@@ -4,6 +4,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { hashKey } from "./auth";
+import { publicOrigin } from "./origin";
 import type { CallerEnv } from "./rest";
 
 /**
@@ -61,6 +62,7 @@ export async function createSession(
 }
 
 export interface SessionDeps {
+  readonly baseUrl?: string | undefined;
   readonly db: Db;
   readonly mailOut: MailOut;
   readonly businessName: () => Promise<string>;
@@ -105,7 +107,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         expiresAt: now() + MAGIC_TTL_MS,
         createdAt: now(),
       });
-      const origin = new URL(c.req.url).origin;
+      const origin = publicOrigin(c.req.raw, deps.baseUrl);
       const link = `${origin}/auth/verify?token=${token}${body.redirect ? `&redirect=${encodeURIComponent(body.redirect)}` : ""}`;
       const name = await deps.businessName();
       await deps.mailOut.send({
@@ -180,7 +182,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
     const session = await createSession(deps.db, user.id, c.req.raw, now());
     setCookie(c, SESSION_COOKIE, session.token, {
       httpOnly: true,
-      secure: new URL(c.req.url).protocol === "https:",
+      secure: publicOrigin(c.req.raw, deps.baseUrl).startsWith("https:"),
       sameSite: "Lax",
       path: "/",
       expires: new Date(session.expiresAt),

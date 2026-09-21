@@ -6,6 +6,7 @@ import { callerFromRequest } from "./auth";
 import { ingestEmail } from "./email";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
+import { publicOrigin } from "./origin";
 import { forbidden, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
@@ -14,7 +15,9 @@ import { authRoutes } from "./session";
 export * from "./auth";
 export * from "./email";
 export * from "./mcp";
+export * from "./network";
 export * from "./oauth";
+export * from "./origin";
 export * from "./problem";
 export * from "./rest";
 export * from "./safe-fetch";
@@ -34,14 +37,17 @@ export interface DoorDeps {
   readonly now?: (() => number) | undefined;
   /** Shared secret for the raw-MIME inbound webhook; null disables it. */
   readonly inboundEmailSecret?: (() => Promise<string | null>) | undefined;
+  /** The instance's public URL (INBOX_PUBLIC_URL); wins over the request URL behind a proxy. */
+  readonly baseUrl?: string | undefined;
 }
 
 /** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
-function sameOrigin(request: Request): boolean {
+function sameOrigin(request: Request, baseUrl: string | undefined): boolean {
   const site = request.headers.get("sec-fetch-site");
   if (site === "same-origin" || site === "none") return true;
   const origin = request.headers.get("origin");
-  return origin !== null && origin === new URL(request.url).origin;
+  if (origin === null) return false;
+  return origin === publicOrigin(request, baseUrl) || origin === new URL(request.url).origin;
 }
 
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
@@ -53,7 +59,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     if (
       caller.auth?.via === "session" &&
       !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
-      !sameOrigin(c.req.raw)
+      !sameOrigin(c.req.raw, deps.baseUrl)
     ) {
       return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
     }
@@ -62,7 +68,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   });
   app.route(
     "/auth",
-    authRoutes({ db: deps.db, mailOut: deps.mailOut, businessName: deps.businessName, now: deps.now }),
+    authRoutes({
+      db: deps.db,
+      mailOut: deps.mailOut,
+      businessName: deps.businessName,
+      now: deps.now,
+      baseUrl: deps.baseUrl,
+    }),
   );
   app.route(
     "/oauth",
@@ -70,13 +82,18 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       db: deps.db,
       fetchMetadata: deps.fetchClientMetadata ?? ((url) => safeFetchJson<ClientMetadata>(url)),
       now: deps.now,
+      baseUrl: deps.baseUrl,
     }),
   );
   app.get("/.well-known/oauth-protected-resource/mcp/owner", (c) =>
-    c.json(protectedResourceMetadata(new URL(c.req.url).origin), 200, { "Cache-Control": "public, max-age=3600" }),
+    c.json(protectedResourceMetadata(publicOrigin(c.req.raw, deps.baseUrl)), 200, {
+      "Cache-Control": "public, max-age=3600",
+    }),
   );
   app.get("/.well-known/oauth-authorization-server", (c) =>
-    c.json(authorizationServerMetadata(new URL(c.req.url).origin), 200, { "Cache-Control": "public, max-age=3600" }),
+    c.json(authorizationServerMetadata(publicOrigin(c.req.raw, deps.baseUrl)), 200, {
+      "Cache-Control": "public, max-age=3600",
+    }),
   );
   // Raw-MIME inbound webhook (Mailgun routes, custom forwarders, the hosted Email Worker).
   app.post("/v1/email/inbound", async (c) => {
@@ -131,7 +148,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       return unauthorized(
         c,
         "Connect with OAuth or send an owner API key.",
-        `${new URL(c.req.url).origin}/.well-known/oauth-protected-resource/mcp/owner`,
+        `${publicOrigin(c.req.raw, deps.baseUrl)}/.well-known/oauth-protected-resource/mcp/owner`,
       );
     }
     return mcpOwner.fetch(c.req.raw, { authInfo: authInfo(caller) });

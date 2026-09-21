@@ -3,6 +3,7 @@ import { sha256Hex } from "@surfingdog/platform";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { hashKey } from "./auth";
+import { publicOrigin } from "./origin";
 import type { CallerEnv } from "./rest";
 import { userFromCookie } from "./session";
 
@@ -29,6 +30,7 @@ export const ACCESS_PREFIX = "sdi_at_";
 export const REFRESH_PREFIX = "sdi_rt_";
 
 export interface OAuthDeps {
+  readonly baseUrl?: string | undefined;
   readonly db: Db;
   /** Resolves a Client ID Metadata Document; must refuse private hosts. */
   readonly fetchMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
@@ -183,7 +185,7 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
     });
     redirect.searchParams.set("code", code);
     if (q.state) redirect.searchParams.set("state", q.state);
-    redirect.searchParams.set("iss", new URL(c.req.url).origin);
+    redirect.searchParams.set("iss", publicOrigin(c.req.raw, deps.baseUrl));
     return c.redirect(redirect.toString());
   });
 

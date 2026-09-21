@@ -5,15 +5,10 @@ requests, orders and bookings from people and from AI agents — through email, 
 and MCP (and every agent protocol we can reasonably speak) — and turns them into structured
 items with a lifecycle that can be handled by rules, by the owner, or by the owner's own AI.
 
-Status: **the groundwork complete** (research, decisions, scaffold, design kit). Nothing here is usable yet.
-Read the ADRs in [docs/adr/](docs/adr/) first.
-
-```bash
-pnpm install
-pnpm check && pnpm typecheck
-pnpm test:node && pnpm test:workers   # the same suite on Node and inside workerd
-pnpm kit                             # builds the design kit into packages/ui/dist/kit
-```
+Status: **the first release in progress.** The core, the REST + MCP doors, email in, sessions, OAuth for the
+owner's AI and network membership work on both runtimes; the owner app, passkeys, receipts and the
+setup wizard are being built. A demo instance runs at https://inbox.surfingdog.ai and the network at
+https://network.surfingdog.ai. Read the ADRs in [docs/adr/](docs/adr/) first.
 
 - `apps/inbox` — the product: a Hono server + React SPA that runs on Cloudflare Workers and on Node/Bun.
 - `packages/core` — domain model, state machines, rules, receipts (AGPL-3.0).
@@ -24,3 +19,45 @@ pnpm kit                             # builds the design kit into packages/ui/di
 - `docs/` — ADRs and plans.
 
 Licence: AGPL-3.0 for the server and app; MIT for `packages/spec`, `packages/sdk` and the connector SDK.
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev            # Node, SQLite in ./data/inbox.db, http://localhost:8787
+pnpm dev:workers    # the same app on workerd (D1, Queues, cron)
+pnpm test           # every test on Node and on Workers
+```
+
+The Node build is one file: `pnpm --filter @surfingdog/inbox build:server` writes `apps/inbox/dist/server.mjs`.
+Run it with `node server.mjs` and these variables:
+
+| Variable | What |
+|---|---|
+| `INBOX_DB` | SQLite file (default `./data/inbox.db`) |
+| `INBOX_PUBLIC_URL` | The https URL people and agents reach you at. Behind a proxy set it, or pass `X-Forwarded-Proto`. |
+| `INBOX_STATIC` | Static files directory (the owner app) |
+| `RESEND_API_KEY` | Sends real email; otherwise outgoing mail is logged |
+| `PORT`, `HOST` | Listen address (default 8787 on all interfaces) |
+
+CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo business
+to an empty instance, `network-ping` reports to the network now.
+
+## Email in
+
+Every instance accepts raw MIME at `POST /v1/email/inbound` with the shared secret from Settings
+(`email.inboundSecret`) in `X-Inbox-Email-Secret`. Point a Mailgun route, a Postmark/SES inbound
+webhook or a forwarder at it. On Cloudflare, Email Routing delivers straight to the Worker's
+`email()` handler, no webhook needed. Messages are threaded by `In-Reply-To`/`References`, by a plus
+address (`inbox+<item id>@…`) or by a `[SDI-<item id>]` subject token, and deduplicated on
+`Message-ID`.
+
+## Join a network
+
+Settings → Network. `network.url` is the directory this instance reports to (default
+`https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and
+`POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on,
+the instance registers its domain once (the network verifies it by fetching
+`/.well-known/agent-inbox.json` and checking that `instance` is your https origin) and then sends,
+every hour, its software version, runtime and the number of bookings, orders, quotes and messages
+created in the last 24 hours. Nothing about customers leaves the instance.
