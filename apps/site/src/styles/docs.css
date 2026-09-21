@@ -1,0 +1,51 @@
+/* Starlight, dressed in the site's palette and type. Night is Starlight's base theme (:root);
+   day is [data-theme="light"]. Tailwind is deliberately not loaded here. */
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/manrope";
+
+:root {
+  --sl-font: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --sd-display:
+    "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --sl-color-accent-low: #2a2260;
+  --sl-color-accent: #8a6bff;
+  --sl-color-accent-high: #cdc2ff;
+  --sl-color-white: #f2f1ff;
+  --sl-color-gray-1: #e4e3f4;
+  --sl-color-gray-2: #b9b8dd;
+  --sl-color-gray-3: #8e8db8;
+  --sl-color-gray-4: #5b5a86;
+  --sl-color-gray-5: #3a3a63;
+  --sl-color-gray-6: #23244a;
+  --sl-color-black: #0d0e26;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e9e3ff;
+  --sl-color-accent: #5a3fd0;
+  --sl-color-accent-high: #2f2472;
+  --sl-color-white: #14163c;
+  --sl-color-gray-1: #2a2c58;
+  --sl-color-gray-2: #474a75;
+  --sl-color-gray-3: #6b6e96;
+  --sl-color-gray-4: #9a9cc0;
+  --sl-color-gray-5: #cfd0e6;
+  --sl-color-gray-6: #ecebfa;
+  --sl-color-gray-7: #f3f2fe;
+  --sl-color-black: #f6f5ff;
+}
+
+.site-title img,
+.sl-markdown-content img[src^="/art/"] {
+  image-rendering: pixelated;
+}
+.sl-markdown-content :is(h1, h2, h3, h4),
+.content-panel h1,
+.hero h1 {
+  font-family: var(--sd-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.site-title {
+  font-family: var(--sd-display);
+  font-weight: 600;
+}

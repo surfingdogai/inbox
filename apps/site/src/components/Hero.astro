@@ -1,0 +1,109 @@
+---
+import Art from "./Art.astro";
+
+const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
+const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
+---
+
+<section class="hero wrap" aria-labelledby="hero-h">
+  <div class="copy">
+    <p class="eyebrow">Surfing Dog Inbox · open source</p>
+    <h1 id="hero-h">Your inbox for people and AI&nbsp;agents.</h1>
+    <p class="sub">
+      Bookings, orders, quotes and messages from anyone and any agent, in one typed inbox you run anywhere.
+    </p>
+    <div class="actions">
+      <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
+      <a class="btn btn-secondary btn-lg" href={LIVE} rel="noopener">See a live instance</a>
+    </div>
+    <p class="position">
+      <span class="rule rule-quote" aria-hidden="true"></span>
+      <span>Not customer support. Automated AI relations: your rules, your availability, your AI answering.</span>
+    </p>
+  </div>
+  <div class="art-box">
+    <div class="sun" aria-hidden="true"></div>
+    <Art
+      src="/art/hero.png"
+      alt="A pixel-art dog surfing a wave of envelopes, calendars and parcels, with three small robot surfers riding behind it"
+      loading="eager"
+      ratio="16 / 9"
+      class="hero-art"
+    />
+  </div>
+</section>
+
+<style>
+  .hero {
+    display: grid;
+    gap: 32px;
+    align-items: center;
+    padding-block: 44px 24px;
+  }
+  @media (min-width: 900px) {
+    .hero {
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      gap: 48px;
+      padding-block: 72px 32px;
+    }
+  }
+  h1 {
+    margin: 10px 0 0;
+    font-size: clamp(36px, 4.4vw, 56px);
+    line-height: 1.06;
+    letter-spacing: -0.025em;
+  }
+  .sub {
+    max-width: 50ch;
+    margin: 18px 0 0;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .position {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    max-width: 56ch;
+    margin: 26px 0 0;
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .position .rule {
+    width: 28px;
+  }
+  .art-box {
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    margin-inline: auto;
+  }
+  @media (min-width: 900px) {
+    .art-box {
+      margin-inline: 0 auto;
+    }
+  }
+  .art-box .sun {
+    position: absolute;
+    left: 16%;
+    top: -2%;
+    z-index: 0;
+    opacity: 0.95;
+  }
+  .art-box :global(.hero-art) {
+    position: relative;
+    z-index: 1;
+    /* The wave runs off the left and bottom edges of the file; let those edges dissolve. */
+    mask-image: linear-gradient(to right, transparent 0, #000 7%), linear-gradient(to top, transparent 0, #000 9%);
+    mask-composite: intersect;
+  }
+</style>

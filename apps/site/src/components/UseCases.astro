@@ -1,0 +1,82 @@
+---
+import Shot from "./Shot.astro";
+
+const cases = [
+  {
+    who: "A bike shop",
+    what: "An agent asks for a full service on Tuesday. The slot is free, inside opening hours and under the limit, so the rule confirms it and replies. The owner sees a confirmed booking, not a question.",
+  },
+  {
+    who: "A bakery",
+    what: "Orders under €80 are accepted the moment they arrive. Above that, the order waits for a person, and the customer is told so.",
+  },
+  {
+    who: "A plumber",
+    what: "Quote requests come back with the questions the owner defined. The owner's AI drafts the quote from the answers; the owner sends it.",
+  },
+  {
+    who: "A studio",
+    what: "Messages are answered by the owner's own Claude, connected over MCP, with the owner's rules as the boundary: it reads availability and prices before it speaks, and never invents them.",
+  },
+];
+---
+
+<section class="section" id="use-cases" aria-labelledby="cases-h">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Use cases</p>
+        <h2 class="h-section" id="cases-h">Four businesses, one inbox</h2>
+        <p class="lede">The rules are the product. Each of these runs on rules a business can write in an afternoon.</p>
+      </div>
+    </div>
+    <div class="cols">
+      <ol class="glass panel flows">
+        {
+          cases.map((c) => (
+            <li class="flow">
+              <h3>{c.who}</h3>
+              <p class="card-text">{c.what}</p>
+            </li>
+          ))
+        }
+      </ol>
+      <Shot
+        src="/shots/item-day.png"
+        alt="An item in the inbox: a booking with its typed fields, its state, and the next actions as buttons"
+        title="What lands in the inbox"
+        caption="The typed item, its state, the conversation, and the valid next actions as the buttons."
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  .cols {
+    display: grid;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 20px;
+    }
+  }
+  .flows {
+    margin: 0;
+    padding-block: 6px;
+    list-style: none;
+  }
+  .flow {
+    padding: 16px 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .flow:first-child {
+    border-top: 0;
+  }
+  .flow h3 {
+    margin: 0 0 4px;
+    font-size: 17px;
+  }
+</style>
