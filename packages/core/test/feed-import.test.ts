@@ -217,6 +217,40 @@ describe("importing", () => {
 });
 
 describe("disconnecting", () => {
+  it("adopts the products back when the same URL is connected again", async () => {
+    const { caps } = await setup();
+    const first = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(first.id, FEED_V1, T0);
+    await caps.feeds.remove(owner, first.id);
+
+    // A new connector row, so a new id. The products must still be the same three products:
+    // keying them on the connector id made a second copy of every one of them, beside a
+    // deactivated first copy that still held the sku.
+    const again = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    expect(again.id).not.toBe(first.id);
+    const summary = await caps.feeds.importBody(again.id, FEED_V1, T0 + 1000);
+
+    expect(summary.created).toBe(0);
+    expect(summary.updated).toBe(3);
+    expect(await caps.setup.listProducts(owner)).toHaveLength(3);
+    expect((await caps.feeds.get(owner, again.id)).product_count).toBe(3);
+  });
+
+  it("keeps two different feeds' products apart", async () => {
+    const { caps } = await setup();
+    const a = await caps.feeds.add(owner, { url: "https://shop-a.example.com/feed.csv" });
+    const b = await caps.feeds.add(owner, { url: "https://shop-b.example.com/feed.csv" });
+    await caps.feeds.importBody(a.id, "id,title,price\nA1,Chain lube,8.50", T0);
+    await caps.feeds.importBody(b.id, "id,title,price\nB1,Bar tape,14.00", T0);
+
+    // Importing one must not deactivate the other's products.
+    await caps.feeds.importBody(a.id, "id,title,price\nA1,Chain lube,8.50", T0 + 1000);
+    const products = await caps.setup.listProducts(owner);
+    expect(products.filter((p) => p.active === 1)).toHaveLength(2);
+    expect((await caps.feeds.get(owner, a.id)).product_count).toBe(1);
+    expect((await caps.feeds.get(owner, b.id)).product_count).toBe(1);
+  });
+
   it("deactivates the products and keeps them, so reconnecting adopts them", async () => {
     const { caps } = await setup();
     const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });

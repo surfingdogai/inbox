@@ -78,7 +78,7 @@ export class FeedCapabilities {
       .where(eq(connectors.kind, "feed"))
       .orderBy(asc(connectors.name));
     const out: FeedConnector[] = [];
-    for (const row of rows) out.push(this.view(row, await this.activeCount(row.id)));
+    for (const row of rows) out.push(this.view(row, await this.activeCount(urlOf(row))));
     return out;
   }
 
@@ -117,7 +117,7 @@ export class FeedCapabilities {
   async get(caller: Caller, connectorId: string): Promise<FeedConnector> {
     requireOwner(caller);
     const row = await this.row(connectorId);
-    return this.view(row, await this.activeCount(row.id));
+    return this.view(row, await this.activeCount(urlOf(row)));
   }
 
   /** Queues an import now. The handler in `@surfingdog/adapters` does the fetching. */
@@ -140,11 +140,12 @@ export class FeedCapabilities {
     requireOwner(caller);
     const row = await this.row(connectorId);
     const now = nowOf(caller);
-    const deactivated = await this.activeCount(row.id);
+    const url = urlOf(row);
+    const deactivated = await this.activeCount(url);
     await this.db.batch([
       {
         sql: "UPDATE products SET active = 0, updated_at = ? WHERE source = ? AND active = 1",
-        params: [now, feedSource(row.id)],
+        params: [now, feedSource(url)],
         method: "run",
       },
       { sql: "DELETE FROM connectors WHERE id = ?", params: [row.id], method: "run" },
@@ -179,7 +180,7 @@ export class FeedCapabilities {
       await this.markError(connectorId, String((error as Error).message ?? error), at);
       throw error;
     }
-    const summary = await this.apply(connectorId, parsed, config.deactivateMissing, at);
+    const summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, at);
     await this.db.client.query({
       sql: "UPDATE connectors SET status = 'active', last_sync_at = ?, last_error = NULL, last_error_at = NULL, updated_at = ? WHERE id = ?",
       params: [at, at, connectorId],
@@ -200,11 +201,12 @@ export class FeedCapabilities {
 
   private async apply(
     connectorId: string,
+    url: string,
     parsed: FeedParseResult,
     deactivateMissing: boolean,
     now: number,
   ): Promise<FeedImportSummary> {
-    const source = feedSource(connectorId);
+    const source = feedSource(url);
     const existing = await this.db.orm
       .select({
         id: products.id,
@@ -350,11 +352,12 @@ export class FeedCapabilities {
   }
 
   /** Active products this feed owns. Through the ORM, so the count comes back as a number. */
-  private async activeCount(connectorId: string): Promise<number> {
+  private async activeCount(url: string): Promise<number> {
+    if (url === "") return 0;
     const [row] = await this.db.orm
       .select({ n: sql<number>`count(*)` })
       .from(products)
-      .where(and(eq(products.source, feedSource(connectorId)), eq(products.active, 1)));
+      .where(and(eq(products.source, feedSource(url)), eq(products.active, 1)));
     const n = Number(row?.n ?? 0);
     return Number.isFinite(n) ? n : 0;
   }
@@ -368,9 +371,17 @@ export class FeedCapabilities {
   }
 }
 
-/** Products this feed owns. Scoped per connector, so two feeds never fight over one product. */
-export function feedSource(connectorId: string): string {
-  return `feed:${connectorId}`;
+/**
+ * Products this feed owns, keyed on the feed's URL rather than the connector row's id.
+ *
+ * The URL is already a feed's identity — `connectors` is UNIQUE on (kind, external_id) — and it
+ * is the only key that survives a disconnect. Keying on the connector id instead meant that
+ * reconnecting the same feed minted a new id, adopted nothing, and imported a second copy of
+ * every product beside the deactivated first copy, which still held the sku. Two feeds cannot
+ * collide here because two connectors cannot hold one URL.
+ */
+export function feedSource(url: string): string {
+  return `feed:${url}`;
 }
 
 /**
@@ -408,6 +419,12 @@ export function normaliseFeedUrl(raw: string): string {
   }
   url.hash = "";
   return url.toString();
+}
+
+/** A connector row's feed URL, from its config with the unique external id as the fallback. */
+function urlOf(row: typeof connectors.$inferSelect): string {
+  const config = (row.configPublic ?? {}) as FeedConfig;
+  return config.url ?? row.externalId ?? "";
 }
 
 function hostOf(url: string): string {
