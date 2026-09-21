@@ -3,6 +3,7 @@ import type { MailOut } from "@surfingdog/platform";
 import type { Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest } from "./auth";
+import { ingestEmail } from "./email";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { forbidden, unauthorized } from "./problem";
@@ -11,6 +12,7 @@ import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
 
 export * from "./auth";
+export * from "./email";
 export * from "./mcp";
 export * from "./oauth";
 export * from "./problem";
@@ -30,6 +32,8 @@ export interface DoorDeps {
   /** Resolves Client ID Metadata Documents; defaults to the SSRF-safe fetcher. */
   readonly fetchClientMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
   readonly now?: (() => number) | undefined;
+  /** Shared secret for the raw-MIME inbound webhook; null disables it. */
+  readonly inboundEmailSecret?: (() => Promise<string | null>) | undefined;
 }
 
 /** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
@@ -74,6 +78,24 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.get("/.well-known/oauth-authorization-server", (c) =>
     c.json(authorizationServerMetadata(new URL(c.req.url).origin), 200, { "Cache-Control": "public, max-age=3600" }),
   );
+  // Raw-MIME inbound webhook (Mailgun routes, custom forwarders, the hosted Email Worker).
+  app.post("/v1/email/inbound", async (c) => {
+    const secret = deps.inboundEmailSecret ? await deps.inboundEmailSecret() : null;
+    if (!secret || c.req.header("x-inbox-email-secret") !== secret) {
+      return unauthorized(c, "Send the inbound email secret from Settings in X-Inbox-Email-Secret.");
+    }
+    const raw = await c.req.arrayBuffer();
+    if (raw.byteLength === 0 || raw.byteLength > 25 * 1024 * 1024) {
+      return c.json({ error: "invalid_input", detail: "raw MIME between 1 byte and 25 MiB" }, 422);
+    }
+    const result = await ingestEmail(
+      deps.db,
+      deps.caps,
+      { raw, envelopeTo: c.req.header("x-envelope-to"), envelopeFrom: c.req.header("x-envelope-from") },
+      { now: deps.now },
+    );
+    return c.json(result, result.outcome === "rejected" ? 422 : 200);
+  });
   app.route("/v1/owner", ownerRest(deps.caps));
   app.route("/v1", publicRest(deps.caps));
 
