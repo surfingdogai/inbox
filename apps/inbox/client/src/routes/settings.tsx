@@ -35,6 +35,9 @@ function SettingsLayout() {
         <Link to="/settings/rules" className="tab">
           Rules
         </Link>
+        <Link to="/settings/integrations" className="tab">
+          Integrations
+        </Link>
       </nav>
       <Outlet />
     </main>

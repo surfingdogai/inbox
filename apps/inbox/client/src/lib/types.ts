@@ -4,6 +4,8 @@ import type {
   BusinessProfile,
   Closure,
   Condition,
+  DeliveryView,
+  FeedConnector,
   Item,
   ItemDetail,
   ItemType,
@@ -14,7 +16,10 @@ import type {
   RuleDefinition,
   RuleView,
   Settings,
+  TestEventResult,
   TransitionResult,
+  WebhookView,
+  WebhookWithSecret,
   Weekly,
 } from "@surfingdog/core";
 
@@ -28,6 +33,8 @@ export type {
   BusinessProfile,
   Closure,
   Condition,
+  DeliveryView,
+  FeedConnector,
   Item,
   ItemDetail,
   ItemType,
@@ -38,7 +45,10 @@ export type {
   RuleDefinition,
   RuleView,
   Settings,
+  TestEventResult,
   TransitionResult,
+  WebhookView,
+  WebhookWithSecret,
   Weekly,
 };
 
@@ -197,3 +207,19 @@ export interface RuleTest {
   readonly item: { readonly id: string; readonly type: string; readonly state: string };
   readonly facts: { readonly slotIsFree: boolean | null; readonly withinBusinessHours: boolean | null };
 }
+
+/** Connecting a feed. No credentials: that is the point of a feed. */
+export interface AddFeedBody {
+  readonly url: string;
+  readonly name?: string | undefined;
+  readonly currency?: string | undefined;
+  readonly deactivate_missing?: boolean | undefined;
+}
+
+export interface CreateWebhookBody {
+  readonly url: string;
+  readonly events: readonly string[];
+  readonly payload_style: "thin" | "full";
+}
+
+export type PatchWebhookBody = Partial<CreateWebhookBody & { readonly active: boolean }>;

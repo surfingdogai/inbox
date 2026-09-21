@@ -15,6 +15,7 @@ import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
+import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsRulesRouteImport } from "./routes/settings.rules";
 import { Route as SettingsServicesRouteImport } from "./routes/settings.services";
 import { Route as InboxItemsIdRouteImport } from "./routes/_inbox.items.$id";
@@ -48,6 +49,11 @@ const SettingsAvailabilityRoute = SettingsAvailabilityRouteImport.update({
   path: "/availability",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
+  id: "/integrations",
+  path: "/integrations",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsRulesRoute = SettingsRulesRouteImport.update({
   id: "/rules",
   path: "/rules",
@@ -69,6 +75,7 @@ export interface FileRoutesByFullPath {
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -77,6 +84,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/": typeof InboxIndexRoute;
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/_inbox/": typeof InboxIndexRoute;
@@ -102,6 +111,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/settings"
     | "/settings/availability"
+    | "/settings/integrations"
     | "/settings/rules"
     | "/settings/services"
     | "/settings/"
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
   to:
     | "/login"
     | "/settings/availability"
+    | "/settings/integrations"
     | "/settings/rules"
     | "/settings/services"
     | "/"
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/settings"
     | "/settings/availability"
+    | "/settings/integrations"
     | "/settings/rules"
     | "/settings/services"
     | "/_inbox/"
@@ -178,6 +190,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsAvailabilityRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/integrations": {
+      id: "/settings/integrations";
+      path: "/integrations";
+      fullPath: "/settings/integrations";
+      preLoaderRoute: typeof SettingsIntegrationsRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/rules": {
       id: "/settings/rules";
       path: "/rules";
@@ -216,6 +235,7 @@ const InboxRouteWithChildren = InboxRoute._addFileChildren(InboxRouteChildren);
 
 interface SettingsRouteChildren {
   SettingsAvailabilityRoute: typeof SettingsAvailabilityRoute;
+  SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsRulesRoute: typeof SettingsRulesRoute;
   SettingsServicesRoute: typeof SettingsServicesRoute;
   SettingsIndexRoute: typeof SettingsIndexRoute;
@@ -223,6 +243,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAvailabilityRoute: SettingsAvailabilityRoute,
+  SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsRulesRoute: SettingsRulesRoute,
   SettingsServicesRoute: SettingsServicesRoute,
   SettingsIndexRoute: SettingsIndexRoute,
