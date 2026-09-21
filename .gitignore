@@ -11,3 +11,4 @@ coverage/
 data/*.db
 data/*.db-*
 .DS_Store
+

@@ -25,19 +25,34 @@ export function notifyHandler(mailOut: MailOut, opts: { baseUrl?: string } = {})
     const item = rowToItem(row);
     const settings = await readSettings(db);
     const business = settings.business.name || "the business";
-    const from = { address: settings.email.fromAddress ?? "inbox@localhost", ...(settings.email.fromName ? { name: settings.email.fromName } : { name: business }) };
+    const from = {
+      address: settings.email.fromAddress ?? "inbox@localhost",
+      ...(settings.email.fromName ? { name: settings.email.fromName } : { name: business }),
+    };
     const appUrl = settings.notifications.appUrl ?? opts.baseUrl ?? "";
 
     if (p.to === "owner") {
       const to = settings.notifications.ownerEmail;
       if (!to) return { note: "no owner email configured" };
-      const [party] = await db.orm.select({ displayName: parties.displayName }).from(parties).where(eq(parties.id, item.partyId));
+      const [party] = await db.orm
+        .select({ displayName: parties.displayName })
+        .from(parties)
+        .where(eq(parties.id, item.partyId));
       const who = party?.displayName ?? "a customer";
       const mail: OutboundMail = {
         from,
         to: [to],
         subject: ownerSubject(item, p.event, who),
-        text: [describe(item), "", `From: ${who}`, appUrl ? `Open: ${appUrl}/items/${item.id}` : "", "", "Reply in your inbox to answer."].filter((l) => l !== null).join("\n"),
+        text: [
+          describe(item),
+          "",
+          `From: ${who}`,
+          appUrl ? `Open: ${appUrl}/items/${item.id}` : "",
+          "",
+          "Reply in your inbox to answer.",
+        ]
+          .filter((l) => l !== null)
+          .join("\n"),
       };
       await mailOut.send(mail);
       return { note: `owner ${to}` };
@@ -51,14 +66,25 @@ export function notifyHandler(mailOut: MailOut, opts: { baseUrl?: string } = {})
       to: [email],
       ...(settings.email.replyTo ? { replyTo: settings.email.replyTo } : {}),
       subject: customerSubject(item, p.event, business),
-      text: [describe(item), "", `This message is from ${business}.`, settings.email.replyTo ? "Reply to this email to reach them." : ""].join("\n"),
+      text: [
+        describe(item),
+        "",
+        `This message is from ${business}.`,
+        settings.email.replyTo ? "Reply to this email to reach them." : "",
+      ].join("\n"),
     };
     await mailOut.send(mail);
     return { note: `customer ${email}` };
   };
 }
 
-const TYPE_WORD: Record<Item["type"], string> = { message: "message", quote_request: "quote request", booking: "booking", order: "order", refund: "refund request" };
+const TYPE_WORD: Record<Item["type"], string> = {
+  message: "message",
+  quote_request: "quote request",
+  booking: "booking",
+  order: "order",
+  refund: "refund request",
+};
 
 function ownerSubject(item: Item, event: string, who: string): string {
   if (event === "create") return `New ${TYPE_WORD[item.type]} from ${who}: ${item.subject ?? ""}`.trim();
