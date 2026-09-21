@@ -9,13 +9,14 @@ const when = (d: Date) =>
 ---
 
 <Layout title="Blog · Surfing Dog" description="Notes from building Surfing Dog Inbox: what is live, what is next, and why." type="website">
-  <section class="wrap section">
+  <section class="wrap section" aria-labelledby="blog-h">
     <p class="eyebrow">Blog</p>
-    <h1 class="h-section">Notes from the water</h1>
-    <ul class="posts">
+    <h1 class="h-page" id="blog-h">Notes from the water</h1>
+    <p class="lede">What is live, what is next, and why it was built that way.</p>
+    <ul class="posts" data-reveal="stagger">
       {
         posts.map((post) => (
-          <li class="glass post">
+          <li class="glass lift post">
             {post.data.cover ? (
               <a class="cover" href={`/blog/${post.id}/`} tabindex="-1" aria-hidden="true">
                 <Art src={post.data.cover} alt="" ratio="16 / 9" />
@@ -25,7 +26,7 @@ const when = (d: Date) =>
               <p class="meta">
                 <time datetime={post.data.date.toISOString()}>{when(post.data.date)}</time> · {post.data.author}
               </p>
-              <h2>
+              <h2 class="h-sub">
                 <a class="title" href={`/blog/${post.id}/`}>
                   {post.data.title}
                 </a>
@@ -42,55 +43,56 @@ const when = (d: Date) =>
 <style>
   .posts {
     display: grid;
-    gap: 16px;
-    margin: 28px 0 0;
+    gap: var(--gap-grid);
+    margin: var(--sp-7) 0 0;
     padding: 0;
     list-style: none;
   }
   .post {
     display: grid;
-    gap: 16px;
-    padding: 14px;
-    border-radius: var(--radius-panel);
+    gap: var(--sp-4);
+    padding: var(--sp-3);
+    border-radius: var(--radius-card);
   }
   @media (min-width: 720px) {
     .post {
       grid-template-columns: 300px minmax(0, 1fr);
-      gap: 22px;
+      gap: var(--sp-6);
       align-items: center;
     }
   }
   .cover {
     display: block;
-    border-radius: 12px;
+    border-radius: var(--radius-control);
     overflow: hidden;
   }
   .text {
-    padding: 4px 6px 8px;
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
   }
   .meta {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-fine);
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
   }
-  h2 {
-    margin: 6px 0 0;
-    font-size: 24px;
+  .post .h-sub {
+    margin: var(--sp-1) 0 0;
   }
   .title {
     color: var(--ink);
     text-decoration: none;
   }
-  .title:hover {
+  .title:hover,
+  .title:focus-visible {
     text-decoration: underline;
     text-decoration-color: var(--violet);
     text-underline-offset: 3px;
   }
   .desc {
-    margin: 8px 0 0;
-    font-size: 15.5px;
+    margin: var(--sp-2) 0 0;
+    max-width: var(--measure-card);
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
     color: var(--ink-2);
-    line-height: 1.55;
   }
 </style>

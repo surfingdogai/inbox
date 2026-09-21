@@ -1,0 +1,579 @@
+---
+// apps/site/src/pages/how-it-works.astro
+// The page for a business owner who is not technical: what arrives, what the rules do with it,
+// who answers, why it is safer, why it is worth doing now, and what to do next.
+import Shot from "../components/Shot.astro";
+import Layout from "../layouts/Layout.astro";
+
+const contents = [
+  { href: "#arrives", label: "What arrives" },
+  { href: "#rules", label: "Your rules run first" },
+  { href: "#your-ai", label: "Your own AI answers" },
+  { href: "#safer", label: "Why it is safer" },
+  { href: "#prepare", label: "Why prepare now" },
+  { href: "#use", label: "What to do next" },
+];
+
+/** The four public item types, with the states their machines actually hold. */
+const types = [
+  {
+    label: "Message",
+    tint: "message",
+    states: "open, answered, closed, spam",
+  },
+  {
+    label: "Quote request",
+    tint: "quote",
+    states: "received, needs info, quoted, accepted, declined, expired",
+  },
+  {
+    label: "Booking",
+    tint: "booking",
+    states:
+      "requested, needs info, proposed, confirmed, completed, no show, cancelled by the customer, cancelled by the business, declined, expired",
+  },
+  {
+    label: "Order",
+    tint: "order",
+    states:
+      "received, needs info, accepted, awaiting payment, paid, fulfilling, fulfilled, completed, declined, cancelled",
+  },
+];
+
+/** Two of the six shipped preset rules, exactly as the app reads them back in English. */
+const rules = [
+  {
+    preset: "Appointments",
+    sentence:
+      "When a new item arrives and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
+  },
+  {
+    preset: "Shop",
+    sentence:
+      "When a new item arrives and it is an order and the total is over 200.00: flag it for a person and set priority 2. Stop there.",
+  },
+];
+
+const reasons = [
+  {
+    title: "It already knows you",
+    text: "Your assistant has your history, your prices and your way of saying things. Ours would start from nothing and sound like it.",
+  },
+  {
+    title: "You choose the provider",
+    text: "Pick the model you trust, and change it the day you stop trusting it. The inbox speaks a protocol, not a brand.",
+  },
+  {
+    title: "Your customers stay yours",
+    text: "Nothing about them is handed to a third party to train on. The data sits in your instance, and the instance is yours.",
+  },
+  {
+    title: "The inbox is the guardrail",
+    text: "The assistant is not the brain of the business. It can only take the steps the state machine allows, every action it takes is an event with its name on it, and test mode lets you watch it work on sandbox items before anything is real.",
+  },
+];
+
+const safety = [
+  {
+    title: "Typed doors, not free text",
+    text: "An agent cannot ask for anything the door does not offer. It sends a booking, an order, a quote request or a message, with the fields those require, and a refusal names the field to fix.",
+  },
+  {
+    title: "The history is append-only",
+    text: "Every change is an event carrying who acted, through which door, at what time, and the reason when one was given. Nothing in that history is ever rewritten.",
+  },
+  {
+    title: "The same slot cannot be sold twice",
+    text: "Capacity is arbitrated by the database itself. When two agents ask for the last slot in the same instant, one claim is recorded and the other is refused.",
+  },
+  {
+    title: "A retry cannot book twice",
+    text: "A request can carry a key. Send it again with the same key after a dropped connection and you get the original answer back, not a second booking.",
+  },
+  {
+    title: "Callers carry a trust tier",
+    text: "The inbox knows whether a caller is anonymous or a verified account, and your rules can read that: confirm for a verified caller, send an anonymous one to a person.",
+  },
+  {
+    title: "The data stays with you",
+    text: "One database, on your Cloudflare account or your own server. Network membership is off until you switch it on, and even then only counts are reported.",
+  },
+  {
+    title: "Receipts will be signed by you",
+    text: "When receipts arrive in the next release they will be signed with keys your instance holds, and counter-signed by the customer's agent. The network will hold counts and signatures, never a conversation.",
+  },
+];
+
+/** The order an owner actually does it in. Where to host it is one decision inside the first. */
+const steps = [
+  {
+    title: "Pick where it runs",
+    text: "One click onto your own Cloudflare account, one process on a machine you already pay for, or hosted by us when that opens in a later release. The software is the same in all three.",
+    href: "/#run",
+    cta: "See the three ways",
+  },
+  {
+    title: "Write down the business",
+    text: "Opening hours and closed days, services with their duration and capacity, products with prices, your cancellation window and your approval limit. This is the afternoon's work.",
+    href: "/docs/quickstart/",
+    cta: "Read the quickstart",
+  },
+  {
+    title: "Connect your assistant",
+    text: "Point Claude or ChatGPT at your own inbox, leave test mode on, and watch it work through a day of sandbox items before anything is real.",
+    href: "/docs/connect-your-ai/",
+    cta: "How to connect",
+  },
+];
+---
+
+<Layout
+  title="How it works · Surfing Dog"
+  description="What happens when a request reaches your business: typed items instead of threads, your own rules deciding the routine cases, your own AI answering inside them, and a history you can audit. Written for the owner, not the developer."
+>
+  <section class="wrap section is-head" aria-labelledby="page-h">
+    <p class="eyebrow">How it works</p>
+    <h1 class="h-page" id="page-h">How it works, in plain terms</h1>
+    <p class="lede">
+      Surfing Dog Inbox sits between your business and everyone who wants something from it, people
+      and their AI assistants alike. This page walks through what arrives, what your rules do with
+      it, who answers, and why it is worth setting up before the requests start.
+    </p>
+    <nav class="contents" aria-label="On this page">
+      {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
+    </nav>
+  </section>
+
+  <section class="section" id="arrives" aria-labelledby="arrives-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Step one</p>
+          <h2 class="h-section" id="arrives-h">What arrives</h2>
+          <p class="lede">
+            A request comes in through a door, not a thread. It becomes an item with a type and a
+            state before anyone has read a word of it.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Your customers already write by email, fill in a form or ring you. Their assistants now do
+          the same errands for them. Claude and ChatGPT speak MCP, the protocol an assistant uses to
+          call software directly, and other systems post to a plain web API.
+        </p>
+        <p>
+          Three doors are open today: the REST API, two MCP servers, and email. A web form door is
+          on the way. <span class="pill">the first release</span>
+        </p>
+        <p>
+          Email has the narrowest job for now. It opens a message, or adds a reply to an item you
+          already have. Bookings, orders and quote requests come in through the API and MCP. Reading
+          a free-text email and turning it into a typed booking is the next release work.
+        </p>
+        <p>
+          Whichever door it used, the request lands as a typed item rather than a paragraph to
+          decode. Four types are offered to the outside world. Refunds are a fifth, with a machine
+          of their own, handled inside the app.
+        </p>
+        <p>
+          Each type carries a state machine, so the inbox knows what a request is and what may
+          happen to it next. Look at the booking states and you will see there are two ways to
+          cancel. Who walked away is part of the record, not a note in a mailbox.
+        </p>
+      </div>
+
+      <div class="cols">
+        <Shot
+          src="/shots/item-day.png"
+          alt="A booking open in the inbox: the customer, the time, the state, the valid next actions as buttons, and the event history underneath"
+          title="One item"
+          caption="The request, its state, the steps it may take next, and everything that has already happened to it."
+        />
+        <div class="glass panel points">
+          {
+            types.map((t) => (
+              <article class="point">
+                <span class:list={["pill", `tint-${t.tint}`]}>
+                  <i class:list={["dot", `dot-${t.tint}`]} />
+                  {t.label}
+                </span>
+                <p class="card-text states">{t.states}</p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="rules" aria-labelledby="rules-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Step two</p>
+          <h2 class="h-section" id="rules-h">Your rules run first</h2>
+          <p class="lede">
+            Your hours, your services and your limits, written down once. Then a handful of rules
+            that settle the routine cases without you.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          You set the business up once: opening hours and closed days, services with their duration,
+          buffers and capacity, products with prices, a cancellation window, and the order value
+          above which you want the last word.
+        </p>
+        <p>
+          On top of that sit the rules. A rule is a small piece of structured data, and the app reads
+          it back to you as one sentence, so you can check what you have switched on without reading
+          code. Six rules come ready-made, in three sets: appointments, trades and quotes, and shops.
+        </p>
+        <p>
+          Rules are deterministic. No model decides whether a booking is accepted. The same item and
+          the same rules always reach the same answer, and each action is written into the item's
+          history with its reason attached.
+        </p>
+        <p>
+          They run just after an item is created or changes state, out of a queue, so they follow
+          within about a second instead of holding up the request. Before you switch a rule on, you
+          can try it against an item you already have. The test reports what the rule would do and
+          changes nothing.
+        </p>
+      </div>
+
+      <div class="cols">
+        <Shot
+          src="/shots/rules-detail.png"
+          alt="The rules screen: each rule listed as one plain sentence with its trigger, its conditions and what it does"
+          title="Rules, read back in English"
+          caption="Every rule is one sentence. Turn it off, test it, or change the number in it."
+        />
+        <div class="glass panel points">
+          {
+            rules.map((r) => (
+              <article class="point">
+                <span class="pill">{r.preset}</span>
+                <p class="card-text quote">{r.sentence}</p>
+              </article>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="your-ai" aria-labelledby="your-ai-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Step three</p>
+          <h2 class="h-section" id="your-ai-h">Your own AI answers</h2>
+          <p class="lede">
+            Connect the assistant you already use. It signs in as a member of staff, and it works
+            inside the same rules as one.
+          </p>
+        </div>
+      </div>
+
+      <div class="cols">
+        <Shot
+          src="/shots/settings-detail.png"
+          alt="The settings screen: cancellation window, approval limit, email, test mode and the network the instance reports to"
+          title="The settings your AI works inside"
+          caption="Approval limits, cancellation windows and test mode. Your assistant is bound by the same page you are."
+        />
+        <div class="glass panel points">
+          <article class="point">
+            <h3 class="h-card">It signs in as staff</h3>
+            <p class="card-text">
+              Connect Claude, ChatGPT or anything else that speaks MCP to your own inbox. It signs in
+              with your account, with no key to paste, and from then on it can read the inbox, reply,
+              send a quote, propose another time, or change a setting.
+            </p>
+          </article>
+          <article class="point">
+            <h3 class="h-card">It answers inside your rules</h3>
+            <p class="card-text">
+              Everything it does runs through the same state machine and lands in the same history as
+              a person's work. There is no looser path for the machine.
+            </p>
+          </article>
+          <article class="point">
+            <h3 class="h-card">You watch it first</h3>
+            <p class="card-text">
+              Turn on test mode and every item is a sandbox item, counted separately and kept out of
+              the real numbers. Watch your assistant work through a day of them before you let it
+              near a customer.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <h3 class="h-sub sub-h">Why your own AI, and not ours</h3>
+      <ul class="grid-cards cards" data-reveal="stagger">
+        {
+          reasons.map((r) => (
+            <li class="glass card">
+              <h4 class="h-card">{r.title}</h4>
+              <p class="card-text">{r.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="safer" aria-labelledby="safer-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Why it is safer</p>
+          <h2 class="h-section" id="safer-h">Safer than a mailbox, by construction</h2>
+          <p class="lede">
+            None of this depends on the agent behaving well. It depends on what the software will
+            accept, and on what it writes down.
+          </p>
+        </div>
+      </div>
+      <div class="glass panel points wide">
+        {
+          safety.map((s) => (
+            <article class="point">
+              <h3 class="h-card">{s.title}</h3>
+              <p class="card-text">{s.text}</p>
+            </article>
+          ))
+        }
+      </div>
+      <p class="fine">
+        Everything above ships today except the last line, which is marked as the next release work. Signed
+        agent verification, which will let a rule tell a known agent from an anonymous caller, is
+        the next release as well.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="prepare" aria-labelledby="prepare-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">The shift</p>
+          <h2 class="h-section" id="prepare-h">Why prepare now</h2>
+          <p class="lede">
+            The requests arrive whether a business is ready or not. Being ready is the difference
+            between work and noise.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Assistants already shop and book on behalf of the people using them. Storefront platforms
+          expose agent endpoints by default, and an agent commerce protocol is live. None of that
+          waits for small businesses to agree to it.
+        </p>
+      </div>
+
+      <div class="grid-cards cards two" data-reveal="stagger">
+        <div class="glass card">
+          <h3 class="h-card">Unprepared</h3>
+          <p class="card-text">
+            The request lands in a shared mailbox as text, behind forty others, and someone has to
+            read it, price it and answer it. Or it finds no door at all and bounces, and the customer
+            books the business next door.
+          </p>
+        </div>
+        <div class="glass card">
+          <h3 class="h-card">Prepared</h3>
+          <p class="card-text">
+            A manifest at your own address tells any agent where the doors are. Your availability and
+            your prices are readable by machine. Your rules settle the routine, and you see only what
+            needs a person.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Preparing takes an afternoon, not a project. You write down what you already know: your
+          hours, your services, your prices, the limit above which you want to be asked.
+        </p>
+        <p>
+          Nothing is locked in either. The software is open source, and the data is one database you
+          own. If you stop liking the arrangement, you take the file and go.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="use" aria-labelledby="use-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What next</p>
+          <h2 class="h-section" id="use-h">Three things to do, in this order</h2>
+          <p class="lede">
+            Setting an inbox up is a short afternoon. Most of it is writing down what you already
+            know about your own business.
+          </p>
+        </div>
+      </div>
+
+      <ol class="grid-cards cards three" data-reveal="stagger">
+        {
+          steps.map((w) => (
+            <li class="glass card lift way">
+              <h3 class="h-card">{w.title}</h3>
+              <p class="card-text">{w.text}</p>
+              <p class="foot">
+                <a class="btn btn-secondary btn-sm" href={w.href}>
+                  {w.cta}
+                </a>
+              </p>
+            </li>
+          ))
+        }
+      </ol>
+
+      <div class="glass panel cta">
+        <p class="position">
+          <span class="u-line" aria-hidden="true"></span>
+          <span>An afternoon of writing things down, and the routine answers itself from then on.</span>
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/#run">Get your inbox</a>
+          <a class="btn btn-secondary" href="/network/">See the network</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* Page header: the h1 and the lede come from .h-page and .lede; the head section
+     stops at --header-pb so the next section's top padding does the work. */
+  .contents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: var(--sp-6);
+  }
+
+  /* Reading paragraphs: one measure, one size, spaced by gap like everything else. */
+  .says {
+    display: grid;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-6);
+  }
+  .says p {
+    max-width: var(--measure);
+    margin: 0;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .says .pill {
+    margin-left: var(--sp-1);
+  }
+
+  .cols {
+    display: grid;
+    gap: var(--gap-grid);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .cols {
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    }
+  }
+  .points {
+    padding-block: var(--sp-1);
+  }
+  .point {
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .point:first-child {
+    border-top: 0;
+  }
+  .point .h-card {
+    margin-bottom: var(--sp-1);
+  }
+  .point .states,
+  .point .quote {
+    margin-top: var(--sp-2);
+  }
+  .point .quote {
+    color: var(--ink);
+  }
+  /* The safety list runs the page width, so it reads in two columns when there is room. */
+  @media (min-width: 900px) {
+    .wide {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: var(--sp-7);
+      padding: var(--sp-1) var(--sp-6);
+    }
+    .wide .point:nth-child(2) {
+      border-top: 0;
+    }
+  }
+
+  .sub-h {
+    margin: var(--sp-7) 0 0;
+  }
+  .cards {
+    margin: var(--sp-4) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 760px) {
+    .cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cards.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .card .card-text {
+    margin-top: var(--sp-2);
+  }
+  .cards.two,
+  .cards.three {
+    margin-top: var(--sp-6);
+  }
+  .way {
+    display: flex;
+    flex-direction: column;
+  }
+  .way .foot {
+    margin: auto 0 0;
+    padding-top: var(--sp-5);
+  }
+
+  .cta {
+    margin-top: var(--sp-6);
+  }
+  .position {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--sp-4);
+    align-items: center;
+    max-width: 54ch;
+    margin: 0;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    line-height: var(--lh-ui);
+    color: var(--ink);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-3);
+    margin-top: var(--sp-5);
+  }
+</style>

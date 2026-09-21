@@ -1,5 +1,7 @@
-/* Starlight, dressed in the site's palette and type. Night is Starlight's base theme (:root);
-   day is [data-theme="light"]. Tailwind is deliberately not loaded here. */
+/* Starlight, dressed in the site's palette, type scale and detail.
+   Night is Starlight's base theme (:root); day is [data-theme="light"].
+   Tailwind is deliberately not loaded here, so the site tokens the docs
+   need are restated rather than imported. */
 @import "@fontsource-variable/plus-jakarta-sans";
 @import "@fontsource-variable/manrope";
 
@@ -18,6 +20,13 @@
   --sl-color-gray-5: #3a3a63;
   --sl-color-gray-6: #23244a;
   --sl-color-black: #0d0e26;
+
+  /* The site's focus and selection, restated for the docs. */
+  --sd-focus: rgba(171, 149, 255, 0.82);
+  --sd-selection: rgba(138, 107, 255, 0.4);
+  --sd-selection-fg: #ffffff;
+  --sd-radius-code: 6px;
+  --sd-radius-block: 12px;
 }
 :root[data-theme="light"] {
   --sl-color-accent-low: #e9e3ff;
@@ -32,11 +41,45 @@
   --sl-color-gray-6: #ecebfa;
   --sl-color-gray-7: #f3f2fe;
   --sl-color-black: #f6f5ff;
+
+  --sd-focus: rgba(90, 63, 208, 0.78);
+  --sd-selection: rgba(138, 107, 255, 0.22);
+  --sd-selection-fg: #14163c;
 }
 
-.site-title img,
+/* --- Type: the site's scale, one step down from Starlight's default --- */
+:root {
+  --sl-text-xs: 0.6875rem; /* 11px  micro */
+  --sl-text-sm: 0.78125rem; /* 12.5px fine */
+  --sl-text-base: 1rem; /* 16px  body */
+  --sl-text-lg: 1.09375rem; /* 17.5px lede */
+  --sl-text-xl: 1.1875rem; /* 19px */
+  --sl-text-2xl: 1.5rem; /* 24px */
+  --sl-text-3xl: 1.75rem; /* 28px */
+  --sl-text-4xl: 2.125rem; /* 34px  page title */
+  --sl-text-5xl: 2.5rem;
+  --sl-text-body: var(--sl-text-base);
+  --sl-text-body-sm: var(--sl-text-sm);
+  --sl-text-code: 0.8125rem; /* 13px  mono */
+  --sl-text-code-sm: 0.78125rem;
+  --sl-text-h1: var(--sl-text-4xl);
+  --sl-text-h2: var(--sl-text-2xl);
+  --sl-text-h3: var(--sl-text-xl);
+  --sl-text-h4: var(--sl-text-lg);
+  --sl-text-h5: var(--sl-text-base);
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.25;
+}
+
+/* Pixel art stays pixel art. The brand mark is vector and must not be. */
 .sl-markdown-content img[src^="/art/"] {
   image-rendering: pixelated;
+}
+/* The half sun sits on the title's own line, sized to its cap height. */
+.site-title img {
+  width: auto;
+  height: 15px;
+  align-self: center;
 }
 .sl-markdown-content :is(h1, h2, h3, h4),
 .content-panel h1,
@@ -44,8 +87,58 @@
   font-family: var(--sd-display);
   font-weight: 500;
   letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.sl-markdown-content h1,
+.content-panel h1 {
+  line-height: 1.14;
+  letter-spacing: -0.024em;
 }
 .site-title {
   font-family: var(--sd-display);
   font-weight: 600;
+}
+
+/* --- Detail: measure, code, links, focus, selection --- */
+.sl-markdown-content p,
+.sl-markdown-content li {
+  text-wrap: pretty;
+}
+.sl-markdown-content :is(p, ul, ol, blockquote) {
+  max-width: 66ch;
+}
+.sl-markdown-content :not(pre) > code {
+  border-radius: var(--sd-radius-code);
+  padding: 1px 6px;
+  font-size: var(--sl-text-code);
+}
+.sl-markdown-content pre,
+.expressive-code .frame pre,
+.expressive-code .frame .header {
+  border-radius: var(--sd-radius-block);
+}
+.sl-markdown-content a {
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+  text-decoration-skip-ink: auto;
+}
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--sd-focus);
+  outline-offset: 2px;
+  border-radius: var(--sd-radius-code);
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+::selection {
+  background: var(--sd-selection);
+  color: var(--sd-selection-fg);
+}
+.sl-markdown-content :is(table, .tabular) {
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }

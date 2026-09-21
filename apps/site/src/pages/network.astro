@@ -1,0 +1,417 @@
+---
+// apps/site/src/pages/network.astro
+// Why a directory of inboxes matters: how a business joins, how receipts become reputation on
+// both sides, and what the network is never allowed to see. LiveMetrics carries the live numbers
+// so the fetch, the fallback and the refresh live in one place.
+import LiveMetrics from "../components/LiveMetrics.astro";
+import Layout from "../layouts/Layout.astro";
+
+const contents = [
+  { href: "#directory", label: "The directory" },
+  { href: "#receipts", label: "Receipts, not reviews" },
+  { href: "#clients", label: "Good clients" },
+  { href: "#ranking", label: "How the best win" },
+  { href: "#privacy", label: "What it never sees" },
+  { href: "#join", label: "Join" },
+];
+
+const signals = [
+  {
+    title: "A customer you know",
+    text: "Their record is clean and their agent is verified. A rule confirms the booking the moment it arrives, at any hour.",
+    tint: "success",
+  },
+  {
+    title: "A first-timer",
+    text: "No record yet, and nothing against them. A rule asks for a deposit, or holds the slot and sends the request to you.",
+    tint: "warning",
+  },
+  {
+    title: "Anything unusual",
+    text: "A record with late cancellations behind it, or a request that does not fit your limits. It goes to a person, with the signal shown beside it.",
+    tint: "message",
+  },
+];
+
+const never = [
+  {
+    k: "Stays in your instance",
+    v: "Conversations, prices, names, addresses, payment references, every item and every event.",
+  },
+  {
+    k: "Reaches the network",
+    v: "Your domain, the version and runtime the instance reports, and hourly counts in four buckets. Later, the public manifest at your domain, receipt signatures and reviews.",
+  },
+];
+---
+
+<Layout
+  title="The network · Surfing Dog"
+  description="A directory of inboxes that agents can search, where listing is by verified domain and ranking follows kept promises. How receipts will become reputation on both sides, how a business will know its good clients, and what the network is never allowed to see."
+>
+  <section class="wrap section is-head" aria-labelledby="page-h">
+    <p class="eyebrow">The network</p>
+    <h1 class="h-page" id="page-h">A directory of inboxes that keep their promises</h1>
+    <p class="lede">
+      Every Surfing Dog inbox can join a network: a place where an agent can find a business, and a
+      record of promises kept on both sides of the exchange. It is off until you switch it on, and
+      it never sees what your customers write.
+    </p>
+    <nav class="contents" aria-label="On this page">
+      {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
+    </nav>
+  </section>
+
+  <LiveMetrics />
+
+  <section class="section" id="directory" aria-labelledby="directory-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Membership</p>
+          <h2 class="h-section" id="directory-h">One directory, open format</h2>
+          <p class="lede">
+            An inbox joins by registering its own domain. After that it reports counts, once an
+            hour, and nothing else.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Membership ships today. Switch it on and your instance registers its domain with the
+          network and sends an hourly ping: the version it runs, what it runs on, and how many
+          bookings, orders, quote requests and messages arrived in the last day. Counts only. No
+          content, no names, no amounts. Test items are left out.
+        </p>
+        <p>
+          The directory that lists those instances is a separate service, and it is being built.
+          <span class="pill">a later release</span> It will verify a domain before listing it, by fetching
+          the manifest at that address and checking that the instance names itself. A listing will
+          carry the business name, where it is, what it does, the languages it answers in, and the
+          doors it offers.
+        </p>
+        <p>
+          surfingdog.ai runs the first network. The protocol is two HTTP calls, so a trade body, a
+          city or a franchise can run one of their own, and an inbox will be able to belong to more
+          than one.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="receipts" aria-labelledby="receipts-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Reputation</p>
+          <h2 class="h-section" id="receipts-h">Receipts, not reviews</h2>
+          <p class="lede">
+            A review should be proof that something happened, not an opinion anyone can post about
+            anyone.
+          </p>
+        </div>
+        <span class="pill">the next release and 3</span>
+      </div>
+
+      <div class="says">
+        <p>
+          When an item completes, the instance will issue a receipt: a small signed record of what
+          was agreed and what happened. The customer's agent will counter-sign it, so both sides end
+          up holding the same proof, and neither can quietly change it afterwards.
+        </p>
+        <p>
+          A review will only be accepted against a receipt, in both directions. Nobody will be able
+          to review a business they never dealt with, and no business will be able to review a
+          customer it never served.
+        </p>
+        <p>
+          Both reviews will be sealed when they are written and revealed together when the window
+          closes. Neither side sees the other's words in time to react to them, which is the only
+          way honest feedback survives contact with a rating.
+        </p>
+      </div>
+
+      <p class="more">
+        <a class="link" href="/blog/receipts-not-reviews/">Read why we are starting with receipts</a>
+      </p>
+      <p class="fine">
+        Today the endpoint and the MCP tool exist and answer that receipts arrive in the next release. Nothing
+        on this page is issuing a receipt yet.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="clients" aria-labelledby="clients-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Both sides</p>
+          <h2 class="h-section" id="clients-h">Knowing who the good clients are</h2>
+          <p class="lede">
+            Businesses have been rated by their customers for twenty years. The other half of that
+            record has never existed.
+          </p>
+        </div>
+        <span class="pill">a later release</span>
+      </div>
+
+      <div class="says">
+        <p>
+          Receipts add up. Over time a customer, or the agent acting for them, will carry a record:
+          bookings kept, bookings cancelled late, no-shows, orders paid, disputes raised.
+        </p>
+        <p>
+          When a request arrives you will see that record as a short signal, something like
+          <span class="mono">verified, 14 receipts, 13 kept</span>. It will be advice, never a
+          verdict. The software will not decline anyone on its own, and a person will be able to see
+          what is held about them and contest it.
+        </p>
+        <p>
+          In practice it changes what your rules can safely do on their own.
+        </p>
+      </div>
+
+      <ul class="grid-cards cards three" data-reveal="stagger">
+        {
+          signals.map((s) => (
+            <li class="glass card">
+              <span class:list={["pill", `tint-${s.tint}`]}>
+                <i class:list={["dot", `dot-${s.tint}`]} />
+                {s.title}
+              </span>
+              <p class="card-text">{s.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="fine">
+        The incentive runs both ways. An agent that keeps the bookings it makes earns faster
+        confirmations for the people it acts for, so behaving well is worth more to it than pushing.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="ranking" aria-labelledby="ranking-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Discovery</p>
+          <h2 class="h-section" id="ranking-h">How the best businesses win</h2>
+          <p class="lede">
+            Listing by verified domain, ranking by kept promises. Neither can be bought.
+          </p>
+        </div>
+        <span class="pill">a later release</span>
+      </div>
+
+      <div class="says">
+        <p>
+          Every entry will be a real business at a domain it proved it controls, so the directory
+          cannot fill up with listings nobody stands behind.
+        </p>
+        <p>
+          Ranking will follow what a business actually did: confirmations honoured, quotes answered,
+          orders fulfilled, receipts issued, and how quickly someone replies. Not advertising spend,
+          and not the number of reviews collected.
+        </p>
+        <p>
+          Agents will find businesses through the directory and prefer the ones whose doors work and
+          whose record is clean. A good small business gets found the same way a large one does,
+          because the thing being measured is the same in both cases.
+        </p>
+        <p>
+          And because reviews are two-sided and revealed together, there is nothing to retaliate
+          against. Honest feedback costs nothing to give, so the businesses that issue receipts and
+          answer their reviews will sit above the ones that do not.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="privacy" aria-labelledby="privacy-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Limits</p>
+          <h2 class="h-section" id="privacy-h">What the network never sees</h2>
+          <p class="lede">
+            The line is drawn in the code, not in a policy document: counts leave the instance,
+            content does not.
+          </p>
+        </div>
+      </div>
+
+      <dl class="glass spec">
+        {
+          never.map((n) => (
+            <div class="row-spec">
+              <dt>{n.k}</dt>
+              <dd>{n.v}</dd>
+            </div>
+          ))
+        }
+      </dl>
+
+      <div class="says top">
+        <p>
+          Reputation will be advisory. It will decay with time, so an old mistake stops counting
+          against someone forever, and it can be contested by the person it describes.
+        </p>
+        <p>
+          The design follows European data protection rules from the start, including the part that
+          matters most here: no decision about a person is made automatically by the software alone.
+          A refusal is always a person's refusal, or a rule that person wrote and can read back in
+          one sentence.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="join" aria-labelledby="join-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Switch it on</p>
+          <h2 class="h-section" id="join-h">Join, or run your own</h2>
+          <p class="lede">
+            Membership is a switch in Settings, and it is off until you turn it on.
+          </p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Open Settings, switch network membership on, and give the instance its public address. It
+          registers itself and starts reporting. Switch it off and the reporting stops the same
+          minute.
+        </p>
+        <p>
+          Running a network of your own is two HTTP calls: one that takes a registration, one that
+          takes the hourly ping. The payloads are open, and so is everything that reads them.
+        </p>
+      </div>
+
+      <div class="glass panel cta">
+        <p class="position">
+          <span class="u-line" aria-hidden="true"></span>
+          <span>Your inbox first. The network is worth joining once it is answering for you.</span>
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/#run">Get your inbox</a>
+          <a class="btn btn-secondary" href="/technical/">Read the technical page</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .contents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: var(--sp-6);
+  }
+
+  .says {
+    display: grid;
+    gap: var(--sp-4);
+  }
+  .says.top {
+    margin-top: var(--sp-6);
+  }
+  .says p {
+    max-width: var(--measure);
+    margin: 0;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .says .pill {
+    margin-inline: var(--sp-1);
+  }
+  .says .mono {
+    font-size: 0.92em;
+    color: var(--ink);
+  }
+
+  .more {
+    margin: var(--sp-5) 0 0;
+    font-size: var(--fs-card);
+  }
+
+  .cards {
+    margin: var(--sp-6) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 760px) {
+    .cards.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .card .card-text {
+    margin-top: var(--sp-3);
+  }
+
+  .spec {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: var(--sp-1) var(--sp-5);
+    border-radius: var(--radius-card);
+  }
+  .row-spec {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--sp-1) var(--sp-4);
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .row-spec:first-child {
+    border-top: 0;
+  }
+  @media (max-width: 660px) {
+    .row-spec {
+      grid-template-columns: 1fr;
+      gap: var(--sp-1);
+    }
+  }
+  .spec dt {
+    font-size: var(--fs-card);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .spec dd {
+    margin: 0;
+    min-width: 0;
+    max-width: var(--measure-card);
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+
+  .cta {
+    margin-top: var(--sp-6);
+  }
+  .position {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--sp-4);
+    align-items: center;
+    max-width: 54ch;
+    margin: 0;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    line-height: var(--lh-ui);
+    color: var(--ink);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-3);
+    margin-top: var(--sp-5);
+  }
+</style>

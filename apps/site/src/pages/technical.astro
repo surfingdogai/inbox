@@ -1,0 +1,598 @@
+---
+// apps/site/src/pages/technical.astro
+// Everything a developer needs in one place, so the rest of the navigation can stay about the
+// business. The numbers here are counted from the repository, not rounded up.
+import Layout from "../layouts/Layout.astro";
+
+const REPO = "https://github.com/surfingdogai/inbox";
+const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
+const INSTANCE = "https://inbox.surfingdog.ai";
+
+const facts = [
+  { label: "REST operations", value: "38", sub: "11 public, 27 for the owner" },
+  { label: "MCP tools", value: "35", sub: "11 public, 24 for the owner" },
+  { label: "States", value: "34", sub: "across five state machines" },
+  { label: "Tests", value: "195", sub: "on Node and inside workerd" },
+];
+
+/** `phase` marks a door that is named in the schema but not built yet. */
+const doors: { k: string; v: string; note: string; phase?: string }[] = [
+  {
+    k: "Discovery",
+    v: "GET /.well-known/agent-inbox.json",
+    note: "One document naming the instance, the item types it accepts, the trust tiers it recognises, and the REST, OpenAPI and MCP doors. The email door is not listed in it.",
+  },
+  {
+    k: "REST",
+    v: "GET /openapi.json · /v1/*",
+    note: "38 operations: 11 public and 27 under /v1/owner. The OpenAPI document is generated from the same schemas as the MCP tools, so the two never drift apart.",
+  },
+  {
+    k: "MCP public",
+    v: "POST /mcp",
+    note: "11 tools for a customer's agent, no sign-in. Ten do the work today. acknowledge_receipt answers that receipts will arrive in the next release.",
+  },
+  {
+    k: "MCP owner",
+    v: "POST /mcp/owner",
+    note: "24 tools for the owner and the AI the owner trusts. OAuth 2.1 with PKCE, or an owner API key in an Authorization header.",
+  },
+  {
+    k: "Email in",
+    v: "POST /v1/email/inbound",
+    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That will come in the next release.",
+  },
+  {
+    k: "Web form",
+    v: "channel: form",
+    phase: "the first release",
+    note: "A page for a person who has no agent. The channel name is reserved in the schema. The door itself is not built.",
+  },
+  {
+    k: "Idempotency",
+    v: "Idempotency-Key · idempotency_key",
+    note: "The same key with the same request returns the same answer. A replay comes back 200 with Idempotent-Replayed: true, never as a second booking.",
+  },
+  {
+    k: "Access tokens",
+    v: "access_token · x-access-token",
+    note: "Issued when someone creates an item with no party attached. It is how that person reads or cancels their own item afterwards. The owner reads any item without one.",
+  },
+  {
+    k: "Errors",
+    v: "application/problem+json",
+    note: "For an invalid request: a code, a sentence, and fields[{path, problem, message}] naming exactly which field is wrong and why.",
+  },
+];
+
+const urls = [
+  {
+    href: `${INSTANCE}/.well-known/agent-inbox.json`,
+    link: true,
+    note: "The manifest. Read this first: it tells an agent which doors exist and where they are.",
+  },
+  {
+    href: `${INSTANCE}/openapi.json`,
+    link: true,
+    note: "The OpenAPI 3.1 document for every REST operation, public and owner.",
+  },
+  {
+    href: `${INSTANCE}/mcp`,
+    link: false,
+    note: "The public MCP server. It answers POST, so point an MCP client at it rather than a browser.",
+  },
+];
+
+const ways = [
+  {
+    title: "Cloudflare Workers",
+    text: "One click on your own account. D1, R2 and a queue are provisioned for you.",
+    href: DEPLOY,
+    label: "Deploy to Cloudflare",
+    external: true,
+  },
+  {
+    title: "Your own machine",
+    text: "Node 22.16 or newer, built from the repository today. One command will arrive with 0.1.",
+    href: "/docs/quickstart/#your-own-server",
+    label: "Read the quickstart",
+    external: false,
+  },
+  {
+    title: "Hosted by us",
+    text: "The same inbox run for you, one database per business. It opens in a later release, and the waitlist is on the home page.",
+    href: "/#run",
+    label: "Join the waitlist",
+    external: false,
+  },
+];
+---
+
+<Layout
+  title="Technical · Surfing Dog"
+  description="The technical side of Surfing Dog Inbox: the doors an agent can use, the OpenAPI and MCP endpoints, how to run it on Cloudflare Workers or your own machine, and how to contribute."
+>
+  <section class="wrap section is-head" id="technical" aria-labelledby="technical-h">
+    <p class="eyebrow">Technical</p>
+    <h1 class="h-page" id="technical-h">The doors, the code and how to run it</h1>
+    <p class="lede">
+      Surfing Dog Inbox is one open-source repository you can read, run and change. This page collects the doors, the
+      endpoints, the numbers and the licences, so the rest of the site can stay about the business.
+    </p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/docs/">Read the docs</a>
+      <a class="btn btn-secondary" href={REPO} rel="noopener">GitHub</a>
+      <a class="btn btn-secondary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
+    </div>
+    <p class="fine">
+      Here for the product rather than the code? <a class="link" href="/how-it-works/">How it works</a> covers the same
+      inbox without the endpoints.
+    </p>
+  </section>
+
+  <section class="section" id="what" aria-labelledby="what-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What it is</p>
+          <h2 class="h-section" id="what-h">One repository, two runtimes</h2>
+          <p class="lede">
+            A TypeScript monorepo behind an inbox you host yourself. The same code runs on Cloudflare Workers and on
+            Node, and the whole suite runs on both before anything ships.
+          </p>
+        </div>
+      </div>
+
+      <ul class="grid-cards cards" data-reveal="stagger">
+        <li class="glass card">
+          <h3 class="h-card">Open source, all of it</h3>
+          <p class="card-text">
+            Six packages and two apps: the domain core, the adapters that mount the doors, the platform bindings, the
+            shared UI, the spec and the client. 36 tables from 3 migrations, and 15 decision records explaining why the
+            architecture is the way it is.
+          </p>
+        </li>
+        <li class="glass card">
+          <h3 class="h-card">Run it where you like</h3>
+          <p class="card-text">
+            Cloudflare Workers with D1, queues and cron, or Node 22.16 and newer on any machine with a single SQLite
+            file. One instance is one business and one database, and the data stays there.
+          </p>
+        </li>
+        <li class="glass card">
+          <h3 class="h-card">Licensed to be copied</h3>
+          <p class="card-text">
+            AGPL-3.0-only for the server, the app and the shared UI. MIT for the spec and the SDK, so anyone can
+            implement the format without taking on the copyleft. The SDK is a stub today. It will be generated from the
+            OpenAPI document in the first release.
+          </p>
+        </li>
+      </ul>
+
+      <div class="tiles" data-reveal="stagger">
+        {
+          facts.map((f) => (
+            <div class="glass card tile">
+              <p class="label">{f.label}</p>
+              <p class="value u-count" data-to={f.value}>{f.value}</p>
+              <p class="sub">{f.sub}</p>
+            </div>
+          ))
+        }
+      </div>
+
+      <p class="fine">
+        Counted from the source on 21 September 2026. Five item types have a state machine. Four are advertised
+        publicly, and refunds are handled inside the owner app. The version string the OpenAPI document and the network
+        ping report is still 0.0.0.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="doors" aria-labelledby="doors-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">The doors</p>
+          <h2 class="h-section" id="doors-h">Three doors today, one more to come</h2>
+          <p class="lede">
+            REST, MCP and email ship now. A web form is the first release work. Everything below is what the code does, not what
+            it is meant to do one day.
+          </p>
+        </div>
+        <a class="btn btn-secondary" href="/docs/api/">Read the API docs</a>
+      </div>
+
+      <dl class="glass spec mono">
+        {
+          doors.map((d) => (
+            <div class="row-spec">
+              <dt>{d.k}</dt>
+              <dd>
+                <span class="dd-head">
+                  <code>{d.v}</code>
+                  {d.phase ? <span class="pill">{d.phase}</span> : null}
+                </span>
+                <span class="note">{d.note}</span>
+              </dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+  </section>
+
+  <section class="section" id="try" aria-labelledby="try-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Try it</p>
+          <h2 class="h-section" id="try-h">Point something at the live instance</h2>
+          <p class="lede">
+            inbox.surfingdog.ai is a real instance running this code. Its public doors need no key, so an agent can read
+            it from a standing start.
+          </p>
+        </div>
+      </div>
+
+      <ul class="glass panel urls">
+        {
+          urls.map((u) => (
+            <li class="url">
+              <span class="url-head">
+                {u.link ? (
+                  <a class="mono u" href={u.href} rel="noopener">
+                    {u.href}
+                  </a>
+                ) : (
+                  <span class="mono u">{u.href}</span>
+                )}
+                <button class="btn btn-secondary btn-sm" type="button" data-copy={u.href} hidden>
+                  Copy
+                </button>
+              </span>
+              <span class="url-note">{u.note}</span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <div class="glass panel call">
+        <h3 class="h-card">One call you can make right now</h3>
+        <pre class="cmd mono"><code>curl {INSTANCE}/v1/business</code><button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            data-copy={`curl ${INSTANCE}/v1/business`}
+            hidden>Copy</button></pre>
+        <p class="card-text">
+          It answers with the business profile: the name, the item types the instance accepts and where its doors are.
+          No key and no sign-up, and the answer is cached for five minutes.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="run-it" aria-labelledby="run-it-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Run it</p>
+          <h2 class="h-section" id="run-it-h">Three ways, same software</h2>
+          <p class="lede">Pick the runtime. The home page carries the full version of this, with the waitlist.</p>
+        </div>
+      </div>
+
+      <ul class="grid-cards cards" data-reveal="stagger">
+        {
+          ways.map((w) => (
+            <li class="glass card lift way">
+              <h3 class="h-card">{w.title}</h3>
+              <p class="card-text">{w.text}</p>
+              <span class="foot">
+                <a class="btn btn-secondary" href={w.href} rel={w.external ? "noopener" : undefined}>
+                  {w.label}
+                </a>
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="connect" aria-labelledby="connect-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Connect your AI</p>
+          <h2 class="h-section" id="connect-h">Your own AI runs the inbox</h2>
+          <p class="lede">
+            The owner MCP server is the same surface the owner app uses. Claude, ChatGPT or anything that speaks
+            Streamable HTTP can work the inbox on your behalf.
+          </p>
+        </div>
+        <a class="btn btn-secondary" href="/docs/connect-your-ai/">How to connect</a>
+      </div>
+
+      <div class="glass panel connect">
+        <p class="endpoint mono"><code>POST /mcp/owner</code></p>
+        <p class="card-text">
+          Every instance is its own authorization server. A client connects with OAuth 2.1, authorization code and PKCE,
+          and identifies itself with a Client ID Metadata Document, so nothing has to be registered by hand. Dynamic
+          registration is there for clients that still need it. A client that cannot do OAuth sends an owner API key
+          instead.
+        </p>
+        <p class="card-text">
+          24 tools cover the work: list and read items, fire the transitions an item allows, reply to a customer, and
+          set up the profile, the services, the products, the opening hours and the rules. Eight scopes bound what a
+          connected client may do, and a consent screen names them in plain words.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="contribute" aria-labelledby="contribute-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Contribute</p>
+          <h2 class="h-section" id="contribute-h">Issues, pull requests and feature requests</h2>
+          <p class="lede">
+            Read the plan and the decision records before changing the architecture. They are short, and they explain
+            why. Then open an issue or a pull request.
+          </p>
+        </div>
+      </div>
+
+      <ul class="grid-cards cards" data-reveal="stagger">
+        <li class="glass card lift">
+          <h3 class="h-card">The code</h3>
+          <p class="card-text">
+            The repository, the issues and the decision records. Every change has to pass the suite on Node and inside
+            workerd.
+          </p>
+          <span class="foot">
+            <a class="btn btn-secondary" href={REPO} rel="noopener">Open the repository</a>
+          </span>
+        </li>
+        <li class="glass card lift">
+          <h3 class="h-card">How to work on it</h3>
+          <p class="card-text">
+            The toolchain, the rules of the repository, and what a change has to respect before it is merged.
+          </p>
+          <span class="foot">
+            <a class="btn btn-secondary" href="/docs/contributing/">Read contributing</a>
+          </span>
+        </li>
+        <li class="glass card lift">
+          <h3 class="h-card">Ask for something</h3>
+          <p class="card-text">
+            Not every idea needs a pull request. Say what you need, see what other people need, and vote on it.
+          </p>
+          <span class="foot">
+            <a class="btn btn-secondary" href="/requests/">Feature requests</a>
+          </span>
+        </li>
+      </ul>
+
+      <p class="fine">
+        The server, the app and the shared UI are AGPL-3.0-only: run a modified copy as a service and its source has to
+        be available. The spec and the SDK are MIT on purpose, so anyone can implement a compatible instance, agent or
+        integration without inheriting that.
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* The page header: .h-page and .lede carry the type; the section stops at --header-pb. */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-3);
+    margin-top: var(--sp-6);
+  }
+
+  .cards {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 900px) {
+    .cards {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+  }
+  .card .card-text {
+    margin-top: var(--sp-2);
+  }
+  .foot {
+    display: block;
+    margin-top: auto;
+    padding-top: var(--sp-5);
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--gap-row);
+    margin-top: var(--gap-grid);
+  }
+  @media (min-width: 720px) {
+    .tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--gap-grid);
+    }
+  }
+  .tile p {
+    margin: 0;
+  }
+  .label {
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+  .value {
+    margin-top: var(--sp-1);
+    font-family: var(--font-display);
+    font-size: clamp(24px, 2.6vw, 32px);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--ink);
+  }
+  .sub {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-fine);
+    line-height: 1.45;
+    color: var(--ink-3);
+  }
+
+  /* The specification table, the same shape as the one on the network page. */
+  .spec {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: var(--sp-1) var(--sp-5);
+    border-radius: var(--radius-card);
+  }
+  .row-spec {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: var(--sp-1) var(--sp-4);
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .row-spec:first-child {
+    border-top: 0;
+  }
+  @media (max-width: 560px) {
+    .row-spec {
+      grid-template-columns: 1fr;
+      gap: var(--sp-1);
+    }
+  }
+  dt {
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  dd {
+    display: grid;
+    gap: var(--sp-1);
+    margin: 0;
+    min-width: 0;
+  }
+  .dd-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+  .spec code {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  /* Small text on a narrow measure, never the widest line on the page. */
+  .note {
+    max-width: var(--measure-tight);
+    font-family: var(--font-sans);
+    font-size: var(--fs-ui);
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  .urls {
+    margin: 0;
+    padding-block: var(--sp-1);
+    list-style: none;
+  }
+  .url {
+    display: grid;
+    gap: var(--sp-1);
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .url:first-child {
+    border-top: 0;
+  }
+  .url-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+  .u {
+    min-width: 0;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .url-note {
+    max-width: var(--measure-tight);
+    font-size: var(--fs-ui);
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  .call {
+    margin-top: var(--gap-grid);
+  }
+  .cmd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .cmd code::before {
+    content: "$ ";
+    color: var(--ink-3);
+  }
+
+  .endpoint {
+    margin: 0 0 var(--sp-3);
+  }
+  .connect .card-text + .card-text {
+    margin-top: var(--sp-3);
+  }
+</style>
+
+<script>
+  // Progressive enhancement: the URLs are already readable and selectable, so the copy button only
+  // appears where the clipboard is actually available.
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-copy]"));
+  if (navigator.clipboard) {
+    for (const button of buttons) {
+      button.hidden = false;
+      button.addEventListener("click", async () => {
+        const value = button.dataset.copy;
+        if (!value) return;
+        const label = button.textContent ?? "Copy";
+        try {
+          await navigator.clipboard.writeText(value);
+          button.textContent = "Copied";
+        } catch {
+          button.textContent = "Press to select";
+        }
+        window.setTimeout(() => {
+          button.textContent = label;
+        }, 1600);
+      });
+    }
+  }
+</script>

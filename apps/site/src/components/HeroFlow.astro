@@ -1,0 +1,797 @@
+---
+/**
+ * The hero animation, "the line". One current carries typed work from several AI agents into one
+ * business: bookings, orders, quotes and messages arrive as typed chips, land as rows, and are
+ * decided by the owner's own rules and the owner's own AI. Four of the five are answered; one — the
+ * quote — stops with an amber dot because a person is needed, which is what the product actually
+ * does. Confirmed work carries on to the point of sale, the shop and the calendar. Those three are
+ * drawn as a live link, never as a shipped logo, because the connectors are still being built.
+ *
+ * The timings are deliberate; do not retune them by accident.
+ *  - TRAVEL is unequal per agent (1.34 / 1.16 / 1.42 s) so two arrivals never land on the same
+ *    frame and the loop never reads as a metronome.
+ *  - LOOP is 12.9 s against five items spaced 0.60 s to 8.65 s: long enough that the repeat is not
+ *    noticed beside a headline, short enough that a visitor sees all four beats.
+ *  - The return arc is inked only while an answer is travelling it (sd-trail, step 4). An always-on
+ *    return line would claim a channel that is not always open.
+ *  - The rule phrase holds for 1 s and fades over 0.42 s, so it lives 1.42 s. Decisions fall at
+ *    2.38 / 4.41 / 6.74 / 9.01 / 10.43 s — gaps of 2.03, 2.33, 2.27 and 1.42 s. Exactly one phrase
+ *    is ever on screen, but the last pair has no margin at all: it holds only because the gate is
+ *    "ph >= p2 + .10", which can fire late and never early, and because say() rewrites the whole
+ *    class in one call so no frame shows new text in the old tint. Widening that gap means moving
+ *    the fifth item and therefore LOOP, which is a timing change and Tiago's call.
+ *
+ * The moving scene is built in JavaScript inside one <figure>, which is why the styles below are
+ * global: Astro rewrites scoped selectors at build time, so they would never reach an element the
+ * script creates at run time. Nothing leaks, because every selector begins with .sdf and every
+ * keyframe is named sdf-*; the sd- class names exist only inside .sdf.
+ *
+ * The figure is not empty before that script runs. It ships with the scene at rest — the lines, the
+ * card, the rule strip, the agents, the systems — server-rendered as inline SVG and dropped by
+ * mount() the moment the live scene is ready. With JavaScript off, or if mount() throws, that
+ * picture is what a visitor keeps, so the page can never show a hole where the hero is. The figure
+ * also carries aspect-ratio 520/390, so the box holds its height from first paint and nothing below
+ * the hero jumps. The static markup is generated from the same numbers the script uses
+ * (build/gen-seed.js in the prototype folder); regenerate it rather than hand-editing it.
+ *
+ * Colours come from the site's tokens where one exists — --ground, --ink, --ink-2, --ink-3,
+ * --hairline, --glass-bg, --glass-border, --row-bg, --c-booking/-ink and the rest, --ease-out-soft,
+ * --font-sans, --font-display. The literals are only the fallback for a host that has not declared
+ * a role alias, and night redefines those fallbacks under both the prefers-color-scheme query and
+ * the [data-theme="dark"] attribute, the way the rest of the site does.
+ *
+ * Two day inks are a step darker than the brand's own: --c-message-ink #0b6a75 and --c-order-ink
+ * #9c4409. At the lighter values the chip labels measured 3.97:1 and 4.22:1 on the day ground,
+ * under the 4.5:1 floor, on the four words that carry the whole point. Both stay on their brand
+ * hue. A host that declares these tokens itself needs the same two values.
+ *
+ * The pills are measured at run time (fit(), below) rather than hard-coded, so "Calendar" and
+ * "Booking" cannot push out of their pills when Manrope loads or a fallback font resolves wider.
+ * The pads used are the drawn ones, so where the metrics match the design the floor binds and the
+ * composition is exactly as approved.
+ *
+ * With reduced motion the same machine is stepped forward to a composed still frame rather than
+ * replaced by a second drawing, and the preference is honoured if it is turned on later.
+ *
+ * No max-width of its own: the piece is whatever its container is, and Hero.astro's .art-box
+ * already caps it. The viewBox is 4:3, so a 900-wide instance is 675 tall, not 640.
+ */
+---
+
+<figure class="sdf" role="img" aria-label="Several AI agents send one business typed bookings, orders, quotes and messages; the business's own rules and AI answer most of them automatically, while its point of sale, online shop and calendar are kept in step as those connections come online.">
+<svg class="sd-seed" viewBox="0 0 520 390" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="sdseed-g" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="var(--sd-tangerine)"/>
+<stop offset="58%" stop-color="var(--sd-flamingo)"/>
+<stop offset="100%" stop-color="var(--sd-violet)"/>
+</linearGradient>
+<clipPath id="sdseed-c"><path d="M188,105 A11,11 0 0 1 210,105 Z"/></clipPath>
+</defs>
+<g>
+<path d="M56,104 C104,104 118,196 176,196" class="sd-line"/>
+<path d="M56,196 L176,196" class="sd-line"/>
+<path d="M56,288 C104,288 118,196 176,196" class="sd-line"/>
+<path d="M344,196 C380,196 388,112 420,112" class="sd-line"/>
+<path d="M344,196 L420,196" class="sd-line"/>
+<path d="M344,196 C380,196 388,280 420,280" class="sd-line"/>
+</g>
+<text x="30" y="60" font-size="8.2" class="sd-cap">AI AGENTS</text>
+<text x="504" y="60" font-size="8.2" class="sd-cap" text-anchor="end">YOUR SYSTEMS</text>
+<g>
+<rect x="176" y="76" width="168" height="240" rx="14" class="sd-glass"/>
+<path d="M188,105 A11,11 0 0 1 210,105 Z" fill="url(#sdseed-g)"/>
+<g clip-path="url(#sdseed-c)">
+<rect x="187" y="96.4" width="24" height=".9" fill="var(--sd-ground)"/>
+<rect x="187" y="98.7" width="24" height=".9" fill="var(--sd-ground)"/>
+<rect x="187" y="100.8" width="24" height=".9" fill="var(--sd-ground)"/>
+</g>
+<text x="218" y="105" font-size="12.5" class="sd-title">Your business</text>
+<line x1="188" y1="118" x2="332" y2="118" class="sd-hair"/>
+<circle cx="176" cy="196" r="2.6" class="sd-port"/>
+<circle cx="344" cy="196" r="2.6" class="sd-port"/>
+<g class="sd-rule">
+<rect x="188" y="126" width="100" height="19" rx="9.5"/>
+<text x="198" y="138.6" font-size="8.6">Rules + your AI</text>
+<circle cx="316" cy="135.5" r="3.2" class="sd-beat"/>
+</g>
+</g>
+<g class="sd-agent" style="--ag:var(--sd-violet)">
+<rect x="30" y="92" width="24" height="24" rx="7" class="bodyfill"/>
+<rect x="30" y="92" width="24" height="24" rx="7"/>
+<circle cx="37.6" cy="103" r="1.7" class="eye"/>
+<circle cx="46.4" cy="103" r="1.7" class="eye"/>
+<line x1="42" y1="92" x2="42" y2="85"/>
+<circle cx="42" cy="82.4" r="2.6" class="ant"/>
+</g>
+<g class="sd-agent" style="--ag:var(--sd-lagoon)">
+<rect x="30" y="184" width="24" height="24" rx="7" class="bodyfill"/>
+<rect x="30" y="184" width="24" height="24" rx="7"/>
+<circle cx="37.6" cy="195" r="1.7" class="eye"/>
+<circle cx="46.4" cy="195" r="1.7" class="eye"/>
+<line x1="42" y1="184" x2="42" y2="177"/>
+<circle cx="42" cy="174.4" r="2.6" class="ant"/>
+</g>
+<g class="sd-agent" style="--ag:var(--sd-flamingo)">
+<rect x="30" y="276" width="24" height="24" rx="7" class="bodyfill"/>
+<rect x="30" y="276" width="24" height="24" rx="7"/>
+<circle cx="37.6" cy="287" r="1.7" class="eye"/>
+<circle cx="46.4" cy="287" r="1.7" class="eye"/>
+<line x1="42" y1="276" x2="42" y2="269"/>
+<circle cx="42" cy="266.4" r="2.6" class="ant"/>
+</g>
+<g class="sd-node">
+<rect x="420" y="96" width="84" height="32" rx="10" class="pill"/>
+<text x="462" y="115.4" font-size="9.4" text-anchor="middle">POS</text>
+</g>
+<g class="sd-node">
+<rect x="420" y="180" width="84" height="32" rx="10" class="pill"/>
+<text x="462" y="199.4" font-size="9.4" text-anchor="middle">Shop</text>
+</g>
+<g class="sd-node">
+<rect x="420" y="264" width="84" height="32" rx="10" class="pill"/>
+<text x="462" y="283.4" font-size="9.4" text-anchor="middle">Calendar</text>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector below begins with .sdf and every keyframe is named sdf-*, so
+   the component reserves nothing in the page's global namespace. .sdf is also
+   the query container, which is why the width query further down still matches. */
+.sdf{
+  /* Every colour is a property: host token first, component fallback second. */
+  --sd-ground:var(--ground,#f6f5ff);
+  --sd-ink:var(--ink,#14163c);
+  --sd-ink2:var(--ink-2,#3f4472);
+  --sd-ink3:var(--ink-3,#565a86);
+  --sd-hair:var(--hairline,rgba(20,22,60,.08));
+  --sd-glass:var(--glass-bg,rgba(255,255,255,.32));
+  --sd-glassb:var(--glass-border,rgba(255,255,255,.55));
+  --sd-row:var(--row-bg,rgba(255,255,255,.24));
+  --sd-booking:var(--c-booking,#ff6fa8);  --sd-booking-i:var(--c-booking-ink,#b02a6b);
+  --sd-order:var(--c-order,#ff9650);      --sd-order-i:var(--c-order-ink,#9c4409);
+  --sd-quote:var(--c-quote,#8a6bff);      --sd-quote-i:var(--c-quote-ink,#5a3fd0);
+  --sd-message:var(--c-message,#25cfe0);  --sd-message-i:var(--c-message-ink,#0b6a75);
+  --sd-palm:var(--c-success,#2fd3a5);     --sd-palm-i:var(--c-success-ink,#147a5c);
+  --sd-sun:var(--c-warning,#ffcf5c);      --sd-sun-i:var(--c-warning-ink,#866000);
+  --sd-flamingo:var(--flamingo,#ff6fa8);
+  --sd-violet:var(--violet,#8a6bff);
+  --sd-lagoon:var(--lagoon,#25cfe0);
+  --sd-tangerine:var(--tangerine,#ff9650);
+  --sd-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  /* No max-width: the piece is whatever its container is. The host caps it —
+     900 as a section piece, 520 in the hero art-box, 340 on a phone — and the
+     viewBox keeps the 4:3 composition at every one of them. aspect-ratio holds
+     that same 4:3 box open before the scene exists, so the column never
+     collapses to nothing and nothing below it jumps. */
+  display:block;margin:0;width:100%;aspect-ratio:520/390;container-type:inline-size;
+}
+/* Night re-points the same properties. The literals are only the fallback for a
+   host that has not declared the role aliases, never the source of truth — which
+   is why both blocks stay even on a host whose own tokens already flip. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .sdf{
+    --sd-ground:var(--ground,#0d0e26);
+    --sd-ink:var(--ink,#f2f1ff);
+    --sd-ink2:var(--ink-2,#b9bce0);
+    --sd-ink3:var(--ink-3,#9a9dc4);
+    --sd-hair:var(--hairline,rgba(255,255,255,.10));
+    --sd-glass:var(--glass-bg,rgba(255,255,255,.07));
+    --sd-glassb:var(--glass-border,rgba(255,255,255,.14));
+    --sd-row:var(--row-bg,rgba(255,255,255,.05));
+    --sd-booking-i:var(--c-booking-ink,#ff8fbc);
+    --sd-order-i:var(--c-order-ink,#ffb27c);
+    --sd-quote-i:var(--c-quote-ink,#ab95ff);
+    --sd-message-i:var(--c-message-ink,#63e2ee);
+    --sd-palm-i:var(--c-success-ink,#72e6c3);
+    --sd-sun-i:var(--c-warning-ink,#ffda80);
+  }
+}
+[data-theme="dark"] .sdf{
+  --sd-ground:var(--ground,#0d0e26);
+  --sd-ink:var(--ink,#f2f1ff);
+  --sd-ink2:var(--ink-2,#b9bce0);
+  --sd-ink3:var(--ink-3,#9a9dc4);
+  --sd-hair:var(--hairline,rgba(255,255,255,.10));
+  --sd-glass:var(--glass-bg,rgba(255,255,255,.07));
+  --sd-glassb:var(--glass-border,rgba(255,255,255,.14));
+  --sd-row:var(--row-bg,rgba(255,255,255,.05));
+  --sd-booking-i:var(--c-booking-ink,#ff8fbc);
+  --sd-order-i:var(--c-order-ink,#ffb27c);
+  --sd-quote-i:var(--c-quote-ink,#ab95ff);
+  --sd-message-i:var(--c-message-ink,#63e2ee);
+  --sd-palm-i:var(--c-success-ink,#72e6c3);
+  --sd-sun-i:var(--c-warning-ink,#ffda80);
+}
+/* One pair of properties carries an item's type wherever it goes: on the line,
+   in the row, in the card, in the rule that decided it. Nothing downstream
+   needs to know which type it is. */
+.sdf .t-booking{--tc:var(--sd-booking);--ti:var(--sd-booking-i)}
+.sdf .t-order  {--tc:var(--sd-order);  --ti:var(--sd-order-i)}
+.sdf .t-quote  {--tc:var(--sd-quote);  --ti:var(--sd-quote-i)}
+.sdf .t-message{--tc:var(--sd-message);--ti:var(--sd-message-i)}
+
+.sdf svg{display:block;width:100%;height:auto}
+.sdf text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sd-ink2)}
+/* The card heading and the column captions both ship in --ink-2. That is what
+   the approved render shows, so it is written here rather than left to fall out
+   of a specificity accident. Raising the heading to --ink and the captions to
+   --ink-3 is a visible change to a signed-off composition: Tiago's call, not a
+   silent edit. */
+.sdf .sd-title{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-weight:600;fill:var(--sd-ink2);letter-spacing:-.01em}
+.sdf .sd-cap{letter-spacing:.11em;fill:var(--sd-ink2)}
+
+/* the current itself */
+.sdf .sd-line{fill:none;stroke:var(--sd-ink3);stroke-opacity:.34;stroke-width:1.1;
+  transition:stroke-dashoffset .95s var(--sd-ease)}
+.sdf .sd-port{fill:var(--sd-ink3);fill-opacity:.55}
+/* the return route is only inked while an answer is using it */
+.sdf .sd-trail{fill:none;stroke:var(--sd-palm);stroke-width:1.1;stroke-dasharray:1 5;stroke-linecap:round;opacity:0}
+
+/* glass: a wash and a hairline, never a shadow that reads as a sticker */
+.sdf .sd-glass{fill:var(--sd-glass);stroke:var(--sd-glassb);stroke-width:1}
+.sdf .sd-hair{stroke:var(--sd-hair);stroke-width:1}
+
+/* Agent marks are drawn in ink and carry their identity in one small tinted
+   dot, so that colour stays reserved for item types as the system requires. */
+.sdf .sd-agent rect,.sdf .sd-agent line{fill:none;stroke:var(--sd-ink2);stroke-opacity:.55;stroke-width:1.2}
+.sdf .sd-agent .bodyfill{fill:var(--ag);fill-opacity:.07;stroke:none}
+.sdf .sd-agent .eye{fill:var(--sd-ink2);fill-opacity:.5;stroke:none}
+.sdf .sd-agent .ant{fill:var(--ag);stroke:none}
+.sdf .sd-agent .halo{fill:none;stroke:var(--ag);stroke-opacity:0;stroke-width:1.2;transform-box:fill-box;transform-origin:50% 50%}
+.sdf .sd-agent.wake .halo{animation:sdf-halo .62s var(--sd-ease)}
+@keyframes sdf-halo{0%{stroke-opacity:.5;transform:scale(.82)}100%{stroke-opacity:0;transform:scale(1.28)}}
+
+/* the rule strip inside the card */
+.sdf .sd-rule rect{fill:none;stroke:var(--sd-ink3);stroke-opacity:.30;stroke-width:1;transition:stroke-opacity .3s var(--sd-ease)}
+.sdf .sd-rule.lit rect{stroke-opacity:.62}
+.sdf .sd-beat{fill:var(--sd-ink3);fill-opacity:.4;transform-box:fill-box;transform-origin:50% 50%;
+  transition:fill .28s var(--sd-ease),fill-opacity .28s var(--sd-ease)}
+.sdf .sd-rule.lit .sd-beat{fill:var(--sd-palm);fill-opacity:1;animation:sdf-beat .7s var(--sd-ease)}
+.sdf .sd-rule.lit.warn .sd-beat{fill:var(--sd-sun)}
+@keyframes sdf-beat{0%{transform:scale(1)}36%{transform:scale(1.5)}100%{transform:scale(1)}}
+
+/* The rule itself, in the words the owner wrote, under the strip and in the
+   item's own tint. The beat says that a rule ran; this says which one. One at
+   a time, about a second, faded in and out — never a pop. Two classes so the
+   still frame can hold it without a timer. */
+.sdf .sd-phrase{fill:var(--ti,var(--sd-ink3));opacity:0;transition:opacity .42s var(--sd-ease)}
+.sdf .sd-phrase.on{opacity:1}
+
+/* the inbox rows */
+.sdf .sd-row{opacity:0;transition:transform .42s var(--sd-ease),opacity .3s linear}
+.sdf .sd-row.on{opacity:1}
+.sdf .sd-row .in{transform:translateY(6px);opacity:0;transition:transform .42s var(--sd-ease),opacity .42s var(--sd-ease)}
+.sdf .sd-row.on .in{transform:none;opacity:1}
+.sdf .sd-row.out{opacity:0}
+.sdf .sd-row.out .in{transform:translateY(-7px)}
+/* a recycled row must be re-seated in its new slot without travelling there */
+.sdf .sd-row.nt,.sdf .sd-row.nt .in{transition:none}
+.sdf .sd-row .bg{fill:var(--sd-row)}
+.sdf .sd-row .bar{fill:var(--tc)}
+.sdf .sd-row .lb{fill:var(--ti);font-weight:600}
+.sdf .sd-row .st{fill:var(--sd-ink3)}
+.sdf .sd-row .res{opacity:0;transition:opacity .36s var(--sd-ease)}
+.sdf .sd-row.res .res{opacity:1}
+.sdf .sd-tick{fill:none;stroke:var(--sd-palm-i);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sdf .sd-wait{fill:var(--sd-sun)}
+.sdf .sd-waitring{fill:none;stroke:var(--sd-sun);stroke-width:1.2;opacity:.28}
+.sdf .sd-row.res .sd-waitring{animation:sdf-breathe 2.8s var(--sd-ease) infinite}
+@keyframes sdf-breathe{0%,100%{opacity:.16}50%{opacity:.46}}
+
+/* the pieces that travel */
+.sdf .sd-chip .bg{fill:color-mix(in srgb,var(--tc) 15%,var(--sd-ground));stroke:color-mix(in srgb,var(--tc) 44%,transparent);stroke-width:1}
+.sdf .sd-chip .dot{fill:var(--tc)}
+.sdf .sd-chip .lb{fill:var(--ti);font-weight:600}
+.sdf .sd-reply .disc{fill:var(--sd-ground);stroke:var(--sd-palm);stroke-opacity:.65;stroke-width:1.1}
+.sdf .sd-reply .mark{fill:none;stroke:var(--sd-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sdf .sd-fandot{fill:var(--sd-palm)}
+.sdf .sd-off{display:none}
+
+/* the systems on the right */
+.sdf .sd-node .pill{fill:var(--sd-glass);stroke:var(--sd-glassb);stroke-width:1;transition:stroke .4s var(--sd-ease)}
+.sdf .sd-node.lit .pill{stroke:var(--sd-palm)}
+.sdf .sd-node text{fill:var(--sd-ink2);transition:fill .4s var(--sd-ease)}
+.sdf .sd-node.lit text{fill:var(--sd-palm-i)}
+.sdf .sd-node .ring{fill:none;stroke:var(--sd-palm);stroke-width:1.2;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdf .sd-node.ping .ring{animation:sdf-ping .72s var(--sd-ease)}
+@keyframes sdf-ping{0%{opacity:.5;transform:scale(1)}100%{opacity:0;transform:scale(1.09)}}
+
+/* Below the breakpoint the viewBox has shrunk the type past reading size, so
+   every label that carries meaning grows in user units together — the chip
+   words, the row labels, the statuses, the captions, the systems, the card
+   heading and the rule strip. Targets were set in CSS pixels at a 327-wide
+   art-box (a 375px phone) and divided by the container scale, not picked by
+   eye. The pills are measured at run time, so a bigger word simply gets a
+   bigger pill.
+   Two labels cannot come with them, and both were measured rather than judged.
+   The rule phrase sits in a 12.5-unit band between the strip's lower edge
+   (145.5) and the first row slot (158); at anything readable its ink box
+   crosses the strip's border. The row status sits in the 102 units between the
+   row label and the tick; "Message" and "Answered" together need 105 at the
+   sizes above, and holding both inside the row means pinning the pair back at
+   7.2 and 6.3 CSS pixels, which is not reading them, only printing them.
+   So below the breakpoint those two step out and the picture says the same
+   thing without words: the beat lights, the tick means answered, the amber dot
+   that breathes means a person is needed. The four typed words, the card
+   heading, the captions and the systems all grow instead. */
+@container (max-width:460px){
+  .sdf .sd-phrase,.sdf .sd-row .st{display:none}
+  .sdf .sd-cap{font-size:12.4px}
+  .sdf .sd-title{font-size:15px}
+  .sdf .sd-rule text{font-size:12.3px}
+  .sdf .sd-row .lb{font-size:13px}
+  .sdf .sd-node text{font-size:12.4px}
+  .sdf .sd-chip .lb{font-size:13px}
+}
+
+/* Reduced motion: the scene is stepped to a composed frame and then every
+   transition and keyframe inside the component is switched off. Off-screen or
+   in a hidden tab the clock stops, and sd-paused stops the CSS keyframes with
+   it, so "the piece stops when you are not looking" is literally true. */
+.sdf.sd-still *,.sdf.sd-still{animation:none!important;transition:none!important}
+/* !important because the rules that start these keyframes use the animation
+   shorthand, which resets play-state, and they are the more specific selectors. */
+.sdf.sd-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdf *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine. Typing it would mean rewriting
+// the file, and its composition and timings are approved as they stand.
+(function(){
+"use strict";
+var NS="http://www.w3.org/2000/svg";
+
+function E(n,a,t){var e=document.createElementNS(NS,n),k;for(k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;return e;}
+function TX(x,y,s,c,str,an){var e=E("text",{x:x,y:y,"font-size":s,"class":c},str);if(an)e.setAttribute("text-anchor",an);return e;}
+
+/* Newton solve for a CSS cubic-bezier, so the JS-driven travel uses the same
+   curve as the CSS transitions around it instead of an approximation of it. */
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),                                  /* the brand easing */
+    eSine=function(t){return -(Math.cos(Math.PI*t)-1)/2;},  /* calm travel */
+    cl=function(v){return v<0?0:v>1?1:v;};
+
+/* ---- geometry, all in the 520x390 viewBox ---------------------------- */
+var SEND=["M56,104 C104,104 118,196 176,196","M56,196 L176,196","M56,288 C104,288 118,196 176,196"],
+    BACK=["M176,182 Q116,106 58,100","M176,206 Q116,252 58,200","M176,210 Q116,286 58,292"],
+    FAN =["M344,196 C380,196 388,112 420,112","M344,196 L420,196","M344,196 C380,196 388,280 420,280"],
+    AGY =[104,196,288],
+    AGC =["var(--sd-violet)","var(--sd-lagoon)","var(--sd-flamingo)"],
+    NODES=[{y:112,l:"POS"},{y:196,l:"Shop"},{y:280,l:"Calendar"}],
+    SLOT=[158,194,230,266], RX=188, RW=144, RH=28,
+    NX=462, NW=84,             /* systems pills: centre, and the drawn width */
+    PADL=19, PADR=.8,          /* the drawn pads either side of a chip's word */
+    TRAVEL=[1.34,1.16,1.42],   /* per agent, deliberately unequal: arrivals never sync */
+    LOOP=12.9,
+    STILL=9.55;                /* where the reduced-motion frame is taken, see still() */
+
+/* One pass. Four of the five items are answered by the rules; the quote stops
+   and waits for a person, because the product does not close everything.
+   `why` is the rule that decided it, in the owner's own words — each phrase is
+   true of the product, not decoration. */
+var SCRIPT=[
+  {t:0.60,a:1,ty:"message",lb:"Message",w:62,st:"Answered", auto:1,nd:[],   why:"answered by your AI"},
+  {t:2.45,a:0,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,nd:[2],  why:"slot free, inside hours"},
+  {t:4.70,a:2,ty:"order",  lb:"Order",  w:50,st:"Confirmed",auto:1,nd:[0,1],why:"under your limit"},
+  {t:7.05,a:0,ty:"quote",  lb:"Quote",  w:52,st:"Needs you",auto:0,nd:[],   why:"needs a person"},
+  {t:8.65,a:1,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,nd:[2],  why:"slot free, inside hours"}
+];
+
+var seq=0;
+
+function mount(fig){
+  if(fig.getAttribute("data-sdf")==="on")return;   /* one scene per figure, however often this runs */
+  fig.setAttribute("data-sdf","on");
+
+  var uid="sd"+(++seq),
+      svg=E("svg",{viewBox:"0 0 520 390","aria-hidden":"true",focusable:"false"}),
+      defs=E("defs"),i;
+
+  /* The one permitted signature: a small striped half sun, the business's mark. */
+  var g=E("linearGradient",{id:uid+"g",x1:0,y1:0,x2:0,y2:1});
+  g.appendChild(E("stop",{offset:"0%","stop-color":"var(--sd-tangerine)"}));
+  g.appendChild(E("stop",{offset:"58%","stop-color":"var(--sd-flamingo)"}));
+  g.appendChild(E("stop",{offset:"100%","stop-color":"var(--sd-violet)"}));
+  defs.appendChild(g);
+  var cp=E("clipPath",{id:uid+"c"});
+  cp.appendChild(E("path",{d:"M188,105 A11,11 0 0 1 210,105 Z"}));
+  defs.appendChild(cp);
+  svg.appendChild(defs);
+
+  /* --- the line ------------------------------------------------------- */
+  var gl=E("g"),lines=[],trails=[];
+  for(i=0;i<3;i++){lines.push(E("path",{d:SEND[i],"class":"sd-line"}));gl.appendChild(lines[i]);}
+  for(i=0;i<3;i++){lines.push(E("path",{d:FAN[i],"class":"sd-line"}));gl.appendChild(lines[3+i]);}
+  for(i=0;i<3;i++){trails.push(E("path",{d:BACK[i],"class":"sd-trail"}));gl.appendChild(trails[i]);}
+  svg.appendChild(gl);
+
+  /* --- column captions ------------------------------------------------ */
+  svg.appendChild(TX(30,60,8.2,"sd-cap","AI AGENTS"));
+  svg.appendChild(TX(504,60,8.2,"sd-cap","YOUR SYSTEMS","end"));
+
+  /* --- the business ---------------------------------------------------- */
+  var card=E("g");
+  card.appendChild(E("rect",{x:176,y:76,width:168,height:240,rx:14,"class":"sd-glass"}));
+  card.appendChild(E("path",{d:"M188,105 A11,11 0 0 1 210,105 Z",fill:"url(#"+uid+"g)"}));
+  var strp=E("g",{"clip-path":"url(#"+uid+"c)"});   /* ground-coloured bands cut the sun */
+  [96.4,98.7,100.8].forEach(function(y){strp.appendChild(E("rect",{x:187,y:y,width:24,height:.9,fill:"var(--sd-ground)"}));});
+  card.appendChild(strp);
+  card.appendChild(TX(218,105,12.5,"sd-title","Your business"));
+  card.appendChild(E("line",{x1:188,y1:118,x2:332,y2:118,"class":"sd-hair"}));
+  card.appendChild(E("circle",{cx:176,cy:196,r:2.6,"class":"sd-port"}));
+  card.appendChild(E("circle",{cx:344,cy:196,r:2.6,"class":"sd-port"}));
+
+  var rule=E("g",{"class":"sd-rule"}),
+      ruleBg=E("rect",{x:188,y:126,width:100,height:19,rx:9.5}),
+      ruleTx=TX(198,138.6,8.6,"","Rules + your AI"),
+      beat=E("circle",{cx:316,cy:135.5,r:3.2,"class":"sd-beat"});
+  rule.appendChild(ruleBg);rule.appendChild(ruleTx);rule.appendChild(beat);
+  card.appendChild(rule);
+
+  /* the rule in words, on its own line under the strip, tinted by the item */
+  var phrase=TX(188,154.4,8,"sd-phrase","");
+  card.appendChild(phrase);
+
+  var rows=E("g");card.appendChild(rows);
+  svg.appendChild(card);
+
+  /* --- agents ---------------------------------------------------------- */
+  var agents=[],y,ga;
+  for(i=0;i<3;i++){
+    y=AGY[i];ga=E("g",{"class":"sd-agent",style:"--ag:"+AGC[i]});
+    ga.appendChild(E("rect",{x:30,y:y-12,width:24,height:24,rx:7,"class":"bodyfill"}));
+    ga.appendChild(E("rect",{x:30,y:y-12,width:24,height:24,rx:7}));
+    ga.appendChild(E("rect",{x:26,y:y-16,width:32,height:32,rx:10,"class":"halo"}));
+    ga.appendChild(E("circle",{cx:37.6,cy:y-1,r:1.7,"class":"eye"}));
+    ga.appendChild(E("circle",{cx:46.4,cy:y-1,r:1.7,"class":"eye"}));
+    ga.appendChild(E("line",{x1:42,y1:y-12,x2:42,y2:y-19}));
+    ga.appendChild(E("circle",{cx:42,cy:y-21.6,r:2.6,"class":"ant"}));
+    svg.appendChild(ga);agents.push(ga);
+  }
+
+  /* --- systems --------------------------------------------------------- */
+  var nodes=[],nPill=[],nRing=[],nTx=[],n,gn,pill,ring,tx;
+  for(i=0;i<3;i++){
+    n=NODES[i];gn=E("g",{"class":"sd-node"});
+    pill=E("rect",{x:NX-NW/2,y:n.y-16,width:NW,height:32,rx:10,"class":"pill"});
+    ring=E("rect",{x:NX-NW/2,y:n.y-16,width:NW,height:32,rx:10,"class":"ring"});
+    tx=TX(NX,n.y+3.4,9.4,"",n.l,"middle");
+    gn.appendChild(pill);gn.appendChild(ring);gn.appendChild(tx);
+    svg.appendChild(gn);nodes.push(gn);nPill.push(pill);nRing.push(ring);nTx.push(tx);
+  }
+
+  /* --- one set of pieces per scripted item, built once and reused ------- */
+  var fly=E("g");svg.appendChild(fly);
+  var EV=SCRIPT.map(function(s){
+    var e={},k;for(k in s)e[k]=s[k];
+    e.p1=.18+TRAVEL[e.a];        /* reaches the card edge */
+    e.p2=e.p1+.34;               /* has snapped into its row */
+    e.b0=e.p2+.80; e.b1=e.b0+.92;
+    e.dur=e.p2+2.2; e.f={};
+
+    var c=E("g",{"class":"sd-chip t-"+e.ty+" sd-off"}),h=e.w/2;
+    e.chipBg=E("rect",{x:-h,y:-10,width:e.w,height:20,rx:10,"class":"bg"});
+    e.chipDot=E("circle",{cx:-h+11,cy:0,r:3,"class":"dot"});
+    e.chipLb=TX(-h+PADL,3.3,9.4,"lb",e.lb);
+    c.appendChild(e.chipBg);c.appendChild(e.chipDot);c.appendChild(e.chipLb);
+    fly.appendChild(c); e.chip=c;
+
+    var r=E("g",{"class":"sd-row t-"+e.ty}),ri=E("g",{"class":"in"});
+    ri.appendChild(E("rect",{x:0,y:0,width:RW,height:RH,rx:8,"class":"bg"}));
+    ri.appendChild(E("rect",{x:0,y:5,width:2.5,height:RH-10,rx:1.25,"class":"bar"}));
+    ri.appendChild(TX(10,17.8,9.6,"lb",e.lb));
+    var res=E("g",{"class":"res"});
+    res.appendChild(TX(112,17.8,8.4,"st",e.st,"end"));
+    if(e.auto){res.appendChild(E("path",{d:"M124.4,14.4 l2.7,2.9 l5.1,-6.2","class":"sd-tick"}));}
+    else{res.appendChild(E("circle",{cx:128,cy:14,r:6.6,"class":"sd-waitring"}));
+         res.appendChild(E("circle",{cx:128,cy:14,r:3.6,"class":"sd-wait"}));}
+    ri.appendChild(res); r.appendChild(ri); rows.appendChild(r); e.row=r;
+
+    if(e.auto){
+      var rp=E("g",{"class":"sd-reply sd-off"});
+      rp.appendChild(E("circle",{cx:0,cy:0,r:7.6,"class":"disc"}));
+      rp.appendChild(E("path",{d:"M-3.1,.2 L-.9,2.5 L3.3,-2.7","class":"mark"}));
+      fly.appendChild(rp); e.reply=rp;
+    }
+    e.dots=e.nd.map(function(){var d=E("circle",{cx:0,cy:0,r:3,"class":"sd-fandot sd-off"});fly.appendChild(d);return d;});
+    return e;
+  });
+
+  /* The scene is complete before the static one is dropped, so the figure is
+     never empty: either the server-rendered picture is on screen or this one
+     is. Anything that throws from here on leaves a drawn scene, not a hole. */
+  fig.textContent="";
+  fig.appendChild(svg);
+
+  /* path lengths need the nodes to be in the document */
+  var LSEND=[],LBACK=[],LFAN=[];
+  for(i=0;i<3;i++){LSEND[i]=lines[i].getTotalLength();LFAN[i]=lines[3+i].getTotalLength();LBACK[i]=trails[i].getTotalLength();}
+
+  /* ---- pills are measured, never guessed -------------------------------
+     The widths written into the geometry above are floors, not fixed sizes. A
+     pill grows to hold its own text and never shrinks below the drawn width.
+     The pads are the drawn ones — 19 units left of the word and 0.8 right — so
+     where the metrics match the design the floor binds and the composition is
+     exactly as approved; only a genuinely wider font pushes a pill out. */
+  function bx(t){try{var b=t.getBBox();return b&&b.width?b:null;}catch(err){return null;}}
+  function fit(){
+    EV.forEach(function(e){
+      /* a chip is display:none between passes; unhide it for the read only */
+      var hid=e.chip.classList.contains("sd-off");
+      if(hid)e.chip.classList.remove("sd-off");
+      var b=bx(e.chipLb);
+      if(hid)e.chip.classList.add("sd-off");
+      if(!b)return;
+      var w=Math.max(e.w,Math.round(b.width+PADL+PADR)),h=w/2;
+      e.chipBg.setAttribute("x",-h);e.chipBg.setAttribute("width",w);
+      e.chipDot.setAttribute("cx",-h+11);
+      e.chipLb.setAttribute("x",-h+PADL);
+    });
+    var rb=bx(ruleTx);
+    if(rb){                                   /* the strip grows right, and takes the beat with it */
+      var rw=Math.max(100,Math.ceil(22+rb.width));
+      ruleBg.setAttribute("width",rw);
+      beat.setAttribute("cx",Math.max(316,188+rw+12));
+    }
+    nTx.forEach(function(t,k){                /* the systems stay centred on NX */
+      var b=bx(t);if(!b)return;
+      var w=Math.max(NW,Math.ceil(b.width+22)),x=NX-w/2;
+      nPill[k].setAttribute("x",x);nPill[k].setAttribute("width",w);
+      nRing[k].setAttribute("x",x);nRing[k].setAttribute("width",w);
+    });
+  }
+  /* The type scale changes at the container breakpoint, so the pills are
+     re-measured when the piece crosses it — and once more when the host's
+     webfonts have actually arrived. "Which breakpoint" and "has ever been
+     measured" are separate questions: a figure that mounts inside a hidden
+     ancestor measures as zero, and must be re-measured when it is revealed
+     even though the breakpoint did not change. fit() only ever raises a pill
+     to its own floor, so measuring again can never ratchet anything wider. */
+  var narrow=null,measured=false;
+  function gauge(){
+    var w=fig.clientWidth,nw=w>0&&w<=460;
+    if(nw===narrow&&measured)return;
+    narrow=nw;
+    if(w>0){fit();measured=true;}
+  }
+  gauge();                                     /* synchronous: nothing is ever unmeasured */
+  if("ResizeObserver" in window)new ResizeObserver(gauge).observe(fig);
+  try{
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then)
+      document.fonts.ready.then(function(){fit();},function(){});
+  }catch(err){}
+
+  /* --- the stack ------------------------------------------------------- */
+  var stack=[];
+  function put(el,x,y){el.setAttribute("transform","translate("+x+","+y+")");el.classList.remove("sd-off");}
+  function off(el){if(el)el.classList.add("sd-off");}
+  /* Highlights are wall-clock, so every one of them is held here: when the
+     piece is paused, or swapped to the still frame, a timer that has not yet
+     fired must not reach in afterwards and take a class back off. */
+  var timers=[];
+  function hold(ms,fn){timers.push(setTimeout(fn,ms));}
+  function flash(el,cls,ms){el.classList.add(cls);hold(ms,function(){el.classList.remove(cls);});}
+  function seat(e,i){e.row.style.transform="translate("+RX+"px,"+SLOT[i]+"px)";}
+  function layout(){stack.forEach(function(e,i){seat(e,i);});}
+  function slotFor(){return stack.length>3?3:stack.length;}
+  function push(e,live){
+    if(stack.length>3){                       /* the card holds four; the oldest leaves */
+      var old=stack.shift();
+      old.row.classList.remove("on","res");
+      old.row.classList.add("out");
+      if(live)setTimeout(function(){old.row.classList.remove("out");},440);
+    }
+    e.row.classList.add("nt");                /* re-seat a recycled row without travel */
+    e.row.classList.remove("out","res");
+    seat(e,slotFor());
+    void e.row.getBoundingClientRect();        /* flush, so this is the from-state */
+    e.row.classList.remove("nt");
+    stack.push(e);layout();
+    if(live)requestAnimationFrame(function(){e.row.classList.add("on");});
+    else e.row.classList.add("on");
+  }
+
+  /* One phrase on screen at a time: the node is shared, so a new decision
+     replaces the old one and cancels its timer. The still frame calls this
+     with live=false and the phrase simply stays put. */
+  var phT=0;
+  function say(e,live){
+    clearTimeout(phT);
+    phrase.textContent=e.why;
+    phrase.setAttribute("class","sd-phrase t-"+e.ty+" on");
+    if(live)phT=setTimeout(function(){phrase.classList.remove("on");},1000);
+  }
+
+  /* --- one item, one frame --------------------------------------------- */
+  function once(e,k){if(e.f[k])return false;e.f[k]=true;return true;}
+
+  function step(e,ph,live){
+    if(ph<0||ph>e.dur){
+      /* Outside its window an item owns nothing but its own pieces. It must not
+         touch trails[e.a]: that path is shared with any other item cast by the
+         same agent, and zeroing it here wiped the return ink out from under a
+         reply that was still flying it. Each item clears its own trail at b1,
+         which always falls inside its window. */
+      if(ph<0)e.f={};
+      off(e.chip);off(e.reply);e.dots.forEach(off);
+      return;
+    }
+    /* 1. the agent wakes and casts a typed chip onto the line */
+    if(live&&once(e,"wake"))flash(agents[e.a],"wake",640);
+
+    if(ph>=.18&&ph<e.p2){
+      var x,y,o=1,p;
+      if(ph<e.p1){
+        p=lines[e.a].getPointAtLength(eSine((ph-.18)/(e.p1-.18))*LSEND[e.a]);
+        x=p.x;y=p.y;
+        if(ph<.36)o=(ph-.18)/.18;
+      }else{
+        /* 2. it snaps into the next free row instead of morphing into one */
+        if(once(e,"aim"))e.slot=slotFor();
+        var u=eSoft((ph-e.p1)/(e.p2-e.p1));
+        x=176+(260-176)*u; y=196+(SLOT[e.slot]+RH/2-196)*u;
+        if(ph>e.p2-.13)o=cl((e.p2-ph)/.13);
+      }
+      e.chip.style.opacity=o;put(e.chip,x,y);
+    }else off(e.chip);
+
+    /* 3. the row lands, the rules run, the outcome resolves. The beat says a
+          rule ran; the phrase says which one. Both are outside the live gate
+          so the reduced-motion still frame derives them from this same code. */
+    if(ph>=e.p2&&once(e,"row"))push(e,live);
+    if(ph>=e.p2+.10&&once(e,"rule")){
+      if(e.auto)rule.classList.remove("warn");else rule.classList.add("warn");
+      say(e,live);
+      if(live)flash(rule,"lit",760);
+    }
+    if(ph>=e.p2+.62&&once(e,"res"))e.row.classList.add("res");
+
+    /* 4. most answers fly home along a route inked only for the journey */
+    if(e.auto){
+      var tr=trails[e.a];
+      if(ph>=e.b0&&ph<e.b1){
+        var v=(ph-e.b0)/(e.b1-e.b0),q=tr.getPointAtLength(eSine(v)*LBACK[e.a]);
+        put(e.reply,q.x,q.y);
+        e.reply.style.opacity=v<.14?v/.14:v>.88?cl((1-v)/.12):1;
+        tr.style.opacity=(v<.2?v/.2:v>.7?cl((1-v)/.3):1)*.55;
+      }else{off(e.reply);if(ph>=e.b1)tr.style.opacity=0;}
+      if(live&&ph>=e.b1&&once(e,"home"))flash(agents[e.a],"wake",640);
+    }
+
+    /* 5. confirmed work reaches the systems: a travelling dot, then a pulse */
+    e.nd.forEach(function(nn,k){
+      var s=e.p2+.70+k*.26,f=s+.56,d=e.dots[k];
+      if(ph>=s&&ph<f){
+        /* the only linear movement in the piece: a dot on a wire */
+        var w=lines[3+nn].getPointAtLength((ph-s)/(f-s)*LFAN[nn]);
+        put(d,w.x,w.y);
+      }else off(d);
+      if(live&&ph>=f&&once(e,"n"+k)){
+        nodes[nn].classList.add("lit");flash(nodes[nn],"ping",760);
+        hold(1500,function(){nodes[nn].classList.remove("lit");});
+      }
+    });
+  }
+
+  function render(t,live){EV.forEach(function(e){step(e,t-e.t,live);});}
+
+  /* --- the clock -------------------------------------------------------- */
+  var clock=-1.25,          /* negative: the lines draw themselves first */
+      last=0,raf=0,run=false,seen=true,phase=0,wasPhase=0,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.min((now-last)/1000,.05);   /* clamped: a long stall slows the piece rather than teleporting it */
+    last=now;
+    if(clock>=0){
+      phase=clock%LOOP;
+      /* belt and braces on the wrap: every trail is already cleared by its own
+         item at b1, and b1 of the last item is 12.05 against a 12.9 loop */
+      if(phase<wasPhase)trails.forEach(function(t){t.style.opacity=0;});
+      wasPhase=phase;
+      render(phase,true);
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  /* A piece paused mid-decision would come back with a lit strip and a
+     half-faded phrase, because those timers kept running while the clock did
+     not. Resume from a settled state instead. */
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    clearTimeout(phT);
+    phrase.classList.remove("on");
+    rule.classList.remove("lit","warn");
+    nodes.forEach(function(nd){nd.classList.remove("lit","ping");});
+    agents.forEach(function(ag){ag.classList.remove("wake");});
+  }
+  function sync(){
+    if(fig.classList.contains("sd-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sd-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sd-paused");}
+  }
+
+  /* The lines draw themselves in on arrival — but only for a visitor who has
+     not already seen them. If the browser has painted, the static scene is on
+     screen with its lines complete, and replaying the intro would blink them
+     out and back. A browser with no paint timing simply plays it, as before. */
+  var painted=false;
+  try{painted=performance.getEntriesByType("paint").length>0;}catch(err){}
+  lines.forEach(function(p,i){var L=i<3?LSEND[i]:LFAN[i-3];p.style.strokeDasharray=L;p.style.strokeDashoffset=painted?0:L;});
+  function draw(){lines.forEach(function(p,i){p.style.transitionDelay=(i<3?i*.08:.26+(i-3)*.08)+"s";p.style.strokeDashoffset=0;});}
+
+  /* The still is this same machine stepped forward, not a second drawing. At
+     STILL=9.55 the quote is the last item the rules decided, so the strip is
+     amber and the phrase reads "needs a person" — both derived, not typed —
+     and the fifth item's chip is still clear of the card rather than sitting
+     across its edge. The sweep is coarse because every gate in step() is a
+     threshold, not a sample: 0.1 s finds them all, and a final exact render
+     places the pieces. Then three are held mid-journey, so one frame states
+     all four beats: a chip on the line, an answer on the return trail, a dot
+     on the wire to the point of sale. */
+  function still(){
+    fig.classList.add("sd-still");
+    settle();
+    stack.length=0;
+    EV.forEach(function(e){
+      e.f={};off(e.chip);off(e.reply);e.dots.forEach(off);
+      e.chip.style.opacity="";e.row.setAttribute("class","sd-row t-"+e.ty);e.row.style.transform="";
+    });
+    trails.forEach(function(t){t.style.opacity=0;});
+    rule.setAttribute("class","sd-rule");
+    phrase.setAttribute("class","sd-phrase");
+    draw();
+    for(var t=0;t<STILL;t+=.1)render(t,false);
+    render(STILL,false);
+    stack.forEach(function(e){e.row.classList.add("on","res");});
+    var b=trails[0].getPointAtLength(.46*LBACK[0]);
+    put(EV[1].reply,b.x,b.y);EV[1].reply.style.opacity=1;trails[0].style.opacity=.55;
+    var c2=lines[3].getPointAtLength(.58*LFAN[0]);
+    put(EV[2].dots[0],c2.x,c2.y);
+    nodes[0].classList.add("lit");rule.classList.add("lit");
+  }
+
+  if(mq.matches){still();return;}
+
+  /* two frames: the dashed from-state must be computed before it is changed */
+  requestAnimationFrame(function(){requestAnimationFrame(draw);});
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  /* The preference can be turned on after the page has loaded; both paths end
+     in the same composed frame. */
+  function onMq(){if(!mq.matches||fig.classList.contains("sd-still"))return;run=false;cancelAnimationFrame(raf);still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+/* One figure that throws must not take the rest of the page's figures with it,
+   and must leave its own server-rendered picture standing. */
+function mountAll(){
+  document.querySelectorAll(".sdf").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("hero flow",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);   /* harmless today; correct the day a router lands */
+})();
+</script>

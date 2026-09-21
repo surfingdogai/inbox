@@ -2,34 +2,337 @@
 @import "@surfingdog/ui/index.css";
 @source "../";
 
-/* ------------------------------------------------------------------ */
-/*  Site-level adjustments to the tokens: secondary inks dark enough    */
-/*  for AA on glass over the light fields, and reading sizes for a      */
-/*  marketing page. Everything else comes from @surfingdog/ui.          */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  1. TOKENS                                                         */
+/*  Every value the marketing site uses is named here. Components      */
+/*  read tokens; no component invents a size, a space or a colour.     */
+/*  Theme-dependent tokens are declared in all three theme blocks, so  */
+/*  no colour lives only inside a media query.                         */
+/* ================================================================== */
+
+/* --- Theme-dependent -------------------------------------------- */
 :root,
 [data-theme="light"] {
+  /* Secondary inks, dark enough for AA on glass over the light fields. */
   --ink-2: #3f4472;
   --ink-3: #565a86;
+
+  /* Two hairlines and one separator. The lit glass edge and the rule. */
+  --hairline: rgba(20, 22, 60, 0.08);
+  --hairline-strong: rgba(20, 22, 60, 0.14);
+  --edge: rgba(255, 255, 255, 0.55);
+  --edge-strong: rgba(255, 255, 255, 0.66);
+  /* The four legacy alphas were one visible line; they now point at the two. */
+  --glass-border: var(--edge);
+  --glass-border-strong: var(--edge-strong);
+  --pill-border: var(--edge-strong);
+  --input-border: var(--edge-strong);
+
+  /* An opaque veil under the glass, so sibling cards are the same colour
+     whatever the sky is doing behind them. */
+  --card-veil: color-mix(in srgb, var(--ground) 52%, transparent);
+  /* A panel that covers the page rather than sitting in it — the menu sheet —
+     needs to own its area, so it takes a heavier veil than a card does. */
+  --veil-sheet: color-mix(in srgb, var(--ground) 93%, transparent);
+
+  /* The sky: four hues by day. */
+  --sky-1: var(--flamingo);
+  --sky-2: var(--lagoon);
+  --sky-3: var(--violet);
+  --sky-4: var(--tangerine);
+  --field-alpha: 0.3;
+
+  --selection-bg: color-mix(in srgb, var(--violet) 22%, transparent);
+  --selection-fg: var(--ink);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --ink-2: #b9bce0;
     --ink-3: #9a9dc4;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --hairline-strong: rgba(255, 255, 255, 0.16);
+    --edge: rgba(255, 255, 255, 0.14);
+    --edge-strong: rgba(255, 255, 255, 0.2);
+    --glass-border: var(--edge);
+    --glass-border-strong: var(--edge-strong);
+    --pill-border: var(--edge-strong);
+    --input-border: var(--edge-strong);
+    --card-veil: color-mix(in srgb, var(--ground) 34%, transparent);
+    --veil-sheet: color-mix(in srgb, var(--ground) 92%, transparent);
+    /* Night is two hues, not four day hues dimmed. */
+    --sky-1: var(--violet);
+    --sky-2: var(--lagoon);
+    --sky-3: var(--violet);
+    --sky-4: transparent;
+    --field-alpha: 0.26;
+    --selection-bg: color-mix(in srgb, var(--violet) 40%, transparent);
+    --selection-fg: #ffffff;
   }
 }
 :root[data-theme="dark"],
 [data-theme="dark"] {
   --ink-2: #b9bce0;
   --ink-3: #9a9dc4;
-}
-body {
-  font-size: 17px;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+  --edge: rgba(255, 255, 255, 0.14);
+  --edge-strong: rgba(255, 255, 255, 0.2);
+  --glass-border: var(--edge);
+  --glass-border-strong: var(--edge-strong);
+  --pill-border: var(--edge-strong);
+  --input-border: var(--edge-strong);
+  --card-veil: color-mix(in srgb, var(--ground) 34%, transparent);
+  --veil-sheet: color-mix(in srgb, var(--ground) 92%, transparent);
+  --sky-1: var(--violet);
+  --sky-2: var(--lagoon);
+  --sky-3: var(--violet);
+  --sky-4: transparent;
+  --field-alpha: 0.26;
+  --selection-bg: color-mix(in srgb, var(--violet) 40%, transparent);
+  --selection-fg: #ffffff;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Page shell: one gutter, one max-width, one panel radius.            */
-/* ------------------------------------------------------------------ */
+/* --- Theme-independent ------------------------------------------ */
+:root {
+  /* Type. Six sizes below the headings, each with one job.
+     Nothing on this site sets a raw px font-size that is not one of these. */
+  --fs-micro: 11px; /* uppercase eyebrows, badges, chart labels */
+  --fs-fine: 12.5px; /* fine print, hints, captions, meta */
+  --fs-ui: 14px; /* buttons, nav, pills, table cells */
+  --fs-card: 15px; /* card and list copy */
+  --fs-body: 16px; /* body and prose */
+  --fs-lede: 17.5px; /* the one paragraph under a title */
+  --fs-mono: 13px; /* monospace runs optically small; its own step */
+
+  /* Headings. One token per level, used by every page. */
+  --fs-h-card: 17px; /* every card and step heading */
+  --fs-h-sub: 19px; /* a heading inside a panel */
+  --fs-section: clamp(25px, 2.4vw, 30px); /* .h-section */
+  --fs-page-title: clamp(28px, 3.2vw, 38px); /* every page h1 */
+  --fs-hero: clamp(32px, 4.2vw, 50px); /* the home hero, the one exception */
+
+  /* Leading: tight above 28px, comfortable below. */
+  --lh-hero: 1.12;
+  --lh-title: 1.14;
+  --lh-heading: 1.25;
+  --lh-body: 1.6;
+  --lh-ui: 1.45;
+
+  /* Measure, bound to size: small text is narrower, never wider. */
+  --measure: 66ch; /* body and prose */
+  --measure-lede: 58ch;
+  --measure-card: 62ch;
+  --measure-tight: 52ch; /* fine print and hints */
+
+  /* Space: one scale. Nothing uses a value that is not on it. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 56px;
+  --sp-10: 80px;
+
+  /* Space with a job. */
+  --section-y: var(--sp-9); /* every section, phone */
+  --section-y-tight: var(--sp-8);
+  --header-pb: var(--sp-6); /* a page-header section stops here */
+  --hero-pb: var(--sp-7);
+  --space-head: var(--sp-6); /* under a section head */
+  --card-pad: var(--sp-5); /* .reason, .tile, any card */
+  --panel-pad: var(--sp-6); /* .panel */
+  --gap-grid: var(--sp-5); /* card grids */
+  --gap-row: var(--sp-3); /* stacked rows */
+  --gutter: var(--sp-6);
+
+  /* Radius: three, and that is all. The old names point at the survivors. */
+  --radius-control: 12px; /* inputs, rows, buttons that are not pills */
+  --radius-card: 16px; /* cards, panels, sheets */
+  --radius-pill: 9999px;
+  --radius-code: 6px;
+  --radius-md: var(--radius-control);
+  --radius-tile: var(--radius-control);
+  --radius-panel: var(--radius-card);
+  --radius-sheet: var(--radius-card);
+
+  /* Motion. One easing, three durations. */
+  --ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+  --dur-fast: 0.18s;
+  --dur: 0.28s;
+  --dur-slow: 0.5s;
+
+  /* Focus. --violet-ink is already theme-aware, so one definition holds. */
+  --focus: color-mix(in srgb, var(--violet-ink) 78%, transparent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* Touch */
+  --touch: 44px;
+}
+@media (min-width: 900px) {
+  :root {
+    --section-y: var(--sp-10);
+    --section-y-tight: var(--sp-9);
+    --space-head: var(--sp-7);
+    --gutter: var(--sp-8);
+  }
+}
+
+/* ================================================================== */
+/*  2. BASE                                                           */
+/* ================================================================== */
+body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-wrap: pretty;
+}
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+h1 {
+  line-height: var(--lh-title);
+  letter-spacing: -0.024em;
+}
+h2 {
+  line-height: var(--lh-heading);
+  letter-spacing: -0.018em;
+}
+h3,
+h4 {
+  line-height: var(--lh-heading);
+  letter-spacing: -0.01em;
+}
+p,
+li {
+  text-wrap: pretty;
+}
+/* Unclassed body copy still gets a measure. */
+main p:not([class]) {
+  max-width: var(--measure);
+}
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+/* Digits that line up, everywhere digits line up. */
+.tabular,
+.u-count,
+time,
+.mono,
+kbd {
+  font-variant-numeric: tabular-nums;
+}
+/* Colour and background move at one speed across the whole site. */
+a,
+button,
+summary,
+.row,
+.tab {
+  transition:
+    color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+/* One focus ring, on everything that takes focus. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+details:focus-visible,
+label:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible,
+[contenteditable]:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-control);
+}
+/* Pills keep their shape when focused. */
+.btn:focus-visible,
+.pill:focus-visible,
+.skip:focus-visible {
+  border-radius: var(--radius-pill);
+}
+/* No ring on a mouse click, and never a bare browser ring. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip link: invisible until focused, then it lands on the pill line. */
+.skip {
+  position: absolute;
+  top: -80px;
+  left: var(--sp-6);
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--glass-shadow);
+  transition: top var(--dur) var(--ease);
+}
+.skip:focus,
+.skip:focus-visible {
+  top: var(--sp-3);
+}
+
+/* Links in running text: one decoration, brand tinted. */
+.link,
+.prose a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+  text-decoration-skip-ink: auto;
+  transition: text-decoration-color var(--dur-fast) ease;
+}
+.link:hover,
+.link:focus-visible,
+.prose a:hover,
+.prose a:focus-visible {
+  text-decoration-color: var(--violet);
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+}
+code.mono,
+.prose code,
+kbd {
+  padding: 1px 6px;
+  border-radius: var(--radius-code);
+  background: var(--pill-bg);
+  border: 1px solid var(--edge);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  color: var(--ink);
+}
+
+/* ================================================================== */
+/*  3. PAGE SHELL AND RHYTHM                                          */
+/* ================================================================== */
 .sky-fixed {
   position: fixed;
   z-index: -1;
@@ -38,119 +341,324 @@ body {
   width: 100%;
   max-width: 1200px;
   margin-inline: auto;
-  padding-inline: 24px;
-}
-@media (min-width: 768px) {
-  .wrap {
-    padding-inline: 40px;
-  }
+  padding-inline: var(--gutter);
 }
 .section {
-  padding-block: 56px;
+  padding-block: var(--section-y);
   /* Anchor jumps land below the sticky nav. */
   scroll-margin-top: 88px;
 }
-@media (min-width: 900px) {
-  .section {
-    padding-block: 80px;
-  }
+/* A page-header section stops short: the next section's top padding does the work. */
+.section-head,
+.section.is-head {
+  padding-bottom: var(--header-pb);
+}
+.section-tight {
+  padding-block: var(--section-y-tight);
 }
 .sec-head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px 24px;
-  margin-bottom: 28px;
+  gap: var(--sp-3) var(--sp-6);
+  margin-bottom: var(--space-head);
 }
+
+/* ================================================================== */
+/*  4. TYPE CLASSES                                                   */
+/* ================================================================== */
 .eyebrow {
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
+.h-page {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-title);
+}
 .h-section {
-  margin: 8px 0 0;
-  font-size: clamp(28px, 3vw, 34px);
-  line-height: 1.15;
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-section);
+  line-height: var(--lh-heading);
+  letter-spacing: -0.016em;
+}
+/* One card heading for the whole site: every card, every step. */
+.h-card {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h-card);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.h-sub {
+  margin: 0;
+  font-size: var(--fs-h-sub);
+  line-height: var(--lh-heading);
 }
 .lede {
-  max-width: 60ch;
-  margin: 12px 0 0;
+  max-width: var(--measure-lede);
+  margin: var(--sp-3) 0 0;
   color: var(--ink-2);
-  font-size: 17px;
-  line-height: 1.55;
+  font-size: var(--fs-lede);
+  line-height: 1.5;
 }
 .card-text {
   margin: 0;
-  font-size: 15.5px;
-  line-height: 1.55;
+  max-width: var(--measure-card);
+  font-size: var(--fs-card);
+  line-height: var(--lh-body);
   color: var(--ink-2);
 }
 .fine {
-  margin: 16px 0 0;
-  max-width: 70ch;
-  font-size: 13px;
+  margin: var(--sp-4) 0 0;
+  max-width: var(--measure-tight);
+  font-size: var(--fs-fine);
   line-height: 1.5;
   color: var(--ink-3);
 }
-.panel {
-  padding: 24px;
-  border-radius: var(--radius-panel);
+/* The smallest text on the site never sits on the widest line. */
+.hint {
+  margin-top: var(--sp-2);
+  max-width: var(--measure-tight);
+  font-size: var(--fs-fine);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink-3);
 }
-.skip {
-  position: absolute;
-  top: -60px;
-  left: 24px;
-  z-index: 100;
-  padding: 10px 14px;
-  border-radius: 9999px;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-fg);
-  font-weight: 600;
+.label {
+  font-size: var(--fs-fine);
 }
-.skip:focus {
-  top: 12px;
+.measure {
+  max-width: var(--measure);
 }
-.link {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--violet) 55%, transparent);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
-}
-.link:hover {
-  text-decoration-color: var(--violet);
-}
-.mono {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-}
-code.mono,
-.prose code,
-kbd {
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--pill-bg);
-  border: 1px solid var(--pill-border);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 0.92em;
-  color: var(--ink);
-}
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
-  outline-offset: 2px;
+.measure-tight {
+  max-width: var(--measure-tight);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Art: pixel work stays crisp at every size. Keyed art floats on the  */
-/*  light; unkeyed art (covers) sits in a glass frame in both themes.   */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  5. SURFACES                                                       */
+/*  A veil under the glass so two cards of the same kind are the same  */
+/*  colour, whatever the sky is doing behind them.                     */
+/* ================================================================== */
+.glass,
+.glass-strong {
+  background-image: linear-gradient(0deg, var(--card-veil), var(--card-veil));
+  border-color: var(--edge);
+}
+.glass-strong {
+  border-color: var(--edge-strong);
+}
+.panel {
+  padding: var(--panel-pad);
+  border-radius: var(--radius-card);
+}
+.card {
+  padding: var(--card-pad);
+  border-radius: var(--radius-card);
+}
+.grid-cards {
+  display: grid;
+  gap: var(--gap-grid);
+}
+/* Controls on a touch screen are never smaller than a fingertip. */
+@media (pointer: coarse) {
+  .btn {
+    height: var(--touch);
+  }
+  .btn-sm {
+    height: 40px;
+  }
+  .btn-icon {
+    width: var(--touch);
+  }
+  .btn-icon.btn-sm {
+    width: 40px;
+  }
+}
+
+/* ================================================================== */
+/*  6. THE SKY AND THE SUN                                            */
+/*  Calmer by day, two hues by night, strongest at the top of the      */
+/*  viewport where the hero is.                                        */
+/* ================================================================== */
+.sky .f1 {
+  background: var(--sky-1);
+}
+.sky .f2 {
+  background: var(--sky-2);
+}
+.sky .f3 {
+  background: var(--sky-3);
+}
+.sky .f4 {
+  background: var(--sky-4);
+}
+.sky-fixed {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.62) 58%, rgba(0, 0, 0, 0.42) 100%);
+  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.62) 58%, rgba(0, 0, 0, 0.42) 100%);
+}
+/* The striped half sun knocks its stripes out with the surface behind it.
+   On bare ground that is --ground; inside a glass pill, set --sun-knockout
+   on the mark so the stripes knock out to the pill, not to hard bars. */
+.sun::after {
+  background: linear-gradient(
+    180deg,
+    transparent 0 44%,
+    var(--sun-knockout, var(--ground)) 44% 46.5%,
+    transparent 46.5% 55%,
+    var(--sun-knockout, var(--ground)) 55% 58.5%,
+    transparent 58.5% 66%,
+    var(--sun-knockout, var(--ground)) 66% 71%,
+    transparent 71% 78%,
+    var(--sun-knockout, var(--ground)) 78% 84.5%,
+    transparent 84.5% 90%,
+    var(--sun-knockout, var(--ground)) 90% 100%
+  );
+}
+/* A mark that has to sit on a translucent pill: mask the stripes out
+   instead of painting them, so nothing hard-edged lands on the blur. */
+.sun-mask::after {
+  background: none;
+}
+.sun-mask {
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0 44%,
+    transparent 44% 46.5%,
+    #000 46.5% 55%,
+    transparent 55% 58.5%,
+    #000 58.5% 66%,
+    transparent 66% 71%,
+    #000 71% 78%,
+    transparent 78% 84.5%,
+    #000 84.5% 90%,
+    transparent 90% 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0 44%,
+    transparent 44% 46.5%,
+    #000 46.5% 55%,
+    transparent 55% 58.5%,
+    #000 58.5% 66%,
+    transparent 66% 71%,
+    #000 71% 78%,
+    transparent 78% 84.5%,
+    #000 84.5% 90%,
+    transparent 90% 100%
+  );
+}
+.sun-xs {
+  width: 22px;
+}
+
+/* ================================================================== */
+/*  7. MOTION                                                         */
+/*  Four named utilities and one reveal mechanism. Transform, opacity, */
+/*  colour and shadow only. Everything is off under reduced motion and */
+/*  every resting state is the visible one, so a page with no script   */
+/*  is a finished page.                                                */
+/* ================================================================== */
+
+/* .lift — a surface that rises on hover and on focus inside it. */
+.lift {
+  transition:
+    transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    border-color var(--dur) ease,
+    background-color var(--dur) ease;
+}
+.lift:hover,
+.lift:focus-within {
+  transform: translateY(-1px);
+  border-color: var(--edge-strong);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+/* .u-line — the four-colour brand line, drawn once when it is revealed. */
+.u-line {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--flamingo) 0%, var(--tangerine) 34%, var(--lagoon) 68%, var(--violet) 100%);
+  transform-origin: left center;
+}
+.u-line.line-armed {
+  transform: scaleX(0);
+}
+.u-line.line-armed.line-drawn {
+  transform: scaleX(1);
+  transition: transform 0.7s var(--ease);
+}
+
+/* .u-count — a number that counts up once. Its final value is in the HTML. */
+.u-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* .u-breathe — a very slow, very small breath. The sun, and nothing else. */
+@keyframes sd-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+.u-breathe {
+  animation: sd-breathe 7s ease-in-out infinite;
+}
+
+/* data-reveal — the one reveal mechanism.
+   Resting state is the normal, visible one. The script arms only elements
+   that are below the fold when it runs, and armed is .55 opacity, never 0. */
+.reveal-armed {
+  opacity: 0.55;
+  transform: translateY(10px);
+  transition:
+    opacity var(--dur-slow) var(--ease),
+    transform var(--dur-slow) var(--ease);
+  transition-delay: calc(var(--reveal-i, 0) * 70ms);
+}
+.reveal-armed.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .u-breathe {
+    animation: none;
+  }
+  .lift:hover,
+  .lift:focus-within {
+    transform: none;
+  }
+  .reveal-armed,
+  .reveal-armed.reveal-in {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .u-line.line-armed {
+    transform: scaleX(1);
+    transition: none;
+  }
+}
+
+/* ================================================================== */
+/*  8. ART AND SCREENSHOTS                                            */
+/*  Pixel work stays crisp at every size. Keyed art floats on the      */
+/*  light; unkeyed art sits in a glass frame in both themes.           */
+/* ================================================================== */
 .art {
   display: block;
   width: 100%;
@@ -158,18 +666,18 @@ summary:focus-visible {
   image-rendering: pixelated;
 }
 .art-frame {
-  padding: 10px;
-  border-radius: var(--radius-panel);
+  padding: var(--sp-3);
+  border-radius: var(--radius-card);
 }
 .art-frame > .art {
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 .art-fallback {
   display: grid;
   place-items: center;
   width: 100%;
   aspect-ratio: var(--art-ratio, 1);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-card);
   background: var(--row-bg);
   border: 1px solid var(--hairline);
 }
@@ -179,21 +687,16 @@ summary:focus-visible {
   height: auto;
   image-rendering: pixelated;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Screenshots: a real print of the app in a glass frame, no browser   */
-/*  chrome. Until the file lands, a labelled slot with the same size.   */
-/* ------------------------------------------------------------------ */
 .shot {
   margin: 0;
-  padding: 10px;
-  border-radius: var(--radius-panel);
+  padding: var(--sp-3);
+  border-radius: var(--radius-card);
 }
 .shot img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   border: 1px solid var(--hairline);
 }
 .shot-empty {
@@ -201,20 +704,23 @@ summary:focus-visible {
   place-items: center;
   width: 100%;
   aspect-ratio: 16 / 10;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--row-bg);
   border: 1px dashed color-mix(in srgb, var(--ink-3) 45%, transparent);
   color: var(--ink-3);
+  font-size: var(--fs-fine);
 }
 .shot-cap {
-  margin: 12px 4px 2px;
-  font-size: 13.5px;
+  margin: var(--sp-3) var(--sp-1) 2px;
+  max-width: var(--measure-card);
+  font-size: var(--fs-fine);
   line-height: 1.5;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 .shot-cap b {
   display: block;
   margin-bottom: 2px;
+  font-size: var(--fs-ui);
   font-weight: 600;
   color: var(--ink);
 }
@@ -237,50 +743,39 @@ summary:focus-visible {
   display: none;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Long-form text (blog).                                              */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  9. LONG-FORM TEXT (blog)                                          */
+/* ================================================================== */
 .prose {
-  max-width: 66ch;
-  font-size: 18px;
-  line-height: 1.72;
+  max-width: var(--measure);
+  font-size: var(--fs-body);
+  line-height: 1.7;
   color: var(--ink);
   text-wrap: pretty;
 }
 .prose > * + * {
-  margin-top: 1.25em;
+  margin-top: 1.3em;
 }
 .prose > p:first-child {
-  font-size: 20px;
-  line-height: 1.6;
+  font-size: var(--fs-lede);
+  line-height: 1.55;
   color: var(--ink-2);
 }
 .prose h2 {
   margin-top: 2.4em;
   margin-bottom: -0.35em;
-  font-size: 27px;
+  font-size: 24px;
   line-height: 1.2;
-  letter-spacing: -0.012em;
-  text-wrap: balance;
+  letter-spacing: -0.016em;
 }
 .prose h3 {
-  margin-top: 1.8em;
+  margin-top: 1.9em;
   margin-bottom: -0.4em;
-  font-size: 21px;
+  font-size: var(--fs-h-sub);
   line-height: 1.3;
 }
 .prose p {
   margin: 0;
-}
-.prose a {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--violet) 55%, transparent);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
-}
-.prose a:hover {
-  text-decoration-color: var(--violet);
 }
 .prose ul,
 .prose ol {
@@ -291,18 +786,18 @@ summary:focus-visible {
 }
 .prose blockquote {
   margin: 0;
-  padding: 4px 0 4px 18px;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-5);
   border-left: 2px solid var(--violet);
   color: var(--ink-2);
 }
 .prose pre {
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  border-radius: var(--radius-control);
   background: var(--row-bg);
   border: 1px solid var(--hairline);
   overflow-x: auto;
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-size: var(--fs-mono);
+  line-height: 1.55;
 }
 .prose pre code {
   padding: 0;

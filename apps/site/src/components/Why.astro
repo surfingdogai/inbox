@@ -16,30 +16,34 @@ const reasons = [
 ];
 ---
 
-<section class="wrap why" aria-labelledby="why-h">
-  <p class="eyebrow">Why join</p>
-  <h2 class="h-section" id="why-h">Surfing Dog gives you an inbox.</h2>
-  <ul class="reasons">
-    {
-      reasons.map((r, i) => (
-        <li class="glass reason">
-          <span class="num tabular" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
-          <h3>{r.title}</h3>
-          <p>{r.body}</p>
-        </li>
-      ))
-    }
-  </ul>
+<section class="section why" aria-labelledby="why-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Why join</p>
+        <h2 class="h-section" id="why-h">Surfing Dog gives you an inbox.</h2>
+      </div>
+    </div>
+    <ul class="grid-cards reasons" data-reveal="stagger">
+      {
+        reasons.map((r, i) => (
+          <li class="glass card reason">
+            <span class="num tabular" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+            <h3 class="h-card">{r.title}</h3>
+            <p class="card-text">{r.body}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="more">
+      <a class="link" href="/how-it-works/">See what happens to a request, step by step</a>
+    </p>
+  </div>
 </section>
 
 <style>
-  .why {
-    padding-block: 40px 24px;
-  }
   .reasons {
-    display: grid;
-    gap: 16px;
-    margin: 24px 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
   }
@@ -48,26 +52,21 @@ const reasons = [
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
-  .reason {
-    padding: 22px 22px 24px;
-    border-radius: var(--radius-panel);
-  }
   .num {
     display: block;
-    font-size: 12px;
-    letter-spacing: 0.08em;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
     color: var(--ink-3);
   }
-  .reason h3 {
-    margin: 10px 0 0;
-    font-size: 20px;
-    line-height: 1.25;
-    letter-spacing: -0.01em;
+  .reason .h-card {
+    margin-top: var(--sp-2);
   }
-  .reason p {
-    margin: 10px 0 0;
-    font-size: 15.5px;
-    line-height: 1.55;
-    color: var(--ink-2);
+  .reason .card-text {
+    margin-top: var(--sp-2);
+  }
+  .more {
+    margin: var(--sp-5) 0 0;
+    font-size: var(--fs-card);
   }
 </style>

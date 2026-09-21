@@ -1,33 +1,44 @@
 ---
 import Shot from "./Shot.astro";
 
+/**
+ * Four trades, one build. `rule` is the line that differs between them; `what` is the day that
+ * line produces. Keeping the rule first is the whole point of the section.
+ */
 const cases = [
   {
     who: "A bike shop",
-    what: "An agent asks for a full service on Tuesday. The slot is free, inside opening hours and under the limit, so the rule confirms it and replies. The owner sees a confirmed booking, not a question.",
+    rule: "Confirm a service booking when the slot is free and the time is inside opening hours.",
+    what: "An agent asks for a full service on Tuesday. The booking is confirmed and answered before the owner has looked at a screen.",
   },
   {
     who: "A bakery",
-    what: "Orders under €80 are accepted the moment they arrive. Above that, the order waits for a person, and the customer is told so.",
+    rule: "Accept an order under €80. Send anything larger to a person.",
+    what: "Small orders go through the moment they arrive. A large one waits, and the customer is told that it is waiting.",
   },
   {
     who: "A plumber",
-    what: "Quote requests come back with the questions the owner defined. The owner's AI drafts the quote from the answers; the owner sends it.",
+    rule: "Ask every quote request for the address, the job and the access before it reaches the owner.",
+    what: "The answers arrive as fields rather than a paragraph. The owner's AI drafts the quote from them, and the owner sends it.",
   },
   {
     who: "A studio",
-    what: "Messages are answered by the owner's own Claude, connected over MCP, with the owner's rules as the boundary: it reads availability and prices before it speaks, and never invents them.",
+    rule: "Leave messages to the owner's own AI, inside the prices and hours the owner wrote down.",
+    what: "Claude is connected over MCP and reads the real availability before it answers. It cannot invent a price that is not there.",
   },
 ];
 ---
 
-<section class="section" id="use-cases" aria-labelledby="cases-h">
+<section class="section" id="use-cases" aria-labelledby="cases-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <p class="eyebrow">Use cases</p>
-        <h2 class="h-section" id="cases-h">Four businesses, one inbox</h2>
-        <p class="lede">The rules are the product. Each of these runs on rules a business can write in an afternoon.</p>
+        <p class="eyebrow">In practice</p>
+        <h2 class="h-section" id="cases-h">The same inbox, four sets of rules</h2>
+        <p class="lede">
+          A bike shop, a bakery, a plumber and a studio. The software is identical in all four. Only the rules differ,
+          and each set takes an afternoon to write.
+        </p>
       </div>
     </div>
     <div class="cols">
@@ -35,7 +46,8 @@ const cases = [
         {
           cases.map((c) => (
             <li class="flow">
-              <h3>{c.who}</h3>
+              <h3 class="h-card">{c.who}</h3>
+              <p class="does">{c.rule}</p>
               <p class="card-text">{c.what}</p>
             </li>
           ))
@@ -54,29 +66,34 @@ const cases = [
 <style>
   .cols {
     display: grid;
-    gap: 16px;
+    gap: var(--gap-grid);
     align-items: start;
   }
   @media (min-width: 900px) {
     .cols {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 20px;
     }
   }
   .flows {
     margin: 0;
-    padding-block: 6px;
+    padding-block: var(--sp-1);
     list-style: none;
   }
   .flow {
-    padding: 16px 0;
+    display: grid;
+    gap: var(--sp-1);
+    padding: var(--sp-4) 0;
     border-top: 1px solid var(--hairline);
   }
   .flow:first-child {
     border-top: 0;
   }
-  .flow h3 {
-    margin: 0 0 4px;
-    font-size: 17px;
+  /* The rule itself, in full ink: it is the sentence that changes from trade to trade. */
+  .does {
+    margin: 0;
+    max-width: var(--measure-card);
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
+    color: var(--ink);
   }
 </style>

@@ -5,7 +5,7 @@ description: The public and owner operations, their REST routes and MCP tools, a
 
 One capability set, several doors. Every operation exists once in the core and is exposed by thin adapters: REST under `/v1` with an OpenAPI 3.1 document, and MCP tools with the same names and the same schemas ([ADR-010](https://github.com/surfingdogai/inbox/blob/main/docs/adr/010-protocols.md)). Whichever door an agent takes, it gets the same item and the same errors.
 
-The live OpenAPI document of the demo instance: [inbox.surfingdog.ai/openapi.json](https://inbox.surfingdog.ai/openapi.json). Every instance serves its own at `/openapi.json`.
+The live OpenAPI document of our own instance: [inbox.surfingdog.ai/openapi.json](https://inbox.surfingdog.ai/openapi.json). Every instance serves its own at `/openapi.json`.
 
 ## Public operations
 
@@ -69,7 +69,7 @@ Both servers are stateless per request, so a client connects with a plain `POST`
 
 ## Discovery
 
-- `/.well-known/agent-inbox.json`: the [manifest](/docs/manifest/), listing every door.
+- `/.well-known/agent-inbox.json`: the [manifest](/docs/manifest/), listing the REST, OpenAPI and MCP doors. The email door is not in it.
 - `/.well-known/oauth-protected-resource/mcp/owner` and `/.well-known/oauth-authorization-server`: OAuth 2.1 metadata for the owner MCP.
 - `/healthz`: `{ "ok": true, "version": "…" }`.
 - `POST /v1/email/inbound`: raw MIME from a mail provider's webhook or a forwarder, with the instance's shared secret in `X-Inbox-Email-Secret`.

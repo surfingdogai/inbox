@@ -59,4 +59,4 @@ The same URL will be cross-linked from the A2A card, the UCP profile, `llms.txt`
 
 ## A live one
 
-The demo instance's manifest is at [inbox.surfingdog.ai/.well-known/agent-inbox.json](https://inbox.surfingdog.ai/.well-known/agent-inbox.json).
+The live instance's manifest is at [inbox.surfingdog.ai/.well-known/agent-inbox.json](https://inbox.surfingdog.ai/.well-known/agent-inbox.json).

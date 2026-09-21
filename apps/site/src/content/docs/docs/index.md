@@ -3,9 +3,9 @@ title: Overview
 description: Start here. What the inbox is, how to run it, and how people and AI agents talk to it.
 ---
 
-Surfing Dog Inbox is an open-source, self-hostable typed inbox for a business. It receives bookings, orders, quote requests and messages from people and from AI agents, through email, a web form, REST and MCP, and turns each one into a typed item with a lifecycle that rules, the owner, or the owner's own AI can handle. It is fully functional with zero AI.
+Surfing Dog Inbox is an open-source, self-hostable typed inbox for a business. It receives bookings, orders, quote requests and messages from people and from AI agents, through REST, MCP and email, and turns each one into a typed item with a lifecycle that rules, the owner, or the owner's own AI can handle. It is fully functional with zero AI.
 
-One codebase runs on Cloudflare Workers and on Node. One SQLite database holds everything the business owns. One discovery manifest at `/.well-known/agent-inbox.json` tells an agent which doors are open.
+One codebase runs on Cloudflare Workers and on Node. One SQLite database holds everything the business owns. One discovery manifest at `/.well-known/agent-inbox.json` tells an agent where the REST, OpenAPI and MCP doors are.
 
 ## Where things stand
 
@@ -15,13 +15,13 @@ Written on 21 September 2026. the groundwork (research, decisions, scaffold) is 
 - the rules engine, with presets for appointments, trades and shops;
 - REST with an OpenAPI document, a public MCP server and an owner MCP server;
 - owner API keys, owner sign-in by magic link, and an OAuth 2.1 authorization server for the owner MCP;
-- the owner app, first version: sign in with an owner key, a three-pane inbox, a typed item view with the valid next actions as buttons, and settings;
+- the owner app, first version: sign in by emailed link or owner key, a three-pane inbox, a typed item view with the valid next actions as buttons, and settings;
 - the email door: inbound MIME parsed, deduplicated and threaded onto the right item;
 - the job runner for notifications and rules, on cron and queues on Workers and on a loop on Node;
 - network membership: an instance joins a network from settings and reports counts-only telemetry every hour;
-- a live demo instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
+- our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: the setup wizard, passkeys and email sign-in in the app (the first release), receipts and connectors (the next release), hosted tenancy and the network's directory, reviews and reputation (a later release). Every page in these docs says which phase a feature belongs to.
+Still to come: the setup wizard, passkeys and a web form door (the first release), receipts and connectors (the next release), hosted tenancy and the network's directory, reviews and reputation (a later release). Every page in these docs says which phase a feature belongs to.
 
 ## Pages
 
