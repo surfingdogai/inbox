@@ -12,6 +12,7 @@ export async function appendThreadEntry(
   item: Item,
   body: string,
   direction: "in" | "out" | "note",
+  messageId?: string | undefined,
 ): Promise<void> {
   const now = nowOf(caller);
   const statements: Statement[] = [
@@ -23,6 +24,7 @@ export async function appendThreadEntry(
       actorId: caller.actor.id,
       partyId: direction === "in" ? item.partyId : null,
       body,
+      messageId: messageId ?? null,
       now,
     }),
     { sql: "UPDATE items SET updated_at = ? WHERE id = ?", params: [now, item.id], method: "run" },

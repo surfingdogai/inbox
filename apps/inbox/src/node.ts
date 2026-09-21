@@ -3,7 +3,7 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey } from "@surfingdog/adapters";
-import { MIGRATIONS, createDb } from "@surfingdog/core";
+import { createDb, MIGRATIONS } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";

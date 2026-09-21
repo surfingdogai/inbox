@@ -73,6 +73,8 @@ export const sendMessageInput = z.object({
   subject: z.string().max(500).optional(),
   body: z.string().min(1).max(20_000),
   contact: contactSchema.optional(),
+  /** Dedupe key of the underlying message, e.g. an email Message-ID. */
+  message_id: z.string().min(1).max(998).optional(),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
 });

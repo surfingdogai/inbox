@@ -193,8 +193,8 @@ describe("rules engine", () => {
       .select({ direction: threadEntries.direction, body: threadEntries.bodyText })
       .from(threadEntries)
       .where(eq(threadEntries.itemId, m.view.item.id));
-    expect(thread.map((t) => t.direction)).toEqual(["out"]);
-    expect(thread[0]?.body).toBe("Thanks, we read every message about Do you fix e-bike batteries? within a day.");
+    expect(thread.map((t) => t.direction)).toEqual(["in", "out"]);
+    expect(thread[1]?.body).toBe("Thanks, we read every message about Do you fix e-bike batteries? within a day.");
     const [row] = await db.orm.select().from(items).where(eq(items.id, m.view.item.id));
     expect(row?.flags).toMatchObject({ priority: 0 });
   });

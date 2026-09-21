@@ -20,10 +20,13 @@
     "hono": "catalog:",
     "hono-openapi": "^1.3.3",
     "zod": "catalog:",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "postal-mime": "^3.0.0"
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@cloudflare/vitest-plugin": "^1.2.0"
   }
 }
