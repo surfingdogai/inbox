@@ -4,7 +4,11 @@ import { cloudflareEmailMailOut, logMailOut, type MailOut, resendMailOut } from 
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
 
-type Bindings = Env & { EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0]; RESEND_API_KEY?: string };
+type Bindings = Env & {
+  EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
+  RESEND_API_KEY?: string;
+  INBOX_OWNER_EMAIL?: string;
+};
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
 const inboxes = new WeakMap<object, Inbox>();
@@ -16,7 +20,14 @@ function inboxFor(env: Bindings): Inbox {
       : env.RESEND_API_KEY
         ? resendMailOut(env.RESEND_API_KEY)
         : logMailOut(console.log);
-    inbox = createInbox({ db: createDb(d1Client(env.DB)), mailOut });
+    inbox = createInbox({
+      db: createDb(d1Client(env.DB)),
+      mailOut,
+      ownerEmails: (env.INBOX_OWNER_EMAIL ?? "")
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean),
+    });
     inboxes.set(env.DB, inbox);
   }
   return inbox;

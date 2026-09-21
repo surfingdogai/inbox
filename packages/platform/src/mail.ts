@@ -70,3 +70,44 @@ export function resendMailOut(apiKey: string, fetchImpl: typeof fetch = fetch): 
     },
   };
 }
+
+/**
+ * Cloudflare Email Service over its REST API, for runtimes without the `send_email` binding
+ * (Node, Bun). Cloudflare only sends from domains onboarded on the account, so every message goes
+ * out from the configured address; the message's own sender becomes Reply-To when it differs.
+ */
+export function cloudflareEmailRestMailOut(
+  opts: { accountId: string; token: string; from: { address: string; name?: string | undefined } },
+  fetchImpl: typeof fetch = fetch,
+): MailOut {
+  return {
+    async send(mail) {
+      const replyTo = mail.replyTo ?? (mail.from.address !== opts.from.address ? mail.from.address : undefined);
+      const res = await fetchImpl(
+        `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/email/sending/send`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${opts.token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            from: { address: opts.from.address, name: mail.from.name ?? opts.from.name ?? "" },
+            to: mail.to.length === 1 ? mail.to[0] : [...mail.to],
+            ...(replyTo ? { replyTo } : {}),
+            subject: mail.subject,
+            text: mail.text,
+            ...(mail.html ? { html: mail.html } : {}),
+          }),
+        },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        errors?: { code: number; message: string }[];
+        result?: { messageId?: string; id?: string };
+      };
+      if (!res.ok || body.success === false) {
+        const e = body.errors?.[0];
+        throw new Error(e ? `cloudflare email: ${e.message} (code ${e.code})` : `cloudflare email: HTTP ${res.status}`);
+      }
+      return { messageId: body.result?.messageId ?? body.result?.id ?? `cf-${Date.now()}` };
+    },
+  };
+}

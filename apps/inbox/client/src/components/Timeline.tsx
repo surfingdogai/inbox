@@ -17,7 +17,7 @@ export function Timeline({
       <div className="eyebrow">Timeline</div>
       <div className="timeline">
         {events.map((e) => {
-          const tone = e.event === "create" ? "neutral" : stateTone(e.to);
+          const tone = e.event === "create" || e.event === "flags" ? "neutral" : stateTone(e.to);
           const dot = tone === "neutral" ? `dot-${TYPE_CLASS[type]}` : `dot-${tone}`;
           return (
             <div className="event" key={e.seq}>

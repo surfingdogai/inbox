@@ -1,3 +1,5 @@
 # Secrets for local development (copied to .dev.vars, never committed).
 # The Deploy to Cloudflare button prompts for these.
 INBOX_SECRET_KEY=
+# Who may create the first owner account by magic link (comma-separated).
+INBOX_OWNER_EMAIL=

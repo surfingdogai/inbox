@@ -100,6 +100,7 @@ const EVENT_WORDS: Record<string, string> = {
   approve: "Approved",
   reject: "Rejected",
   refund: "Refunded",
+  flags: "Flag changed",
 };
 
 export function eventWord(event: string): string {

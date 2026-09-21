@@ -28,7 +28,14 @@ describe("owner sign-in", () => {
   it("bootstraps the first owner by magic link, then only known addresses get links", async () => {
     const db = await freshDb();
     const mail = logMailOut();
-    const app = createApp({ db, mailOut: mail });
+    const app = createApp({ db, mailOut: mail, ownerEmails: ["tiago@oficinamare.pt"] });
+    const stranger0 = await app.request(`${ORIGIN}/auth/magic-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "first@example.com" }),
+    });
+    expect(stranger0.status).toBeLessThan(500);
+    expect(mail.sent).toHaveLength(0); // an empty instance does not hand itself to the first click
     const cookie = await signIn(app, mail, "tiago@oficinamare.pt");
     const me = await app.request(`${ORIGIN}/auth/me`, { headers: { cookie } });
     expect(await me.json()).toMatchObject({ email: "tiago@oficinamare.pt", role: "owner" });
@@ -67,7 +74,7 @@ describe("OAuth 2.1 for the owner MCP", () => {
   it("advertises discovery, registers a client, runs the code flow with PKCE, and refreshes with rotation", async () => {
     const db = await freshDb();
     const mail = logMailOut();
-    const app = createApp({ db, mailOut: mail });
+    const app = createApp({ db, mailOut: mail, ownerEmails: ["tiago@oficinamare.pt"] });
     const cookie = await signIn(app, mail, "tiago@oficinamare.pt");
 
     const challenge401 = await app.request(`${ORIGIN}/mcp/owner`, { method: "POST" });

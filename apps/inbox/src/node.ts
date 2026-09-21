@@ -4,21 +4,24 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey, ensureNetworkPing, NETWORK_PING_KIND } from "@surfingdog/adapters";
 import { createDb, ensureJob, MIGRATIONS } from "@surfingdog/core";
-import { ensureMigrated, logMailOut, resendMailOut } from "@surfingdog/platform";
+import { cloudflareEmailRestMailOut, ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
-import { seedDemo, seedSurfingDog } from "./seed";
+import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
  * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
  * ../dist/client (or INBOX_STATIC), and a one-second job loop. Any path that is neither a door nor
  * a file gets the app shell, like the Worker's `not_found_handling: "single-page-application"`.
- * INBOX_DB points at the database file (default ./data/inbox.db); RESEND_API_KEY turns on real
- * email, otherwise mail is logged.
+ * INBOX_DB points at the database file (default ./data/inbox.db). Mail goes out through Cloudflare
+ * Email Service (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN + MAIL_FROM), else Resend
+ * (RESEND_API_KEY), else the console. INBOX_OWNER_EMAIL (comma-separated) lists who may create the
+ * first account by magic link.
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
  *   node server.mjs seed-demo          add the demo bike shop if the instance is empty
+ *   node server.mjs seed-showcase      the demo bike shop with a week of items, rules and hours (screenshots)
  *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
  *   node server.mjs network-ping       report to the network now instead of at the next hour
  */
@@ -35,6 +38,11 @@ if (command) {
   } else if (command === "seed-demo") {
     const r = await seedDemo(db);
     console.log(r.seeded ? "seeded the demo business" : "an instance business already exists; nothing changed");
+  } else if (command === "seed-showcase") {
+    const r = await seedShowcase(db);
+    console.log(
+      r.seeded ? `seeded the showcase: ${r.items} items` : "an instance business already exists; nothing changed",
+    );
   } else if (command === "seed-surfingdog") {
     const r = await seedSurfingDog(db);
     console.log(r.seeded ? "seeded Surfing Dog's own inbox" : "an instance business already exists; nothing changed");
@@ -42,7 +50,9 @@ if (command) {
     await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);
     console.log("queued a network ping; the running server sends it within a second");
   } else {
-    console.error(`unknown command ${command}; use create-owner-key, seed-demo, seed-surfingdog or network-ping`);
+    console.error(
+      `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog or network-ping`,
+    );
     process.exit(2);
   }
   process.exit(0);
@@ -51,8 +61,21 @@ if (command) {
 // Migrate before the job loop starts, so a fresh database never sees a query for a missing table.
 await ensureMigrated(db.client, MIGRATIONS);
 await ensureNetworkPing(db);
-const mailOut = process.env.RESEND_API_KEY ? resendMailOut(process.env.RESEND_API_KEY) : logMailOut(console.log);
-const { app, runner } = createInbox({ db, mailOut, baseUrl: process.env.INBOX_PUBLIC_URL });
+const mailOut: MailOut =
+  process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_TOKEN && process.env.MAIL_FROM
+    ? cloudflareEmailRestMailOut({
+        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+        token: process.env.CLOUDFLARE_EMAIL_TOKEN,
+        from: { address: process.env.MAIL_FROM, name: process.env.MAIL_FROM_NAME },
+      })
+    : process.env.RESEND_API_KEY
+      ? resendMailOut(process.env.RESEND_API_KEY)
+      : consoleMailOut();
+const ownerEmails = (process.env.INBOX_OWNER_EMAIL ?? "")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean);
+const { app, runner } = createInbox({ db, mailOut, baseUrl: process.env.INBOX_PUBLIC_URL, ownerEmails });
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
 const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known"];
@@ -71,6 +94,20 @@ const loop = setInterval(() => {
   runner.runDue(db, { workerId: `node:${process.pid}` }).catch((error) => console.error("jobs:", error));
 }, 1_000);
 loop.unref();
+
+/** No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the terminal. */
+function consoleMailOut(): MailOut {
+  return {
+    async send(mail) {
+      const body = mail.text
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      console.log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${body}`);
+      return { messageId: `console-${Date.now()}` };
+    },
+  };
+}
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0" }, (info) => {

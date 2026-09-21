@@ -5,13 +5,13 @@ import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { ThemeSwitch } from "../components/ThemeSwitch";
 import { problemOf } from "../lib/api";
-import { isSignedIn } from "../lib/auth";
+import { ensureSignedIn } from "../lib/auth";
 import { qk, useSaveSettings, useSettings } from "../lib/queries";
 import type { Settings, SettingsDoc } from "../lib/types";
 
 export const Route = createFileRoute("/settings")({
-  beforeLoad: ({ location }) => {
-    if (!isSignedIn()) throw redirect({ to: "/login", search: { redirect: location.href } });
+  beforeLoad: async ({ location }) => {
+    if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
   },
   component: SettingsPage,
 });
