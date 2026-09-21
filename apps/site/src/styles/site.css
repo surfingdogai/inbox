@@ -102,7 +102,8 @@
   --fs-card: 13.5px; /* card and list copy */
   --fs-body: 14.5px; /* body and prose */
   --fs-lede: 15.5px; /* the one paragraph under a title */
-  --fs-mono: 12px; /* monospace runs optically small; its own step */
+  --fs-mono: 12px;
+  --fs-prose: 16.5px; /* blog and docs body: reading, not interface */ /* monospace runs optically small; its own step */
 
   /* Headings. One token per level, used by every page. */
   --fs-h-card: 15px; /* every card and step heading */
@@ -120,6 +121,7 @@
 
   /* Measure, bound to size: small text is narrower, never wider. */
   --measure: 66ch; /* body and prose */
+  --measure-prose: 55ch; /* long-form: about 72 characters at the prose size */
   --measure-lede: 58ch;
   --measure-card: 62ch;
   --measure-tight: 52ch; /* fine print and hints */
@@ -746,36 +748,45 @@ kbd {
 /* ================================================================== */
 /*  9. LONG-FORM TEXT (blog)                                          */
 /* ================================================================== */
+/* Long-form reading has its own size. The interface is deliberately small, but an
+   essay read top to bottom is not an interface, and 14.5px is below what anyone
+   should be asked to read for a thousand words. */
 .prose {
-  max-width: var(--measure);
-  font-size: var(--fs-body);
-  line-height: 1.7;
+  max-width: var(--measure-prose);
+  font-size: var(--fs-prose);
+  line-height: 1.72;
   color: var(--ink);
   text-wrap: pretty;
 }
+/* Vertical rhythm lives here and nowhere else. `.prose p { margin: 0 }` used to sit
+   below this and beat it on specificity, so every paragraph in every post ran
+   straight into the next one with no gap at all. */
 .prose > * + * {
-  margin-top: 1.3em;
+  margin-top: 1.15em;
 }
 .prose > p:first-child {
-  font-size: var(--fs-lede);
-  line-height: 1.55;
+  font-size: 1.1em;
+  line-height: 1.6;
   color: var(--ink-2);
 }
+.prose :is(h2, h3) {
+  text-wrap: balance;
+}
 .prose h2 {
-  margin-top: 2.4em;
-  margin-bottom: -0.35em;
-  font-size: 24px;
-  line-height: 1.2;
+  margin-top: 2.1em;
+  font-size: 1.42em;
+  line-height: 1.22;
   letter-spacing: -0.016em;
 }
 .prose h3 {
-  margin-top: 1.9em;
-  margin-bottom: -0.4em;
-  font-size: var(--fs-h-sub);
-  line-height: 1.3;
+  margin-top: 1.7em;
+  font-size: 1.14em;
+  line-height: 1.32;
 }
-.prose p {
-  margin: 0;
+/* A heading owns the space above it and a little below, so the paragraph it
+   introduces sits closer to it than to the paragraph before. */
+.prose :is(h2, h3) + * {
+  margin-top: 0.55em;
 }
 .prose ul,
 .prose ol {
