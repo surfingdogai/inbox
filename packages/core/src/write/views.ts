@@ -10,7 +10,53 @@ export interface ItemView {
   readonly item: Item;
   readonly transitions: readonly { readonly event: string; readonly label: string }[];
   readonly human: string;
+  /** Who is asking; present for the business side only, never echoed back to customers. */
+  readonly party?: PartyView | undefined;
 }
+
+export interface PartyView {
+  readonly id: string;
+  readonly name: string | null;
+  readonly kind: string;
+  readonly email?: string | undefined;
+  readonly phone?: string | undefined;
+  readonly verified: boolean;
+}
+
+/**
+ * The order the owner sees actions in: the happy path first, then alternatives, then the
+ * destructive ones. Machines list transitions in lifecycle order, which is not reading order.
+ */
+const ACTION_RANK = [
+  "confirm",
+  "accept",
+  "approve",
+  "quote",
+  "answer",
+  "record_payment",
+  "request_payment",
+  "start_fulfilment",
+  "fulfil",
+  "complete",
+  "propose",
+  "request_info",
+  "provide_info",
+  "reopen",
+  "unspam",
+  "refund",
+  "close",
+  "decline",
+  "reject",
+  "no_show",
+  "cancel",
+  "cancel_by_business",
+  "mark_spam",
+  "expire",
+];
+const rankOf = (event: string) => {
+  const i = ACTION_RANK.indexOf(event);
+  return i === -1 ? ACTION_RANK.length : i;
+};
 
 const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
 
@@ -36,10 +82,13 @@ export function rowToItem(row: ItemRow): Item {
   } as Item;
 }
 
-export function viewFor(item: Item, actor: ActorKind): ItemView {
+export function viewFor(item: Item, actor: ActorKind, party?: PartyView): ItemView {
   const machine = machines[item.type];
-  const transitions = availableTransitions(machine, item.state, actor).map((t) => ({ event: t.event, label: t.label }));
-  return { item, transitions, human: describe(item) };
+  const transitions = availableTransitions(machine, item.state, actor)
+    .map((t, i) => ({ event: t.event, label: t.label, i }))
+    .sort((a, b) => rankOf(a.event) - rankOf(b.event) || a.i - b.i)
+    .map(({ event, label }) => ({ event, label }));
+  return { item, transitions, human: describe(item), ...(party ? { party } : {}) };
 }
 
 const TYPE_WORD: Record<ItemType, string> = {

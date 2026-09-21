@@ -1,10 +1,12 @@
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import {
   business,
   itemEvents,
   items,
+  parties,
+  partyIdentities,
   products,
   services,
   settings as settingsTable,
@@ -17,7 +19,7 @@ import { type CreateResult, createItem } from "../write/create";
 import { fromZod, WriteError } from "../write/errors";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
-import { type ItemView, rowToItem, viewFor } from "../write/views";
+import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
 import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
@@ -208,7 +210,8 @@ export class Capabilities {
       .where(and(...conditions))
       .orderBy(desc(items.updatedAt), desc(items.id))
       .limit(input.limit + 1);
-    const views = rows.map((r) => viewFor(rowToItem(r), caller.actor.kind));
+    const partyViews = await this.partyViews(rows.map((r) => r.partyId));
+    const views = rows.map((r) => viewFor(rowToItem(r), caller.actor.kind, partyViews.get(r.partyId)));
     const last = rows[input.limit - 1];
     return {
       items: views.slice(0, input.limit),
@@ -221,16 +224,17 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
-    const [events, thread] = await Promise.all([
+    const [events, thread, partyViews] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
         .select()
         .from(threadEntries)
         .where(eq(threadEntries.itemId, item.id))
         .orderBy(threadEntries.createdAt),
+      this.partyViews([row.partyId]),
     ]);
     return {
-      ...viewFor(item, caller.actor.kind),
+      ...viewFor(item, caller.actor.kind, partyViews.get(row.partyId)),
       events: events.map((e) => ({
         seq: e.seq,
         event: e.event,
@@ -317,6 +321,33 @@ export class Capabilities {
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  /** Who is behind each item, for the business side: name, contact, and whether any identity is verified. */
+  private async partyViews(ids: readonly string[]): Promise<Map<string, PartyView>> {
+    const unique = [...new Set(ids)];
+    const out = new Map<string, PartyView>();
+    if (unique.length === 0) return out;
+    const [rows, verified] = await Promise.all([
+      this.db.orm.select().from(parties).where(inArray(parties.id, unique)),
+      this.db.orm
+        .select({ partyId: partyIdentities.partyId })
+        .from(partyIdentities)
+        .where(and(inArray(partyIdentities.partyId, unique), isNotNull(partyIdentities.verifiedAt))),
+    ]);
+    const verifiedIds = new Set(verified.map((v) => v.partyId));
+    for (const p of rows) {
+      const contact = (p.contact ?? {}) as { email?: string; phone?: string; name?: string };
+      out.set(p.id, {
+        id: p.id,
+        name: p.displayName ?? contact.name ?? null,
+        kind: p.kind,
+        ...(contact.email ? { email: contact.email } : {}),
+        ...(contact.phone ? { phone: contact.phone } : {}),
+        verified: verifiedIds.has(p.id),
+      });
+    }
+    return out;
+  }
 
   private async loadOwned(caller: Caller, itemId: string) {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
