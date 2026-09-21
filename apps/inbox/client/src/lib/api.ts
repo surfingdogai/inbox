@@ -1,17 +1,32 @@
 import { authHeaders } from "./auth";
 import type {
+  Availability,
   BusinessProfile,
+  Closure,
   ItemDetail,
   ItemView,
   ListParams,
   Page,
+  Preset,
+  PresetKey,
   Problem,
   ProblemField,
+  ProductBody,
+  ProductRow,
+  Profile,
+  ProfileBody,
   ReplyBody,
+  RuleBody,
+  RuleDefinition,
+  RuleTest,
+  RuleView,
+  ServiceBody,
+  ServiceRow,
   SettingsBody,
   SettingsDoc,
   TransitionBody,
   TransitionResult,
+  Weekly,
 } from "./types";
 
 /**
@@ -146,4 +161,35 @@ export const api = {
     call<TransitionResult | ItemView>("POST", `${item(id)}/replies`, { body, idempotent: true }),
   getSettings: () => call<SettingsDoc>("GET", "/v1/owner/settings"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
+
+  // ---- setup: who the business is, what it offers, when it is open, what runs on its own ----
+  profile: () => call<Profile>("GET", "/v1/owner/profile"),
+  putProfile: (body: ProfileBody) => call<Profile>("PUT", "/v1/owner/profile", { body }),
+  services: () => call<{ items: ServiceRow[] }>("GET", "/v1/owner/services"),
+  createService: (body: ServiceBody) => call<ServiceRow>("POST", "/v1/owner/services", { body }),
+  patchService: (id: string, body: ServiceBody) =>
+    call<ServiceRow>("PATCH", `/v1/owner/services/${encodeURIComponent(id)}`, { body }),
+  archiveService: (id: string) => call<ServiceRow>("DELETE", `/v1/owner/services/${encodeURIComponent(id)}`),
+  products: () => call<{ items: ProductRow[] }>("GET", "/v1/owner/products"),
+  createProduct: (body: ProductBody) => call<ProductRow>("POST", "/v1/owner/products", { body }),
+  patchProduct: (id: string, body: ProductBody) =>
+    call<ProductRow>("PATCH", `/v1/owner/products/${encodeURIComponent(id)}`, { body }),
+  archiveProduct: (id: string) => call<ProductRow>("DELETE", `/v1/owner/products/${encodeURIComponent(id)}`),
+  availability: () => call<Availability>("GET", "/v1/owner/availability"),
+  putWeekly: (weekly: Weekly, serviceId?: string) =>
+    call<Availability>("PUT", "/v1/owner/availability", {
+      body: { weekly, ...(serviceId ? { service_id: serviceId } : {}) },
+    }),
+  putClosures: (closures: readonly Closure[]) =>
+    call<Availability>("PUT", "/v1/owner/availability/closures", { body: { closures } }),
+  rules: () => call<{ items: RuleView[] }>("GET", "/v1/owner/rules"),
+  presets: () => call<{ items: Preset[] }>("GET", "/v1/owner/rules/presets"),
+  applyPreset: (key: PresetKey, replace: boolean) =>
+    call<{ items: RuleView[] }>("POST", `/v1/owner/rules/presets/${key}`, { body: { replace } }),
+  createRule: (body: RuleBody) => call<RuleView>("POST", "/v1/owner/rules", { body }),
+  patchRule: (id: string, body: RuleBody) =>
+    call<RuleView>("PATCH", `/v1/owner/rules/${encodeURIComponent(id)}`, { body }),
+  deleteRule: (id: string) => call<{ deleted: true }>("DELETE", `/v1/owner/rules/${encodeURIComponent(id)}`),
+  testRule: (definition: RuleDefinition, itemId: string) =>
+    call<RuleTest>("POST", "/v1/owner/rules/test", { body: { definition, item_id: itemId } }),
 };

@@ -115,7 +115,7 @@ a {
   place-items: center;
 }
 .page-narrow {
-  max-width: 760px;
+  max-width: 900px;
   margin: 0 auto;
   display: grid;
   gap: 16px;
@@ -681,5 +681,209 @@ a {
   }
   .line {
     grid-template-columns: minmax(0, 1fr) 64px 100px auto;
+  }
+}
+
+/* Settings: sections, sub-navigation, editors */
+.subnav {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subnav .tab {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.subnav .tab[aria-current="page"] {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-strong);
+  color: var(--ink);
+  box-shadow: var(--glass-shadow);
+}
+.sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sec-head h3 {
+  margin: 0;
+}
+.lede.small {
+  font-size: 13px;
+}
+.scope-select {
+  width: auto;
+  min-width: 220px;
+}
+.catalogue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+.catalogue-row .wide {
+  grid-column: 1 / -1;
+}
+.catalogue-row.is-archived .catalogue-main {
+  opacity: 0.7;
+}
+.catalogue-main .t {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.catalogue-main .t b {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.catalogue-main .s {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.hours-day {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+}
+.hours-label {
+  font-weight: 600;
+}
+.hours-windows {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.hours-window {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+.hours-window .input {
+  width: 128px;
+}
+.hours-dash {
+  color: var(--ink-3);
+}
+.closure-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.closure-row .input[type="date"] {
+  width: 160px;
+}
+.preset-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.preset-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 14px;
+  border-radius: var(--radius-md);
+}
+.preset-card h4 {
+  margin: 0;
+  font-size: 15px;
+}
+.preset-card ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.rule-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+.rule-line .wide {
+  grid-column: 1 / -1;
+}
+.rule-summary {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rule-line.is-off .rule-summary {
+  color: var(--ink-2);
+}
+.rule-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.cond-row,
+.action-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+.cond-fields,
+.action-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.cond-fields .wide,
+.action-fields .wide {
+  grid-column: 1 / -1;
+}
+.reads-as {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+}
+.reads-as strong {
+  font-weight: 600;
+}
+.event-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.event-pills .pill button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+textarea.json-editor {
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+}
+@media (max-width: 899px) {
+  .hours-day {
+    grid-template-columns: 1fr;
+  }
+  .closure-row {
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .closure-row .input:not([type="date"]),
+  .closure-row .btn {
+    grid-column: 1 / -1;
   }
 }
