@@ -10,10 +10,12 @@ import {
   buildManifest,
   Capabilities,
   createRunner,
+  createSecretBox,
   type Db,
   type JobRunner,
   MANIFEST_PATH,
   MIGRATIONS,
+  parseSecretKeys,
   readSettings,
   VERSION,
 } from "@surfingdog/core";
@@ -30,6 +32,12 @@ export interface AppDeps {
   readonly fetchImpl?: typeof fetch | undefined;
   /** Addresses that may create the first account by magic link (INBOX_OWNER_EMAIL). */
   readonly ownerEmails?: readonly string[] | undefined;
+  /**
+   * INBOX_SECRET_KEY: one key, or several comma-separated and newest first, that seal connector
+   * credentials and webhook secrets. Absent, the instance runs as it does today and refuses to
+   * store a secret (ADR-015 §2).
+   */
+  readonly secretKey?: string | undefined;
   /** Runs work after the response. Workers pass `ctx.waitUntil`; Node lets the loop pick it up. */
   readonly background?: ((work: Promise<unknown>) => void) | undefined;
   /** Test seam for Client ID Metadata Documents. */
@@ -51,7 +59,7 @@ export interface Inbox {
  */
 export function createInbox(deps: AppDeps): Inbox {
   const app = new Hono<CallerEnv>();
-  const caps = new Capabilities(deps.db);
+  const caps = new Capabilities(deps.db, createSecretBox(parseSecretKeys(deps.secretKey)));
   const mailOut = deps.mailOut ?? logMailOut();
   const runner = createRunner({ mailOut, baseUrl: deps.baseUrl }).register(
     NETWORK_PING_KIND,

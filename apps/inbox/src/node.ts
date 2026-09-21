@@ -16,7 +16,8 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  * INBOX_DB points at the database file (default ./data/inbox.db). Mail goes out through Cloudflare
  * Email Service (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN + MAIL_FROM), else Resend
  * (RESEND_API_KEY), else the console. INBOX_OWNER_EMAIL (comma-separated) lists who may create the
- * first account by magic link.
+ * first account by magic link. INBOX_SECRET_KEY (comma-separated, newest first) seals connector
+ * credentials and webhook secrets; without it the instance refuses to store one.
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
@@ -75,7 +76,13 @@ const ownerEmails = (process.env.INBOX_OWNER_EMAIL ?? "")
   .split(",")
   .map((e) => e.trim())
   .filter(Boolean);
-const { app, runner } = createInbox({ db, mailOut, baseUrl: process.env.INBOX_PUBLIC_URL, ownerEmails });
+const { app, runner } = createInbox({
+  db,
+  mailOut,
+  baseUrl: process.env.INBOX_PUBLIC_URL,
+  ownerEmails,
+  secretKey: process.env.INBOX_SECRET_KEY,
+});
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
 const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known"];

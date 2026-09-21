@@ -15,6 +15,13 @@ export * from "./machine/tables";
 export { buildManifest } from "./manifest";
 export * from "./rules/index";
 export { MIGRATIONS } from "./schema/migrations.generated";
+export {
+  createSecretBox,
+  parseSecretKeys,
+  requireSecretBox,
+  type SecretBox,
+  type SecretPurpose,
+} from "./secrets/box";
 export * from "./settings/schema";
 export * from "./write/index";
 

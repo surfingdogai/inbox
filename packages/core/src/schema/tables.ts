@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, sqliteView, text, unique } from "drizzle-orm/sqlite-core";
 
 /**
  * The one schema, shared by every runtime. Conventions (ADR-011): TEXT ULID ids, INTEGER
@@ -314,24 +314,84 @@ export const rules = sqliteTable("rules", {
   updatedAt: updatedAt(),
 });
 
-export const connectors = sqliteTable("connectors", {
-  id: id(),
-  kind: text("kind").notNull(),
-  configEnc: text("config_enc").notNull(),
-  status: text("status").notNull().default("configured"),
-  lastError: text("last_error"),
-  lastSyncAt: integer("last_sync_at"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+/**
+ * A connector is a row, not a setting (ADR-015 §1): settings is one document under one optimistic
+ * version, and `get_settings` hands it verbatim to every connected AI, secrets and all.
+ */
+export const connectors = sqliteTable(
+  "connectors",
+  {
+    id: id(),
+    /** The platform: `shopify`, `woocommerce`, `feed`, … */
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    /** The platform's own identifier for this account: a shop domain, a store id, a feed URL. */
+    externalId: text("external_id"),
+    /** Credentials, sealed by the secret box. Null for a connector that needs none, like a feed. */
+    configEnc: text("config_enc"),
+    /** The non-secret mirror, so Settings can list and disconnect even if the instance key is lost. */
+    configPublic: text("config_public", { mode: "json" }).notNull().default({}),
+    /** Where the last sync got to. Written only by sync jobs, so one never overwrites an owner edit. */
+    cursor: text("cursor"),
+    /** The unguessable path segment of this connector's inbound URL. */
+    inboundToken: text("inbound_token"),
+    /** `configured` | `active` | `error` | `disabled`. */
+    status: text("status").notNull().default("configured"),
+    lastError: text("last_error"),
+    lastErrorAt: integer("last_error_at"),
+    lastSyncAt: integer("last_sync_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique("connectors_kind_external").on(t.kind, t.externalId),
+    unique("connectors_inbound_token").on(t.inboundToken),
+    index("connectors_status").on(t.status),
+  ],
+);
 
+/** The inbound mirror of `webhook_deliveries`: what a platform sent us, and what we made of it. */
+export const connectorEvents = sqliteTable(
+  "connector_events",
+  {
+    id: id(),
+    connectorId: text("connector_id")
+      .notNull()
+      .references(() => connectors.id),
+    /** The platform's delivery id. Unique per connector, so a redelivery is ignored, not doubled. */
+    externalId: text("external_id").notNull(),
+    topic: text("topic").notNull(),
+    receivedAt: integer("received_at").notNull(),
+    /** `pending` | `handled` | `ignored` | `failed`. */
+    status: text("status").notNull().default("pending"),
+    itemId: text("item_id"),
+    handledAt: integer("handled_at"),
+    error: text("error"),
+    /** The body exactly as received, so a handler can be fixed and the event replayed. */
+    raw: text("raw").notNull(),
+  },
+  (t) => [
+    unique("connector_events_once").on(t.connectorId, t.externalId),
+    index("connector_events_pending").on(t.status, t.receivedAt),
+  ],
+);
+
+/** Where events go (ADR-015 §3–§5): one row per endpoint the owner has added. */
 export const webhooks = sqliteTable("webhooks", {
   id: id(),
   url: text("url").notNull(),
+  /** The Standard Webhooks signing secret (`whsec_…`), sealed by the secret box. */
   secretEnc: text("secret_enc").notNull(),
-  events: text("events", { mode: "json" }).notNull(),
+  events: text("events", { mode: "json" }).$type<string[]>().notNull(),
+  /** `thin` sends a pointer; `full` sends customer data to this address, and says so in Settings. */
+  payloadStyle: text("payload_style").notNull().default("thin"),
   active: integer("active").notNull().default(1),
+  /** First failure of the current run of failures; five days of them deactivates the endpoint. */
+  failingSince: integer("failing_since"),
+  disabledAt: integer("disabled_at"),
+  lastError: text("last_error"),
   createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const webhookDeliveries = sqliteTable(
@@ -341,14 +401,23 @@ export const webhookDeliveries = sqliteTable(
     webhookId: text("webhook_id")
       .notNull()
       .references(() => webhooks.id),
+    /** The `events_v1` id, which is also the `webhook-id` header the receiver deduplicates on. */
     eventId: text("event_id").notNull(),
-    status: text("status").notNull().default("queued"),
+    eventType: text("event_type").notNull(),
+    /** `pending` | `delivered` | `failed`. */
+    status: text("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     nextAt: integer("next_at"),
     lastStatus: integer("last_status"),
+    lastError: text("last_error"),
+    durationMs: integer("duration_ms"),
     createdAt: createdAt(),
+    deliveredAt: integer("delivered_at"),
   },
-  (t) => [unique("webhook_deliveries_once").on(t.webhookId, t.eventId)],
+  (t) => [
+    unique("webhook_deliveries_once").on(t.webhookId, t.eventId),
+    index("webhook_deliveries_due").on(t.status, t.nextAt),
+  ],
 );
 
 export const users = sqliteTable("users", {
@@ -520,3 +589,57 @@ export const actionLinks = sqliteTable("action_links", {
   usedAt: integer("used_at"),
   createdAt: createdAt(),
 });
+
+/**
+ * The developer event stream (ADR-015 §6): a view, not a second events table. Both arms have ULID
+ * primary keys, so `WHERE id > ? ORDER BY id LIMIT ?` is an index range scan and replay is free —
+ * and there is no dual write to keep honest. `item_version` is the version the event produced; on
+ * the inbound-message arm, where a thread entry does not bump the version, it is the item's
+ * version as it stands.
+ */
+export const eventsV1 = sqliteView("events_v1", {
+  id: text("id").notNull(),
+  type: text("type").notNull(),
+  createdAt: integer("created_at").notNull(),
+  itemId: text("item_id").notNull(),
+  itemType: text("item_type").notNull(),
+  itemState: text("item_state").notNull(),
+  itemVersion: integer("item_version").notNull(),
+  partyId: text("party_id").notNull(),
+  sandbox: integer("sandbox").notNull(),
+  actorKind: text("actor_kind").notNull(),
+  actorId: text("actor_id"),
+  event: text("event").notNull(),
+  source: text("source").notNull(),
+}).as(sql`SELECT
+  e."id" AS "id",
+  i."type" || '.' || e."event" AS "type",
+  e."created_at" AS "created_at",
+  e."item_id" AS "item_id",
+  i."type" AS "item_type",
+  e."to_state" AS "item_state",
+  e."seq" AS "item_version",
+  i."party_id" AS "party_id",
+  COALESCE(i."sandbox", 0) AS "sandbox",
+  e."actor_kind" AS "actor_kind",
+  e."actor_id" AS "actor_id",
+  e."event" AS "event",
+  'item_event' AS "source"
+FROM "item_events" e JOIN "items" i ON i."id" = e."item_id"
+UNION ALL
+SELECT
+  t."id",
+  i."type" || '.message',
+  t."created_at",
+  t."item_id",
+  i."type",
+  i."state",
+  i."version",
+  i."party_id",
+  COALESCE(i."sandbox", 0),
+  t."actor_kind",
+  t."actor_id",
+  'message',
+  'thread_entry'
+FROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"
+WHERE t."direction" = 'in'`);
