@@ -1,5 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DEFAULT_WEEKLY, localiser, type Weekly, withinOpening } from "../capabilities/availability";
+import { dateLocaliser, isClosed, readClosures } from "../capabilities/closures";
 import type { Db } from "../db";
 import type { Item, ItemType } from "../domain/types";
 import {
@@ -50,7 +51,7 @@ export async function runRulesForEvent(
   const candidates = await loadRules(db, input.trigger);
   if (candidates.length === 0) return report;
   const item = rowToItem(row);
-  const ctx = await buildContext(db, item, eventRow, now);
+  const ctx = await buildRuleContext(db, item, eventRow, now);
   const actor: Caller = {
     actor: { kind: "rule", id: "rule", channel: "system" },
     tier: "verified_principal",
@@ -165,7 +166,8 @@ async function countRuns(db: Db, itemId: string, ruleId: string): Promise<number
   return rows.length;
 }
 
-async function buildContext(
+/** Everything a condition may read, fetched once and frozen; also what "test this rule" evaluates against. */
+export async function buildRuleContext(
   db: Db,
   item: Item,
   eventRow: typeof itemEvents.$inferSelect,
@@ -232,11 +234,9 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   const weekly = (rows.find((r) => r.serviceId === service.id)?.weekly ??
     rows.find((r) => !r.serviceId)?.weekly ??
     DEFAULT_WEEKLY) as Weekly;
-  const withinBusinessHours = withinOpening(
-    localiser(timezone),
-    weekly,
-    Date.parse(item.payload.startTime),
-    Date.parse(item.payload.endTime),
-  );
+  const closures = await readClosures(db, service.id);
+  const withinBusinessHours =
+    withinOpening(localiser(timezone), weekly, Date.parse(item.payload.startTime), Date.parse(item.payload.endTime)) &&
+    !isClosed(closures, dateLocaliser(timezone)(Date.parse(item.payload.startTime)));
   return { slotIsFree, withinBusinessHours };
 }

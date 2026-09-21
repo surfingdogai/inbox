@@ -1,4 +1,5 @@
 import {
+  applyPresetInput,
   type Caller,
   type Capabilities,
   cancelItemInput,
@@ -9,10 +10,21 @@ import {
   listItemsInput,
   listProductsInput,
   listServicesInput,
+  presetKeySchema,
+  productInput,
+  profileInput,
   replyInput,
   requestQuoteInput,
+  ruleInput,
   sendMessageInput,
+  serviceInput,
+  setClosuresInput,
+  setWeeklyInput,
+  testRuleInput,
   transitionItemInput,
+  updateProductInput,
+  updateRuleInput,
+  updateServiceInput,
   updateSettingsInput,
 } from "@surfingdog/core";
 import { Hono } from "hono";
@@ -267,6 +279,165 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     describeRoute({ tags: ["owner"], summary: "Replace the settings document", responses: json("Settings") }),
     validator("json", updateSettingsInput, hook),
     async (c) => c.json(await caps.updateSettings(c.get("caller"), c.req.valid("json"))),
+  );
+
+  // ---- setup: profile, services, products, opening hours, rules ------------------
+
+  app.get(
+    "/profile",
+    describeRoute({ tags: ["setup"], summary: "Business profile", responses: json("Profile") }),
+    async (c) => c.json(await caps.setup.getProfile(c.get("caller"))),
+  );
+  app.put(
+    "/profile",
+    describeRoute({ tags: ["setup"], summary: "Update the business profile", responses: json("Profile") }),
+    validator("json", profileInput, hook),
+    async (c) => c.json(await caps.setup.updateProfile(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.get(
+    "/services",
+    describeRoute({ tags: ["setup"], summary: "All services, archived included", responses: json("Services") }),
+    async (c) => c.json({ items: await caps.setup.listServices(c.get("caller")) }),
+  );
+  app.post(
+    "/services",
+    describeRoute({ tags: ["setup"], summary: "Add a bookable service", responses: json("Service") }),
+    validator("json", serviceInput, hook),
+    async (c) => c.json(await caps.setup.createService(c.get("caller"), c.req.valid("json")), 201),
+  );
+  app.patch(
+    "/services/:id",
+    describeRoute({ tags: ["setup"], summary: "Change a service", responses: json("Service") }),
+    validator("json", updateServiceInput.omit({ service_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.setup.updateService(c.get("caller"), {
+          ...c.req.valid("json"),
+          service_id: String(c.req.param("id")),
+        }),
+      ),
+  );
+  app.delete(
+    "/services/:id",
+    describeRoute({ tags: ["setup"], summary: "Archive a service", responses: json("Service") }),
+    async (c) => c.json(await caps.setup.archiveService(c.get("caller"), { service_id: String(c.req.param("id")) })),
+  );
+
+  app.get(
+    "/products",
+    describeRoute({ tags: ["setup"], summary: "All products, archived included", responses: json("Products") }),
+    async (c) => c.json({ items: await caps.setup.listProducts(c.get("caller")) }),
+  );
+  app.post(
+    "/products",
+    describeRoute({ tags: ["setup"], summary: "Add a product", responses: json("Product") }),
+    validator("json", productInput, hook),
+    async (c) => c.json(await caps.setup.createProduct(c.get("caller"), c.req.valid("json")), 201),
+  );
+  app.patch(
+    "/products/:id",
+    describeRoute({ tags: ["setup"], summary: "Change a product", responses: json("Product") }),
+    validator("json", updateProductInput.omit({ product_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.setup.updateProduct(c.get("caller"), {
+          ...c.req.valid("json"),
+          product_id: String(c.req.param("id")),
+        }),
+      ),
+  );
+  app.delete(
+    "/products/:id",
+    describeRoute({ tags: ["setup"], summary: "Archive a product", responses: json("Product") }),
+    async (c) => c.json(await caps.setup.archiveProduct(c.get("caller"), { product_id: String(c.req.param("id")) })),
+  );
+
+  app.get(
+    "/availability",
+    describeRoute({
+      tags: ["setup"],
+      summary: "Opening hours, per-service overrides and closures",
+      responses: json("Availability"),
+    }),
+    async (c) => c.json(await caps.setup.getAvailability(c.get("caller"))),
+  );
+  app.put(
+    "/availability",
+    describeRoute({
+      tags: ["setup"],
+      summary: "Set the weekly opening hours (business-wide or for one service)",
+      responses: json("Availability"),
+    }),
+    validator("json", setWeeklyInput, hook),
+    async (c) => c.json(await caps.setup.setWeekly(c.get("caller"), c.req.valid("json"))),
+  );
+  app.put(
+    "/availability/closures",
+    describeRoute({ tags: ["setup"], summary: "Replace the list of closed days", responses: json("Availability") }),
+    validator("json", setClosuresInput, hook),
+    async (c) => c.json(await caps.setup.setClosures(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.get(
+    "/rules",
+    describeRoute({
+      tags: ["setup"],
+      summary: "The rules, highest priority first, each with a plain-English summary",
+      responses: json("Rules"),
+    }),
+    async (c) => c.json({ items: await caps.setup.listRules(c.get("caller")) }),
+  );
+  app.get(
+    "/rules/presets",
+    describeRoute({ tags: ["setup"], summary: "Rule presets per kind of business", responses: json("Presets") }),
+    (c) => c.json({ items: caps.setup.listPresets(c.get("caller")) }),
+  );
+  app.post(
+    "/rules/presets/:key",
+    describeRoute({ tags: ["setup"], summary: "Apply a preset's rules", responses: json("Rules") }),
+    validator("json", applyPresetInput.omit({ preset: true }), hook),
+    async (c) => {
+      const key = presetKeySchema.safeParse(c.req.param("key"));
+      if (!key.success) return hook({ success: false, error: key.error }, c) as Response;
+      return c.json({
+        items: await caps.setup.applyPreset(c.get("caller"), { ...c.req.valid("json"), preset: key.data }),
+      });
+    },
+  );
+  app.post(
+    "/rules/test",
+    describeRoute({
+      tags: ["setup"],
+      summary: "Evaluate a rule against an existing item without changing anything",
+      responses: json("Test result"),
+    }),
+    validator("json", testRuleInput, hook),
+    async (c) => c.json(await caps.setup.testRule(c.get("caller"), c.req.valid("json"))),
+  );
+  app.post(
+    "/rules",
+    describeRoute({ tags: ["setup"], summary: "Add a rule", responses: json("Rule") }),
+    validator("json", ruleInput, hook),
+    async (c) => c.json(await caps.setup.createRule(c.get("caller"), c.req.valid("json")), 201),
+  );
+  app.patch(
+    "/rules/:id",
+    describeRoute({
+      tags: ["setup"],
+      summary: "Change a rule (pass expected_version to avoid racing a colleague)",
+      responses: json("Rule"),
+    }),
+    validator("json", updateRuleInput.omit({ rule_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.setup.updateRule(c.get("caller"), { ...c.req.valid("json"), rule_id: String(c.req.param("id")) }),
+      ),
+  );
+  app.delete(
+    "/rules/:id",
+    describeRoute({ tags: ["setup"], summary: "Delete a rule", responses: json("Deleted") }),
+    async (c) => c.json(await caps.setup.deleteRule(c.get("caller"), { rule_id: String(c.req.param("id")) })),
   );
 
   return app;

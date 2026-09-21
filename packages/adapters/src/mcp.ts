@@ -1,5 +1,6 @@
 import { type CallToolResult, createMcpHandler, type McpHttpHandler, McpServer } from "@modelcontextprotocol/server";
 import {
+  applyPresetInput,
   type Caller,
   type Capabilities,
   cancelItemInput,
@@ -11,9 +12,19 @@ import {
   listItemsInput,
   listProductsInput,
   listServicesInput,
+  productIdInput,
+  productInput,
+  profileInput,
   replyInput,
   requestQuoteInput,
+  ruleIdInput,
+  ruleInput,
   sendMessageInput,
+  serviceIdInput,
+  serviceInput,
+  setClosuresInput,
+  setWeeklyInput,
+  testRuleInput,
   transitionItemInput,
   updateSettingsInput,
 } from "@surfingdog/core";
@@ -316,6 +327,294 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         run(async () => {
           const r = await caps.transitionItem(caller, args);
           return { text: humanOf(r), structured: r };
+        }),
+    );
+    // ---- setup: what the business is, offers, when it is open, what agents may do ----
+    server.registerTool(
+      "get_profile",
+      {
+        title: "Get business profile",
+        description: "Name, domain, time zone, currency and languages of this business.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const p = await caps.setup.getProfile(caller);
+          return {
+            text: `${p.name || "(unnamed)"} · ${p.timezone} · ${p.currency} · ${p.languages.join(", ")}${p.domain ? ` · ${p.domain}` : ""}`,
+            structured: p,
+          };
+        }),
+    );
+    server.registerTool(
+      "update_profile",
+      {
+        title: "Update business profile",
+        description:
+          "Change the name, domain, time zone (IANA), currency or languages. Only the fields you pass change.",
+        inputSchema: profileInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({ text: "Profile updated.", structured: await caps.setup.updateProfile(caller, args) })),
+    );
+    server.registerTool(
+      "list_services",
+      {
+        title: "List services",
+        description:
+          "Every bookable service with duration, buffers, capacity, slot granularity and price, archived ones included.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const items = await caps.setup.listServices(caller);
+          return {
+            text:
+              items
+                .map(
+                  (s) =>
+                    `${s.id}: ${s.name}, ${s.durationMin} min, capacity ${s.capacity}${s.active ? "" : " (archived)"}`,
+                )
+                .join("\n") || "No services yet.",
+            structured: { items },
+          };
+        }),
+    );
+    server.registerTool(
+      "upsert_service",
+      {
+        title: "Add or change a service",
+        description:
+          "Without service_id: creates a service (name required; duration 60 min, capacity 1, slots every 15 min by default). With service_id: changes only the fields you pass.",
+        inputSchema: serviceInput.partial().extend({ service_id: z.string().optional() }),
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const { service_id, ...rest } = args;
+          const row = service_id
+            ? await caps.setup.updateService(caller, { ...rest, service_id })
+            : await caps.setup.createService(caller, serviceInput.parse(rest));
+          return { text: `${service_id ? "Updated" : "Created"} service ${row.name} (${row.id}).`, structured: row };
+        }),
+    );
+    server.registerTool(
+      "archive_service",
+      {
+        title: "Archive a service",
+        description: "Hides a service from customers and agents; existing bookings keep it.",
+        inputSchema: serviceIdInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({ text: "Service archived.", structured: await caps.setup.archiveService(caller, args) })),
+    );
+    server.registerTool(
+      "list_products",
+      {
+        title: "List products",
+        description: "Every product with price and stock, archived ones included.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const items = await caps.setup.listProducts(caller);
+          return {
+            text:
+              items
+                .map(
+                  (p) =>
+                    `${p.id}: ${p.name} ${(p.price.value / 100).toFixed(2)} ${p.price.currency}${p.stock === null ? "" : `, stock ${p.stock}`}${p.active ? "" : " (archived)"}`,
+                )
+                .join("\n") || "No products yet.",
+            structured: { items },
+          };
+        }),
+    );
+    server.registerTool(
+      "upsert_product",
+      {
+        title: "Add or change a product",
+        description:
+          "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass.",
+        inputSchema: productInput.partial().extend({ product_id: z.string().optional() }),
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const { product_id, ...rest } = args;
+          const row = product_id
+            ? await caps.setup.updateProduct(caller, { ...rest, product_id })
+            : await caps.setup.createProduct(caller, productInput.parse(rest));
+          return { text: `${product_id ? "Updated" : "Created"} product ${row.name} (${row.id}).`, structured: row };
+        }),
+    );
+    server.registerTool(
+      "archive_product",
+      {
+        title: "Archive a product",
+        description: "Hides a product from customers and agents.",
+        inputSchema: productIdInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({ text: "Product archived.", structured: await caps.setup.archiveProduct(caller, args) })),
+    );
+    server.registerTool(
+      "get_availability",
+      {
+        title: "Get opening hours",
+        description: "Weekly opening hours in the business time zone, per-service overrides and closed days.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const a = await caps.setup.getAvailability(caller);
+          const days = Object.entries(a.weekly)
+            .map(([d, w]) => `${d} ${(w ?? []).map(([o, c]) => `${o}-${c}`).join(", ") || "closed"}`)
+            .join("; ");
+          return {
+            text: `${a.timezone}: ${days}${a.closures.length ? `. Closed: ${a.closures.map((c) => `${c.from}..${c.to}`).join(", ")}` : ""}`,
+            structured: a,
+          };
+        }),
+    );
+    server.registerTool(
+      "set_opening_hours",
+      {
+        title: "Set opening hours",
+        description:
+          'Replace the weekly opening hours, e.g. {"weekly": {"mon": [["09:00","18:00"]], "sat": [["09:00","13:00"]]}}. Days you leave out are closed. Pass service_id to override the hours for one service only.',
+        inputSchema: setWeeklyInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({ text: "Opening hours saved.", structured: await caps.setup.setWeekly(caller, args) })),
+    );
+    server.registerTool(
+      "set_closures",
+      {
+        title: "Set closed days",
+        description:
+          "Replace the list of closed days (holidays, a closed week), as YYYY-MM-DD ranges in the business time zone. No bookings are offered on those days.",
+        inputSchema: setClosuresInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({ text: "Closed days saved.", structured: await caps.setup.setClosures(caller, args) })),
+    );
+    server.registerTool(
+      "list_rules",
+      {
+        title: "List rules",
+        description:
+          "The automation rules, highest priority first, each with a plain-English summary of when it fires and what it does.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const items = await caps.setup.listRules(caller);
+          return {
+            text:
+              items
+                .map((r) => `${r.id} [${r.enabled ? "on" : "off"}, priority ${r.priority}] ${r.name}: ${r.summary}`)
+                .join("\n") || "No rules yet. Try list_rule_presets.",
+            structured: { items },
+          };
+        }),
+    );
+    server.registerTool(
+      "list_rule_presets",
+      {
+        title: "List rule presets",
+        description:
+          "Ready-made rule sets per kind of business (appointments, trades & quotes, shop), with what each rule does.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const items = caps.setup.listPresets(caller);
+          return {
+            text: items
+              .map((p) => `${p.key} (${p.name}):\n${p.rules.map((r) => `  - ${r.name}: ${r.summary}`).join("\n")}`)
+              .join("\n"),
+            structured: { items },
+          };
+        }),
+    );
+    server.registerTool(
+      "apply_rule_preset",
+      {
+        title: "Apply a rule preset",
+        description: "Adds a preset's rules; replace=true removes the existing rules first.",
+        inputSchema: applyPresetInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const items = await caps.setup.applyPreset(caller, args);
+          return { text: `${items.length} rules now active.`, structured: { items } };
+        }),
+    );
+    server.registerTool(
+      "upsert_rule",
+      {
+        title: "Add or change a rule",
+        description:
+          "A rule is JSON: on (triggers such as item.created, thread.inbound, item.transitioned:confirm), if (conditions: all/any/not, {path, op, value} over item.*, party.*, event.*, or fn slot_is_free / within_business_hours / party_verified / text_has_keywords), actions (transition, set_flags, reply, enqueue, stop). Without rule_id it creates; with rule_id it changes the fields you pass. Use test_rule first.",
+        inputSchema: ruleInput
+          .partial()
+          .extend({ rule_id: z.string().optional(), expected_version: z.number().int().min(1).optional() }),
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const { rule_id, expected_version, ...rest } = args;
+          const row = rule_id
+            ? await caps.setup.updateRule(caller, {
+                ...rest,
+                rule_id,
+                ...(expected_version !== undefined ? { expected_version } : {}),
+              })
+            : await caps.setup.createRule(caller, ruleInput.parse(rest));
+          return { text: `${rule_id ? "Updated" : "Created"} rule ${row.name}: ${row.summary}`, structured: row };
+        }),
+    );
+    server.registerTool(
+      "delete_rule",
+      {
+        title: "Delete a rule",
+        description: "Removes a rule for good.",
+        inputSchema: ruleIdInput,
+        annotations: writes,
+      },
+      (args) => run(async () => ({ text: "Rule deleted.", structured: await caps.setup.deleteRule(caller, args) })),
+    );
+    server.registerTool(
+      "test_rule",
+      {
+        title: "Test a rule",
+        description:
+          "Evaluates a rule's conditions against an existing item and says whether it would fire and what it would do. Changes nothing.",
+        inputSchema: testRuleInput,
+        annotations: readOnly,
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.setup.testRule(caller, args);
+          return {
+            text: r.matched
+              ? `Would fire on ${r.item.type} ${r.item.id}: ${r.would.join(", then ")}.`
+              : `Would not fire on ${r.item.type} ${r.item.id} (${r.summary}).`,
+            structured: r,
+          };
         }),
     );
     server.registerTool(
