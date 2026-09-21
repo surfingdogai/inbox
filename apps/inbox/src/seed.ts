@@ -102,3 +102,86 @@ export async function seedDemo(db: Db, now = Date.now()): Promise<{ seeded: bool
   });
   return { seeded: true };
 }
+
+/**
+ * Surfing Dog's own inbox: the company that makes the software runs on it. Calls can be booked,
+ * quotes for hosted setups and connectors requested, and anyone (or their agent) can message.
+ * Idempotent like seedDemo. Opening hours are a working assumption until the owner edits them.
+ */
+export async function seedSurfingDog(db: Db, now = Date.now()): Promise<{ seeded: boolean }> {
+  const [existing] = await db.orm
+    .select({ id: schema.business.id })
+    .from(schema.business)
+    .where(eq(schema.business.id, "self"));
+  if (existing) return { seeded: false };
+  await db.orm.insert(schema.business).values({
+    id: "self",
+    name: "Surfing Dog",
+    domain: "surfingdog.ai",
+    timezone: "Europe/Lisbon",
+    currency: "EUR",
+    languages: ["en", "pt"],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.orm.insert(schema.services).values([
+    {
+      id: ulid(),
+      name: "Intro call",
+      description: "Thirty minutes with Tiago about your business and what an inbox for agents would do for it.",
+      durationMin: 30,
+      capacity: 1,
+      granularityMin: 30,
+      price: { model: "fixed", value: 0, currency: "EUR" },
+      sort: 1,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: ulid(),
+      name: "Working session",
+      description: "One hour of hands-on setup: rules, availability, connectors, your own AI on the owner MCP.",
+      durationMin: 60,
+      bufferAfterMin: 15,
+      capacity: 1,
+      granularityMin: 30,
+      price: { model: "quote" },
+      sort: 2,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  const hours: [string, string][] = [["10:00", "18:00"]];
+  await db.orm.insert(schema.availabilityRules).values({
+    id: ulid(),
+    kind: "open",
+    weekly: { mon: hours, tue: hours, wed: hours, thu: hours, fri: hours },
+    createdAt: now,
+  });
+  await db.orm.insert(schema.rules).values(
+    (PRESETS.appointments ?? []).map((p) => ({
+      id: ulid(),
+      name: p.name,
+      priority: p.priority,
+      enabled: 1,
+      definition: p.definition,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
+  const caps = new Capabilities(db);
+  const system: Caller = {
+    actor: { kind: "system", id: "seed", channel: "system" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => now,
+  };
+  await caps.updateSettings(system, {
+    doc: {
+      business: { name: "Surfing Dog", timezone: "Europe/Lisbon", currency: "EUR", languages: ["en", "pt"] },
+      booking: { cancellationWindowMin: 60 },
+      network: { join: true },
+    },
+  });
+  return { seeded: true };
+}
