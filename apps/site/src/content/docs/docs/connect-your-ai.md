@@ -5,7 +5,23 @@ description: Let Claude, ChatGPT or any MCP client work your inbox on your behal
 
 Every instance serves two MCP servers. The public one at `/mcp` is for customers' agents and needs no login. The **owner MCP** at `/mcp/owner` is for you and the AI you trust: it lists what needs a person, shows an item's full story, moves items through their states, replies to customers and edits settings. It is stateless per request (MCP spec 2026-07-28), and its tools are generated from the same schemas as the REST API.
 
-Two ways in: OAuth 2.1 with a login, or an API key.
+Two ways in: an API key, which works today, or OAuth 2.1 with a login, which the server supports and the owner app will complete once its sign-in creates a session.
+
+## Today: an owner API key
+
+An owner key is a bearer token that starts with `sdi_own_`. On your server:
+
+```bash
+node apps/inbox/dist/server.mjs create-owner-key laptop
+```
+
+The key is printed once and stored hashed. It is the same key the owner app takes at `/login`. Send it as `Authorization: Bearer sdi_own_…` to `/mcp/owner` or to any `/v1/owner/*` route; for Claude Code, for example:
+
+```bash
+claude mcp add --transport http --header "Authorization: Bearer sdi_own_…" inbox https://<your-instance>/mcp/owner
+```
+
+Any MCP client that can send a header works the same way. Agent keys (`sdi_agent_…`) exist for customers' agents that want a stable identity on the public doors.
 
 ## OAuth 2.1
 
@@ -20,17 +36,11 @@ What it supports: authorization code with PKCE (S256, required); public clients 
 
 Scopes: `inbox:read`, `inbox:write`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run`, `offline_access`. A client that asks for none gets `inbox:read inbox:write settings:read offline_access`.
 
-Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session, which is a magic link by email: the first address to sign in on a fresh instance becomes its owner. The sign-in page itself is part of the owner app that ships in the first release; the endpoints behind it (`POST /auth/magic-link`, `GET /auth/verify`) are live.
+Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a magic link by email (`POST /auth/magic-link`, then `GET /auth/verify`; the first address to sign in on a fresh instance becomes its owner). The owner app signs in with an API key today and does not create that session yet, so a consent screen reached through the app cannot finish. Magic-link and passkey sign-in in the app are the first release work; when they land, the flows below complete without any change on the client side.
 
 ### Claude
 
 In Claude, go to Settings, then Connectors, and add a custom connector with your owner MCP URL, `https://<your-instance>/mcp/owner`. Claude fetches the metadata, sends you to your instance to sign in and approve the scopes, and connects. Claude uses a Client ID Metadata Document, so nothing needs to be registered by hand.
-
-For Claude Code:
-
-```bash
-claude mcp add --transport http inbox https://<your-instance>/mcp/owner
-```
 
 ### ChatGPT
 
@@ -39,16 +49,6 @@ In ChatGPT, enable developer mode in the connector settings, then create a conne
 ### Other clients
 
 Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work the same way. Clients that cannot do OAuth use an API key.
-
-## API keys
-
-An owner key is a bearer token that starts with `sdi_own_`. Create one on your server:
-
-```bash
-node dist/server.mjs create-owner-key laptop
-```
-
-Send it as `Authorization: Bearer sdi_own_…` to `/mcp/owner` or to any `/v1/owner/*` route. Keys are stored hashed; the plain key is shown once. Agent keys (`sdi_agent_…`) exist for customers' agents that want a stable identity on the public doors.
 
 ## What the owner tools do
 

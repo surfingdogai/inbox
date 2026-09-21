@@ -23,7 +23,7 @@ There is also a plan, written down, with fourteen decision records behind it. Th
 
 ## What is not there yet
 
-Honesty is cheaper than support tickets, so: the owner app, the screens where a person works the inbox, is still being built. The wizard that sets an instance up is not there. Receipts, which I will write about separately, are designed and stubbed but not issued. Connectors to calendars and shops come after that. The hosted edition, for businesses that do not want to run anything, opens in a later release, and so does the directory and the review service on the network.
+Honesty is cheaper than support tickets, so: the owner app, the screens where a person works the inbox, shipped its first version today, with a sign-in by owner key, a three-pane inbox, a typed item view whose next actions are its buttons, and settings, including which network the instance reports to. It is a first version. Passkeys and email sign-in are not in it yet, and the wizard that sets an instance up is not there. Receipts, which I will write about separately, are designed and stubbed but not issued. Connectors to calendars and shops come after that. The hosted edition, for businesses that do not want to run anything, opens in a later release, and so does the directory and the review service on the network.
 
 The landing page shows live numbers from the network. Today they are small, and when the network is unreachable they say so calmly instead of pretending. I want that page to stay honest as the numbers grow.
 

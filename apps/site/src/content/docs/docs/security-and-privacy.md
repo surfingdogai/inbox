@@ -7,13 +7,15 @@ description: What the instance trusts, what it stores, and what leaves it.
 
 Everything that arrives through a door is data, never instructions. An email, a form submission, an agent's message: each is parsed into a typed item and stored as text. Rules read frozen values and perform no I/O. When AI extraction and drafting arrive in the next release with a bring-your-own key, the extraction model has no tools; it can only fill fields that are then validated like any other input.
 
-The instance fetches remote documents in exactly one place today, to resolve OAuth Client ID Metadata Documents, and does so through a fetcher that refuses IP literals, local and internal hostnames, redirects to another host, large bodies and slow servers.
+Raw email reaches the instance only through a path the receiving mail system authenticated (Email Routing on Workers, which checks DKIM and SPF) or through the `POST /v1/email/inbound` webhook, which requires the shared secret from settings in the `X-Inbox-Email-Secret` header. Email that arrived unauthenticated is treated as anonymous.
+
+The instance fetches remote documents in one place, to resolve OAuth Client ID Metadata Documents, through a fetcher that refuses IP literals, local and internal hostnames, redirects to another host, large bodies and slow servers. Its own outbound calls go to the network it joined, and carry counts only.
 
 ## Nothing personal reaches the network
 
 Content never leaves the instance. What can leave, each by the owner's choice in settings, is:
 
-- **activity counts**: a ping with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts. On by default and explained in the setup wizard; one switch turns it off;
+- **activity counts**: once the owner joins a network (`network.join`, off by default), a ping every hour with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts;
 - **the public profile**, when the business chooses to be listed in a directory (a later release);
 - **receipts and outcome codes**, when the business joins a review service (a later release).
 

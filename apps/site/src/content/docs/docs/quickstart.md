@@ -24,39 +24,39 @@ https://<your-worker>/openapi.json
 
 Email out uses Cloudflare Email Service when the Worker has an `EMAIL` binding (Workers Paid, and a domain that is a Cloudflare zone), otherwise Resend when `RESEND_API_KEY` is set; with neither, mail is written to the Worker's logs instead of sent. Email in arrives through Email Routing once you route an address to the Worker ([ADR-005](https://github.com/surfingdogai/inbox/blob/main/docs/adr/005-email.md)).
 
-What is not there yet on this target: the owner app and its setup wizard (the first release). The public doors, the manifest and the MCP servers work today; owner access from a client waits for the sign-in and consent screens, or use the Node target below where an owner key can be minted on the command line.
+The Worker also serves the owner app, built into `apps/inbox/dist/client`, and its sign-in page at `/login` takes an owner API key. Minting the first key on Workers belongs to the setup wizard still to come (the first release), so for owner work today use the Node target, where a key is one command away; the public doors, the manifest and the MCP servers work on both.
 
 ## Your own server
 
-Node 22.16, 24 or 26 (`node:sqlite` with FTS5), one process, one SQLite file. A single `npx` command is coming with 0.1; until then, build the server bundle from the repository:
+Node 22.16, 24 or 26 (`node:sqlite` with FTS5), one process, one SQLite file. A single `npx` command is coming with 0.1; until then, build the owner app and the server bundle from the repository:
 
 ```bash
 git clone https://github.com/surfingdogai/inbox && cd inbox
 pnpm install
-pnpm --filter @surfingdog/inbox build:server     # writes apps/inbox/dist/server.mjs
-cd apps/inbox
-node dist/server.mjs                             # http://0.0.0.0:8787, database in ./data/inbox.db
+pnpm --filter @surfingdog/inbox build            # apps/inbox/dist/client and apps/inbox/dist/server.mjs
+node apps/inbox/dist/server.mjs                  # http://0.0.0.0:8787, database in ./data/inbox.db
 ```
 
-Environment variables, all optional:
+The server serves the owner app from `dist/client` next to the bundle; any path that is neither a door nor a file gets the app shell. Environment variables, all optional:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `8787` | Port to listen on. |
 | `HOST` | `0.0.0.0` | Interface to bind. |
 | `INBOX_DB` | `./data/inbox.db` | The SQLite file. Created, and migrated, at boot. |
-| `INBOX_STATIC` | `./public` | Static files (the app) to serve. |
-| `INBOX_PUBLIC_URL` | derived from the request | The public origin, used in links inside emails. |
+| `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
+| `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest and the links in emails. |
 | `RESEND_API_KEY` | unset | Turns on real email through Resend; otherwise mail is logged. |
 
-Two commands run against the same database and exit:
+Three commands run against the same database and exit:
 
 ```bash
-node dist/server.mjs create-owner-key laptop     # prints a new owner API key (sdi_own_…) once
-node dist/server.mjs seed-demo                   # adds the demo business if the instance is empty
+node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once
+node apps/inbox/dist/server.mjs seed-demo                 # adds the demo business if the instance is empty
+node apps/inbox/dist/server.mjs network-ping              # reports to the network now, not at the next hour
 ```
 
-Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
+Open `/login` and paste the key to work the inbox. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
 
 ## Hosted by us
 
