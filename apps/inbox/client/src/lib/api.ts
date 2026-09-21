@@ -1,12 +1,17 @@
 import { authHeaders } from "./auth";
 import type {
+  AddFeedBody,
   Availability,
   BusinessProfile,
   Closure,
+  CreateWebhookBody,
+  DeliveryView,
+  FeedConnector,
   ItemDetail,
   ItemView,
   ListParams,
   Page,
+  PatchWebhookBody,
   Preset,
   PresetKey,
   Problem,
@@ -24,8 +29,11 @@ import type {
   ServiceRow,
   SettingsBody,
   SettingsDoc,
+  TestEventResult,
   TransitionBody,
   TransitionResult,
+  WebhookView,
+  WebhookWithSecret,
   Weekly,
 } from "./types";
 
@@ -194,4 +202,23 @@ export const api = {
   deleteRule: (id: string) => call<{ deleted: true }>("DELETE", `/v1/owner/rules/${encodeURIComponent(id)}`),
   testRule: (definition: RuleDefinition, itemId: string) =>
     call<RuleTest>("POST", "/v1/owner/rules/test", { body: { definition, item_id: itemId } }),
+
+  // ---- integrations: what comes in, and where events go ----
+  feeds: () => call<{ items: FeedConnector[] }>("GET", "/v1/owner/feeds"),
+  addFeed: (body: AddFeedBody) => call<FeedConnector>("POST", "/v1/owner/feeds", { body }),
+  importFeed: (id: string) =>
+    call<{ queued: true; connector_id: string }>("POST", `/v1/owner/feeds/${encodeURIComponent(id)}/import`),
+  removeFeed: (id: string) =>
+    call<{ removed: true; deactivated: number }>("DELETE", `/v1/owner/feeds/${encodeURIComponent(id)}`),
+  webhooks: () => call<{ items: WebhookView[] }>("GET", "/v1/owner/webhooks"),
+  /** The only call that ever returns the signing secret. Show it once; it cannot be read back. */
+  createWebhook: (body: CreateWebhookBody) => call<WebhookWithSecret>("POST", "/v1/owner/webhooks", { body }),
+  patchWebhook: (id: string, body: PatchWebhookBody) =>
+    call<WebhookView>("PATCH", `/v1/owner/webhooks/${encodeURIComponent(id)}`, { body }),
+  deleteWebhook: (id: string) => call<{ deleted: true }>("DELETE", `/v1/owner/webhooks/${encodeURIComponent(id)}`),
+  rotateWebhookSecret: (id: string) =>
+    call<WebhookWithSecret>("POST", `/v1/owner/webhooks/${encodeURIComponent(id)}/rotate-secret`),
+  testWebhook: (id: string) => call<TestEventResult>("POST", `/v1/owner/webhooks/${encodeURIComponent(id)}/test`),
+  deliveries: (id: string) =>
+    call<{ items: DeliveryView[] }>("GET", `/v1/owner/webhooks/${encodeURIComponent(id)}/deliveries`),
 };

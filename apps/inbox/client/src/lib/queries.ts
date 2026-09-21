@@ -2,8 +2,12 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { api } from "./api";
 import { countsFrom } from "./filters";
 import type {
+  AddFeedBody,
   Closure,
+  CreateWebhookBody,
+  FeedConnector,
   ListParams,
+  PatchWebhookBody,
   PresetKey,
   ProductBody,
   ProfileBody,
@@ -13,6 +17,7 @@ import type {
   ServiceBody,
   SettingsBody,
   TransitionBody,
+  WebhookView,
   Weekly,
 } from "./types";
 
@@ -29,6 +34,9 @@ export const qk = {
   availability: ["availability"] as const,
   rules: ["rules"] as const,
   presets: ["presets"] as const,
+  feeds: ["feeds"] as const,
+  webhooks: ["webhooks"] as const,
+  deliveries: (id: string) => ["deliveries", id] as const,
 };
 
 export function useBusiness() {
@@ -214,5 +222,70 @@ export function useRuleWrite() {
           ? api.patchRule(op.id, op.body ?? {})
           : api.createRule(op.body ?? {}),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.rules }),
+  });
+}
+
+// ---- integrations ----------------------------------------------------------------------------
+
+export function useFeeds() {
+  return useQuery({ queryKey: qk.feeds, queryFn: api.feeds, staleTime: 15_000 });
+}
+
+/** Add, import now, or disconnect. The catalogue is refetched too: an import writes products. */
+export function useFeedWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (op: {
+      body?: AddFeedBody | undefined;
+      id?: string | undefined;
+      remove?: boolean | undefined;
+    }): Promise<FeedConnector | { queued: true; connector_id: string } | { removed: true; deactivated: number }> =>
+      op.remove && op.id ? api.removeFeed(op.id) : op.id ? api.importFeed(op.id) : api.addFeed(op.body ?? { url: "" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.feeds });
+      void qc.invalidateQueries({ queryKey: qk.products });
+    },
+  });
+}
+
+export function useWebhooks() {
+  return useQuery({ queryKey: qk.webhooks, queryFn: api.webhooks, staleTime: 15_000 });
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateWebhookBody) => api.createWebhook(body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.webhooks }),
+  });
+}
+
+/** Change, pause, resume or remove an endpoint. */
+export function useWebhookWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (op: {
+      id: string;
+      body?: PatchWebhookBody | undefined;
+      remove?: boolean | undefined;
+    }): Promise<WebhookView | { deleted: true }> =>
+      op.remove ? api.deleteWebhook(op.id) : api.patchWebhook(op.id, op.body ?? {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.webhooks }),
+  });
+}
+
+export function useTestWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.testWebhook(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.webhooks }),
+  });
+}
+
+export function useRotateSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.rotateWebhookSecret(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.webhooks }),
   });
 }
