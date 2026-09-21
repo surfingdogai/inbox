@@ -14,3 +14,10 @@ data/*.db
 data/*.db-*
 .DS_Store
 
+# Scratch tests written by review agents into the working tree. They are probes, not tests:
+# they fail on purpose to print values, and one swept into a commit by `git add -A` turned CI
+# red on main. Never commit one.
+**/test/zz-*
+**/test/_tmp*
+**/test/*scratch*
+**/test/*refute*
