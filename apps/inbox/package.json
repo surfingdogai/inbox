@@ -18,7 +18,8 @@
     "@surfingdog/platform": "workspace:*",
     "hono": "catalog:",
     "zod": "catalog:",
-    "@surfingdog/adapters": "workspace:*"
+    "@surfingdog/adapters": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
