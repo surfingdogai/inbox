@@ -13,7 +13,11 @@ export const PING_PERIOD_MS = 60 * 60_000;
 const PRUNE_AFTER_MS = 7 * 24 * 3_600_000;
 
 export interface NetworkDeps {
-  /** This instance's public URL; its hostname is the domain registered with the network. */
+  /**
+   * This instance's public URL; its hostname is the domain registered with the network. Optional
+   * because a Workers deploy has no env var to put it in, so the ping falls back to the Inbox
+   * address the owner already types into Settings.
+   */
   readonly baseUrl?: string | undefined;
   readonly version: string;
   readonly fetchImpl?: typeof fetch | undefined;
@@ -79,8 +83,9 @@ export function networkPingHandler(deps: NetworkDeps): JobHandler {
     await pruneJobs(db, PRUNE_AFTER_MS, now);
     const settings = await readSettings(db);
     if (!settings.network.join) return { note: "not joined; enable network.join in Settings" };
-    if (!deps.baseUrl) return { note: "no public URL; set INBOX_PUBLIC_URL (or deploy behind a hostname)" };
-    const instance = new URL(deps.baseUrl);
+    const base = deps.baseUrl ?? settings.notifications.appUrl;
+    if (!base) return { note: "no public URL; set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };
+    const instance = new URL(base);
     const network = new URL(settings.network.url);
     if (instance.protocol !== "https:" || !isPublicHost(instance.hostname)) {
       return { note: `instance URL ${instance.origin} is not a public https origin; the network cannot verify it` };
