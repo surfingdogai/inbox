@@ -46,7 +46,9 @@ CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` add
 to an empty instance, `seed-showcase` the same shop with a week of items, `network-ping` reports to
 the network now. `pnpm --filter @surfingdog/inbox shots` captures the owner app for the website.
 
-Sign in at `/login` with an address from `INBOX_OWNER_EMAIL` (a link is emailed) or with an owner key.
+Sign in at `/login` with an address from `INBOX_OWNER_EMAIL` (a link is emailed; in development the
+mail is printed to the console, so set `INBOX_OWNER_EMAIL=you@example.com pnpm dev` and copy the link) or
+with an owner key.
 
 ## Email in
 
