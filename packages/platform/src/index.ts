@@ -5,17 +5,10 @@
  * Draft signatures; a later design pass finalises them.
  */
 
-export interface Statement {
-  sql: string;
-  params?: readonly unknown[];
-}
+import type { SqliteClient } from "./db";
 
-/** SQLite-shaped. No interactive transactions anywhere: `batch` is the only atomic multi-statement write. */
-export interface Db {
-  query<Row = Record<string, unknown>>(stmt: Statement): Promise<Row[]>;
-  run(stmt: Statement): Promise<{ changes: number }>;
-  batch(stmts: readonly Statement[]): Promise<void>;
-}
+export * from "./db";
+export * from "./migrate";
 
 export interface Blob {
   put(key: string, body: ReadableStream | ArrayBuffer | string, meta?: { contentType?: string }): Promise<void>;
@@ -60,7 +53,7 @@ export interface MailIn {
 }
 
 export interface Platform {
-  db: Db;
+  db: SqliteClient;
   blob: Blob;
   jobs: Jobs;
   mailOut: MailOut;
