@@ -24,3 +24,45 @@ pnpm kit                             # builds the design kit into packages/ui/di
 - `docs/` — ADRs and plans.
 
 Licence: AGPL-3.0 for the server and app; MIT for `packages/spec`, `packages/sdk` and the connector SDK.
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev            # Node, SQLite in ./data/inbox.db, http://localhost:8787
+pnpm dev:workers    # the same app on workerd (D1, Queues, cron)
+pnpm test           # every test on Node and on Workers
+```
+
+The Node build is one file: `pnpm --filter @surfingdog/inbox build:server` writes `apps/inbox/dist/server.mjs`.
+Run it with `node server.mjs` and these variables:
+
+| Variable | What |
+|---|---|
+| `INBOX_DB` | SQLite file (default `./data/inbox.db`) |
+| `INBOX_PUBLIC_URL` | The https URL people and agents reach you at. Behind a proxy set it, or pass `X-Forwarded-Proto`. |
+| `INBOX_STATIC` | Static files directory (the owner app) |
+| `RESEND_API_KEY` | Sends real email; otherwise outgoing mail is logged |
+| `PORT`, `HOST` | Listen address (default 8787 on all interfaces) |
+
+CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo business
+to an empty instance, `network-ping` reports to the network now.
+
+## Email in
+
+Every instance accepts raw MIME at `POST /v1/email/inbound` with the shared secret from Settings
+(`email.inboundSecret`) in `X-Inbox-Email-Secret`. Point a Mailgun route, a Postmark/SES inbound
+webhook or a forwarder at it. On Cloudflare, Email Routing delivers straight to the Worker's
+`email()` handler, no webhook needed. Messages are threaded by `In-Reply-To`/`References`, by a plus
+address (`inbox+<item id>@…`) or by a `[SDI-<item id>]` subject token, and deduplicated on
+`Message-ID`.
+
+## Join a network
+
+Settings → Network. `network.url` is the directory this instance reports to (default
+`https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and
+`POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on,
+the instance registers its domain once (the network verifies it by fetching
+`/.well-known/agent-inbox.json` and checking that `instance` is your https origin) and then sends,
+every hour, its software version, runtime and the number of bookings, orders, quotes and messages
+created in the last 24 hours. Nothing about customers leaves the instance.
