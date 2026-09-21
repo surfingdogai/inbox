@@ -5,6 +5,10 @@ import {
   NETWORK_PING_KIND,
   networkPingHandler,
   publicOrigin,
+  WEBHOOK_DELIVERY_KIND,
+  WEBHOOK_FANOUT_KIND,
+  webhookDeliverHandler,
+  webhookFanoutHandler,
 } from "@surfingdog/adapters";
 import {
   buildManifest,
@@ -43,6 +47,11 @@ export interface AppDeps {
   /** Test seam for Client ID Metadata Documents. */
   readonly fetchClientMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
   readonly now?: (() => number) | undefined;
+  /**
+   * How far behind live `GET /v1/owner/events` reads, in milliseconds (default `EVENT_SETTLE_MS`).
+   * Only a test that writes an event and polls for it in the same tick ever passes zero.
+   */
+  readonly eventSettleMs?: number | undefined;
 }
 
 export interface Inbox {
@@ -59,12 +68,30 @@ export interface Inbox {
  */
 export function createInbox(deps: AppDeps): Inbox {
   const app = new Hono<CallerEnv>();
-  const caps = new Capabilities(deps.db, createSecretBox(parseSecretKeys(deps.secretKey)));
-  const mailOut = deps.mailOut ?? logMailOut();
-  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl }).register(
-    NETWORK_PING_KIND,
-    networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
+  const caps = new Capabilities(
+    deps.db,
+    createSecretBox(parseSecretKeys(deps.secretKey)),
+    deps.baseUrl,
+    deps.eventSettleMs,
   );
+  const mailOut = deps.mailOut ?? logMailOut();
+  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl })
+    .register(
+      NETWORK_PING_KIND,
+      networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
+    )
+    // Outbound webhooks (ADR-015): fanout is gated on there being an active endpoint, so these two
+    // handlers cost an instance with no integrations nothing but their registration.
+    .register(WEBHOOK_FANOUT_KIND, webhookFanoutHandler())
+    .register(
+      WEBHOOK_DELIVERY_KIND,
+      webhookDeliverHandler({
+        secrets: caps.secrets,
+        version: VERSION,
+        baseUrl: deps.baseUrl,
+        fetchImpl: deps.fetchImpl,
+      }),
+    );
   const background = deps.background ?? ((work) => void work.catch(() => {}));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).

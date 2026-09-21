@@ -5,7 +5,7 @@ import { type ItemFlags, itemFlagsSchema } from "../domain/types";
 import { ulid } from "../ids";
 import { items } from "../schema/tables";
 import { type Caller, nowOf } from "./caller";
-import { diagnoseFailure, eventStatement } from "./common";
+import { diagnoseFailure, eventStatement, hasActiveWebhook, webhookFanoutStatement } from "./common";
 import { WriteError } from "./errors";
 import { type ItemView, rowToItem, viewFor } from "./views";
 
@@ -21,9 +21,10 @@ export async function setFlags(
   const item = rowToItem(row);
   const flags = itemFlagsSchema.parse({ ...item.flags, ...input.flags });
   const seq = item.version + 1;
+  const eventId = ulid();
   const statements: Statement[] = [
     eventStatement({
-      id: ulid(),
+      id: eventId,
       itemId: item.id,
       seq,
       event: "flags",
@@ -43,6 +44,13 @@ export async function setFlags(
       method: "run",
     },
   ];
+  // `events_v1` shows this as `<type>.flags` whether or not anyone subscribed, so a poller of the
+  // cursor sees it. An endpoint has to see the same event, or the two halves of ADR-015 disagree
+  // about what an event is — and "needs a human" being raised is exactly what an integration is
+  // for.
+  if (await hasActiveWebhook(db)) {
+    statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.flags`, itemId: item.id }, now));
+  }
   try {
     await db.batch(statements);
   } catch (error) {

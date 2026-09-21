@@ -95,7 +95,13 @@ export function eventStatement(e: {
   };
 }
 
+/**
+ * The row's id is minted by the caller, not in here, because it is also the id of the event the
+ * developer event stream shows for an inbound message (`events_v1` reads `thread_entries.id`), and
+ * a webhook fanout has to name that same id.
+ */
 export function threadEntryStatement(t: {
+  id: string;
   itemId: string;
   direction: "in" | "out" | "note";
   channel: string;
@@ -110,7 +116,7 @@ export function threadEntryStatement(t: {
   return {
     sql: "INSERT INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'text', ?, ?)",
     params: [
-      ulid(),
+      t.id,
       t.itemId,
       t.direction,
       t.channel,
@@ -124,6 +130,52 @@ export function threadEntryStatement(t: {
     ],
     method: "run",
   };
+}
+
+/**
+ * The two outbound-webhook job kinds, named **here** and nowhere else (ADR-015 §5). The handlers
+ * live in `@surfingdog/adapters` (`webhooks/fanout.ts`, `webhooks/deliver.ts`), which imports core
+ * and not the other way round; the write path and the owner capability both enqueue, so the name
+ * has to sit below both of them. Everything else — the capability, the adapters, the app that
+ * registers the runner — imports these.
+ *
+ * Fanout is gated: it is enqueued only when there is an endpoint to receive it, so an instance
+ * with no integrations writes exactly the rows it writes today. One indexed existence check is the
+ * whole cost of the feature for everybody who does not use it.
+ */
+export const WEBHOOK_FANOUT_KIND = "webhook_fanout";
+
+/**
+ * One row of `webhook_deliveries`, one attempt. Payload `{deliveryId}` is complete on its own —
+ * the row knows the endpoint, the event and the attempt count — so a replay can enqueue the
+ * shortest possible job and the handler re-reads the rest. A replay carries no dedupe key, so two
+ * jobs for one delivery are ordinary: the handler does nothing when the row is already delivered.
+ */
+export const WEBHOOK_DELIVERY_KIND = "webhook_delivery";
+
+/**
+ * The dedupe key of one scheduled attempt: `whsend:<delivery id>:<attempt>`. The format is named
+ * here, below both the adapter that writes it and the capability that clears it, because a replay
+ * has to delete the keys the *previous* chain left behind — attempts are numbered from zero again,
+ * so without the delete the successor of attempt 0 collides with a row the first chain already
+ * wrote and `INSERT OR IGNORE` swallows it, leaving the delivery stalled after one attempt.
+ */
+export const deliverJobPrefix = (deliveryId: string): string => `whsend:${deliveryId}:`;
+
+export async function hasActiveWebhook(db: Db): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM webhooks WHERE active = 1 LIMIT 1",
+    params: [],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+/** Enqueued inside the batch that wrote the event, once per event, whatever the endpoint count. */
+export function webhookFanoutStatement(event: { id: string; type: string; itemId: string }, now: number): Statement {
+  return jobStatement(WEBHOOK_FANOUT_KIND, { eventId: event.id, eventType: event.type, itemId: event.itemId }, now, {
+    dedupeKey: `fanout:${event.id}`,
+  });
 }
 
 /**

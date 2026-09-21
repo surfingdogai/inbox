@@ -23,6 +23,5 @@ export {
   type SecretPurpose,
 } from "./secrets/box";
 export * from "./settings/schema";
+export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";
-
-export const VERSION = "0.0.0";

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoDateTime } from "../domain/types";
 import { ruleDefinitionSchema } from "../rules/schema";
 
 /** Inputs of the owner's setup operations: profile, services, products, opening hours, rules. */
@@ -105,3 +106,102 @@ export type RuleInput = z.infer<typeof ruleInput>;
 export type UpdateRuleInput = z.infer<typeof updateRuleInput>;
 export type ApplyPresetInput = z.infer<typeof applyPresetInput>;
 export type TestRuleInput = z.infer<typeof testRuleInput>;
+
+// ---- webhooks and the developer event cursor (ADR-015) ----------------------------
+
+/**
+ * An event type is `<item type>.<event>`: `booking.create`, `booking.confirm`, `order.record_payment`,
+ * `quote_request.quote`, `message.create`, and `<item type>.message` for an inbound message on an
+ * item. A subscription pattern may use `*` for a whole segment: `*` is everything, `booking.*` is
+ * every booking event, `*.create` is every new item.
+ */
+export const eventPatternSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .regex(/^(\*|[a-z][a-z0-9_]*)(\.(\*|[a-z][a-z0-9_]*))?$/, 'use "*", "booking.*" or "booking.confirm"');
+
+export const eventTypeSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .regex(/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/, 'an event type like "booking.confirm"');
+
+export const payloadStyleSchema = z
+  .enum(["thin", "full"])
+  .describe(
+    "thin sends a pointer — id, type, state, version and a URL — and never goes stale or leaks. full also sends the customer's data to this address.",
+  );
+
+export const createWebhookInput = z.object({
+  url: z
+    .url()
+    .max(2_000)
+    .describe("https URL on a public host. Every event is POSTed here, signed with Standard Webhooks."),
+  events: z
+    .array(eventPatternSchema)
+    .min(1)
+    .max(50)
+    .default(["*"])
+    .describe('Which events to send, e.g. ["booking.*", "order.*"]. Default: everything.'),
+  payload_style: payloadStyleSchema.default("thin"),
+});
+
+export const webhookIdInput = z.object({ webhook_id: z.string().min(1) });
+
+export const updateWebhookInput = z.object({
+  webhook_id: z.string().min(1),
+  url: z.url().max(2_000).optional(),
+  events: z.array(eventPatternSchema).min(1).max(50).optional(),
+  payload_style: payloadStyleSchema.optional(),
+  active: z.boolean().optional().describe("Setting it back to true also clears a failure run, so deliveries resume."),
+});
+
+export const deliveryStatusSchema = z.enum(["pending", "delivered", "failed"]);
+
+export const listDeliveriesInput = z.object({
+  webhook_id: z.string().min(1).optional().describe("Omit to see every endpoint's deliveries."),
+  status: deliveryStatusSchema.optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
+export const deliveryIdInput = z.object({ delivery_id: z.string().min(1) });
+
+export const replayMissingInput = z.object({
+  webhook_id: z.string().min(1),
+  since: isoDateTime.describe("Re-send every matching event from this instant that this endpoint never received."),
+  after: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      "The next_after of your last call. One call scans at most 500 events from `since`; when the result is truncated, pass its next_after back here to take the next window.",
+    ),
+});
+
+export const listEventsInput = z.object({
+  cursor: z
+    .string()
+    .max(200)
+    .optional()
+    .describe("The next_cursor of your last page. Omit to start at the beginning of time."),
+  limit: z.number().int().min(1).max(100).default(50),
+  types: z
+    .array(eventPatternSchema)
+    .min(1)
+    .max(50)
+    .optional()
+    .describe('Only these event types, patterns allowed: ["booking.*"].'),
+  since: isoDateTime.optional().describe("Only events from this instant onwards."),
+});
+
+export type CreateWebhookInput = z.infer<typeof createWebhookInput>;
+export type UpdateWebhookInput = z.infer<typeof updateWebhookInput>;
+export type WebhookIdInput = z.infer<typeof webhookIdInput>;
+export type ListDeliveriesInput = z.infer<typeof listDeliveriesInput>;
+export type DeliveryIdInput = z.infer<typeof deliveryIdInput>;
+export type ReplayMissingInput = z.infer<typeof replayMissingInput>;
+export type ListEventsInput = z.infer<typeof listEventsInput>;
+export type PayloadStyle = z.infer<typeof payloadStyleSchema>;
+export type DeliveryStatus = z.infer<typeof deliveryStatusSchema>;

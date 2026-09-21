@@ -6,13 +6,18 @@ import {
   checkAvailabilityInput,
   createBookingInput,
   createOrderInput,
+  createWebhookInput,
+  deliveryIdInput,
   getItemInput,
+  listDeliveriesInput,
+  listEventsInput,
   listItemsInput,
   listProductsInput,
   listServicesInput,
   presetKeySchema,
   productInput,
   profileInput,
+  replayMissingInput,
   replyInput,
   requestQuoteInput,
   ruleInput,
@@ -26,6 +31,7 @@ import {
   updateRuleInput,
   updateServiceInput,
   updateSettingsInput,
+  updateWebhookInput,
 } from "@surfingdog/core";
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
@@ -448,6 +454,146 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     "/rules/:id",
     describeRoute({ tags: ["setup"], summary: "Delete a rule", responses: json("Deleted") }),
     async (c) => c.json(await caps.setup.deleteRule(c.get("caller"), { rule_id: String(c.req.param("id")) })),
+  );
+  // ---- integrations: where events go, and the cursor for everyone else -------------
+
+  app.get(
+    "/webhooks",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "The endpoints events are sent to, each with a delivery summary. Never the secret.",
+      responses: json("Webhooks"),
+    }),
+    async (c) => c.json({ items: await caps.webhooks.listWebhooks(c.get("caller")) }),
+  );
+  app.post(
+    "/webhooks",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Add an endpoint. The signing secret is in this response and in no other: store it now.",
+      responses: json("Webhook and its secret"),
+    }),
+    validator("json", createWebhookInput, hook),
+    async (c) => c.json(await caps.webhooks.createWebhook(c.get("caller"), c.req.valid("json")), 201),
+  );
+  app.patch(
+    "/webhooks/:id",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Change an endpoint's URL, events, payload style, or wake it after a failure run",
+      responses: json("Webhook"),
+    }),
+    validator("json", updateWebhookInput.omit({ webhook_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.webhooks.updateWebhook(c.get("caller"), {
+          ...c.req.valid("json"),
+          webhook_id: String(c.req.param("id")),
+        }),
+      ),
+  );
+  app.delete(
+    "/webhooks/:id",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Remove an endpoint and its delivery log",
+      responses: json("Deleted"),
+    }),
+    async (c) => c.json(await caps.webhooks.deleteWebhook(c.get("caller"), { webhook_id: String(c.req.param("id")) })),
+  );
+  app.post(
+    "/webhooks/:id/rotate-secret",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Mint a new signing secret, shown once. The old one keeps verifying for 24 hours.",
+      responses: json("Webhook and its new secret"),
+    }),
+    async (c) =>
+      c.json(await caps.webhooks.rotateWebhookSecret(c.get("caller"), { webhook_id: String(c.req.param("id")) })),
+  );
+  app.post(
+    "/webhooks/:id/test",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Send a real, signed, clearly marked test event now and report the HTTP status it got",
+      responses: json("Test result"),
+    }),
+    async (c) => c.json(await caps.webhooks.sendTestEvent(c.get("caller"), { webhook_id: String(c.req.param("id")) })),
+  );
+  app.post(
+    "/webhooks/:id/replay",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Re-queue every matching event since an instant that this endpoint never received",
+      responses: json("Replay report"),
+    }),
+    validator("json", replayMissingInput.omit({ webhook_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.webhooks.replayMissing(c.get("caller"), {
+          ...c.req.valid("json"),
+          webhook_id: String(c.req.param("id")),
+        }),
+      ),
+  );
+  app.get(
+    "/webhooks/:id/deliveries",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "One endpoint's deliveries, newest first",
+      responses: json("Deliveries"),
+    }),
+    async (c) => {
+      const parsed = listDeliveriesInput.safeParse({
+        ...coerceQuery(c.req.query()),
+        webhook_id: String(c.req.param("id")),
+      });
+      if (!parsed.success) return hook({ success: false, error: parsed.error }, c) as Response;
+      return c.json(await caps.webhooks.listDeliveries(c.get("caller"), parsed.data));
+    },
+  );
+  app.get(
+    "/deliveries",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Deliveries across every endpoint, newest first, keyset paginated",
+      responses: json("Deliveries"),
+    }),
+    async (c) => {
+      const parsed = listDeliveriesInput.safeParse(coerceQuery(c.req.query()));
+      if (!parsed.success) return hook({ success: false, error: parsed.error }, c) as Response;
+      return c.json(await caps.webhooks.listDeliveries(c.get("caller"), parsed.data));
+    },
+  );
+  app.post(
+    "/deliveries/:id/replay",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Send one delivery again, on the row it already has",
+      responses: json("Delivery"),
+    }),
+    async (c) =>
+      c.json(
+        await caps.webhooks.replayDelivery(c.get("caller"), deliveryIdInput.parse({ delivery_id: c.req.param("id") })),
+      ),
+  );
+  app.get(
+    "/events",
+    describeRoute({
+      tags: ["integrations"],
+      summary:
+        "The event stream, oldest first: every booking, order, quote and message event as the same thin event a webhook carries. Pass the next_cursor of your last page as cursor. The stream trails live by a few seconds, which is what makes that cursor safe as a watermark. For anyone who cannot receive a webhook.",
+      responses: json("Events and the next cursor"),
+    }),
+    async (c) => {
+      const types = c.req.queries("types");
+      const parsed = listEventsInput.safeParse({
+        ...coerceQuery(c.req.query()),
+        ...(types?.length ? { types: types.flatMap((t) => t.split(",")).filter(Boolean) } : {}),
+      });
+      if (!parsed.success) return hook({ success: false, error: parsed.error }, c) as Response;
+      return c.json(await caps.webhooks.listEvents(c.get("caller"), parsed.data));
+    },
   );
 
   return app;

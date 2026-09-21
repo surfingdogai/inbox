@@ -7,14 +7,19 @@ import {
   checkAvailabilityInput,
   createBookingInput,
   createOrderInput,
+  createWebhookInput,
+  deliveryIdInput,
   getItemInput,
   getItemStatusInput,
+  listDeliveriesInput,
+  listEventsInput,
   listItemsInput,
   listProductsInput,
   listServicesInput,
   productIdInput,
   productInput,
   profileInput,
+  replayMissingInput,
   replyInput,
   requestQuoteInput,
   ruleIdInput,
@@ -27,6 +32,8 @@ import {
   testRuleInput,
   transitionItemInput,
   updateSettingsInput,
+  updateWebhookInput,
+  webhookIdInput,
 } from "@surfingdog/core";
 import { z } from "zod";
 import { problemFrom } from "./problem";
@@ -52,6 +59,7 @@ export const OWNER_INSTRUCTIONS = [
   "You are working this business's inbox on the owner's behalf. list_items shows what needs a person; get_item shows the full story;",
   "transition_item moves an item with one of the events its view lists; reply speaks to the customer, or with internal=true leaves a note.",
   "Never invent facts about availability or prices: read them first.",
+  "To connect another system to this inbox, create_webhook registers a URL that receives every event, signed; list_events is the same stream by polling, for anything that cannot receive one.",
 ].join(" ");
 
 const ok = (text: string, structured: unknown): CallToolResult => ({
@@ -645,6 +653,192 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           return {
             text: "view" in r ? (r as { view: { human: string } }).view.human : (r as { human: string }).human,
             structured: r,
+          };
+        }),
+    );
+    // ---- integrations: where events go, and the cursor for everyone else ----
+    server.registerTool(
+      "list_webhooks",
+      {
+        title: "List webhook endpoints",
+        description:
+          "Every URL this inbox sends events to, with what it subscribes to, whether it is active, how its deliveries are going, and its last error. The signing secret is never returned by this tool, or any other.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const items = await caps.webhooks.listWebhooks(caller);
+          return {
+            text:
+              items
+                .map(
+                  (w) =>
+                    `${w.id} ${w.url} [${w.active ? "active" : "inactive"}, ${w.payload_style}] events ${w.events.join(", ")}; ${w.deliveries.delivered} delivered, ${w.deliveries.pending} pending, ${w.deliveries.failed} failed${w.last_error ? `; last error: ${w.last_error}` : ""}`,
+                )
+                .join("\n") || "No endpoints yet. create_webhook adds one.",
+            structured: { items },
+          };
+        }),
+    );
+    server.registerTool(
+      "create_webhook",
+      {
+        title: "Add a webhook endpoint",
+        description:
+          "Registers an https URL. From then on this inbox POSTs every event you subscribe to — a booking requested or confirmed, an order paid, a quote sent, a message arriving — signed with Standard Webhooks headers (webhook-id, webhook-timestamp, webhook-signature), retried for a day if the URL is down, and replayable afterwards. It works with Zapier, n8n, Make, a Slack bot or any server; there is nothing to register and no OAuth. THE SIGNING SECRET IS IN THIS RESPONSE AND IN NO OTHER: show it to the person and tell them to store it now, because no tool can ever read it back — it can only be replaced with rotate_webhook_secret. payload_style thin (the default) sends only a pointer — item id, type, state, version and URL; full also sends the customer's data to that address, so only choose it when the person understands that.",
+        inputSchema: createWebhookInput,
+        annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false },
+      },
+      (args) =>
+        run(async () => {
+          const w = await caps.webhooks.createWebhook(caller, args);
+          return {
+            text: `Endpoint ${w.id} created for ${w.url} (${w.events.join(", ")}, ${w.payload_style}). Signing secret, shown once and never again — store it now: ${w.secret}`,
+            structured: w,
+          };
+        }),
+    );
+    server.registerTool(
+      "update_webhook",
+      {
+        title: "Change a webhook endpoint",
+        description:
+          "Changes the URL, the events, the payload style, or turns an endpoint off and on. An endpoint that failed for five days straight is deactivated automatically, never deleted; setting active=true after fixing the address clears the failure run, and replay_missing_webhook_deliveries then sends what it missed.",
+        inputSchema: updateWebhookInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const w = await caps.webhooks.updateWebhook(caller, args);
+          return { text: `Endpoint ${w.id} now ${w.active ? "active" : "inactive"} for ${w.url}.`, structured: w };
+        }),
+    );
+    server.registerTool(
+      "rotate_webhook_secret",
+      {
+        title: "Rotate a webhook's signing secret",
+        description:
+          "Mints a new signing secret and returns it ONCE. The previous secret keeps verifying for 24 hours, so the receiver can be updated without dropping an event. Use this when a secret was lost or may have leaked. Only one previous secret is kept — rotating again before the 24 hours are up drops the secret the receiver still holds and every delivery starts failing verification, so update and redeploy the receiver between rotations.",
+        inputSchema: webhookIdInput,
+        annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: true },
+      },
+      (args) =>
+        run(async () => {
+          const w = await caps.webhooks.rotateWebhookSecret(caller, args);
+          return {
+            text: `New signing secret for ${w.id}, shown once — store it now: ${w.secret}. The old secret keeps working until ${w.previous_secret_until}.`,
+            structured: w,
+          };
+        }),
+    );
+    server.registerTool(
+      "delete_webhook",
+      {
+        title: "Remove a webhook endpoint",
+        description:
+          "Removes an endpoint and its delivery log for good. To pause one instead, update_webhook with active=false.",
+        inputSchema: webhookIdInput,
+        annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
+      },
+      (args) =>
+        run(async () => ({ text: "Endpoint removed.", structured: await caps.webhooks.deleteWebhook(caller, args) })),
+    );
+    server.registerTool(
+      "send_test_event",
+      {
+        title: "Send a test event",
+        description:
+          "Delivers one real, signed, clearly marked test event to an endpoint right now and reports the HTTP status it answered with. The quickest way to find out whether a URL and its signature verification actually work. Every call is another POST and another row in the delivery log, so it is not free to repeat.",
+        inputSchema: webhookIdInput,
+        annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false },
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.webhooks.sendTestEvent(caller, args);
+          return {
+            text: r.delivered
+              ? `Delivered: HTTP ${r.status} in ${r.duration_ms} ms.`
+              : `Not delivered: ${r.error}${r.status === null ? "" : ` (HTTP ${r.status})`} after ${r.duration_ms} ms.`,
+            structured: r,
+          };
+        }),
+    );
+    server.registerTool(
+      "list_webhook_deliveries",
+      {
+        title: "List webhook deliveries",
+        description:
+          "What was sent where, newest first: the event type, whether it was delivered, how many attempts it took, the last HTTP status and error, how long it took, and when the next attempt is due if it is still failing. Pass the next_cursor from the previous page to continue.",
+        inputSchema: listDeliveriesInput,
+        annotations: readOnly,
+      },
+      (args) =>
+        run(async () => {
+          const page = await caps.webhooks.listDeliveries(caller, args);
+          return {
+            text:
+              page.items
+                .map(
+                  (d) =>
+                    `${d.id} ${d.event_type} → ${d.webhook_id}: ${d.status}, ${d.attempts} attempt(s)${d.last_status === null ? "" : `, HTTP ${d.last_status}`}${d.last_error ? `, ${d.last_error}` : ""}${d.next_attempt_at ? `, next ${d.next_attempt_at}` : ""}`,
+                )
+                .join("\n") || "No deliveries yet.",
+            structured: page,
+          };
+        }),
+    );
+    server.registerTool(
+      "replay_webhook_delivery",
+      {
+        title: "Replay one delivery",
+        description:
+          "Sends one delivery again on the row it already has, so the receiver sees the same webhook-id and can deduplicate. Use it after fixing the receiving end.",
+        inputSchema: deliveryIdInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const d = await caps.webhooks.replayDelivery(caller, args);
+          return { text: `Delivery ${d.id} (${d.event_type}) queued to send again.`, structured: d };
+        }),
+    );
+    server.registerTool(
+      "replay_missing_webhook_deliveries",
+      {
+        title: "Replay everything an endpoint missed",
+        description:
+          "Queues every event since an instant that this endpoint should have received and did not — the fix after a wrong URL, an outage, or an endpoint added after the fact. Already delivered events are left alone, so nothing arrives twice. One call scans at most 500 events; if the answer comes back truncated, call it again with the same `since` and `after` set to the `next_after` it gave you.",
+        inputSchema: replayMissingInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.webhooks.replayMissing(caller, args);
+          return {
+            text: `${r.queued} of ${r.matched} matching events queued for ${r.webhook_id}${r.truncated ? `; there were more — call it again with after=${r.next_after}` : ""}.`,
+            structured: r,
+          };
+        }),
+    );
+    server.registerTool(
+      "list_events",
+      {
+        title: "Read the event stream",
+        description:
+          "Every event this inbox has ever produced, oldest first, in the same shape a webhook carries: id, type (like booking.confirm, order.record_payment, message.create), timestamp, and data with the item's id, type, state, version and URL. This is the polling alternative to a webhook, for anything that cannot receive one. Keep the next_cursor you get back and pass it as cursor next time to read only what is new; the order is stable and an event is never returned twice. The stream trails live by a few seconds, which is what makes the cursor safe to treat as a watermark. An empty page returns next_cursor null — keep the cursor you already have.",
+        inputSchema: listEventsInput,
+        annotations: readOnly,
+      },
+      (args) =>
+        run(async () => {
+          const page = await caps.webhooks.listEvents(caller, args);
+          return {
+            text:
+              page.events
+                .map((e) => `${e.id} ${e.type} ${e.timestamp} ${e.data.type} ${e.data.id} (${e.data.state})`)
+                .join("\n") || "No events after that cursor.",
+            structured: page,
           };
         }),
     );
