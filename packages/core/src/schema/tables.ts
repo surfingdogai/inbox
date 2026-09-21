@@ -107,6 +107,7 @@ export const parties = sqliteTable("parties", {
   kind: text("kind").notNull(),
   displayName: text("display_name"),
   locale: text("locale"),
+  contact: text("contact", { mode: "json" }),
   notes: text("notes"),
   erasedAt: integer("erased_at"),
   createdAt: createdAt(),
@@ -162,6 +163,7 @@ export const items = sqliteTable(
     channel: text("channel").notNull(),
     subject: text("subject"),
     linkedItemId: text("linked_item_id"),
+    accessTokenHash: text("access_token_hash"),
     payload: text("payload", { mode: "json" }).notNull(),
     flags: text("flags", { mode: "json" }).notNull(),
     needsHuman: integer("needs_human").generatedAlwaysAs(sql`json_extract("flags", '$.needsHuman')`, {
@@ -184,6 +186,7 @@ export const items = sqliteTable(
     index("items_needs_human").on(t.needsHuman, t.updatedAt),
     index("items_sandbox").on(t.sandbox, t.updatedAt),
     index("items_location").on(t.locationId, t.type, t.state),
+    index("items_access_token").on(t.accessTokenHash),
   ],
 );
 

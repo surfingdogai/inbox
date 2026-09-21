@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "05b8de86-224e-4da3-abaa-b052ec846508",
+  "id": "31eb6010-18b1-4c99-88ae-82a48302ba0d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "action_links": {
@@ -831,6 +831,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "access_token_hash": {
+          "name": "access_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "payload": {
           "name": "payload",
           "type": "text",
@@ -951,6 +958,11 @@
         "items_location": {
           "name": "items_location",
           "columns": ["location_id", "type", "state"],
+          "isUnique": false
+        },
+        "items_access_token": {
+          "name": "items_access_token",
+          "columns": ["access_token_hash"],
           "isUnique": false
         }
       },
@@ -1523,6 +1535,13 @@
         },
         "locale": {
           "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contact": {
+          "name": "contact",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

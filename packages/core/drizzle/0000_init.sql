@@ -129,6 +129,7 @@ CREATE TABLE `items` (
 	`channel` text NOT NULL,
 	`subject` text,
 	`linked_item_id` text,
+	`access_token_hash` text,
 	`payload` text NOT NULL,
 	`flags` text NOT NULL,
 	`needs_human` integer GENERATED ALWAYS AS (json_extract("flags", '$.needsHuman')) VIRTUAL,
@@ -149,6 +150,7 @@ CREATE INDEX `items_start` ON `items` (`type`,`start_at`);--> statement-breakpoi
 CREATE INDEX `items_needs_human` ON `items` (`needs_human`,`updated_at`);--> statement-breakpoint
 CREATE INDEX `items_sandbox` ON `items` (`sandbox`,`updated_at`);--> statement-breakpoint
 CREATE INDEX `items_location` ON `items` (`location_id`,`type`,`state`);--> statement-breakpoint
+CREATE INDEX `items_access_token` ON `items` (`access_token_hash`);--> statement-breakpoint
 CREATE TABLE `jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
@@ -239,6 +241,7 @@ CREATE TABLE `parties` (
 	`kind` text NOT NULL,
 	`display_name` text,
 	`locale` text,
+	`contact` text,
 	`notes` text,
 	`erased_at` integer,
 	`created_at` integer NOT NULL,

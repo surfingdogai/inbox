@@ -5,7 +5,7 @@ import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { items, parties, threadEntries } from "../src/schema/tables";
-import { makeClient } from "./harness";
+import { makeClient, resetTables } from "./harness";
 
 // Runs on Node (node:sqlite) and inside workerd (D1): the schema must behave the same on both.
 describe("core schema", () => {
@@ -13,6 +13,7 @@ describe("core schema", () => {
     const db = createDb(await makeClient());
     await runMigrations(db.client, MIGRATIONS);
     await runMigrations(db.client, MIGRATIONS);
+    await resetTables(db.client);
     const now = Date.now();
     const partyId = ulid();
     const itemId = ulid();
