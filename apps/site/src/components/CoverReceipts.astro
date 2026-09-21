@@ -17,7 +17,7 @@
  *
  * Beat four owns 6.2 s of the 13.8 s loop because it is the point of the post. Nothing here
  * claims a shipped feature — no status chip, no badge, no interface. Receipts do not exist yet
- * and the post says so; this is the explanation, drawn.
+ * and the post says so; this is an explanation, drawn.
  *
  * Built the way HeroFlow.astro is built, that piece being the approved standard. The scene ships
  * as inline SVG rather than being built in JS, so the box is never empty and a throw leaves a
@@ -101,8 +101,8 @@
 <rect x="48" y="254" width="204" height="6" rx="3" class="sdr-say"/>
 <rect x="48" y="268" width="168" height="6" rx="3" class="sdr-say"/>
 <rect x="48" y="282" width="186" height="6" rx="3" class="sdr-say"/>
-<rect x="48" y="298" width="92" height="22" rx="11" class="sdr-pill"/>
-<text x="61" y="313" class="sdr-code">completed</text>
+<rect x="48" y="296" width="92" height="26" rx="13" class="sdr-pill"/>
+<text x="61" y="309" dominant-baseline="central" class="sdr-code">completed</text>
 </g>
 <g class="sdr-band">
 <rect x="46" y="248" width="228" height="68" rx="9" class="bg"/>
@@ -146,11 +146,10 @@
 
 <style is:global>
 /* Every selector starts with .sdr and every keyframe is sdr-*, so nothing leaks.
-   .sdr is also the query container the width steps below match. Colours are
-   properties: the host token first, a brand literal only as the fallback. One
-   theme block rather than HeroFlow's three, because the tokens package sets
-   color-scheme in all three cases, so light-dark() carries night correctly for
-   a host that has not declared the role at all. */
+   .sdr is also the query container the width steps match. Colours are properties:
+   host token first, brand literal only as the fallback — one theme block rather
+   than HeroFlow's three, because the tokens package sets color-scheme in all
+   three cases, so light-dark() carries night for a host with no tokens at all. */
 .sdr{
   --sdr-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
   --sdr-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
@@ -173,9 +172,9 @@
 
 .sdr svg{display:block;width:100%;height:auto}
 .sdr text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdr-ink2)}
-.sdr .sdr-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13px;font-weight:600;letter-spacing:-.01em}
-.sdr .sdr-cap{font-size:10.5px;letter-spacing:.11em}
-.sdr .sdr-sub{font-size:11.8px}
+.sdr .sdr-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.sdr .sdr-cap{font-size:11px;letter-spacing:.11em}
+.sdr .sdr-sub{font-size:12.2px}
 .sdr .sdr-hair{stroke:var(--sdr-hair);stroke-width:1}
 .sdr .sdr-bar,.sdr .sdr-line{fill:var(--sdr-ink3);fill-opacity:.17}
 
@@ -217,7 +216,7 @@
 @keyframes sdr-breathe{0%,100%{opacity:.16}50%{opacity:.5}}
 .sdr .sdr-say{fill:var(--sc);fill-opacity:.34}
 .sdr .sdr-pill{fill:var(--sc);fill-opacity:.12;stroke:var(--sc);stroke-opacity:.5;stroke-width:1}
-.sdr .sdr-code{font-size:10.4px;font-weight:600;fill:var(--si)}
+.sdr .sdr-code{font-size:10.8px;font-weight:600;fill:var(--si)}
 .sdr .sdr-pip{fill:var(--sc)}
 .sdr .sdr-pip.off{fill:none;stroke:var(--sc);stroke-opacity:.45;stroke-width:1.3}
 
@@ -228,21 +227,20 @@
 .sdr .sdr-win.done .sdr-arc{stroke:var(--sdr-palm)}
 .sdr .sdr-spoke{stroke:var(--sdr-palm);stroke-width:1.3;stroke-dasharray:1.5 5;stroke-linecap:round}
 
-/* The viewBox is fixed, so reading size falls with the drawn width. Both steps
-   were measured in CSS pixels at the widths a post gets — about 750 on a desktop,
-   about 300 in the card on a phone — and divided by the container scale. At the
-   narrow step the card headings step out rather than print at 6 px; the columns
-   above already name the sides. */
+/* The viewBox is fixed, so reading size falls with the drawn width. The steps
+   were measured in CSS pixels at the widths a post gets — 750 at 1440, 728 at
+   900, 285 at 375 — and every band holds each label at 9.8 px or more. At the
+   narrow step the card headings step out rather than print at 6 px. */
 @container (max-width:600px){
-  .sdr .sdr-cap{font-size:15px}
+  .sdr .sdr-cap{font-size:15.5px}
   .sdr .sdr-h{font-size:19px}
-  .sdr .sdr-sub{font-size:16.5px}
+  .sdr .sdr-sub{font-size:17px}
   .sdr .sdr-code{font-size:15px}
 }
-@container (max-width:430px){
-  .sdr .sdr-cap{font-size:21px}
-  .sdr .sdr-h{font-size:26px}
-  .sdr .sdr-code{font-size:20px}
+@container (max-width:400px){
+  .sdr .sdr-cap{font-size:23px}
+  .sdr .sdr-h{font-size:27px}
+  .sdr .sdr-code{font-size:22px}
   .sdr .sdr-sub{display:none}
 }
 
@@ -260,7 +258,7 @@
 (function(){
 "use strict";
 
-/* Newton solve for a CSS cubic-bezier, so the JS eases match the CSS transitions
+/* Newton solve for a CSS cubic-bezier, so the JS eases match the transitions
    beside them instead of approximating them. */
 function bez(x1,y1,x2,y2){
   var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
@@ -294,7 +292,7 @@ function mount(fig){
   if(fig.getAttribute("data-sdr")==="on")return;   /* one scene per figure, however often this runs */
 
   /* Every lookup happens before the first mutation, so a missing node throws
-     while the shipped picture is still as the server drew it. */
+     with the shipped picture still as the server drew it. */
   function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverReceipts "+s);return e;}
   function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverReceipts "+s);return [].slice.call(l);}
 
@@ -375,7 +373,7 @@ function mount(fig){
 
   /* The pill is measured, never guessed, so a wider fallback font cannot push
      "completed" out of it. 92 is the drawn width and the floor, and fit() only
-     ever raises, so measuring again can never ratchet it wider. */
+     raises, so measuring again cannot ratchet it wider. */
   function fit(){
     var b;
     try{b=code.getBBox();}catch(err){return;}

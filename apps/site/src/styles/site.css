@@ -844,7 +844,7 @@ kbd {
    some carry none at all, which is how a card band ended up touching the
    paragraph under it. Adjacent margins collapse in normal flow, so this
    sets a floor without doubling any gap that is already there. */
-.wrap-read > * + * {
+.wrap-read > :where(* + *) {
   margin-top: var(--sp-6);
 }
 .wrap-read > :is(.grid-cards, .cols, .ways, .tiles, .spec, .shot, figure, table, .bleed) {
