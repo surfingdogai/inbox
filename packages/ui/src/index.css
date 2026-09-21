@@ -1,0 +1,859 @@
+@import "tailwindcss";
+@source "../kit";
+
+/* ------------------------------------------------------------------ */
+/*  Surfing Dog Inbox — design tokens                                  */
+/*  The colour is in the light behind the glass, not in the interface. */
+/*  Light palette on bare :root; night redefines only the tokens.      */
+/* ------------------------------------------------------------------ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --ground: #f6f5ff;
+  --ink: #14163c;
+  --ink-2: #474a75;
+  --ink-3: #6b6e96;
+  --hairline: rgba(20, 22, 60, 0.08);
+
+  --flamingo: #ff6fa8;
+  --violet: #8a6bff;
+  --lagoon: #25cfe0;
+  --palm: #2fd3a5;
+  --tangerine: #ff9650;
+  --sun: #ffcf5c;
+  --danger: #e5484d;
+
+  /* Text-safe partners for tinted pills (AA on glass in daylight). */
+  --flamingo-ink: #b02a6b;
+  --violet-ink: #5a3fd0;
+  --lagoon-ink: #0f7f8c;
+  --palm-ink: #147a5c;
+  --tangerine-ink: #b4520f;
+  --sun-ink: #866000;
+  --danger-ink: #b3262b;
+
+  /* Glass. Values from the brief (fixtheworld.io water glass, re-lit). */
+  --glass-bg: rgba(255, 255, 255, 0.32);
+  --glass-bg-strong: rgba(255, 255, 255, 0.44);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-border-strong: rgba(255, 255, 255, 0.6);
+  --glass-fallback: rgba(255, 255, 255, 0.86);
+  --glass-shadow: 0 8px 24px -16px rgba(20, 90, 140, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-shadow-hover: 0 14px 32px -18px rgba(20, 90, 140, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --pill-bg: rgba(255, 255, 255, 0.34);
+  --pill-bg-hover: rgba(255, 255, 255, 0.5);
+  --pill-border: rgba(255, 255, 255, 0.62);
+  --row-bg: rgba(255, 255, 255, 0.24);
+  --row-bg-hover: rgba(255, 255, 255, 0.4);
+  --input-bg: rgba(255, 255, 255, 0.38);
+  --input-bg-hover: rgba(255, 255, 255, 0.46);
+  --input-border: rgba(255, 255, 255, 0.65);
+  --btn-primary-bg: #14163c;
+  --btn-primary-fg: #ffffff;
+  --field-alpha: 0.5;
+}
+
+/* Night: same light fields, dimmer; chrome stays quiet. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #0d0e26;
+    --ink: #f2f1ff;
+    --ink-2: #b9b8dd;
+    --ink-3: #8e8db8;
+    --hairline: rgba(255, 255, 255, 0.1);
+    --flamingo-ink: #ff8fbc;
+    --violet-ink: #ab95ff;
+    --lagoon-ink: #63e2ee;
+    --palm-ink: #72e6c3;
+    --tangerine-ink: #ffb27c;
+    --sun-ink: #ffda80;
+    --danger-ink: #ff7e83;
+    --glass-bg: rgba(255, 255, 255, 0.07);
+    --glass-bg-strong: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --glass-border-strong: rgba(255, 255, 255, 0.18);
+    --glass-fallback: rgba(22, 23, 52, 0.92);
+    --glass-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    --glass-shadow-hover: 0 14px 32px -18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    --pill-bg: rgba(255, 255, 255, 0.08);
+    --pill-bg-hover: rgba(255, 255, 255, 0.14);
+    --pill-border: rgba(255, 255, 255, 0.16);
+    --row-bg: rgba(255, 255, 255, 0.05);
+    --row-bg-hover: rgba(255, 255, 255, 0.09);
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --input-bg-hover: rgba(255, 255, 255, 0.09);
+    --input-border: rgba(255, 255, 255, 0.16);
+    --btn-primary-bg: #f2f1ff;
+    --btn-primary-fg: #0d0e26;
+    --field-alpha: 0.28;
+  }
+}
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #0d0e26;
+  --ink: #f2f1ff;
+  --ink-2: #b9b8dd;
+  --ink-3: #8e8db8;
+  --hairline: rgba(255, 255, 255, 0.1);
+  --flamingo-ink: #ff8fbc;
+  --violet-ink: #ab95ff;
+  --lagoon-ink: #63e2ee;
+  --palm-ink: #72e6c3;
+  --tangerine-ink: #ffb27c;
+  --sun-ink: #ffda80;
+  --danger-ink: #ff7e83;
+  --glass-bg: rgba(255, 255, 255, 0.07);
+  --glass-bg-strong: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-strong: rgba(255, 255, 255, 0.18);
+  --glass-fallback: rgba(22, 23, 52, 0.92);
+  --glass-shadow: 0 8px 24px -16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --glass-shadow-hover: 0 14px 32px -18px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --pill-bg: rgba(255, 255, 255, 0.08);
+  --pill-bg-hover: rgba(255, 255, 255, 0.14);
+  --pill-border: rgba(255, 255, 255, 0.16);
+  --row-bg: rgba(255, 255, 255, 0.05);
+  --row-bg-hover: rgba(255, 255, 255, 0.09);
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-bg-hover: rgba(255, 255, 255, 0.09);
+  --input-border: rgba(255, 255, 255, 0.16);
+  --btn-primary-bg: #f2f1ff;
+  --btn-primary-fg: #0d0e26;
+  --field-alpha: 0.28;
+}
+
+/* Colour has jobs. Item types and states are the only things that get colour. */
+:root,
+[data-theme] {
+  --c-message: var(--lagoon);
+  --c-message-ink: var(--lagoon-ink);
+  --c-quote: var(--violet);
+  --c-quote-ink: var(--violet-ink);
+  --c-booking: var(--flamingo);
+  --c-booking-ink: var(--flamingo-ink);
+  --c-order: var(--tangerine);
+  --c-order-ink: var(--tangerine-ink);
+  --c-refund: var(--sun);
+  --c-refund-ink: var(--sun-ink);
+  --c-success: var(--palm);
+  --c-success-ink: var(--palm-ink);
+  --c-warning: var(--sun);
+  --c-warning-ink: var(--sun-ink);
+  --c-danger: var(--danger);
+  --c-danger-ink: var(--danger-ink);
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  --color-flamingo: var(--flamingo);
+  --color-violet: var(--violet);
+  --color-lagoon: var(--lagoon);
+  --color-palm: var(--palm);
+  --color-tangerine: var(--tangerine);
+  --color-sun: var(--sun);
+  --color-danger: var(--danger);
+  --color-message: var(--c-message);
+  --color-message-ink: var(--c-message-ink);
+  --color-quote: var(--c-quote);
+  --color-quote-ink: var(--c-quote-ink);
+  --color-booking: var(--c-booking);
+  --color-booking-ink: var(--c-booking-ink);
+  --color-order: var(--c-order);
+  --color-order-ink: var(--c-order-ink);
+  --color-refund: var(--c-refund);
+  --color-refund-ink: var(--c-refund-ink);
+  --color-success: var(--c-success);
+  --color-success-ink: var(--c-success-ink);
+  --color-warning: var(--c-warning);
+  --color-warning-ink: var(--c-warning-ink);
+  --color-danger-ink: var(--c-danger-ink);
+
+  /* Display: Plus Jakarta Sans 500/600. Body and UI: Manrope 400/500/600. Nothing heavier ships. */
+  --font-display:
+    "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* One radius scale: tile = icon tiles, md = inputs and rows, panel = cards, sheet = panels and sheets, pills are full. */
+  --radius-tile: 10px;
+  --radius-md: 12px;
+  --radius-panel: 16px;
+  --radius-sheet: 20px;
+
+  --shadow-glass: var(--glass-shadow);
+  --shadow-glass-hover: var(--glass-shadow-hover);
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--violet) 24%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Surfaces. Only nav, panels and sheets blur. Rows are translucent   */
+/*  without blur. Never stack more than two blurred layers.            */
+/* ------------------------------------------------------------------ */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+@utility glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid var(--glass-border-strong);
+  box-shadow: var(--glass-shadow);
+}
+/* Chips, counters, small round controls. Blurs only when it floats directly on the light. */
+@utility pill-glass {
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  backdrop-filter: blur(10px);
+  .glass &,
+  .glass-strong & {
+    background: var(--pill-bg-hover);
+    backdrop-filter: none;
+  }
+}
+/* List rows: translucent, hairline, no blur. */
+@utility row-glass {
+  background: var(--row-bg);
+  border: 1px solid var(--hairline);
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+    outline-offset: 2px;
+  }
+}
+/* A 44px touch target for a control drawn smaller (coarse pointers only). */
+@utility hit-44 {
+  @media (pointer: coarse) {
+    &::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+      border-radius: inherit;
+    }
+  }
+}
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Browsers without backdrop-filter get a more opaque pane instead of unreadable text. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass-strong,
+  .pill-glass,
+  .btn-secondary {
+    background: var(--glass-fallback);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  The light behind the glass: three or four soft fields, fixed,      */
+/*  static. Motion only in response to user action.                   */
+/* ------------------------------------------------------------------ */
+.sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--ground);
+  z-index: 0;
+}
+.sky > i {
+  position: absolute;
+  display: block;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: var(--field-alpha);
+}
+.sky .f1 {
+  width: 52vw;
+  height: 52vw;
+  left: -14vw;
+  top: -18vw;
+  background: var(--flamingo);
+}
+.sky .f2 {
+  width: 48vw;
+  height: 48vw;
+  right: -12vw;
+  top: 6vh;
+  background: var(--lagoon);
+}
+.sky .f3 {
+  width: 56vw;
+  height: 56vw;
+  right: -10vw;
+  bottom: -24vw;
+  background: var(--violet);
+}
+.sky .f4 {
+  width: 38vw;
+  height: 38vw;
+  left: 4vw;
+  bottom: -14vw;
+  background: var(--tangerine);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Components. Buttons say what they do; colour never fills a button  */
+/*  except the neutral ink primary.                                    */
+/* ------------------------------------------------------------------ */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform 0.2s var(--ease-out-soft),
+    background-color 0.2s,
+    box-shadow 0.2s,
+    color 0.2s;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0) scale(0.97);
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  box-shadow: 0 10px 22px -14px color-mix(in srgb, var(--ink) 60%, transparent);
+}
+.btn-secondary {
+  background: var(--pill-bg);
+  border-color: var(--pill-border);
+  backdrop-filter: blur(10px);
+}
+.btn-secondary:hover {
+  background: var(--pill-bg-hover);
+}
+.glass .btn-secondary,
+.glass-strong .btn-secondary {
+  backdrop-filter: none;
+  background: var(--pill-bg-hover);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.btn-ghost:hover {
+  background: var(--pill-bg);
+  color: var(--ink);
+}
+.btn-danger {
+  background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-danger) 40%, transparent);
+  color: var(--c-danger-ink);
+}
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--c-danger) 22%, transparent);
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.btn-sm svg {
+  width: 16px;
+  height: 16px;
+}
+.btn-lg {
+  height: 44px;
+  padding: 0 22px;
+  font-size: 15px;
+}
+.btn-icon {
+  width: 38px;
+  padding: 0;
+}
+.btn-icon.btn-sm {
+  width: 32px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pills: soft tints at 12 to 16% alpha with a text-safe ink. Dots are 8px. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--pill-border);
+  background: var(--pill-bg);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.pill-lg {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex: none;
+  background: var(--ink-3);
+}
+.tint-message {
+  background: color-mix(in srgb, var(--c-message) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-message) 42%, transparent);
+  color: var(--c-message-ink);
+}
+.tint-quote {
+  background: color-mix(in srgb, var(--c-quote) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-quote) 42%, transparent);
+  color: var(--c-quote-ink);
+}
+.tint-booking {
+  background: color-mix(in srgb, var(--c-booking) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-booking) 42%, transparent);
+  color: var(--c-booking-ink);
+}
+.tint-order {
+  background: color-mix(in srgb, var(--c-order) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-order) 42%, transparent);
+  color: var(--c-order-ink);
+}
+.tint-refund {
+  background: color-mix(in srgb, var(--c-refund) 16%, transparent);
+  border-color: color-mix(in srgb, var(--c-refund) 46%, transparent);
+  color: var(--c-refund-ink);
+}
+.tint-success {
+  background: color-mix(in srgb, var(--c-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-success) 42%, transparent);
+  color: var(--c-success-ink);
+}
+.tint-warning {
+  background: color-mix(in srgb, var(--c-warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--c-warning) 46%, transparent);
+  color: var(--c-warning-ink);
+}
+.tint-danger {
+  background: color-mix(in srgb, var(--c-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--c-danger) 40%, transparent);
+  color: var(--c-danger-ink);
+}
+.dot-message {
+  background: var(--c-message);
+}
+.dot-quote {
+  background: var(--c-quote);
+}
+.dot-booking {
+  background: var(--c-booking);
+}
+.dot-order {
+  background: var(--c-order);
+}
+.dot-refund {
+  background: var(--c-refund);
+}
+.dot-success {
+  background: var(--c-success);
+}
+.dot-warning {
+  background: var(--c-warning);
+}
+.dot-danger {
+  background: var(--c-danger);
+}
+/* 2px rules: the other permitted use of colour. */
+.rule {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ink-3);
+}
+.rule-message {
+  background: var(--c-message);
+}
+.rule-quote {
+  background: var(--c-quote);
+}
+.rule-booking {
+  background: var(--c-booking);
+}
+.rule-order {
+  background: var(--c-order);
+}
+.rule-refund {
+  background: var(--c-refund);
+}
+
+/* Fields: glass inputs; 16px on phones so iOS does not zoom. */
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.label .opt {
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.input {
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  outline: none;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+}
+@media (min-width: 768px) {
+  .input {
+    font-size: 14.5px;
+  }
+}
+.input::placeholder {
+  color: var(--ink-3);
+}
+.input:hover {
+  background: var(--input-bg-hover);
+}
+.input:focus {
+  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+}
+.input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--c-danger) 70%, transparent);
+}
+.input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-danger) 18%, transparent);
+}
+textarea.input {
+  resize: vertical;
+  min-height: 88px;
+}
+select.input {
+  appearance: none;
+  padding-right: 36px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 55%,
+    calc(100% - 13px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+.hint {
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.hint.error {
+  color: var(--c-danger-ink);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--pill-bg-hover);
+  border: 1px solid var(--pill-border);
+  transition: background-color 0.2s;
+}
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--ink);
+  transition: transform 0.2s var(--ease-out-soft);
+}
+.switch input:checked + span {
+  background: color-mix(in srgb, var(--c-success) 45%, transparent);
+  border-color: color-mix(in srgb, var(--c-success) 60%, transparent);
+}
+.switch input:checked + span::after {
+  transform: translateX(18px);
+}
+.switch input:focus-visible + span {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* Rows and lists */
+.row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  border: 1px solid var(--hairline);
+  transition: background-color 0.15s;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--row-bg-hover);
+}
+.row[data-selected="true"] {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-strong);
+}
+
+/* Avatar: initials on a tinted disc, never a photo requirement. */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  background: var(--pill-bg-hover);
+  border: 1px solid var(--pill-border);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  flex: none;
+}
+
+/* Skeleton */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--row-bg), var(--row-bg-hover), var(--row-bg));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Tabs: pills that slide, no underline chrome. */
+.tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--row-bg);
+  border: 1px solid var(--hairline);
+}
+.tab {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: transparent;
+  cursor: pointer;
+}
+.tab[aria-selected="true"] {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border-strong);
+  color: var(--ink);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Timeline of events */
+.timeline {
+  display: grid;
+  gap: 10px;
+}
+.event {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.event .dot {
+  position: relative;
+  top: 4px;
+}
+.event b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.event time {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The one signature element: a retro striped sun. Exactly three     */
+/*  places — onboarding and login, the empty inbox, the marketing hero.*/
+/* ------------------------------------------------------------------ */
+.sun {
+  position: relative;
+  width: 120px;
+  aspect-ratio: 2 / 1;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, var(--tangerine) 0%, var(--flamingo) 58%, var(--violet) 100%);
+  overflow: hidden;
+  flex: none;
+}
+.sun::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0 44%,
+    var(--ground) 44% 46.5%,
+    transparent 46.5% 55%,
+    var(--ground) 55% 58.5%,
+    transparent 58.5% 66%,
+    var(--ground) 66% 71%,
+    transparent 71% 78%,
+    var(--ground) 78% 84.5%,
+    transparent 84.5% 90%,
+    var(--ground) 90% 100%
+  );
+}
+.sun-sm {
+  width: 72px;
+}
+.sun-lg {
+  width: 200px;
+}

@@ -1,0 +1,3 @@
+# Secrets for local development (copied to .dev.vars, never committed).
+# The Deploy to Cloudflare button prompts for these.
+INBOX_SECRET_KEY=

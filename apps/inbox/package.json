@@ -1,0 +1,32 @@
+{
+  "name": "@surfingdog/inbox",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "tsx watch src/node.ts",
+    "dev:workers": "wrangler dev",
+    "types": "wrangler types",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:node": "vitest run --project node",
+    "test:workers": "vitest run --project workers",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@surfingdog/core": "workspace:*",
+    "@surfingdog/platform": "workspace:*",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.2.0",
+    "@types/node": "catalog:",
+    "tsx": "^4.23.15",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "^4.136.0"
+  }
+}
