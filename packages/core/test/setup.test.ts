@@ -146,6 +146,8 @@ describe("setup: availability", () => {
     });
     const override = await caps.setup.setWeekly(owner, { weekly: { sat: [["10:00", "13:00"]] }, service_id: svc.id });
     expect(override.overrides).toEqual([{ service_id: svc.id, weekly: { sat: [["10:00", "13:00"]] } }]);
+    const cleared = await caps.setup.clearWeeklyOverride(owner, { service_id: svc.id });
+    expect(cleared.overrides).toEqual([]);
   });
 });
 
@@ -166,7 +168,7 @@ describe("setup: rules", () => {
     const presets = caps.setup.listPresets(owner);
     expect(presets.map((p) => p.key)).toEqual(["appointments", "trades", "shop"]);
     expect(presets[0]?.rules[0]?.summary).toBe(
-      "When a new item arrives and it is a booking and it is not a test and (the total is under 50.00 or there is no a total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
+      "When a new item arrives and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
     );
     const applied = await caps.setup.applyPreset(owner, { preset: "appointments", replace: false });
     expect(applied.map((r) => r.name)).toEqual((PRESETS.appointments ?? []).map((r) => r.name));

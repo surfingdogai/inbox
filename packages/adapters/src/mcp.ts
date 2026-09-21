@@ -497,6 +497,20 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         run(async () => ({ text: "Opening hours saved.", structured: await caps.setup.setWeekly(caller, args) })),
     );
     server.registerTool(
+      "clear_service_hours",
+      {
+        title: "Clear a service's own hours",
+        description: "Removes the per-service opening hours so the service follows the business hours again.",
+        inputSchema: serviceIdInput,
+        annotations: writes,
+      },
+      (args) =>
+        run(async () => ({
+          text: "The service follows the business hours again.",
+          structured: await caps.setup.clearWeeklyOverride(caller, args),
+        })),
+    );
+    server.registerTool(
       "set_closures",
       {
         title: "Set closed days",

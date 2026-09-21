@@ -261,6 +261,17 @@ export class SetupCapabilities {
     return this.availability();
   }
 
+  /** Removes a service's own hours so it follows the business hours again. */
+  async clearWeeklyOverride(caller: Caller, input: { service_id: string }): Promise<Availability> {
+    requireOwner(caller);
+    await this.db.client.query({
+      sql: "DELETE FROM availability_rules WHERE kind = 'open' AND service_id = ?",
+      params: [input.service_id],
+      method: "run",
+    });
+    return this.availability();
+  }
+
   async setClosures(caller: Caller, input: S.SetClosuresInput): Promise<Availability> {
     requireOwner(caller);
     const now = nowOf(caller);

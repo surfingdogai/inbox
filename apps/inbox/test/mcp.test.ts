@@ -100,6 +100,7 @@ describe("MCP doors", () => {
       "archive_product",
       "get_availability",
       "set_opening_hours",
+      "clear_service_hours",
       "set_closures",
       "list_rules",
       "list_rule_presets",

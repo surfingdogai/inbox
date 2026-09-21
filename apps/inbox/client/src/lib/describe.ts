@@ -108,7 +108,7 @@ function describePath(path: string, op: string, value: unknown): string {
     case "exists":
       return `there is ${subject}`;
     case "empty":
-      return `there is no ${subject}`;
+      return `there is no ${subject.replace(/^(a|an|the) /, "")}`;
     case "between": {
       const [a, b] = Array.isArray(value) ? value : [value, value];
       return `${subject} is between ${show(a, path)} and ${show(b, path)}`;
