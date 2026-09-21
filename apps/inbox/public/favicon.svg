@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Surfing Dog Inbox</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9650"/>
+      <stop offset="0.58" stop-color="#ff6fa8"/>
+      <stop offset="1" stop-color="#8a6bff"/>
+    </linearGradient>
+    <clipPath id="c"><path d="M4 36a28 28 0 0 1 56 0z"/></clipPath>
+  </defs>
+  <g clip-path="url(#c)">
+    <rect x="4" y="8" width="56" height="28" fill="url(#g)"/>
+    <rect x="4" y="21" width="56" height="1.5" fill="#f6f5ff"/>
+    <rect x="4" y="25" width="56" height="2" fill="#f6f5ff"/>
+    <rect x="4" y="29.5" width="56" height="2.5" fill="#f6f5ff"/>
+  </g>
+  <path d="M8 44h48" stroke="#14163c" stroke-width="3" stroke-linecap="round"/>
+  <path d="M14 52h36" stroke="#14163c" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+</svg>
