@@ -372,6 +372,16 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     validator("json", setWeeklyInput, hook),
     async (c) => c.json(await caps.setup.setWeekly(c.get("caller"), c.req.valid("json"))),
   );
+  app.delete(
+    "/availability/:serviceId",
+    describeRoute({
+      tags: ["setup"],
+      summary: "Remove a service's own hours so it follows the business hours",
+      responses: json("Availability"),
+    }),
+    async (c) =>
+      c.json(await caps.setup.clearWeeklyOverride(c.get("caller"), { service_id: String(c.req.param("serviceId")) })),
+  );
   app.put(
     "/availability/closures",
     describeRoute({ tags: ["setup"], summary: "Replace the list of closed days", responses: json("Availability") }),
