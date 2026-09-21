@@ -9,6 +9,7 @@ export * from "./capabilities/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
 export { isUlid, randomToken, ulid } from "./ids";
+export * from "./jobs/index";
 export * from "./machine/machine";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";

@@ -34,6 +34,22 @@ export const settingsSchema = z.object({
     })
     .prefault({}),
   orders: z.object({ maxValueWithoutApprovalMinor: z.number().int().min(0).default(0) }).prefault({}),
+  notifications: z
+    .object({
+      /** Where the owner is told about new items; empty = no owner emails. */
+      ownerEmail: z.email().optional(),
+      /** Public base URL of the owner app, used in links. */
+      appUrl: z.url().optional(),
+    })
+    .prefault({}),
+  email: z
+    .object({
+      fromAddress: z.email().optional(),
+      fromName: z.string().max(100).optional(),
+      /** Customers reply here; usually the business mailbox. */
+      replyTo: z.email().optional(),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof settingsSchema>;
