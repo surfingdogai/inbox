@@ -1,12 +1,12 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "apps/inbox/node_modules/wrangler/config-schema.json",
   "name": "surfingdog-inbox",
-  "main": "src/worker.ts",
+  "main": "apps/inbox/src/worker.ts",
   "compatibility_date": "2026-09-01",
   "observability": { "enabled": true },
   // The SPA and public files. API, MCP and discovery paths are answered by the Worker first.
   "assets": {
-    "directory": "./public",
+    "directory": "apps/inbox/public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/.well-known/*", "/healthz"]
@@ -17,7 +17,7 @@
       "binding": "DB",
       "database_name": "surfingdog-inbox",
       "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
+      "migrations_dir": "apps/inbox/migrations"
     }
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "surfingdog-inbox-blobs" }],
