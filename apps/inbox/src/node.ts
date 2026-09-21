@@ -7,7 +7,7 @@ import { createDb, ensureJob, MIGRATIONS } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
-import { seedDemo } from "./seed";
+import { seedDemo, seedSurfingDog } from "./seed";
 
 /**
  * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
@@ -18,7 +18,8 @@ import { seedDemo } from "./seed";
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
- *   node server.mjs seed-demo          add the demo business if the instance is empty
+ *   node server.mjs seed-demo          add the demo bike shop if the instance is empty
+ *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
  *   node server.mjs network-ping       report to the network now instead of at the next hour
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
@@ -34,11 +35,14 @@ if (command) {
   } else if (command === "seed-demo") {
     const r = await seedDemo(db);
     console.log(r.seeded ? "seeded the demo business" : "an instance business already exists; nothing changed");
+  } else if (command === "seed-surfingdog") {
+    const r = await seedSurfingDog(db);
+    console.log(r.seeded ? "seeded Surfing Dog's own inbox" : "an instance business already exists; nothing changed");
   } else if (command === "network-ping") {
     await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);
     console.log("queued a network ping; the running server sends it within a second");
   } else {
-    console.error(`unknown command ${command}; use create-owner-key, seed-demo or network-ping`);
+    console.error(`unknown command ${command}; use create-owner-key, seed-demo, seed-surfingdog or network-ping`);
     process.exit(2);
   }
   process.exit(0);
