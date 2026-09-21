@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Inbox Kit</title>
+<style id="kit-fonts">
+@font-face { font-family: "Manrope Variable"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("../fonts/manrope-latin-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Manrope Variable"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("../fonts/manrope-latin-ext-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Plus Jakarta Sans Variable"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("../fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Plus Jakarta Sans Variable"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("../fonts/plus-jakarta-sans-latin-ext-wght-normal.woff2") format("woff2-variations"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+</style>
+<link rel="stylesheet" href="./kit.css" />
+<style id="kit-layout">
+/* Layout of the kit page itself. Product screens do not use these classes. */
+html, body { margin: 0; min-height: 100%; }
+body { background: var(--ground); padding-inline: 0; }
+.kit-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; border-left: 0; border-right: 0; border-top: 0; border-radius: 0; }
+.kit-bar h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: 0; }
+.kit-bar .sp { flex: 1; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9999px; background: var(--row-bg); border: 1px solid var(--hairline); }
+.seg button { height: 28px; padding: 0 12px; border-radius: 9999px; border: 1px solid transparent; background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--glass-bg-strong); border-color: var(--glass-border-strong); color: var(--ink); }
+.stage { position: relative; min-height: 100vh; background: var(--ground); color: var(--ink); }
+.stage.grey { filter: grayscale(1); }
+.kit { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding-block: 28px 120px; padding-inline: 16px; }
+.lede { max-width: 66ch; color: var(--ink-2); font-size: 15px; }
+.sec { margin-top: 56px; }
+.sec > h2 { font-size: 22px; margin: 0 0 4px; }
+.sec > p.note { max-width: 66ch; margin: 0 0 18px; color: var(--ink-2); font-size: 13.5px; }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+.demo { padding: 20px; border-radius: var(--radius-panel); }
+.demo + .demo { margin-top: 16px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.stack { display: grid; gap: 12px; }
+.rowx { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.swatch { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; padding: 12px; border-radius: var(--radius-md); }
+.swatch i { display: block; width: 40px; height: 40px; border-radius: 12px; }
+.swatch b { display: block; font-weight: 600; font-size: 13.5px; }
+.swatch small { display: block; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.k { font-size: 12px; color: var(--ink-3); }
+.type-sample h1 { font-size: 34px; margin: 0 0 6px; }
+.type-sample h2 { font-size: 24px; margin: 18px 0 4px; }
+.type-sample h3 { font-size: 17px; margin: 14px 0 4px; }
+.type-sample p { max-width: 66ch; margin: 0; }
+.money { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 24px; max-width: 420px; font-variant-numeric: tabular-nums; }
+.money span:nth-child(3n+2), .money span:nth-child(3n+3) { text-align: right; }
+.money .tot { font-weight: 600; color: var(--ink); border-top: 1px solid var(--hairline); padding-top: 6px; }
+.hr { height: 1px; background: var(--hairline); margin: 14px 0; }
+.scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.inbox { display: grid; grid-template-columns: 208px 348px minmax(0, 1fr); min-width: 980px; height: 600px; border-radius: var(--radius-sheet); overflow: hidden; }
+.inbox > * { min-height: 0; }
+.rail { padding: 16px 12px; border-right: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 6px; }
+.rail .h { display: flex; align-items: center; gap: 8px; padding: 6px 8px 14px; font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.rail a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; color: var(--ink-2); text-decoration: none; font-size: 13.5px; font-weight: 500; }
+.rail a[aria-current="true"] { background: var(--glass-bg-strong); border: 1px solid var(--glass-border-strong); color: var(--ink); }
+.rail a .n { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.rail .foot { margin-top: auto; display: grid; gap: 6px; }
+.list { padding: 14px 12px; border-right: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.list .top { display: flex; align-items: center; gap: 8px; padding: 0 2px 8px; }
+.list .top h3 { margin: 0; font-size: 16px; flex: 1; }
+.row .t { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.row .t b { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .s { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .m { display: grid; justify-items: end; gap: 4px; }
+.row .m time { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.detail { padding: 18px 22px; overflow: auto; display: grid; gap: 16px; align-content: start; }
+.card { padding: 18px 20px; border-radius: var(--radius-panel); }
+.card .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.card h3 { margin: 0; font-size: 20px; flex-basis: 100%; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 20px; margin: 14px 0 18px; }
+.fields dt { font-size: 11.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.03em; text-transform: uppercase; }
+.fields dd { margin: 2px 0 0; font-size: 14px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.msg { display: grid; grid-template-columns: 32px 1fr; gap: 10px; }
+.msg .b { padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.5; }
+.msg .who { font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
+.phone { position: relative; width: 390px; max-width: 100%; height: 760px; margin: 0 auto; border-radius: 40px; overflow: hidden; }
+.phone .screen { position: absolute; inset: 0; padding: 54px 16px 0; overflow: auto; display: grid; gap: 12px; align-content: start; }
+.phone .bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 14px 28px; display: grid; grid-template-columns: 1fr auto auto; gap: 8px; border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0; }
+.phone .status { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.phone .notch { position: absolute; top: 12px; left: 50%; width: 118px; height: 30px; transform: translateX(-50%); border-radius: 20px; background: var(--ink); opacity: 0.9; }
+.center { display: grid; place-items: center; text-align: center; gap: 10px; }
+.toast { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 14px; max-width: 460px; }
+.toast .x { flex: 1; font-size: 13.5px; }
+.toast .x small { display: block; color: var(--ink-3); font-size: 12px; }
+.icon { width: 18px; height: 18px; flex: none; }
+ul.rules { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13.5px; max-width: 70ch; }
+ul.rules li + li { margin-top: 6px; }
+.both { display: grid; grid-template-columns: 1fr 1fr; }
+.both .pane { position: relative; overflow: hidden; background: var(--ground); color: var(--ink); }
+.both .pane .stage { min-height: auto; }
+@media (max-width: 900px) { .both { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<!-- kit:start -->
+<svg hidden aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5.5" width="16" height="14" rx="3"/><path d="M4 10h16M8 3.5v4M16 3.5v4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6" width="17" height="12" rx="3"/><path d="M4 8l8 5 8-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 14h6l-1 7 9-12h-6z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l2.2-7A2 2 0 0 1 8.1 4.5h7.8a2 2 0 0 1 1.9 1.5L20 13v4a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17z"/><path d="M4 13h4.5l1.5 2.5h4l1.5-2.5H20"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M15 7l2.5 2.5M17.5 4.5L20 7"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+</svg>
+
+<header class="kit-bar glass">
+  <h1>Surfing Dog Inbox · kit 0.1</h1>
+  <span class="k">Every component in both themes. Approve this before any screen is built.</span>
+  <span class="sp"></span>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" data-set-theme="system" aria-pressed="true">System</button>
+    <button type="button" data-set-theme="light" aria-pressed="false">Day</button>
+    <button type="button" data-set-theme="dark" aria-pressed="false">Night</button>
+    <button type="button" data-set-theme="both" aria-pressed="false">Both</button>
+  </div>
+  <label class="check" style="font-size:12.5px"><input type="checkbox" id="grey" /> Greyscale test</label>
+</header>
+
+<div id="stage-host">
+<div class="stage" id="stage">
+  <div class="sky" aria-hidden="true"><i class="f1"></i><i class="f2"></i><i class="f3"></i><i class="f4"></i></div>
+  <main class="kit">
+
+    <p class="lede">The colour is in the light behind the glass, not in the interface. Three or four soft fields sit fixed behind everything; the chrome stays quiet and nearly neutral and picks up colour only through the blur. Colour has jobs: item types, states, and nothing else. A greyscale screenshot must still read perfectly.</p>
+
+    <!-- 1. Light and colour -->
+    <section class="sec">
+      <h2>Light behind the glass</h2>
+      <p class="note">Six accents from an 80s surf brand palette, each with one job. They appear as 8px dots, 2px rules and soft tinted pills at 12 to 16% alpha. Never large fills, never coloured body text.</p>
+      <div class="grid">
+        <div class="swatch glass"><i style="background:var(--flamingo)"></i><div><b>Flamingo</b><small>#ff6fa8 · booking</small></div></div>
+        <div class="swatch glass"><i style="background:var(--violet)"></i><div><b>Violet</b><small>#8a6bff · quote</small></div></div>
+        <div class="swatch glass"><i style="background:var(--lagoon)"></i><div><b>Lagoon</b><small>#25cfe0 · message</small></div></div>
+        <div class="swatch glass"><i style="background:var(--tangerine)"></i><div><b>Tangerine</b><small>#ff9650 · order</small></div></div>
+        <div class="swatch glass"><i style="background:var(--sun)"></i><div><b>Sun</b><small>#ffcf5c · refund, warning</small></div></div>
+        <div class="swatch glass"><i style="background:var(--palm)"></i><div><b>Palm</b><small>#2fd3a5 · success</small></div></div>
+        <div class="swatch glass"><i style="background:var(--danger)"></i><div><b>Danger</b><small>#e5484d · destructive only</small></div></div>
+        <div class="swatch glass"><i style="background:var(--ink);border:1px solid var(--hairline)"></i><div><b>Ink</b><small>text, primary button</small></div></div>
+        <div class="swatch glass"><i style="background:var(--ink-2)"></i><div><b>Ink 2</b><small>secondary text</small></div></div>
+        <div class="swatch glass"><i style="background:var(--ink-3)"></i><div><b>Ink 3</b><small>hints, meta, dots at rest</small></div></div>
+        <div class="swatch glass"><i style="background:var(--ground);border:1px solid var(--hairline)"></i><div><b>Ground</b><small>day #f6f5ff · night #0d0e26</small></div></div>
+        <div class="swatch glass"><i style="background:var(--glass-bg);border:1px solid var(--glass-border)"></i><div><b>Glass</b><small>white 32% · blur 26px · sat 150%</small></div></div>
+      </div>
+    </section>
+
+    <!-- 2. Type -->
+    <section class="sec">
+      <h2>Type</h2>
+      <p class="note">Plus Jakarta Sans for headings at medium weight, slightly tight. Manrope for body and UI at 14.5px. Sentence case everywhere. Tabular numerals for money and times.</p>
+      <div class="demo glass type-sample">
+        <h1>Confirm the booking for Tuesday</h1>
+        <p>Rita asked for a full service on her city bike. The slot is free, the price is under your auto-confirm limit, and she has booked with you twice before.</p>
+        <h2>What agents see</h2>
+        <p>Small, typed, cacheable responses. A validation error names the exact missing field so an agent can fix it and retry in one step.</p>
+        <h3>Money and times line up</h3>
+        <div class="money" style="margin-top:8px">
+          <span>Full service, city bike</span><span>1 ×</span><span>€45.00</span>
+          <span>Brake pads, front and rear</span><span>2 ×</span><span>€12.90</span>
+          <span>Chain, 9-speed</span><span>1 ×</span><span>€18.50</span>
+          <span class="tot">Total</span><span class="tot"></span><span class="tot">€89.30</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Buttons -->
+    <section class="sec">
+      <h2>Buttons</h2>
+      <p class="note">Named after what they do, and the confirmation uses the same word. The valid next transitions of an item are its primary buttons. The only filled button is ink.</p>
+      <div class="demo glass stack">
+        <div class="rowx">
+          <button class="btn btn-primary"><svg class="icon"><use href="#i-check"/></svg>Confirm booking</button>
+          <button class="btn btn-secondary"><svg class="icon"><use href="#i-clock"/></svg>Propose another time</button>
+          <button class="btn btn-ghost">Add a note</button>
+          <button class="btn btn-danger">Decline</button>
+        </div>
+        <div class="rowx">
+          <button class="btn btn-primary btn-sm">Accept quote</button>
+          <button class="btn btn-secondary btn-sm">Ask for details</button>
+          <button class="btn btn-ghost btn-sm">Later</button>
+          <button class="btn btn-danger btn-sm">Decline</button>
+          <button class="btn btn-secondary btn-sm btn-icon" aria-label="Add"><svg class="icon"><use href="#i-plus"/></svg></button>
+        </div>
+        <div class="rowx">
+          <button class="btn btn-primary btn-lg">Go live</button>
+          <button class="btn btn-secondary btn-lg"><span class="spinner" aria-hidden="true"></span>Sending confirmation</button>
+          <button class="btn btn-primary" disabled>Confirm booking</button>
+          <button class="btn btn-secondary btn-icon" aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Pills, dots, rules -->
+    <section class="sec">
+      <h2>Item types and states</h2>
+      <p class="note">Type pills carry the dot. State pills carry meaning: success, warning, danger. Neutral pills count and label.</p>
+      <div class="demo glass stack">
+        <div class="rowx">
+          <span class="pill tint-message"><i class="dot dot-message"></i>Message</span>
+          <span class="pill tint-quote"><i class="dot dot-quote"></i>Quote</span>
+          <span class="pill tint-booking"><i class="dot dot-booking"></i>Booking</span>
+          <span class="pill tint-order"><i class="dot dot-order"></i>Order</span>
+          <span class="pill tint-refund"><i class="dot dot-refund"></i>Refund</span>
+        </div>
+        <div class="rowx">
+          <span class="pill tint-success"><svg class="icon" style="width:12px;height:12px"><use href="#i-check"/></svg>Confirmed</span>
+          <span class="pill tint-warning">Needs info</span>
+          <span class="pill tint-danger">Declined</span>
+          <span class="pill">Open</span>
+          <span class="pill">Requested</span>
+          <span class="pill"><i class="dot"></i>Sandbox</span>
+          <span class="pill">12</span>
+          <span class="pill pill-lg tint-booking"><i class="dot dot-booking"></i>Booking · Tue 14:00</span>
+        </div>
+        <div class="rowx" style="gap:18px">
+          <span class="rule rule-message" style="width:64px"></span>
+          <span class="rule rule-quote" style="width:64px"></span>
+          <span class="rule rule-booking" style="width:64px"></span>
+          <span class="rule rule-order" style="width:64px"></span>
+          <span class="rule rule-refund" style="width:64px"></span>
+          <span class="k">2px rules: timeline ends, active tab, card edge</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Fields -->
+    <section class="sec">
+      <h2>Fields</h2>
+      <p class="note">Glass inputs. 16px on phones so iOS does not zoom. Errors say what is wrong and how to fix it.</p>
+      <div class="demo glass">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+          <div>
+            <label class="label" for="f-name">Name</label>
+            <input class="input" id="f-name" value="Rita Amaral" />
+          </div>
+          <div>
+            <label class="label" for="f-email">Email</label>
+            <input class="input" id="f-email" value="rita@amaral" aria-invalid="true" aria-describedby="f-email-err" />
+            <div class="hint error" id="f-email-err">That address is missing a domain, like rita@amaral.pt</div>
+          </div>
+          <div>
+            <label class="label" for="f-service">Service</label>
+            <select class="input" id="f-service"><option>Full service, city bike · €45</option><option>Puncture repair · €12</option><option>Custom build · on quote</option></select>
+          </div>
+          <div>
+            <label class="label" for="f-when">When <span class="opt">· optional</span></label>
+            <input class="input" id="f-when" value="Tue 23 Sep, 14:00" />
+            <div class="hint">Slots are 90 minutes. Next free: Tue 14:00, Wed 09:30.</div>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="label" for="f-notes">Notes</label>
+            <textarea class="input" id="f-notes">Brakes squeak at low speed. Please check the rear wheel, it wobbles a little.</textarea>
+          </div>
+          <label class="check"><input type="checkbox" id="f-mail" checked /> Send a confirmation by email</label>
+          <label class="check"><span class="switch"><input type="checkbox" id="f-auto" checked /><span></span></span> Auto-confirm bookings under €50</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Surfaces -->
+    <section class="sec">
+      <h2>Surfaces</h2>
+      <p class="note">Only nav, panels and sheets are true glass. List rows are translucent without blur. Never stack more than two blurred layers. Tile radius 10px, panels 16px, sheets 20px, pills full.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        <div class="demo glass">
+          <div class="eyebrow">glass</div>
+          <p style="margin:0;color:var(--ink-2)">Cards and panels. White at 32%, 1px border at 55%, blur 26px with 150% saturation, a soft low shadow with an inset highlight.</p>
+        </div>
+        <div class="demo glass-strong">
+          <div class="eyebrow">glass-strong</div>
+          <p style="margin:0;color:var(--ink-2)">Sheets, dialogs and the sign-in card. White at 44%, border at 60%. Use when text needs to sit on top of busy content.</p>
+        </div>
+        <div class="stack">
+          <div class="eyebrow">rows, no blur</div>
+          <div class="row"><i class="dot dot-booking"></i><div><div class="t"><b>Rita Amaral</b><span class="pill tint-booking" style="height:20px;font-size:11px">Booking</span></div><div class="s">Full service, city bike · Tue 14:00</div></div><div class="m"><time>2m</time></div></div>
+          <div class="row" data-selected="true"><i class="dot dot-order"></i><div><div class="t"><b>Agent for Luís Costa</b></div><div class="s">2 × Schwalbe Marathon 700×35 · €78.40</div></div><div class="m"><time>18m</time></div></div>
+          <div class="row"><i class="dot dot-message"></i><div><div class="t"><b>Tomás Pereira</b></div><div class="s">Do you fix e-bike batteries?</div></div><div class="m"><time>3h</time></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. The inbox, desktop -->
+    <section class="sec" id="inbox-desktop">
+      <h2>The inbox, desktop</h2>
+      <p class="note">Three panes: filters rail, item list, item detail. The detail shows the typed card first, with its state and the valid next transitions as the primary buttons, then the conversation and the event timeline.</p>
+      <div class="scroller">
+      <div class="inbox glass">
+        <aside class="rail">
+          <div class="h"><svg class="icon"><use href="#i-inbox"/></svg>Oficina Maré</div>
+          <a href="#inbox-desktop" aria-current="true"><span>Needs you</span><span class="n">3</span></a>
+          <a href="#inbox-desktop"><span>All</span><span class="n">14</span></a>
+          <a href="#inbox-desktop"><span><i class="dot dot-booking" style="margin-right:8px"></i>Bookings</span><span class="n">6</span></a>
+          <a href="#inbox-desktop"><span><i class="dot dot-order" style="margin-right:8px"></i>Orders</span><span class="n">4</span></a>
+          <a href="#inbox-desktop"><span><i class="dot dot-quote" style="margin-right:8px"></i>Quotes</span><span class="n">2</span></a>
+          <a href="#inbox-desktop"><span><i class="dot dot-message" style="margin-right:8px"></i>Messages</span><span class="n">2</span></a>
+          <a href="#inbox-desktop"><span>Done</span><span class="n">41</span></a>
+          <div class="foot">
+            <span class="pill"><i class="dot dot-success"></i>Rules on</span>
+            <span class="pill"><i class="dot"></i>Test mode off</span>
+          </div>
+        </aside>
+        <section class="list">
+          <div class="top"><h3>Needs you</h3><button class="btn btn-secondary btn-sm btn-icon" aria-label="Search"><svg class="icon"><use href="#i-search"/></svg></button></div>
+          <div class="row" data-selected="true"><i class="dot dot-booking"></i><div><div class="t"><b>Rita Amaral</b></div><div class="s">Full service, city bike · Tue 14:00</div></div><div class="m"><span class="pill" style="height:20px;font-size:11px">Requested</span><time>2m</time></div></div>
+          <div class="row"><i class="dot dot-order"></i><div><div class="t"><b>Agent for Luís Costa</b></div><div class="s">2 × Schwalbe Marathon 700×35 · €78.40</div></div><div class="m"><span class="pill" style="height:20px;font-size:11px">Received</span><time>18m</time></div></div>
+          <div class="row"><i class="dot dot-quote"></i><div><div class="t"><b>Mariana Lopes</b></div><div class="s">Custom gravel build, Shimano GRX</div></div><div class="m"><span class="pill tint-warning" style="height:20px;font-size:11px">Needs info</span><time>1h</time></div></div>
+          <div class="row"><i class="dot dot-message"></i><div><div class="t"><b>Tomás Pereira</b></div><div class="s">Do you fix e-bike batteries?</div></div><div class="m"><span class="pill" style="height:20px;font-size:11px">Open</span><time>3h</time></div></div>
+          <div class="row"><i class="dot dot-booking"></i><div><div class="t"><b>Agent for Ana Ferreira</b></div><div class="s">Puncture repair · Wed 09:30</div></div><div class="m"><span class="pill tint-success" style="height:20px;font-size:11px">Confirmed</span><time>yesterday</time></div></div>
+        </section>
+        <section class="detail">
+          <div class="card glass">
+            <div class="head">
+              <span class="pill tint-booking"><i class="dot dot-booking"></i>Booking</span>
+              <span class="pill">Requested</span>
+              <span class="pill tint-warning">Needs you</span>
+              <h3>Full service, city bike</h3>
+            </div>
+            <dl class="fields">
+              <div><dt>When</dt><dd>Tue 23 Sep · 14:00–15:30</dd></div>
+              <div><dt>Customer</dt><dd>Rita Amaral</dd></div>
+              <div><dt>Price</dt><dd>€45.00</dd></div>
+              <div><dt>Via</dt><dd>Web form · verified email</dd></div>
+              <div><dt>History</dt><dd>2 bookings, showed up twice</dd></div>
+              <div><dt>Slot</dt><dd>Free · 1 of 2 bays</dd></div>
+            </dl>
+            <div class="actions">
+              <button class="btn btn-primary"><svg class="icon"><use href="#i-check"/></svg>Confirm booking</button>
+              <button class="btn btn-secondary"><svg class="icon"><use href="#i-clock"/></svg>Propose another time</button>
+              <button class="btn btn-danger">Decline</button>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="eyebrow">Conversation</div>
+            <div class="msg"><span class="avatar">RA</span><div><div class="who">Rita · via web form · 14:02</div><div class="b row-glass">Brakes squeak at low speed. Please check the rear wheel, it wobbles a little.</div></div></div>
+            <div class="msg"><span class="avatar" style="background:color-mix(in srgb,var(--ink) 8%,transparent)">OM</span><div><div class="who">Draft · not sent</div><div class="b row-glass" style="color:var(--ink-2)">Thanks Rita, Tuesday at 14:00 works. We will check the wheel too.</div></div></div>
+          </div>
+          <div class="stack">
+            <div class="eyebrow">Timeline</div>
+            <div class="timeline">
+              <div class="event"><i class="dot dot-booking"></i><span><b>Requested</b> by Rita through the web form</span><time>14:02</time></div>
+              <div class="event"><i class="dot"></i><span>Rule <b>auto-confirm under €50</b> skipped: two bays already held at 14:00 by another rule</span><time>14:02</time></div>
+              <div class="event"><i class="dot dot-warning"></i><span>Flagged <b>needs you</b></span><time>14:02</time></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      </div>
+    </section>
+
+    <!-- 8. Mobile -->
+    <section class="sec">
+      <h2>The inbox, phone</h2>
+      <p class="note">Single column, bottom action bar within the safe-area insets, one-thumb approve. Same words as the desktop buttons.</p>
+      <div class="phone glass-strong">
+        <div class="status"><span>14:02</span><span>●●● ▲</span></div>
+        <div class="notch" aria-hidden="true"></div>
+        <div class="screen">
+          <div class="rowx" style="justify-content:space-between">
+            <span class="pill tint-booking"><i class="dot dot-booking"></i>Booking</span>
+            <span class="pill tint-warning">Needs you</span>
+          </div>
+          <h3 style="margin:0;font-size:22px">Full service, city bike</h3>
+          <dl class="fields" style="margin:4px 0 0">
+            <div><dt>When</dt><dd>Tue 23 Sep · 14:00–15:30</dd></div>
+            <div><dt>Customer</dt><dd>Rita Amaral</dd></div>
+            <div><dt>Price</dt><dd>€45.00</dd></div>
+            <div><dt>Slot</dt><dd>Free · 1 of 2 bays</dd></div>
+          </dl>
+          <div class="msg"><span class="avatar">RA</span><div><div class="who">Rita · 14:02</div><div class="b row-glass">Brakes squeak at low speed. Please check the rear wheel, it wobbles a little.</div></div></div>
+          <div class="timeline" style="margin-top:4px">
+            <div class="event"><i class="dot dot-booking"></i><span><b>Requested</b> via web form</span><time>14:02</time></div>
+            <div class="event"><i class="dot dot-warning"></i><span>Flagged <b>needs you</b></span><time>14:02</time></div>
+          </div>
+        </div>
+        <div class="bar glass-strong">
+          <button class="btn btn-primary btn-lg" style="width:100%"><svg class="icon"><use href="#i-check"/></svg>Confirm booking</button>
+          <button class="btn btn-secondary btn-lg btn-icon" style="width:44px" aria-label="Propose another time"><svg class="icon"><use href="#i-clock"/></svg></button>
+          <button class="btn btn-danger btn-lg btn-icon" style="width:44px" aria-label="Decline"><svg class="icon"><use href="#i-x"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. The sun -->
+    <section class="sec">
+      <h2>The signature, in its three places</h2>
+      <p class="note">One retro striped sun: tangerine to flamingo to violet, cut by stripes in the ground colour. It appears on onboarding and login, on the empty inbox, and in the marketing hero. Nowhere else.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <div class="demo glass center" style="padding:40px 20px">
+          <div class="sun"></div>
+          <h3 style="margin:8px 0 0;font-size:18px">No requests yet</h3>
+          <p style="margin:0;max-width:34ch;color:var(--ink-2)">Share your inbox address, or run a test agent against it to see what arrives.</p>
+          <div class="rowx" style="justify-content:center;margin-top:6px">
+            <button class="btn btn-primary btn-sm"><svg class="icon"><use href="#i-bolt"/></svg>Test as an agent</button>
+            <button class="btn btn-secondary btn-sm">Copy address</button>
+          </div>
+        </div>
+        <div class="demo glass-strong" style="max-width:420px;padding:28px 24px">
+          <div class="sun sun-sm" style="margin-bottom:14px"></div>
+          <h3 style="margin:0 0 4px;font-size:20px">Sign in to Oficina Maré</h3>
+          <p style="margin:0 0 16px;color:var(--ink-2)">Use your passkey, or get a link by email.</p>
+          <div class="stack">
+            <button class="btn btn-primary btn-lg" style="width:100%"><svg class="icon"><use href="#i-key"/></svg>Continue with passkey</button>
+            <div class="hr" style="margin:6px 0"></div>
+            <label class="label" for="l-email">Email</label>
+            <input class="input" id="l-email" placeholder="you@oficinamare.pt" />
+            <button class="btn btn-secondary btn-lg" style="width:100%"><svg class="icon"><use href="#i-mail"/></svg>Email me a link</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10. Feedback -->
+    <section class="sec">
+      <h2>Feedback and navigation</h2>
+      <p class="note">A confirmation uses the same word as the button. Empty and error states give direction, not mood. Motion only in response to user action.</p>
+      <div class="demo glass stack">
+        <div class="toast glass-strong"><i class="dot dot-success"></i><div class="x">Booking confirmed<small>Rita will get an email in Portuguese. Slot held at Tue 14:00.</small></div><button class="btn btn-ghost btn-sm">Undo</button></div>
+        <div class="toast glass-strong"><i class="dot dot-danger"></i><div class="x">Could not send the email<small>The mail provider refused the message. Check the sender domain in Settings.</small></div><button class="btn btn-secondary btn-sm">Open settings</button></div>
+        <div class="rowx">
+          <div class="tabs" role="tablist">
+            <button class="tab" role="tab" aria-selected="true">Details</button>
+            <button class="tab" role="tab" aria-selected="false">Conversation</button>
+            <button class="tab" role="tab" aria-selected="false">Timeline <span class="k">3</span></button>
+          </div>
+          <span class="avatar">RA</span><span class="avatar">LC</span><span class="avatar">AI</span>
+        </div>
+        <div class="stack" style="max-width:520px">
+          <div class="row"><i class="dot"></i><div><div class="skeleton" style="height:12px;width:55%"></div><div class="skeleton" style="height:10px;width:80%;margin-top:8px"></div></div><div class="skeleton" style="height:10px;width:28px"></div></div>
+          <div class="row"><i class="dot"></i><div><div class="skeleton" style="height:12px;width:40%"></div><div class="skeleton" style="height:10px;width:70%;margin-top:8px"></div></div><div class="skeleton" style="height:10px;width:28px"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11. Guardrails -->
+    <section class="sec">
+      <h2>Guardrails</h2>
+      <ul class="rules">
+        <li>At most two stacked backdrop-filter layers. List rows are translucent without blur. Only nav, panels and sheets are true glass, with an @supports fallback.</li>
+        <li>Colour never fills a surface and never colours body text. Item types are dots, rules and tinted pills. States are palm, sun and #e5484d, the last for destructive actions only.</li>
+        <li>WCAG AA on glass in both themes: every tinted pill uses a text-safe ink, and the primary button is ink on white by day, white on ink by night.</li>
+        <li>Motion only in response to user action. Reduced motion is respected. The light fields are static.</li>
+        <li>The greyscale test in the top bar removes all hue. If a screen stops reading, the colour was doing a job it should not have.</li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+</div>
+
+<script>
+(() => {
+  var root = document.documentElement;
+  var host = document.getElementById("stage-host");
+  var stage = document.getElementById("stage");
+  var buttons = document.querySelectorAll("[data-set-theme]");
+  var grey = document.getElementById("grey");
+  var both = null;
+
+  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  function setTheme(mode) {
+    buttons.forEach((b) => { b.setAttribute("aria-pressed", String(b.getAttribute("data-set-theme") === mode)); });
+    if (mode === "both") {
+      if (!both) {
+        both = document.createElement("div");
+        both.className = "both";
+        ["light", "dark"].forEach((t) => {
+          var pane = document.createElement("div");
+          pane.className = "pane";
+          pane.setAttribute("data-theme", t);
+          var clone = stage.cloneNode(true);
+          clone.removeAttribute("id");
+          clone.querySelectorAll("[id]").forEach((el) => { el.removeAttribute("id"); });
+          pane.appendChild(clone);
+          both.appendChild(pane);
+        });
+        host.appendChild(both);
+      }
+      stage.hidden = true;
+      both.hidden = false;
+      root.removeAttribute("data-theme");
+    } else {
+      if (both) both.hidden = true;
+      stage.hidden = false;
+      if (mode === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", mode);
+    }
+    applyGrey();
+    store("kit-theme", mode);
+  }
+  function applyGrey() {
+    var on = grey.checked;
+    document.querySelectorAll(".stage").forEach((s) => { s.classList.toggle("grey", on); });
+    store("kit-grey", on ? "1" : "0");
+  }
+  buttons.forEach((b) => { b.addEventListener("click", () => { setTheme(b.getAttribute("data-set-theme")); }); });
+  grey.addEventListener("change", applyGrey);
+  document.addEventListener("click", (e) => {
+    var tab = e.target.closest?.(".tab");
+    if (tab) { tab.parentNode.querySelectorAll(".tab").forEach((t) => { t.setAttribute("aria-selected", String(t === tab)); }); }
+  });
+  var saved = load("kit-theme");
+  if (load("kit-grey") === "1") grey.checked = true;
+  setTheme(saved && /^(system|light|dark|both)$/.test(saved) ? saved : "system");
+})();
+</script>
+<!-- kit:end -->
+</body>
+</html>

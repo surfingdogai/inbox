@@ -1,0 +1,68 @@
+/**
+ * @surfingdog/platform — the five seams between the core and a runtime.
+ * Cloudflare: D1 or Durable Object SQLite · R2 · Queues + Cron · Email Workers · Email Service.
+ * Node/Bun:   node:sqlite / bun:sqlite · S3-compatible or a directory · SQLite job table · provider webhook · Resend/Postmark/SMTP.
+ * Draft signatures; a later design pass finalises them.
+ */
+
+export interface Statement {
+  sql: string;
+  params?: readonly unknown[];
+}
+
+/** SQLite-shaped. No interactive transactions anywhere: `batch` is the only atomic multi-statement write. */
+export interface Db {
+  query<Row = Record<string, unknown>>(stmt: Statement): Promise<Row[]>;
+  run(stmt: Statement): Promise<{ changes: number }>;
+  batch(stmts: readonly Statement[]): Promise<void>;
+}
+
+export interface Blob {
+  put(key: string, body: ReadableStream | ArrayBuffer | string, meta?: { contentType?: string }): Promise<void>;
+  get(key: string): Promise<{ body: ReadableStream; contentType?: string } | null>;
+  delete(key: string): Promise<void>;
+}
+
+export interface JobSpec {
+  kind: string;
+  payload: unknown;
+  idempotencyKey?: string;
+}
+
+export interface Jobs {
+  enqueue(job: JobSpec, opts?: { delaySeconds?: number }): Promise<void>;
+}
+
+export interface OutboundMail {
+  from: { address: string; name?: string };
+  to: string[];
+  replyTo?: string;
+  subject: string;
+  text: string;
+  html?: string;
+  headers?: Record<string, string>;
+}
+
+export interface MailOut {
+  send(mail: OutboundMail): Promise<{ messageId: string }>;
+}
+
+/** Raw inbound MIME, however it arrived (Email Worker, provider webhook, forward). */
+export interface RawMail {
+  envelopeFrom: string;
+  envelopeTo: string;
+  raw: ReadableStream | ArrayBuffer;
+  receivedAt: Date;
+}
+
+export interface MailIn {
+  onMessage(handler: (mail: RawMail) => Promise<void>): void;
+}
+
+export interface Platform {
+  db: Db;
+  blob: Blob;
+  jobs: Jobs;
+  mailOut: MailOut;
+  now(): Date;
+}

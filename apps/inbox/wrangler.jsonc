@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "surfingdog-inbox",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  // The SPA and public files. API, MCP and discovery paths are answered by the Worker first.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/.well-known/*", "/healthz"]
+  },
+  // One business = one database. The Deploy button provisions these from the names below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "surfingdog-inbox",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "surfingdog-inbox-blobs" }],
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "surfingdog-inbox-jobs" }],
+    "consumers": [{ "queue": "surfingdog-inbox-jobs", "max_batch_size": 10, "max_retries": 3 }]
+  },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": { "INBOX_ENV": "development" }
+}

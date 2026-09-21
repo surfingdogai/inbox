@@ -5,7 +5,9 @@
   "description": "Surfing Dog Inbox — an open-source, self-hostable typed inbox for businesses: messages, quotes, bookings and orders from people and AI agents.",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.3.0",
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": "^22.16 || ^24 || >=26"
+  },
   "scripts": {
     "check": "biome check .",
     "fix": "biome check --write .",

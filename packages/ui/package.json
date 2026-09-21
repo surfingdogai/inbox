@@ -1,0 +1,22 @@
+{
+  "name": "@surfingdog/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "Design tokens, glass utilities and the kit page for Surfing Dog Inbox.",
+  "exports": {
+    "./index.css": "./src/index.css"
+  },
+  "scripts": {
+    "kit": "tailwindcss -i src/index.css -o dist/kit/kit.css --minify && node scripts/build-kit.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3"
+  }
+}

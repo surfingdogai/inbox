@@ -2,6 +2,11 @@ packages:
   - apps/*
   - packages/*
 
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  workerd: true
+
 # One version of the shared libraries for the whole monorepo.
 catalog:
   hono: ^4.13.8
@@ -9,3 +14,15 @@ catalog:
   vitest: ^4.1.11
   typescript: ^5.9.3
   "@types/node": ^26.6.2
+
+minimumReleaseAgeExclude:
+  - '@cloudflare/vitest-plugin@1.2.0'
+  - '@cloudflare/workerd-darwin-64@1.20260921.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20260921.1'
+  - '@cloudflare/workerd-linux-64@1.20260921.1'
+  - '@cloudflare/workerd-linux-arm64@1.20260921.1'
+  - '@cloudflare/workerd-windows-64@1.20260921.1'
+  - miniflare@5.20260921.0-alpha
+  - workerd@1.20260921.1
+  - wrangler@4.136.0
+
