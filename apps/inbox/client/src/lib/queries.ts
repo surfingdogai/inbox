@@ -167,6 +167,14 @@ export function useSaveWeekly() {
   });
 }
 
+export function useClearOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (serviceId: string) => api.clearOverride(serviceId),
+    onSuccess: (data) => qc.setQueryData(qk.availability, data),
+  });
+}
+
 export function useSaveClosures() {
   const qc = useQueryClient();
   return useMutation({
