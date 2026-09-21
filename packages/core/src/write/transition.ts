@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import { type Item, type ItemType, payloadSchemas } from "../domain/types";
 import { ulid } from "../ids";
 import { resolveTransition, type Transition } from "../machine/machine";
-import { machines } from "../machine/tables";
+import { machines, noteInput } from "../machine/tables";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { hashJson, hashText } from "../util/canonical";
@@ -99,7 +99,8 @@ async function attempt_(
     }
   }
   const t = resolved.transition;
-  const parsedInput = t.input ? t.input.safeParse(input.input ?? {}) : { success: true as const, data: {} };
+  // Every transition takes an optional note; some take more.
+  const parsedInput = (t.input ?? noteInput).safeParse(input.input ?? {});
   if (!parsedInput.success) throw fromZod(parsedInput.error, "input");
   const data = parsedInput.data as Record<string, unknown>;
 
