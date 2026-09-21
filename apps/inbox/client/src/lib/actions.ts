@@ -6,10 +6,15 @@ import type { Money } from "./types";
  */
 export type ButtonTone = "primary" | "secondary" | "danger";
 
-const DANGER_EVENTS = new Set(["decline", "reject", "mark_spam"]);
+const DANGER_EVENTS = new Set(["decline", "reject", "mark_spam", "no_show"]);
 
 export function isDanger(event: string): boolean {
   return DANGER_EVENTS.has(event) || event.startsWith("cancel");
+}
+
+/** The API ranks the happy path first; whatever the ranking, destructive actions come last. */
+export function orderActions<T extends { readonly event: string }>(transitions: readonly T[]): T[] {
+  return [...transitions.filter((t) => !isDanger(t.event)), ...transitions.filter((t) => isDanger(t.event))];
 }
 
 /** Buttons in the order the API gives them: the first non-destructive one is primary. */

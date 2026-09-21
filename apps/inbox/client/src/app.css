@@ -887,3 +887,196 @@ textarea.json-editor {
     grid-column: 1 / -1;
   }
 }
+
+/* Rows: who and what on up to two lines, the time on the right, the state at the end. */
+.row-text {
+  min-width: 0;
+}
+.row-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.row-line .who {
+  font-weight: 600;
+}
+.row-line .s {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.row-line .glyph {
+  display: inline-block;
+  margin-left: 3px;
+  vertical-align: -1px;
+  color: var(--ink-3);
+}
+.row-line .glyph.verified {
+  color: var(--c-success-ink);
+}
+.row-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.row-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.row-when .dot {
+  position: relative;
+}
+
+/* The person (or agent) behind an item */
+.who-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 10px 0 2px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.who-line .name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.who-line a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
+}
+.who-line .sep {
+  color: var(--ink-3);
+}
+.who-line .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* Details disclosure under the actions */
+.details {
+  margin-top: 14px;
+}
+.details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  list-style: none;
+}
+.details summary::-webkit-details-marker {
+  display: none;
+}
+.details summary::before {
+  content: "\25B8";
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.details[open] summary::before {
+  content: "\25BE";
+}
+.details .fields {
+  margin: 10px 0 0;
+}
+.details .card-ref {
+  margin: 0;
+}
+
+/* Today: the first screen when nothing is open */
+.today {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+.today-date {
+  margin: 2px 0 0;
+  font-size: 22px;
+}
+.today-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.today-line {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: inherit;
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.today-line:hover {
+  background: var(--row-bg-hover);
+}
+.today-line .when {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.today-line .what {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.today-line .what b {
+  font-weight: 600;
+}
+.today-line .what span {
+  color: var(--ink-2);
+}
+
+/* 900–1279px: the rail collapses to icons, the list narrows, the detail keeps its room. */
+@media (min-width: 900px) and (max-width: 1279px) {
+  .inbox {
+    grid-template-columns: 64px 320px minmax(0, 1fr);
+  }
+  .rail {
+    gap: 4px;
+    padding: 16px 8px;
+  }
+  .rail .h {
+    justify-content: center;
+    padding: 6px 0 12px;
+  }
+  .rail .label,
+  .rail-link .n,
+  .rail .foot .pill {
+    display: none;
+  }
+  .rail-link {
+    justify-content: center;
+    padding: 10px 0;
+  }
+  .rail-link > span:first-child {
+    gap: 0;
+  }
+  .rail-link .dot {
+    width: 12px;
+    height: 12px;
+  }
+  .rail .foot {
+    justify-items: center;
+  }
+  .rail .seg {
+    flex-direction: column;
+    border-radius: 16px;
+  }
+  .detail {
+    padding: 16px 18px;
+  }
+}
