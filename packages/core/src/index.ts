@@ -13,6 +13,7 @@ export * from "./jobs/index";
 export * from "./machine/machine";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";
+export * from "./rules/index";
 export { MIGRATIONS } from "./schema/migrations.generated";
 export * from "./settings/schema";
 export * from "./write/index";

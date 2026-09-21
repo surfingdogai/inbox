@@ -88,9 +88,9 @@ export async function findSlots(
   return { service: { id: service.id, name: service.name, durationMin: service.durationMin }, slots };
 }
 
-type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };
+export type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };
 
-function localiser(timezone: string): Localiser {
+export function localiser(timezone: string): Localiser {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",
@@ -114,7 +114,7 @@ function localiser(timezone: string): Localiser {
   };
 }
 
-function withinOpening(local: Localiser, weekly: Weekly, start: number, end: number): boolean {
+export function withinOpening(local: Localiser, weekly: Weekly, start: number, end: number): boolean {
   const s = local(start);
   const e = local(end - 1);
   if (s.day !== e.day) return false;

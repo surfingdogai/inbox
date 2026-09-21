@@ -28,6 +28,8 @@ export interface TransitionInput {
   readonly reason?: string;
   /** Optimistic lock from the caller's last read; the write also checks against the current row. */
   readonly expectedVersion?: number;
+  /** For writes caused by another event (rules): keeps the chain and its depth. */
+  readonly causation?: { readonly id: string; readonly depth: number } | undefined;
 }
 
 export interface TransitionResult {
@@ -208,6 +210,8 @@ async function attempt_(
       reason: input.reason ?? null,
       diff: { state: [item.state, t.to], payload: changedKeys(item.payload as Record<string, unknown>, payload) },
       meta: { channel: caller.actor.channel, tier: caller.tier, input: data },
+      causationId: input.causation?.id ?? null,
+      depth: input.causation?.depth ?? 0,
       now,
     }),
   );
