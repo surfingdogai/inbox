@@ -102,14 +102,12 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
       margin-inline: 0 auto;
     }
   }
-  /* Each render sits on its theme's own ground; the edges dissolve into the page so no rectangle can show. */
+  /* Both files are keyed: the ground is cut out, so the art floats on whatever the page is. */
   .hero-art {
     display: block;
     width: 100%;
     height: auto;
     image-rendering: auto;
-    mask-image: radial-gradient(ellipse 58% 58% at 50% 52%, #000 52%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 58% 58% at 50% 52%, #000 52%, transparent 100%);
   }
   .hero-art.night {
     display: none;
