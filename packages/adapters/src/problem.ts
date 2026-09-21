@@ -3,8 +3,9 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 /**
- * Every refusal is an RFC 9457 problem document with the machine code, a human sentence, and the
- * exact fields to fix, so an agent can repair its request and retry once.
+ * Every refusal is an RFC 9457 problem document with the machine code and a human sentence. A
+ * refusal about the request itself also carries `fields`, so an agent can repair it and retry
+ * once; an auth, not-found or rate-limit refusal has no field to name and omits them.
  */
 export interface Problem {
   readonly type: string;

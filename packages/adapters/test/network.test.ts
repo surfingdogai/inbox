@@ -106,6 +106,27 @@ describe("network membership", () => {
     expect(net.calls).toEqual([]);
   });
 
+  it("uses the Inbox address from Settings when no base URL is injected", async () => {
+    const { db, caps } = await freshDb();
+    await caps.updateSettings(system, {
+      doc: { network: { join: true }, notifications: { appUrl: "https://shop.example.com" } },
+    });
+    const net = fakeNetwork(new Set(["shop.example.com"]));
+    const runner = new JobRunner().register(
+      NETWORK_PING_KIND,
+      networkPingHandler({ version: "0.0.0", fetchImpl: net.fetchImpl }),
+    );
+    const now = Date.now();
+    await ensureNetworkPing(db, now);
+    await runner.runDue(db, { now });
+    const { rows } = await db.client.query({
+      sql: "SELECT last_error FROM jobs WHERE kind = ? AND status = 'done'",
+      params: [NETWORK_PING_KIND],
+    });
+    expect(String(rows[0]?.[0])).toBe("pinged network.surfingdog.ai as shop.example.com");
+    expect(net.calls.map((c) => c.url)).toEqual(["https://network.surfingdog.ai/v1/instances/shop.example.com/ping"]);
+  });
+
   it("derives the public origin from the base URL, then the proxy header, then the request", () => {
     const req = (url: string, headers: Record<string, string> = {}) => new Request(url, { headers });
     expect(publicOrigin(req("http://127.0.0.1:9003/x"), "https://inbox.surfingdog.ai/")).toBe(

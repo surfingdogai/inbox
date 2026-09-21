@@ -31,7 +31,7 @@ const STATUS: Record<WriteErrorCode, number> = {
   internal: 500,
 };
 
-/** A refused write. `fields` names exactly what an agent must fix to retry in one step. */
+/** A refused write. `fields`, where the refusal is about the request, names what to fix to retry in one step. */
 export class WriteError extends Error {
   readonly code: WriteErrorCode;
   readonly status: number;
