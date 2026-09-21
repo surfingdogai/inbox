@@ -1,3 +1,4 @@
+import { ingestEmail } from "@surfingdog/adapters";
 import { createDb } from "@surfingdog/core";
 import { cloudflareEmailMailOut, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
@@ -38,7 +39,16 @@ export default {
     await inboxFor(env).runner.runDue(createDb(d1Client(env.DB)), { workerId: "cron", limit: 100 });
   },
 
-  async email(message) {
-    message.setReject("Inbound email is not configured on this instance yet.");
+  // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.
+  async email(message, env) {
+    const inbox = inboxFor(env);
+    const result = await ingestEmail(createDb(d1Client(env.DB)), inbox.caps, {
+      raw: message.raw,
+      envelopeTo: message.to,
+      envelopeFrom: message.from,
+      authenticated: true,
+    });
+    if (result.outcome === "rejected") message.setReject(result.reason);
+    await inbox.runner.runDue(createDb(d1Client(env.DB)), { workerId: "email" });
   },
 } satisfies ExportedHandler<Bindings>;

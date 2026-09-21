@@ -174,7 +174,7 @@ describe("public capabilities", () => {
     })) as { view: { item: { state: string } } };
     expect(reopened.view.item.state).toBe("open");
     const detail = await caps.getItem(owner, { item_id: id });
-    expect(detail.thread.map((t) => t.direction)).toEqual(["out", "in"]);
+    expect(detail.thread.map((t) => t.direction)).toEqual(["in", "out", "in"]);
     expect(detail.events.map((e) => e.event)).toEqual(["create", "answer", "reopen"]);
   });
 });
