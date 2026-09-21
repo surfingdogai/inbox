@@ -17,10 +17,10 @@ export type {
   InboxItemType,
   ThinEventData,
   ThinInboxEvent,
-} from "./webhooks/events";
-export { isFullEvent, isTestEvent, TEST_EVENT_TYPE } from "./webhooks/events";
-export { isAcceptedStatus, isRetryableStatus, RETRY_SCHEDULE_SECONDS } from "./webhooks/status";
-export type { HeadersLike, VerifyWebhookInput, WebhookVerificationCode } from "./webhooks/verify";
+} from "./webhooks/events.js";
+export { isFullEvent, isTestEvent, TEST_EVENT_TYPE } from "./webhooks/events.js";
+export { isAcceptedStatus, isRetryableStatus, RETRY_SCHEDULE_SECONDS } from "./webhooks/status.js";
+export type { HeadersLike, VerifyWebhookInput, WebhookVerificationCode } from "./webhooks/verify.js";
 export {
   DEFAULT_TOLERANCE_SECONDS,
   verifyWebhook,
@@ -28,6 +28,6 @@ export {
   WEBHOOK_SIGNATURE_HEADER,
   WEBHOOK_TIMESTAMP_HEADER,
   WebhookVerificationError,
-} from "./webhooks/verify";
+} from "./webhooks/verify.js";
 
-export const SDK_VERSION = "0.0.0";
+export const SDK_VERSION = "0.1.0";

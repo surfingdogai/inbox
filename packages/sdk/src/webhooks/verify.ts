@@ -1,4 +1,4 @@
-import type { InboxEvent } from "./events";
+import type { InboxEvent } from "./events.js";
 
 /**
  * Standard Webhooks v1.0.0 verification (ADR-015 §4), in about a hundred lines of WebCrypto so it
