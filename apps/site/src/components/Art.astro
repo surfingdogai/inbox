@@ -1,0 +1,49 @@
+---
+import { existsSync, readFileSync } from "node:fs";
+import { imageSize } from "../lib/image-size";
+
+/**
+ * Pixel art from public/art. Reads the image header at build time for width and height (no layout
+ * shift), and falls back to the logo when a file is missing so the layout never breaks the build.
+ * `frame` wraps unkeyed art (a cover with its own ground) in glass, in both themes.
+ */
+interface Props {
+  src: string;
+  alt: string;
+  class?: string;
+  loading?: "eager" | "lazy";
+  frame?: boolean;
+  /** Aspect ratio for the fallback box, e.g. "16 / 9". */
+  ratio?: string;
+}
+
+const { src, alt, class: className, loading = "lazy", frame = false, ratio = "1" } = Astro.props;
+
+const file = new URL(`../../public${src}`, import.meta.url);
+const present = existsSync(file);
+const size = present ? imageSize(readFileSync(file)) : undefined;
+---
+
+{
+  present ? (
+    frame ? (
+      <div class:list={["glass art-frame", className]}>
+        <img class="art" src={src} alt={alt} width={size?.width} height={size?.height} loading={loading} decoding="async" />
+      </div>
+    ) : (
+      <img
+        class:list={["art", className]}
+        src={src}
+        alt={alt}
+        width={size?.width}
+        height={size?.height}
+        loading={loading}
+        decoding="async"
+      />
+    )
+  ) : (
+    <div class:list={["art-fallback", className]} role="img" aria-label={alt} style={`--art-ratio: ${ratio}`}>
+      <img src="/logo.png" alt="" width="460" height="461" loading={loading} decoding="async" />
+    </div>
+  )
+}

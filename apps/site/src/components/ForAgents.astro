@@ -1,0 +1,100 @@
+---
+const rows = [
+  {
+    k: "Discovery",
+    v: "GET /.well-known/agent-inbox.json",
+    note: "spec, item types, one URL per door, trust tiers, receipt keys, review services",
+  },
+  { k: "REST", v: "GET /openapi.json · /v1/*", note: "OpenAPI 3.1 from the same Zod schemas as MCP" },
+  { k: "MCP", v: "POST /mcp · POST /mcp/owner", note: "public, no auth · owner, OAuth 2.1 or an owner key" },
+  {
+    k: "Idempotency",
+    v: "idempotency_key · Idempotency-Key",
+    note: "same key + same request = same answer; a replay is 200 with Idempotent-Replayed: true",
+  },
+  {
+    k: "Access tokens",
+    v: "access_token · x-access-token",
+    note: "returned when you create without an account; the only way to read or cancel that item later",
+  },
+  {
+    k: "Errors",
+    v: "application/problem+json",
+    note: "code, a sentence, and fields[{path, problem, message}] naming exactly what to fix",
+  },
+];
+---
+
+<section class="section" id="agents" aria-labelledby="agents-h">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">For agents</p>
+        <h2 class="h-section" id="agents-h">Small, typed, cacheable</h2>
+        <p class="lede">
+          Read the manifest, pick a door, keep the tokens you are given. Every refusal names the field to fix, so an
+          agent repairs its request and retries once.
+        </p>
+      </div>
+      <a class="btn btn-secondary" href="/docs/api/">Read the API docs</a>
+    </div>
+    <dl class="glass spec mono">
+      {
+        rows.map((r) => (
+          <div class="row-spec">
+            <dt>{r.k}</dt>
+            <dd>
+              <code>{r.v}</code>
+              <span class="note">{r.note}</span>
+            </dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>
+
+<style>
+  .spec {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 6px 20px;
+    border-radius: var(--radius-panel);
+  }
+  .row-spec {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 6px 16px;
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .row-spec:first-child {
+    border-top: 0;
+  }
+  @media (max-width: 560px) {
+    .row-spec {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+  dt {
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  dd {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    min-width: 0;
+  }
+  code {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .note {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+</style>

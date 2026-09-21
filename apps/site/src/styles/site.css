@@ -1,0 +1,218 @@
+/* The site shares the product's design tokens, glass utilities and components. */
+@import "@surfingdog/ui/index.css";
+@source "../";
+
+/* ------------------------------------------------------------------ */
+/*  Page shell                                                          */
+/* ------------------------------------------------------------------ */
+.sky-fixed {
+  position: fixed;
+  z-index: -1;
+}
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+@media (min-width: 768px) {
+  .wrap {
+    padding-inline: 24px;
+  }
+}
+.section {
+  padding-block: 56px;
+}
+@media (min-width: 900px) {
+  .section {
+    padding-block: 84px;
+  }
+}
+.sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 24px;
+}
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.h-section {
+  margin: 6px 0 0;
+  font-size: clamp(26px, 3.4vw, 36px);
+  line-height: 1.12;
+}
+.lede {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 16.5px;
+  line-height: 1.55;
+}
+.fine {
+  margin: 16px 0 0;
+  max-width: 70ch;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.panel {
+  padding: 22px;
+  border-radius: var(--radius-panel);
+}
+.skip {
+  position: absolute;
+  top: -60px;
+  left: 16px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: 9999px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+  font-weight: 600;
+}
+.skip:focus {
+  top: 12px;
+}
+.link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 55%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.link:hover {
+  text-decoration-color: var(--violet);
+}
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
+code.mono,
+.prose code,
+kbd {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  color: var(--ink);
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Art: pixel work stays crisp at every size. Keyed art floats on the  */
+/*  light; unkeyed art (covers) sits in a glass frame in both themes.   */
+/* ------------------------------------------------------------------ */
+.art {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.art-frame {
+  padding: 10px;
+  border-radius: var(--radius-sheet);
+}
+.art-frame > .art {
+  border-radius: 12px;
+}
+.art-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: var(--art-ratio, 1);
+  border-radius: var(--radius-panel);
+  background: var(--row-bg);
+  border: 1px solid var(--hairline);
+}
+.art-fallback img {
+  width: 34%;
+  max-width: 200px;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Long-form text (blog).                                              */
+/* ------------------------------------------------------------------ */
+.prose {
+  max-width: 68ch;
+  font-size: 16.5px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+.prose > * + * {
+  margin-top: 1.1em;
+}
+.prose h2 {
+  margin-top: 2em;
+  font-size: 25px;
+  line-height: 1.2;
+}
+.prose h3 {
+  margin-top: 1.6em;
+  font-size: 19px;
+}
+.prose p {
+  margin: 0;
+}
+.prose a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 55%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.prose a:hover {
+  text-decoration-color: var(--violet);
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.3em;
+}
+.prose li + li {
+  margin-top: 0.35em;
+}
+.prose blockquote {
+  margin: 0;
+  padding: 4px 0 4px 18px;
+  border-left: 2px solid var(--violet);
+  color: var(--ink-2);
+}
+.prose pre {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  border: 1px solid var(--hairline);
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.prose pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+}
+.prose hr {
+  border: 0;
+  height: 1px;
+  background: var(--hairline);
+}
+.prose strong {
+  font-weight: 600;
+}
