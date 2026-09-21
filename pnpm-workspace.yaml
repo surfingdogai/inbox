@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# One version of the shared libraries for the whole monorepo.
+catalog:
+  hono: ^4.13.8
+  zod: ^4.6.5
+  vitest: ^4.1.11
+  typescript: ^5.9.3
+  "@types/node": ^26.6.2
