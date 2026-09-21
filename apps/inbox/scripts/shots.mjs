@@ -4,7 +4,7 @@
  * signs in through the real magic-link flow (the link is read from the server's own stdout), and
  * captures 1440×900 at 2× into apps/site/public/shots:
  *
- *   inbox-day.png, inbox-night.png   the three panes with tomorrow's booking open
+ *   inbox-day.png, inbox-night.png   the three panes with the Today pane, names in the rows
  *   item-day.png                     a quote request with its quote, transitions and thread
  *   settings-day.png                 the settings page
  *   rules-day.png                    the rules screen
@@ -58,6 +58,8 @@ async function main() {
     PORT: String(port),
     HOST: "127.0.0.1",
     INBOX_PUBLIC_URL: base,
+    // An empty instance hands itself only to a listed owner; the pipeline's owner is this address.
+    INBOX_OWNER_EMAIL: email,
   };
   cli(["seed-showcase"], env);
 
@@ -116,8 +118,8 @@ async function main() {
       await page.screenshot({ path: path.join(out, `${name}.png`) });
       console.log(`wrote ${path.relative(process.cwd(), path.join(out, `${name}.png`))}`);
     };
-    await shot("inbox-day", `/items/${booking.item.id}`, "light", ".card .actions");
-    await shot("inbox-night", `/items/${booking.item.id}`, "dark", ".card .actions");
+    await shot("inbox-day", "/", "light", ".today-list");
+    await shot("inbox-night", "/", "dark", ".today-list");
     await shot("item-day", `/items/${quote.item.id}`, "light", ".card .actions");
     await shot("settings-day", "/settings", "light", ".settings-grid");
     await shot("rules-day", "/settings/rules", "light", ".rule-line");
