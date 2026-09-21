@@ -147,7 +147,7 @@ describe("transitionItem", () => {
     const created = await createItem(db, form(), booking(svc1));
     const res = await transitionItem(db, owner, { itemId: created.view.item.id, event: "confirm" });
     expect(res.view.item).toMatchObject({ state: "confirmed", version: 2 });
-    expect(res.view.transitions.map((t) => t.label)).toEqual(["Cancel booking", "Mark completed", "Mark no-show"]);
+    expect(res.view.transitions.map((t) => t.label)).toEqual(["Mark completed", "Mark no-show", "Cancel booking"]);
     const claims = await db.orm.select().from(slotClaims).where(eq(slotClaims.itemId, created.view.item.id));
     expect(claims).toHaveLength(6); // 90 minutes in 15-minute buckets
     expect(claims.every((c) => c.resourceKey === `service:${svc1}` && c.ordinal === 0)).toBe(true);
