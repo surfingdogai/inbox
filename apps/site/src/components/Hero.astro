@@ -1,6 +1,4 @@
 ---
-import Art from "./Art.astro";
-
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
 ---
@@ -8,9 +6,10 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
 <section class="hero wrap" aria-labelledby="hero-h">
   <div class="copy">
     <p class="eyebrow">Surfing Dog Inbox · open source</p>
-    <h1 id="hero-h">Your inbox for people and AI&nbsp;agents.</h1>
+    <h1 id="hero-h">Get the bookings, orders and messages. Skip the answering.</h1>
     <p class="sub">
-      Bookings, orders, quotes and messages from anyone and any agent, in one typed inbox you run anywhere.
+      AI agents are about to send your business more requests than you can read. Surfing Dog gives you one inbox
+      that takes them in, applies your rules and answers for you, so you get the work without the noise.
     </p>
     <div class="actions">
       <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
@@ -22,13 +21,24 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
     </p>
   </div>
   <div class="art-box">
-    <div class="sun" aria-hidden="true"></div>
-    <Art
-      src="/art/hero.png"
-      alt="A pixel-art dog surfing a wave of envelopes, calendars and parcels, with three small robot surfers riding behind it"
+    <img
+      class="hero-art day"
+      src="/art/hero-day.png"
+      width="1024"
+      height="768"
+      alt="A pixel-art dog surfing a glowing wave that carries envelopes, a calendar and a receipt, with three small robots on surfboards behind it"
       loading="eager"
-      ratio="16 / 9"
-      class="hero-art"
+      decoding="async"
+    />
+    <img
+      class="hero-art night"
+      src="/art/hero-night.png"
+      width="1024"
+      height="768"
+      alt=""
+      aria-hidden="true"
+      loading="eager"
+      decoding="async"
     />
   </div>
 </section>
@@ -84,7 +94,7 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
   .art-box {
     position: relative;
     width: 100%;
-    max-width: 440px;
+    max-width: 520px;
     margin-inline: auto;
   }
   @media (min-width: 900px) {
@@ -92,18 +102,30 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
       margin-inline: 0 auto;
     }
   }
-  .art-box .sun {
-    position: absolute;
-    left: 16%;
-    top: -2%;
-    z-index: 0;
-    opacity: 0.95;
+  /* Each render sits on its theme's own ground; the edges dissolve into the page so no rectangle can show. */
+  .hero-art {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: auto;
+    mask-image: radial-gradient(ellipse 58% 58% at 50% 52%, #000 52%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 58% 58% at 50% 52%, #000 52%, transparent 100%);
   }
-  .art-box :global(.hero-art) {
-    position: relative;
-    z-index: 1;
-    /* The wave runs off the left and bottom edges of the file; let those edges dissolve. */
-    mask-image: linear-gradient(to right, transparent 0, #000 7%), linear-gradient(to top, transparent 0, #000 9%);
-    mask-composite: intersect;
+  .hero-art.night {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hero-art.day {
+      display: none;
+    }
+    :root:not([data-theme="light"]) .hero-art.night {
+      display: block;
+    }
+  }
+  :root[data-theme="dark"] .hero-art.day {
+    display: none;
+  }
+  :root[data-theme="dark"] .hero-art.night {
+    display: block;
   }
 </style>

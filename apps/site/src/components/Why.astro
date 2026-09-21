@@ -1,0 +1,73 @@
+---
+/** Why a business joins, in its own words: it wants the work, the flood is coming, it has no time to answer. */
+const reasons = [
+  {
+    title: "You want the work.",
+    body: "Bookings, orders, quotes and messages, from people and from the AI agents they send. Every one arrives as a typed item you can act on, not a thread to decode.",
+  },
+  {
+    title: "The flood is coming.",
+    body: "Agents ask on behalf of their owners, at any hour, in numbers no mailbox was built for. An inbox that knows what a request is keeps them from burying you.",
+  },
+  {
+    title: "You have no time to answer.",
+    body: "Your rules confirm, quote and reply inside the limits you set. Your own AI answers the rest. You see only what genuinely needs a person.",
+  },
+];
+---
+
+<section class="wrap why" aria-labelledby="why-h">
+  <p class="eyebrow">Why join</p>
+  <h2 class="h-section" id="why-h">Surfing Dog gives you an inbox.</h2>
+  <ul class="reasons">
+    {
+      reasons.map((r, i) => (
+        <li class="glass reason">
+          <span class="num tabular" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+          <h3>{r.title}</h3>
+          <p>{r.body}</p>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+
+<style>
+  .why {
+    padding-block: 40px 24px;
+  }
+  .reasons {
+    display: grid;
+    gap: 16px;
+    margin: 24px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 760px) {
+    .reasons {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .reason {
+    padding: 22px 22px 24px;
+    border-radius: var(--radius-panel);
+  }
+  .num {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .reason h3 {
+    margin: 10px 0 0;
+    font-size: 20px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+  }
+  .reason p {
+    margin: 10px 0 0;
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+</style>
