@@ -3,9 +3,10 @@
 **Status:** accepted (21 Sep 2026), verification pending a public repo
 
 ## Decision
-Keep one monorepo. Make the button target self-contained: a root-level `wrangler.jsonc` whose
-`main` and `assets` point at built output, a root build script, and `.dev.vars.example` for the
-secrets the button prompts for. Run the button for real as soon as the repo is public. If the
+Keep one monorepo with **one `wrangler.jsonc` at the repo root** (the app's scripts and the Vitest
+plugin point at it with `--config`), `main` and `assets` under `apps/inbox`, and a root
+`.dev.vars.example` for the secrets the button prompts for. The button URL is
+`https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox`. Run the button for real as soon as the repo is public. If the
 button chokes on the workspace, publish a CI-generated, prebuilt `inbox-deploy` template repo per
 release (also the source of the `npx` tarball).
 

@@ -6,13 +6,13 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "tsx watch src/node.ts",
-    "dev:workers": "wrangler dev",
-    "types": "wrangler types",
+    "dev:workers": "wrangler dev --config ../../wrangler.jsonc",
+    "types": "wrangler types --config ../../wrangler.jsonc ./worker-configuration.d.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:node": "vitest run --project node",
     "test:workers": "vitest run --project workers",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy --config ../../wrangler.jsonc"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
