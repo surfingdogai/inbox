@@ -39,6 +39,8 @@ export interface DoorDeps {
   readonly inboundEmailSecret?: (() => Promise<string | null>) | undefined;
   /** The instance's public URL (INBOX_PUBLIC_URL); wins over the request URL behind a proxy. */
   readonly baseUrl?: string | undefined;
+  /** Addresses that may create the first account by magic link. */
+  readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
 }
 
 /** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
@@ -74,6 +76,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       businessName: deps.businessName,
       now: deps.now,
       baseUrl: deps.baseUrl,
+      ownerEmails: deps.ownerEmails,
     }),
   );
   app.route(

@@ -67,6 +67,17 @@ export interface SessionDeps {
   readonly mailOut: MailOut;
   readonly businessName: () => Promise<string>;
   readonly now?: (() => number) | undefined;
+  /**
+   * Addresses allowed to create the first account (INBOX_OWNER_EMAIL, the owner email in
+   * Settings). Without one, an empty instance is only reachable with an owner API key: on a
+   * public host, "first to click becomes the owner" would be a takeover.
+   */
+  readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
+}
+
+async function mayBootstrap(deps: SessionDeps, email: string): Promise<boolean> {
+  const list = deps.ownerEmails ? await deps.ownerEmails() : [];
+  return list.some((e) => e.trim().toLowerCase() === email);
 }
 
 export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
@@ -97,7 +108,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       .from(schema.users)
       .where(eq(schema.users.email, email));
     const [anyUser] = await db(deps).select({ id: schema.users.id }).from(schema.users).limit(1);
-    const known = Boolean(existing) || !anyUser; // the first sign-in bootstraps the owner
+    const known = Boolean(existing) || (!anyUser && (await mayBootstrap(deps, email)));
     if (known) {
       const token = randomToken(32);
       await deps.db.orm.insert(schema.loginTokens).values({
@@ -154,7 +165,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
     let [user] = await db(deps).select().from(schema.users).where(eq(schema.users.email, row.email));
     if (!user) {
       const [anyUser] = await db(deps).select({ id: schema.users.id }).from(schema.users).limit(1);
-      if (anyUser)
+      if (anyUser || !(await mayBootstrap(deps, row.email)))
         return c.json(
           {
             type: "https://surfingdog.ai/problems/not_allowed",

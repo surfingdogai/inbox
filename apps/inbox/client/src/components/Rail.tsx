@@ -22,8 +22,8 @@ export function Rail({
   testMode: boolean;
 }) {
   const navigate = useNavigate();
-  const leave = () => {
-    signOut();
+  const leave = async () => {
+    await signOut();
     void navigate({ to: "/login" });
   };
   return (
@@ -60,7 +60,7 @@ export function Rail({
           </span>
         </Link>
         <ThemeSwitch compact />
-        <button type="button" className="rail-link" onClick={leave}>
+        <button type="button" className="rail-link" onClick={() => void leave()}>
           <span>
             <LogOut className="icon" aria-hidden="true" />
             Sign out

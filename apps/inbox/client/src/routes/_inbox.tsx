@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useParams } from "@tanstack/react-router";
 import { ItemList } from "../components/ItemList";
 import { Rail } from "../components/Rail";
-import { isSignedIn } from "../lib/auth";
+import { ensureSignedIn } from "../lib/auth";
 import { type Filter, parseFilter } from "../lib/filters";
 import { useBusiness, useCounts, useSettings } from "../lib/queries";
 
@@ -17,8 +17,8 @@ export const Route = createFileRoute("/_inbox")({
     const q = typeof search.q === "string" ? search.q.trim() : "";
     return { ...(f && f !== "all" ? { f } : {}), ...(q ? { q } : {}) };
   },
-  beforeLoad: ({ location }) => {
-    if (!isSignedIn()) throw redirect({ to: "/login", search: { redirect: location.href } });
+  beforeLoad: async ({ location }) => {
+    if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
   },
   component: InboxLayout,
 });

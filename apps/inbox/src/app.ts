@@ -28,6 +28,8 @@ export interface AppDeps {
   readonly baseUrl?: string | undefined;
   /** Outbound fetch for the network ping (tests inject a fake). */
   readonly fetchImpl?: typeof fetch | undefined;
+  /** Addresses that may create the first account by magic link (INBOX_OWNER_EMAIL). */
+  readonly ownerEmails?: readonly string[] | undefined;
   /** Runs work after the response. Workers pass `ctx.waitUntil`; Node lets the loop pick it up. */
   readonly background?: ((work: Promise<unknown>) => void) | undefined;
   /** Test seam for Client ID Metadata Documents. */
@@ -95,6 +97,10 @@ export function createInbox(deps: AppDeps): Inbox {
     fetchClientMetadata: deps.fetchClientMetadata,
     now: deps.now,
     inboundEmailSecret: async () => (await readSettings(deps.db)).email.inboundSecret ?? null,
+    ownerEmails: async () => {
+      const fromSettings = (await readSettings(deps.db)).notifications.ownerEmail;
+      return [...(deps.ownerEmails ?? []), ...(fromSettings ? [fromSettings] : [])];
+    },
   });
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
