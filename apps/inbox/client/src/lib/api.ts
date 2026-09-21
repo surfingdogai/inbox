@@ -180,6 +180,8 @@ export const api = {
     call<Availability>("PUT", "/v1/owner/availability", {
       body: { weekly, ...(serviceId ? { service_id: serviceId } : {}) },
     }),
+  clearOverride: (serviceId: string) =>
+    call<Availability>("DELETE", `/v1/owner/availability/${encodeURIComponent(serviceId)}`),
   putClosures: (closures: readonly Closure[]) =>
     call<Availability>("PUT", "/v1/owner/availability/closures", { body: { closures } }),
   rules: () => call<{ items: RuleView[] }>("GET", "/v1/owner/rules"),
