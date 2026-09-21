@@ -1,4 +1,11 @@
-import { type CallerEnv, type ClientMetadata, mountDoors } from "@surfingdog/adapters";
+import {
+  type CallerEnv,
+  type ClientMetadata,
+  mountDoors,
+  NETWORK_PING_KIND,
+  networkPingHandler,
+  publicOrigin,
+} from "@surfingdog/adapters";
 import {
   buildManifest,
   Capabilities,
@@ -19,6 +26,8 @@ export interface AppDeps {
   readonly mailOut?: MailOut | undefined;
   /** Public base URL for links in emails; derived from the request when absent. */
   readonly baseUrl?: string | undefined;
+  /** Outbound fetch for the network ping (tests inject a fake). */
+  readonly fetchImpl?: typeof fetch | undefined;
   /** Runs work after the response. Workers pass `ctx.waitUntil`; Node lets the loop pick it up. */
   readonly background?: ((work: Promise<unknown>) => void) | undefined;
   /** Test seam for Client ID Metadata Documents. */
@@ -42,7 +51,10 @@ export function createInbox(deps: AppDeps): Inbox {
   const app = new Hono<CallerEnv>();
   const caps = new Capabilities(deps.db);
   const mailOut = deps.mailOut ?? logMailOut();
-  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl });
+  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl }).register(
+    NETWORK_PING_KIND,
+    networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
+  );
   const background = deps.background ?? ((work) => void work.catch(() => {}));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
@@ -62,7 +74,7 @@ export function createInbox(deps: AppDeps): Inbox {
   app.get("/healthz", (c) => c.json({ ok: true, version: VERSION }));
 
   app.get(MANIFEST_PATH, async (c) => {
-    const origin = new URL(c.req.url).origin;
+    const origin = publicOrigin(c.req.raw, deps.baseUrl);
     const profile = await caps.getBusinessProfile();
     const manifest = buildManifest({
       instanceUrl: origin,
@@ -75,6 +87,7 @@ export function createInbox(deps: AppDeps): Inbox {
   mountDoors(app, {
     db: deps.db,
     caps,
+    baseUrl: deps.baseUrl,
     version: VERSION,
     sandbox: async () => (await readSettings(deps.db)).testMode,
     mailOut,

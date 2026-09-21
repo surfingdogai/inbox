@@ -5,6 +5,7 @@ import { JobRunner } from "./runner";
 
 export * from "./notify";
 export * from "./runner";
+export * from "./schedule";
 
 /** The standard runner: notifications now, rules and receipts as they land. */
 export function createRunner(deps: { mailOut: MailOut; baseUrl?: string | undefined }): JobRunner {
