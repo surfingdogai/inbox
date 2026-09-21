@@ -7,7 +7,7 @@ const shots = [
     alt: "The rules screen of the inbox, listing plain rules with their triggers, conditions and actions",
     title: "Rules",
     caption:
-      "Plain rules, evaluated after every event: confirm a booking under €50 when the slot is free and inside opening hours; ask a person about anything else.",
+      "Plain rules, read back in English, run the moment an item arrives or changes state. Turn one off, test it, or change the number in it.",
   },
   {
     src: "/shots/availability-detail.png",
@@ -21,12 +21,12 @@ const shots = [
     alt: "The settings screen: cancellation window, approval limit, email, test mode and the network the instance reports to",
     title: "Settings",
     caption:
-      "Cancellation windows, approval limits, email, test mode and the network you report to: one versioned document, edited by you or by your AI.",
+      "Cancellation windows, approval limits, email and test mode: one versioned document, edited by you or by your AI.",
   },
 ];
 ---
 
-<section class="section" id="rules" aria-labelledby="rules-h">
+<section class="section" id="rules" aria-labelledby="rules-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
@@ -39,7 +39,7 @@ const shots = [
         </p>
       </div>
     </div>
-    <div class="shots">
+    <div class="shots" data-reveal="stagger">
       {shots.map((s) => <Shot src={s.src} alt={s.alt} title={s.title} caption={s.caption} />)}
     </div>
   </div>
@@ -48,7 +48,7 @@ const shots = [
 <style>
   .shots {
     display: grid;
-    gap: 16px;
+    gap: var(--gap-grid);
   }
   @media (min-width: 900px) {
     .shots {

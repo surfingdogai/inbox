@@ -1,4 +1,6 @@
 ---
+import HeroFlow from "./HeroFlow.astro";
+
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
 ---
@@ -6,7 +8,9 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
 <section class="hero wrap" aria-labelledby="hero-h">
   <div class="copy">
     <p class="eyebrow">Surfing Dog Inbox · open source</p>
-    <h1 id="hero-h">Get the bookings, orders and messages. Skip the answering.</h1>
+    <h1 id="hero-h">
+      Get the bookings, orders and messages. <span class="l2">Skip the answering.</span>
+    </h1>
     <p class="sub">
       AI agents are about to send your business more requests than you can read. Surfing Dog gives you one inbox
       that takes them in, applies your rules and answers for you, so you get the work without the noise.
@@ -16,80 +20,72 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
       <a class="btn btn-secondary btn-lg" href={LIVE} rel="noopener">See a live instance</a>
     </div>
     <p class="position">
-      <span class="rule rule-quote" aria-hidden="true"></span>
+      <span class="u-line" aria-hidden="true"></span>
       <span>Not customer support. Automated AI relations: your rules, your availability, your AI answering.</span>
     </p>
   </div>
   <div class="art-box">
-    <img
-      class="hero-art day"
-      src="/art/hero-day.png"
-      width="1024"
-      height="768"
-      alt="A pixel-art dog surfing a glowing wave that carries envelopes, a calendar and a receipt, with three small robots on surfboards behind it"
-      loading="eager"
-      decoding="async"
-    />
-    <img
-      class="hero-art night"
-      src="/art/hero-night.png"
-      width="1024"
-      height="768"
-      alt=""
-      aria-hidden="true"
-      loading="eager"
-      decoding="async"
-    />
+    <HeroFlow />
   </div>
 </section>
 
 <style>
   .hero {
     display: grid;
-    gap: 32px;
-    align-items: center;
-    padding-block: 44px 24px;
+    gap: var(--sp-7);
+    /* Both columns start together. The drawing carries its own sky above its first
+       label, which is what brings its top edge level with the headline. */
+    align-items: start;
+    /* The art already fills the bottom of the first screen, so the hero closes on
+       its own token rather than a full section. */
+    padding-block: var(--sp-8) var(--sp-5);
   }
   @media (min-width: 900px) {
     .hero {
-      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-      gap: 48px;
-      padding-block: 72px 32px;
+      /* 1.15fr / 1fr lands near 573 / 499 inside the 1120 pill: the drawing is the
+         other half of the composition, not a margin note. */
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: var(--sp-8);
+      padding-block: var(--sp-9) var(--hero-pb);
     }
   }
   h1 {
-    margin: 10px 0 0;
-    font-size: clamp(36px, 4.4vw, 56px);
-    line-height: 1.06;
-    letter-spacing: -0.025em;
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-hero);
+    line-height: var(--lh-hero);
+    letter-spacing: -0.024em;
+  }
+  /* On a phone the rag is left to chance and breaks mid-phrase, so the second
+     sentence takes its own line. Above that the balancer handles it. */
+  @media (max-width: 480px) {
+    .l2 {
+      display: block;
+    }
   }
   .sub {
-    max-width: 50ch;
-    margin: 18px 0 0;
-    font-size: 17px;
-    line-height: 1.55;
+    max-width: var(--measure-lede);
+    margin: var(--sp-4) 0 0;
+    font-size: var(--fs-lede);
+    line-height: 1.5;
     color: var(--ink-2);
   }
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 26px;
+    gap: var(--sp-2) var(--sp-3);
+    margin-top: var(--sp-6);
   }
   .position {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--sp-4);
     align-items: center;
-    max-width: 56ch;
-    margin: 26px 0 0;
-    font-size: 15.5px;
+    max-width: 54ch;
+    margin: var(--sp-6) 0 0;
+    font-size: var(--fs-body);
     font-weight: 600;
-    line-height: 1.45;
+    line-height: var(--lh-ui);
     color: var(--ink);
-  }
-  .position .rule {
-    width: 28px;
   }
   .art-box {
     position: relative;
@@ -100,30 +96,7 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
   @media (min-width: 900px) {
     .art-box {
       margin-inline: 0 auto;
+      margin-top: var(--sp-1);
     }
-  }
-  /* Both files are keyed: the ground is cut out, so the art floats on whatever the page is. */
-  .hero-art {
-    display: block;
-    width: 100%;
-    height: auto;
-    image-rendering: auto;
-  }
-  .hero-art.night {
-    display: none;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .hero-art.day {
-      display: none;
-    }
-    :root:not([data-theme="light"]) .hero-art.night {
-      display: block;
-    }
-  }
-  :root[data-theme="dark"] .hero-art.day {
-    display: none;
-  }
-  :root[data-theme="dark"] .hero-art.night {
-    display: block;
   }
 </style>

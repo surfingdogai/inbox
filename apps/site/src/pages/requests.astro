@@ -1,0 +1,846 @@
+---
+// apps/site/src/pages/requests.astro
+// People ask, other people vote, the most wanted rises. The board is filled in from the network
+// after load. Without it the page still explains itself and points at the issues.
+import Layout from "../layouts/Layout.astro";
+
+const API = "https://network.surfingdog.ai/v1/requests";
+const ISSUES = "https://github.com/surfingdogai/inbox/issues";
+
+const sorts = [
+  { key: "top", label: "Most wanted" },
+  { key: "new", label: "Newest" },
+  { key: "shipped", label: "Shipped" },
+];
+
+const legend = [
+  { status: "open", tint: "message", text: "Asked for, on the board, collecting votes." },
+  { status: "planned", tint: "quote", text: "Decided. It is on the plan and it will be built." },
+  { status: "building", tint: "warning", text: "Someone is writing it now." },
+  { status: "shipped", tint: "success", text: "Released. The blog says what changed and when." },
+];
+---
+
+<Layout
+  title="Feature requests · Surfing Dog"
+  description="Ask for a feature in Surfing Dog Inbox, and vote on what other people have asked for. The inbox is open source, so the most wanted requests get built first."
+>
+  <section class="wrap section is-head" id="requests" aria-labelledby="requests-h">
+    <p class="eyebrow">Feature requests</p>
+    <h1 class="h-page" id="requests-h">What should the inbox do next?</h1>
+    <p class="lede">
+      Surfing Dog Inbox is open source, so anyone can ask for something. Votes decide what gets built first, and the
+      status on each request says where it stands. A pull request is welcome too.
+    </p>
+  </section>
+
+  <section class="section" id="ask" aria-labelledby="ask-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Ask</p>
+          <h2 class="h-section" id="ask-h">Tell us what you need</h2>
+          <p class="lede">
+            One request at a time. Keep the title short enough to read in a list, and use the box under it for the part
+            that matters: what you were trying to do.
+          </p>
+        </div>
+      </div>
+
+      <form class="glass-strong panel ask" method="post" action={API} data-ask>
+        <div class="field">
+          <label class="label" for="req-title">Title</label>
+          <input
+            class="input"
+            id="req-title"
+            name="title"
+            type="text"
+            required
+            maxlength="120"
+            autocomplete="off"
+            placeholder="Send a reminder the day before a booking"
+          />
+        </div>
+
+        <div class="field">
+          <label class="label" for="req-body">What would it do? <span class="opt">optional</span></label>
+          <textarea
+            class="input"
+            id="req-body"
+            name="body"
+            rows="4"
+            maxlength="2000"
+            aria-describedby="req-body-hint"
+            placeholder="People turn up at the wrong time because nothing reminds them the day before."></textarea>
+          <p class="hint" id="req-body-hint">
+            Describe the situation you are in rather than the solution you have in mind. Two or three sentences is
+            plenty, and it is the part that gets a request built.
+          </p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="req-email">Email <span class="opt">optional</span></label>
+          <input
+            class="input"
+            id="req-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            aria-describedby="req-email-hint"
+            placeholder="you@yourbusiness.pt"
+          />
+          <p class="hint" id="req-email-hint">Only to tell you when it ships. It is never shown on the board.</p>
+        </div>
+
+        <div class="ask-foot">
+          <button class="btn btn-primary" type="submit">Ask for it</button>
+          <p class="hint" data-ask-status aria-live="polite"></p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="section" id="board" aria-labelledby="board-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">The board</p>
+          <h2 class="h-section" id="board-h">What everyone else is asking for</h2>
+          <p class="lede">
+            Vote for the ones you want. One vote per address, and the count is the whole ranking: the most wanted sit
+            at the top.
+          </p>
+        </div>
+      </div>
+
+      <div class="board-head">
+        <div class="tabs" role="tablist" aria-label="Sort the board" data-tabs hidden>
+          {
+            sorts.map((s, i) => (
+              <button
+                class="tab"
+                type="button"
+                role="tab"
+                id={`tab-${s.key}`}
+                data-sort={s.key}
+                aria-selected={i === 0 ? "true" : "false"}
+                aria-controls="board-list"
+              >
+                {s.label}
+              </button>
+            ))
+          }
+        </div>
+        <p class="fine tabular" data-counts></p>
+      </div>
+
+      <div
+        class="board-list"
+        id="board-list"
+        role="tabpanel"
+        aria-labelledby="tab-top"
+        aria-busy="true"
+        data-board
+        hidden
+      >
+        <ul class="list">
+          <li class="row-glass req is-skeleton" aria-hidden="true">
+            <span class="skeleton sk-vote"></span>
+            <span class="sk-lines"><span class="skeleton sk-line"></span><span class="skeleton sk-line short"></span></span>
+          </li>
+          <li class="row-glass req is-skeleton" aria-hidden="true">
+            <span class="skeleton sk-vote"></span>
+            <span class="sk-lines"><span class="skeleton sk-line"></span><span class="skeleton sk-line short"></span></span>
+          </li>
+          <li class="row-glass req is-skeleton" aria-hidden="true">
+            <span class="skeleton sk-vote"></span>
+            <span class="sk-lines"><span class="skeleton sk-line"></span><span class="skeleton sk-line short"></span></span>
+          </li>
+        </ul>
+      </div>
+
+      <p class="hint" data-board-status aria-live="polite"></p>
+
+      <noscript>
+        <div class="glass panel">
+          <p class="card-text">
+            The board is filled in by the browser, so it needs JavaScript. The form above still works without it, and
+            every request also lives in the issues.
+          </p>
+          <p class="note-foot">
+            <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues on GitHub</a>
+          </p>
+        </div>
+      </noscript>
+
+      {/* Cloned by the script, so every row it builds carries the styles this page already ships. */}
+      <template data-row-template>
+        <li class="row-glass lift req">
+          <button class="vote" type="button" aria-pressed="false" data-vote>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 14.5 12 8.5l6 6"></path>
+            </svg>
+            <span class="count tabular" data-count>0</span>
+            <span class="vote-word" data-word>vote</span>
+          </button>
+          <div class="req-main">
+            <div class="req-head">
+              <h3 class="h-card" data-title></h3>
+              <span class="pill" data-pill><i class="dot" data-dot></i><span data-status></span></span>
+            </div>
+            <p class="card-text clamp" data-body></p>
+            <time class="req-age" data-age></time>
+          </div>
+        </li>
+      </template>
+      <template data-list-template><ul class="list"></ul></template>
+      <template data-note-template>
+        <div class="glass panel note">
+          <p class="card-text" data-note-text></p>
+          <p class="note-foot" data-note-foot>
+            <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues on GitHub</a>
+          </p>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <section class="section" id="asking-well" aria-labelledby="asking-well-h" data-reveal>
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Before you ask</p>
+          <h2 class="h-section" id="asking-well-h">A good request is a real situation</h2>
+          <p class="lede">
+            Some of it is already built, and a request that describes the day you had is worth more than one that
+            describes the feature you imagined.
+          </p>
+        </div>
+      </div>
+
+      <ul class="grid-cards cards" data-reveal="stagger">
+        <li class="glass card lift">
+          <h3 class="h-card">It may already exist</h3>
+          <ul class="checks">
+            <li><a class="link" href="/how-it-works/">How it works</a> shows what an inbox does with a request today.</li>
+            <li><a class="link" href="/docs/">The docs</a> cover the doors, the rules language and the owner tools.</li>
+            <li><a class="link" href="/blog/">The blog</a> says what shipped and what changed with it.</li>
+          </ul>
+        </li>
+        <li class="glass card lift">
+          <h3 class="h-card">Prefer GitHub?</h3>
+          <p class="card-text">
+            If you read code, the issues are the better room: you can attach a log, a schema or a patch, and argue about
+            the design in the open.
+          </p>
+          <p class="card-text">
+            A good issue is a real situation rather than a guessed solution. Say what you tried, what happened, and what
+            you needed to happen instead.
+          </p>
+          <span class="foot">
+            <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues</a>
+          </span>
+        </li>
+        <li class="glass card">
+          <h3 class="h-card">What the statuses mean</h3>
+          <ul class="legend">
+            {
+              legend.map((l) => (
+                <li>
+                  <span class:list={["pill", `tint-${l.tint}`]}>
+                    <i class:list={["dot", `dot-${l.tint}`]} />
+                    {l.status}
+                  </span>
+                  <span class="legend-text">{l.text}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* The form */
+  .ask {
+    display: grid;
+    gap: var(--sp-4);
+  }
+  .field {
+    display: grid;
+    gap: var(--sp-1);
+  }
+  .ask .label {
+    margin-bottom: 0;
+  }
+  .ask-foot {
+    display: grid;
+    justify-items: start;
+    gap: var(--sp-2);
+  }
+  .hint:empty {
+    display: none;
+  }
+
+  /* The board */
+  .board-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2) var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+  .board-head .fine {
+    margin: 0;
+  }
+  .list {
+    display: grid;
+    gap: var(--gap-row);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .req {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: var(--sp-4);
+    align-items: start;
+    padding: var(--sp-3);
+    border-radius: var(--radius-card);
+  }
+  .req-main {
+    display: grid;
+    gap: var(--sp-1);
+    min-width: 0;
+  }
+  .req-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  /* Two lines of the story, then the title carries the rest. */
+  .clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  .req-age {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .note {
+    margin: 0;
+  }
+  .note-foot {
+    margin: var(--sp-4) 0 0;
+  }
+
+  /* The vote button: a chevron over the count, and the word that says whether you already did. */
+  .vote {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 1px;
+    min-height: var(--touch);
+    padding: var(--sp-2) var(--sp-1);
+    border-radius: var(--radius-control);
+    border: 1px solid var(--hairline);
+    background: var(--pill-bg);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .vote:hover,
+  .vote:focus-visible {
+    background: var(--pill-bg-hover);
+    color: var(--ink);
+  }
+  .vote[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--c-success) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c-success) 42%, transparent);
+    color: var(--c-success-ink);
+  }
+  .vote svg {
+    width: 16px;
+    height: 16px;
+  }
+  .count {
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    line-height: 1.15;
+  }
+  .vote-word {
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  /* What stands in for the rows until the first answer arrives. */
+  .sk-vote {
+    display: block;
+    height: 58px;
+    border-radius: var(--radius-control);
+  }
+  .sk-lines {
+    display: grid;
+    gap: 9px;
+    padding-top: var(--sp-1);
+  }
+  .sk-line {
+    display: block;
+    height: 12px;
+  }
+  .sk-line.short {
+    width: 58%;
+  }
+
+  /* Before you ask */
+  .cards {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 900px) {
+    .cards {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+  }
+  .card .h-card {
+    margin-bottom: var(--sp-3);
+  }
+  .card .card-text + .card-text {
+    margin-top: var(--sp-2);
+  }
+  .foot {
+    display: block;
+    margin-top: auto;
+    padding-top: var(--sp-5);
+  }
+  .checks {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-width: var(--measure-card);
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .legend {
+    display: grid;
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .legend li {
+    display: grid;
+    justify-items: start;
+    gap: var(--sp-1);
+  }
+  .legend-text {
+    max-width: var(--measure-card);
+    font-size: var(--fs-ui);
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+</style>
+
+<script>
+  // The board talks to the network service. Everything that comes back is untrusted text: rows are
+  // cloned from the templates on the page and filled in with textContent, never with markup.
+  const API = "https://network.surfingdog.ai/v1/requests";
+  const ISSUES = "https://github.com/surfingdogai/inbox/issues";
+  const VOTED_KEY = "surfingdog-requests-voted";
+
+  const STATUSES = ["open", "planned", "building", "shipped", "declined"] as const;
+  type Status = (typeof STATUSES)[number];
+  type Sort = "top" | "new" | "shipped";
+
+  interface FeatureRequest {
+    id: string;
+    title: string;
+    body: string;
+    status: Status;
+    votes: number;
+    createdAt: string;
+  }
+
+  /** Colour carries the status and nothing else. Declined stays neutral: it is not destructive. */
+  const TINT: Record<Status, string> = {
+    open: "tint-message",
+    planned: "tint-quote",
+    building: "tint-warning",
+    shipped: "tint-success",
+    declined: "",
+  };
+  const DOT: Record<Status, string> = {
+    open: "dot-message",
+    planned: "dot-quote",
+    building: "dot-warning",
+    shipped: "dot-success",
+    declined: "",
+  };
+
+  const numbers = new Intl.NumberFormat("en-GB");
+  const relative = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
+  const UNITS = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ] as const;
+
+  const board = document.querySelector<HTMLElement>("[data-board]");
+  const tabs = document.querySelector<HTMLElement>("[data-tabs]");
+  const countsLine = document.querySelector<HTMLElement>("[data-counts]");
+  const boardStatus = document.querySelector<HTMLElement>("[data-board-status]");
+  const form = document.querySelector<HTMLFormElement>("[data-ask]");
+  const formStatus = document.querySelector<HTMLElement>("[data-ask-status]");
+  const rowTemplate = document.querySelector<HTMLTemplateElement>("[data-row-template]");
+  const listTemplate = document.querySelector<HTMLTemplateElement>("[data-list-template]");
+  const noteTemplate = document.querySelector<HTMLTemplateElement>("[data-note-template]");
+
+  let current: Sort = "top";
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+  }
+
+  /** The network is a separate service: nothing it sends is trusted until it has been checked. */
+  function toRequest(value: unknown): FeatureRequest | null {
+    if (!isRecord(value)) return null;
+    if (typeof value.id !== "string" || typeof value.title !== "string") return null;
+    const votes = typeof value.votes === "number" && Number.isFinite(value.votes) ? Math.round(value.votes) : 0;
+    return {
+      id: value.id,
+      title: value.title,
+      body: typeof value.body === "string" ? value.body : "",
+      status: STATUSES.find((s) => s === value.status) ?? "open",
+      votes: Math.max(0, votes),
+      createdAt: typeof value.created_at === "string" ? value.created_at : "",
+    };
+  }
+
+  function age(iso: string): string {
+    const at = Date.parse(iso);
+    if (Number.isNaN(at)) return "";
+    const seconds = Math.round((at - Date.now()) / 1000);
+    for (const [unit, size] of UNITS) {
+      if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
+    }
+    return relative.format(Math.min(seconds, 0), "second");
+  }
+
+  function readVoted(): Set<string> {
+    try {
+      const raw = window.localStorage.getItem(VOTED_KEY);
+      if (!raw) return new Set();
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
+    } catch {
+      // Blocked or private storage: the buttons still work, they just forget between visits.
+      return new Set();
+    }
+  }
+  const voted = readVoted();
+
+  function remember(id: string): void {
+    voted.add(id);
+    try {
+      window.localStorage.setItem(VOTED_KEY, JSON.stringify([...voted]));
+    } catch {
+      // The vote is counted on the network either way.
+    }
+  }
+
+  function clone(template: HTMLTemplateElement | null): HTMLElement | null {
+    const node = template?.content.firstElementChild?.cloneNode(true);
+    return node instanceof HTMLElement ? node : null;
+  }
+
+  function say(target: HTMLElement | null, text: string, isError = false): void {
+    if (!target) return;
+    target.classList.toggle("error", isError);
+    target.replaceChildren();
+    if (text) target.append(document.createTextNode(text));
+  }
+
+  function sayUnreachable(target: HTMLElement | null): void {
+    if (!target) return;
+    target.classList.add("error");
+    target.replaceChildren(
+      document.createTextNode("The board is not reachable right now. Open an issue on GitHub instead: "),
+    );
+    const link = document.createElement("a");
+    link.className = "link";
+    link.href = ISSUES;
+    link.rel = "noopener";
+    link.textContent = "github.com/surfingdogai/inbox/issues";
+    target.append(link);
+  }
+
+  function note(text: string, withIssues: boolean): HTMLElement | null {
+    const box = clone(noteTemplate);
+    if (!box) return null;
+    const line = box.querySelector<HTMLElement>("[data-note-text]");
+    if (line) line.textContent = text;
+    if (!withIssues) box.querySelector("[data-note-foot]")?.remove();
+    return box;
+  }
+
+  function setVote(button: HTMLElement, votes: number, isVoted: boolean): void {
+    const title = button.dataset.title ?? "this request";
+    button.dataset.votes = String(votes);
+    const count = button.querySelector<HTMLElement>("[data-count]");
+    const word = button.querySelector<HTMLElement>("[data-word]");
+    if (count) count.textContent = numbers.format(votes);
+    if (word) word.textContent = isVoted ? "voted" : "vote";
+    button.setAttribute("aria-pressed", isVoted ? "true" : "false");
+    button.setAttribute("aria-label", isVoted ? `You voted for: ${title}` : `Vote for: ${title}`);
+  }
+
+  function rowFor(item: FeatureRequest): HTMLElement | null {
+    const row = clone(rowTemplate);
+    if (!row) return null;
+
+    const button = row.querySelector<HTMLElement>("[data-vote]");
+    if (button) {
+      button.dataset.id = item.id;
+      button.dataset.title = item.title;
+      setVote(button, item.votes, voted.has(item.id));
+    }
+
+    const title = row.querySelector<HTMLElement>("[data-title]");
+    if (title) title.textContent = item.title;
+
+    const status = row.querySelector<HTMLElement>("[data-status]");
+    if (status) status.textContent = item.status;
+    if (TINT[item.status]) row.querySelector("[data-pill]")?.classList.add(TINT[item.status]);
+    if (DOT[item.status]) row.querySelector("[data-dot]")?.classList.add(DOT[item.status]);
+
+    const body = row.querySelector<HTMLElement>("[data-body]");
+    if (body) {
+      if (item.body) body.textContent = item.body;
+      else body.remove();
+    }
+
+    const when = row.querySelector<HTMLTimeElement>("[data-age]");
+    const said = age(item.createdAt);
+    if (when) {
+      if (said) {
+        when.dateTime = item.createdAt;
+        when.textContent = said;
+      } else {
+        when.remove();
+      }
+    }
+
+    return row;
+  }
+
+  function paint(items: readonly FeatureRequest[]): void {
+    if (!board) return;
+    if (items.length === 0) {
+      const text =
+        current === "shipped"
+          ? "Nothing from the board has shipped yet. The blog carries every release."
+          : "Nothing here yet. Yours can be the first.";
+      const empty = note(text, false);
+      if (empty) board.replaceChildren(empty);
+      return;
+    }
+    const list = clone(listTemplate);
+    if (!list) return;
+    for (const item of items) {
+      const row = rowFor(item);
+      if (row) list.append(row);
+    }
+    board.replaceChildren(list);
+  }
+
+  function paintCounts(value: unknown): void {
+    if (!countsLine) return;
+    if (!isRecord(value)) {
+      countsLine.textContent = "";
+      return;
+    }
+    const parts: string[] = [];
+    for (const status of STATUSES) {
+      const total = value[status];
+      if (typeof total === "number" && total > 0) parts.push(`${numbers.format(total)} ${status}`);
+    }
+    countsLine.textContent = parts.join(" · ");
+  }
+
+  function select(sort: Sort): void {
+    current = sort;
+    if (!tabs) return;
+    for (const tab of Array.from(tabs.querySelectorAll<HTMLButtonElement>("[data-sort]"))) {
+      const chosen = tab.dataset.sort === sort;
+      tab.setAttribute("aria-selected", chosen ? "true" : "false");
+      if (chosen) board?.setAttribute("aria-labelledby", tab.id);
+    }
+  }
+
+  async function load(sort: Sort): Promise<void> {
+    if (!board) return;
+    select(sort);
+    board.setAttribute("aria-busy", "true");
+    say(boardStatus, "");
+    try {
+      const res = await fetch(`${API}?sort=${sort}&limit=50`, {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data: unknown = await res.json();
+      const raw: unknown[] = isRecord(data) && Array.isArray(data.items) ? data.items : [];
+      const items: FeatureRequest[] = [];
+      for (const entry of raw) {
+        const item = toRequest(entry);
+        if (item) items.push(item);
+      }
+      paint(items);
+      paintCounts(isRecord(data) ? data.counts : undefined);
+    } catch {
+      const offline = note("The board is not reachable right now. Nothing is lost: the issues are the other way in.", true);
+      if (offline) board.replaceChildren(offline);
+      paintCounts(undefined);
+    } finally {
+      board.setAttribute("aria-busy", "false");
+    }
+  }
+
+  async function castVote(button: HTMLElement): Promise<void> {
+    const id = button.dataset.id;
+    if (!id || button.dataset.busy === "true") return;
+    const before = Number(button.dataset.votes ?? "0");
+    const wasVoted = voted.has(id);
+    button.dataset.busy = "true";
+    say(boardStatus, "");
+    // Optimistic: the count moves now, and comes back if the network disagrees.
+    setVote(button, wasVoted ? before : before + 1, true);
+    try {
+      const res = await fetch(`${API}/${encodeURIComponent(id)}/votes`, {
+        method: "POST",
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data: unknown = await res.json();
+      remember(id);
+      setVote(button, isRecord(data) && typeof data.votes === "number" ? data.votes : before + 1, true);
+    } catch {
+      setVote(button, before, wasVoted);
+      say(boardStatus, "That vote did not reach the network. Nothing was lost, so try it again in a moment.", true);
+    } finally {
+      button.dataset.busy = "false";
+    }
+  }
+
+  function problemText(payload: unknown, status: number): string {
+    if (isRecord(payload)) {
+      const detail = payload.detail;
+      if (typeof detail === "string" && detail.trim()) return detail;
+      const title = payload.title;
+      if (typeof title === "string" && title.trim()) return title;
+    }
+    return status === 429
+      ? "That is a lot of requests from one address. Try again in an hour, or open an issue on GitHub."
+      : "That did not go through. Check the title and try again.";
+  }
+
+  if (tabs) {
+    tabs.hidden = false;
+    for (const tab of Array.from(tabs.querySelectorAll<HTMLButtonElement>("[data-sort]"))) {
+      tab.addEventListener("click", () => {
+        const sort = tab.dataset.sort;
+        if (sort !== "top" && sort !== "new" && sort !== "shipped") return;
+        if (sort === current) return;
+        void load(sort);
+      });
+    }
+  }
+
+  if (board) {
+    board.hidden = false;
+    board.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest<HTMLElement>("[data-vote]");
+      if (button) void castVote(button);
+    });
+    void load("top");
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const title = String(data.get("title") ?? "").trim();
+    const body = String(data.get("body") ?? "").trim();
+    const email = String(data.get("email") ?? "").trim();
+    if (!title) return;
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+    say(formStatus, "Sending…");
+    if (button) button.disabled = true;
+    try {
+      const res = await fetch(API, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ title, body, email }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const payload: unknown = await res.json().catch(() => null);
+      if (res.status === 201) {
+        const created = toRequest(payload);
+        // The service withholds the status on purpose, because a request the spam filter
+        // held is not on the board. Use its own wording, and show what the board returns
+        // rather than a row we assumed was there.
+        say(
+          formStatus,
+          isRecord(payload) && typeof payload.message === "string"
+            ? payload.message
+            : "Thank you. We have your request.",
+        );
+        form.reset();
+        if (created) remember(created.id);
+        void load(current);
+        return;
+      }
+      if (res.status === 422 || res.status === 429) {
+        say(formStatus, problemText(payload, res.status), true);
+        return;
+      }
+      throw new Error(String(res.status));
+    } catch {
+      sayUnreachable(formStatus);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+</script>

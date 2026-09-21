@@ -1,0 +1,59 @@
+---
+/**
+ * The brand mark: the striped half sun, the same shape as `.sun` in the design
+ * system, drawn as vector so it stays crisp at 20px and at 64px.
+ *
+ * Two differences from `.sun`, both deliberate:
+ *  - `.sun` knocks its stripes out with the ground colour, which paints solid bars
+ *    over anything translucent behind it. The mark knocks them out with a mask, so
+ *    the pill's own glass shows through the gaps.
+ *  - `.sun` carries five bands at 120px wide. At mark sizes the finest of them close
+ *    up, so the mark keeps three: the dome and the two widest bands, with the base
+ *    cut away as it is on the large sun.
+ *
+ * No text: the wordmark beside it carries the name, so this is aria-hidden.
+ */
+interface Props {
+  /** Width in px. The mark is always half as tall as it is wide. */
+  size?: number;
+  class?: string;
+}
+
+const { size = 26, class: cls } = Astro.props;
+const uid = Math.random().toString(36).slice(2, 8);
+const fill = `sd-mark-fill-${uid}`;
+const mask = `sd-mark-mask-${uid}`;
+---
+
+<svg
+  class:list={["mark", cls]}
+  width={size}
+  height={size / 2}
+  viewBox="0 0 48 24"
+  fill="none"
+  role="presentation"
+  aria-hidden="true"
+  focusable="false"
+  shape-rendering="geometricPrecision"
+>
+  <defs>
+    <linearGradient id={fill} x1="0" y1="0" x2="0" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="var(--tangerine, #ff9650)"></stop>
+      <stop offset="0.58" stop-color="var(--flamingo, #ff6fa8)"></stop>
+      <stop offset="1" stop-color="var(--violet, #8a6bff)"></stop>
+    </linearGradient>
+    <mask id={mask} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="24">
+      <rect x="0" y="0" width="48" height="11.05" fill="#fff"></rect>
+      <rect x="0" y="12.7" width="48" height="3.85" fill="#fff"></rect>
+      <rect x="0" y="18.5" width="48" height="2.85" fill="#fff"></rect>
+    </mask>
+  </defs>
+  <path d="M0 24A24 24 0 0 1 48 24Z" fill={`url(#${fill})`} mask={`url(#${mask})`}></path>
+</svg>
+
+<style>
+  .mark {
+    display: block;
+    flex: none;
+  }
+</style>

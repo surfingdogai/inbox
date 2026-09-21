@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" width="48" height="24">
+  <title>Surfing Dog</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff9650"/>
+      <stop offset=".58" stop-color="#ff6fa8"/>
+      <stop offset="1" stop-color="#8a6bff"/>
+    </linearGradient>
+    <mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="24">
+      <rect x="0" y="0" width="48" height="11.05" fill="#fff"/>
+      <rect x="0" y="12.7" width="48" height="3.85" fill="#fff"/>
+      <rect x="0" y="18.5" width="48" height="2.85" fill="#fff"/>
+    </mask>
+  </defs>
+  <path d="M0 24A24 24 0 0 1 48 24Z" fill="url(#g)" mask="url(#m)"/>
+</svg>

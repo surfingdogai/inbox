@@ -36,7 +36,7 @@ What it supports: authorization code with PKCE (S256, required); public clients 
 
 Scopes: `inbox:read`, `inbox:write`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run`, `offline_access`. A client that asks for none gets `inbox:read inbox:write settings:read offline_access`.
 
-Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a magic link by email (`POST /auth/magic-link`, then `GET /auth/verify`; the first address to sign in on a fresh instance becomes its owner). The owner app signs in with an API key today and does not create that session yet, so a consent screen reached through the app cannot finish. Magic-link and passkey sign-in in the app are the first release work; when they land, the flows below complete without any change on the client side.
+Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a magic link by email (`POST /auth/magic-link`, then `GET /auth/verify`; the first address to sign in on a fresh instance becomes its owner). The owner app offers both ways in: the emailed link, which creates that session, and an owner API key for people who only ever use the API. Passkey sign-in is the first release work.
 
 ### Claude
 

@@ -21,8 +21,9 @@ export default defineConfig({
       title: "Surfing Dog Inbox",
       description:
         "Docs for Surfing Dog Inbox: an open-source typed inbox for people and AI agents. Bookings, orders, quotes and messages, from anyone and any agent.",
-      logo: { src: "./public/logo.png", alt: "Surfing Dog" },
-      favicon: "/favicon-32.png",
+      // The striped half sun, the same mark the site's bar carries.
+      logo: { src: "./public/mark.svg", alt: "Surfing Dog" },
+      favicon: "/favicon.svg",
       head: [
         { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "32x32" } },
         { tag: "link", attrs: { rel: "apple-touch-icon", href: "/apple-touch-icon.png" } },
@@ -36,6 +37,7 @@ export default defineConfig({
       customCss: ["./src/styles/docs.css"],
       sidebar: [
         { label: "Home", link: "/" },
+        { label: "How it works", link: "/how-it-works/" },
         {
           label: "Start",
           items: ["docs", "docs/quickstart"],
@@ -52,16 +54,17 @@ export default defineConfig({
           label: "Trust",
           items: ["docs/security-and-privacy", "docs/contributing"],
         },
+        { label: "Technical", link: "/technical/" },
         { label: "Blog", link: "/blog/" },
       ],
       plugins: [
         starlightLlmsTxt({
           projectName: "Surfing Dog Inbox",
           description:
-            "An open-source, self-hostable typed inbox for businesses. It receives bookings, orders, quote requests and messages from people and from AI agents through REST, MCP, email and a web form, and turns them into typed items with a lifecycle handled by rules, the owner, or the owner's own AI.",
+            "An open-source, self-hostable typed inbox for businesses. It receives bookings, orders, quote requests and messages from people and from AI agents through REST, MCP and email, and turns them into typed items with a lifecycle handled by rules, the owner, or the owner's own AI.",
           details: [
-            "Every instance publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists the doors an agent may use.",
-            "A live demo instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
+            "Every instance publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. Email is a door as well, and it is not named in the manifest.",
+            "A live instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
             "The server is AGPL-3.0; the spec and the SDK are MIT. Hosted tenancy and the network's reviews arrive in a later release.",
           ].join("\n\n"),
           optionalLinks: [

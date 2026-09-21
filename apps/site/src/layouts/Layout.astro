@@ -27,6 +27,9 @@ const ogImage = new URL(image, Astro.site);
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <!-- The striped half sun, the same mark as the one in the bar. Browsers that
+         understand SVG take this one; the rest fall back to the rasters. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
@@ -61,5 +64,10 @@ const ogImage = new URL(image, Astro.site);
     <Nav />
     <main id="main"><slot /></main>
     <Footer />
+    <!-- Motion: reveals, the brand line and the counters. Every resting state is the
+         visible one, so a page without this script is simply a finished page. -->
+    <script>
+      import "../scripts/motion.ts";
+    </script>
   </body>
 </html>

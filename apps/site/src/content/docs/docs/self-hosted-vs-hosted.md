@@ -8,7 +8,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | | Deploy to Cloudflare | Your own server | Hosted by us (a later release) |
 | --- | --- | --- | --- |
 | Runs on | Cloudflare Workers on your account: D1, R2, Queues, cron | Node 22.16 or newer (Bun later) on any machine, `node:sqlite` | Our own servers, Node runtime, one SQLite file per business |
-| Set-up | The Deploy button provisions everything and asks for one secret | Build the server bundle, run one process, put Caddy or nginx in front | A slug, a magic link |
+| Set-up | The Deploy button provisions everything and asks for two values | Build the server bundle, run one process, put Caddy or nginx in front | A slug, a magic link |
 | Data | Your D1 database and R2 bucket | Your SQLite file and blob directory | One database per tenant on our servers, replicated with Litestream to object storage |
 | Email out | Cloudflare Email Service on Workers Paid with a Cloudflare zone; otherwise Resend, Postmark or SMTP | SMTP by default, or a provider adapter | Included, from `<slug>@mail.surfingdog.ai` with Reply-To the business, or your own domain with DKIM |
 | Email in | Email Routing (needs a Cloudflare zone) or a provider webhook | Forwarding, a subdomain MX, or a provider webhook | Included: `<slug>@in.surfingdog.ai` |

@@ -1,17 +1,28 @@
 ---
+interface Props {
+  /**
+   * Set everywhere except the network page: adds the pointer to it and the long provenance
+   * line, which that page states in full for itself.
+   */
+  more?: boolean;
+}
+
+const { more = false } = Astro.props;
+
 const INSTANCE = "https://inbox.surfingdog.ai";
+const NETWORK_STATS = "https://network.surfingdog.ai/v1/stats";
 /** The seed business every fresh instance can load; not a name to show as ours. */
 const DEMO_SEED_DOMAIN = "oficinamare.pt";
 
 const tiles = [
   { key: "instances_online", label: "Instances online", sub: "pinged in the last 24 h" },
-  { key: "businesses_listed", label: "Businesses listed", sub: "verified in the directory" },
+  { key: "businesses_listed", label: "Businesses listed", sub: "registered with the network" },
   { key: "activity_24h.bookings", label: "Bookings today", sub: "last 24 h, all instances" },
   { key: "activity_24h.orders", label: "Orders today", sub: "last 24 h, all instances" },
   { key: "activity_24h.quotes", label: "Quotes today", sub: "last 24 h, all instances" },
   { key: "activity_24h.messages", label: "Messages today", sub: "last 24 h, all instances" },
-  { key: "receipts_issued", label: "Receipts issued", sub: "co-signed, all time" },
-  { key: "reviews_published", label: "Reviews published", sub: "after reveal, all time" },
+  { key: "receipts_issued", label: "Receipts issued", sub: "co-signed, from the next release" },
+  { key: "reviews_published", label: "Reviews published", sub: "after reveal, from a later release" },
 ];
 
 const doors = [
@@ -43,14 +54,50 @@ try {
   // Unreachable at build time: keep the defaults.
 }
 const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message" });
+
+// The counts are read once at build time as well, so the page ships with real numbers rather
+// than dashes: a share card and a reader with no JavaScript both get the figures, and the
+// count-up has a value in the HTML to count to. The browser keeps them current after that.
+// If the network cannot be reached the tiles stay at a dash and nothing counts.
+const numbers = new Intl.NumberFormat("en-GB");
+const read = (source: unknown, path: string): unknown =>
+  path
+    .split(".")
+    .reduce<unknown>((v, k) => (v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined), source);
+
+let seeded: Record<string, number> = {};
+try {
+  const res = await fetch(NETWORK_STATS, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (res.ok) {
+    const stats: unknown = await res.json();
+    for (const t of tiles) {
+      const value = read(stats, t.key);
+      if (typeof value === "number" && Number.isFinite(value)) seeded[t.key] = value;
+    }
+  }
+} catch {
+  // Unreachable at build time: dashes, and the browser fills them in.
+  seeded = {};
+}
 ---
 
-<section class="section" id="network" aria-labelledby="network-h">
+<section class="section" id="network" aria-labelledby="network-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
         <p class="eyebrow">Live</p>
         <h2 class="h-section" id="network-h">The network, right now</h2>
+        {
+          more ? (
+            <p class="lede">
+              An inbox reports counts once an hour, and only if its owner switched membership on.
+              <a class="link" href="/network/">What the network is for</a>
+            </p>
+          ) : null
+        }
       </div>
       <span class="pill pill-lg" data-network-pill aria-live="polite">
         <i class="dot"></i>
@@ -58,25 +105,29 @@ const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message"
       </span>
     </div>
 
-    <div class="tiles">
+    <div class="tiles" data-reveal="stagger">
       {
-        tiles.map((t) => (
-          <div class="glass tile">
-            <p class="label">{t.label}</p>
-            <p class="value tabular" data-stat={t.key}>
-              —
-            </p>
-            <p class="sub">{t.sub}</p>
-          </div>
-        ))
+        tiles.map((t) => {
+          // A tile with no number carries no data-to, so nothing counts up to a dash.
+          const value = seeded[t.key];
+          return (
+            <div class="glass card tile">
+              <p class="label">{t.label}</p>
+              <p class="value u-count" data-stat={t.key} data-to={value === undefined ? undefined : String(value)}>
+                {value === undefined ? "—" : numbers.format(value)}
+              </p>
+              <p class="sub">{t.sub}</p>
+            </div>
+          );
+        })
       }
     </div>
 
-    <div class="glass panel instance">
+    <div class="glass panel lift instance">
       <div class="inst-head">
         <div>
           <p class="eyebrow">Live instance</p>
-          <h3>{name}</h3>
+          <h3 class="h-sub">{name}</h3>
           <p class="card-text who">
             This is our own inbox. Surfing Dog runs on it: book a call, ask for a quote, or message us, as a person or
             through your agent.
@@ -111,8 +162,11 @@ const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message"
     </div>
 
     <p class="fine">
-      Counts come from instances that share anonymous activity counts with network.surfingdog.ai: a version, a runtime
-      and the number of items in the last 24 hours. No content, no identities, no amounts. Refreshes every minute.
+      {
+        more
+          ? "Counts come from instances that share anonymous activity counts with network.surfingdog.ai: a version, a runtime and the number of items in the last 24 hours. No content, no identities, no amounts. Refreshes every minute."
+          : "Refreshes every minute. What an instance reports, and what it never reports, is set out below."
+      }
     </p>
   </div>
 </section>
@@ -121,73 +175,69 @@ const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message"
   .tiles {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--gap-row);
   }
   @media (min-width: 720px) {
     .tiles {
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 16px;
+      gap: var(--gap-grid);
     }
-  }
-  .tile {
-    padding: 20px 20px 18px;
-    border-radius: var(--radius-panel);
   }
   .tile p {
     margin: 0;
   }
   .label {
-    font-size: 13.5px;
+    font-size: var(--fs-ui);
     font-weight: 600;
+    line-height: var(--lh-ui);
     color: var(--ink-2);
   }
   .value {
-    margin-top: 6px;
+    margin-top: var(--sp-1);
     font-family: var(--font-display);
-    font-size: clamp(28px, 3vw, 34px);
+    font-size: clamp(24px, 2.6vw, 32px);
     font-weight: 500;
     letter-spacing: -0.02em;
     line-height: 1.1;
     color: var(--ink);
   }
   .sub {
-    margin-top: 6px;
-    font-size: 12.5px;
+    margin-top: var(--sp-1);
+    font-size: var(--fs-fine);
+    line-height: 1.45;
     color: var(--ink-3);
   }
   .instance {
-    margin-top: 16px;
+    margin-top: var(--gap-grid);
   }
   .inst-head {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px 24px;
+    gap: var(--sp-3) var(--sp-6);
   }
-  .inst-head h3 {
-    margin: 6px 0 0;
-    font-size: 24px;
+  .inst-head .h-sub {
+    margin: var(--sp-1) 0 0;
   }
   .who {
-    max-width: 58ch;
-    margin-top: 8px;
+    margin-top: var(--sp-2);
   }
   .types {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 18px;
+    gap: var(--sp-2);
+    margin-top: var(--sp-5);
   }
   .doors {
     display: grid;
-    gap: 8px;
-    margin: 18px 0 0;
+    gap: var(--sp-2);
+    margin: var(--sp-5) 0 0;
   }
   .doors > div {
     display: grid;
     grid-template-columns: 84px minmax(0, 1fr);
-    gap: 8px;
+    gap: var(--sp-2);
     align-items: baseline;
   }
   .doors dt {
@@ -239,7 +289,19 @@ const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message"
       const stats: unknown = await res.json();
       for (const cell of cells) {
         const value = read(stats, cell.dataset.stat ?? "");
-        cell.textContent = typeof value === "number" ? format.format(value) : "—";
+        // The tile already carries a value from build time, which is what .u-count counts up
+        // to. Keep both that target and the text it settles on in step with the live figure,
+        // so a count that is running lands on the right number instead of the built one.
+        if (typeof value === "number") {
+          const text = format.format(value);
+          cell.dataset.to = String(value);
+          cell.dataset.countFinal = text;
+          cell.textContent = text;
+        } else {
+          delete cell.dataset.to;
+          delete cell.dataset.countFinal;
+          cell.textContent = "—";
+        }
       }
       const api = read(stats, "status.api");
       const lag = read(stats, "status.jobs_lag_seconds");
@@ -247,7 +309,12 @@ const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message"
       if (api === "ok" && !(typeof lag === "number" && lag > 600)) state("ok", `network ok · ${at}`);
       else state("degraded", `catching up · ${at}`);
     } catch {
-      for (const cell of cells) cell.textContent = "—";
+      // Unreachable: a dash and a calm pill, and nothing to count up to.
+      for (const cell of cells) {
+        delete cell.dataset.to;
+        delete cell.dataset.countFinal;
+        cell.textContent = "—";
+      }
       state("warming", "warming up");
     }
   }

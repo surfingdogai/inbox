@@ -7,23 +7,23 @@ const points = [
     text: "Every request becomes a booking, an order, a quote or a message with a state machine behind it. Rules handle the routine; you, or your own AI, handle the rest.",
   },
   {
-    title: "Every door open",
-    text: "Email, web form, REST and MCP today; A2A, UCP and more as adapters. Agents pick their door, you see one inbox. One manifest at /.well-known/agent-inbox.json lists every door.",
+    title: "Three doors, one inbox",
+    text: "A REST API, two MCP servers and email. Agents pick their door and you see one list. The manifest at /.well-known/agent-inbox.json points them at the REST, OpenAPI and MCP doors on their own.",
   },
   {
     title: "Receipts, not reviews",
-    text: "When an item is confirmed the instance issues a signed receipt and the customer's agent counter-signs it. A review on the network is only valid against a receipt, in both directions.",
+    text: "Completed work will end in a signed receipt that both sides hold. A review on the network will only count against one, in both directions.",
     phase: "the next release",
   },
 ];
 ---
 
-<section class="section" id="inbox" aria-labelledby="inbox-h">
+<section class="section" id="inbox" aria-labelledby="inbox-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
         <p class="eyebrow">One inbox</p>
-        <h2 class="h-section" id="inbox-h">Typed, every door open, a receipt at the end</h2>
+        <h2 class="h-section" id="inbox-h">Typed, three doors open, a receipt at the end</h2>
       </div>
     </div>
     <div class="cols">
@@ -39,7 +39,7 @@ const points = [
           points.map((p) => (
             <article class="point">
               <div class="head">
-                <h3>{p.title}</h3>
+                <h3 class="h-card">{p.title}</h3>
                 {p.phase ? <span class="pill">{p.phase}</span> : null}
               </div>
               <p class="card-text">{p.text}</p>
@@ -54,20 +54,19 @@ const points = [
 <style>
   .cols {
     display: grid;
-    gap: 16px;
+    gap: var(--gap-grid);
     align-items: start;
   }
   @media (min-width: 900px) {
     .cols {
       grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-      gap: 20px;
     }
   }
   .points {
-    padding-block: 6px;
+    padding-block: var(--sp-1);
   }
   .point {
-    padding: 16px 0;
+    padding: var(--sp-4) 0;
     border-top: 1px solid var(--hairline);
   }
   .point:first-child {
@@ -77,11 +76,7 @@ const points = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 4px;
-  }
-  h3 {
-    margin: 0;
-    font-size: 17px;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-1);
   }
 </style>

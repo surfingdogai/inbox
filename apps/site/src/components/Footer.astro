@@ -1,50 +1,157 @@
 ---
+import Mark from "./Mark.astro";
+
+interface Group {
+  id: string;
+  title: string;
+  links: { href: string; label: string; external?: boolean }[];
+}
+
+/** The whole map, in three small groups, so nothing is reachable only from the navigation. */
+const groups: Group[] = [
+  {
+    id: "ft-product",
+    title: "Product",
+    links: [
+      { href: "/how-it-works/", label: "How it works" },
+      { href: "/network/", label: "Network" },
+      { href: "/requests/", label: "Requests" },
+    ],
+  },
+  {
+    id: "ft-dev",
+    title: "Developers",
+    links: [
+      { href: "/docs/", label: "Docs" },
+      { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
+      { href: "/technical/", label: "Technical" },
+    ],
+  },
+  {
+    id: "ft-writing",
+    title: "Writing",
+    links: [{ href: "/blog/", label: "Blog" }],
+  },
+];
+
 const year = new Date().getFullYear();
 ---
 
-<footer class="wrap footer">
-  <div class="row1">
-    <p class="who">
-      <img src="/logo.png" alt="" width="460" height="461" loading="lazy" decoding="async" />
-      <span>Surfing Dog Lda · Portugal · {year}</span>
-    </p>
-    <ul class="links">
-      <li><a href="https://github.com/surfingdogai/inbox" rel="noopener">GitHub</a></li>
-      <li><a href="/docs/">Docs</a></li>
-      <li><a href="/blog/">Blog</a></li>
-    </ul>
+<footer class="footer">
+  <div class="wrap">
+    <!-- The four-colour brand line. The shared motion script draws it once when it
+         arrives; with no script it is simply already drawn. -->
+    <span class="u-line brand-line" aria-hidden="true"></span>
+
+    <div class="top">
+      <div class="identity">
+        <a class="fbrand" href="/">
+          <Mark size={24} />
+          <span>Surfing Dog</span>
+        </a>
+        <p class="say">Open source, and it runs on your own servers.</p>
+      </div>
+
+      <nav class="groups" aria-label="Footer" data-reveal="stagger">
+        {
+          groups.map((g) => (
+            <div class="group">
+              <p class="ghead" id={g.id}>
+                {g.title}
+              </p>
+              <ul class="links" aria-labelledby={g.id}>
+                {g.links.map((l) => (
+                  <li>
+                    <a href={l.href} rel={l.external ? "noopener" : undefined}>
+                      <span>{l.label}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </nav>
+    </div>
+
+    <div class="base">
+      <p class="who">
+        <img src="/logo.png" alt="" width="460" height="461" loading="lazy" decoding="async" />
+        <span>Surfing Dog Lda · Portugal · {year}</span>
+      </p>
+      <p class="licence">AGPL-3.0 server and app. MIT spec and SDK.</p>
+    </div>
   </div>
-  <p class="licence">AGPL-3.0 server, MIT spec and SDK.</p>
 </footer>
 
 <style>
   .footer {
-    padding-block: 40px 48px;
-    border-top: 1px solid var(--hairline);
-    font-size: 13.5px;
+    margin-top: var(--sp-6);
+    padding-block: 0 var(--sp-8);
+    font-size: var(--fs-ui);
     color: var(--ink-2);
   }
-  .row1 {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px 24px;
+  /* Appearance and motion come from .u-line; only the room below it is ours. */
+  .brand-line {
+    margin-bottom: var(--sp-7);
   }
-  .who {
+
+  .top {
+    display: grid;
+    gap: var(--sp-7) var(--sp-6);
+  }
+  .identity {
+    display: grid;
+    gap: var(--sp-3);
+    align-content: start;
+  }
+  .fbrand {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    margin: 0;
+    gap: var(--sp-2);
+    width: fit-content;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: var(--fs-ui);
+    color: var(--ink);
+    text-decoration: none;
   }
-  .who img {
-    width: 22px;
-    height: 22px;
-    image-rendering: pixelated;
+  .fbrand :global(.mark) {
+    transition: transform 0.35s var(--ease-out-soft);
+  }
+  .fbrand:hover :global(.mark),
+  .fbrand:focus-visible :global(.mark) {
+    transform: translateY(-1px);
+  }
+  .say {
+    max-width: 30ch;
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-7) var(--sp-6);
+  }
+  .group {
+    display: grid;
+    gap: var(--sp-3);
+    align-content: start;
+  }
+  .ghead {
+    margin: 0;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
   .links {
-    display: flex;
-    gap: 18px;
+    display: grid;
+    gap: var(--sp-3);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -52,15 +159,83 @@ const year = new Date().getFullYear();
   .links a {
     color: var(--ink-2);
     text-decoration: none;
+    transition: color 0.15s var(--ease-out-soft);
   }
-  .links a:hover {
+  .links a span {
+    position: relative;
+  }
+  /* The rule grows out from the left rather than blinking on. */
+  .links a span::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -3px;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.2s var(--ease-out-soft);
+  }
+  .links a:hover,
+  .links a:focus-visible {
     color: var(--ink);
-    text-decoration: underline;
-    text-underline-offset: 3px;
+  }
+  .links a:hover span::after,
+  .links a:focus-visible span::after {
+    transform: scaleX(1);
+  }
+
+  .footer a:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  .base {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2) var(--sp-6);
+    margin-top: var(--sp-7);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--hairline);
+  }
+  .who {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .who img {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
   }
   .licence {
-    margin: 14px 0 0;
-    font-size: 12.5px;
+    margin: 0;
+    font-size: var(--fs-fine);
     color: var(--ink-3);
+  }
+
+  @media (min-width: 560px) {
+    .groups {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 900px) {
+    .footer {
+      padding-bottom: var(--sp-9);
+    }
+    .top {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+      gap: var(--sp-8);
+    }
+    .groups {
+      gap: var(--sp-6) var(--sp-7);
+    }
   }
 </style>

@@ -12,7 +12,7 @@ Three ways to run the same software. Pick one, then make the first calls at the 
 - a D1 database, `surfingdog-inbox`, the one database of your business;
 - an R2 bucket, `surfingdog-inbox-blobs`, for raw email and attachments;
 - a queue, `surfingdog-inbox-jobs`, plus a cron trigger every five minutes, which drive notifications and rules;
-- one secret, `INBOX_SECRET_KEY`, which the flow asks you for.
+- two values, `INBOX_SECRET_KEY` and `INBOX_OWNER_EMAIL`, which the flow asks you for.
 
 Migrations run lazily on the first request after a deploy. When the Worker is up, these answer:
 
@@ -47,6 +47,7 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
 | `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest and the links in emails. |
 | `INBOX_OWNER_EMAIL` | unset | Comma-separated addresses allowed to create the first account by email link. Without it, the first sign-in needs an owner API key. |
+| `INBOX_SECRET_KEY` | unset | Seals connector credentials and webhook secrets (AES-256-GCM). One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, and refuses to store a secret rather than store it in the clear. |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | unset | Real email through Cloudflare Email Service (sign-in links, notifications), from an address on a domain onboarded there. `MAIL_FROM_NAME` is optional. |
 | `RESEND_API_KEY` | unset | Real email through Resend instead. With neither, mail is printed to the console. |
 
@@ -67,7 +68,7 @@ Hosted tenancy opens in a later release: the same software on our own servers, o
 
 ## First calls
 
-The examples use the demo instance. Add `x-sandbox: 1` to anything that creates an item there, so it is marked as a sandbox item and triggers no real notifications; on your own instance, leave it off.
+The examples hit inbox.surfingdog.ai, which is our own working inbox. Send `x-sandbox: 1` on anything that creates an item there. It is required, not optional, or you will create a real item and a real notification. On your own instance, leave it off.
 
 Read the manifest, then the services:
 

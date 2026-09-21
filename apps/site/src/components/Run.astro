@@ -3,7 +3,7 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
 
-<section class="section" id="run" aria-labelledby="run-h">
+<section class="section" id="run" aria-labelledby="run-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
@@ -16,31 +16,31 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
       </div>
     </div>
 
-    <div class="ways">
-      <article class="glass panel way">
-        <h3>Deploy to Cloudflare</h3>
+    <div class="grid-cards ways" data-reveal="stagger">
+      <article class="glass card lift way">
+        <h3 class="h-card">Deploy to Cloudflare</h3>
         <p class="card-text">
           One click on your own Cloudflare account. The button provisions a D1 database, an R2 bucket and a queue, and
-          asks for one secret. Starts on a free account; sending email needs Workers Paid.
+          asks for two values. Starts on a free account; sending email needs Workers Paid.
         </p>
         <div class="foot">
           <a class="btn btn-primary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
         </div>
       </article>
 
-      <article class="glass panel way">
-        <h3>Your own server</h3>
+      <article class="glass card lift way">
+        <h3 class="h-card">Your own server</h3>
         <p class="card-text">One process, one SQLite file, Node 22.16 or newer. A single command is on its way with 0.1.</p>
-        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">coming with 0.1</span></pre>
+        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">0.1</span></pre>
         <div class="foot">
           <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
         </div>
       </article>
 
-      <article class="glass panel way">
+      <article class="glass card lift way">
         <div class="way-head">
-          <h3>Hosted by us</h3>
-          <span class="pill">Hosted opens in a later release</span>
+          <h3 class="h-card">Hosted by us</h3>
+          <span class="pill">a later release</span>
         </div>
         <p class="card-text">
           The same inbox on our own servers, one database per business, email in and out, backups and one-click
@@ -68,10 +68,7 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 </section>
 
 <style>
-  .ways {
-    display: grid;
-    gap: 16px;
-  }
+  /* The grid and its gap come from .grid-cards; only the column count is local. */
   @media (min-width: 900px) {
     .ways {
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -81,33 +78,29 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
     display: flex;
     flex-direction: column;
   }
-  .way h3 {
-    margin: 0;
-    font-size: 20px;
-  }
   .way-head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--sp-2);
   }
   .way .card-text {
-    margin-top: 10px;
+    margin-top: var(--sp-2);
   }
   .foot {
     margin-top: auto;
-    padding-top: 18px;
+    padding-top: var(--sp-5);
   }
   .cmd {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    margin: 14px 0 0;
-    padding: 10px 12px;
-    border-radius: var(--radius-md);
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0 0;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-control);
     background: var(--row-bg);
     border: 1px solid var(--hairline);
     color: var(--ink);
@@ -120,7 +113,7 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
   .wait-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--sp-2);
   }
   .wait-row .input {
     flex: 1 1 180px;
