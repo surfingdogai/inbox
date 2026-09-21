@@ -160,6 +160,8 @@ export class Capabilities {
         type: "message",
         payload: { text: input.body, subject: input.subject },
         contact: input.contact,
+        message: input.body,
+        messageId: input.message_id,
       });
     }
     const row = await this.loadOwned(c, input.item_id);
@@ -167,7 +169,7 @@ export class Capabilities {
     if (item.type === "message" && item.state !== "open") {
       return transitionItem(this.db, c, { itemId: item.id, event: "reopen", input: { note: input.body } });
     }
-    await this.appendEntry(c, item, input.body, "in");
+    await this.appendEntry(c, item, input.body, "in", input.message_id);
     return viewFor(item, caller.actor.kind);
   }
 
@@ -322,8 +324,14 @@ export class Capabilities {
     return row;
   }
 
-  private appendEntry(caller: Caller, item: Item, body: string, direction: "in" | "out" | "note"): Promise<void> {
-    return appendThreadEntry(this.db, caller, item, body, direction);
+  private appendEntry(
+    caller: Caller,
+    item: Item,
+    body: string,
+    direction: "in" | "out" | "note",
+    messageId?: string | undefined,
+  ): Promise<void> {
+    return appendThreadEntry(this.db, caller, item, body, direction, messageId);
   }
 }
 

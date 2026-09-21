@@ -29,6 +29,7 @@ export interface AppDeps {
 export interface Inbox {
   readonly app: Hono<CallerEnv>;
   readonly runner: JobRunner;
+  readonly caps: Capabilities;
 }
 
 /**
@@ -80,10 +81,11 @@ export function createInbox(deps: AppDeps): Inbox {
     businessName: async () => (await caps.getBusinessProfile()).name,
     fetchClientMetadata: deps.fetchClientMetadata,
     now: deps.now,
+    inboundEmailSecret: async () => (await readSettings(deps.db)).email.inboundSecret ?? null,
   });
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
-  return { app, runner };
+  return { app, runner, caps };
 }
 
 /** The app alone, for tests and simple hosts. */

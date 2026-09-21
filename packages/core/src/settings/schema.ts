@@ -48,6 +48,8 @@ export const settingsSchema = z.object({
       fromName: z.string().max(100).optional(),
       /** Customers reply here; usually the business mailbox. */
       replyTo: z.email().optional(),
+      /** Shared secret for the raw-MIME inbound webhook (Mailgun routes, forwarders). */
+      inboundSecret: z.string().min(16).max(200).optional(),
     })
     .prefault({}),
   testMode: z.boolean().default(false),
