@@ -6,27 +6,46 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "tsx watch src/node.ts",
+    "dev:client": "vite",
     "dev:workers": "wrangler dev --config ../../wrangler.jsonc",
+    "key": "tsx src/node.ts create-owner-key",
     "types": "wrangler types --config ../../wrangler.jsonc ./worker-configuration.d.ts",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p client/tsconfig.json",
     "deploy": "wrangler deploy --config ../../wrangler.jsonc",
+    "build": "pnpm build:client && pnpm build:server",
+    "build:client": "vite build",
     "build:server": "esbuild src/node.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.mjs --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --log-level=warning"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@surfingdog/adapters": "workspace:*",
     "@surfingdog/core": "workspace:*",
     "@surfingdog/platform": "workspace:*",
+    "drizzle-orm": "catalog:",
     "hono": "catalog:",
-    "zod": "catalog:",
-    "@surfingdog/adapters": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@surfingdog/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.103.1",
+    "@tanstack/react-router": "^1.170.38",
+    "@tanstack/router-plugin": "^1.168.40",
     "@types/node": "catalog:",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "clsx": "^2.1.1",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.47.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "tsx": "^4.23.15",
     "typescript": "catalog:",
-    "wrangler": "^4.136.0",
-    "@modelcontextprotocol/client": "^2.0.0",
-    "esbuild": "^0.28.2"
+    "vite": "^8.3.0",
+    "wrangler": "^4.136.0"
   }
 }

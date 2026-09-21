@@ -1,0 +1,112 @@
+import clsx from "clsx";
+import { Send, StickyNote, User } from "lucide-react";
+import { type FormEvent, type RefObject, useState } from "react";
+import type { ApiProblem } from "../lib/api";
+import { actorWord, channelWord, formatDateTime, initials } from "../lib/format";
+import type { ThreadEntry } from "../lib/types";
+
+/** Thread entries in, out and internal notes, then a reply box that also takes a private note. */
+export function Conversation({
+  entries,
+  tz,
+  business,
+  replyRef,
+  onSend,
+  sending,
+  error,
+}: {
+  entries: readonly ThreadEntry[];
+  tz: string | undefined;
+  business: string | undefined;
+  replyRef: RefObject<HTMLTextAreaElement | null>;
+  onSend: (body: string, internal: boolean) => Promise<void>;
+  sending: boolean;
+  error: ApiProblem | null;
+}) {
+  const [text, setText] = useState("");
+  const [internal, setInternal] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const body = text.trim();
+    if (!body || sending) return;
+    try {
+      await onSend(body, internal);
+      setText("");
+    } catch {
+      // The problem is shown under the box.
+    }
+  };
+
+  return (
+    <div className="stack">
+      <div className="eyebrow">Conversation</div>
+      {entries.length === 0 && <p className="hint">No messages on this item yet.</p>}
+      {entries.map((e) => (
+        <Entry key={e.id} entry={e} tz={tz} business={business} />
+      ))}
+      <form className="reply" onSubmit={submit}>
+        <label className="label" htmlFor="reply-box">
+          {internal ? "Internal note" : "Reply"}
+        </label>
+        <textarea
+          id="reply-box"
+          ref={replyRef}
+          className="input"
+          rows={3}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={internal ? "A private note for the team. The customer never sees it." : "Write to the customer…"}
+          aria-invalid={error ? "true" : undefined}
+          aria-describedby={error ? "reply-error" : undefined}
+        />
+        <div className="rowx">
+          <label className="check">
+            <span className="switch">
+              <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
+              <span />
+            </span>
+            Internal note
+          </label>
+          <span className="sp" />
+          <button type="submit" className="btn btn-primary btn-sm" disabled={!text.trim() || sending}>
+            {sending ? <span className="spinner" aria-hidden="true" /> : <Send className="icon" aria-hidden="true" />}
+            {internal ? "Add note" : "Send reply"}
+          </button>
+        </div>
+        {error && (
+          <p className="hint error" id="reply-error" role="alert">
+            {error.detail}
+          </p>
+        )}
+      </form>
+    </div>
+  );
+}
+
+function Entry({ entry, tz, business }: { entry: ThreadEntry; tz: string | undefined; business: string | undefined }) {
+  const when = formatDateTime(entry.at, tz);
+  const who =
+    entry.direction === "in"
+      ? `Customer · via ${channelWord(entry.channel)} · ${when}`
+      : entry.direction === "note"
+        ? `Internal note · ${actorWord(entry.actor)} · ${when}`
+        : `${business || "You"} · ${when}`;
+  return (
+    <div className={clsx("msg", `msg-${entry.direction}`)}>
+      <span className="avatar" aria-hidden="true">
+        {entry.direction === "in" ? (
+          <User className="icon-sm" />
+        ) : entry.direction === "note" ? (
+          <StickyNote className="icon-sm" />
+        ) : (
+          initials(business || "You")
+        )}
+      </span>
+      <div>
+        <div className="who">{who}</div>
+        <div className="b row-glass">{entry.body}</div>
+      </div>
+    </div>
+  );
+}

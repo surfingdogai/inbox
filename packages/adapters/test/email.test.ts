@@ -1,33 +1,8 @@
-import { Capabilities, createDb, MIGRATIONS, schema } from "@surfingdog/core";
-import { runMigrations, type SqliteClient } from "@surfingdog/platform";
+import { schema } from "@surfingdog/core";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ingestEmail, stripQuotedReply } from "../src/email";
-
-async function makeClient(): Promise<SqliteClient> {
-  if (typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers") {
-    const spec = "cloudflare:test";
-    const { env } = (await import(/* @vite-ignore */ spec)) as { env: { DB: unknown } };
-    const { d1Client } = await import("@surfingdog/platform/cloudflare");
-    return d1Client(env.DB as Parameters<typeof d1Client>[0]);
-  }
-  const { nodeSqliteClient } = await import("@surfingdog/platform/node");
-  return nodeSqliteClient(":memory:");
-}
-
-async function setup() {
-  const db = createDb(await makeClient());
-  await runMigrations(db.client, MIGRATIONS);
-  const { rows } = await db.client.query({
-    sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%' AND name NOT LIKE 'search_fts%' AND name <> 'migrations'",
-  });
-  await db.client.batch([
-    { sql: "PRAGMA defer_foreign_keys = ON", method: "run" },
-    ...rows.map((r) => ({ sql: `DELETE FROM "${String(r[0])}"`, method: "run" as const })),
-    { sql: "DELETE FROM search_fts", method: "run" },
-  ]);
-  return { db, caps: new Capabilities(db) };
-}
+import { freshDb } from "./db";
 
 const mime = (h: Record<string, string>, body: string) =>
   `${Object.entries(h)
@@ -36,7 +11,7 @@ const mime = (h: Record<string, string>, body: string) =>
 
 describe("email door", () => {
   it("turns a new email into a message item, dedupes on Message-ID, and threads the reply", async () => {
-    const { db, caps } = await setup();
+    const { db, caps } = await freshDb();
     const first = await ingestEmail(db, caps, {
       raw: mime(
         {
@@ -98,7 +73,7 @@ describe("email door", () => {
   });
 
   it("routes by plus address and subject token, and rejects mail without a sender", async () => {
-    const { db, caps } = await setup();
+    const { db, caps } = await freshDb();
     const first = await ingestEmail(db, caps, {
       raw: mime(
         { From: "rita@example.com", To: "hello@oficinamare.pt", Subject: "Hello", "Message-ID": "<b1@x>" },

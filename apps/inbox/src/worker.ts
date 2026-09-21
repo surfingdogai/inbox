@@ -1,4 +1,4 @@
-import { ingestEmail } from "@surfingdog/adapters";
+import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
 import { createDb } from "@surfingdog/core";
 import { cloudflareEmailMailOut, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
@@ -36,7 +36,9 @@ export default {
   },
 
   async scheduled(_controller, env) {
-    await inboxFor(env).runner.runDue(createDb(d1Client(env.DB)), { workerId: "cron", limit: 100 });
+    const db = createDb(d1Client(env.DB));
+    await ensureNetworkPing(db);
+    await inboxFor(env).runner.runDue(db, { workerId: "cron", limit: 100 });
   },
 
   // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.
