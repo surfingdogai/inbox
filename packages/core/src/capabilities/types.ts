@@ -22,7 +22,7 @@ const accessToken = z
   .describe("Capability secret returned when the item was created without an account.");
 const idempotencyKey = z
   .string()
-  .min(8)
+  .min(1)
   .max(200)
   .optional()
   .describe("Same key + same request = same answer. Required for agents.");

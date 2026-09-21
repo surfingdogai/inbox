@@ -1,0 +1,29 @@
+{
+  "name": "@surfingdog/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "The doors: REST + OpenAPI, public and owner MCP, and the bearer/access-token resolver that turns a request into a Caller.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.1",
+    "@modelcontextprotocol/hono": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@surfingdog/core": "workspace:*",
+    "@surfingdog/platform": "workspace:*",
+    "hono": "catalog:",
+    "hono-openapi": "^1.3.3",
+    "zod": "catalog:",
+    "drizzle-orm": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
