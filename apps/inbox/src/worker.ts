@@ -1,34 +1,44 @@
 import { createDb } from "@surfingdog/core";
+import { cloudflareEmailMailOut, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
-import { type App, createApp } from "./app";
+import { createInbox, type Inbox } from "./app";
+
+type Bindings = Env & { EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0]; RESEND_API_KEY?: string };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
-const apps = new WeakMap<object, App>();
-function appFor(env: Env): App {
-  let app = apps.get(env.DB);
-  if (!app) {
-    app = createApp({ db: createDb(d1Client(env.DB)) });
-    apps.set(env.DB, app);
+const inboxes = new WeakMap<object, Inbox>();
+function inboxFor(env: Bindings): Inbox {
+  let inbox = inboxes.get(env.DB);
+  if (!inbox) {
+    const mailOut: MailOut = env.EMAIL
+      ? cloudflareEmailMailOut(env.EMAIL)
+      : env.RESEND_API_KEY
+        ? resendMailOut(env.RESEND_API_KEY)
+        : logMailOut(console.log);
+    inbox = createInbox({ db: createDb(d1Client(env.DB)), mailOut });
+    inboxes.set(env.DB, inbox);
   }
-  return app;
+  return inbox;
 }
 
 /**
- * Cloudflare Workers entry. HTTP goes to the Hono app; the other handlers are the seams for the
- * platform adapters (jobs consumer, cron, inbound email).
+ * Cloudflare Workers entry. HTTP goes to the Hono app; cron and the queue drain the job outbox;
+ * inbound email lands here once the email door is wired.
  */
 export default {
-  fetch: (request, env, ctx) => appFor(env).fetch(request, env, ctx),
+  fetch: (request, env, ctx) => inboxFor(env).app.fetch(request, env, ctx),
 
-  async queue(batch) {
+  async queue(batch, env) {
+    const inbox = inboxFor(env);
+    await inbox.runner.runDue(createDb(d1Client(env.DB)), { workerId: "queue" });
     for (const message of batch.messages) message.ack();
   },
 
-  async scheduled() {
-    // Cron tick: due jobs, digests, cleanup. Wired with the job runner.
+  async scheduled(_controller, env) {
+    await inboxFor(env).runner.runDue(createDb(d1Client(env.DB)), { workerId: "cron", limit: 100 });
   },
 
   async email(message) {
     message.setReject("Inbound email is not configured on this instance yet.");
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Bindings>;

@@ -2,32 +2,56 @@ import { type CallerEnv, mountDoors } from "@surfingdog/adapters";
 import {
   buildManifest,
   Capabilities,
+  createRunner,
   type Db,
+  type JobRunner,
   MANIFEST_PATH,
   MIGRATIONS,
   readSettings,
   VERSION,
 } from "@surfingdog/core";
-import { ensureMigrated } from "@surfingdog/platform";
+import { ensureMigrated, logMailOut, type MailOut } from "@surfingdog/platform";
 import { Hono } from "hono";
 
 export interface AppDeps {
   readonly db: Db;
+  /** Outbound mail; defaults to a logger, which is right for development and tests. */
+  readonly mailOut?: MailOut | undefined;
+  /** Public base URL for links in emails; derived from the request when absent. */
+  readonly baseUrl?: string | undefined;
+  /** Runs work after the response. Workers pass `ctx.waitUntil`; Node lets the loop pick it up. */
+  readonly background?: ((work: Promise<unknown>) => void) | undefined;
+}
+
+export interface Inbox {
+  readonly app: Hono<CallerEnv>;
+  readonly runner: JobRunner;
 }
 
 /**
  * The HTTP application, runtime-agnostic: the Worker and the Node server both mount this. Every
  * door (REST, OpenAPI, MCP) is registered by `mountDoors`; the manifest is generated from the
- * business profile so agents discover the doors from one small document.
+ * business profile so agents discover the doors from one small document. Mutating requests kick
+ * the job runner so notifications and rules follow within the same second.
  */
-export function createApp(deps: AppDeps) {
+export function createInbox(deps: AppDeps): Inbox {
   const app = new Hono<CallerEnv>();
   const caps = new Capabilities(deps.db);
+  const runner = createRunner({ mailOut: deps.mailOut ?? logMailOut(), baseUrl: deps.baseUrl });
+  const background = deps.background ?? ((work) => void work.catch(() => {}));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
-  app.use("*", async (_c, next) => {
+  app.use("*", async (c, next) => {
     await ensureMigrated(deps.db.client, MIGRATIONS);
     await next();
+    if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
+      const work = runner.runDue(deps.db, { workerId: "request" });
+      try {
+        c.executionCtx.waitUntil(work);
+      } catch {
+        background(work);
+      }
+    }
   });
 
   app.get("/healthz", (c) => c.json({ ok: true, version: VERSION }));
@@ -46,7 +70,12 @@ export function createApp(deps: AppDeps) {
   mountDoors(app, { db: deps.db, caps, version: VERSION, sandbox: async () => (await readSettings(deps.db)).testMode });
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
-  return app;
+  return { app, runner };
+}
+
+/** The app alone, for tests and simple hosts. */
+export function createApp(deps: AppDeps): Hono<CallerEnv> {
+  return createInbox(deps).app;
 }
 
 export type App = ReturnType<typeof createApp>;
