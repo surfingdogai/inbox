@@ -20,6 +20,7 @@ jobs:
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm --filter @surfingdog/inbox build:client
+      - run: pnpm --filter @surfingdog/sdk build
       - run: pnpm test:node
       - run: pnpm test:workers
       - run: pnpm kit

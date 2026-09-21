@@ -1,14 +1,57 @@
 {
   "name": "@surfingdog/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "Typed client for the Surfing Dog Inbox public and owner APIs.",
+  "description": "Verify Surfing Dog Inbox webhooks and type their events. Standard Webhooks over WebCrypto: no dependencies, runs unchanged on Node, Workers, Deno, Bun and in the browser.",
+  "keywords": [
+    "webhook",
+    "webhooks",
+    "standard-webhooks",
+    "webhook-verification",
+    "hmac",
+    "signature",
+    "surfingdog",
+    "inbox",
+    "bookings",
+    "orders",
+    "agents"
+  ],
+  "homepage": "https://surfingdog.ai/docs/webhooks/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/surfingdogai/inbox.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/surfingdogai/inbox/issues"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "prepack": "pnpm run build"
   },
   "devDependencies": {
     "typescript": "catalog:"
