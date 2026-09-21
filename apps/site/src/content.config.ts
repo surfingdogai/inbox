@@ -1,16 +1,15 @@
 import { defineCollection } from "astro:content";
-import { docsLoader, i18nLoader } from "@astrojs/starlight/loaders";
-import { docsSchema, i18nSchema } from "@astrojs/starlight/schema";
+import { docsLoader } from "@astrojs/starlight/loaders";
+import { docsSchema } from "@astrojs/starlight/schema";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
 
 /**
- * Starlight's docs (src/content/docs, served under /docs) and its optional UI translations, plus
- * the blog (src/content/blog, one Markdown file per post, rendered by src/pages/blog).
+ * Starlight's docs (src/content/docs, served under /docs) and the blog (src/content/blog, one
+ * Markdown file per post, rendered by src/pages/blog).
  */
 export const collections = {
   docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
-  i18n: defineCollection({ loader: i18nLoader(), schema: i18nSchema() }),
   blog: defineCollection({
     loader: glob({ pattern: "**/[^_]*.md", base: "./src/content/blog" }),
     schema: z.object({

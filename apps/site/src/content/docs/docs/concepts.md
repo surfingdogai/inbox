@@ -48,6 +48,10 @@ The manifest publishes which tiers an instance accepts. Defaults that stand unle
 
 **Test mode**. An instance in test mode marks every item as `sandbox`. Any caller can also ask for a sandbox item with the `x-sandbox: 1` header or by calling a `sandbox.` hostname. Sandbox items go through the same machines but never trigger real notifications.
 
+## Networks
+
+An instance may join a network from settings: `network.url` is the directory it reports to (default `https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and `POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on, the instance registers its domain once, which the network verifies by fetching the manifest and checking that `instance` is the https origin it was told, and then sends every hour its software version, its runtime and the number of bookings, orders, quotes and messages created in the last 24 hours. Nothing about customers leaves the instance. The numbers on the front page of surfingdog.ai are the sum of those pings.
+
 ## Receipts and two-sided reviews
 
 When an item reaches a state that matters (`confirmed` for a booking, `paid` for an order) the instance issues a **receipt**: a compact JWS signed with the instance's Ed25519 key, which the manifest publishes in `receipt_keys`. The customer's agent counter-signs it with `acknowledge_receipt`. Both sides then hold a small, verifiable proof that this transaction happened between these two parties. Receipt issuing and counter-signing are the next release; the endpoints already exist and answer `501` until then.

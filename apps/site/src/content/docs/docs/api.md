@@ -72,6 +72,7 @@ Both servers are stateless per request, so a client connects with a plain `POST`
 - `/.well-known/agent-inbox.json`: the [manifest](/docs/manifest/), listing every door.
 - `/.well-known/oauth-protected-resource/mcp/owner` and `/.well-known/oauth-authorization-server`: OAuth 2.1 metadata for the owner MCP.
 - `/healthz`: `{ "ok": true, "version": "…" }`.
+- `POST /v1/email/inbound`: raw MIME from a mail provider's webhook or a forwarder, with the instance's shared secret in `X-Inbox-Email-Secret`.
 
 ## SDK
 

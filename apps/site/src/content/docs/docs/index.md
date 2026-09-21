@@ -14,12 +14,14 @@ Written on 21 September 2026. the groundwork (research, decisions, scaffold) is 
 - the core write path: typed items, five state machines, append-only events, idempotency keys and compare-and-set versions;
 - the rules engine, with presets for appointments, trades and shops;
 - REST with an OpenAPI document, a public MCP server and an owner MCP server;
-- owner sign-in by magic link, an OAuth 2.1 authorization server for the owner MCP, and owner API keys;
+- owner API keys, owner sign-in by magic link, and an OAuth 2.1 authorization server for the owner MCP;
+- the owner app, first version: sign in with an owner key, a three-pane inbox, a typed item view with the valid next actions as buttons, and settings;
 - the email door: inbound MIME parsed, deduplicated and threaded onto the right item;
 - the job runner for notifications and rules, on cron and queues on Workers and on a loop on Node;
-- a live demo instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json).
+- network membership: an instance joins a network from settings and reports counts-only telemetry every hour;
+- a live demo instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: the owner app (the inbox screens and the setup wizard, the first release), receipts and connectors (the next release), hosted tenancy and the network's directory, reviews and reputation (a later release). Every page in these docs says which phase a feature belongs to.
+Still to come: the setup wizard, passkeys and email sign-in in the app (the first release), receipts and connectors (the next release), hosted tenancy and the network's directory, reviews and reputation (a later release). Every page in these docs says which phase a feature belongs to.
 
 ## Pages
 
