@@ -4,6 +4,8 @@ dist/
 .dev.vars
 .env
 .env.*
+# The publish script writes a placeholder .npmrc here and removes it; never commit one.
+packages/*/.npmrc
 !.env.example
 !.dev.vars.example
 coverage/
