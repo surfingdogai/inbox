@@ -97,6 +97,7 @@ export async function seedDemo(db: Db, now = Date.now()): Promise<{ seeded: bool
     doc: {
       business: { name: "Oficina Maré", timezone: "Europe/Lisbon", currency: "EUR", languages: ["pt", "en"] },
       booking: { cancellationWindowMin: 120 },
+      network: { join: true },
     },
   });
   return { seeded: true };

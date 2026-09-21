@@ -52,6 +52,14 @@ export const settingsSchema = z.object({
       inboundSecret: z.string().min(16).max(200).optional(),
     })
     .prefault({}),
+  network: z
+    .object({
+      /** The directory this instance reports to and appears in. Any Surfing Dog network works. */
+      url: z.url().default("https://network.surfingdog.ai"),
+      /** Join the directory: register this instance and send counts-only telemetry every hour. */
+      join: z.boolean().default(false),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof settingsSchema>;
