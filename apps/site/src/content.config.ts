@@ -20,6 +20,12 @@ export const collections = {
       /** Public path of the cover art, e.g. /art/blog-hello.png (16:9). */
       cover: z.string().optional(),
       coverAlt: z.string().optional(),
+      /**
+       * An animated cover, drawn in a component instead of the still image. It replaces `cover`
+       * on the post page only: `cover` stays the post's real picture for the social card and for
+       * the index tile, because an og:image cannot be a script.
+       */
+      coverAnim: z.enum(["receipts"]).optional(),
     }),
   }),
 };

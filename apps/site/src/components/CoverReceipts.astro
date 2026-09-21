@@ -1,0 +1,445 @@
+---
+/**
+ * The cover for "Receipts, not reviews", drawing the argument of the post in four beats.
+ *
+ *  1. Work completes and a receipt is issued: the paper draws itself, its lines fill in, a tick
+ *     closes the work, and the business signs it with the key its own instance holds — a flamingo
+ *     seal travels from the business mark into the left slot and a signature writes itself there.
+ *  2. The customer's side counter-signs the same paper, violet into the right slot. Two
+ *     signatures, one document.
+ *  3. Both sides then hold the same proof: two copies slide out from behind the receipt, and each
+ *     carries BOTH seal dots — neither side could have made it alone. A palm bracket holds them.
+ *  4. Later, two reviews, each sealed — a sun band, a waiting dot that breathes, a row of blocks
+ *     for the commitment the network keeps — while one shared window fills between them. When it
+ *     closes both open in the same frame, and two spokes say one trigger opened both: neither was
+ *     written in reaction to the other. The business side reveals an outcome code rather than a
+ *     rating, which is the post's third section.
+ *
+ * Beat four owns 6.2 s of the 13.8 s loop because it is the point of the post. Nothing here
+ * claims a shipped feature — no status chip, no badge, no interface. Receipts do not exist yet
+ * and the post says so; this is the explanation, drawn.
+ *
+ * Built the way HeroFlow.astro is built, that piece being the approved standard. The scene ships
+ * as inline SVG rather than being built in JS, so the box is never empty and a throw leaves a
+ * finished picture. That markup is the composed frame at t = 11.6 s and the live clock starts
+ * there, so there is no mount flicker either way; reduced motion is the same machine stepped to
+ * that frame, carrying all four beats at once. It stops when nobody is looking, and has no
+ * max-width of its own — aspect-ratio holds the box open so nothing below the cover jumps.
+ */
+---
+
+<figure
+  class="sdr"
+  role="img"
+  aria-label="A receipt for completed work is signed by a business and counter-signed by the customer's side, both keep the same twice-signed copy, and their two reviews stay sealed until one shared window opens them at the same moment."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<g class="sdr-copy s-biz">
+<rect x="92" y="96" width="136" height="56" rx="9" class="box"/>
+<rect x="106" y="110" width="62" height="4.5" rx="2.25" class="sdr-bar"/>
+<rect x="106" y="121" width="44" height="4.5" rx="2.25" class="sdr-bar"/>
+<circle cx="190" cy="124" r="7.5" class="d1"/>
+<circle cx="212" cy="124" r="7.5" class="d2"/>
+</g>
+<g class="sdr-copy s-cus">
+<rect x="412" y="96" width="136" height="56" rx="9" class="box"/>
+<rect x="426" y="110" width="62" height="4.5" rx="2.25" class="sdr-bar"/>
+<rect x="426" y="121" width="44" height="4.5" rx="2.25" class="sdr-bar"/>
+<circle cx="510" cy="124" r="7.5" class="d1"/>
+<circle cx="532" cy="124" r="7.5" class="d2"/>
+</g>
+<path d="M160,154 L160,186 L480,186 L480,154" class="sdr-link"/>
+<rect x="244" y="38" width="152" height="132" rx="12" class="sdr-doc-fill"/>
+<path d="M256,38 H384 A12,12 0 0 1 396,50 V158 A12,12 0 0 1 384,170 H256 A12,12 0 0 1 244,158 V50 A12,12 0 0 1 256,38 Z" class="sdr-doc-edge"/>
+<g class="sdr-doc-head">
+<text x="258" y="62" class="sdr-h">Receipt</text>
+<line x1="258" y1="73" x2="382" y2="73" class="sdr-hair"/>
+</g>
+<rect x="258" y="82" width="104" height="6" rx="3" class="sdr-line"/>
+<rect x="258" y="95" width="82" height="6" rx="3" class="sdr-line"/>
+<rect x="258" y="108" width="96" height="6" rx="3" class="sdr-line"/>
+<path d="M366,111 l3.4,3.6 l6.6,-8.2" class="sdr-tick"/>
+<circle cx="282" cy="142" r="14" class="sdr-slot"/>
+<circle cx="358" cy="142" r="14" class="sdr-slot"/>
+<path d="M177,66 C216,66 240,116 282,142" class="sdr-guide"/>
+<path d="M463,66 C424,66 400,116 358,142" class="sdr-guide"/>
+<g class="sdr-seal s-biz" transform="translate(282,142)">
+<circle r="15.5" class="pop"/>
+<circle r="12.5" class="disc"/>
+<circle r="15.5" class="sdr-ring"/>
+<path d="M-7.4,2.6 c2.6,-5.6 4.6,3.4 7.2,-2.8 c1.4,-3.2 2.8,1.8 4.6,-1.2" class="sdr-sig"/>
+</g>
+<g class="sdr-seal s-cus" transform="translate(358,142)">
+<circle r="15.5" class="pop"/>
+<circle r="12.5" class="disc"/>
+<circle r="15.5" class="sdr-ring"/>
+<path d="M-7.4,2.6 c2.6,-5.6 4.6,3.4 7.2,-2.8 c1.4,-3.2 2.8,1.8 4.6,-1.2" class="sdr-sig"/>
+</g>
+<g class="sdr-mark s-biz">
+<rect x="143" y="48" width="34" height="34" rx="10" class="tint"/>
+<rect x="143" y="48" width="34" height="34" rx="10"/>
+<rect x="139" y="44" width="42" height="42" rx="13" class="halo"/>
+<circle cx="152" cy="65" r="3.6" class="key"/>
+<path d="M155.6,65 H168.5 M163,65 V69 M167,65 V69" class="key"/>
+</g>
+<g class="sdr-mark s-cus">
+<rect x="463" y="48" width="34" height="34" rx="10" class="tint"/>
+<rect x="463" y="48" width="34" height="34" rx="10"/>
+<rect x="459" y="44" width="42" height="42" rx="13" class="halo"/>
+<line x1="480" y1="48" x2="480" y2="38"/>
+<circle cx="480" cy="35.2" r="2.8" class="ant"/>
+<circle cx="472" cy="65" r="3.6" class="key"/>
+<path d="M475.6,65 H488.5 M483,65 V69 M487,65 V69" class="key"/>
+</g>
+<text x="160" y="26" class="sdr-cap" text-anchor="middle">BUSINESS</text>
+<text x="480" y="26" class="sdr-cap" text-anchor="middle">CUSTOMER</text>
+<g class="sdr-card s-biz open">
+<rect x="32" y="202" width="256" height="130" rx="12" class="box"/>
+<text x="48" y="228" class="sdr-sub">From the business</text>
+<line x1="48" y1="238" x2="272" y2="238" class="sdr-hair sdr-sub"/>
+<g class="sdr-body">
+<rect x="48" y="254" width="204" height="6" rx="3" class="sdr-say"/>
+<rect x="48" y="268" width="168" height="6" rx="3" class="sdr-say"/>
+<rect x="48" y="282" width="186" height="6" rx="3" class="sdr-say"/>
+<rect x="48" y="298" width="92" height="22" rx="11" class="sdr-pill"/>
+<text x="61" y="313" class="sdr-code">completed</text>
+</g>
+<g class="sdr-band">
+<rect x="46" y="248" width="228" height="68" rx="9" class="bg"/>
+<circle cx="74" cy="282" r="11.5" class="ring"/>
+<circle cx="74" cy="282" r="7" class="wait"/>
+<line x1="98" y1="282" x2="204" y2="282" class="hash"/>
+</g>
+</g>
+<g class="sdr-card s-cus open">
+<rect x="352" y="202" width="256" height="130" rx="12" class="box"/>
+<text x="368" y="228" class="sdr-sub">From the customer</text>
+<line x1="368" y1="238" x2="592" y2="238" class="sdr-hair sdr-sub"/>
+<g class="sdr-body">
+<rect x="368" y="254" width="204" height="6" rx="3" class="sdr-say"/>
+<rect x="368" y="268" width="168" height="6" rx="3" class="sdr-say"/>
+<rect x="368" y="282" width="186" height="6" rx="3" class="sdr-say"/>
+<circle cx="392" cy="309" r="5.5" class="sdr-pip"/>
+<circle cx="410" cy="309" r="5.5" class="sdr-pip"/>
+<circle cx="428" cy="309" r="5.5" class="sdr-pip"/>
+<circle cx="446" cy="309" r="5.5" class="sdr-pip"/>
+<circle cx="464" cy="309" r="5.5" class="sdr-pip off"/>
+</g>
+<g class="sdr-band">
+<rect x="366" y="248" width="228" height="68" rx="9" class="bg"/>
+<circle cx="394" cy="282" r="11.5" class="ring"/>
+<circle cx="394" cy="282" r="7" class="wait"/>
+<line x1="418" y1="282" x2="524" y2="282" class="hash"/>
+</g>
+</g>
+<g class="sdr-spokes">
+<line x1="306" y1="282" x2="278" y2="282" class="sdr-spoke"/>
+<line x1="334" y1="282" x2="362" y2="282" class="sdr-spoke"/>
+</g>
+<g class="sdr-win done">
+<circle cx="320" cy="282" r="16" class="track"/>
+<circle cx="320" cy="282" r="16" class="sdr-arc" transform="rotate(-90 320 282)"/>
+<circle cx="320" cy="282" r="4.5" class="knob"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sdr and every keyframe is sdr-*, so nothing leaks.
+   .sdr is also the query container the width steps below match. Colours are
+   properties: the host token first, a brand literal only as the fallback. One
+   theme block rather than HeroFlow's three, because the tokens package sets
+   color-scheme in all three cases, so light-dark() carries night correctly for
+   a host that has not declared the role at all. */
+.sdr{
+  --sdr-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sdr-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sdr-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sdr-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sdr-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --sdr-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --sdr-palm:var(--palm,#2fd3a5);
+  --sdr-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --sdr-violet:var(--violet,#8a6bff);
+  --sdr-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --sdr-flam:var(--flamingo,#ff6fa8);
+  --sdr-flam-i:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc));
+  --sdr-sun:var(--sun,#ffcf5c);
+  --sdr-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.sdr .s-biz{--sc:var(--sdr-flam);--si:var(--sdr-flam-i)}
+.sdr .s-cus{--sc:var(--sdr-violet);--si:var(--sdr-violet-i)}
+
+.sdr svg{display:block;width:100%;height:auto}
+.sdr text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdr-ink2)}
+.sdr .sdr-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13px;font-weight:600;letter-spacing:-.01em}
+.sdr .sdr-cap{font-size:10.5px;letter-spacing:.11em}
+.sdr .sdr-sub{font-size:11.8px}
+.sdr .sdr-hair{stroke:var(--sdr-hair);stroke-width:1}
+.sdr .sdr-bar,.sdr .sdr-line{fill:var(--sdr-ink3);fill-opacity:.17}
+
+.sdr .sdr-mark rect,.sdr .sdr-mark line{fill:none;stroke:var(--sdr-ink2);stroke-opacity:.55;stroke-width:1.3}
+.sdr .sdr-mark .tint{fill:var(--sc);fill-opacity:.08;stroke:none}
+.sdr .sdr-mark .halo{fill:none;stroke:var(--sc);stroke-opacity:0;stroke-width:1.3;transform-box:fill-box;transform-origin:50% 50%}
+.sdr .sdr-mark .key{fill:none;stroke:var(--sc);stroke-width:1.6;stroke-linecap:round}
+.sdr .sdr-mark .ant{fill:var(--sc);stroke:none}
+.sdr .sdr-mark.wake .halo{animation:sdr-halo .66s var(--sdr-ease)}
+@keyframes sdr-halo{0%{stroke-opacity:.5;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.26)}}
+
+.sdr .sdr-doc-fill{fill:var(--sdr-glass);stroke:none}
+.sdr .sdr-doc-edge{fill:none;stroke:var(--sdr-ink3);stroke-opacity:.32;stroke-width:1.2}
+.sdr .sdr-tick{fill:none;stroke:var(--sdr-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sdr .sdr-slot{fill:none;stroke:var(--sdr-ink3);stroke-opacity:.30;stroke-width:1.1;stroke-dasharray:2.4 4}
+.sdr .sdr-guide{fill:none;stroke:none}   /* geometry the seals travel, never ink */
+
+.sdr .sdr-seal .disc{fill:var(--sc);fill-opacity:.16;stroke:var(--sc);stroke-opacity:.55;stroke-width:1.2}
+.sdr .sdr-sig{fill:none;stroke:var(--si);stroke-width:1.7;stroke-linecap:round}
+.sdr .sdr-ring{fill:none;stroke:var(--sdr-palm);stroke-opacity:.75;stroke-width:1.2}
+.sdr .sdr-seal .pop{fill:none;stroke:var(--sdr-palm);stroke-width:1.3;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdr .sdr-seal.land .pop{animation:sdr-pop .74s var(--sdr-ease)}
+@keyframes sdr-pop{0%{opacity:.6;transform:scale(.82)}100%{opacity:0;transform:scale(1.42)}}
+
+.sdr .sdr-copy .box{fill:var(--sdr-row);stroke:var(--sdr-hair);stroke-width:1}
+.sdr .sdr-copy .d1{fill:var(--sdr-flam)}
+.sdr .sdr-copy .d2{fill:var(--sdr-violet)}
+.sdr .sdr-link{fill:none;stroke:var(--sdr-palm);stroke-width:1.3;stroke-dasharray:1.5 6;stroke-linecap:round;opacity:.55}
+
+/* Sealed is the sun band, opened is the body under it. Transparent by default,
+   so a page with no JavaScript keeps the composed frame. */
+.sdr .sdr-card .box{fill:var(--sdr-glass);stroke:var(--sdr-glassb);stroke-width:1;transition:stroke .4s var(--sdr-ease),stroke-opacity .4s var(--sdr-ease)}
+.sdr .sdr-card.open .box{stroke:var(--sdr-palm);stroke-opacity:.6}
+.sdr .sdr-band{opacity:0}
+.sdr .sdr-band .bg{fill:var(--sdr-sun);fill-opacity:.10;stroke:var(--sdr-sun);stroke-opacity:.40;stroke-width:1}
+.sdr .sdr-band .wait{fill:var(--sdr-sun)}
+.sdr .sdr-band .hash{stroke:var(--sdr-sun);stroke-opacity:.45;stroke-width:8;stroke-dasharray:8 6}
+.sdr .sdr-band .ring{fill:none;stroke:var(--sdr-sun);stroke-width:1.2;animation:sdr-breathe 3.2s var(--sdr-ease) infinite}
+@keyframes sdr-breathe{0%,100%{opacity:.16}50%{opacity:.5}}
+.sdr .sdr-say{fill:var(--sc);fill-opacity:.34}
+.sdr .sdr-pill{fill:var(--sc);fill-opacity:.12;stroke:var(--sc);stroke-opacity:.5;stroke-width:1}
+.sdr .sdr-code{font-size:10.4px;font-weight:600;fill:var(--si)}
+.sdr .sdr-pip{fill:var(--sc)}
+.sdr .sdr-pip.off{fill:none;stroke:var(--sc);stroke-opacity:.45;stroke-width:1.3}
+
+.sdr .sdr-win .track{fill:none;stroke:var(--sdr-ink3);stroke-opacity:.25;stroke-width:2.6}
+.sdr .sdr-win .knob{fill:var(--sdr-sun);transition:fill .3s var(--sdr-ease)}
+.sdr .sdr-arc{fill:none;stroke:var(--sdr-sun);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:100.54;transition:stroke .3s}
+.sdr .sdr-win.done .knob{fill:var(--sdr-palm)}
+.sdr .sdr-win.done .sdr-arc{stroke:var(--sdr-palm)}
+.sdr .sdr-spoke{stroke:var(--sdr-palm);stroke-width:1.3;stroke-dasharray:1.5 5;stroke-linecap:round}
+
+/* The viewBox is fixed, so reading size falls with the drawn width. Both steps
+   were measured in CSS pixels at the widths a post gets — about 750 on a desktop,
+   about 300 in the card on a phone — and divided by the container scale. At the
+   narrow step the card headings step out rather than print at 6 px; the columns
+   above already name the sides. */
+@container (max-width:600px){
+  .sdr .sdr-cap{font-size:15px}
+  .sdr .sdr-h{font-size:19px}
+  .sdr .sdr-sub{font-size:16.5px}
+  .sdr .sdr-code{font-size:15px}
+}
+@container (max-width:430px){
+  .sdr .sdr-cap{font-size:21px}
+  .sdr .sdr-h{font-size:26px}
+  .sdr .sdr-code{font-size:20px}
+  .sdr .sdr-sub{display:none}
+}
+
+/* Off screen or on a hidden tab the clock stops and sdr-paused stops the CSS
+   keyframes with it. !important because the rules that start them use the
+   animation shorthand, which resets play-state and is more specific. */
+.sdr.sdr-still,.sdr.sdr-still *{animation:none!important;transition:none!important}
+.sdr.sdr-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdr *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as HeroFlow's.
+// Typing it would mean rewriting it, and the composition and the timings are the deliverable.
+(function(){
+"use strict";
+
+/* Newton solve for a CSS cubic-bezier, so the JS eases match the CSS transitions
+   beside them instead of approximating them. */
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},      /* linear, for the one clock */
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};   /* eased, for everything else */
+
+/* The timeline, in seconds. Beat four runs 6.95 to 13.10 — 6.2 s of a 13.8 s
+   loop — because it is the point. Do not retune these by accident. */
+var T={mark:.35,doc:.70,head:1.30,bar:1.50,tick:2.20,s1:2.55,mark2:3.85,s2:4.00,
+       copy:5.55,link:6.40,cards:6.95,win:7.55,open:10.40,exit:13.10},
+    FLY=.78,       /* a seal's travel from its mark to its slot */
+    SIGN=.42,      /* the signature writing itself once the seal has landed */
+    LOOP=13.80,
+    STILL=11.60,   /* the frame the markup ships and the clock starts from */
+    ARC=100.54,    /* 2 pi r at r = 16, matching the dasharray in the CSS */
+    FROM=[[160,-20],[-160,-20]];   /* where each copy starts, behind the receipt */
+
+function mount(fig){
+  if(fig.getAttribute("data-sdr")==="on")return;   /* one scene per figure, however often this runs */
+
+  /* Every lookup happens before the first mutation, so a missing node throws
+     while the shipped picture is still as the server drew it. */
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverReceipts "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverReceipts "+s);return [].slice.call(l);}
+
+  var edge=q(".sdr-doc-edge"),fill=q(".sdr-doc-fill"),head=q(".sdr-doc-head"),
+      lines=qa(".sdr-line"),tick=q(".sdr-tick"),slots=qa(".sdr-slot"),
+      marks=qa(".sdr-mark"),seals=qa(".sdr-seal"),sigs=qa(".sdr-sig"),rings=qa(".sdr-ring"),
+      guides=qa(".sdr-guide"),copies=qa(".sdr-copy"),link=q(".sdr-link"),
+      cards=qa(".sdr-card"),bands=qa(".sdr-band"),bodies=qa(".sdr-body"),
+      win=q(".sdr-win"),arc=q(".sdr-arc"),spokes=q(".sdr-spokes"),
+      pill=q(".sdr-pill"),code=q(".sdr-code");
+
+  fig.setAttribute("data-sdr","on");
+
+  var DL=edge.getTotalLength(),
+      SL=sigs.map(function(s){return s.getTotalLength();}),
+      GL=guides.map(function(g){return g.getTotalLength();}),
+      AT=[T.s1,T.s2];
+  edge.style.strokeDasharray=DL;
+  sigs.forEach(function(s,i){s.style.strokeDasharray=SL[i];});
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+
+  function render(t){
+    var g=1-ramp(t,T.exit,LOOP),u,p,vb,vc,done;
+
+    /* 1. the work completes and a receipt is issued */
+    edge.style.strokeDashoffset=DL*(1-ramp(t,T.doc,T.doc+1.05));
+    op(edge,g*ramp(t,T.doc,T.doc+.18));
+    op(fill,g*ramp(t,T.doc+.55,T.doc+1.25));
+    op(head,g*ramp(t,T.head,T.head+.45));
+    lines.forEach(function(b,k){op(b,g*ramp(t,T.bar+k*.18,T.bar+k*.18+.34));});
+    op(tick,g*ramp(t,T.tick,T.tick+.30));
+    slots.forEach(function(s){op(s,g*ramp(t,T.doc+.95,T.doc+1.35));});
+
+    /* 1 and 2. each side's seal travels its own guide and signs where it lands */
+    seals.forEach(function(s,k){
+      p=guides[k].getPointAtLength(ramp(t,AT[k],AT[k]+FLY)*GL[k]);
+      mv(s,p.x,p.y);
+      op(s,g*ramp(t,AT[k],AT[k]+.20));
+      op(rings[k],ramp(t,AT[k]+FLY,AT[k]+FLY+.22));
+      sigs[k].style.strokeDashoffset=SL[k]*(1-ramp(t,AT[k]+FLY,AT[k]+FLY+SIGN));
+    });
+
+    /* 3. two copies, each carrying both seals, slide out from behind the paper */
+    u=1-ramp(t,T.copy,T.copy+.85);
+    copies.forEach(function(c,k){mv(c,FROM[k][0]*u,FROM[k][1]*u);op(c,g*ramp(t,T.copy,T.copy+.50));});
+    op(link,g*ramp(t,T.link,T.link+.50)*.55);
+
+    /* 4. sealed, then both opened by one window in the same frame */
+    u=ramp(t,T.cards,T.cards+.55);
+    cards.forEach(function(c){op(c,g*u);mv(c,0,(1-u)*10);});
+    vb=ramp(t,T.open,T.open+.30);vc=ramp(t,T.open+.06,T.open+.50);
+    bands.forEach(function(b){op(b,g*u*(1-vb));mv(b,0,-7*vb);});
+    bodies.forEach(function(b){op(b,g*vc);mv(b,0,(1-vc)*9);});
+    op(win,g*ramp(t,T.cards+.20,T.cards+.62));
+    arc.style.strokeDashoffset=ARC*(1-seg(t,T.win,T.open));
+    op(spokes,g*ramp(t,T.open,T.open+.28));
+    done=t>=T.open&&t<T.exit;
+    win.classList.toggle("done",done);
+    cards.forEach(function(c){c.classList.toggle("open",done);});
+  }
+
+  var timers=[],fired={};
+  function flash(el,c,ms){el.classList.add(c);timers.push(setTimeout(function(){el.classList.remove(c);},ms));}
+  function cue(t,live){
+    function at(k,when,el,c){if(t<when||fired[k])return;fired[k]=true;if(live)flash(el,c,700);}
+    at("m0",T.mark,marks[0],"wake");
+    at("l0",T.s1+FLY,seals[0],"land");
+    at("m1",T.mark2,marks[1],"wake");
+    at("l1",T.s2+FLY,seals[1],"land");
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    marks.forEach(function(m){m.classList.remove("wake");});
+    seals.forEach(function(s){s.classList.remove("land");});
+  }
+
+  /* The pill is measured, never guessed, so a wider fallback font cannot push
+     "completed" out of it. 92 is the drawn width and the floor, and fit() only
+     ever raises, so measuring again can never ratchet it wider. */
+  function fit(){
+    var b;
+    try{b=code.getBBox();}catch(err){return;}
+    if(b&&b.width)pill.setAttribute("width",Math.max(92,Math.ceil(b.width+26)));
+  }
+
+  /* The markup already is render(STILL): the clock starts there so the live
+     piece continues from what is painted, never snapping to an empty stage. */
+  render(STILL);
+  cue(STILL,false);
+  fit();
+  if("ResizeObserver" in window)new ResizeObserver(fit).observe(fig);
+  try{
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then)
+      document.fonts.ready.then(fit,function(){});
+  }catch(err){}
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,wasP=STILL,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.min((now-last)/1000,.05);   /* clamped: a long stall slows the piece rather than teleporting it */
+    last=now;
+    var ph=clock%LOOP;
+    if(ph<wasP)fired={};                    /* a new pass re-arms the one-shots */
+    wasP=ph;
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sdr-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sdr-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sdr-paused");}
+  }
+
+  /* One frame, all four beats. */
+  function still(){
+    fig.classList.add("sdr-still");
+    run=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  /* The preference can be turned on after load; both paths end in the same frame. */
+  function onMq(){if(mq.matches&&!fig.classList.contains("sdr-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sdr").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover receipts",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);   /* harmless today; correct the day a router lands */
+})();
+</script>

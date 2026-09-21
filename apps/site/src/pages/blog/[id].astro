@@ -1,6 +1,7 @@
 ---
 import { type CollectionEntry, getCollection, render } from "astro:content";
 import Art from "../../components/Art.astro";
+import CoverReceipts from "../../components/CoverReceipts.astro";
 import Layout from "../../layouts/Layout.astro";
 
 export async function getStaticPaths() {
@@ -38,7 +39,13 @@ const date = post.data.date.toLocaleDateString("en-GB", {
       </p>
     </header>
     {
-      post.data.cover ? (
+      /* An animated cover takes the place of the still one on the page. `image` above still
+         points at post.data.cover, because a social card cannot run a script. */
+      post.data.coverAnim === "receipts" ? (
+        <div class="cover">
+          <CoverReceipts />
+        </div>
+      ) : post.data.cover ? (
         <div class="cover">
           <Art src={post.data.cover} alt={post.data.coverAlt ?? ""} frame loading="eager" ratio="16 / 9" />
         </div>

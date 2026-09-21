@@ -1,10 +1,12 @@
 ---
 // apps/site/src/pages/requests.astro
-// People ask, other people vote, the most wanted rises. The board is filled in from the network
-// after load. Without it the page still explains itself and points at the issues.
+// People ask, other people vote, the most wanted rises. Anyone can vote; an account is what it
+// takes to comment, so the thread under a request stays readable. The board is filled in from the
+// network after load. Without it the page still explains itself and points at the issues.
 import Layout from "../layouts/Layout.astro";
 
 const API = "https://network.surfingdog.ai/v1/requests";
+const SIGNIN = "https://network.surfingdog.ai/board/signin?to=https://surfingdog.ai/requests";
 const ISSUES = "https://github.com/surfingdogai/inbox/issues";
 
 const sorts = [
@@ -23,7 +25,7 @@ const legend = [
 
 <Layout
   title="Feature requests · Surfing Dog"
-  description="Ask for a feature in Surfing Dog Inbox, and vote on what other people have asked for. The inbox is open source, so the most wanted requests get built first."
+  description="Ask for a feature in Surfing Dog Inbox, vote on what other people have asked for, and say why it matters. The inbox is open source, so the most wanted requests get built first."
 >
   <section class="wrap wrap-read section is-head" id="requests" aria-labelledby="requests-h">
     <p class="eyebrow">Feature requests</p>
@@ -107,11 +109,51 @@ const legend = [
           <p class="eyebrow">The board</p>
           <h2 class="h-section" id="board-h">What everyone else is asking for</h2>
           <p class="lede">
-            Vote for the ones you want. One vote per address, and the count is the whole ranking: the most wanted sit
-            at the top.
+            Vote for the ones you want, and open a request to read what people have said about it. The count is the
+            whole ranking: the most wanted sit at the top.
           </p>
         </div>
       </div>
+
+      {/* Who you are, at the top of the board. Hidden until the script runs, because signing in
+          is something only the browser can finish. */}
+      <div class="glass ident" data-ident hidden>
+        <div class="ident-say">
+          <p class="card-text ident-line"><span data-ident-text></span><b class="ident-name" data-ident-name></b></p>
+          <p class="hint" data-ident-status aria-live="polite"></p>
+        </div>
+        <div class="ident-act">
+          <a class="btn btn-secondary btn-sm" href={SIGNIN} data-signin hidden>Sign in</a>
+          <button class="btn btn-secondary btn-sm" type="button" data-signout hidden>Sign out</button>
+        </div>
+      </div>
+
+      {/* The one thing a new account is asked for, and only until it has one. */}
+      <form class="glass-strong name-panel" data-name-form hidden>
+        <h3 class="h-card">Choose a display name</h3>
+        <div class="field">
+          <label class="label" for="board-name">Display name</label>
+          <div class="name-row">
+            <input
+              class="input"
+              id="board-name"
+              name="display_name"
+              type="text"
+              required
+              maxlength="40"
+              autocomplete="nickname"
+              aria-describedby="board-name-hint"
+              placeholder="Ana Duarte"
+              data-name-input
+            />
+            <button class="btn btn-primary" type="submit" data-name-save>Save</button>
+          </div>
+          <p class="hint" id="board-name-hint">
+            It is shown next to your comments, and nothing else about you ever is.
+          </p>
+          <p class="hint" data-name-error aria-live="polite"></p>
+        </div>
+      </form>
 
       <div class="board-head">
         <div class="tabs" role="tablist" aria-label="Sort the board" data-tabs hidden>
@@ -164,8 +206,8 @@ const legend = [
       <noscript>
         <div class="glass panel">
           <p class="card-text">
-            The board is filled in by the browser, so it needs JavaScript. The form above still works without it, and
-            every request also lives in the issues.
+            The board is filled in by the browser, so signing in, voting and commenting all need JavaScript. The form
+            above still works without it, and every request also lives in the issues.
           </p>
           <p class="note-foot">
             <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues on GitHub</a>
@@ -197,10 +239,84 @@ const legend = [
               <span class="pill" data-pill><i class="dot" data-dot></i><span data-status></span></span>
             </div>
             <p class="card-text clamp" data-body></p>
-            <time class="req-age" data-age></time>
+            <p class="req-foot">
+              <time class="req-age" data-age></time>
+              <button class="talk" type="button" aria-expanded="false" data-talk>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M20.5 11.6a8 8 0 0 1-8.6 8 9.3 9.3 0 0 1-2.7-.4L4.3 21l1.4-3.9a7.9 7.9 0 0 1-2.2-5.5 8 8 0 0 1 8.6-8 8.1 8.1 0 0 1 8.4 8Z"></path>
+                </svg>
+                <span class="tabular" data-talk-count>0</span>
+                <span data-talk-word>comments</span>
+              </button>
+            </p>
+          </div>
+          <div class="talk-panel" data-talk-panel hidden>
+            <p class="hint" data-talk-status aria-live="polite"></p>
+            <ul class="comments" data-comments></ul>
+            <div data-talk-foot></div>
           </div>
         </li>
       </template>
+
+      <template data-comment-template>
+        <li class="comment">
+          <p class="comment-head"><b class="who" data-who></b><time class="when" data-when></time></p>
+          <p class="card-text comment-body" data-comment-body></p>
+          <p class="comment-act" data-act hidden>
+            <button class="btn btn-ghost btn-sm" type="button" data-delete>Delete</button>
+          </p>
+          <p class="comment-act" data-confirm hidden>
+            <span class="confirm-text">Delete this comment?</span>
+            <button class="btn btn-danger btn-sm" type="button" aria-label="Delete this comment" data-delete-yes>
+              Delete
+            </button>
+            <button class="btn btn-ghost btn-sm" type="button" aria-label="Keep this comment" data-delete-no>
+              Keep
+            </button>
+          </p>
+        </li>
+      </template>
+
+      <template data-composer-template>
+        <form class="composer" data-composer>
+          <div class="field">
+            <label class="label" data-composer-label>Add a comment</label>
+            <textarea
+              class="input"
+              rows="3"
+              maxlength="1000"
+              data-composer-box
+              placeholder="What would this change for you?"></textarea>
+          </div>
+          <div class="composer-foot">
+            <button class="btn btn-primary btn-sm" type="submit" data-composer-send>Post comment</button>
+            <p class="hint" data-composer-left aria-live="polite"></p>
+          </div>
+          <p class="hint" data-composer-error aria-live="polite"></p>
+        </form>
+      </template>
+
+      <template data-signin-line-template>
+        <p class="hint talk-line">
+          <a class="link" href={SIGNIN}>Sign in</a> to comment. Voting does not need an account.
+        </p>
+      </template>
+
+      <template data-name-line-template>
+        <p class="hint talk-line">
+          Choose a display name before you comment.
+          <button class="linkish" type="button" data-name-jump>Choose one now</button>
+        </p>
+      </template>
+
       <template data-list-template><ul class="list"></ul></template>
       <template data-note-template>
         <div class="glass panel note">
@@ -292,6 +408,60 @@ const legend = [
     display: none;
   }
 
+  /* Who you are. One quiet line, and the one control that changes it. */
+  .ident {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    border-radius: var(--radius-card);
+  }
+  .ident-say {
+    min-width: 0;
+  }
+  .ident-line {
+    margin: 0;
+  }
+  .ident-name {
+    font-weight: 600;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .ident .hint {
+    margin-top: var(--sp-1);
+  }
+  .ident-act {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  /* The name, asked for once. */
+  .name-panel {
+    display: grid;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+    padding: var(--card-pad);
+    border-radius: var(--radius-card);
+  }
+  .name-panel .label {
+    margin-bottom: 0;
+  }
+  .name-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  .name-row .input {
+    flex: 1 1 200px;
+  }
+  .name-row .btn {
+    flex: none;
+  }
+
   /* The board */
   .board-head {
     display: flex;
@@ -338,9 +508,21 @@ const legend = [
     line-clamp: 2;
     overflow: hidden;
   }
+  .req-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1) var(--sp-3);
+    margin: var(--sp-1) 0 0;
+  }
   .req-age {
     font-size: var(--fs-fine);
     color: var(--ink-3);
+  }
+  /* An open thread stays still: a tall row that lifts under the cursor reads as a wobble. */
+  .req.is-open:hover,
+  .req.is-open:focus-within {
+    transform: none;
   }
   .note {
     margin: 0;
@@ -388,6 +570,141 @@ const legend = [
     font-weight: 600;
     letter-spacing: 0.07em;
     text-transform: uppercase;
+  }
+
+  /* The comment count is the way in: it opens the thread under the request. */
+  .talk {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    min-height: 30px;
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-pill);
+    border: 1px solid transparent;
+    background: transparent;
+    font: inherit;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .talk:hover,
+  .talk:focus-visible,
+  .talk[aria-expanded="true"] {
+    background: var(--pill-bg);
+    border-color: var(--pill-border);
+    color: var(--ink);
+  }
+  .talk:focus-visible {
+    border-radius: var(--radius-pill);
+  }
+  .talk svg {
+    width: 14px;
+    height: 14px;
+  }
+  @media (pointer: coarse) {
+    .talk {
+      min-height: 40px;
+    }
+  }
+
+  /* The thread. Full width under both columns, so it survives a narrow phone. */
+  .talk-panel {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--hairline);
+  }
+  .talk-panel .hint {
+    margin-top: 0;
+  }
+  .talk-line {
+    max-width: none;
+  }
+  .comments {
+    display: grid;
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .comments:empty {
+    display: none;
+  }
+  .comment {
+    display: grid;
+    gap: var(--sp-1);
+  }
+  .comment + .comment {
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--hairline);
+  }
+  .comment-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-1) var(--sp-2);
+    margin: 0;
+  }
+  .who {
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .when {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .comment-body {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  .comment-act {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-1) 0 0;
+  }
+  .confirm-text {
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
+  }
+  .composer {
+    display: grid;
+    gap: var(--sp-2);
+  }
+  .composer textarea.input {
+    min-height: 72px;
+  }
+  .composer .label {
+    margin-bottom: 0;
+  }
+  .composer-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+  /* A button that reads as a link, for the one place a link would be a lie. */
+  .linkish {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--violet) 45%, transparent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 0.18em;
+    cursor: pointer;
+  }
+  .linkish:hover,
+  .linkish:focus-visible {
+    text-decoration-color: var(--violet);
   }
 
   /* What stands in for the rows until the first answer arrives. */
@@ -469,13 +786,28 @@ const legend = [
 <script>
   // The board talks to the network service. Everything that comes back is untrusted text: rows are
   // cloned from the templates on the page and filled in with textContent, never with markup.
-  const API = "https://network.surfingdog.ai/v1/requests";
+  //
+  // Identity is a bearer token the service hands back in the URL fragment after a sign-in. It is
+  // read once, stripped from the URL, and kept in localStorage. Any 401 means it is no longer good,
+  // so it is forgotten and the page falls back to the signed-out state.
+  const ORIGIN = "https://network.surfingdog.ai";
+  const API = `${ORIGIN}/v1/requests`;
+  const ME = `${ORIGIN}/v1/me`;
+  const SIGNOUT = `${ORIGIN}/v1/signout`;
   const ISSUES = "https://github.com/surfingdogai/inbox/issues";
   const VOTED_KEY = "surfingdog-requests-voted";
+  const TOKEN_KEY = "surfingdog-board-token";
+
+  /** The service has the final say on length; this is what the box will accept. */
+  const COMMENT_MAX = 2000; // what the service accepts, so the page never refuses first
+  /** The counter stays out of the way until the limit is close. */
+  const COUNT_FROM = 120;
 
   const STATUSES = ["open", "planned", "building", "shipped", "declined"] as const;
   type Status = (typeof STATUSES)[number];
   type Sort = "top" | "new" | "shipped";
+  /** out: no token. checking: a token, not yet answered for. in: known. unknown: a token, no answer. */
+  type View = "out" | "checking" | "in" | "unknown";
 
   interface FeatureRequest {
     id: string;
@@ -483,7 +815,23 @@ const legend = [
     body: string;
     status: Status;
     votes: number;
+    comments: number;
+    /** Only the service knows this, and only when a token was sent. */
+    voted: boolean | null;
     createdAt: string;
+  }
+
+  interface Comment {
+    id: string;
+    body: string;
+    author: string;
+    createdAt: string;
+    mine: boolean;
+  }
+
+  interface Me {
+    displayName: string;
+    needsName: boolean;
   }
 
   /** Colour carries the status and nothing else. Declined stays neutral: it is not destructive. */
@@ -522,8 +870,28 @@ const legend = [
   const rowTemplate = document.querySelector<HTMLTemplateElement>("[data-row-template]");
   const listTemplate = document.querySelector<HTMLTemplateElement>("[data-list-template]");
   const noteTemplate = document.querySelector<HTMLTemplateElement>("[data-note-template]");
+  const commentTemplate = document.querySelector<HTMLTemplateElement>("[data-comment-template]");
+  const composerTemplate = document.querySelector<HTMLTemplateElement>("[data-composer-template]");
+  const signinTemplate = document.querySelector<HTMLTemplateElement>("[data-signin-line-template]");
+  const nameLineTemplate = document.querySelector<HTMLTemplateElement>("[data-name-line-template]");
+
+  const ident = document.querySelector<HTMLElement>("[data-ident]");
+  const identText = document.querySelector<HTMLElement>("[data-ident-text]");
+  const identName = document.querySelector<HTMLElement>("[data-ident-name]");
+  const identStatus = document.querySelector<HTMLElement>("[data-ident-status]");
+  const signinButton = document.querySelector<HTMLElement>("[data-signin]");
+  const signoutButton = document.querySelector<HTMLElement>("[data-signout]");
+  const nameForm = document.querySelector<HTMLFormElement>("[data-name-form]");
+  const nameInput = document.querySelector<HTMLInputElement>("[data-name-input]");
+  const nameError = document.querySelector<HTMLElement>("[data-name-error]");
 
   let current: Sort = "top";
+  let token: string | null = null;
+  let me: Me | null = null;
+  let view: View = "out";
+  let seq = 0;
+  /** What someone had typed when the composer was swapped out from under them. */
+  const drafts = new Map<string, string>();
 
   function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -534,13 +902,40 @@ const legend = [
     if (!isRecord(value)) return null;
     if (typeof value.id !== "string" || typeof value.title !== "string") return null;
     const votes = typeof value.votes === "number" && Number.isFinite(value.votes) ? Math.round(value.votes) : 0;
+    const comments = typeof value.comments === "number" && Number.isFinite(value.comments)
+      ? Math.round(value.comments)
+      : 0;
     return {
       id: value.id,
       title: value.title,
       body: typeof value.body === "string" ? value.body : "",
       status: STATUSES.find((s) => s === value.status) ?? "open",
       votes: Math.max(0, votes),
+      comments: Math.max(0, comments),
+      voted: typeof value.voted === "boolean" ? value.voted : null,
       createdAt: typeof value.created_at === "string" ? value.created_at : "",
+    };
+  }
+
+  function toComment(value: unknown): Comment | null {
+    if (!isRecord(value)) return null;
+    if (typeof value.id !== "string" || typeof value.body !== "string") return null;
+    const author = typeof value.author === "string" ? value.author.trim() : "";
+    return {
+      id: value.id,
+      body: value.body,
+      author: author || "Someone",
+      createdAt: typeof value.created_at === "string" ? value.created_at : "",
+      mine: value.mine === true,
+    };
+  }
+
+  function toMe(value: unknown): Me | null {
+    if (!isRecord(value)) return null;
+    const name = typeof value.display_name === "string" ? value.display_name : "";
+    return {
+      displayName: name,
+      needsName: typeof value.needs_name === "boolean" ? value.needs_name : name.trim() === "",
     };
   }
 
@@ -554,28 +949,63 @@ const legend = [
     return relative.format(Math.min(seconds, 0), "second");
   }
 
-  function readVoted(): Set<string> {
-    try {
-      const raw = window.localStorage.getItem(VOTED_KEY);
-      if (!raw) return new Set();
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return new Set();
-      return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
-    } catch {
-      // Blocked or private storage: the buttons still work, they just forget between visits.
-      return new Set();
-    }
-  }
-  const voted = readVoted();
+  /* --- The token ---------------------------------------------------- */
 
-  function remember(id: string): void {
-    voted.add(id);
+  function readToken(): string | null {
     try {
-      window.localStorage.setItem(VOTED_KEY, JSON.stringify([...voted]));
+      const raw = window.localStorage.getItem(TOKEN_KEY);
+      return raw && raw.trim() ? raw : null;
     } catch {
-      // The vote is counted on the network either way.
+      // Blocked or private storage: the sign-in still holds for this page view.
+      return null;
     }
   }
+
+  function writeToken(value: string | null): void {
+    try {
+      if (value) window.localStorage.setItem(TOKEN_KEY, value);
+      else window.localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      // Nothing to do. The token lives in memory for as long as the page does.
+    }
+  }
+
+  /** A token in the fragment is read once and taken straight back out of the URL, so it is never
+   *  in a shared link or in a back-button entry. */
+  function captureToken(): boolean {
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return false;
+    try {
+      const params = new URLSearchParams(hash.slice(1));
+      const found = params.get("board_token");
+      if (!found) return false;
+      params.delete("board_token");
+      const rest = params.toString();
+      const url = `${window.location.pathname}${window.location.search}${rest ? `#${rest}` : ""}`;
+      window.history.replaceState(null, "", url);
+      token = found;
+      writeToken(found);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function headers(extra?: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = { accept: "application/json", ...extra };
+    if (token) out.authorization = `Bearer ${token}`;
+    return out;
+  }
+
+  function forgetIdentity(): void {
+    token = null;
+    me = null;
+    view = "out";
+    writeToken(null);
+    paintIdentity();
+  }
+
+  /* --- Small DOM helpers -------------------------------------------- */
 
   function clone(template: HTMLTemplateElement | null): HTMLElement | null {
     const node = template?.content.firstElementChild?.cloneNode(true);
@@ -612,8 +1042,194 @@ const legend = [
     return box;
   }
 
+  /** What the service said, in its own words, before anything we would have guessed. */
+  function problemText(payload: unknown, status: number): string {
+    if (isRecord(payload)) {
+      const detail = payload.detail;
+      if (typeof detail === "string" && detail.trim()) return detail;
+      const title = payload.title;
+      if (typeof title === "string" && title.trim()) return title;
+    }
+    return status === 429
+      ? "That is a lot of requests from one address. Try again in an hour, or open an issue on GitHub."
+      : "That did not go through. Check what you wrote and try again.";
+  }
+
+  /** The same, for a refusal that names the field it is about. */
+  function fieldText(payload: unknown, field: string, status: number): string {
+    if (isRecord(payload) && isRecord(payload.errors)) {
+      const one = payload.errors[field];
+      if (typeof one === "string" && one.trim()) return one;
+      if (Array.isArray(one)) {
+        const first = one.find((entry): entry is string => typeof entry === "string" && entry.trim() !== "");
+        if (first) return first;
+      }
+    }
+    return problemText(payload, status);
+  }
+
+  function codeOf(payload: unknown): string {
+    return isRecord(payload) && typeof payload.code === "string" ? payload.code : "";
+  }
+
+  /* --- Voting memory ------------------------------------------------- */
+
+  function readVoted(): Set<string> {
+    try {
+      const raw = window.localStorage.getItem(VOTED_KEY);
+      if (!raw) return new Set();
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return new Set();
+      return new Set(parsed.filter((entry): entry is string => typeof entry === "string"));
+    } catch {
+      // Blocked or private storage: the buttons still work, they just forget between visits.
+      return new Set();
+    }
+  }
+  const voted = readVoted();
+
+  function remember(id: string, yes: boolean): void {
+    if (yes) voted.add(id);
+    else voted.delete(id);
+    try {
+      window.localStorage.setItem(VOTED_KEY, JSON.stringify([...voted]));
+    } catch {
+      // The vote is counted on the network either way.
+    }
+  }
+
+  /** Signed in, the account is what holds the vote, so the service is the one that knows. */
+  function votedState(item: FeatureRequest): boolean {
+    if (token && item.voted !== null) return item.voted;
+    return voted.has(item.id);
+  }
+
+  /* --- Identity ------------------------------------------------------ */
+
+  function paintIdentity(): void {
+    if (!ident) return;
+    ident.hidden = false;
+    const signedIn = view === "in" || view === "unknown" || view === "checking";
+    if (signinButton) signinButton.hidden = signedIn;
+    if (signoutButton) signoutButton.hidden = !signedIn;
+
+    if (identName) identName.textContent = view === "in" && me ? me.displayName : "";
+    if (identText) {
+      if (view === "out") {
+        identText.textContent = "Voting is open to everyone. Commenting needs an account, which keeps the board readable.";
+      } else if (view === "checking") {
+        identText.textContent = "Checking whether you are signed in.";
+      } else if (view === "unknown") {
+        identText.textContent = "You are signed in, but the board is not answering, so your name is not showing.";
+      } else if (me && me.displayName.trim()) {
+        identText.textContent = "Signed in as ";
+      } else {
+        // Signed in, but the name below has not been chosen yet, so there is nothing to name.
+        identText.textContent = "Signed in.";
+      }
+    }
+
+    const needsName = view === "in" && me !== null && me.needsName;
+    if (nameForm) nameForm.hidden = !needsName;
+    if (!needsName) {
+      say(nameError, "");
+      nameInput?.removeAttribute("aria-invalid");
+    }
+  }
+
+  async function loadMe(): Promise<void> {
+    if (!token) {
+      view = "out";
+      paintIdentity();
+      return;
+    }
+    view = "checking";
+    paintIdentity();
+    try {
+      const res = await fetch(ME, { headers: headers(), cache: "no-store", signal: AbortSignal.timeout(8000) });
+      if (res.status === 401) {
+        forgetIdentity();
+        return;
+      }
+      if (!res.ok) throw new Error(String(res.status));
+      const data: unknown = await res.json();
+      const parsed = toMe(data);
+      if (!parsed) throw new Error("shape");
+      me = parsed;
+      view = "in";
+      paintIdentity();
+      refreshFeet();
+    } catch {
+      // The service is not answering. The token is probably still good, so it is kept.
+      me = null;
+      view = "unknown";
+      paintIdentity();
+      refreshFeet();
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    if (signoutButton) signoutButton.setAttribute("aria-disabled", "true");
+    say(identStatus, "");
+    try {
+      if (token) {
+        await fetch(SIGNOUT, { method: "POST", headers: headers(), signal: AbortSignal.timeout(8000) });
+      }
+    } catch {
+      // The token is dropped here whether or not the service heard about it.
+    }
+    if (signoutButton) signoutButton.removeAttribute("aria-disabled");
+    forgetIdentity();
+    // The voted marks were keyed to the account, so the board is asked again as a guest.
+    void load(current);
+  }
+
+  async function saveName(): Promise<void> {
+    if (!nameInput) return;
+    const value = nameInput.value.trim();
+    const button = nameForm?.querySelector<HTMLButtonElement>("[data-name-save]") ?? null;
+    if (!value) {
+      nameInput.setAttribute("aria-invalid", "true");
+      say(nameError, "Choose a name to show next to your comments.", true);
+      return;
+    }
+    if (button) button.disabled = true;
+    say(nameError, "Saving.");
+    try {
+      const res = await fetch(ME, {
+        method: "PUT",
+        headers: headers({ "content-type": "application/json" }),
+        body: JSON.stringify({ display_name: value }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.status === 401) {
+        forgetIdentity();
+        refreshFeet();
+        return;
+      }
+      const payload: unknown = await res.json().catch(() => null);
+      if (res.ok) {
+        me = toMe(payload) ?? { displayName: value, needsName: false };
+        view = "in";
+        nameInput.removeAttribute("aria-invalid");
+        say(nameError, "");
+        paintIdentity();
+        refreshFeet();
+        return;
+      }
+      nameInput.setAttribute("aria-invalid", "true");
+      say(nameError, fieldText(payload, "display_name", res.status), true);
+    } catch {
+      say(nameError, "That name did not reach the network. Nothing was lost, so try again in a moment.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  /* --- Rows ----------------------------------------------------------- */
+
   function setVote(button: HTMLElement, votes: number, isVoted: boolean): void {
-    const title = button.dataset.title ?? "this request";
+    const title = button.dataset.label ?? "this request";
     button.dataset.votes = String(votes);
     const count = button.querySelector<HTMLElement>("[data-count]");
     const word = button.querySelector<HTMLElement>("[data-word]");
@@ -623,15 +1239,33 @@ const legend = [
     button.setAttribute("aria-label", isVoted ? `You voted for: ${title}` : `Vote for: ${title}`);
   }
 
+  function setTalk(button: HTMLElement, total: number): void {
+    const title = button.dataset.label ?? "this request";
+    const said = total === 1 ? "1 comment" : `${numbers.format(total)} comments`;
+    button.dataset.total = String(total);
+    const count = button.querySelector<HTMLElement>("[data-talk-count]");
+    const word = button.querySelector<HTMLElement>("[data-talk-word]");
+    if (count) count.textContent = numbers.format(total);
+    if (word) word.textContent = total === 1 ? "comment" : "comments";
+    button.setAttribute("aria-label", `${said} on: ${title}`);
+  }
+
+  function bumpTalk(row: HTMLElement, delta: number): void {
+    const button = row.querySelector<HTMLElement>("[data-talk]");
+    if (!button) return;
+    setTalk(button, Math.max(0, Number(button.dataset.total ?? "0") + delta));
+  }
+
   function rowFor(item: FeatureRequest): HTMLElement | null {
     const row = clone(rowTemplate);
     if (!row) return null;
+    row.dataset.request = item.id;
 
     const button = row.querySelector<HTMLElement>("[data-vote]");
     if (button) {
       button.dataset.id = item.id;
-      button.dataset.title = item.title;
-      setVote(button, item.votes, voted.has(item.id));
+      button.dataset.label = item.title;
+      setVote(button, item.votes, votedState(item));
     }
 
     const title = row.querySelector<HTMLElement>("[data-title]");
@@ -657,6 +1291,18 @@ const legend = [
       } else {
         when.remove();
       }
+    }
+
+    // The count is the disclosure: it names the panel it opens.
+    seq += 1;
+    const panelId = `sd-talk-${seq}`;
+    const panel = row.querySelector<HTMLElement>("[data-talk-panel]");
+    const talk = row.querySelector<HTMLElement>("[data-talk]");
+    if (panel) panel.id = panelId;
+    if (talk) {
+      talk.dataset.label = item.title;
+      talk.setAttribute("aria-controls", panelId);
+      setTalk(talk, item.comments);
     }
 
     return row;
@@ -706,17 +1352,25 @@ const legend = [
     }
   }
 
+  /** One 401 means the token has expired. Reading the board needs no account, so it is dropped and
+   *  the same question is asked again as a guest. */
+  async function read(url: string): Promise<Response> {
+    const once = (): Promise<Response> =>
+      fetch(url, { headers: headers(), cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const res = await once();
+    if (res.status !== 401 || !token) return res;
+    forgetIdentity();
+    refreshFeet();
+    return once();
+  }
+
   async function load(sort: Sort): Promise<void> {
     if (!board) return;
     select(sort);
     board.setAttribute("aria-busy", "true");
     say(boardStatus, "");
     try {
-      const res = await fetch(`${API}?sort=${sort}&limit=50`, {
-        headers: { accept: "application/json" },
-        cache: "no-store",
-        signal: AbortSignal.timeout(8000),
-      });
+      const res = await read(`${API}?sort=${sort}&limit=50`);
       if (!res.ok) throw new Error(String(res.status));
       const data: unknown = await res.json();
       const raw: unknown[] = isRecord(data) && Array.isArray(data.items) ? data.items : [];
@@ -740,21 +1394,28 @@ const legend = [
     const id = button.dataset.id;
     if (!id || button.dataset.busy === "true") return;
     const before = Number(button.dataset.votes ?? "0");
-    const wasVoted = voted.has(id);
+    const wasVoted = button.getAttribute("aria-pressed") === "true";
     button.dataset.busy = "true";
     say(boardStatus, "");
     // Optimistic: the count moves now, and comes back if the network disagrees.
     setVote(button, wasVoted ? before : before + 1, true);
     try {
-      const res = await fetch(`${API}/${encodeURIComponent(id)}/votes`, {
-        method: "POST",
-        headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(8000),
-      });
+      const url = `${API}/${encodeURIComponent(id)}/votes`;
+      const once = (): Promise<Response> =>
+        fetch(url, { method: "POST", headers: headers(), signal: AbortSignal.timeout(8000) });
+      let res = await once();
+      if (res.status === 401 && token) {
+        // Voting is open to everyone, so an expired token is dropped and the vote goes as a guest.
+        forgetIdentity();
+        refreshFeet();
+        res = await once();
+      }
       if (!res.ok) throw new Error(String(res.status));
       const data: unknown = await res.json();
-      remember(id);
-      setVote(button, isRecord(data) && typeof data.votes === "number" ? data.votes : before + 1, true);
+      const votes = isRecord(data) && typeof data.votes === "number" ? data.votes : before + 1;
+      const now = isRecord(data) && typeof data.voted === "boolean" ? data.voted : true;
+      remember(id, now);
+      setVote(button, votes, now);
     } catch {
       setVote(button, before, wasVoted);
       say(boardStatus, "That vote did not reach the network. Nothing was lost, so try it again in a moment.", true);
@@ -763,17 +1424,288 @@ const legend = [
     }
   }
 
-  function problemText(payload: unknown, status: number): string {
-    if (isRecord(payload)) {
-      const detail = payload.detail;
-      if (typeof detail === "string" && detail.trim()) return detail;
-      const title = payload.title;
-      if (typeof title === "string" && title.trim()) return title;
+  /* --- Comments -------------------------------------------------------- */
+
+  function commentFor(item: Comment): HTMLElement | null {
+    const el = clone(commentTemplate);
+    if (!el) return null;
+    el.dataset.comment = item.id;
+
+    const who = el.querySelector<HTMLElement>("[data-who]");
+    if (who) who.textContent = item.author;
+
+    const when = el.querySelector<HTMLTimeElement>("[data-when]");
+    const said = age(item.createdAt);
+    if (when) {
+      if (said) {
+        when.dateTime = item.createdAt;
+        when.textContent = said;
+      } else {
+        when.remove();
+      }
     }
-    return status === 429
-      ? "That is a lot of requests from one address. Try again in an hour, or open an issue on GitHub."
-      : "That did not go through. Check the title and try again.";
+
+    const body = el.querySelector<HTMLElement>("[data-comment-body]");
+    if (body) body.textContent = item.body;
+
+    // Yours to delete, and only while you are signed in: a control that cannot work is worse
+    // than no control at all.
+    if (item.mine && token) {
+      const act = el.querySelector<HTMLElement>("[data-act]");
+      if (act) act.hidden = false;
+    }
+    return el;
   }
+
+  /** What sits under the thread depends on who you are, so it is drawn again whenever that changes. */
+  function paintFoot(panel: HTMLElement, id: string): void {
+    const foot = panel.querySelector<HTMLElement>("[data-talk-foot]");
+    if (!foot) return;
+
+    const open = foot.querySelector<HTMLTextAreaElement>("[data-composer-box]");
+    if (open) drafts.set(id, open.value);
+    foot.replaceChildren();
+
+    if (!token) {
+      const line = clone(signinTemplate);
+      if (line) foot.append(line);
+      return;
+    }
+    if (me?.needsName === true) {
+      const line = clone(nameLineTemplate);
+      if (line) foot.append(line);
+      return;
+    }
+
+    const composer = clone(composerTemplate);
+    if (!composer) return;
+    seq += 1;
+    const boxId = `sd-comment-${seq}`;
+    const label = composer.querySelector<HTMLLabelElement>("[data-composer-label]");
+    const box = composer.querySelector<HTMLTextAreaElement>("[data-composer-box]");
+    if (label) label.htmlFor = boxId;
+    if (box) {
+      box.id = boxId;
+      box.maxLength = COMMENT_MAX;
+      box.value = drafts.get(id) ?? "";
+    }
+    foot.append(composer);
+    updateLeft(composer);
+  }
+
+  function refreshFeet(): void {
+    for (const panel of Array.from(document.querySelectorAll<HTMLElement>("[data-talk-panel]"))) {
+      if (panel.hidden) continue;
+      const row = panel.closest<HTMLElement>("[data-request]");
+      const id = row?.dataset.request;
+      if (id) paintFoot(panel, id);
+    }
+  }
+
+  function updateLeft(composer: HTMLElement): void {
+    const box = composer.querySelector<HTMLTextAreaElement>("[data-composer-box]");
+    const left = composer.querySelector<HTMLElement>("[data-composer-left]");
+    if (!box || !left) return;
+    const remaining = COMMENT_MAX - box.value.length;
+    if (remaining > COUNT_FROM) {
+      say(left, "");
+      return;
+    }
+    say(left, remaining === 1 ? "1 character left" : `${numbers.format(remaining)} characters left`, remaining === 0);
+  }
+
+  async function loadComments(panel: HTMLElement, id: string): Promise<void> {
+    const status = panel.querySelector<HTMLElement>("[data-talk-status]");
+    const list = panel.querySelector<HTMLElement>("[data-comments]");
+    if (!list) return;
+    say(status, "Loading the comments.");
+    try {
+      const res = await read(`${API}/${encodeURIComponent(id)}/comments?limit=50`);
+      if (!res.ok) throw new Error(String(res.status));
+      const data: unknown = await res.json();
+      const raw: unknown[] = isRecord(data) && Array.isArray(data.items) ? data.items : [];
+      const items: Comment[] = [];
+      for (const entry of raw) {
+        const item = toComment(entry);
+        if (item) items.push(item);
+      }
+      list.replaceChildren();
+      for (const item of items) {
+        const el = commentFor(item);
+        if (el) list.append(el);
+      }
+      panel.dataset.loaded = "true";
+      const more = isRecord(data) && typeof data.next_cursor === "string" && data.next_cursor !== "";
+      if (items.length === 0) say(status, "No comments yet. Yours would be the first.");
+      else if (more) say(status, "The first 50 comments are shown.");
+      else {
+        say(status, "");
+        const row = panel.closest<HTMLElement>("[data-request]");
+        const talk = row?.querySelector<HTMLElement>("[data-talk]");
+        if (talk) setTalk(talk, items.length);
+      }
+    } catch {
+      list.replaceChildren();
+      say(status, "The comments are not reachable right now. Try again in a moment.", true);
+    } finally {
+      paintFoot(panel, id);
+    }
+  }
+
+  function toggleTalk(row: HTMLElement, button: HTMLElement): void {
+    const panel = row.querySelector<HTMLElement>("[data-talk-panel]");
+    const id = row.dataset.request;
+    if (!panel || !id) return;
+    if (!panel.hidden) {
+      panel.hidden = true;
+      row.classList.remove("is-open");
+      button.setAttribute("aria-expanded", "false");
+      return;
+    }
+    panel.hidden = false;
+    row.classList.add("is-open");
+    button.setAttribute("aria-expanded", "true");
+    if (panel.dataset.loaded === "true") paintFoot(panel, id);
+    else void loadComments(panel, id);
+  }
+
+  async function postComment(composer: HTMLFormElement): Promise<void> {
+    const panel = composer.closest<HTMLElement>("[data-talk-panel]");
+    const row = composer.closest<HTMLElement>("[data-request]");
+    const id = row?.dataset.request;
+    const box = composer.querySelector<HTMLTextAreaElement>("[data-composer-box]");
+    const error = composer.querySelector<HTMLElement>("[data-composer-error]");
+    const status = panel?.querySelector<HTMLElement>("[data-talk-status]") ?? null;
+    const list = panel?.querySelector<HTMLElement>("[data-comments]") ?? null;
+    const button = composer.querySelector<HTMLButtonElement>("[data-composer-send]");
+    if (!panel || !row || !id || !box) return;
+
+    const body = box.value.trim();
+    if (!body) {
+      say(error, "Write something first.", true);
+      box.focus();
+      return;
+    }
+    if (button) button.disabled = true;
+    say(error, "");
+    try {
+      const res = await fetch(`${API}/${encodeURIComponent(id)}/comments`, {
+        method: "POST",
+        headers: headers({ "content-type": "application/json" }),
+        body: JSON.stringify({ body }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const payload: unknown = await res.json().catch(() => null);
+      if (res.status === 201) {
+        box.value = "";
+        drafts.delete(id);
+        updateLeft(composer);
+        const posted = toComment(payload);
+        if (posted && list) {
+          const el = commentFor(posted);
+          if (el) list.append(el);
+          say(status, "");
+          bumpTalk(row, 1);
+        } else {
+          void loadComments(panel, id);
+        }
+        return;
+      }
+      if (res.status === 401) {
+        forgetIdentity();
+        paintFoot(panel, id);
+        say(status, "You are signed out now. Sign in again to post that comment.", true);
+        return;
+      }
+      if (res.status === 409 && codeOf(payload) === "needs_name") {
+        drafts.set(id, body);
+        me = { displayName: me?.displayName ?? "", needsName: true };
+        view = "in";
+        paintIdentity();
+        paintFoot(panel, id);
+        say(status, problemText(payload, res.status), true);
+        nameInput?.focus();
+        return;
+      }
+      say(error, problemText(payload, res.status), true);
+    } catch {
+      say(error, "That comment did not reach the network. Nothing was lost, so try again in a moment.", true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function removeComment(el: HTMLElement): Promise<void> {
+    const panel = el.closest<HTMLElement>("[data-talk-panel]");
+    const row = el.closest<HTMLElement>("[data-request]");
+    const requestId = row?.dataset.request;
+    const commentId = el.dataset.comment;
+    const status = panel?.querySelector<HTMLElement>("[data-talk-status]") ?? null;
+    const list = panel?.querySelector<HTMLElement>("[data-comments]") ?? null;
+    if (!panel || !row || !requestId || !commentId) return;
+
+    for (const button of Array.from(el.querySelectorAll<HTMLButtonElement>("button"))) button.disabled = true;
+    say(status, "");
+    let gone = false;
+    try {
+      const res = await fetch(`${API}/${encodeURIComponent(requestId)}/comments/${encodeURIComponent(commentId)}`, {
+        method: "DELETE",
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.status === 204 || res.status === 200) {
+        gone = true;
+        el.remove();
+        bumpTalk(row, -1);
+        if (list && list.childElementCount === 0) say(status, "No comments yet. Yours would be the first.");
+        // The focused button left with the comment, so put the cursor back on the thread.
+        row.querySelector<HTMLElement>("[data-talk]")?.focus();
+        return;
+      }
+      if (res.status === 401) {
+        forgetIdentity();
+        paintFoot(panel, requestId);
+        say(status, "You are signed out now. Sign in again to delete that comment.", true);
+        return;
+      }
+      const payload: unknown = await res.json().catch(() => null);
+      say(status, problemText(payload, res.status), true);
+    } catch {
+      say(status, "That comment was not deleted. Nothing was lost, so try again in a moment.", true);
+    } finally {
+      if (!gone) {
+        for (const button of Array.from(el.querySelectorAll<HTMLButtonElement>("button"))) button.disabled = false;
+        showConfirm(el, false);
+      }
+    }
+  }
+
+  function showConfirm(el: HTMLElement, yes: boolean): void {
+    const act = el.querySelector<HTMLElement>("[data-act]");
+    const confirm = el.querySelector<HTMLElement>("[data-confirm]");
+    if (act) act.hidden = yes;
+    if (confirm) confirm.hidden = !yes;
+    if (yes) confirm?.querySelector<HTMLButtonElement>("[data-delete-yes]")?.focus();
+    else act?.querySelector<HTMLButtonElement>("[data-delete]")?.focus();
+  }
+
+  /* --- Wiring ---------------------------------------------------------- */
+
+  const arrived = captureToken();
+  if (!token) token = readToken();
+  paintIdentity();
+  void loadMe().then(() => {
+    if (arrived && me?.needsName === true) nameInput?.focus();
+  });
+
+  signoutButton?.addEventListener("click", () => {
+    void signOut();
+  });
+
+  nameForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveName();
+  });
 
   if (tabs) {
     tabs.hidden = false;
@@ -789,12 +1721,52 @@ const legend = [
 
   if (board) {
     board.hidden = false;
+
     board.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const button = target.closest<HTMLElement>("[data-vote]");
-      if (button) void castVote(button);
+
+      const vote = target.closest<HTMLElement>("[data-vote]");
+      if (vote) {
+        void castVote(vote);
+        return;
+      }
+
+      const talk = target.closest<HTMLElement>("[data-talk]");
+      const row = target.closest<HTMLElement>("[data-request]");
+      if (talk && row) {
+        toggleTalk(row, talk);
+        return;
+      }
+
+      const comment = target.closest<HTMLElement>("[data-comment]");
+      if (comment) {
+        if (target.closest("[data-delete]")) showConfirm(comment, true);
+        else if (target.closest("[data-delete-no]")) showConfirm(comment, false);
+        else if (target.closest("[data-delete-yes]")) void removeComment(comment);
+        return;
+      }
+
+      if (target.closest("[data-name-jump]")) {
+        nameForm?.scrollIntoView({ block: "center" });
+        nameInput?.focus();
+      }
     });
+
+    board.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const composer = target.closest<HTMLElement>("[data-composer]");
+      if (composer) updateLeft(composer);
+    });
+
+    board.addEventListener("submit", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLFormElement) || !target.matches("[data-composer]")) return;
+      event.preventDefault();
+      void postComment(target);
+    });
+
     void load("top");
   }
 
@@ -806,12 +1778,12 @@ const legend = [
     const email = String(data.get("email") ?? "").trim();
     if (!title) return;
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
-    say(formStatus, "Sending…");
+    say(formStatus, "Sending.");
     if (button) button.disabled = true;
     try {
       const res = await fetch(API, {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
+        headers: headers({ "content-type": "application/json" }),
         body: JSON.stringify({ title, body, email }),
         signal: AbortSignal.timeout(10000),
       });
@@ -828,7 +1800,7 @@ const legend = [
             : "Thank you. We have your request.",
         );
         form.reset();
-        if (created) remember(created.id);
+        if (created) remember(created.id, true);
         void load(current);
         return;
       }
