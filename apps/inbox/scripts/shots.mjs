@@ -7,8 +7,8 @@
  *   inbox-day.png, inbox-night.png   the three panes with tomorrow's booking open
  *   item-day.png                     a quote request with its quote, transitions and thread
  *   settings-day.png                 the settings page
- *   rules-day.png, availability-day.png   the rules and availability screens once they exist;
- *                                    until then the settings page stands in, so the site has something
+ *   rules-day.png                    the rules screen
+ *   availability-day.png             the opening hours screen
  *
  *   pnpm --filter @surfingdog/inbox shots
  *
@@ -120,9 +120,8 @@ async function main() {
     await shot("inbox-night", `/items/${booking.item.id}`, "dark", ".card .actions");
     await shot("item-day", `/items/${quote.item.id}`, "light", ".card .actions");
     await shot("settings-day", "/settings", "light", ".settings-grid");
-    // Stand-ins until the rules and availability screens land.
-    await shot("rules-day", "/settings", "light", ".settings-grid");
-    await shot("availability-day", "/settings", "light", ".settings-grid");
+    await shot("rules-day", "/settings/rules", "light", ".rule-line");
+    await shot("availability-day", "/settings/availability", "light", ".hours-day");
   } finally {
     await browser?.close();
     server.kill();
