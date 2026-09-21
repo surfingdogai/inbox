@@ -18,7 +18,9 @@
     "build": "pnpm -r --if-present build",
     "kit": "pnpm --filter @surfingdog/ui kit",
     "dev": "pnpm --filter @surfingdog/inbox dev",
-    "dev:workers": "pnpm --filter @surfingdog/inbox dev:workers"
+    "dev:workers": "pnpm --filter @surfingdog/inbox dev:workers",
+    "site": "pnpm --filter @surfingdog/site dev",
+    "site:build": "pnpm --filter @surfingdog/site build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

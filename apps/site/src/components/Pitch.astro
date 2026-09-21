@@ -1,0 +1,116 @@
+---
+import Art from "./Art.astro";
+
+const cards = [
+  {
+    art: "/art/tile-inbox.png",
+    alt: "A pixel-art inbox tray holding an envelope, a price tag, a calendar page and a shopping bag",
+    title: "Typed, not threaded",
+    body: "Every request becomes a booking, an order, a quote or a message, with a state machine behind it. Rules handle the routine. You, or your own AI, handle the rest.",
+    agents: "An agent reads an item's state and the events it accepts, so a reply is a transition, not a guess.",
+  },
+  {
+    art: "/art/tile-agents.png",
+    alt: "Three pixel-art robots queueing at a shop door, each holding a letter",
+    title: "Every door open",
+    body: "Email, web form, REST and MCP today; A2A, UCP and more as adapters. Agents pick their door. You see one inbox.",
+    agents:
+      "One manifest at /.well-known/agent-inbox.json lists every door, so an agent picks one without fetching each card.",
+  },
+  {
+    art: "/art/tile-receipts.png",
+    alt: "A pixel-art paper receipt with two seals, a signature and a small sun",
+    title: "Receipts, not reviews",
+    body: "When an item is confirmed, the instance issues a signed receipt and the customer's agent counter-signs it. A review on the network is only valid against a receipt, in both directions.",
+    agents:
+      "The receipt is a compact JWS the agent verifies against the keys in the manifest; issuing and counter-signing ship in the next release.",
+    phase: "the next release",
+  },
+];
+---
+
+<section class="section" id="why" aria-labelledby="why-h">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Why</p>
+        <h2 class="h-section" id="why-h">An inbox that knows what a request is</h2>
+      </div>
+    </div>
+    <div class="cards">
+      {
+        cards.map((c) => (
+          <article class="glass card">
+            <div class="tile-art">
+              <Art src={c.art} alt={c.alt} ratio="1" />
+            </div>
+            <div class="head">
+              <h3>{c.title}</h3>
+              {c.phase ? <span class="pill">{c.phase}</span> : null}
+            </div>
+            <p class="body">{c.body}</p>
+            <p class="agents">
+              <span class="k">For agents</span>
+              {c.agents}
+            </p>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .cards {
+    display: grid;
+    gap: 14px;
+  }
+  @media (min-width: 820px) {
+    .cards {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 20px 22px;
+    border-radius: var(--radius-panel);
+  }
+  .tile-art {
+    width: 68%;
+    max-width: 240px;
+    margin: 4px auto 14px;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  h3 {
+    margin: 0;
+    font-size: 21px;
+  }
+  .body {
+    margin: 10px 0 0;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+  .agents {
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .k {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+</style>

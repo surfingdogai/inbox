@@ -1,0 +1,66 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer class="wrap footer">
+  <div class="row1">
+    <p class="who">
+      <img src="/logo.png" alt="" width="460" height="461" loading="lazy" decoding="async" />
+      <span>Surfing Dog Lda · Portugal · {year}</span>
+    </p>
+    <ul class="links">
+      <li><a href="https://github.com/surfingdogai/inbox" rel="noopener">GitHub</a></li>
+      <li><a href="/docs/">Docs</a></li>
+      <li><a href="/blog/">Blog</a></li>
+    </ul>
+  </div>
+  <p class="licence">AGPL-3.0 server, MIT spec and SDK.</p>
+</footer>
+
+<style>
+  .footer {
+    padding-block: 40px 48px;
+    border-top: 1px solid var(--hairline);
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .row1 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+  }
+  .who {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+  }
+  .who img {
+    width: 22px;
+    height: 22px;
+    image-rendering: pixelated;
+  }
+  .links {
+    display: flex;
+    gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .links a {
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .links a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .licence {
+    margin: 14px 0 0;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+</style>
