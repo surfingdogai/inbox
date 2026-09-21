@@ -24,7 +24,7 @@ https://<your-worker>/openapi.json
 
 Email out uses Cloudflare Email Service when the Worker has an `EMAIL` binding (Workers Paid, and a domain that is a Cloudflare zone), otherwise Resend when `RESEND_API_KEY` is set; with neither, mail is written to the Worker's logs instead of sent. Email in arrives through Email Routing once you route an address to the Worker ([ADR-005](https://github.com/surfingdogai/inbox/blob/main/docs/adr/005-email.md)).
 
-The Worker also serves the owner app, built into `apps/inbox/dist/client`, and its sign-in page at `/login` takes an owner API key. Minting the first key on Workers belongs to the setup wizard still to come (the first release), so for owner work today use the Node target, where a key is one command away; the public doors, the manifest and the MCP servers work on both.
+The Worker also serves the owner app, built into `apps/inbox/dist/client`, and its sign-in page at `/login` takes an owner API key. Minting the first key on Workers belongs to the setup wizard still to come (being built), so for owner work today use the Node target, where a key is one command away; the public doors, the manifest and the MCP servers work on both.
 
 ## Your own server
 
@@ -64,7 +64,7 @@ Open `/login`: enter an address from `INBOX_OWNER_EMAIL` and click the link you 
 
 ## Hosted by us
 
-Hosted tenancy opens in a later release: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/#run) and we will write when it opens.
+Hosted tenancy is not open yet: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/#run) and we will write when it opens.
 
 ## First calls
 

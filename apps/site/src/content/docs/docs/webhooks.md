@@ -219,7 +219,7 @@ Two ways to send something again:
 - **one delivery**, `POST /v1/owner/deliveries/{id}/replay`, on the row it already has;
 - **everything the endpoint missed**, `POST /v1/owner/webhooks/{id}/replay` with `{"since":"2026-09-20T00:00:00Z"}`, which queues every matching event from that instant that this endpoint never received. Turning a deactivated endpoint back on (`active: true`) clears its failure run first, so run that, then this.
 
-A replay is the same event: the same `webhook-id`, the same body, a fresh timestamp and signature. If you deduplicate on `webhook-id`, as you should, a replay of something you already handled costs you nothing.
+A replay is the same event, under the same `webhook-id`, with a fresh timestamp and signature. A thin event replays byte for byte; a full one is rebuilt from the item as it stands now, so it may show a state later than the one the event announced. If you deduplicate on `webhook-id`, as you should, a replay of something you already handled costs you nothing.
 
 Deliveries are pruned after thirty days. For anything older, use the cursor below — the events themselves are kept as long as their items are.
 

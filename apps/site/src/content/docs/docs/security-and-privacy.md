@@ -5,7 +5,7 @@ description: What the instance trusts, what it stores, and what leaves it.
 
 ## Inbound content is untrusted
 
-Everything that arrives through a door is data, never instructions. An email, a form submission, an agent's message: each is parsed into a typed item and stored as text. Rules read frozen values and perform no I/O. When AI extraction and drafting arrive in the next release with a bring-your-own key, the extraction model has no tools; it can only fill fields that are then validated like any other input.
+Everything that arrives through a door is data, never instructions. An email, a form submission, an agent's message: each is parsed into a typed item and stored as text. Rules read frozen values and perform no I/O. When AI extraction and drafting arrive, with a key you bring yourself, the extraction model has no tools; it can only fill fields that are then validated like any other input.
 
 Raw email reaches the instance only through a path the receiving mail system authenticated (Email Routing on Workers, which checks DKIM and SPF) or through the `POST /v1/email/inbound` webhook, which requires the shared secret from settings in the `X-Inbox-Email-Secret` header. Email that arrived unauthenticated is treated as anonymous.
 
@@ -16,8 +16,8 @@ The instance fetches remote documents in one place, to resolve OAuth Client ID M
 Content never leaves the instance. What can leave, each by the owner's choice in settings, is:
 
 - **activity counts**: once the owner joins a network (`network.join`, off by default), a ping every hour with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts;
-- **the public profile**, when the business chooses to be listed in a directory (a later release);
-- **receipts and outcome codes**, when the business joins a review service (a later release).
+- **the public profile**, when the business chooses to be listed in a directory (coming);
+- **receipts and outcome codes**, when the business joins a review service (coming).
 
 Personal data inside items is tracked by path so that an erasure request rewrites exactly those fields. Pseudonyms on the network will be HMACs with a server-held secret, never a bare hash of an email or phone number, and reputation stays advisory: decayed counts, no pass/fail, a human decision with a recorded reason, a contest procedure ([ADR-012](https://github.com/surfingdogai/inbox/blob/main/docs/adr/012-reputation-and-reviews-law.md)).
 

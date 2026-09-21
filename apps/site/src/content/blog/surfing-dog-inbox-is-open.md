@@ -23,15 +23,15 @@ There is also a plan, written down, with fourteen decision records behind it. Th
 
 ## What is not there yet
 
-Honesty is cheaper than support tickets, so: the owner app, the screens where a person works the inbox, shipped its first version today, with sign-in by an emailed link or an owner key, a three-pane inbox, a typed item view whose next actions are its buttons, and settings, including which network the instance reports to. It is a first version. Passkeys are not in it yet, and the wizard that sets an instance up is not there. Receipts, which I will write about separately, are designed and stubbed but not issued. Connectors to calendars and shops come after that. The hosted edition, for businesses that do not want to run anything, opens in a later release, and so does the directory and the review service on the network.
+Honesty is cheaper than support tickets, so: the owner app, the screens where a person works the inbox, shipped its first version today, with sign-in by an emailed link or an owner key, a three-pane inbox, a typed item view whose next actions are its buttons, and settings, including which network the instance reports to. It is a first version. Passkeys are not in it yet, and the wizard that sets an instance up is not there. Receipts, which I will write about separately, are designed and stubbed but not issued. Connectors to calendars and shops come after that. The hosted edition, for businesses that do not want to run anything, is not open yet, and neither is the review service on the network.
 
 The landing page shows live numbers from the network. Today they are small, and when the network is unreachable they say so calmly instead of pretending. I want that page to stay honest as the numbers grow.
 
 ## What comes next
 
-the first release ends when a fresh deploy reaches a confirmed sandbox booking through the public MCP in under ten minutes, following only the docs, on both targets. That is the whole definition of done, and it is a good one because it forces the docs, the deploy button, the Node bundle and the agent path to work at the same time.
+This first stretch ends when a fresh deploy reaches a confirmed sandbox booking through the public MCP in under ten minutes, following only the docs, on both targets. That is the whole definition of done, and it is a good one because it forces the docs, the deploy button, the Node bundle and the agent path to work at the same time.
 
-After that, the next release makes it useful in the real world: a free-text email becomes a correct typed booking in Google Calendar, a Shopify order placed through the public API shows up in Shopify, and both come with receipts. a later release brings the network: a directory of agent-reachable businesses, receipt-verified reviews with simultaneous reveal, and hosting.
+After that comes the work that makes it useful in the real world: a free-text email becomes a correct typed booking in a calendar, an order placed through the public API reaches the shop it belongs to, and both come with receipts. Then the network: a directory of agent-reachable businesses, receipt-verified reviews with a simultaneous reveal, and hosting.
 
 If you run a business and want an inbox that agents can use without you losing the plot, deploy one, or leave your address on the waitlist. If you build agents, read the manifest and tell me what is missing. If you build software for small businesses, the connector SDK is MIT and the door is open.
 

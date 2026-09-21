@@ -42,7 +42,7 @@ An instance publishes one small document at `/.well-known/agent-inbox.json`. It 
 | `item_types` | Which of `message`, `quote_request`, `booking`, `order`, `refund` this instance accepts. |
 | `protocols` | Protocol name to entry URL. Today: `openapi`, `rest`, `mcp`, `mcp_owner`. Adapters add their own keys as they ship (`a2a`, `ucp`, `arp`, `email`, `form`). |
 | `agent_policy.tiers` | The trust tiers the instance serves, from `anonymous`, `signed_agent`, `verified_principal`, `reputed_principal`. |
-| `receipt_keys` | A JWKS with the instance's Ed25519 receipt-signing keys. Empty until receipts ship in the next release. |
+| `receipt_keys` | A JWKS with the instance's Ed25519 receipt-signing keys. Empty until receipts ship. |
 | `review_services` | The networks this instance publishes receipts and reviews to. Empty means none. Chosen by the owner in settings; `https://network.surfingdog.ai` is only the default. |
 
 The schema is a Zod object in [`packages/spec/src/index.ts`](https://github.com/surfingdogai/inbox/blob/main/packages/spec/src/index.ts). The instance builds the document from its business profile and serves it with a five-minute cache header.

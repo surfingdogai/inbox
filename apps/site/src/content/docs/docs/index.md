@@ -9,7 +9,7 @@ One codebase runs on Cloudflare Workers and on Node. One SQLite database holds e
 
 ## Where things stand
 
-Written on 21 September 2026. the groundwork (research, decisions, scaffold) is complete and the first release (the self-hosted MVP) is under way. Working today, on both runtimes:
+Written on 21 September 2026. The self-hostable inbox is under way and this page says what actually runs. Working today, on both runtimes:
 
 - the core write path: typed items, five state machines, append-only events, idempotency keys and compare-and-set versions;
 - the rules engine, with presets for appointments, trades and shops;
@@ -21,7 +21,7 @@ Written on 21 September 2026. the groundwork (research, decisions, scaffold) is 
 - network membership: an instance joins a network from settings and reports counts-only telemetry every hour;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: the setup wizard, passkeys and a web form door (the first release), receipts and connectors (the next release), hosted tenancy and the network's directory, reviews and reputation (a later release). Every page in these docs says which phase a feature belongs to.
+Still to come: the setup wizard, passkeys and a web form door (being built), receipts and connectors (coming), hosted tenancy and the network's directory, reviews and reputation (coming). Every page in these docs says which phase a feature belongs to.
 
 ## Pages
 

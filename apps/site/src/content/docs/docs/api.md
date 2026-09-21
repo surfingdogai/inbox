@@ -23,7 +23,7 @@ No authentication. Anonymous callers receive an `accessToken` when they create a
 | `get_item_status` | `GET /v1/items/{id}` | The current state of an item you created, and what you may do next. |
 | `cancel_item` | `POST /v1/items/{id}/cancel` | Cancel an item you created, within the business's cancellation window. |
 | `send_message` | `POST /v1/messages` | Start a conversation, or reply on an item you own with `item_id`. |
-| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt. Answers `501` until receipts ship in the next release. |
+| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt. Answers `501` until receipts ship. |
 
 Create calls take `payload` (the typed fields, schema.org names in camelCase), an optional `contact` (`name`, `email`, `phone`, `locale`), an optional free-text `message`, and `idempotency_key`.
 
@@ -40,7 +40,7 @@ Authenticate with an owner API key or an OAuth 2.1 access token as a Bearer toke
 | `get_settings` | `GET /v1/owner/settings` | The settings document and its version. |
 | `update_settings` | `PUT /v1/owner/settings` | Replace the document, with `expected_version`. |
 
-Three more owner operations are in the capability set and arrive with the owner app in the first release: `update_availability`, `update_catalogue` and `run_setup_step`.
+Three more owner operations are in the capability set and arrive with the owner app: `update_availability`, `update_catalogue` and `run_setup_step`.
 
 ## Conventions
 
@@ -76,4 +76,4 @@ Both servers are stateless per request, so a client connects with a plain `POST`
 
 ## SDK
 
-`@surfingdog/sdk` (MIT) will be generated from the OpenAPI document in the first release with `openapi-typescript` and `openapi-fetch`. Until it lands, any OpenAPI client works.
+`@surfingdog/sdk` (MIT) will be generated from the OpenAPI document with `openapi-typescript` and `openapi-fetch`. Until it lands, any OpenAPI client works.
