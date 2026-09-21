@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Copy, Search } from "lucide-react";
+import { BadgeCheck, Bot, Copy, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
-import { relativeTime, snippetFor, TYPE_CLASS, titleFor } from "../lib/format";
+import { partyName, relativeTime, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
 import { useItemPages } from "../lib/queries";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
@@ -90,8 +90,9 @@ export function ItemList({
   );
 }
 
+/** Who · what on up to two lines, then the snippet; time on the right, the state at the end. */
 function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
-  const { item } = view;
+  const { item, party } = view;
   return (
     <Link
       to="/items/$id"
@@ -101,19 +102,33 @@ function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: st
       data-selected={selected ? "true" : undefined}
     >
       <i className={`dot dot-${TYPE_CLASS[item.type]}`} />
-      <div>
-        <div className="t">
-          <b>{titleFor(item)}</b>
-          {item.flags.needsHuman && <span className="pill tint-warning pill-xs">Needs you</span>}
-          {item.flags.sandbox && <span className="pill pill-xs">Sandbox</span>}
+      <div className="row-text">
+        <div className="row-line">
+          <span className="who">
+            {partyName(party)}
+            {party?.kind === "agent" && <Bot className="icon-xs glyph" role="img" aria-label="Agent" />}
+            {party?.verified && <BadgeCheck className="icon-xs glyph verified" role="img" aria-label="Verified" />}
+            {" · "}
+            {item.subject?.trim() || TYPE_WORD[item.type]}
+          </span>
+          <span className="s"> {snippetFor(item, tz)}</span>
         </div>
-        <div className="s">{snippetFor(item, tz)}</div>
       </div>
       <div className="m">
-        <StatePill state={item.state} small />
-        <time dateTime={item.updatedAt} title={item.updatedAt}>
-          {relativeTime(item.updatedAt)}
-        </time>
+        <span className="row-when">
+          {item.flags.needsHuman && (
+            <i className="dot dot-warning" title="Needs you">
+              <span className="sr-only">Needs you</span>
+            </i>
+          )}
+          <time dateTime={item.updatedAt} title={item.updatedAt}>
+            {relativeTime(item.updatedAt)}
+          </time>
+        </span>
+        <div className="row-pills">
+          {item.flags.sandbox && <span className="pill pill-xs">Sandbox</span>}
+          <StatePill state={item.state} small />
+        </div>
       </div>
     </Link>
   );

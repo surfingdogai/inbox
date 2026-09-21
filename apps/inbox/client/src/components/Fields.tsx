@@ -10,12 +10,25 @@ export function Fields({ item, tz }: { item: Item; tz: string | undefined }) {
       {item.type === "order" && <Lines lines={item.payload.orderedItem} total={item.payload.totalPrice} />}
       <dl className="fields">
         <Typed item={item} tz={tz} />
-        <F label="Via">{capitalise(channelWord(item.channel).replace(/^(the|a|an) /, ""))}</F>
-        <F label="Received">{formatDateTime(item.createdAt, tz)}</F>
       </dl>
-      <Reference id={item.id} />
       {item.type === "quote_request" && item.payload.quote && <QuoteBlock quote={item.payload.quote} tz={tz} />}
     </>
+  );
+}
+
+/** How and when it arrived, and the reference: folded away until needed. */
+export function Details({ item, tz }: { item: Item; tz: string | undefined }) {
+  return (
+    <details className="details">
+      <summary>Details</summary>
+      <dl className="fields">
+        <F label="Via">{capitalise(channelWord(item.channel).replace(/^(the|a|an) /, ""))}</F>
+        <F label="Received">{formatDateTime(item.createdAt, tz)}</F>
+        <F label="Reference" wide>
+          <Reference id={item.id} />
+        </F>
+      </dl>
+    </details>
   );
 }
 
@@ -212,7 +225,6 @@ function Reference({ id }: { id: string }) {
   };
   return (
     <div className="card-ref">
-      <span>Reference</span>
       <span className="mono">{id}</span>
       <button type="button" className="btn btn-ghost btn-sm" onClick={copy}>
         {copied ? "Copied" : "Copy"}
