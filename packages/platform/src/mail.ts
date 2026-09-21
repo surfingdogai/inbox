@@ -82,14 +82,15 @@ export function cloudflareEmailRestMailOut(
 ): MailOut {
   return {
     async send(mail) {
-      const replyTo = mail.replyTo ?? (mail.from.address !== opts.from.address ? mail.from.address : undefined);
+      const replyTo = mail.replyTo && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail.replyTo) ? mail.replyTo : undefined;
+      const name = mail.from.name ?? opts.from.name;
       const res = await fetchImpl(
         `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/email/sending/send`,
         {
           method: "POST",
           headers: { authorization: `Bearer ${opts.token}`, "content-type": "application/json" },
           body: JSON.stringify({
-            from: { address: opts.from.address, name: mail.from.name ?? opts.from.name ?? "" },
+            from: name ? { address: opts.from.address, name } : { address: opts.from.address },
             to: mail.to.length === 1 ? mail.to[0] : [...mail.to],
             ...(replyTo ? { replyTo } : {}),
             subject: mail.subject,
