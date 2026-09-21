@@ -60,7 +60,13 @@ export class JobRunner {
     });
     const report = { claimed: rows.length, done: 0, failed: 0, dead: 0 };
     for (const r of rows) {
-      const job: JobRow = { id: String(r[0]), kind: String(r[1]), payload: parse(r[2]), attempts: Number(r[3]), maxAttempts: Number(r[4]) };
+      const job: JobRow = {
+        id: String(r[0]),
+        kind: String(r[1]),
+        payload: parse(r[2]),
+        attempts: Number(r[3]),
+        maxAttempts: Number(r[4]),
+      };
       const handler = this.handlers.get(job.kind);
       try {
         if (!handler) throw new Error(`no handler for job kind "${job.kind}"`);
@@ -74,7 +80,11 @@ export class JobRunner {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (job.attempts >= job.maxAttempts) {
-          await db.client.query({ sql: "UPDATE jobs SET status = 'dead', lease_until = NULL, last_error = ? WHERE id = ?", params: [message, job.id], method: "run" });
+          await db.client.query({
+            sql: "UPDATE jobs SET status = 'dead', lease_until = NULL, last_error = ? WHERE id = ?",
+            params: [message, job.id],
+            method: "run",
+          });
           report.dead++;
         } else {
           await db.client.query({

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
-import { JobRunner, backoffMs, createRunner } from "../src/jobs/index";
+import { backoffMs, createRunner, JobRunner } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { jobs, services } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
@@ -34,7 +34,9 @@ describe("JobRunner", () => {
     const first = await runner.runDue(db, { now: T0 });
     expect(first).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1 });
     expect(calls).toBe(1);
-    const rows = await db.orm.select({ kind: jobs.kind, status: jobs.status, runAt: jobs.runAt, lastError: jobs.lastError }).from(jobs);
+    const rows = await db.orm
+      .select({ kind: jobs.kind, status: jobs.status, runAt: jobs.runAt, lastError: jobs.lastError })
+      .from(jobs);
     const flaky = rows.find((r) => r.kind === "flaky");
     expect(flaky?.status).toBe("queued");
     expect(flaky?.runAt).toBe(T0 + backoffMs(1));
@@ -50,21 +52,51 @@ describe("JobRunner", () => {
   it("notifies the owner and the customer by email after a booking is created and confirmed", async () => {
     const db = await setup();
     const svc = ulid();
-    await db.orm.insert(services).values({ id: svc, name: "Full service", durationMin: 90, capacity: 1, granularityMin: 30, createdAt: T0, updatedAt: T0 });
+    await db.orm
+      .insert(services)
+      .values({
+        id: svc,
+        name: "Full service",
+        durationMin: 90,
+        capacity: 1,
+        granularityMin: 30,
+        createdAt: T0,
+        updatedAt: T0,
+      });
     const caps = new Capabilities(db);
-    const owner: Caller = { actor: { kind: "owner", id: "u1", channel: "owner_ui" }, tier: "verified_principal", sandbox: false, now: () => T0 };
+    const owner: Caller = {
+      actor: { kind: "owner", id: "u1", channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => T0,
+    };
     await caps.updateSettings(owner, {
-      doc: { business: { name: "Oficina Maré" }, notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://app.example" }, email: { fromAddress: "inbox@oficinamare.pt", replyTo: "hello@oficinamare.pt" } },
+      doc: {
+        business: { name: "Oficina Maré" },
+        notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://app.example" },
+        email: { fromAddress: "inbox@oficinamare.pt", replyTo: "hello@oficinamare.pt" },
+      },
     });
     const mail = logMailOut();
     const runner = createRunner({ mailOut: mail });
-    const customer: Caller = { actor: { kind: "customer_human", id: "form", channel: "form" }, tier: "anonymous", sandbox: false, now: () => T0 };
+    const customer: Caller = {
+      actor: { kind: "customer_human", id: "form", channel: "form" },
+      tier: "anonymous",
+      sandbox: false,
+      now: () => T0,
+    };
     const created = await caps.createBooking(customer, {
-      payload: { reservationFor: { serviceId: svc, name: "Full service" }, startTime: "2026-09-22T08:00:00Z", endTime: "2026-09-22T09:30:00Z" },
+      payload: {
+        reservationFor: { serviceId: svc, name: "Full service" },
+        startTime: "2026-09-22T08:00:00Z",
+        endTime: "2026-09-22T09:30:00Z",
+      },
       contact: { name: "Rita Amaral", email: "rita@example.com" },
     });
     expect(await runner.runDue(db, { now: T0 })).toMatchObject({ claimed: 2, done: 2 });
-    expect(mail.sent.map((m) => [m.to[0], m.subject])).toEqual([["hello@oficinamare.pt", "New booking from Rita Amaral: Full service"]]);
+    expect(mail.sent.map((m) => [m.to[0], m.subject])).toEqual([
+      ["hello@oficinamare.pt", "New booking from Rita Amaral: Full service"],
+    ]);
     expect(mail.sent[0]?.text).toContain("https://app.example/items/");
 
     await caps.transitionItem(owner, { item_id: created.view.item.id, event: "confirm" });
