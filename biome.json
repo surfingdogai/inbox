@@ -13,7 +13,8 @@
       "!**/node_modules",
       "!**/.wrangler",
       "!**/worker-configuration.d.ts",
-      "!**/routeTree.gen.ts"
+      "!**/routeTree.gen.ts",
+      "!**/.astro"
     ]
   },
   "formatter": {
@@ -51,6 +52,20 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "off"
+          },
+          "style": {
+            "useImportType": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["packages/ui/src/**"],
       "linter": {

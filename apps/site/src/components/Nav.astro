@@ -1,0 +1,155 @@
+---
+const links = [
+  { href: "/docs/", label: "Docs" },
+  { href: "/blog/", label: "Blog" },
+  { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
+];
+---
+
+<header class="nav-shell">
+  <div class="wrap">
+    <nav class="glass-strong navbar" aria-label="Site">
+      <a class="brand" href="/">
+        <img src="/logo.png" alt="" width="460" height="461" decoding="async" />
+        <span>Surfing Dog</span>
+      </a>
+      <ul class="links">
+        {
+          links.map((l) => (
+            <li>
+              <a href={l.href} rel={l.external ? "noopener" : undefined}>
+                {l.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <button class="btn btn-secondary btn-icon btn-sm tt" type="button" data-theme-toggle aria-label="Switch theme">
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"></path>
+        </svg>
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"></path>
+        </svg>
+      </button>
+      <a class="btn btn-primary btn-sm cta" href="#run">Get your inbox</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .nav-shell {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    padding-top: 12px;
+  }
+  .navbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 56px;
+    padding: 0 8px 0 10px;
+    border-radius: 9999px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px 4px 2px;
+    border-radius: 9999px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15.5px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .brand img {
+    width: 34px;
+    height: 34px;
+    image-rendering: pixelated;
+  }
+  .links {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 auto 0 4px;
+    padding: 0;
+    list-style: none;
+  }
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 9999px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .links a:hover {
+    background: var(--pill-bg-hover);
+    color: var(--ink);
+  }
+  .tt svg {
+    width: 17px;
+    height: 17px;
+  }
+  .tt .i-sun {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .tt .i-sun {
+      display: block;
+    }
+    :root:not([data-theme="light"]) .tt .i-moon {
+      display: none;
+    }
+  }
+  :root[data-theme="dark"] .tt .i-sun {
+    display: block;
+  }
+  :root[data-theme="dark"] .tt .i-moon {
+    display: none;
+  }
+  .cta {
+    margin-left: 4px;
+  }
+  @media (max-width: 560px) {
+    .brand span {
+      display: none;
+    }
+    .links a {
+      padding: 0 9px;
+    }
+    .links li:nth-child(3) {
+      display: none;
+    }
+  }
+  /* The narrowest phones: the system theme still applies; the toggle returns on wider screens. */
+  @media (max-width: 400px) {
+    .tt {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  // Day or night. Stored under Starlight's key so the docs and the site agree.
+  const root = document.documentElement;
+  const button = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
+  button?.addEventListener("click", () => {
+    const explicit = root.getAttribute("data-theme");
+    const dark = explicit ? explicit === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("starlight-theme", next);
+    } catch {
+      // Private mode: the choice lasts for this page only.
+    }
+  });
+</script>

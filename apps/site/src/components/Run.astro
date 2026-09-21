@@ -1,0 +1,164 @@
+---
+const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
+const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
+---
+
+<section class="section" id="run" aria-labelledby="run-h">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Run it</p>
+        <h2 class="h-section" id="run-h">Three ways to run</h2>
+        <p class="lede">
+          The same software, whichever way you pick. Your data stays in one SQLite database that you own, and the
+          network is optional.
+        </p>
+      </div>
+    </div>
+
+    <div class="ways">
+      <article class="glass panel way">
+        <h3>Deploy to Cloudflare</h3>
+        <p class="card-text">
+          One click on your own Cloudflare account. The button provisions a D1 database, an R2 bucket and a queue, and
+          asks for one secret. Starts on a free account; sending email needs Workers Paid.
+        </p>
+        <div class="foot">
+          <a class="btn btn-primary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
+        </div>
+      </article>
+
+      <article class="glass panel way">
+        <h3>Your own server</h3>
+        <p class="card-text">One process, one SQLite file, Node 22.16 or newer. A single command is on its way with 0.1.</p>
+        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">coming with 0.1</span></pre>
+        <div class="foot">
+          <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
+        </div>
+      </article>
+
+      <article class="glass panel way">
+        <div class="way-head">
+          <h3>Hosted by us</h3>
+          <span class="pill">Hosted opens in a later release</span>
+        </div>
+        <p class="card-text">
+          The same inbox on our server in the EU, one database per business, email in and out, backups and one-click
+          connectors. Leave your address and we will write when it opens.
+        </p>
+        <form class="foot wait" method="post" action={WAITLIST} data-waitlist>
+          <label class="label" for="wait-email">Email</label>
+          <div class="wait-row">
+            <input
+              class="input"
+              id="wait-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              placeholder="you@yourbusiness.pt"
+            />
+            <button class="btn btn-primary" type="submit">Join the waitlist</button>
+          </div>
+          <p class="hint" data-waitlist-status aria-live="polite"></p>
+        </form>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .ways {
+    display: grid;
+    gap: 16px;
+  }
+  @media (min-width: 900px) {
+    .ways {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .way {
+    display: flex;
+    flex-direction: column;
+  }
+  .way h3 {
+    margin: 0;
+    font-size: 20px;
+  }
+  .way-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .way .card-text {
+    margin-top: 10px;
+  }
+  .foot {
+    margin-top: auto;
+    padding-top: 18px;
+  }
+  .cmd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--row-bg);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    white-space: normal;
+  }
+  .cmd code::before {
+    content: "$ ";
+    color: var(--ink-3);
+  }
+  .wait-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wait-row .input {
+    flex: 1 1 180px;
+  }
+  .hint:empty {
+    display: none;
+  }
+</style>
+
+<script>
+  // Progressive enhancement: post the address without leaving the page; say something calm if
+  // the network is not reachable yet.
+  const form = document.querySelector<HTMLFormElement>("[data-waitlist]");
+  const status = document.querySelector<HTMLElement>("[data-waitlist-status]");
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const email = (form.elements.namedItem("email") as HTMLInputElement | null)?.value.trim() ?? "";
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]");
+    if (!email || !status) return;
+    status.classList.remove("error");
+    status.textContent = "Joining…";
+    if (button) button.disabled = true;
+    try {
+      const res = await fetch(form.action, {
+        method: "POST",
+        body: new URLSearchParams({ email }),
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      status.textContent = "You are on the list. We will write when hosted opens.";
+      form.reset();
+    } catch {
+      status.classList.add("error");
+      status.textContent =
+        "The waitlist is not reachable right now. Your address stays here; try again in a little while.";
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+</script>

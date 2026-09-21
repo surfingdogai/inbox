@@ -21,7 +21,9 @@
     "dev:client": "pnpm --filter @surfingdog/inbox dev:client",
     "build:client": "pnpm --filter @surfingdog/inbox build:client",
     "dev:workers": "pnpm --filter @surfingdog/inbox dev:workers",
-    "key": "pnpm --filter @surfingdog/inbox key"
+    "key": "pnpm --filter @surfingdog/inbox key",
+    "site": "pnpm --filter @surfingdog/site dev",
+    "site:build": "pnpm --filter @surfingdog/site build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
