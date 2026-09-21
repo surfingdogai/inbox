@@ -5,6 +5,7 @@
 
 export type { Manifest } from "@surfingdog/spec";
 export { MANIFEST_PATH, manifestSchema } from "@surfingdog/spec";
+export * from "./capabilities/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
 export { isUlid, randomToken, ulid } from "./ids";

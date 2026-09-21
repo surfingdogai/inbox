@@ -27,15 +27,15 @@ import { defaultSubject, type ItemView, viewFor } from "./views";
 export interface CreateInput {
   readonly type: ItemType;
   readonly payload: unknown;
-  readonly subject?: string;
-  readonly locationId?: string;
+  readonly subject?: string | undefined;
+  readonly locationId?: string | undefined;
   /** Who is asking, for human doors. Authenticated principals carry a party on the caller instead. */
-  readonly contact?: Contact;
+  readonly contact?: Contact | undefined;
   /** A first message from the customer (form notes, the email body). */
-  readonly message?: string;
+  readonly message?: string | undefined;
   /** Dedupe key for the first message, e.g. an email Message-ID. */
-  readonly messageId?: string;
-  readonly flags?: Partial<ItemFlags>;
+  readonly messageId?: string | undefined;
+  readonly flags?: Partial<ItemFlags> | undefined;
 }
 
 export interface CreateResult {
