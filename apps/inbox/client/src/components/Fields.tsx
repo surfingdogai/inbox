@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import { capitalise, channelWord, formatAddress, formatDateTime, formatMoney, formatWhen } from "../lib/format";
 import type { Item, ItemOf, Money } from "../lib/types";
 
@@ -12,10 +12,8 @@ export function Fields({ item, tz }: { item: Item; tz: string | undefined }) {
         <Typed item={item} tz={tz} />
         <F label="Via">{capitalise(channelWord(item.channel).replace(/^(the|a|an) /, ""))}</F>
         <F label="Received">{formatDateTime(item.createdAt, tz)}</F>
-        <F label="Reference">
-          <span className="mono">{item.id}</span>
-        </F>
       </dl>
+      <Reference id={item.id} />
       {item.type === "quote_request" && item.payload.quote && <QuoteBlock quote={item.payload.quote} tz={tz} />}
     </>
   );
@@ -202,6 +200,23 @@ export function Lines({
       <span className="tot">Total</span>
       <span className="tot" />
       <span className="tot">{formatMoney(total)}</span>
+    </div>
+  );
+}
+
+/** The item's id, for emails and receipts: small, monospace, one click to copy. */
+function Reference({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard.writeText(id).then(() => setCopied(true));
+  };
+  return (
+    <div className="card-ref">
+      <span>Reference</span>
+      <span className="mono">{id}</span>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={copy}>
+        {copied ? "Copied" : "Copy"}
+      </button>
     </div>
   );
 }
