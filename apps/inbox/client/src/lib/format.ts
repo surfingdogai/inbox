@@ -1,4 +1,4 @@
-import type { Item, ItemType, Money } from "./types";
+import type { Item, ItemType, ItemView, Money, Party } from "./types";
 
 /**
  * Words and numbers for humans. Pure functions, no DOM, so they run in tests on both runtimes.
@@ -296,4 +296,25 @@ export function currencyOf(item: Item): string | undefined {
     case "message":
       return undefined;
   }
+}
+
+/** Who is asking: the name, else the email, else what little we know. */
+export function partyName(party: Party | undefined): string {
+  if (party?.name?.trim()) return party.name.trim();
+  if (party?.email) return party.email;
+  return party?.kind === "agent" ? "An agent" : "Someone";
+}
+
+/** "Rita Amaral · Full service": a row's first line. */
+export function rowTitle(view: ItemView): string {
+  const subject = view.item.subject?.trim();
+  return `${partyName(view.party)} · ${subject || TYPE_WORD[view.item.type]}`;
+}
+
+/** The calendar day (YYYY-MM-DD) of an instant in a time zone, so "today" is the business's today. */
+export function localDateKey(at: string | number, tz?: string): string {
+  const d = typeof at === "number" ? new Date(at) : parse(at);
+  if (!d) return "";
+  const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
+  return dateFormatter("en-CA", opts, tz).format(d);
 }

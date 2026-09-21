@@ -4,7 +4,7 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { ClosuresEditor, HoursEditor } from "../components/Hours";
 import { problemOf } from "../lib/api";
 import { describeWeekly } from "../lib/hours";
-import { useAvailability, useSaveClosures, useSaveWeekly, useServices } from "../lib/queries";
+import { useAvailability, useClearOverride, useSaveClosures, useSaveWeekly, useServices } from "../lib/queries";
 
 export const Route = createFileRoute("/settings/availability")({
   component: AvailabilityPage,
@@ -15,6 +15,7 @@ function AvailabilityPage() {
   const availability = useAvailability();
   const services = useServices();
   const saveWeekly = useSaveWeekly();
+  const clearOverride = useClearOverride();
   const saveClosures = useSaveClosures();
   const [scope, setScope] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,7 +69,30 @@ function AvailabilityPage() {
             ))}
           </select>
           <span className="hint">Time zone {a.timezone}; change it under General.</span>
+          {service && override && (
+            <>
+              <span className="sp" />
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={clearOverride.isPending}
+                onClick={() =>
+                  clearOverride.mutate(service.id, {
+                    onSuccess: () => setNotice(`${service.name} follows the business hours again.`),
+                  })
+                }
+              >
+                {clearOverride.isPending && <span className="spinner" aria-hidden="true" />}
+                Follow business hours again
+              </button>
+            </>
+          )}
         </div>
+        {clearOverride.error && (
+          <p className="hint error" role="alert">
+            {problemOf(clearOverride.error).detail}
+          </p>
+        )}
         <HoursEditor
           key={editorKey}
           initial={weekly}

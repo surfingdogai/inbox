@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { inputKindFor, isoToLocal, localToIso, parseMoney, sumLines, tonesFor } from "../client/src/lib/actions";
+import {
+  inputKindFor,
+  isoToLocal,
+  localToIso,
+  orderActions,
+  parseMoney,
+  sumLines,
+  tonesFor,
+} from "../client/src/lib/actions";
 import { countsFrom, paramsFor, parseFilter, visibleIn, withQuery } from "../client/src/lib/filters";
 import type { ItemView } from "../client/src/lib/types";
 
@@ -104,5 +112,18 @@ describe("client filters", () => {
     const counts = countsFrom(open, everything);
     expect(counts).toMatchObject({ needs: 1, all: 3, done: 1, openMore: true, doneMore: false });
     expect(counts.byType).toEqual({ message: 0, quote_request: 0, booking: 2, order: 1, refund: 0 });
+  });
+});
+
+describe("client action order", () => {
+  it("keeps the API's ranking but moves destructive actions last", () => {
+    expect(
+      orderActions([{ event: "decline" }, { event: "confirm" }, { event: "propose" }]).map((t) => t.event),
+    ).toEqual(["confirm", "propose", "decline"]);
+    expect(tonesFor([{ event: "complete" }, { event: "no_show" }, { event: "cancel_by_business" }])).toEqual([
+      "primary",
+      "danger",
+      "danger",
+    ]);
   });
 });

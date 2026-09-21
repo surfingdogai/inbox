@@ -1,13 +1,14 @@
 import clsx from "clsx";
-import { Send, StickyNote, User } from "lucide-react";
+import { Bot, Send, StickyNote, User } from "lucide-react";
 import { type FormEvent, type RefObject, useState } from "react";
 import type { ApiProblem } from "../lib/api";
-import { actorWord, channelWord, formatDateTime, initials } from "../lib/format";
-import type { ThreadEntry } from "../lib/types";
+import { actorWord, channelWord, formatDateTime, initials, partyName } from "../lib/format";
+import type { Party, ThreadEntry } from "../lib/types";
 
 /** Thread entries in, out and internal notes, then a reply box that also takes a private note. */
 export function Conversation({
   entries,
+  party,
   tz,
   business,
   replyRef,
@@ -16,6 +17,7 @@ export function Conversation({
   error,
 }: {
   entries: readonly ThreadEntry[];
+  party: Party | undefined;
   tz: string | undefined;
   business: string | undefined;
   replyRef: RefObject<HTMLTextAreaElement | null>;
@@ -43,11 +45,11 @@ export function Conversation({
       <div className="eyebrow">Conversation</div>
       {entries.length === 0 && <p className="hint">No messages on this item yet.</p>}
       {entries.map((e) => (
-        <Entry key={e.id} entry={e} tz={tz} business={business} />
+        <Entry key={e.id} entry={e} party={party} tz={tz} business={business} />
       ))}
       <form className="reply" onSubmit={submit}>
         <label className="label" htmlFor="reply-box">
-          {internal ? "Internal note" : "Reply"}
+          {internal ? "Internal note" : `Reply to ${partyName(party)}`}
         </label>
         <textarea
           id="reply-box"
@@ -56,7 +58,9 @@ export function Conversation({
           rows={3}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={internal ? "A private note for the team. The customer never sees it." : "Write to the customer…"}
+          placeholder={
+            internal ? "A private note for the team. The customer never sees it." : `Write to ${partyName(party)}…`
+          }
           aria-invalid={error ? "true" : undefined}
           aria-describedby={error ? "reply-error" : undefined}
         />
@@ -84,11 +88,21 @@ export function Conversation({
   );
 }
 
-function Entry({ entry, tz, business }: { entry: ThreadEntry; tz: string | undefined; business: string | undefined }) {
+function Entry({
+  entry,
+  party,
+  tz,
+  business,
+}: {
+  entry: ThreadEntry;
+  party: Party | undefined;
+  tz: string | undefined;
+  business: string | undefined;
+}) {
   const when = formatDateTime(entry.at, tz);
   const who =
     entry.direction === "in"
-      ? `Customer · via ${channelWord(entry.channel)} · ${when}`
+      ? `${partyName(party)} · via ${channelWord(entry.channel)} · ${when}`
       : entry.direction === "note"
         ? `Internal note · ${actorWord(entry.actor)} · ${when}`
         : `${business || "You"} · ${when}`;
@@ -96,7 +110,13 @@ function Entry({ entry, tz, business }: { entry: ThreadEntry; tz: string | undef
     <div className={clsx("msg", `msg-${entry.direction}`)}>
       <span className="avatar" aria-hidden="true">
         {entry.direction === "in" ? (
-          <User className="icon-sm" />
+          party?.kind === "agent" ? (
+            <Bot className="icon-sm" />
+          ) : party?.name ? (
+            initials(party.name)
+          ) : (
+            <User className="icon-sm" />
+          )
         ) : entry.direction === "note" ? (
           <StickyNote className="icon-sm" />
         ) : (

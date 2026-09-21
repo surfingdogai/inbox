@@ -559,6 +559,47 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
     count++;
   }
 
+  // 7b. Two bookings today, confirmed days ago: what the Today pane opens on.
+  for (const [days, hh, mm, service, name, who, mail, note] of [
+    [
+      3,
+      15,
+      0,
+      "puncture",
+      "Puncture repair",
+      "Diogo Nunes",
+      "diogo.nunes@example.com",
+      "Rear tyre, tubeless; it lost pressure overnight.",
+    ],
+    [
+      2,
+      16,
+      30,
+      "brakes",
+      "Brake bleed",
+      "Beatriz Gomes",
+      "beatriz.gomes@example.com",
+      "Front lever feels spongy since the last ride.",
+    ],
+  ] as const) {
+    const start = localTime(now, TZ, 0, hh, mm);
+    const t = now - days * DAY;
+    const r = await createItem(db, person(t), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: svc[service], name },
+        startTime: iso(start),
+        endTime: iso(start + (service === "brakes" ? 45 : 30) * MIN),
+        totalPrice: EUR(service === "brakes" ? 3500 : 1200),
+      },
+      contact: { name: who, email: mail },
+      message: note,
+    });
+    await settle(t);
+    await confirmIfNeeded(db, owner(t + 20 * MIN), r.view.item.id);
+    count++;
+  }
+
   // 8. A message from a person, answered.
   {
     const t = now - DAY;

@@ -4,7 +4,10 @@ import {
   formatAddress,
   formatMoney,
   formatWhen,
+  localDateKey,
+  partyName,
   relativeTime,
+  rowTitle,
   snippetFor,
   stateTone,
   stateWord,
@@ -105,5 +108,27 @@ describe("client format", () => {
       }),
     ).toBe("Rua A 1, 1000-001 Lisboa, PT");
     expect(formatAddress(undefined)).toBe("");
+  });
+});
+
+describe("client party words", () => {
+  it("names who is asking and keys days to the business time zone", () => {
+    expect(partyName({ id: "p", name: "Rita Amaral", kind: "human", verified: false })).toBe("Rita Amaral");
+    expect(partyName({ id: "p", name: null, kind: "human", email: "rita@example.com", verified: false })).toBe(
+      "rita@example.com",
+    );
+    expect(partyName({ id: "p", name: null, kind: "agent", verified: true })).toBe("An agent");
+    expect(partyName(undefined)).toBe("Someone");
+    expect(
+      rowTitle({
+        item: booking,
+        transitions: [],
+        human: "",
+        party: { id: "p", name: "Rita Amaral", kind: "human", verified: true },
+      }),
+    ).toBe("Rita Amaral · Full service, city bike");
+    expect(rowTitle({ item: { ...booking, subject: null }, transitions: [], human: "" })).toBe("Someone · Booking");
+    expect(localDateKey("2026-09-23T09:00:00Z", "Europe/Lisbon")).toBe("2026-09-23");
+    expect(localDateKey("2026-09-23T23:30:00Z", "Europe/Lisbon")).toBe("2026-09-24");
   });
 });
