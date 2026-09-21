@@ -10,8 +10,8 @@ import { defineConfig } from "vite";
  */
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-/** Paths the API answers. In dev they are proxied to the running server (`pnpm dev`). */
-const API_PATHS = ["/v1", "/mcp", "/openapi.json", "/healthz", "/.well-known"];
+/** The doors the server answers; in dev they are proxied to it (`pnpm dev`). Same list as src/node.ts. */
+const API_PATHS = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known"];
 const API_TARGET = process.env.INBOX_API ?? "http://localhost:8787";
 
 export default defineConfig({
