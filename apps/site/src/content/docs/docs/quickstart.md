@@ -60,7 +60,7 @@ Open `/login` and paste the key to work the inbox. Put Caddy or nginx in front f
 
 ## Hosted by us
 
-Hosted tenancy opens in a later release: the same software on our server in the EU, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/#run) and we will write when it opens.
+Hosted tenancy opens in a later release: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/#run) and we will write when it opens.
 
 ## First calls
 

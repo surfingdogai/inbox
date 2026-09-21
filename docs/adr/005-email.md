@@ -19,6 +19,6 @@ with a vendored copy of `email-reply-parser` (its published build imports Node's
 
 ## Why
 Cloudflare Email Sending is public beta, Paid-only, 3,000 messages a month included then $0.35 per
-thousand, any recipient after domain onboarding, DKIM automatic; our platform already uses it. Resend
+thousand, any recipient after domain onboarding, DKIM automatic; we already use it. Resend
 runs on Workers and has inbound on all plans but stores all data in the US even on its EU region.
 Postmark has no EU option; Mailgun has an EU region; SES is cheapest.
