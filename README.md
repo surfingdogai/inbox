@@ -38,6 +38,7 @@ Run it with `node server.mjs` and these variables:
 | `INBOX_PUBLIC_URL` | The https URL people and agents reach you at. Behind a proxy set it, or pass `X-Forwarded-Proto`. |
 | `INBOX_STATIC` | Static files directory (the owner app) |
 | `INBOX_OWNER_EMAIL` | Comma-separated addresses that may create the first account by email link |
+| `INBOX_SECRET_KEY` | Seals connector credentials and webhook secrets. One long random string, or several comma-separated and newest first to rotate. Without it the instance runs as normal but refuses to store a secret. |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | Real email through Cloudflare Email Service (`MAIL_FROM_NAME` optional) |
 | `RESEND_API_KEY` | Real email through Resend instead; with neither, mail is printed to the console |
 | `PORT`, `HOST` | Listen address (default 8787 on all interfaces) |

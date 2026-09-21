@@ -1,5 +1,9 @@
 # Secrets for local development (copied to .dev.vars, never committed).
 # The Deploy to Cloudflare button prompts for these.
+# Seals connector credentials and webhook secrets (AES-256-GCM, ADR-015). One long random string,
+# or several comma-separated and newest first to rotate a key without downtime. Leave it empty and
+# the instance runs exactly as it does today, but refuses to store a secret rather than store it in
+# the clear. `openssl rand -base64 32` makes a good one.
 INBOX_SECRET_KEY=
 # Who may create the first owner account by magic link (comma-separated).
 INBOX_OWNER_EMAIL=

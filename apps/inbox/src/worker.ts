@@ -8,6 +8,7 @@ type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
   RESEND_API_KEY?: string;
   INBOX_OWNER_EMAIL?: string;
+  INBOX_SECRET_KEY?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -27,6 +28,7 @@ function inboxFor(env: Bindings): Inbox {
         .split(",")
         .map((e) => e.trim())
         .filter(Boolean),
+      secretKey: env.INBOX_SECRET_KEY,
     });
     inboxes.set(env.DB, inbox);
   }

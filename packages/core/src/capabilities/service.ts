@@ -12,6 +12,7 @@ import {
   settings as settingsTable,
   threadEntries,
 } from "../schema/tables";
+import type { SecretBox } from "../secrets/box";
 import { readSettings, SETTINGS_SCHEMA_VERSION, type Settings, settingsSchema } from "../settings/schema";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
@@ -66,8 +67,19 @@ export class Capabilities {
   /** The owner's setup: profile, services, products, opening hours, rules. */
   readonly setup: SetupCapabilities;
 
-  constructor(private readonly db: Db) {
+  /**
+   * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
+   * `INBOX_SECRET_KEY`: everything else works, and anything that would store a secret refuses
+   * through `requireSecretBox`.
+   */
+  readonly secrets: SecretBox | null;
+
+  constructor(
+    private readonly db: Db,
+    secrets: SecretBox | null = null,
+  ) {
     this.setup = new SetupCapabilities(db);
+    this.secrets = secrets;
   }
 
   // ---- public ----------------------------------------------------------------
