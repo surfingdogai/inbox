@@ -6,7 +6,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ApiProblem, setUnauthorizedHandler } from "./lib/api";
-import { signOut } from "./lib/auth";
+import { dropCredentials } from "./lib/auth";
 import { initTheme } from "./lib/theme";
 import { routeTree } from "./routeTree.gen";
 
@@ -33,9 +33,9 @@ declare module "@tanstack/react-router" {
   }
 }
 
-// A refused owner call means the key is gone or revoked: sign out and ask for it again.
+// A refused owner call means the session ended or the key was revoked: forget both, ask again.
 setUnauthorizedHandler(() => {
-  signOut();
+  dropCredentials();
   const redirect = `${window.location.pathname}${window.location.search}`;
   void router.navigate({ to: "/login", search: { reason: "expired", ...(redirect !== "/" ? { redirect } : {}) } });
 });
