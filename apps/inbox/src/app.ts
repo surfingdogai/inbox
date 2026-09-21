@@ -1,4 +1,4 @@
-import { type CallerEnv, mountDoors } from "@surfingdog/adapters";
+import { type CallerEnv, type ClientMetadata, mountDoors } from "@surfingdog/adapters";
 import {
   buildManifest,
   Capabilities,
@@ -21,6 +21,9 @@ export interface AppDeps {
   readonly baseUrl?: string | undefined;
   /** Runs work after the response. Workers pass `ctx.waitUntil`; Node lets the loop pick it up. */
   readonly background?: ((work: Promise<unknown>) => void) | undefined;
+  /** Test seam for Client ID Metadata Documents. */
+  readonly fetchClientMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
+  readonly now?: (() => number) | undefined;
 }
 
 export interface Inbox {
@@ -37,7 +40,8 @@ export interface Inbox {
 export function createInbox(deps: AppDeps): Inbox {
   const app = new Hono<CallerEnv>();
   const caps = new Capabilities(deps.db);
-  const runner = createRunner({ mailOut: deps.mailOut ?? logMailOut(), baseUrl: deps.baseUrl });
+  const mailOut = deps.mailOut ?? logMailOut();
+  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl });
   const background = deps.background ?? ((work) => void work.catch(() => {}));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
@@ -67,7 +71,16 @@ export function createInbox(deps: AppDeps): Inbox {
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });
 
-  mountDoors(app, { db: deps.db, caps, version: VERSION, sandbox: async () => (await readSettings(deps.db)).testMode });
+  mountDoors(app, {
+    db: deps.db,
+    caps,
+    version: VERSION,
+    sandbox: async () => (await readSettings(deps.db)).testMode,
+    mailOut,
+    businessName: async () => (await caps.getBusinessProfile()).name,
+    fetchClientMetadata: deps.fetchClientMetadata,
+    now: deps.now,
+  });
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
   return { app, runner };

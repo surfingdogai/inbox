@@ -1,6 +1,8 @@
 import { type Caller, type Channel, type Db, randomToken, schema, type TrustTier, ulid } from "@surfingdog/core";
 import { sha256Hex } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
+import { resolveAccessToken } from "./oauth";
+import { userFromCookie } from "./session";
 
 /**
  * Turns a request into a Caller. Owner keys (`sdi_own_…`) and agent keys (`sdi_agent_…`) are
@@ -17,6 +19,8 @@ export interface ApiKeyInfo {
   readonly scopes: readonly string[];
   readonly userId: string | null;
   readonly partyId: string | null;
+  /** How the principal proved itself. Cookie sessions need same-origin checks on writes. */
+  readonly via: "api_key" | "session" | "oauth";
 }
 
 export async function hashKey(key: string): Promise<string> {
@@ -64,6 +68,7 @@ export async function resolveApiKey(db: Db, key: string): Promise<ApiKeyInfo | n
     scopes: row.scopes,
     userId: row.userId,
     partyId: row.partyId,
+    via: "api_key",
   };
 }
 
@@ -86,7 +91,33 @@ export async function callerFromRequest(
   const url = new URL(request.url);
   const sandbox =
     opts.sandbox === true || request.headers.get("x-sandbox") === "1" || url.hostname.startsWith("sandbox.");
-  const key = bearer ? await resolveApiKey(db, bearer) : null;
+  let key = bearer ? await resolveApiKey(db, bearer) : null;
+  if (!key && bearer) {
+    const grant = await resolveAccessToken(db, bearer, now());
+    if (grant)
+      key = {
+        id: grant.clientId,
+        kind: "owner",
+        name: `oauth:${grant.clientId}`,
+        scopes: grant.scopes,
+        userId: grant.userId,
+        partyId: null,
+        via: "oauth",
+      };
+  }
+  if (!key && !bearer) {
+    const user = await userFromCookie(db, request, now());
+    if (user)
+      key = {
+        id: user.sessionId,
+        kind: "owner",
+        name: user.email,
+        scopes: ["*"],
+        userId: user.id,
+        partyId: null,
+        via: "session",
+      };
+  }
   if (key?.kind === "owner") {
     return {
       auth: key,

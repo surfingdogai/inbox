@@ -57,7 +57,11 @@ export function problemResponse(c: Context, error: unknown): Response {
   return c.json(p, p.status as ContentfulStatusCode, { "Content-Type": "application/problem+json" });
 }
 
-export function unauthorized(c: Context, detail = "Send an owner API key as a Bearer token."): Response {
+export function unauthorized(
+  c: Context,
+  detail = "Sign in, or send an owner API key or OAuth token as a Bearer token.",
+  resourceMetadata?: string,
+): Response {
   const p: Problem = {
     type: "https://surfingdog.ai/problems/unauthorized",
     title: TITLES.unauthorized ?? "",
@@ -65,5 +69,17 @@ export function unauthorized(c: Context, detail = "Send an owner API key as a Be
     detail,
     code: "unauthorized",
   };
-  return c.json(p, 401, { "Content-Type": "application/problem+json", "WWW-Authenticate": 'Bearer realm="owner"' });
+  const challenge = resourceMetadata ? `Bearer resource_metadata="${resourceMetadata}"` : 'Bearer realm="owner"';
+  return c.json(p, 401, { "Content-Type": "application/problem+json", "WWW-Authenticate": challenge });
+}
+
+export function forbidden(c: Context, detail: string): Response {
+  const p: Problem = {
+    type: "https://surfingdog.ai/problems/not_allowed",
+    title: TITLES.not_allowed ?? "",
+    status: 403,
+    detail,
+    code: "not_allowed",
+  };
+  return c.json(p, 403, { "Content-Type": "application/problem+json" });
 }

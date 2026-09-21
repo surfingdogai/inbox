@@ -1,15 +1,22 @@
 import type { Capabilities, Db } from "@surfingdog/core";
+import type { MailOut } from "@surfingdog/platform";
 import type { Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest } from "./auth";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
-import { unauthorized } from "./problem";
+import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
+import { forbidden, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
+import { safeFetchJson } from "./safe-fetch";
+import { authRoutes } from "./session";
 
 export * from "./auth";
 export * from "./mcp";
+export * from "./oauth";
 export * from "./problem";
 export * from "./rest";
+export * from "./safe-fetch";
+export * from "./session";
 
 export interface DoorDeps {
   readonly db: Db;
@@ -18,6 +25,19 @@ export interface DoorDeps {
   readonly title?: string;
   /** Whether the instance is in test mode right now (every item becomes sandbox). */
   readonly sandbox?: () => Promise<boolean>;
+  readonly mailOut: MailOut;
+  readonly businessName: () => Promise<string>;
+  /** Resolves Client ID Metadata Documents; defaults to the SSRF-safe fetcher. */
+  readonly fetchClientMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
+  readonly now?: (() => number) | undefined;
+}
+
+/** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
+function sameOrigin(request: Request): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "same-origin" || site === "none") return true;
+  const origin = request.headers.get("origin");
+  return origin !== null && origin === new URL(request.url).origin;
 }
 
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
@@ -25,9 +45,35 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   const sandbox = deps.sandbox ?? (async () => false);
 
   app.use("/v1/*", async (c, next) => {
-    c.set("caller", await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() }));
+    const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() });
+    if (
+      caller.auth?.via === "session" &&
+      !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
+      !sameOrigin(c.req.raw)
+    ) {
+      return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
+    }
+    c.set("caller", caller);
     await next();
   });
+  app.route(
+    "/auth",
+    authRoutes({ db: deps.db, mailOut: deps.mailOut, businessName: deps.businessName, now: deps.now }),
+  );
+  app.route(
+    "/oauth",
+    oauthRoutes({
+      db: deps.db,
+      fetchMetadata: deps.fetchClientMetadata ?? ((url) => safeFetchJson<ClientMetadata>(url)),
+      now: deps.now,
+    }),
+  );
+  app.get("/.well-known/oauth-protected-resource/mcp/owner", (c) =>
+    c.json(protectedResourceMetadata(new URL(c.req.url).origin), 200, { "Cache-Control": "public, max-age=3600" }),
+  );
+  app.get("/.well-known/oauth-authorization-server", (c) =>
+    c.json(authorizationServerMetadata(new URL(c.req.url).origin), 200, { "Cache-Control": "public, max-age=3600" }),
+  );
   app.route("/v1/owner", ownerRest(deps.caps));
   app.route("/v1", publicRest(deps.caps));
 
@@ -59,7 +105,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
 
   app.all("/mcp/owner", async (c) => {
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_owner", sandbox: await sandbox() });
-    if (caller.auth?.kind !== "owner") return unauthorized(c);
+    if (caller.auth?.kind !== "owner") {
+      return unauthorized(
+        c,
+        "Connect with OAuth or send an owner API key.",
+        `${new URL(c.req.url).origin}/.well-known/oauth-protected-resource/mcp/owner`,
+      );
+    }
     return mcpOwner.fetch(c.req.raw, { authInfo: authInfo(caller) });
   });
   app.all("/mcp", async (c) => {
