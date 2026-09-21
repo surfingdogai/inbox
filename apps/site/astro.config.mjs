@@ -9,7 +9,7 @@ const GITHUB = "https://github.com/surfingdogai/inbox";
 /**
  * surfingdog.ai: a static Astro site. The landing page and the blog are plain Astro pages on the
  * shared design tokens; the docs are Starlight, mounted under /docs. Everything prerenders to
- * apps/site/dist and is served from our own servers.
+ * apps/site/dist and is served by Caddy on our server.
  */
 export default defineConfig({
   site: "https://surfingdog.ai",
