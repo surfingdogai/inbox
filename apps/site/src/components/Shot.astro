@@ -1,0 +1,71 @@
+---
+import { publicDir } from "astro:config/server";
+import { existsSync, readFileSync } from "node:fs";
+import { imageSize } from "../lib/image-size";
+
+/**
+ * A real print of the app in a glass frame, no browser chrome. The files live in public/shots;
+ * until one lands the frame stays, at the same aspect ratio, with the expected file name in it,
+ * so the swap is a file drop. `night` names a second print shown in the night theme.
+ */
+interface Props {
+  src: string;
+  alt: string;
+  night?: string;
+  title?: string;
+  caption?: string;
+  class?: string;
+  loading?: "eager" | "lazy";
+}
+
+const { src, alt, night, title, caption, class: className, loading = "lazy" } = Astro.props;
+
+function load(path: string) {
+  const file = new URL(`.${path}`, publicDir);
+  if (!existsSync(file)) return undefined;
+  return { path, size: imageSize(readFileSync(file)) };
+}
+const day = load(src);
+const dark = night ? load(night) : undefined;
+---
+
+<figure class:list={["glass shot", className]}>
+  {
+    day ? (
+      <img
+        class:list={["day", { "has-night": Boolean(dark) }]}
+        src={day.path}
+        alt={alt}
+        width={day.size?.width}
+        height={day.size?.height}
+        loading={loading}
+        decoding="async"
+      />
+    ) : (
+      <div class="shot-empty mono" role="img" aria-label={alt}>
+        <span>{src.replace(/^\//, "")}</span>
+      </div>
+    )
+  }
+  {
+    dark ? (
+      <img
+        class="night"
+        src={dark.path}
+        alt={alt}
+        width={dark.size?.width}
+        height={dark.size?.height}
+        loading={loading}
+        decoding="async"
+      />
+    ) : null
+  }
+  {
+    title || caption ? (
+      <figcaption class="shot-cap">
+        {title ? <b>{title}</b> : null}
+        {caption}
+      </figcaption>
+    ) : null
+  }
+</figure>

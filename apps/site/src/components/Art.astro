@@ -1,10 +1,13 @@
 ---
+import { publicDir } from "astro:config/server";
 import { existsSync, readFileSync } from "node:fs";
 import { imageSize } from "../lib/image-size";
 
 /**
  * Pixel art from public/art. Reads the image header at build time for width and height (no layout
  * shift), and falls back to the logo when a file is missing so the layout never breaks the build.
+ * The file is located through Astro's `publicDir`, which is correct in dev and in the static build
+ * (a path relative to `import.meta.url` is not: components are bundled elsewhere at build time).
  * `frame` wraps unkeyed art (a cover with its own ground) in glass, in both themes.
  */
 interface Props {
@@ -19,7 +22,7 @@ interface Props {
 
 const { src, alt, class: className, loading = "lazy", frame = false, ratio = "1" } = Astro.props;
 
-const file = new URL(`../../public${src}`, import.meta.url);
+const file = new URL(`.${src}`, publicDir);
 const present = existsSync(file);
 const size = present ? imageSize(readFileSync(file)) : undefined;
 ---
