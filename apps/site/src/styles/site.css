@@ -96,26 +96,26 @@
 :root {
   /* Type. Six sizes below the headings, each with one job.
      Nothing on this site sets a raw px font-size that is not one of these. */
-  --fs-micro: 11px; /* uppercase eyebrows, badges, chart labels */
-  --fs-fine: 12.5px; /* fine print, hints, captions, meta */
-  --fs-ui: 14px; /* buttons, nav, pills, table cells */
-  --fs-card: 15px; /* card and list copy */
-  --fs-body: 16px; /* body and prose */
-  --fs-lede: 17.5px; /* the one paragraph under a title */
-  --fs-mono: 13px; /* monospace runs optically small; its own step */
+  --fs-micro: 10.5px; /* uppercase eyebrows, badges, chart labels */
+  --fs-fine: 12px; /* fine print, hints, captions, meta */
+  --fs-ui: 13.5px; /* buttons, nav, pills, table cells */
+  --fs-card: 14px; /* card and list copy */
+  --fs-body: 15px; /* body and prose */
+  --fs-lede: 16px; /* the one paragraph under a title */
+  --fs-mono: 12.5px; /* monospace runs optically small; its own step */
 
   /* Headings. One token per level, used by every page. */
-  --fs-h-card: 17px; /* every card and step heading */
-  --fs-h-sub: 19px; /* a heading inside a panel */
-  --fs-section: clamp(25px, 2.4vw, 30px); /* .h-section */
-  --fs-page-title: clamp(28px, 3.2vw, 38px); /* every page h1 */
-  --fs-hero: clamp(32px, 4.2vw, 50px); /* the home hero, the one exception */
+  --fs-h-card: 15.5px; /* every card and step heading */
+  --fs-h-sub: 17px; /* a heading inside a panel */
+  --fs-section: clamp(21px, 1.9vw, 25px); /* .h-section */
+  --fs-page-title: clamp(25px, 2.6vw, 32px); /* every page h1 */
+  --fs-hero: clamp(30px, 3.6vw, 44px); /* the home hero, the one exception */
 
   /* Leading: tight above 28px, comfortable below. */
   --lh-hero: 1.12;
   --lh-title: 1.14;
   --lh-heading: 1.25;
-  --lh-body: 1.6;
+  --lh-body: 1.58;
   --lh-ui: 1.45;
 
   /* Measure, bound to size: small text is narrower, never wider. */
@@ -137,8 +137,8 @@
   --sp-10: 80px;
 
   /* Space with a job. */
-  --section-y: var(--sp-9); /* every section, phone */
-  --section-y-tight: var(--sp-8);
+  --section-y: var(--sp-8); /* every section, phone */
+  --section-y-tight: var(--sp-7);
   --header-pb: var(--sp-6); /* a page-header section stops here */
   --hero-pb: var(--sp-7);
   --space-head: var(--sp-6); /* under a section head */
@@ -174,9 +174,9 @@
 }
 @media (min-width: 900px) {
   :root {
-    --section-y: var(--sp-10);
-    --section-y-tight: var(--sp-9);
-    --space-head: var(--sp-7);
+    --section-y: var(--sp-9);
+    --section-y-tight: var(--sp-8);
+    --space-head: var(--sp-6);
     --gutter: var(--sp-8);
   }
 }
@@ -812,4 +812,53 @@ kbd {
 }
 .prose strong {
   font-weight: 600;
+}
+
+
+/* ------------------------------------------------------------------ */
+/*  Reading column. A page that is mostly prose sets its container to  */
+/*  the measure instead of capping each paragraph inside a much wider  */
+/*  one, which left every line ending in a void two thirds across.     */
+/*  Prose keeps a real measure; anything wider than a sentence breaks  */
+/*  out of it, so the page reads as a column with bands, not as text   */
+/*  stranded in a hall.                                                */
+/* ------------------------------------------------------------------ */
+.wrap-read {
+  max-width: 616px;
+}
+.wrap-read :is(p, .lede, .card-text, .fine, .hint, dd, li) {
+  max-width: none;
+}
+
+/* One rhythm down the column. Blocks carry their own bottom margins and
+   some carry none at all, which is how a card band ended up touching the
+   paragraph under it. Adjacent margins collapse in normal flow, so this
+   sets a floor without doubling any gap that is already there. */
+.wrap-read > * + * {
+  margin-top: var(--sp-6);
+}
+.wrap-read > :is(.grid-cards, .cols, .ways, .tiles, .spec, .shot, figure, table, .bleed) {
+  margin-block: var(--sp-7);
+}
+
+/* The things that are not sentences break out of the measure. Centred with
+   left plus a translate rather than a percentage margin: a percentage margin
+   resolves against a containing block whose width depends on where the gutter
+   padding sits, which put every band one gutter to the right and overflowing. */
+.wrap-read > :is(.grid-cards, .cols, .ways, .tiles, .spec, .shot, figure, table, .bleed) {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1064px, calc(100vw - var(--gutter) * 2));
+  max-width: none;
+}
+/* Below this there is no room to break out: the band would be narrower than
+   the column it is escaping. */
+@media (max-width: 720px) {
+  .wrap-read > :is(.grid-cards, .cols, .ways, .tiles, .spec, .shot, figure, table, .bleed) {
+    position: static;
+    left: auto;
+    transform: none;
+    width: auto;
+  }
 }
