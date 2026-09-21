@@ -149,6 +149,25 @@ export const createWebhookInput = z.object({
 
 export const webhookIdInput = z.object({ webhook_id: z.string().min(1) });
 
+/** A product feed. No credentials: the whole point is that there is nothing to authorise. */
+export const addFeedInput = z.object({
+  url: z
+    .string()
+    .min(1)
+    .max(2_000)
+    .describe("The feed URL, as the shop's platform gives it. A comma-separated export or a Google Merchant XML feed."),
+  name: z.string().max(120).optional().describe("What to call it. Defaults to the host it is fetched from."),
+  currency: z
+    .string()
+    .length(3)
+    .optional()
+    .describe("Used for prices the feed states with no currency of their own. Defaults to the business currency."),
+  deactivate_missing: z
+    .boolean()
+    .optional()
+    .describe("Deactivate products that stop appearing in the feed. On by default; they are never deleted."),
+});
+
 export const updateWebhookInput = z.object({
   webhook_id: z.string().min(1),
   url: z.url().max(2_000).optional(),
@@ -196,6 +215,7 @@ export const listEventsInput = z.object({
   since: isoDateTime.optional().describe("Only events from this instant onwards."),
 });
 
+export type AddFeedInput = z.infer<typeof addFeedInput>;
 export type CreateWebhookInput = z.infer<typeof createWebhookInput>;
 export type UpdateWebhookInput = z.infer<typeof updateWebhookInput>;
 export type WebhookIdInput = z.infer<typeof webhookIdInput>;

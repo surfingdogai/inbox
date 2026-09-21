@@ -1,4 +1,5 @@
 import {
+  addFeedInput,
   applyPresetInput,
   type Caller,
   type Capabilities,
@@ -500,6 +501,48 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       responses: json("Deleted"),
     }),
     async (c) => c.json(await caps.webhooks.deleteWebhook(c.get("caller"), { webhook_id: String(c.req.param("id")) })),
+  );
+  app.get(
+    "/feeds",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "The product feeds this inbox imports, with when each last ran and what went wrong",
+      responses: json("Feeds"),
+    }),
+    async (c) => c.json({ items: await caps.feeds.list(c.get("caller")) }),
+  );
+  app.post(
+    "/feeds",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Connect a product feed by URL. No credentials. The first import starts immediately.",
+      responses: json("Feed"),
+    }),
+    validator("json", addFeedInput, hook),
+    async (c) => c.json(await caps.feeds.add(c.get("caller"), c.req.valid("json")), 201),
+  );
+  app.get(
+    "/feeds/:id",
+    describeRoute({ tags: ["integrations"], summary: "One feed", responses: json("Feed") }),
+    async (c) => c.json(await caps.feeds.get(c.get("caller"), String(c.req.param("id")))),
+  );
+  app.post(
+    "/feeds/:id/import",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Import now rather than waiting for the next scheduled run",
+      responses: json("Queued"),
+    }),
+    async (c) => c.json(await caps.feeds.importNow(c.get("caller"), String(c.req.param("id")))),
+  );
+  app.delete(
+    "/feeds/:id",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "Disconnect a feed. Its products are deactivated, never deleted.",
+      responses: json("Removed"),
+    }),
+    async (c) => c.json(await caps.feeds.remove(c.get("caller"), String(c.req.param("id")))),
   );
   app.post(
     "/webhooks/:id/rotate-secret",

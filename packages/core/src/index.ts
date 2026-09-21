@@ -8,6 +8,7 @@ export { MANIFEST_PATH, manifestSchema } from "@surfingdog/spec";
 export * from "./capabilities/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
+export * from "./feeds/parse";
 export { isUlid, randomToken, ulid } from "./ids";
 export * from "./jobs/index";
 export * from "./machine/machine";

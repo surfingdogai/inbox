@@ -22,6 +22,7 @@ import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
+import { FeedCapabilities } from "./feeds";
 import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
 import { WebhookCapabilities } from "./webhooks";
@@ -71,6 +72,9 @@ export class Capabilities {
   /** Where events go, and the cursor a developer polls when it cannot receive one (ADR-015). */
   readonly webhooks: WebhookCapabilities;
 
+  /** Product feeds: the one integration that needs no credentials at all (ADR-015 §7.3). */
+  readonly feeds: FeedCapabilities;
+
   /**
    * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
    * `INBOX_SECRET_KEY`: everything else works, and anything that would store a secret refuses
@@ -94,6 +98,7 @@ export class Capabilities {
     eventSettleMs?: number | undefined,
   ) {
     this.setup = new SetupCapabilities(db);
+    this.feeds = new FeedCapabilities(db);
     this.secrets = secrets;
     this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
   }

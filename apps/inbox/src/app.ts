@@ -1,6 +1,8 @@
 import {
   type CallerEnv,
   type ClientMetadata,
+  FEED_IMPORT_KIND,
+  feedImportHandler,
   mountDoors,
   NETWORK_PING_KIND,
   networkPingHandler,
@@ -91,7 +93,9 @@ export function createInbox(deps: AppDeps): Inbox {
         baseUrl: deps.baseUrl,
         fetchImpl: deps.fetchImpl,
       }),
-    );
+    )
+    // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
+    .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }));
   const background = deps.background ?? ((work) => void work.catch(() => {}));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).

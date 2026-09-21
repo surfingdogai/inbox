@@ -14,6 +14,7 @@ import { authRoutes } from "./session";
 
 export * from "./auth";
 export * from "./email";
+export * from "./feeds/index";
 export * from "./mcp";
 export * from "./network";
 export * from "./oauth";
