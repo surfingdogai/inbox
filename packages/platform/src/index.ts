@@ -8,6 +8,7 @@
 import type { SqliteClient } from "./db";
 
 export * from "./db";
+export * from "./mail";
 export * from "./migrate";
 
 export interface Blob {
