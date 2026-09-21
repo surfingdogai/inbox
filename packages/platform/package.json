@@ -5,12 +5,18 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts",
+    "./cloudflare": "./src/cloudflare/index.ts",
+    "./test": "./test/contract.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "@cloudflare/vitest-plugin": "^1.2.0",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

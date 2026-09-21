@@ -2,7 +2,7 @@
   "name": "surfingdog-inbox",
   "private": true,
   "version": "0.0.0",
-  "description": "Surfing Dog Inbox — an open-source, self-hostable typed inbox for businesses: messages, quotes, bookings and orders from people and AI agents.",
+  "description": "Surfing Dog Inbox \u2014 an open-source, self-hostable typed inbox for businesses: messages, quotes, bookings and orders from people and AI agents.",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.3.0",
   "engines": {
@@ -12,9 +12,9 @@
     "check": "biome check .",
     "fix": "biome check --write .",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
-    "test:node": "pnpm --filter @surfingdog/inbox test:node",
-    "test:workers": "pnpm --filter @surfingdog/inbox test:workers",
+    "test": "vitest run",
+    "test:node": "vitest run --project node",
+    "test:workers": "vitest run --project workers",
     "build": "pnpm -r --if-present build",
     "kit": "pnpm --filter @surfingdog/ui kit",
     "dev": "pnpm --filter @surfingdog/inbox dev",
@@ -22,6 +22,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
-    "typescript": "5.9.3"
-  }
+    "typescript": "5.9.3",
+    "@cloudflare/vitest-plugin": "^1.2.0",
+    "@types/node": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "^4.136.0"
+  },
+  "type": "module"
 }
