@@ -37,11 +37,16 @@ Run it with `node server.mjs` and these variables:
 | `INBOX_DB` | SQLite file (default `./data/inbox.db`) |
 | `INBOX_PUBLIC_URL` | The https URL people and agents reach you at. Behind a proxy set it, or pass `X-Forwarded-Proto`. |
 | `INBOX_STATIC` | Static files directory (the owner app) |
-| `RESEND_API_KEY` | Sends real email; otherwise outgoing mail is logged |
+| `INBOX_OWNER_EMAIL` | Comma-separated addresses that may create the first account by email link |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | Real email through Cloudflare Email Service (`MAIL_FROM_NAME` optional) |
+| `RESEND_API_KEY` | Real email through Resend instead; with neither, mail is printed to the console |
 | `PORT`, `HOST` | Listen address (default 8787 on all interfaces) |
 
-CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo business
-to an empty instance, `network-ping` reports to the network now.
+CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo bike shop
+to an empty instance, `seed-showcase` the same shop with a week of items, `network-ping` reports to
+the network now. `pnpm --filter @surfingdog/inbox shots` captures the owner app for the website.
+
+Sign in at `/login` with an address from `INBOX_OWNER_EMAIL` (a link is emailed) or with an owner key.
 
 ## Email in
 

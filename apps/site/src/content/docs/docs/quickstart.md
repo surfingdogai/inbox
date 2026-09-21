@@ -46,17 +46,20 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `INBOX_DB` | `./data/inbox.db` | The SQLite file. Created, and migrated, at boot. |
 | `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
 | `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest and the links in emails. |
-| `RESEND_API_KEY` | unset | Turns on real email through Resend; otherwise mail is logged. |
+| `INBOX_OWNER_EMAIL` | unset | Comma-separated addresses allowed to create the first account by email link. Without it, the first sign-in needs an owner API key. |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | unset | Real email through Cloudflare Email Service (sign-in links, notifications), from an address on a domain onboarded there. `MAIL_FROM_NAME` is optional. |
+| `RESEND_API_KEY` | unset | Real email through Resend instead. With neither, mail is printed to the console. |
 
-Three commands run against the same database and exit:
+A few commands run against the same database and exit:
 
 ```bash
 node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once
-node apps/inbox/dist/server.mjs seed-demo                 # adds the demo business if the instance is empty
+node apps/inbox/dist/server.mjs seed-demo                 # adds a demo bike shop if the instance is empty
+node apps/inbox/dist/server.mjs seed-showcase             # the same shop with a week of items, rules and hours
 node apps/inbox/dist/server.mjs network-ping              # reports to the network now, not at the next hour
 ```
 
-Open `/login` and paste the key to work the inbox. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
+Open `/login`: enter an address from `INBOX_OWNER_EMAIL` and click the link you receive, or paste an owner key. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
 
 ## Hosted by us
 
