@@ -22,6 +22,8 @@
 }
 .section {
   padding-block: 56px;
+  /* Anchor jumps land below the sticky nav. */
+  scroll-margin-top: 72px;
 }
 @media (min-width: 900px) {
   .section {

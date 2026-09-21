@@ -1,5 +1,5 @@
 ---
-title: Surfing Dog Inbox docs
+title: Overview
 description: Start here. What the inbox is, how to run it, and how people and AI agents talk to it.
 ---
 
