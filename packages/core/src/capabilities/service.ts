@@ -19,6 +19,7 @@ import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
+import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
 
 /**
@@ -60,7 +61,12 @@ export interface ItemDetail extends ItemView {
 }
 
 export class Capabilities {
-  constructor(private readonly db: Db) {}
+  /** The owner's setup: profile, services, products, opening hours, rules. */
+  readonly setup: SetupCapabilities;
+
+  constructor(private readonly db: Db) {
+    this.setup = new SetupCapabilities(db);
+  }
 
   // ---- public ----------------------------------------------------------------
 
@@ -72,7 +78,7 @@ export class Capabilities {
       domain: row?.domain ?? null,
       timezone: row?.timezone ?? s.business.timezone,
       currency: row?.currency ?? s.business.currency,
-      languages: s.business.languages,
+      languages: row?.languages?.length ? row.languages : s.business.languages,
       item_types: ["message", "quote_request", "booking", "order"],
     };
   }

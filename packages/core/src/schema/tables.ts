@@ -17,6 +17,7 @@ export const business = sqliteTable("business", {
   domain: text("domain"),
   timezone: text("timezone").notNull().default("UTC"),
   currency: text("currency").notNull().default("EUR"),
+  languages: text("languages", { mode: "json" }).$type<string[]>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

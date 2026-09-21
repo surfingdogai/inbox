@@ -3,6 +3,7 @@ import type { Db } from "../db";
 import { availabilityRules, services } from "../schema/tables";
 import { WriteError } from "../write/errors";
 import { bucketsFor, planClaims, readClaims, type SlotSpec } from "../write/slots";
+import { dateLocaliser, isClosed, readClosures } from "./closures";
 
 /**
  * Free slots for a service inside a window: opening hours from availability rules (a weekly
@@ -62,6 +63,8 @@ export async function findSlots(
   const weekly = (rules.find((r) => r.serviceId === service.id)?.weekly ??
     rules[0]?.weekly ??
     DEFAULT_WEEKLY) as Weekly;
+  const closures = await readClosures(db, service.id);
+  const localDate = dateLocaliser(input.timezone);
   const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
   const step = service.granularityMin * 60_000;
   const duration = service.durationMin * 60_000;
@@ -79,6 +82,8 @@ export async function findSlots(
   for (let start = first; start + duration <= to && slots.length < limit; start += step) {
     const end = start + duration;
     if (!withinOpening(local, weekly, start, end)) continue;
+    if (closures.length > 0 && (isClosed(closures, localDate(start)) || isClosed(closures, localDate(end - 1))))
+      continue;
     const buckets = bucketsFor(spec, new Date(start).toISOString(), new Date(end).toISOString());
     const plan = planClaims(spec, buckets, taken);
     if (!plan.ok) continue;
