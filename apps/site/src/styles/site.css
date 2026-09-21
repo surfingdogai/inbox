@@ -96,20 +96,20 @@
 :root {
   /* Type. Six sizes below the headings, each with one job.
      Nothing on this site sets a raw px font-size that is not one of these. */
-  --fs-micro: 10.5px; /* uppercase eyebrows, badges, chart labels */
-  --fs-fine: 12px; /* fine print, hints, captions, meta */
-  --fs-ui: 13.5px; /* buttons, nav, pills, table cells */
-  --fs-card: 14px; /* card and list copy */
-  --fs-body: 15px; /* body and prose */
-  --fs-lede: 16px; /* the one paragraph under a title */
-  --fs-mono: 12.5px; /* monospace runs optically small; its own step */
+  --fs-micro: 10px; /* uppercase eyebrows, badges, chart labels */
+  --fs-fine: 11.5px; /* fine print, hints, captions, meta */
+  --fs-ui: 13px; /* buttons, nav, pills, table cells */
+  --fs-card: 13.5px; /* card and list copy */
+  --fs-body: 14.5px; /* body and prose */
+  --fs-lede: 15.5px; /* the one paragraph under a title */
+  --fs-mono: 12px; /* monospace runs optically small; its own step */
 
   /* Headings. One token per level, used by every page. */
-  --fs-h-card: 15.5px; /* every card and step heading */
-  --fs-h-sub: 17px; /* a heading inside a panel */
-  --fs-section: clamp(21px, 1.9vw, 25px); /* .h-section */
-  --fs-page-title: clamp(25px, 2.6vw, 32px); /* every page h1 */
-  --fs-hero: clamp(30px, 3.6vw, 44px); /* the home hero, the one exception */
+  --fs-h-card: 15px; /* every card and step heading */
+  --fs-h-sub: 16px; /* a heading inside a panel */
+  --fs-section: clamp(19px, 1.7vw, 22px); /* .h-section */
+  --fs-page-title: clamp(23px, 2.3vw, 28px); /* every page h1 */
+  --fs-hero: clamp(27px, 3.1vw, 38px); /* the home hero, the one exception */
 
   /* Leading: tight above 28px, comfortable below. */
   --lh-hero: 1.12;
@@ -824,7 +824,7 @@ kbd {
 /*  stranded in a hall.                                                */
 /* ------------------------------------------------------------------ */
 .wrap-read {
-  max-width: 616px;
+  max-width: 560px;
 }
 .wrap-read :is(p, .lede, .card-text, .fine, .hint, dd, li) {
   max-width: none;
