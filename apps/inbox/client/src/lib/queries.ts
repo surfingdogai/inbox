@@ -1,7 +1,20 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { countsFrom } from "./filters";
-import type { ListParams, ReplyBody, SettingsBody, TransitionBody } from "./types";
+import type {
+  Closure,
+  ListParams,
+  PresetKey,
+  ProductBody,
+  ProfileBody,
+  ReplyBody,
+  RuleBody,
+  RuleView,
+  ServiceBody,
+  SettingsBody,
+  TransitionBody,
+  Weekly,
+} from "./types";
 
 /** Query keys and hooks. Writes invalidate the item, every list and the counts. */
 export const qk = {
@@ -10,6 +23,12 @@ export const qk = {
   items: (params: ListParams) => ["items", params] as const,
   item: (id: string) => ["item", id] as const,
   counts: (sandbox: boolean) => ["counts", sandbox] as const,
+  profile: ["profile"] as const,
+  services: ["services"] as const,
+  products: ["products"] as const,
+  availability: ["availability"] as const,
+  rules: ["rules"] as const,
+  presets: ["presets"] as const,
 };
 
 export function useBusiness() {
@@ -76,5 +95,116 @@ export function useSaveSettings() {
       void qc.invalidateQueries({ queryKey: ["items"] });
       void qc.invalidateQueries({ queryKey: ["counts"] });
     },
+  });
+}
+
+// ---- setup -----------------------------------------------------------------------------------
+
+export function useProfile() {
+  return useQuery({ queryKey: qk.profile, queryFn: api.profile, staleTime: 60_000 });
+}
+
+export function useSaveProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProfileBody) => api.putProfile(body),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.profile, data);
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.availability });
+    },
+  });
+}
+
+export function useServices() {
+  return useQuery({ queryKey: qk.services, queryFn: api.services, staleTime: 30_000 });
+}
+
+export function useProducts() {
+  return useQuery({ queryKey: qk.products, queryFn: api.products, staleTime: 30_000 });
+}
+
+/** One mutation for add, change and archive; the list is refetched after any of them. */
+export function useServiceWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (op: { id?: string | undefined; body?: ServiceBody | undefined; archive?: boolean | undefined }) =>
+      op.archive && op.id
+        ? api.archiveService(op.id)
+        : op.id
+          ? api.patchService(op.id, op.body ?? {})
+          : api.createService(op.body ?? {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.services });
+      void qc.invalidateQueries({ queryKey: qk.availability });
+    },
+  });
+}
+
+export function useProductWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (op: { id?: string | undefined; body?: ProductBody | undefined; archive?: boolean | undefined }) =>
+      op.archive && op.id
+        ? api.archiveProduct(op.id)
+        : op.id
+          ? api.patchProduct(op.id, op.body ?? {})
+          : api.createProduct(op.body ?? {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.products }),
+  });
+}
+
+export function useAvailability() {
+  return useQuery({ queryKey: qk.availability, queryFn: api.availability, staleTime: 30_000 });
+}
+
+export function useSaveWeekly() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { weekly: Weekly; serviceId?: string | undefined }) =>
+      api.putWeekly(input.weekly, input.serviceId),
+    onSuccess: (data) => qc.setQueryData(qk.availability, data),
+  });
+}
+
+export function useSaveClosures() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (closures: readonly Closure[]) => api.putClosures(closures),
+    onSuccess: (data) => qc.setQueryData(qk.availability, data),
+  });
+}
+
+export function useRules() {
+  return useQuery({ queryKey: qk.rules, queryFn: api.rules, staleTime: 30_000 });
+}
+
+export function usePresets() {
+  return useQuery({ queryKey: qk.presets, queryFn: api.presets, staleTime: 5 * 60_000 });
+}
+
+export function useApplyPreset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { key: PresetKey; replace: boolean }) => api.applyPreset(input.key, input.replace),
+    onSuccess: (data) => qc.setQueryData(qk.rules, data),
+  });
+}
+
+/** Add, change or delete a rule; the list is refetched afterwards. */
+export function useRuleWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (op: {
+      id?: string | undefined;
+      body?: RuleBody | undefined;
+      remove?: boolean | undefined;
+    }): Promise<RuleView | { deleted: true }> =>
+      op.remove && op.id
+        ? api.deleteRule(op.id)
+        : op.id
+          ? api.patchRule(op.id, op.body ?? {})
+          : api.createRule(op.body ?? {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.rules }),
   });
 }
