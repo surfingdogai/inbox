@@ -36,19 +36,19 @@ export type Condition =
       args?: Record<string, unknown>;
     };
 
-export const conditionSchema: z.ZodType<Condition> = z.lazy(
-  (): z.ZodType<Condition> =>
-    z.union([
-      z.object({ all: z.array(conditionSchema).max(20) }),
-      z.object({ any: z.array(conditionSchema).max(20) }),
-      z.object({ not: conditionSchema }),
-      z.object({ path: z.string().min(1).max(120), op: opSchema, value: z.unknown().optional() }),
-      z.object({
-        fn: z.enum(["slot_is_free", "within_business_hours", "party_verified", "text_has_keywords", "is_sandbox"]),
-        args: z.record(z.string(), z.unknown()).optional(),
-      }),
-    ]),
-);
+const conditionUnion = () =>
+  z.union([
+    z.object({ all: z.array(conditionSchema).max(20) }),
+    z.object({ any: z.array(conditionSchema).max(20) }),
+    z.object({ not: conditionSchema }),
+    z.object({ path: z.string().min(1).max(120), op: opSchema, value: z.unknown().optional() }),
+    z.object({
+      fn: z.enum(["slot_is_free", "within_business_hours", "party_verified", "text_has_keywords", "is_sandbox"]),
+      args: z.record(z.string(), z.unknown()).optional(),
+    }),
+  ]);
+// The recursive union infers the same shape as Condition; the cast only bridges exactOptionalPropertyTypes.
+export const conditionSchema = z.lazy(conditionUnion) as unknown as z.ZodType<Condition>;
 
 export const actionSchema = z.discriminatedUnion("action", [
   z.object({
