@@ -4,10 +4,10 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey, ensureNetworkPing, NETWORK_PING_KIND } from "@surfingdog/adapters";
 import { createDb, ensureJob, MIGRATIONS } from "@surfingdog/core";
-import { ensureMigrated, logMailOut, resendMailOut } from "@surfingdog/platform";
+import { ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
-import { seedDemo } from "./seed";
+import { seedDemo, seedShowcase } from "./seed";
 
 /**
  * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
@@ -19,6 +19,7 @@ import { seedDemo } from "./seed";
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
  *   node server.mjs seed-demo          add the demo business if the instance is empty
+ *   node server.mjs seed-showcase      the demo business with a week of items, rules and hours (screenshots)
  *   node server.mjs network-ping       report to the network now instead of at the next hour
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
@@ -34,11 +35,16 @@ if (command) {
   } else if (command === "seed-demo") {
     const r = await seedDemo(db);
     console.log(r.seeded ? "seeded the demo business" : "an instance business already exists; nothing changed");
+  } else if (command === "seed-showcase") {
+    const r = await seedShowcase(db);
+    console.log(
+      r.seeded ? `seeded the showcase: ${r.items} items` : "an instance business already exists; nothing changed",
+    );
   } else if (command === "network-ping") {
     await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);
     console.log("queued a network ping; the running server sends it within a second");
   } else {
-    console.error(`unknown command ${command}; use create-owner-key, seed-demo or network-ping`);
+    console.error(`unknown command ${command}; use create-owner-key, seed-demo, seed-showcase or network-ping`);
     process.exit(2);
   }
   process.exit(0);
@@ -47,7 +53,7 @@ if (command) {
 // Migrate before the job loop starts, so a fresh database never sees a query for a missing table.
 await ensureMigrated(db.client, MIGRATIONS);
 await ensureNetworkPing(db);
-const mailOut = process.env.RESEND_API_KEY ? resendMailOut(process.env.RESEND_API_KEY) : logMailOut(console.log);
+const mailOut = process.env.RESEND_API_KEY ? resendMailOut(process.env.RESEND_API_KEY) : consoleMailOut();
 const { app, runner } = createInbox({ db, mailOut, baseUrl: process.env.INBOX_PUBLIC_URL });
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
@@ -67,6 +73,20 @@ const loop = setInterval(() => {
   runner.runDue(db, { workerId: `node:${process.pid}` }).catch((error) => console.error("jobs:", error));
 }, 1_000);
 loop.unref();
+
+/** No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the terminal. */
+function consoleMailOut(): MailOut {
+  return {
+    async send(mail) {
+      const body = mail.text
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      console.log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${body}`);
+      return { messageId: `console-${Date.now()}` };
+    },
+  };
+}
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0" }, (info) => {
