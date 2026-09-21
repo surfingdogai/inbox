@@ -5,7 +5,7 @@ description: Signed, retried, replayable events for every booking, order, quote 
 
 Your Inbox tells your systems what happened, the moment it happens. A new booking, an order that was paid, a customer's reply: each one is an **event**, and an event is an HTTP `POST` to a URL you own, signed so you can prove it came from your Inbox and retried for a day if your server is down.
 
-There is no platform to join, no OAuth dance and no app to register. You paste a URL into Settings, keep the secret you are shown, and answer `2xx`.
+There is no platform to join, no OAuth dance and no app to register. You register a URL with one `POST` — or ask your AI to — keep the secret you are shown once, and answer `2xx`.
 
 ## What an event is, and when one is sent
 
@@ -64,19 +64,13 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `<type>.message` | An inbound message arrived on an item of that type — `booking.message`, `order.message`, and so on. |
 | `<type>.flags` | A flag changed on an item: `needsHuman` was raised or cleared, or its priority moved. |
 
+One event is not about an item at all: **`inbox.test`**, what `POST /v1/owner/webhooks/{id}/test` sends. It carries `"test": true`, a sentence saying that nothing was created, and a `data.id` with no item behind it. A receiver that matches on the item type ignores it, which is the right behaviour — it is for whoever is checking the endpoint works, not for your integration.
+
 Treat the list as open. New events appear as the state machines grow, so match the types you handle and ignore the rest rather than refusing what you do not recognise.
 
 ## Add an endpoint
 
-In the owner app, **Settings → Integrations → Where events go → Add endpoint**. You give:
-
-- **the URL** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk;
-- **the events** you want;
-- **the style**, thin or full — see [thin and full](#thin-and-full) at the bottom of this page; thin is the default and the right answer for almost everyone.
-
-The **signing secret is shown once**, when the endpoint is created: `whsec_` and then base64, 32 random bytes. Copy it into your own configuration there and then. It is sealed in the database with your instance key and never shown again — if you lose it, rotate it, which shows you a new one. During a rotation both signatures travel on every delivery for 24 hours, so nothing is dropped while you deploy the new secret.
-
-The same thing over the API, if you would rather not click:
+One `POST` to the owner API:
 
 ```bash
 curl -s -X POST https://your-inbox.example.com/v1/owner/webhooks \
@@ -84,7 +78,19 @@ curl -s -X POST https://your-inbox.example.com/v1/owner/webhooks \
   -d '{"url":"https://shop.example.com/hooks/inbox","events":["booking.*","order.*"],"payload_style":"thin"}'
 ```
 
-The secret is in that response and in no other. `POST /v1/owner/webhooks/{id}/test` then sends a real, signed, clearly marked test event and tells you the status your server answered — the fastest way to find out that a framework is redirecting you. Your AI can do all of it through the owner MCP, where the same operations are `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `send_test_event` and `list_events` ([Connect your AI](/docs/connect-your-ai/)).
+Three fields, and only the first is required:
+
+- **`url`** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk;
+- **`events`** — the patterns you want; `["*"]`, everything, is the default;
+- **`payload_style`** — thin or full, see [thin and full](#thin-and-full) at the bottom of this page. Thin is the default and the right answer for almost everyone; full sends the customer's data to that address.
+
+The **signing secret is in that response and in no other**: `whsec_` and then base64, 32 random bytes. Copy it into your own configuration there and then. It is sealed in the database with your instance key, no endpoint and no tool will ever read it back, and if you lose it you rotate it, which shows you a new one. During a rotation both signatures travel on every delivery for 24 hours, so nothing is dropped while you deploy the new secret.
+
+`POST /v1/owner/webhooks/{id}/test` then sends a real, signed, clearly marked test event — its type is `inbox.test`, it carries `"test": true`, and no item exists behind it — and tells you the status your server answered. It is the fastest way to find out that a framework is redirecting you.
+
+Your AI can do all of it without you writing any of that: on the owner MCP server the same operations are `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `delete_webhook`, `send_test_event`, `list_webhook_deliveries`, `replay_webhook_delivery`, `replay_missing_webhook_deliveries` and `list_events` ([Connect your AI](/docs/connect-your-ai/)). Ask it to connect your shop to your Inbox and it will.
+
+An **Integrations screen** in the owner app, with the same endpoints and their deliveries in a list, is on its way. Until it lands, the API and the MCP tools above are the two ways in, and they are the same two the screen will use.
 
 ## The request we send
 
@@ -95,7 +101,7 @@ POST /hooks/inbox HTTP/1.1
 host: shop.example.com
 content-type: application/json
 accept: application/json
-user-agent: surfingdog-inbox/0.1.0
+user-agent: surfingdog-inbox/0.0.0
 webhook-id: 01K5RJ3B4C5D6E7F8G9H0JKMNP
 webhook-timestamp: 1789992000
 webhook-signature: v1,ceSnlptw5xQUh4NhglImizWi+wQ7rjsL2Dyjl4kXX9U=
@@ -208,16 +214,16 @@ Eight attempts over about a day, each with a tenth of jitter so a fleet of endpo
 | 7 | 10 hours later |
 | 8 | 10 hours later |
 
-The last attempt lands a little over a day after the event, which is long enough to cover a night of downtime nobody noticed. After it, the delivery is marked failed — and kept. An endpoint that has done nothing but fail for five days is deactivated, and it is kept too: never silently deleted, never quietly forgotten. You will see it in Settings, with its last error, and your failed deliveries are still sitting there waiting to be sent once the address is fixed. (Some platforms drop a subscription after a handful of failures and tell nobody. That is the behaviour this is avoiding.)
+The last attempt lands a little over a day after the event, which is long enough to cover a night of downtime nobody noticed. After it, the delivery is marked failed — and kept. An endpoint that has done nothing but fail for five days is deactivated, and it is kept too: never silently deleted, never quietly forgotten. `GET /v1/owner/webhooks` shows it, inactive, with `disabled_at` and the last error that did it, and your failed deliveries are still sitting there waiting to be sent once the address is fixed. (Some platforms drop a subscription after a handful of failures and tell nobody. That is the behaviour this is avoiding.)
 
 ## Replay
 
-**Settings → Integrations → your endpoint** lists its recent deliveries with their status, response code, duration and last error — `GET /v1/owner/webhooks/{id}/deliveries` over the API, or `GET /v1/owner/deliveries` across every endpoint.
+`GET /v1/owner/webhooks/{id}/deliveries` lists one endpoint's recent deliveries with their status, response code, duration and last error; `GET /v1/owner/deliveries` does the same across every endpoint. Both are keyset paginated, newest first, and both are `list_webhook_deliveries` on the owner MCP.
 
 Two ways to send something again:
 
 - **one delivery**, `POST /v1/owner/deliveries/{id}/replay`, on the row it already has;
-- **everything the endpoint missed**, `POST /v1/owner/webhooks/{id}/replay` with `{"since":"2026-09-20T00:00:00Z"}`, which queues every matching event from that instant that this endpoint never received. Turning a deactivated endpoint back on (`active: true`) clears its failure run first, so run that, then this.
+- **everything the endpoint missed**, `POST /v1/owner/webhooks/{id}/replay` with `{"since":"2026-09-20T00:00:00Z"}`, which queues every matching event from that instant that this endpoint never received. Turning a deactivated endpoint back on (`PATCH /v1/owner/webhooks/{id}` with `{"active":true}`) clears its failure run first, so run that, then this.
 
 A replay is the same event, under the same `webhook-id`, with a fresh timestamp and signature. A thin event replays byte for byte; a full one is rebuilt from the item as it stands now, so it may show a state later than the one the event announced. If you deduplicate on `webhook-id`, as you should, a replay of something you already handled costs you nothing.
 
@@ -229,7 +235,7 @@ A **thin** event carries a pointer: the ids, the type, the new state, the versio
 
 Thin is the default, for two reasons. A thin event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
 
-Choose full when the receiver genuinely cannot call back — a Zapier or Make step that can only read what it is handed, or a Slack message that needs the customer's name in it. The Settings screen says in plain words that this style sends customer data to that address. To fetch an item from a thin event, `GET` the `data.url` with an owner API key ([API](/docs/api/)); you get the same item, as it stands now.
+Choose full when the receiver genuinely cannot call back — a Zapier or Make step that can only read what it is handed, or a Slack message that needs the customer's name in it. Choose it knowing what it means: `payload_style: "full"` sends your customers' names, email addresses and phone numbers to that address, on every event, for as long as the endpoint exists. To fetch an item from a thin event, `GET` the `data.url` with an owner API key ([API](/docs/api/)); you get the same item, as it stands now.
 
 ## If you cannot receive a webhook
 

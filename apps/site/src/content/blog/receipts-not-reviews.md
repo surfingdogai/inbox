@@ -5,6 +5,7 @@ date: 2026-09-21
 author: Tiago Pita
 cover: /art/tile-receipts.png
 coverAlt: A pixel-art paper receipt with two seals and a signature
+coverAnim: receipts
 ---
 
 Reviews were supposed to be the memory of a market: who was good, who was not, so the next person could choose. They have become something else. A review today is a claim by someone who may or may not have been a customer, about a transaction that may or may not have happened, published on a platform whose incentive is volume. Businesses buy them, competitors plant them, and everyone has learned to read five stars as "probably fine" and one star as "probably angry". The signal is gone and the anxiety remains.

@@ -56,15 +56,29 @@ const when = (d: Date) =>
   }
   @media (min-width: 720px) {
     .post {
-      grid-template-columns: 300px minmax(0, 1fr);
+      grid-template-columns: 224px minmax(0, 1fr);
       gap: var(--sp-6);
       align-items: center;
     }
   }
+  /* Covers arrive at whatever size and shape the art happens to be, so the card fixes the box
+     and fits the art inside it. Without this a square 1024px tile filled the column and became
+     the loudest thing on the page. */
   .cover {
-    display: block;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 16 / 10;
+    padding: var(--sp-3);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-control);
+    background: var(--row-bg);
     overflow: hidden;
+  }
+  .cover :global(.art) {
+    width: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
   }
   .text {
     padding: var(--sp-1) var(--sp-2) var(--sp-2);
