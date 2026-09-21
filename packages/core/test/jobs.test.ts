@@ -52,17 +52,15 @@ describe("JobRunner", () => {
   it("notifies the owner and the customer by email after a booking is created and confirmed", async () => {
     const db = await setup();
     const svc = ulid();
-    await db.orm
-      .insert(services)
-      .values({
-        id: svc,
-        name: "Full service",
-        durationMin: 90,
-        capacity: 1,
-        granularityMin: 30,
-        createdAt: T0,
-        updatedAt: T0,
-      });
+    await db.orm.insert(services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
     const caps = new Capabilities(db);
     const owner: Caller = {
       actor: { kind: "owner", id: "u1", channel: "owner_ui" },

@@ -14,7 +14,10 @@ export interface JobRow {
   readonly maxAttempts: number;
 }
 
-export type JobHandler = (job: JobRow, ctx: { db: Db; now: number }) => Promise<void | { note?: string }>;
+export type JobHandler = (
+  job: JobRow,
+  ctx: { db: Db; now: number },
+) => Promise<{ note?: string | undefined } | undefined>;
 
 export interface RunReport {
   readonly claimed: number;

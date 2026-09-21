@@ -1,8 +1,6 @@
-import type { Statement } from "@surfingdog/platform";
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
-import { ulid } from "../ids";
 import {
   business,
   itemEvents,
@@ -15,9 +13,9 @@ import {
 import { readSettings, SETTINGS_SCHEMA_VERSION, type Settings, settingsSchema } from "../settings/schema";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
-import { jobStatement, threadEntryStatement } from "../write/common";
 import { type CreateResult, createItem } from "../write/create";
 import { fromZod, WriteError } from "../write/errors";
+import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
@@ -324,26 +322,8 @@ export class Capabilities {
     return row;
   }
 
-  private async appendEntry(caller: Caller, item: Item, body: string, direction: "in" | "out" | "note"): Promise<void> {
-    const now = nowOf(caller);
-    const statements: Statement[] = [
-      threadEntryStatement({
-        itemId: item.id,
-        direction,
-        channel: caller.actor.channel,
-        actorKind: caller.actor.kind,
-        actorId: caller.actor.id,
-        partyId: direction === "in" ? item.partyId : null,
-        body,
-        now,
-      }),
-      { sql: "UPDATE items SET updated_at = ? WHERE id = ?", params: [now, item.id], method: "run" },
-    ];
-    if (direction !== "note") {
-      const to = direction === "in" ? "owner" : "customer";
-      statements.push(jobStatement("notify", { to, itemId: item.id, event: "message", entry: ulid() }, now));
-    }
-    await this.db.batch(statements);
+  private appendEntry(caller: Caller, item: Item, body: string, direction: "in" | "out" | "note"): Promise<void> {
+    return appendThreadEntry(this.db, caller, item, body, direction);
   }
 }
 

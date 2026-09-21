@@ -1,6 +1,5 @@
 import type { MailOut, OutboundMail } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
-import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { items, parties } from "../schema/tables";
 import { readSettings } from "../settings/schema";
