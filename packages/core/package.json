@@ -9,14 +9,19 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrations": "drizzle-kit generate && node scripts/embed-migrations.mjs"
   },
   "dependencies": {
     "@surfingdog/spec": "workspace:*",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "drizzle-orm": "catalog:",
+    "@surfingdog/platform": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "drizzle-kit": "^0.31.11",
+    "@types/node": "catalog:"
   }
 }
