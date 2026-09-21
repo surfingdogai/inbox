@@ -54,6 +54,7 @@ export interface Counts {
   readonly all: number;
   readonly done: number;
   readonly byType: Record<ItemType, number>;
+  readonly needsByType: Record<ItemType, number>;
   /** More open items exist than were counted. */
   readonly openMore: boolean;
   readonly doneMore: boolean;
@@ -61,16 +62,21 @@ export interface Counts {
 
 export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>): Counts {
   const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
+  const needsByType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
   let needs = 0;
   for (const v of open.items) {
     byType[v.item.type] += 1;
-    if (v.item.flags.needsHuman) needs += 1;
+    if (v.item.flags.needsHuman) {
+      needs += 1;
+      needsByType[v.item.type] += 1;
+    }
   }
   return {
     needs,
     all: open.items.length,
     done: everything.items.filter((v) => v.item.closedAt !== null).length,
     byType,
+    needsByType,
     openMore: open.next_cursor !== null,
     doneMore: everything.next_cursor !== null,
   };

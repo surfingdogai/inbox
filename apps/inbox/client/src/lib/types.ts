@@ -46,6 +46,8 @@ export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
 export type ThreadEntry = ItemDetail["thread"][number];
 export type ItemEvent = ItemDetail["events"][number];
 export type Transition = ItemView["transitions"][number];
+/** Who is asking, as the owner sees it; never sent to customers. */
+export type Party = NonNullable<ItemView["party"]>;
 
 export interface SettingsDoc {
   readonly doc: Settings;

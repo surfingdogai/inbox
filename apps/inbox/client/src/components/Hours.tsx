@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import type { ApiProblem } from "../lib/api";
 import {
   checkClosures,
@@ -14,6 +14,19 @@ import {
 } from "../lib/hours";
 import type { Closure, Weekday, Weekly } from "../lib/types";
 import { Switch } from "./Form";
+
+interface WindowRow {
+  readonly id: number;
+  readonly from: string;
+  readonly to: string;
+}
+type Rows = Record<Weekday, readonly WindowRow[]>;
+
+const asDraft = (rows: Rows): Draft => {
+  const draft = {} as Draft;
+  for (const { key } of WEEKDAYS) draft[key] = rows[key].map((w) => [w.from, w.to] as const);
+  return draft;
+};
 
 /** The weekly grid: each day open or closed, with up to six windows of HH:MM. */
 export function HoursEditor({
@@ -31,12 +44,20 @@ export function HoursEditor({
   error: ApiProblem | null;
   onSave: (weekly: Weekly) => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(initial));
+  const nextId = useRef(1);
+  const [rows, setRows] = useState<Rows>(() => {
+    const draft = toDraft(initial);
+    const out = {} as Rows;
+    for (const { key } of WEEKDAYS) out[key] = draft[key].map(([from, to]) => ({ id: nextId.current++, from, to }));
+    return out;
+  });
   const [local, setLocal] = useState<string | null>(null);
-  const setDay = (day: Weekday, windows: Draft[Weekday]) => setDraft((d) => ({ ...d, [day]: windows }));
+  const setDay = (day: Weekday, windows: readonly WindowRow[]) => setRows((r) => ({ ...r, [day]: windows }));
+  const row = ([from, to]: readonly [string, string]): WindowRow => ({ id: nextId.current++, from, to });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (pending) return;
+    const draft = asDraft(rows);
     const problem = checkDraft(draft);
     setLocal(problem);
     if (!problem) onSave(toWeekly(draft));
@@ -48,27 +69,27 @@ export function HoursEditor({
         {hint && <p className="lede small">{hint}</p>}
       </div>
       {WEEKDAYS.map(({ key, label }) => {
-        const windows = draft[key];
+        const windows = rows[key];
         const open = windows.length > 0;
         return (
           <div className="hours-day" key={key}>
-            <Switch checked={open} onChange={(v) => setDay(key, v ? [DEFAULT_WINDOW] : [])}>
+            <Switch checked={open} onChange={(v) => setDay(key, v ? [row(DEFAULT_WINDOW)] : [])}>
               <span className="hours-label">{label}</span>
             </Switch>
             <div className="hours-windows">
               {!open && <span className="hint">Closed</span>}
-              {windows.map(([from, to], i) => (
-                <div className="hours-window" key={`${key}-${i}-${windows.length}`}>
+              {windows.map((w) => (
+                <div className="hours-window" key={w.id}>
                   <input
                     className="input"
                     type="time"
                     step={900}
-                    value={from}
+                    value={w.from}
                     aria-label={`${label}, opens`}
                     onChange={(e) =>
                       setDay(
                         key,
-                        windows.map((w, j) => (j === i ? [e.target.value, w[1]] : w)),
+                        windows.map((x) => (x.id === w.id ? { ...x, from: e.target.value } : x)),
                       )
                     }
                   />
@@ -77,12 +98,12 @@ export function HoursEditor({
                     className="input"
                     type="time"
                     step={900}
-                    value={to}
+                    value={w.to}
                     aria-label={`${label}, closes`}
                     onChange={(e) =>
                       setDay(
                         key,
-                        windows.map((w, j) => (j === i ? [w[0], e.target.value] : w)),
+                        windows.map((x) => (x.id === w.id ? { ...x, to: e.target.value } : x)),
                       )
                     }
                   />
@@ -90,11 +111,11 @@ export function HoursEditor({
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm btn-icon"
-                      aria-label={`Remove ${label} ${from}–${to}`}
+                      aria-label={`Remove ${label} ${w.from}–${w.to}`}
                       onClick={() =>
                         setDay(
                           key,
-                          windows.filter((_w, j) => j !== i),
+                          windows.filter((x) => x.id !== w.id),
                         )
                       }
                     >
@@ -107,7 +128,9 @@ export function HoursEditor({
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  onClick={() => setDay(key, [...windows, nextWindow(windows)])}
+                  onClick={() =>
+                    setDay(key, [...windows, row(nextWindow(windows.map((x) => [x.from, x.to] as const)))])
+                  }
                 >
                   <Plus className="icon" aria-hidden="true" />
                   Add a window

@@ -1,26 +1,27 @@
 import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Bot, Check, Copy, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { tonesFor } from "../lib/actions";
+import { orderActions, tonesFor } from "../lib/actions";
 import { problemOf } from "../lib/api";
-import { currencyOf, stateWord, TYPE_CLASS, TYPE_WORD, titleFor } from "../lib/format";
+import { channelWord, currencyOf, partyName, stateWord, TYPE_CLASS, TYPE_WORD, titleFor } from "../lib/format";
 import { usePhone } from "../lib/media";
 import { useItem, useReply, useTransition } from "../lib/queries";
-import type { Transition } from "../lib/types";
+import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
 import { Conversation } from "./Conversation";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
-import { Fields } from "./Fields";
+import { Details, Fields } from "./Fields";
 import { StatePill, TypePill } from "./Pills";
 import { Sheet } from "./Sheet";
 import { Timeline } from "./Timeline";
 
 /**
- * One item: the typed card with its state and the valid next transitions as buttons, the
- * conversation, and the timeline. A button opens an inline confirmation (a sheet on phones).
+ * One item: the typed card with who is asking, the facts and the valid next actions (happy path
+ * first, destructive last), then the conversation and the timeline. A button opens an inline
+ * confirmation (a sheet on phones).
  */
 export function ItemDetailView({
   id,
@@ -58,7 +59,8 @@ export function ItemDetailView({
     );
   }
 
-  const { item, transitions, thread, events } = query.data;
+  const { item, thread, events, party } = query.data;
+  const transitions = orderActions(query.data.transitions);
   const tones = tonesFor(transitions);
   const money = currencyOf(item) ?? currency ?? "EUR";
 
@@ -130,6 +132,7 @@ export function ItemDetailView({
           <h2 id="item-title">{titleFor(item)}</h2>
         </div>
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
+        <WhoLine party={party} channel={item.channel} />
         <Fields item={item} tz={tz} />
         {transitions.length > 0 ? (
           <div className="actions">
@@ -152,9 +155,11 @@ export function ItemDetailView({
           </p>
         )}
         {!phone && confirm}
+        <Details item={item} tz={tz} />
       </article>
       <Conversation
         entries={thread}
+        party={party}
         tz={tz}
         business={business}
         replyRef={replyRef}
@@ -170,5 +175,70 @@ export function ItemDetailView({
         </Sheet>
       )}
     </>
+  );
+}
+
+/** Who is asking, how they came in, and how to reach them: copyable, linkable, never for customers' eyes. */
+function WhoLine({ party, channel }: { party: Party | undefined; channel: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (text: string) => {
+    void navigator.clipboard.writeText(text).then(() => setCopied(text));
+  };
+  const email = party?.email;
+  const phone = party?.phone;
+  return (
+    <div className="who-line">
+      {party?.kind === "agent" ? (
+        <Bot className="icon" aria-hidden="true" />
+      ) : (
+        <UserRound className="icon" aria-hidden="true" />
+      )}
+      <span className="name">{partyName(party)}</span>
+      {party?.verified && (
+        <span className="pill tint-success pill-xs">
+          <BadgeCheck className="icon-xs" aria-hidden="true" />
+          Verified
+        </span>
+      )}
+      {party?.kind === "agent" && <span className="pill pill-xs">Agent</span>}
+      <span className="sep">·</span>
+      <span>via {channelWord(channel)}</span>
+      {email && (
+        <>
+          <span className="sep">·</span>
+          <a href={`mailto:${email}`}>{email}</a>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            aria-label={copied === email ? "Email copied" : `Copy ${email}`}
+            onClick={() => copy(email)}
+          >
+            {copied === email ? (
+              <Check className="icon-sm" aria-hidden="true" />
+            ) : (
+              <Copy className="icon-sm" aria-hidden="true" />
+            )}
+          </button>
+        </>
+      )}
+      {phone && (
+        <>
+          <span className="sep">·</span>
+          <a href={`tel:${phone.replace(/\s+/g, "")}`}>{phone}</a>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            aria-label={copied === phone ? "Phone copied" : `Copy ${phone}`}
+            onClick={() => copy(phone)}
+          >
+            {copied === phone ? (
+              <Check className="icon-sm" aria-hidden="true" />
+            ) : (
+              <Copy className="icon-sm" aria-hidden="true" />
+            )}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
