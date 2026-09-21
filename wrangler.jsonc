@@ -6,7 +6,7 @@
   "observability": { "enabled": true },
   // The SPA and public files. API, MCP and discovery paths are answered by the Worker first.
   "assets": {
-    "directory": "apps/inbox/public",
+    "directory": "apps/inbox/dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/.well-known/*", "/healthz"]
