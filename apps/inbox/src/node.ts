@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -10,9 +10,11 @@ import { createInbox } from "./app";
 import { seedDemo } from "./seed";
 
 /**
- * Node/Bun entry: the same app over the built-in SQLite, plus static files from ./public and a
- * one-second job loop. INBOX_DB points at the database file (default ./data/inbox.db);
- * RESEND_API_KEY turns on real email, otherwise mail is logged.
+ * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
+ * ../dist/client (or INBOX_STATIC), and a one-second job loop. Any path that is neither a door nor
+ * a file gets the app shell, like the Worker's `not_found_handling: "single-page-application"`.
+ * INBOX_DB points at the database file (default ./data/inbox.db); RESEND_API_KEY turns on real
+ * email, otherwise mail is logged.
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
@@ -42,7 +44,19 @@ if (command) {
 await ensureMigrated(db.client, MIGRATIONS);
 const mailOut = process.env.RESEND_API_KEY ? resendMailOut(process.env.RESEND_API_KEY) : logMailOut(console.log);
 const { app, runner } = createInbox({ db, mailOut, baseUrl: process.env.INBOX_PUBLIC_URL });
-app.use("/*", serveStatic({ root: process.env.INBOX_STATIC ?? "./public" }));
+
+/** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
+const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known"];
+const isDoor = (p: string) => DOOR_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+
+const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");
+if (existsSync(clientDir)) {
+  app.use("/*", serveStatic({ root: clientDir }));
+  const shell = serveStatic({ root: clientDir, path: "index.html" });
+  app.get("/*", (c, next) => (isDoor(c.req.path) ? next() : shell(c, next)));
+} else {
+  console.warn(`No client build at ${clientDir}. Run "pnpm build:client", or "pnpm dev:client" for the dev server.`);
+}
 
 const loop = setInterval(() => {
   runner.runDue(db, { workerId: `node:${process.pid}` }).catch((error) => console.error("jobs:", error));
