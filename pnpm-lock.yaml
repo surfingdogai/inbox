@@ -166,6 +166,12 @@ importers:
       '@astrojs/check':
         specifier: ^0.9.10
         version: 0.9.10(@emnapi/runtime@1.11.3)(prettier@3.9.8)(typescript@5.9.3)
+      '@emnapi/core':
+        specifier: ^1.11.3
+        version: 1.11.3
+      '@emnapi/runtime':
+        specifier: ^1.11.3
+        version: 1.11.3
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.2
