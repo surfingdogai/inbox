@@ -13,9 +13,11 @@ import {
   diagnoseFailure,
   eventStatement,
   findIdempotent,
+  hasActiveWebhook,
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
+  webhookFanoutStatement,
 } from "./common";
 import { fromZod, WriteError } from "./errors";
 import { bucketsFor, claimStatements, planClaims, readClaims, releaseStatement, type SlotSpec } from "./slots";
@@ -185,12 +187,15 @@ async function attempt_(
   const statements: Statement[] = [];
   let linkedView: ItemView | undefined;
   let linkedId: string | null = row.linkedItemId;
+  /** The order or booking an accepted quote became is its own event; developers subscribe to it. */
+  let linkedEvent: { id: string; type: string; itemId: string } | undefined;
 
   if (effects.has("link_item") && item.type === "quote_request") {
     const linked = await planLinkedItem(db, caller, item, payload, eventId, now);
     linkedId = linked.id;
     statements.push(...linked.statements);
     linkedView = linked.view;
+    linkedEvent = { id: linked.eventId, type: `${linked.type}.create`, itemId: linked.id };
   }
   updated.linkedItemId = linkedId;
   const view = viewFor(updated, caller.actor.kind);
@@ -229,6 +234,7 @@ async function attempt_(
   if (note) {
     statements.push(
       threadEntryStatement({
+        id: ulid(),
         itemId: item.id,
         direction: isCustomer(caller) ? "in" : "out",
         channel: caller.actor.channel,
@@ -268,6 +274,10 @@ async function attempt_(
       dedupeKey: `rules:${eventId}`,
     }),
   );
+  if (await hasActiveWebhook(db)) {
+    statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
+    if (linkedEvent) statements.push(webhookFanoutStatement(linkedEvent, now));
+  }
 
   try {
     await db.batch(statements);
@@ -398,6 +408,7 @@ async function planLinkedItem(
     closedAt: null,
     payload: parsed,
   } as Item;
+  const linkedEventId = ulid();
   const statements: Statement[] = [
     {
       sql: "INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags, created_at, updated_at, closed_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, (SELECT access_token_hash FROM items WHERE id = ?), ?, ?, ?, ?, NULL)",
@@ -419,7 +430,7 @@ async function planLinkedItem(
       method: "run",
     },
     eventStatement({
-      id: ulid(),
+      id: linkedEventId,
       itemId: id,
       seq: 1,
       event: "create",
@@ -436,7 +447,7 @@ async function planLinkedItem(
       dedupeKey: `notify:create:${id}:owner`,
     }),
   ];
-  return { id, statements, view: viewFor(item, caller.actor.kind) };
+  return { id, type, eventId: linkedEventId, statements, view: viewFor(item, caller.actor.kind) };
 }
 
 function orderFromQuote(

@@ -16,9 +16,11 @@ import {
   diagnoseFailure,
   eventStatement,
   findIdempotent,
+  hasActiveWebhook,
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
+  webhookFanoutStatement,
 } from "./common";
 import { fromZod, WriteError } from "./errors";
 import { planParty } from "./party";
@@ -135,6 +137,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   if (input.message) {
     statements.push(
       threadEntryStatement({
+        id: ulid(),
         itemId: id,
         direction: isCustomer(caller) ? "in" : "note",
         channel: caller.actor.channel,
@@ -156,6 +159,9 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   statements.push(
     jobStatement("rules", { itemId: id, eventId, trigger: "item.created" }, now, { dedupeKey: `rules:${eventId}` }),
   );
+  if (await hasActiveWebhook(db)) {
+    statements.push(webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now));
+  }
 
   try {
     await db.batch(statements);

@@ -52,6 +52,45 @@ export const settingsSchema = z.object({
       inboundSecret: z.string().min(16).max(200).optional(),
     })
     .prefault({}),
+  integrations: z
+    .object({
+      /** Outbound webhooks (ADR-015 §3–§5): where this inbox sends its events. */
+      webhooks: z
+        .object({
+          enabled: z.boolean().default(true).describe("Off, no endpoint is called and nothing is queued."),
+          timeoutMs: z.number().int().min(1_000).max(30_000).default(10_000),
+          /** Attempts at 0s, 5s, 5m, 30m, 2h, 5h, 10h, 10h; the last delay repeats beyond eight. */
+          maxAttempts: z.number().int().min(1).max(12).default(8),
+          /** An endpoint that has done nothing but fail for this long is deactivated, never deleted. */
+          disableAfterDays: z.number().int().min(1).max(30).default(5),
+          retainDeliveryDays: z.number().int().min(1).max(90).default(30),
+          /**
+           * Allows an endpoint on a private, local or plain-http address. Only for a machine you
+           * control: it lets anything with owner access make this instance call an internal host.
+           */
+          allowPrivateTargets: z.boolean().default(false),
+        })
+        .prefault({}),
+      /** Product feeds (ADR-015 ship order 3): a catalogue from a URL, with no credentials at all. */
+      feeds: z
+        .object({
+          enabled: z.boolean().default(true),
+          refreshHours: z.number().int().min(1).max(168).default(6),
+          maxProducts: z.number().int().min(1).max(50_000).default(5_000),
+          /** Archive the products a feed stopped listing instead of leaving them on sale. */
+          deactivateMissing: z.boolean().default(true),
+        })
+        .prefault({}),
+      /** Platform connectors (ADR-015 §1): a connector is a row, so only its cadence lives here. */
+      connectors: z
+        .object({
+          enabled: z.boolean().default(true),
+          syncMinutes: z.number().int().min(5).max(1_440).default(15),
+          retainEventDays: z.number().int().min(1).max(90).default(30),
+        })
+        .prefault({}),
+    })
+    .prefault({}),
   network: z
     .object({
       /** The directory this instance reports to and appears in. Any Surfing Dog network works. */

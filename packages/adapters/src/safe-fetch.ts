@@ -3,26 +3,15 @@
  * no redirects to another host, a short timeout and a size cap. Used for Client ID Metadata
  * Documents, key directories and website imports.
  */
-const BLOCKED_HOSTS = new Set(["localhost", "localhost.localdomain", "metadata", "metadata.google.internal"]);
-const BLOCKED_SUFFIXES = [
-  ".localhost",
-  ".local",
-  ".internal",
-  ".localdomain",
-  ".home.arpa",
-  ".onion",
-  ".test",
-  ".invalid",
-  ".example",
-];
+import { isPublicHost } from "@surfingdog/core";
 
-export function isPublicHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/\.$/, "");
-  if (!h || BLOCKED_HOSTS.has(h)) return false;
-  if (!h.includes(".")) return false;
-  if (/^[\d.]+$/.test(h) || h.startsWith("[") || h.includes(":")) return false;
-  return !BLOCKED_SUFFIXES.some((s) => h.endsWith(s));
-}
+/**
+ * The host rule itself lives in `@surfingdog/core` (`capabilities/webhooks.ts`), because the
+ * webhook capability has to apply it when an endpoint is added and core cannot import adapters.
+ * It is re-exported rather than copied: two allow-lists drifting apart is how one door ends up
+ * laxer than the other.
+ */
+export { isPublicHost };
 
 export interface SafeFetchOptions {
   readonly timeoutMs?: number;

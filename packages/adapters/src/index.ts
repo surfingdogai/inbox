@@ -22,6 +22,7 @@ export * from "./problem";
 export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
+export * from "./webhooks/index";
 
 export interface DoorDeps {
   readonly db: Db;

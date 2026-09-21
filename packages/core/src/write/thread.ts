@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { ulid } from "../ids";
 import { type Caller, nowOf } from "./caller";
-import { jobStatement, threadEntryStatement } from "./common";
+import { hasActiveWebhook, jobStatement, threadEntryStatement, webhookFanoutStatement } from "./common";
 
 /** Adds a conversation entry without changing state; customer-facing ones queue a notification. */
 export async function appendThreadEntry(
@@ -15,8 +15,12 @@ export async function appendThreadEntry(
   messageId?: string | undefined,
 ): Promise<void> {
   const now = nowOf(caller);
+  // The entry's own id, minted here because it is also the id this message has in the developer
+  // event stream: `events_v1` reads `thread_entries.id` for its inbound-message arm.
+  const entryId = ulid();
   const statements: Statement[] = [
     threadEntryStatement({
+      id: entryId,
       itemId: item.id,
       direction,
       channel: caller.actor.channel,
@@ -31,7 +35,11 @@ export async function appendThreadEntry(
   ];
   if (direction !== "note") {
     const to = direction === "in" ? "owner" : "customer";
-    statements.push(jobStatement("notify", { to, itemId: item.id, event: "message", entry: ulid() }, now));
+    statements.push(jobStatement("notify", { to, itemId: item.id, event: "message", entry: entryId }, now));
+  }
+  // Only an inbound entry is an event: `events_v1` carries what the customer said, never our reply.
+  if (direction === "in" && (await hasActiveWebhook(db))) {
+    statements.push(webhookFanoutStatement({ id: entryId, type: `${item.type}.message`, itemId: item.id }, now));
   }
   await db.batch(statements);
 }

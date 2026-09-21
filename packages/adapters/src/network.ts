@@ -1,5 +1,6 @@
 import { type Db, ensureJob, type JobHandler, pruneJobs, readSettings } from "@surfingdog/core";
 import { isPublicHost } from "./safe-fetch";
+import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
 
 /**
  * Membership of a Surfing Dog network (ADR-013): the instance registers its domain once and then
@@ -82,6 +83,9 @@ export function networkPingHandler(deps: NetworkDeps): JobHandler {
     });
     await pruneJobs(db, PRUNE_AFTER_MS, now);
     const settings = await readSettings(db);
+    // The hourly tick is the instance's only housekeeping: an unbounded delivery log is how a
+    // database reaches its size cap (ADR-015).
+    await pruneWebhookDeliveries(db, webhookSettings(settings).retainDeliveryDays * 86_400_000, now);
     if (!settings.network.join) return { note: "not joined; enable network.join in Settings" };
     const base = deps.baseUrl ?? settings.notifications.appUrl;
     if (!base) return { note: "no public URL; set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };

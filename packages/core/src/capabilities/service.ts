@@ -24,6 +24,7 @@ import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/view
 import { findSlots, type Slot } from "./availability";
 import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
+import { WebhookCapabilities } from "./webhooks";
 
 /**
  * The capability set: the eleven public and the owner operations, implemented once. Adapters
@@ -67,6 +68,9 @@ export class Capabilities {
   /** The owner's setup: profile, services, products, opening hours, rules. */
   readonly setup: SetupCapabilities;
 
+  /** Where events go, and the cursor a developer polls when it cannot receive one (ADR-015). */
+  readonly webhooks: WebhookCapabilities;
+
   /**
    * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
    * `INBOX_SECRET_KEY`: everything else works, and anything that would store a secret refuses
@@ -77,9 +81,21 @@ export class Capabilities {
   constructor(
     private readonly db: Db,
     secrets: SecretBox | null = null,
+    /**
+     * This instance's public URL (`INBOX_PUBLIC_URL`), when the host knows it. It is what an
+     * event's `data.url` hangs off, and the delivery job resolves it the same way, so the URL in a
+     * webhook body and the URL in `GET /v1/owner/events` are the same string for the same event.
+     */
+    baseUrl?: string | undefined,
+    /**
+     * How far behind live the developer event cursor reads (`EVENT_SETTLE_MS`). Only a test that
+     * writes an event and polls for it in the same tick ever passes zero.
+     */
+    eventSettleMs?: number | undefined,
   ) {
     this.setup = new SetupCapabilities(db);
     this.secrets = secrets;
+    this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
   }
 
   // ---- public ----------------------------------------------------------------

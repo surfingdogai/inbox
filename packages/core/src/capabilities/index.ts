@@ -4,3 +4,4 @@ export * from "./service";
 export * from "./setup";
 export * from "./setup-types";
 export * from "./types";
+export * from "./webhooks";
