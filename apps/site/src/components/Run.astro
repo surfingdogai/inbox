@@ -1,16 +1,11 @@
 ---
-import Art from "./Art.astro";
-
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
 
 <section class="section" id="run" aria-labelledby="run-h">
   <div class="wrap">
-    <div class="intro">
-      <div class="run-art">
-        <Art src="/art/tile-run.png" alt="A pixel-art cloud, a server tower and a surfboard, with the dog giving a thumbs up" ratio="1" />
-      </div>
+    <div class="sec-head">
       <div>
         <p class="eyebrow">Run it</p>
         <h2 class="h-section" id="run-h">Three ways to run</h2>
@@ -22,9 +17,9 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
     </div>
 
     <div class="ways">
-      <article class="glass way">
+      <article class="glass panel way">
         <h3>Deploy to Cloudflare</h3>
-        <p>
+        <p class="card-text">
           One click on your own Cloudflare account. The button provisions a D1 database, an R2 bucket and a queue, and
           asks for one secret. Starts on a free account; sending email needs Workers Paid.
         </p>
@@ -33,28 +28,36 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
         </div>
       </article>
 
-      <article class="glass way">
+      <article class="glass panel way">
         <h3>Your own server</h3>
-        <p>One process, one SQLite file, Node 22.16 or newer. A single command is on its way with 0.1.</p>
+        <p class="card-text">One process, one SQLite file, Node 22.16 or newer. A single command is on its way with 0.1.</p>
         <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">coming with 0.1</span></pre>
         <div class="foot">
           <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
         </div>
       </article>
 
-      <article class="glass way">
+      <article class="glass panel way">
         <div class="way-head">
           <h3>Hosted by us</h3>
           <span class="pill">Hosted opens in a later release</span>
         </div>
-        <p>
+        <p class="card-text">
           The same inbox on our server in the EU, one database per business, email in and out, backups and one-click
           connectors. Leave your address and we will write when it opens.
         </p>
         <form class="foot wait" method="post" action={WAITLIST} data-waitlist>
           <label class="label" for="wait-email">Email</label>
           <div class="wait-row">
-            <input class="input" id="wait-email" name="email" type="email" autocomplete="email" required placeholder="you@yourbusiness.pt" />
+            <input
+              class="input"
+              id="wait-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              placeholder="you@yourbusiness.pt"
+            />
             <button class="btn btn-primary" type="submit">Join the waitlist</button>
           </div>
           <p class="hint" data-waitlist-status aria-live="polite"></p>
@@ -65,22 +68,9 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 </section>
 
 <style>
-  .intro {
-    display: grid;
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 20px;
-    align-items: center;
-    margin-bottom: 26px;
-  }
-  @media (min-width: 720px) {
-    .intro {
-      grid-template-columns: 150px minmax(0, 1fr);
-      gap: 28px;
-    }
-  }
   .ways {
     display: grid;
-    gap: 14px;
+    gap: 16px;
   }
   @media (min-width: 900px) {
     .ways {
@@ -90,12 +80,10 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
   .way {
     display: flex;
     flex-direction: column;
-    padding: 22px 20px;
-    border-radius: var(--radius-panel);
   }
   .way h3 {
     margin: 0;
-    font-size: 21px;
+    font-size: 20px;
   }
   .way-head {
     display: flex;
@@ -104,10 +92,8 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
     justify-content: space-between;
     gap: 8px;
   }
-  .way p {
-    margin: 10px 0 0;
-    color: var(--ink-2);
-    line-height: 1.55;
+  .way .card-text {
+    margin-top: 10px;
   }
   .foot {
     margin-top: auto;

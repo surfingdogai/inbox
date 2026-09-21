@@ -8,7 +8,7 @@ const links = [
 
 <header class="nav-shell">
   <div class="wrap">
-    <nav class="glass navbar" aria-label="Site">
+    <nav class="glass-strong navbar" aria-label="Site">
       <a class="brand" href="/">
         <img src="/logo.png" alt="" width="460" height="461" decoding="async" />
         <span>Surfing Dog</span>
@@ -43,12 +43,13 @@ const links = [
     position: sticky;
     top: 0;
     z-index: 40;
-    padding-top: 10px;
+    padding-top: 12px;
   }
   .navbar {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
     height: 56px;
     padding: 0 8px 0 10px;
     border-radius: 9999px;
@@ -125,6 +126,12 @@ const links = [
       padding: 0 9px;
     }
     .links li:nth-child(3) {
+      display: none;
+    }
+  }
+  /* The narrowest phones: the system theme still applies; the toggle returns on wider screens. */
+  @media (max-width: 400px) {
+    .tt {
       display: none;
     }
   }

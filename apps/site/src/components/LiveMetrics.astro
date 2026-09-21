@@ -1,5 +1,7 @@
 ---
 const INSTANCE = "https://inbox.surfingdog.ai";
+/** The seed business every fresh instance can load; not a name to show as ours. */
+const DEMO_SEED_DOMAIN = "oficinamare.pt";
 
 const tiles = [
   { key: "instances_online", label: "Instances online", sub: "pinged in the last 24 h" },
@@ -17,6 +19,30 @@ const doors = [
   { label: "OpenAPI", path: "/openapi.json" },
   { label: "MCP", path: "/mcp" },
 ];
+
+const TYPE_LABELS: Record<string, { label: string; tint: string }> = {
+  message: { label: "Message", tint: "message" },
+  quote_request: { label: "Quote", tint: "quote" },
+  booking: { label: "Booking", tint: "booking" },
+  order: { label: "Order", tint: "order" },
+  refund: { label: "Refund", tint: "refund" },
+};
+
+// The instance publishes no CORS headers, so its profile is read once, at build time. A short
+// timeout and a fallback keep the build independent of the instance being up.
+let name = "Surfing Dog";
+let itemTypes = ["message", "quote_request", "booking", "order"];
+try {
+  const res = await fetch(`${INSTANCE}/v1/business`, { signal: AbortSignal.timeout(4000) });
+  if (res.ok) {
+    const profile = (await res.json()) as { name?: string; domain?: string; item_types?: string[] };
+    if (profile.name && profile.domain !== DEMO_SEED_DOMAIN) name = profile.name;
+    if (Array.isArray(profile.item_types) && profile.item_types.length > 0) itemTypes = profile.item_types;
+  }
+} catch {
+  // Unreachable at build time: keep the defaults.
+}
+const types = itemTypes.map((t) => TYPE_LABELS[t] ?? { label: t, tint: "message" });
 ---
 
 <section class="section" id="network" aria-labelledby="network-h">
@@ -50,18 +76,23 @@ const doors = [
       <div class="inst-head">
         <div>
           <p class="eyebrow">Live instance</p>
-          <h3>Oficina Maré</h3>
-          <p class="who">
-            The demo business: a bicycle workshop in Ericeira. It is real, it is running, and it answers agents today.
+          <h3>{name}</h3>
+          <p class="card-text who">
+            This is our own inbox. Surfing Dog runs on it: book a call, ask for a quote, or message us, as a person or
+            through your agent.
           </p>
         </div>
         <a class="btn btn-secondary" href={INSTANCE} rel="noopener">Open the instance</a>
       </div>
       <div class="types" aria-label="Item types accepted">
-        <span class="pill tint-message"><i class="dot dot-message"></i>Message</span>
-        <span class="pill tint-quote"><i class="dot dot-quote"></i>Quote</span>
-        <span class="pill tint-booking"><i class="dot dot-booking"></i>Booking</span>
-        <span class="pill tint-order"><i class="dot dot-order"></i>Order</span>
+        {
+          types.map((t) => (
+            <span class:list={["pill", `tint-${t.tint}`]}>
+              <i class:list={["dot", `dot-${t.tint}`]} />
+              {t.label}
+            </span>
+          ))
+        }
       </div>
       <dl class="doors mono">
         {
@@ -95,25 +126,25 @@ const doors = [
   @media (min-width: 720px) {
     .tiles {
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
+      gap: 16px;
     }
   }
   .tile {
-    padding: 18px 18px 16px;
+    padding: 20px 20px 18px;
     border-radius: var(--radius-panel);
   }
   .tile p {
     margin: 0;
   }
   .label {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 600;
     color: var(--ink-2);
   }
   .value {
     margin-top: 6px;
     font-family: var(--font-display);
-    font-size: clamp(28px, 3.2vw, 36px);
+    font-size: clamp(28px, 3vw, 34px);
     font-weight: 500;
     letter-spacing: -0.02em;
     line-height: 1.1;
@@ -121,11 +152,11 @@ const doors = [
   }
   .sub {
     margin-top: 6px;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--ink-3);
   }
   .instance {
-    margin-top: 14px;
+    margin-top: 16px;
   }
   .inst-head {
     display: flex;
@@ -135,19 +166,18 @@ const doors = [
     gap: 12px 24px;
   }
   .inst-head h3 {
-    margin: 4px 0 0;
+    margin: 6px 0 0;
     font-size: 24px;
   }
   .who {
-    max-width: 56ch;
-    margin: 6px 0 0;
-    color: var(--ink-2);
+    max-width: 58ch;
+    margin-top: 8px;
   }
   .types {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 16px;
+    margin-top: 18px;
   }
   .doors {
     display: grid;
@@ -187,7 +217,9 @@ const doors = [
   const text = document.querySelector<HTMLElement>("[data-network-text]");
 
   const read = (source: unknown, path: string): unknown =>
-    path.split(".").reduce<unknown>((v, k) => (v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined), source);
+    path
+      .split(".")
+      .reduce<unknown>((v, k) => (v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined), source);
 
   function state(kind: "ok" | "degraded" | "warming", label: string) {
     if (!pill || !text) return;
