@@ -34,6 +34,40 @@ const legend = [
       Surfing Dog Inbox is open source, so anyone can ask for something. Votes decide what gets built first, and the
       status on each request says where it stands. A pull request is welcome too.
     </p>
+
+    {/* Who you are, at the top of the page rather than buried in the board: a reader should not
+        have to scroll past the form to learn that an account exists. "Sign in" is a plain anchor
+        to the service, so it works before the module has loaded and with no JavaScript at all. */}
+    <div class="ident" data-ident>
+      <div class="ident-say">
+        <p class="card-text ident-line"><span data-ident-text
+          >Voting is open to everyone. Commenting needs an account.</span
+          ><b class="ident-name" data-ident-name></b></p>
+        <p class="hint" data-ident-status aria-live="polite"></p>
+      </div>
+      <div class="ident-act">
+        <a class="btn btn-secondary btn-sm" href={SIGNIN} data-signin>Sign in</a>
+        <button class="btn btn-secondary btn-sm" type="button" data-signout hidden>Sign out</button>
+      </div>
+    </div>
+    <script is:inline>
+      /* Choose the right control before first paint, from the token already in storage, so a
+         signed-in reader is not shown "Sign in" for as long as the module takes to load. The
+         board confirms with /v1/me a moment later and corrects this if the token has expired.
+         The key is the TOKEN_KEY of the module below; keep the two in step. */
+      (function () {
+        try {
+          var raw = window.localStorage.getItem("surfingdog-board-token");
+          var held = !!(raw && raw.trim()) || window.location.hash.indexOf("board_token=") >= 0;
+          var signin = document.querySelector("[data-signin]");
+          var signout = document.querySelector("[data-signout]");
+          if (signin) signin.hidden = held;
+          if (signout) signout.hidden = !held;
+        } catch (e) {
+          /* Storage blocked: the signed-out controls already in the markup are the right ones. */
+        }
+      })();
+    </script>
   </section>
 
   <section class="section" id="ask" aria-labelledby="ask-h" data-reveal>
@@ -112,19 +146,6 @@ const legend = [
             Vote for the ones you want, and open a request to read what people have said about it. The count is the
             whole ranking: the most wanted sit at the top.
           </p>
-        </div>
-      </div>
-
-      {/* Who you are, at the top of the board. Hidden until the script runs, because signing in
-          is something only the browser can finish. */}
-      <div class="glass ident" data-ident hidden>
-        <div class="ident-say">
-          <p class="card-text ident-line"><span data-ident-text></span><b class="ident-name" data-ident-name></b></p>
-          <p class="hint" data-ident-status aria-live="polite"></p>
-        </div>
-        <div class="ident-act">
-          <a class="btn btn-secondary btn-sm" href={SIGNIN} data-signin hidden>Sign in</a>
-          <button class="btn btn-secondary btn-sm" type="button" data-signout hidden>Sign out</button>
         </div>
       </div>
 
@@ -415,9 +436,9 @@ const legend = [
     align-items: center;
     justify-content: space-between;
     gap: var(--sp-3) var(--sp-4);
-    margin-bottom: var(--sp-4);
-    padding: var(--sp-4) var(--sp-5);
-    border-radius: var(--radius-card);
+    margin-top: var(--sp-5);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--hairline);
   }
   .ident-say {
     min-width: 0;
@@ -1116,7 +1137,7 @@ const legend = [
     if (identName) identName.textContent = view === "in" && me ? me.displayName : "";
     if (identText) {
       if (view === "out") {
-        identText.textContent = "Voting is open to everyone. Commenting needs an account, which keeps the board readable.";
+        identText.textContent = "Voting is open to everyone. Commenting needs an account.";
       } else if (view === "checking") {
         identText.textContent = "Checking whether you are signed in.";
       } else if (view === "unknown") {
