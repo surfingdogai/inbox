@@ -1,12 +1,19 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * The one place that knows how the owner is authenticated. Today: an owner API key pasted at
- * sign-in and kept in localStorage. When sessions and passkeys arrive (ADR-004) this module swaps
- * to cookies and the rest of the app does not change.
+ * The one place that knows how the owner is authenticated: the session cookie the magic-link flow
+ * sets (/auth/magic-link → /auth/verify → sdi_session), or an owner API key kept in localStorage
+ * for API-only owners. Every request goes out with `credentials: "include"`; the key, when there
+ * is one, rides as a Bearer header and wins.
  */
 export const KEY_PREFIX = "sdi_own_";
 const STORAGE_KEY = "sdi.owner_key";
+
+export interface SessionUser {
+  readonly id: string;
+  readonly email: string;
+  readonly role: "owner" | "staff";
+}
 
 const listeners = new Set<() => void>();
 function notify() {
@@ -21,29 +28,62 @@ export function getKey(): string | null {
   }
 }
 
-export function isSignedIn(): boolean {
-  return getKey() !== null;
+/** The cookie's user. A positive answer is kept for the page's life; a negative one is asked again. */
+let lookup: Promise<SessionUser | null> | null = null;
+export function session(): Promise<SessionUser | null> {
+  if (!lookup) {
+    lookup = fetch("/auth/me", { credentials: "include", headers: { accept: "application/json" } })
+      .then(async (res) => (res.ok ? ((await res.json()) as SessionUser) : null))
+      .catch(() => null)
+      .then((user) => {
+        if (!user) lookup = null;
+        return user;
+      });
+  }
+  return lookup;
 }
 
-export function signIn(key: string): void {
+export function forgetSession(): void {
+  lookup = null;
+}
+
+/** A stored key counts at once; otherwise the cookie decides. Route guards await this. */
+export async function ensureSignedIn(): Promise<boolean> {
+  if (getKey()) return true;
+  return (await session()) !== null;
+}
+
+export function signInWithKey(key: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, key);
   } catch {
-    // Private mode without storage: the session lasts until the tab closes.
+    // Private mode without storage: the key lasts until the tab closes.
   }
   notify();
 }
 
-export function signOut(): void {
+/** Forgets the key and the session locally, without telling the server: the 401 path. */
+export function dropCredentials(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore
   }
+  forgetSession();
   notify();
 }
 
-/** Headers for an owner call; empty when signed out so the API answers 401 and the app redirects. */
+/** Signing out on purpose: end the cookie session on the server too. */
+export async function signOut(): Promise<void> {
+  dropCredentials();
+  try {
+    await fetch("/auth/logout", { method: "POST", credentials: "include" });
+  } catch {
+    // Offline: the cookie dies with its expiry.
+  }
+}
+
+/** Headers for an owner call: the key when there is one; otherwise the cookie goes on its own. */
 export function authHeaders(): Record<string, string> {
   const key = getKey();
   return key ? { authorization: `Bearer ${key}` } : {};
@@ -58,6 +98,10 @@ function subscribe(fn: () => void): () => void {
   };
 }
 
-export function useSignedIn(): boolean {
-  return useSyncExternalStore(subscribe, isSignedIn, () => false);
+export function useHasKey(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => getKey() !== null,
+    () => false,
+  );
 }

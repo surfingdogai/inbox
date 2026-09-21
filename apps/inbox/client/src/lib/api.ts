@@ -77,7 +77,7 @@ async function problemFrom(res: Response): Promise<Problem> {
     code: `http_${res.status}`,
     detail:
       res.status === 401
-        ? "That key was not accepted. Check it is an owner key (it starts with sdi_own_) and has not been revoked."
+        ? "You are not signed in here any more. Sign in again to continue."
         : `The inbox answered ${res.status}${res.statusText ? ` ${res.statusText}` : ""}.`,
   };
   try {
@@ -108,6 +108,7 @@ async function call<T>(method: string, path: string, opts: CallOptions = {}): Pr
     res = await fetch(url, {
       method,
       headers,
+      credentials: "include",
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
     });
   } catch {
@@ -129,7 +130,13 @@ const item = (id: string) => `/v1/owner/items/${encodeURIComponent(id)}`;
 
 export const api = {
   business: () => call<BusinessProfile>("GET", "/v1/business", { public: true }),
-  /** Sign-in: the settings document is the cheapest owner-only read. */
+  /** Sign-in by email: the server mails a link (or logs it when no mail provider is set up). */
+  requestMagicLink: (email: string, redirect: string | undefined) =>
+    call<{ ok: boolean; message: string }>("POST", "/auth/magic-link", {
+      body: { email, ...(redirect ? { redirect } : {}) },
+      public: true,
+    }),
+  /** Sign-in by key: the settings document is the cheapest owner-only read. */
   verifyKey: (key: string) => call<SettingsDoc>("GET", "/v1/owner/settings", { key }),
   listItems: (params: ListParams) => call<Page<ItemView>>("GET", "/v1/owner/items", { query: { ...params } }),
   getItem: (id: string) => call<ItemDetail>("GET", item(id)),
