@@ -7,7 +7,7 @@ import { createDb, ensureJob, MIGRATIONS } from "@surfingdog/core";
 import { ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
-import { seedDemo, seedShowcase } from "./seed";
+import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
  * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
@@ -18,8 +18,9 @@ import { seedDemo, seedShowcase } from "./seed";
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
- *   node server.mjs seed-demo          add the demo business if the instance is empty
- *   node server.mjs seed-showcase      the demo business with a week of items, rules and hours (screenshots)
+ *   node server.mjs seed-demo          add the demo bike shop if the instance is empty
+ *   node server.mjs seed-showcase      the demo bike shop with a week of items, rules and hours (screenshots)
+ *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
  *   node server.mjs network-ping       report to the network now instead of at the next hour
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
@@ -40,11 +41,16 @@ if (command) {
     console.log(
       r.seeded ? `seeded the showcase: ${r.items} items` : "an instance business already exists; nothing changed",
     );
+  } else if (command === "seed-surfingdog") {
+    const r = await seedSurfingDog(db);
+    console.log(r.seeded ? "seeded Surfing Dog's own inbox" : "an instance business already exists; nothing changed");
   } else if (command === "network-ping") {
     await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);
     console.log("queued a network ping; the running server sends it within a second");
   } else {
-    console.error(`unknown command ${command}; use create-owner-key, seed-demo, seed-showcase or network-ping`);
+    console.error(
+      `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog or network-ping`,
+    );
     process.exit(2);
   }
   process.exit(0);

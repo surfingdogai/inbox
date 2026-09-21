@@ -1,0 +1,1 @@
+ALTER TABLE `business` ADD `languages` text;

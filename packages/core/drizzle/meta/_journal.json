@@ -15,6 +15,13 @@
       "when": 1790002333964,
       "tag": "0001_fts_search",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790008479305,
+      "tag": "0002_shallow_blue_blade",
+      "breakpoints": true
     }
   ]
 }

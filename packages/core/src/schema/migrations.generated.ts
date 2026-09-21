@@ -82,4 +82,9 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE TRIGGER `thread_entries_au` AFTER UPDATE OF subject, body_text ON `thread_entries` BEGIN\n  DELETE FROM `search_fts` WHERE entry_id = old.id;\n  INSERT INTO `search_fts` (subject, body, party, item_id, entry_id)\n  VALUES (new.subject, new.body_text, (SELECT display_name FROM parties WHERE id = new.party_id), new.item_id, new.id);\nEND;",
     ],
   },
+  {
+    version: 3,
+    name: "0002_shallow_blue_blade",
+    statements: ["ALTER TABLE `business` ADD `languages` text;"],
+  },
 ];
