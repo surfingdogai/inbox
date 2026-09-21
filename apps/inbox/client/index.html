@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Surfing Dog Inbox</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // The stored theme goes on <html> before the first paint, so there is no flash.
+      (() => {
+        let theme = null;
+        try {
+          theme = localStorage.getItem("sdi.theme");
+        } catch {
+          // No storage: follow the system.
+        }
+        if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
