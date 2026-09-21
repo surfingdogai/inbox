@@ -130,7 +130,7 @@ That body, spaced out so you can read it, is a thin event:
 }
 ```
 
-`webhook-id` is the event's id and it is stable across retries: **deduplicate on it**. `data.version` is the item's version after the event, so an event that arrives out of order is one you can drop by comparing it with the version you hold.
+`webhook-id` is the event's id and it is stable across retries: **deduplicate on it**. On a transition event `data.version` is the item's version after the event, so one that arrives out of order is one you can drop by comparing it with the version you hold. A `<type>.message` event does not bump the version — it reports the item's version as it stands when we send — so order messages by `webhook-id`, which is a ULID, and never drop one on version.
 
 ## Verify it
 
@@ -141,7 +141,7 @@ The signature is [Standard Webhooks](https://www.standardwebhooks.com/) v1.0.0, 
 3. `webhook-timestamp` is Unix seconds and must be within five minutes of now, in both directions. Without that check, anyone who captures one request can replay it at you forever;
 4. compare in constant time.
 
-With our helper, which is MIT so it costs you no licence, and WebCrypto so it runs in Node, in a Worker, in Deno, in Bun and in a browser:
+With our helper, which is MIT so it costs you no licence, and WebCrypto so it runs in Node, in a Worker, in Deno, in Bun and in a browser. It ships in `@surfingdog/sdk`, which is not on npm yet; until it lands, use the `standardwebhooks` example underneath it, or the four rules above:
 
 ```ts
 import { verifyWebhook, WebhookVerificationError } from "@surfingdog/sdk";
@@ -225,7 +225,9 @@ Two ways to send something again:
 - **one delivery**, `POST /v1/owner/deliveries/{id}/replay`, on the row it already has;
 - **everything the endpoint missed**, `POST /v1/owner/webhooks/{id}/replay` with `{"since":"2026-09-20T00:00:00Z"}`, which queues every matching event from that instant that this endpoint never received. Turning a deactivated endpoint back on (`PATCH /v1/owner/webhooks/{id}` with `{"active":true}`) clears its failure run first, so run that, then this.
 
-A replay is the same event, under the same `webhook-id`, with a fresh timestamp and signature. A thin event replays byte for byte; a full one is rebuilt from the item as it stands now, so it may show a state later than the one the event announced. If you deduplicate on `webhook-id`, as you should, a replay of something you already handled costs you nothing.
+  One call scans at most 500 events. When the answer comes back `"truncated": true` it also carries a `next_after`: call it again with the same `since` and `{"after":"<that value>"}` to take the next window, and keep going until `truncated` is false. Re-sending the same request without `after` reads the same 500 events again and queues nothing new.
+
+A replay is the same event, under the same `webhook-id`, with a fresh timestamp and signature. A thin transition event replays byte for byte. A full event — and a thin `<type>.message` event, because a message does not change the item — is rebuilt from the item as it stands now, so it may show a state later than the one the event announced. If you deduplicate on `webhook-id`, as you should, a replay of something you already handled costs you nothing.
 
 Deliveries are pruned after thirty days. For anything older, use the cursor below — the events themselves are kept as long as their items are.
 
@@ -233,7 +235,7 @@ Deliveries are pruned after thirty days. For anything older, use the cursor belo
 
 A **thin** event carries a pointer: the ids, the type, the new state, the version and a URL. A **full** event is the same envelope with more inside `data`: `item`, the whole item with its typed payload and its flags; `transitions`, the events it accepts right now, each with a label; `human`, a sentence describing it; `party`, the customer, with the name, email address and phone number you hold for them; and, on a `<type>.message` event, `message`, the message itself.
 
-Thin is the default, for two reasons. A thin event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
+Thin is the default, for two reasons. A thin transition event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. (A `<type>.message` event is the exception in both styles: a message does not change the item, so its `state` and `version` are the item's as they stand when we send.) And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
 
 Choose full when the receiver genuinely cannot call back — a Zapier or Make step that can only read what it is handed, or a Slack message that needs the customer's name in it. Choose it knowing what it means: `payload_style: "full"` sends your customers' names, email addresses and phone numbers to that address, on every event, for as long as the endpoint exists. To fetch an item from a thin event, `GET` the `data.url` with an owner API key ([API](/docs/api/)); you get the same item, as it stands now.
 
@@ -266,6 +268,6 @@ curl -s "https://your-inbox.example.com/v1/owner/events?cursor=01K5RJ3B4C5D6E7F8
 }
 ```
 
-Events come back oldest first, and the ids are ULIDs, so they sort in the order things happened. Send the `next_cursor` of your last page as `cursor` on the next call; omit `cursor` to start at the beginning of time, and expect `null` when you have caught up. There is nothing to acknowledge, so re-reading from an older id is free — which is what makes this the way to backfill after an outage, or to build a copy of your data from scratch. `limit` is 1 to 100 and defaults to 50; `types` takes the same patterns a subscription does, comma-separated or repeated; `since` takes an ISO instant when you would rather start from a time than from an id.
+Events come back oldest first, and the ids are ULIDs, so they sort in the order things happened. The stream trails live by a few seconds: an event's id is minted a moment before its write commits, so holding the newest few seconds back is what lets you treat `next_cursor` as a hard watermark and never miss a row that landed out of order. Send the `next_cursor` of your last page as `cursor` on the next call; omit `cursor` to start at the beginning of time, and expect `null` when you have caught up. There is nothing to acknowledge, so re-reading from an older id is free — which is what makes this the way to backfill after an outage, or to build a copy of your data from scratch. `limit` is 1 to 100 and defaults to 50; `types` takes the same patterns a subscription does, comma-separated or repeated; `since` takes an ISO instant when you would rather start from a time than from an id.
 
 Every event you would have received as a webhook appears here, as the same thin event, whether or not an endpoint exists. The owner MCP exposes it as `list_events`, so the AI you already connected can read the stream too.
