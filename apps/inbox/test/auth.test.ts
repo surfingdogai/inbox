@@ -195,6 +195,7 @@ describe("OAuth 2.1 for the owner MCP", () => {
     const app = createApp({
       db,
       mailOut: mail,
+      ownerEmails: ["tiago@oficinamare.pt"],
       fetchClientMetadata: async (url) =>
         url === "https://claude.ai/oauth/claude-code-client-metadata"
           ? { client_id: url, client_name: "Claude Code", redirect_uris: ["http://localhost/callback"] }

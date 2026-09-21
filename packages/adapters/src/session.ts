@@ -121,12 +121,27 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       const origin = publicOrigin(c.req.raw, deps.baseUrl);
       const link = `${origin}/auth/verify?token=${token}${body.redirect ? `&redirect=${encodeURIComponent(body.redirect)}` : ""}`;
       const name = await deps.businessName();
-      await deps.mailOut.send({
-        from: { address: "inbox@localhost", name: name || "Surfing Dog Inbox" },
-        to: [email],
-        subject: `Sign in to ${name || "your inbox"}`,
-        text: `Open this link within 15 minutes to sign in:\n\n${link}\n\nIf you did not ask for it, ignore this email.`,
-      });
+      try {
+        await deps.mailOut.send({
+          from: { address: "inbox@localhost", name: name || "Surfing Dog Inbox" },
+          to: [email],
+          subject: `Sign in to ${name || "your inbox"}`,
+          text: `Open this link within 15 minutes to sign in:\n\n${link}\n\nIf you did not ask for it, ignore this email.`,
+        });
+      } catch (error) {
+        console.error("magic link: mail failed:", error instanceof Error ? error.message : error);
+        return c.json(
+          {
+            type: "https://surfingdog.ai/problems/mail_failed",
+            title: "Email could not be sent",
+            status: 502,
+            code: "mail_failed",
+            detail: "The sign-in email could not be sent. Try again in a minute, or sign in with an API key.",
+          },
+          502,
+          { "Content-Type": "application/problem+json" },
+        );
+      }
     }
     return c.json({ ok: true, message: "If that address is known here, a sign-in link is on its way." });
   });
