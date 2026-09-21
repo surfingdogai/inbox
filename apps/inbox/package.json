@@ -16,12 +16,14 @@
     "@surfingdog/core": "workspace:*",
     "@surfingdog/platform": "workspace:*",
     "hono": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@surfingdog/adapters": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "tsx": "^4.23.15",
     "typescript": "catalog:",
-    "wrangler": "^4.136.0"
+    "wrangler": "^4.136.0",
+    "@modelcontextprotocol/client": "^2.0.0"
   }
 }
