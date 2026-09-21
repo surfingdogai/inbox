@@ -39,6 +39,8 @@ describe("two isolates, one connector", () => {
     const { rows } = await db.client.query({ sql: "SELECT count(*), count(DISTINCT external_id) FROM products", method: "all" });
     console.log("products rows/distinct", JSON.stringify(rows));
     console.log("get", JSON.stringify(await caps.feeds.get(owner(T0 + 3000), feed.id)));
+    const done = await db.client.query({ sql: "SELECT id, status, last_error, leased_by FROM jobs", method: "all" });
+    console.log("jobs after", JSON.stringify(done.rows));
     expect(true).toBe(true);
   });
 });
