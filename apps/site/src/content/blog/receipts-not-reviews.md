@@ -39,4 +39,4 @@ It costs friction. Receipts have to be issued, counter-signed and stored. Window
 
 I think the friction is the point. A review that costs nothing is worth nothing. A review tied to a receipt both sides signed, written blind and revealed at the same moment as the other side's, is worth reading. If we can make that ordinary, the star will go back to being what it was meant to be: a note from one person to the next, about something that really happened.
 
-Receipts ship in the next release of the plan; the review service and simultaneous reveal are a later release. The formats are MIT so that anyone can run a network with the same rules.
+Receipts are next; the review service and the simultaneous reveal follow them. The formats are MIT so that anyone can run a network with the same rules.

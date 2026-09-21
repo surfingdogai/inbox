@@ -40,9 +40,9 @@ Presets exist for three verticals. Appointments: auto-confirm bookings under a l
 Every request is resolved into a **caller** with an actor, a channel and a trust tier. The tiers are:
 
 - `anonymous`: nobody proved anything. Allowed to send messages and to request quotes, bookings and orders. On creation the caller receives an `access_token`, a capability secret that is the only way to read or cancel that item later.
-- `signed_agent`: the request carried a verified signature (RFC 9421 style; Web Bot Auth and Visa TAP tags). the next release.
+- `signed_agent`: the request carried a verified signature (RFC 9421 style; Web Bot Auth and Visa TAP tags). Not yet.
 - `verified_principal`: the caller holds an API key issued by the instance, an OAuth token, or a session; email that arrived through a path that verified DKIM and SPF is treated the same way.
-- `reputed_principal`: a verified principal with a track record on a network. a later release.
+- `reputed_principal`: a verified principal with a track record on a network. Not yet.
 
 The manifest publishes which tiers an instance accepts. Defaults that stand unless the owner changes them: anonymous callers may send messages and request quotes; bookings and orders will require a signed agent or a deposit once those arrive.
 
@@ -54,6 +54,6 @@ An instance may join a network from settings: `network.url` is the directory it 
 
 ## Receipts and two-sided reviews
 
-When an item reaches a state that matters (`confirmed` for a booking, `paid` for an order) the instance issues a **receipt**: a compact JWS signed with the instance's Ed25519 key, which the manifest publishes in `receipt_keys`. The customer's agent counter-signs it with `acknowledge_receipt`. Both sides then hold a small, verifiable proof that this transaction happened between these two parties. Receipt issuing and counter-signing are the next release; the endpoints already exist and answer `501` until then.
+When an item reaches a state that matters (`confirmed` for a booking, `paid` for an order) the instance issues a **receipt**: a compact JWS signed with the instance's Ed25519 key, which the manifest publishes in `receipt_keys`. The customer's agent counter-signs it with `acknowledge_receipt`. Both sides then hold a small, verifiable proof that this transaction happened between these two parties. Receipt issuing and counter-signing are not ready; the endpoints already exist and answer `501` until they are.
 
-Reviews live on a network, not on the instance, and a review is only valid against a co-signed receipt, in both directions. The customer reviews the business; the business records an outcome for the customer (completed, no-show, refund), as a code rather than a star rating. Both are sealed on submission and revealed together after a window, so neither side writes in reaction to the other. Reputation lookups return decayed counts per outcome and stay advisory: no pass/fail, no automated declines. a later release, and [ADR-012](https://github.com/surfingdogai/inbox/blob/main/docs/adr/012-reputation-and-reviews-law.md) explains the legal reasoning.
+Reviews live on a network, not on the instance, and a review is only valid against a co-signed receipt, in both directions. The customer reviews the business; the business records an outcome for the customer (completed, no-show, refund), as a code rather than a star rating. Both are sealed on submission and revealed together after a window, so neither side writes in reaction to the other. Reputation lookups return decayed counts per outcome and stay advisory: no pass/fail, no automated declines. None of it is live yet, and [ADR-012](https://github.com/surfingdogai/inbox/blob/main/docs/adr/012-reputation-and-reviews-law.md) explains the legal reasoning.

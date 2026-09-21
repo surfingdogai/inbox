@@ -1,19 +1,11 @@
 ---
 // apps/site/src/pages/technical.astro
 // Everything a developer needs in one place, so the rest of the navigation can stay about the
-// business. The numbers here are counted from the repository, not rounded up.
 import Layout from "../layouts/Layout.astro";
 
 const REPO = "https://github.com/surfingdogai/inbox";
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const INSTANCE = "https://inbox.surfingdog.ai";
-
-const facts = [
-  { label: "REST operations", value: "38", sub: "11 public, 27 for the owner" },
-  { label: "MCP tools", value: "35", sub: "11 public, 24 for the owner" },
-  { label: "States", value: "34", sub: "across five state machines" },
-  { label: "Tests", value: "195", sub: "on Node and inside workerd" },
-];
 
 /** `phase` marks a door that is named in the schema but not built yet. */
 const doors: { k: string; v: string; note: string; phase?: string }[] = [
@@ -30,7 +22,7 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   {
     k: "MCP public",
     v: "POST /mcp",
-    note: "11 tools for a customer's agent, no sign-in. Ten do the work today. acknowledge_receipt answers that receipts will arrive in the next release.",
+    note: "11 tools for a customer's agent, no sign-in. Ten do the work today. acknowledge_receipt answers that receipts will arrive in Not yet.",
   },
   {
     k: "MCP owner",
@@ -40,12 +32,12 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   {
     k: "Email in",
     v: "POST /v1/email/inbound",
-    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That will come in the next release.",
+    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That will come in Not yet.",
   },
   {
     k: "Web form",
     v: "channel: form",
-    phase: "the first release",
+    phase: "Being built",
     note: "A page for a person who has no agent. The channel name is reserved in the schema. The door itself is not built.",
   },
   {
@@ -100,7 +92,7 @@ const ways = [
   },
   {
     title: "Hosted by us",
-    text: "The same inbox run for you, one database per business. It opens in a later release, and the waitlist is on the home page.",
+    text: "The same inbox run for you, one database per business. It is not open yet, and the waitlist is on the home page.",
     href: "/#run",
     label: "Join the waitlist",
     external: false,
@@ -164,28 +156,11 @@ const ways = [
           <p class="card-text">
             AGPL-3.0-only for the server, the app and the shared UI. MIT for the spec and the SDK, so anyone can
             implement the format without taking on the copyleft. The SDK is a stub today. It will be generated from the
-            OpenAPI document in the first release.
+            OpenAPI document.
           </p>
         </li>
       </ul>
 
-      <div class="tiles" data-reveal="stagger">
-        {
-          facts.map((f) => (
-            <div class="glass card tile">
-              <p class="label">{f.label}</p>
-              <p class="value u-count" data-to={f.value}>{f.value}</p>
-              <p class="sub">{f.sub}</p>
-            </div>
-          ))
-        }
-      </div>
-
-      <p class="fine">
-        Counted from the source on 21 September 2026. Five item types have a state machine. Four are advertised
-        publicly, and refunds are handled inside the owner app. The version string the OpenAPI document and the network
-        ping report is still 0.0.0.
-      </p>
     </div>
   </section>
 
@@ -196,7 +171,7 @@ const ways = [
           <p class="eyebrow">The doors</p>
           <h2 class="h-section" id="doors-h">Three doors today, one more to come</h2>
           <p class="lede">
-            REST, MCP and email ship now. A web form is the first release work. Everything below is what the code does, not what
+            REST, MCP and email ship now. A web form is being built. Everything below is what the code does, not what
             it is meant to do one day.
           </p>
         </div>
@@ -416,18 +391,6 @@ const ways = [
     padding-top: var(--sp-5);
   }
 
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--gap-row);
-    margin-top: var(--gap-grid);
-  }
-  @media (min-width: 720px) {
-    .tiles {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: var(--gap-grid);
-    }
-  }
   .tile p {
     margin: 0;
   }
