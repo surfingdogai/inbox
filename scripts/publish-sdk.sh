@@ -19,7 +19,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PKG="$ROOT/packages/sdk"
-DRY="${1:-}"
+DRY=""; NOW=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry) DRY="--dry" ;;
+    --now) NOW="1" ;;
+    *) die "unknown option: $arg (use --dry or --now)" ;;
+  esac
+done
 
 say() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
@@ -73,12 +80,16 @@ if curl -sf -o /dev/null "https://registry.npmjs.org/$(node -p "encodeURICompone
   die "$NAME@$VERSION is already published; bump the version in packages/sdk/package.json and src/index.ts"
 fi
 
-say "typecheck, tests on both runtimes, lint…"
-pnpm typecheck >/dev/null
-pnpm test:node >/dev/null
-pnpm test:workers >/dev/null
-pnpm exec biome check packages apps/inbox >/dev/null
-ok "green"
+if [ -n "$NOW" ]; then
+  say "--now: skipping typecheck, tests and lint (CI is green for this commit)"
+else
+  say "typecheck, tests on both runtimes, lint…"
+  pnpm typecheck >/dev/null
+  pnpm test:node >/dev/null
+  pnpm test:workers >/dev/null
+  pnpm exec biome check packages apps/inbox >/dev/null
+  ok "green"
+fi
 
 say "build…"
 pnpm --filter "$NAME" build >/dev/null
@@ -97,25 +108,38 @@ fi
 # The code is asked for last, right before the publish, because it is only good for thirty
 # seconds and the tests take longer than that. A token in the environment does not need one.
 # One prompt takes either answer: a six-digit code from an authenticator, or a granular token
-# with "bypass two-factor" ticked, pasted straight in. Asking for the token as an environment
-# variable meant two commands that had to be typed in the same window, and they were not.
+# with "bypass two-factor" ticked. The input is shown, not hidden: hiding it meant a paste that
+# went wrong could not be seen, and the whole run was lost. The token is dug out of whatever was
+# pasted, so a whole "export NODE_AUTH_TOKEN=npm_..." line works too. Three attempts before
+# giving up, because the tests before this point took longer than a retry deserves.
 OTP=""
 if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-  printf 'six-digit code from your authenticator, OR paste an npm token with bypass-2FA: '
-  read -rs ANSWER
-  echo
-  case "$ANSWER" in
-    npm_*)
-      export NODE_AUTH_TOKEN="$ANSWER"
+  attempt=0
+  while [ -z "$OTP" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; do
+    attempt=$((attempt + 1))
+    printf 'paste your npm token (npm_...) or a six-digit code: '
+    read -r ANSWER
+    TOKEN_IN="$(printf '%s' "$ANSWER" | grep -oE 'npm_[A-Za-z0-9_-]{20,}' | head -n1 || true)"
+    CODE_IN="$(printf '%s' "$ANSWER" | grep -oE '(^|[^0-9])[0-9]{6}([^0-9]|$)' | grep -oE '[0-9]{6}' | head -n1 || true)"
+    if [ -n "$TOKEN_IN" ]; then
+      export NODE_AUTH_TOKEN="$TOKEN_IN"
       NPMRC="$PKG/.npmrc"
       printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPMRC"
       WHO="$(whoami_now)"
-      [ -n "$WHO" ] || die "npm does not accept that token; nothing was published"
-      ok "using the token, as $WHO"
-      ;;
-    [0-9][0-9][0-9][0-9][0-9][0-9]) OTP="$ANSWER" ;;
-    *) die "that is neither a six-digit code nor an npm_ token; nothing was published" ;;
-  esac
+      if [ -n "$WHO" ]; then
+        ok "token accepted (${TOKEN_IN:0:8}…${TOKEN_IN: -4}, ${#TOKEN_IN} chars), publishing as $WHO"
+      else
+        no "npm rejected that token (${TOKEN_IN:0:8}…${TOKEN_IN: -4}, ${#TOKEN_IN} chars)"
+        unset NODE_AUTH_TOKEN; rm -f "$NPMRC"; NPMRC=""
+      fi
+    elif [ -n "$CODE_IN" ]; then
+      OTP="$CODE_IN"
+      ok "code accepted"
+    else
+      no "I got ${#ANSWER} characters and none of it looks like npm_… or six digits: '$(printf '%s' "$ANSWER" | cut -c1-40)'"
+    fi
+    [ -n "$OTP" ] || [ -n "${NODE_AUTH_TOKEN:-}" ] || [ "$attempt" -lt 3 ] || die "three tries; nothing was published"
+  done
 fi
 
 say "publishing $NAME@$VERSION as ${WHO}..."
