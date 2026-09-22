@@ -265,3 +265,41 @@ describe("disconnecting", () => {
     expect(products.every((p) => p.active === 0)).toBe(true);
   });
 });
+
+/**
+ * Found by an adversarial review of the first cut, each one demonstrated against the real code
+ * before it was believed.
+ */
+describe("two imports at once", () => {
+  it("converges instead of importing the catalogue twice", async () => {
+    const { db, caps } = await setup();
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    const body = ["id,title,price", ...Array.from({ length: 30 }, (_, i) => `P${i},Item ${i},1.00`)].join("\n");
+
+    // Both read an empty catalogue and both write. Without a unique key on (source, external_id)
+    // this left sixty rows for thirty products, permanently, with both imports reporting success.
+    await Promise.all([caps.feeds.importBody(feed.id, body, T0), caps.feeds.importBody(feed.id, body, T0 + 1)]);
+
+    const { rows } = await db.client.query({
+      sql: "SELECT COUNT(*), COUNT(DISTINCT external_id) FROM products WHERE source LIKE 'feed:%'",
+      method: "all",
+    });
+    const [total, distinct] = rows[0] as [number, number];
+    expect(Number(distinct)).toBe(30);
+    expect(Number(total)).toBe(30);
+  });
+});
+
+describe("a sku that changes in the feed", () => {
+  it("is written, rather than reported as unchanged for ever", async () => {
+    const { caps } = await setup();
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(feed.id, "id,title,sku,price\nA1,Chain lube,LUBE-100,8.50", T0);
+    expect((await caps.setup.listProducts(owner))[0]?.sku).toBe("LUBE-100");
+
+    const summary = await caps.feeds.importBody(feed.id, "id,title,sku,price\nA1,Chain lube,LUBE-200,8.50", T0 + 1000);
+    expect(summary.updated).toBe(1);
+    expect(summary.unchanged).toBe(0);
+    expect((await caps.setup.listProducts(owner))[0]?.sku).toBe("LUBE-200");
+  });
+});

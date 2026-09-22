@@ -180,7 +180,19 @@ export class FeedCapabilities {
       await this.markError(connectorId, String((error as Error).message ?? error), at);
       throw error;
     }
-    const summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, at);
+    let summary: FeedImportSummary;
+    try {
+      summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, at);
+    } catch (error) {
+      // The batches already written stay written: without interactive transactions there is
+      // nothing to roll back to. What must not happen is the connector reading as if nothing
+      // went wrong, because the next import is the only thing that repairs the catalogue.
+      const message = `the import stopped part way through and the catalogue may be incomplete: ${
+        (error as Error).message ?? String(error)
+      }`;
+      await this.markError(connectorId, message, at);
+      throw error;
+    }
     await this.db.client.query({
       sql: "UPDATE connectors SET status = 'active', last_sync_at = ?, last_error = NULL, last_error_at = NULL, updated_at = ? WHERE id = ?",
       params: [at, at, connectorId],
@@ -216,6 +228,7 @@ export class FeedCapabilities {
         price: products.price,
         stock: products.stock,
         active: products.active,
+        sku: products.sku,
       })
       .from(products)
       .where(eq(products.source, source));
@@ -248,8 +261,16 @@ export class FeedCapabilities {
 
       if (!current) {
         statements.push({
+          // ON CONFLICT, not a plain INSERT: two imports of one connector running at the same
+          // time both read an empty catalogue, and without this both inserted, so sixty products
+          // became a hundred and twenty and both imports reported success. The unique index
+          // added in migration 5 is what this conflicts against; the loser updates.
           sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
+                DO UPDATE SET name = excluded.name, description = excluded.description,
+                              price = excluded.price, stock = excluded.stock,
+                              active = excluded.active, updated_at = excluded.updated_at`,
           params: [
             id,
             sku,
@@ -270,7 +291,7 @@ export class FeedCapabilities {
         continue;
       }
 
-      if (!changed(current, product, price, active)) {
+      if (!changed(current, product, price, active, sku)) {
         unchanged++;
         continue;
       }
@@ -436,12 +457,21 @@ function hostOf(url: string): string {
 }
 
 function changed(
-  current: { name: string; description: string | null; price: unknown; stock: number | null; active: number },
+  current: {
+    name: string;
+    description: string | null;
+    price: unknown;
+    stock: number | null;
+    active: number;
+    sku: string | null;
+  },
   product: FeedProduct,
   price: unknown,
   active: number,
+  sku: string | null,
 ): boolean {
   return (
+    (current.sku ?? null) !== sku ||
     current.name !== product.name ||
     (current.description ?? null) !== product.description ||
     JSON.stringify(current.price ?? null) !== JSON.stringify(price ?? null) ||
