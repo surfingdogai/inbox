@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Publish @surfingdog/sdk to npm.
 #
-#   NODE_AUTH_TOKEN=<your npm token> ./scripts/publish-sdk.sh          # publish
-#   NODE_AUTH_TOKEN=<your npm token> ./scripts/publish-sdk.sh --dry    # everything except the publish
+#   ~/surfingdog-inbox/scripts/publish-sdk.sh          # asks for the token, then publishes
+#   ~/surfingdog-inbox/scripts/publish-sdk.sh --dry    # everything except the publish
+#
+# NODE_AUTH_TOKEN may be set in the environment instead, for CI. Do not put it on the command
+# line: a placeholder in angle brackets is shell redirection, and a real one lands in history.
 #
 # The token is read from the environment and never written to disk: the .npmrc this script
 # creates contains the literal string ${NODE_AUTH_TOKEN}, which npm expands in memory, and the
@@ -17,7 +20,16 @@ say() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ -n "${NODE_AUTH_TOKEN:-}" ] || die "set NODE_AUTH_TOKEN to an npm token with publish rights, then run this again"
+# Prompt rather than demand it on the command line. A placeholder in angle brackets is shell
+# redirection, so `NODE_AUTH_TOKEN=<your token> ...` fails with "no such file or directory", and
+# a token typed on a command line is in the shell history and visible to `ps` besides.
+if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+  printf 'npm token (input hidden, from npmjs.com → Access Tokens): '
+  read -rs NODE_AUTH_TOKEN
+  echo
+  export NODE_AUTH_TOKEN
+fi
+[ -n "${NODE_AUTH_TOKEN:-}" ] || die "nothing entered; generate a token at npmjs.com under Access Tokens"
 
 cd "$ROOT"
 VERSION="$(node -p "require('$PKG/package.json').version")"
