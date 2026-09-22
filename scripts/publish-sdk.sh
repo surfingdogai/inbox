@@ -96,13 +96,25 @@ fi
 # login; without it npm answers 403 "Two-factor authentication ... is required to publish".
 # The code is asked for last, right before the publish, because it is only good for thirty
 # seconds and the tests take longer than that. A token in the environment does not need one.
+# One prompt takes either answer: a six-digit code from an authenticator, or a granular token
+# with "bypass two-factor" ticked, pasted straight in. Asking for the token as an environment
+# variable meant two commands that had to be typed in the same window, and they were not.
 OTP=""
 if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-  printf 'one-time code from your authenticator app (6 digits): '
-  read -r OTP
-  case "$OTP" in
-    [0-9][0-9][0-9][0-9][0-9][0-9]) ;;
-    *) die "that is not a six-digit code; nothing was published" ;;
+  printf 'six-digit code from your authenticator, OR paste an npm token with bypass-2FA: '
+  read -rs ANSWER
+  echo
+  case "$ANSWER" in
+    npm_*)
+      export NODE_AUTH_TOKEN="$ANSWER"
+      NPMRC="$PKG/.npmrc"
+      printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPMRC"
+      WHO="$(whoami_now)"
+      [ -n "$WHO" ] || die "npm does not accept that token; nothing was published"
+      ok "using the token, as $WHO"
+      ;;
+    [0-9][0-9][0-9][0-9][0-9][0-9]) OTP="$ANSWER" ;;
+    *) die "that is neither a six-digit code nor an npm_ token; nothing was published" ;;
   esac
 fi
 
