@@ -14,6 +14,7 @@ import {
   threadEntries,
 } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
+import { mergeSettings } from "../settings/merge";
 import { readSettings, SETTINGS_SCHEMA_VERSION, type Settings, settingsSchema } from "../settings/schema";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
@@ -348,10 +349,13 @@ export class Capabilities {
 
   async updateSettings(caller: Caller, input: T.UpdateSettingsInput): Promise<{ doc: Settings; version: number }> {
     requireBusiness(caller);
-    const parsed = settingsSchema.safeParse({ ...input.doc, schemaVersion: SETTINGS_SCHEMA_VERSION });
-    if (!parsed.success) throw fromZod(parsed.error, "doc");
     const now = nowOf(caller);
     const [row] = await this.db.orm.select({ version: settingsTable.version }).from(settingsTable).limit(1);
+    // What the caller sends is laid over what is there: a section left out keeps its values. The
+    // owner's AI, the Settings page and a script may each change one thing without knowing the rest.
+    const merged = mergeSettings(row ? await readSettings(this.db) : {}, input.doc) as Record<string, unknown>;
+    const parsed = settingsSchema.safeParse({ ...merged, schemaVersion: SETTINGS_SCHEMA_VERSION });
+    if (!parsed.success) throw fromZod(parsed.error, "doc");
     if (!row) {
       await this.db.client.query({
         sql: "INSERT INTO settings (id, schema_version, doc, version, updated_at) VALUES ('singleton', ?, ?, 1, ?)",

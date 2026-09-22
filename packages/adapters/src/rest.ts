@@ -297,7 +297,13 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
 
   app.put(
     "/settings",
-    describeRoute({ tags: ["owner"], summary: "Replace the settings document", responses: json("Settings") }),
+    describeRoute({
+      tags: ["owner"],
+      summary: "Change settings",
+      description:
+        "The document you send is merged over the current one: sections and keys left out keep their values.",
+      responses: json("Settings"),
+    }),
     validator("json", updateSettingsInput, hook),
     async (c) => c.json(await caps.updateSettings(c.get("caller"), c.req.valid("json"))),
   );

@@ -865,7 +865,8 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       "update_settings",
       {
         title: "Update settings",
-        description: "Replace the settings document. Send expected_version from get_settings.",
+        description:
+          "Change settings. Send only the sections and keys you want to change: anything left out keeps its value. Send expected_version from get_settings so a concurrent change is refused rather than overwritten.",
         inputSchema: updateSettingsInput,
         annotations: writes,
       },

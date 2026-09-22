@@ -59,6 +59,6 @@ Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work t
 | `transition_item` | Fire one of the events the item lists (`confirm`, `propose`, `decline`, `quote`, …); pass `expected_version` to avoid racing a colleague. |
 | `reply` | Send a reply to the customer, or an internal note with `internal: true`. |
 | `get_settings` | The settings document and its version. |
-| `update_settings` | Replace the settings document, with `expected_version`. |
+| `update_settings` | Change settings: send only the sections that change, with `expected_version`; the rest keeps its values. |
 
 The server's instructions to the model are short: never invent facts about availability or prices; read them first. Every refusal names the fields to fix.

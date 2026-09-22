@@ -231,13 +231,17 @@ from the gateway and not from a stranger.
 
 ```bash
 SECRET=$(openssl rand -base64 32 | tr -d '/+=' | head -c 40)
+# A settings write is a merge: send only what you change and everything else keeps its value.
+# Read the current version first; a write with a stale version is refused, never silently applied.
+VERSION=$(curl -s https://inbox.theirdomain.com/v1/owner/settings -H "authorization: Bearer $OWNER_KEY" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
 curl -s -X PUT https://inbox.theirdomain.com/v1/owner/settings \
   -H "authorization: Bearer $OWNER_KEY" -H 'content-type: application/json' \
-  -d "{\"expected_version\":1,\"doc\":{\"email\":{\"inboundSecret\":\"$SECRET\"}}}"
+  -d "{\"expected_version\":$VERSION,\"doc\":{\"email\":{\"inboundSecret\":\"$SECRET\"}}}"
 ```
 
-The answer contains the new `version`. If it says the version did not match, read the current
-settings first and use the version it gives you.
+The answer contains the new `version`. If it says the version did not match, someone changed the
+settings in between: read them again and use the version they give you.
 
 ### Then, a way for mail to reach it
 
