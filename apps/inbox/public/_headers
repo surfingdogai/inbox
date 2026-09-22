@@ -1,0 +1,9 @@
+# Cloudflare Workers serves static assets — the owner app's HTML among them — before the Worker
+# runs, so the headers the app sets in code never reach them there. This file is the same set for
+# those responses. Keep the two in step: apps/inbox/src/app.ts is the other half.
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=15552000
