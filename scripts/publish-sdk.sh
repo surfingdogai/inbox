@@ -20,16 +20,36 @@ say() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
-# Prompt rather than demand it on the command line. A placeholder in angle brackets is shell
-# redirection, so `NODE_AUTH_TOKEN=<your token> ...` fails with "no such file or directory", and
-# a token typed on a command line is in the shell history and visible to `ps` besides.
-if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+# Who we are, before anything slow runs. An `npm login` already in place is used as it stands;
+# otherwise the token is asked for. It is never taken on the command line: a placeholder in
+# angle brackets is shell redirection, so `NODE_AUTH_TOKEN=<your token> ...` fails before the
+# script starts, and a real one typed there lands in shell history and is visible to `ps`.
+NPMRC=""
+cleanup() { [ -n "$NPMRC" ] && rm -f "$NPMRC"; }
+trap cleanup EXIT INT TERM
+
+whoami_now() { (cd "$PKG" && npm whoami 2>/dev/null) || true; }
+
+WHO="$(whoami_now)"
+if [ -z "$WHO" ] && [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+  say "not signed in to npm."
   printf 'npm token (input hidden, from npmjs.com → Access Tokens): '
   read -rs NODE_AUTH_TOKEN
   echo
   export NODE_AUTH_TOKEN
 fi
-[ -n "${NODE_AUTH_TOKEN:-}" ] || die "nothing entered; generate a token at npmjs.com under Access Tokens"
+
+if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+  # The file holds the placeholder; npm expands it from the environment. The token never lands
+  # on disk, and the file goes on every exit path.
+  NPMRC="$PKG/.npmrc"
+  printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPMRC"
+  WHO="$(whoami_now)"
+fi
+
+# Fail on the credential now rather than after a minute of tests.
+[ -n "$WHO" ] || die "npm does not accept that token. Generate a fresh one at npmjs.com → Access Tokens (Classic → Automation, or Granular with publish rights on @surfingdog)."
+ok "signed in to npm as $WHO"
 
 cd "$ROOT"
 VERSION="$(node -p "require('$PKG/package.json').version")"
@@ -67,13 +87,7 @@ if [ "$DRY" = "--dry" ]; then
   exit 0
 fi
 
-# The token lives in the environment. This file holds the placeholder, not the value.
-NPMRC="$PKG/.npmrc"
-cleanup() { rm -f "$NPMRC"; }
-trap cleanup EXIT INT TERM
-printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPMRC"
-
-say "publishing $NAME@$VERSION…"
+say "publishing $NAME@$VERSION as $WHO…"
 (cd "$PKG" && npm publish --access public)
 ok "published: https://www.npmjs.com/package/$NAME"
 echo
