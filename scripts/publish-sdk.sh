@@ -92,8 +92,26 @@ if [ "$DRY" = "--dry" ]; then
   exit 0
 fi
 
+# An account with two-factor on must present a one-time code at publish time as well as at
+# login; without it npm answers 403 "Two-factor authentication ... is required to publish".
+# The code is asked for last, right before the publish, because it is only good for thirty
+# seconds and the tests take longer than that. A token in the environment does not need one.
+OTP=""
+if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+  printf 'one-time code from your authenticator app (6 digits): '
+  read -r OTP
+  case "$OTP" in
+    [0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+    *) die "that is not a six-digit code; nothing was published" ;;
+  esac
+fi
+
 say "publishing $NAME@$VERSION as ${WHO}..."
-(cd "$PKG" && npm publish --access public)
+if [ -n "$OTP" ]; then
+  (cd "$PKG" && npm publish --access public --otp="$OTP")
+else
+  (cd "$PKG" && npm publish --access public)
+fi
 ok "published: https://www.npmjs.com/package/$NAME"
 echo
 echo "Next: the webhooks docs page can lead with"
