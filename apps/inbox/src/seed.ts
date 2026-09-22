@@ -8,6 +8,7 @@ import {
   type Db,
   type JobRunner,
   PRESETS,
+  type ReceiptCapabilities,
   type RuleDefinition,
   schema,
   setFlags,
@@ -18,10 +19,19 @@ import { logMailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 
 /**
+ * What a seed needs beyond the database. `receipts` is the instance's receipt capability when the
+ * host has a secret key and a public URL; with it, the items a seed confirms earn real receipts,
+ * the way they would on a live instance. Without it they do not, and the jobs say so.
+ */
+export interface SeedDeps {
+  readonly receipts?: ReceiptCapabilities | undefined;
+}
+
+/**
  * A demo business so a fresh instance has something to show: Oficina Maré, a bicycle workshop in
  * Ericeira. Idempotent; never touches an instance that already has a business row.
  */
-export async function seedDemo(db: Db, now = Date.now()): Promise<{ seeded: boolean }> {
+export async function seedDemo(db: Db, now = Date.now(), _deps: SeedDeps = {}): Promise<{ seeded: boolean }> {
   const [existing] = await db.orm
     .select({ id: schema.business.id })
     .from(schema.business)
@@ -134,7 +144,11 @@ const EUR = (value: number) => ({ value, currency: "EUR" });
  * through the real write path with timestamps relative to now, and the rules run as they would
  * have, so timelines say who did what. Idempotent like seedDemo.
  */
-export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: boolean; items: number }> {
+export async function seedShowcase(
+  db: Db,
+  now = Date.now(),
+  deps: SeedDeps = {},
+): Promise<{ seeded: boolean; items: number }> {
   const [existing] = await db.orm
     .select({ id: schema.business.id })
     .from(schema.business)
@@ -327,7 +341,7 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
   });
 
   // ---- the items, oldest first, each followed by the jobs it caused (rules, notifications) ----
-  const runner = createRunner({ mailOut: logMailOut() });
+  const runner = createRunner({ mailOut: logMailOut(), receipts: deps.receipts });
   const owner = (t: number): Caller => ({
     actor: { kind: "owner", id: "owner", channel: "owner_ui" },
     tier: "verified_principal",
@@ -367,7 +381,7 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
       message: "Rear brake lever goes to the bar. Both wheels if you can.",
     });
     await settle(now - 8 * DAY);
-    await confirmIfNeeded(db, owner(now - 8 * DAY + 20 * MIN), r.view.item.id);
+    await confirmIfNeeded(db, deps, owner(now - 8 * DAY + 20 * MIN), r.view.item.id);
     await transitionItem(db, owner(now - 7 * DAY + 90 * MIN), { itemId: r.view.item.id, event: "complete" });
     await settle(now - 7 * DAY + 90 * MIN);
     count++;
@@ -530,7 +544,7 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
       message: "Brakes squeak at low speed. Please check the rear wheel, it wobbles a little.",
     });
     await settle(t);
-    await confirmIfNeeded(db, owner(t + 25 * MIN), r.view.item.id);
+    await confirmIfNeeded(db, deps, owner(t + 25 * MIN), r.view.item.id);
     count++;
   }
 
@@ -549,7 +563,7 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
       contact: { name: "Carla Mendes", email: "carla.mendes@example.com" },
     });
     await settle(t);
-    await confirmIfNeeded(db, owner(t + 30 * MIN), r.view.item.id);
+    await confirmIfNeeded(db, deps, owner(t + 30 * MIN), r.view.item.id);
     await transitionItem(db, person(now - DAY, "form", r.view.item.partyId), {
       itemId: r.view.item.id,
       event: "cancel",
@@ -596,7 +610,7 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
       message: note,
     });
     await settle(t);
-    await confirmIfNeeded(db, owner(t + 20 * MIN), r.view.item.id);
+    await confirmIfNeeded(db, deps, owner(t + 20 * MIN), r.view.item.id);
     count++;
   }
 
@@ -769,14 +783,18 @@ export async function seedShowcase(db: Db, now = Date.now()): Promise<{ seeded: 
   return { seeded: true, items: count };
 }
 
-async function confirmIfNeeded(db: Db, caller: Caller, itemId: string): Promise<void> {
+async function confirmIfNeeded(db: Db, deps: SeedDeps, caller: Caller, itemId: string): Promise<void> {
   const [row] = await db.orm
     .select({ state: schema.items.state })
     .from(schema.items)
     .where(eq(schema.items.id, itemId));
   if (row?.state === "requested") {
     await transitionItem(db, caller, { itemId, event: "confirm" });
-    await drain(createRunner({ mailOut: logMailOut() }), db, caller.now ? caller.now() : Date.now());
+    await drain(
+      createRunner({ mailOut: logMailOut(), receipts: deps.receipts }),
+      db,
+      caller.now ? caller.now() : Date.now(),
+    );
   }
 }
 
@@ -824,7 +842,7 @@ export function localTime(now: number, tz: string, days: number, hh: number, mm:
  * quotes for hosted setups and connectors requested, and anyone (or their agent) can message.
  * Idempotent like seedDemo. Opening hours are a working assumption until the owner edits them.
  */
-export async function seedSurfingDog(db: Db, now = Date.now()): Promise<{ seeded: boolean }> {
+export async function seedSurfingDog(db: Db, now = Date.now(), _deps: SeedDeps = {}): Promise<{ seeded: boolean }> {
   const [existing] = await db.orm
     .select({ id: schema.business.id })
     .from(schema.business)

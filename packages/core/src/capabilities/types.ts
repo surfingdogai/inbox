@@ -81,8 +81,20 @@ export const sendMessageInput = z.object({
 
 export const acknowledgeReceiptInput = z.object({
   item_id: z.string().min(1),
-  receipt: z.string().min(1).describe("The compact JWS the instance returned."),
-  counter_signature: z.string().min(1).describe("A compact JWS by the customer's agent over the receipt hash."),
+  counter_signature: z
+    .string()
+    .min(1)
+    .max(8_192)
+    .describe(
+      'A compact JWS by the customer\'s agent, EdDSA, header carrying its Ed25519 public `jwk`, payload `{"rcp": "<receipt id>", "iat": <unix seconds>}`.',
+    ),
+  receipt: z
+    .string()
+    .min(1)
+    .max(8_192)
+    .optional()
+    .describe("The receipt JWS being acknowledged, if you want the instance to check it is the one it holds."),
+  access_token: accessToken,
 });
 
 // ---- owner -----------------------------------------------------------------
@@ -127,6 +139,7 @@ export type RequestQuoteInput = z.infer<typeof requestQuoteInput>;
 export type CreateBookingInput = z.infer<typeof createBookingInput>;
 export type CreateOrderInput = z.infer<typeof createOrderInput>;
 export type GetItemStatusInput = z.infer<typeof getItemStatusInput>;
+export type AcknowledgeReceiptInput = z.infer<typeof acknowledgeReceiptInput>;
 export type CancelItemInput = z.infer<typeof cancelItemInput>;
 export type SendMessageInput = z.infer<typeof sendMessageInput>;
 export type ListItemsInput = z.infer<typeof listItemsInput>;

@@ -11,6 +11,7 @@ import {
   itemEvents,
   items,
   parties,
+  receipts,
   threadEntries,
   webhookDeliveries,
   webhooks,
@@ -295,3 +296,64 @@ async function expectUnique(write: Promise<unknown>): Promise<void> {
   for (let i = 0; i < 3 && e && e.code !== "unique" && e.cause; i++) e = e.cause as { code?: string; cause?: unknown };
   expect((e as DbError | undefined)?.code).toBe("unique");
 }
+
+/**
+ * Migration 6 (ADR-016): the view gains a receipt's issue and its acknowledgement as events. Both
+ * runtimes must accept the recreated view, and the ids must be what the fanout jobs are written
+ * under — the receipt id, and the receipt id with `:ack`.
+ */
+describe("migration 6 — receipt events in the view", () => {
+  it("lists a receipt as issued, and as acknowledged once it is", async () => {
+    const db = await fresh();
+    const now = Date.now();
+    const partyId = ulid();
+    const itemId = ulid();
+    const receiptId = ulid();
+    await db.orm.insert(parties).values({ id: partyId, kind: "person", contact: {}, createdAt: now, updatedAt: now });
+    await db.orm.insert(items).values({
+      id: itemId,
+      type: "booking",
+      state: "confirmed",
+      version: 2,
+      partyId,
+      channel: "rest",
+      payload: {},
+      flags: { sandbox: false, needsHuman: false, priority: 0 },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.orm.insert(receipts).values({
+      id: receiptId,
+      itemId,
+      kind: "confirmed",
+      jws: "a.b.c",
+      payload: { knd: "confirmed" },
+      kid: "kid",
+      subjectHash: "sub",
+      issuedAt: now + 1,
+    });
+    const before = await db.orm
+      .select()
+      .from(eventsV1)
+      .where(gt(eventsV1.createdAt, now - 1));
+    expect(before.map((e) => [e.id, e.type, e.actorKind, e.source])).toEqual([
+      [receiptId, "booking.receipt_issued", "system", "receipt"],
+    ]);
+
+    await db.orm.update(receipts).set({ ackJws: "d.e.f", ackAt: now + 2 });
+    const after = await db.orm
+      .select()
+      .from(eventsV1)
+      .where(gt(eventsV1.createdAt, now - 1));
+    expect(after.map((e) => [e.id, e.type, e.createdAt, e.actorKind, e.actorId, e.source]).sort()).toEqual(
+      [
+        [receiptId, "booking.receipt_issued", now + 1, "system", null, "receipt"],
+        [`${receiptId}:ack`, "booking.receipt_acknowledged", now + 2, "customer_agent", null, "receipt_ack"],
+      ].sort(),
+    );
+    // The item's own columns ride along, so a thin event still points at the right place.
+    expect(after.every((e) => e.itemId === itemId && e.itemType === "booking" && e.itemState === "confirmed")).toBe(
+      true,
+    );
+  });
+});

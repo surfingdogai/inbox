@@ -69,8 +69,8 @@ only hand edit in this path.
 
 ### A4. Secrets
 
-Generate the sealing key; do not invent one. It encrypts connector credentials and webhook
-secrets at rest.
+Generate the sealing key; do not invent one. It encrypts connector credentials, webhook
+secrets and the receipt-signing key at rest; without it the inbox issues no receipts.
 
 ```bash
 openssl rand -base64 32 | npx wrangler secret put INBOX_SECRET_KEY

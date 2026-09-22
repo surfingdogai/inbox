@@ -391,9 +391,11 @@ describe("end to end: from a booking to a signed request on someone else's serve
     await Promise.all(pending);
     await drain(inbox, db);
 
-    // 5. Two requests arrived on the other server, in the order things happened.
+    // 5. Three requests arrived on the other server, in the order things happened: the booking,
+    //    its confirmation, and the receipt the confirmation earned (ADR-016) — issued by a job after
+    //    the transition, so always third, and covered by `booking.*` like any other event.
     const types = received.map((r) => r.headers.get("sdi-event-type"));
-    expect(types).toEqual(["booking.create", "booking.confirm"]);
+    expect(types).toEqual(["booking.create", "booking.confirm", "booking.receipt_issued"]);
     expect(received.every((r) => r.url === RECEIVER)).toBe(true);
     expect(received[0]?.headers.get("sdi-delivery-attempt")).toBe("1");
     expect(received[0]?.headers.get("content-type")).toBe("application/json");
@@ -416,6 +418,11 @@ describe("end to end: from a booking to a signed request on someone else's serve
     }
     const confirmedEvent = JSON.parse(received[1]?.body ?? "{}") as { type: string; data: { state: string } };
     expect(confirmedEvent).toMatchObject({ type: "booking.confirm", data: { state: "confirmed" } });
+    // The receipt event is named by the receipt's own id, the one the owner sees on the item.
+    const detail = await app.request(`https://inbox.example.com/v1/owner/items/${itemId}`, { headers: auth });
+    const [receipt] = ((await detail.json()) as { receipts: { id: string; kind: string }[] }).receipts;
+    expect(receipt).toMatchObject({ kind: "confirmed" });
+    expect(received[2]?.headers.get("webhook-id")).toBe(receipt?.id);
 
     // A secret that is not the endpoint's is refused, so the check above meant something.
     await expect(
@@ -431,7 +438,7 @@ describe("end to end: from a booking to a signed request on someone else's serve
     const page = (await (
       await app.request("https://inbox.example.com/v1/owner/events?types=booking.*", { headers: auth })
     ).json()) as { events: { id: string; type: string }[] };
-    expect(page.events.map((e) => e.type)).toEqual(["booking.create", "booking.confirm"]);
+    expect(page.events.map((e) => e.type)).toEqual(["booking.create", "booking.confirm", "booking.receipt_issued"]);
     expect(page.events.map((e) => e.id)).toEqual(received.map((r) => r.headers.get("webhook-id")));
     expect(page.events[1]).toEqual(JSON.parse(received[1]?.body ?? "{}"));
 
@@ -440,6 +447,7 @@ describe("end to end: from a booking to a signed request on someone else's serve
       await app.request("https://inbox.example.com/v1/owner/deliveries", { headers: auth })
     ).json()) as { items: { status: string; last_status: number; event_type: string }[] };
     expect(deliveries.items.map((d) => [d.event_type, d.status, d.last_status])).toEqual([
+      ["booking.receipt_issued", "delivered", 204],
       ["booking.confirm", "delivered", 204],
       ["booking.create", "delivered", 204],
     ]);

@@ -9,3 +9,9 @@ or review service:
 
 each with JSON Schema (generated from the Zod schemas here) and test vectors in `vectors/`.
 The Go network service consumes the same vectors in its tests.
+
+`vectors/receipts.json` is the receipt file: fixed keys (the issuer is RFC 8037's published
+Ed25519 test key), the `sub` derivation, two receipts whose JWS any implementation must reproduce
+exactly, one valid acknowledgement, and the refusals with the error each must raise. Regenerate
+with `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`; `receipts-vectors.test.ts`
+there checks the file against the code on both runtimes.

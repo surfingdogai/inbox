@@ -1,6 +1,7 @@
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
+import type { ReceiptView } from "../receipts/capabilities";
 import type { items } from "../schema/tables";
 
 export type ItemRow = typeof items.$inferSelect;
@@ -12,6 +13,11 @@ export interface ItemView {
   readonly human: string;
   /** Who is asking; present for the business side only, never echoed back to customers. */
   readonly party?: PartyView | undefined;
+  /**
+   * The receipts this item has earned (ADR-016), oldest first. Present on the doors that read one
+   * item; absent from lists, which do not pay for the extra query.
+   */
+  readonly receipts?: readonly ReceiptView[] | undefined;
 }
 
 export interface PartyView {

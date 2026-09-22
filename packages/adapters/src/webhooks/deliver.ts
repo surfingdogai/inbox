@@ -352,6 +352,22 @@ export async function buildEvent(
       };
     }
   }
+  if (event.source === "receipt" || event.source === "receipt_ack") {
+    // The acknowledgement's event id is `<receipt id>:ack` (see migration 0005); the receipt
+    // itself is what a developer wants either way, with `acknowledged_at` telling the two apart.
+    const receiptId = event.source === "receipt_ack" ? event.id.replace(/:ack$/, "") : event.id;
+    const [r] = await db.orm.select().from(schema.receipts).where(eq(schema.receipts.id, receiptId));
+    if (r) {
+      data.receipt = {
+        id: r.id,
+        kind: r.kind,
+        jws: r.jws,
+        payload: r.payload,
+        issued_at: new Date(r.issuedAt).toISOString(),
+        acknowledged_at: r.ackAt === null ? null : new Date(r.ackAt).toISOString(),
+      };
+    }
+  }
   return envelope;
 }
 

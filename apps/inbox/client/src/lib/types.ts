@@ -13,6 +13,8 @@ import type {
   Money,
   Page,
   Profile,
+  ReceiptStatus,
+  ReceiptView,
   RuleDefinition,
   RuleView,
   Settings,
@@ -42,6 +44,8 @@ export type {
   Money,
   Page,
   Profile,
+  ReceiptStatus,
+  ReceiptView,
   RuleDefinition,
   RuleView,
   Settings,
@@ -51,6 +55,9 @@ export type {
   WebhookWithSecret,
   Weekly,
 };
+
+/** One receipt as the API returns it on an item. */
+export type Receipt = ReceiptView;
 
 export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
 export type ThreadEntry = ItemDetail["thread"][number];

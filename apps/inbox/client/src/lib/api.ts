@@ -20,6 +20,7 @@ import type {
   ProductRow,
   Profile,
   ProfileBody,
+  ReceiptStatus,
   ReplyBody,
   RuleBody,
   RuleDefinition,
@@ -168,6 +169,7 @@ export const api = {
   reply: (id: string, body: ReplyBody) =>
     call<TransitionResult | ItemView>("POST", `${item(id)}/replies`, { body, idempotent: true }),
   getSettings: () => call<SettingsDoc>("GET", "/v1/owner/settings"),
+  receiptStatus: () => call<ReceiptStatus>("GET", "/v1/owner/receipts"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
 
   // ---- setup: who the business is, what it offers, when it is open, what runs on its own ----

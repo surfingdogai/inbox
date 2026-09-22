@@ -642,4 +642,37 @@ SELECT
   'message',
   'thread_entry'
 FROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"
-WHERE t."direction" = 'in'`);
+WHERE t."direction" = 'in'
+UNION ALL
+SELECT
+  r."id",
+  i."type" || '.receipt_issued',
+  r."issued_at",
+  r."item_id",
+  i."type",
+  i."state",
+  i."version",
+  i."party_id",
+  COALESCE(i."sandbox", 0),
+  'system',
+  NULL,
+  'receipt_issued',
+  'receipt'
+FROM "receipts" r JOIN "items" i ON i."id" = r."item_id"
+UNION ALL
+SELECT
+  r."id" || ':ack',
+  i."type" || '.receipt_acknowledged',
+  r."ack_at",
+  r."item_id",
+  i."type",
+  i."state",
+  i."version",
+  i."party_id",
+  COALESCE(i."sandbox", 0),
+  'customer_agent',
+  NULL,
+  'receipt_acknowledged',
+  'receipt_ack'
+FROM "receipts" r JOIN "items" i ON i."id" = r."item_id"
+WHERE r."ack_at" IS NOT NULL`);

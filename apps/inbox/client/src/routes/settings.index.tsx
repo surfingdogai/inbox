@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
-import { qk, useProfile, useSaveProfile, useSaveSettings, useSettings } from "../lib/queries";
+import { qk, useProfile, useReceiptStatus, useSaveProfile, useSaveSettings, useSettings } from "../lib/queries";
 import type { Profile, Settings, SettingsDoc } from "../lib/types";
 
 export const Route = createFileRoute("/settings/")({
@@ -462,6 +462,11 @@ function SettingsForm({
       </section>
 
       <section className="card glass">
+        <h3 className="sec">Receipts</h3>
+        <ReceiptsStatus />
+      </section>
+
+      <section className="card glass">
         <h3 className="sec">Test mode</h3>
         <Switch checked={form.testMode} onChange={(v) => set("testMode", v)}>
           Test mode
@@ -479,5 +484,35 @@ function SettingsForm({
         <span className="hint">Version {initial.version}</span>
       </div>
     </form>
+  );
+}
+
+/**
+ * Whether this instance signs receipts, and what it has signed. Nothing here is a setting: the two
+ * values that gate it are environment variables, and this says which one is missing.
+ */
+function ReceiptsStatus() {
+  const q = useReceiptStatus();
+  if (q.isPending) return <div className="hint">Checking…</div>;
+  if (q.isError) return <div className="hint">Could not read the receipt status.</div>;
+  const r = q.data;
+  return (
+    <div className="stack">
+      {r.ready ? (
+        <div className="hint">
+          Issuing receipts as <span className="mono">{r.issuer}</span>. A booking gets one when it is confirmed, an
+          order when it is paid; the customer's agent can counter-sign it.
+        </div>
+      ) : (
+        <div className="hint">Not issuing receipts. {r.reason}</div>
+      )}
+      <div className="rowx">
+        <span className="pill pill-xs">{r.issued} issued</span>
+        <span className="pill pill-xs">{r.acknowledged} counter-signed</span>
+        <span className="pill pill-xs">
+          {r.keys} signing key{r.keys === 1 ? "" : "s"}
+        </span>
+      </div>
+    </div>
   );
 }

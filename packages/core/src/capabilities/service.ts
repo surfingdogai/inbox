@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
+import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
   business,
   itemEvents,
@@ -75,6 +76,9 @@ export class Capabilities {
   /** Product feeds: the one integration that needs no credentials at all (ADR-015 §7.3). */
   readonly feeds: FeedCapabilities;
 
+  /** Signed receipts and their acknowledgements (ADR-016). Issued by a job, read by every door. */
+  readonly receipts: ReceiptCapabilities;
+
   /**
    * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
    * `INBOX_SECRET_KEY`: everything else works, and anything that would store a secret refuses
@@ -101,6 +105,7 @@ export class Capabilities {
     this.feeds = new FeedCapabilities(db);
     this.secrets = secrets;
     this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
+    this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
   }
 
   // ---- public ----------------------------------------------------------------
@@ -182,7 +187,8 @@ export class Capabilities {
 
   async getItemStatus(caller: Caller, input: T.GetItemStatusInput): Promise<ItemView> {
     const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
-    return viewFor(rowToItem(row), caller.actor.kind);
+    const receipts = await this.receipts.forItem(row.id);
+    return { ...viewFor(rowToItem(row), caller.actor.kind), receipts };
   }
 
   cancelItem(caller: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
@@ -214,8 +220,14 @@ export class Capabilities {
     return viewFor(item, caller.actor.kind);
   }
 
-  acknowledgeReceipt(): Promise<never> {
-    throw new WriteError("internal", "receipts arrive in the next release");
+  /**
+   * The customer's agent counter-signs a receipt it was handed (ADR-016). Ownership of the item is
+   * proved the same way as reading it — the party on the caller, or the access token the creator
+   * received — and the acknowledgement itself is checked by the receipt capability.
+   */
+  async acknowledgeReceipt(caller: Caller, input: T.AcknowledgeReceiptInput): Promise<ReceiptView> {
+    const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
+    return this.receipts.acknowledge(row, input.counter_signature, { now: nowOf(caller), receipt: input.receipt });
   }
 
   // ---- owner -----------------------------------------------------------------
@@ -252,12 +264,18 @@ export class Capabilities {
     };
   }
 
+  /** For the Settings page: can this instance issue receipts, and how many has it. */
+  getReceiptStatus(caller: Caller): Promise<ReceiptStatus> {
+    requireBusiness(caller);
+    return this.receipts.status();
+  }
+
   async getItem(caller: Caller, input: T.GetItemInput): Promise<ItemDetail> {
     requireBusiness(caller);
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
-    const [events, thread, partyViews] = await Promise.all([
+    const [events, thread, partyViews, receipts] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
         .select()
@@ -265,9 +283,11 @@ export class Capabilities {
         .where(eq(threadEntries.itemId, item.id))
         .orderBy(threadEntries.createdAt),
       this.partyViews([row.partyId]),
+      this.receipts.forItem(item.id),
     ]);
     return {
       ...viewFor(item, caller.actor.kind, partyViews.get(row.partyId)),
+      receipts,
       events: events.map((e) => ({
         seq: e.seq,
         event: e.event,

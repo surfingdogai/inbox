@@ -45,9 +45,9 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `HOST` | `0.0.0.0` | Interface to bind. |
 | `INBOX_DB` | `./data/inbox.db` | The SQLite file. Created, and migrated, at boot. |
 | `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
-| `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest and the links in emails. |
+| `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest, the links in emails and the `iss` of every [receipt](/docs/receipts/), which a background job cannot derive from a request — so set it if you want receipts. |
 | `INBOX_OWNER_EMAIL` | unset | Comma-separated addresses allowed to create the first account by email link. Without it, the first sign-in needs an owner API key. |
-| `INBOX_SECRET_KEY` | unset | Seals connector credentials and webhook secrets (AES-256-GCM). One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, and refuses to store a secret rather than store it in the clear. |
+| `INBOX_SECRET_KEY` | unset | Seals connector credentials, webhook secrets and the receipt-signing key (AES-256-GCM), and is the source of the pseudonym pepper in receipts. One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, refuses to store a secret rather than store it in the clear, and issues no [receipts](/docs/receipts/). |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | unset | Real email through Cloudflare Email Service (sign-in links, notifications), from an address on a domain onboarded there. `MAIL_FROM_NAME` is optional. |
 | `RESEND_API_KEY` | unset | Real email through Resend instead. With neither, mail is printed to the console. |
 
