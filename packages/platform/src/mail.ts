@@ -17,10 +17,17 @@ export function logMailOut(log: (line: string) => void = () => {}): LogMailOut {
   };
 }
 
-/** Cloudflare Email Service `send_email` binding (structural type; `env.EMAIL` satisfies it). */
+/**
+ * Cloudflare Email Service `send_email` binding (structural type; `env.EMAIL` satisfies it).
+ *
+ * The shape is workerd's own `EmailAddress`: `{ email, name }`, name required, or a plain string.
+ * It is NOT the REST API's `{ address, name }` — this type once said `address`, it compiled, and
+ * every send through the binding would have failed, because a hand-written structural type checks
+ * nothing against the runtime. The test in mail.test.ts pins it to the runtime shape.
+ */
 export interface CloudflareEmailBinding {
   send(message: {
-    from: { address: string; name?: string } | string;
+    from: { email: string; name: string } | string;
     to: string | string[];
     replyTo?: string;
     subject: string;
@@ -34,7 +41,7 @@ export function cloudflareEmailMailOut(binding: CloudflareEmailBinding): MailOut
   return {
     async send(mail) {
       const r = await binding.send({
-        from: { address: mail.from.address, ...(mail.from.name ? { name: mail.from.name } : {}) },
+        from: mail.from.name ? { email: mail.from.address, name: mail.from.name } : mail.from.address,
         to: [...mail.to],
         ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
         subject: mail.subject,
@@ -92,7 +99,10 @@ export function cloudflareEmailRestMailOut(
           body: JSON.stringify({
             from: name ? { address: opts.from.address, name } : { address: opts.from.address },
             to: mail.to.length === 1 ? mail.to[0] : [...mail.to],
-            ...(replyTo ? { replyTo } : {}),
+            // The REST API's field is reply_to. The binding's is replyTo; the two are not
+            // interchangeable, and an unknown field is dropped without an error, which is how a
+            // customer's reply ends up at the sender instead of the business.
+            ...(replyTo ? { reply_to: replyTo } : {}),
             subject: mail.subject,
             text: mail.text,
             ...(mail.html ? { html: mail.html } : {}),

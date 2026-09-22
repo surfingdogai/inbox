@@ -31,3 +31,22 @@ describe("app", () => {
     expect(await res.json()).toMatchObject({ error: "not_found" });
   });
 });
+
+describe("security headers", () => {
+  // Every response carries them — the owner app, the API and the discovery documents — and none of
+  // the ones that would break a cross-origin load or the owner MCP's OAuth window.
+  it("are on the API, the manifest and the owner routes alike", async () => {
+    const app = createApp({ db: await freshDb() });
+    for (const path of ["/healthz", MANIFEST_PATH, "/v1/business", "/v1/owner/items", "/openapi.json"]) {
+      const res = await app.request(`https://inbox.example.com${path}`);
+      const h = res.headers;
+      expect(h.get("x-frame-options"), path).toBe("DENY");
+      expect(h.get("content-security-policy"), path).toBe("frame-ancestors 'none'");
+      expect(h.get("x-content-type-options"), path).toBe("nosniff");
+      expect(h.get("referrer-policy"), path).toBe("strict-origin-when-cross-origin");
+      expect(h.get("strict-transport-security"), path).toBe("max-age=15552000");
+      expect(h.get("cross-origin-resource-policy"), path).toBeNull();
+      expect(h.get("cross-origin-opener-policy"), path).toBeNull();
+    }
+  });
+});

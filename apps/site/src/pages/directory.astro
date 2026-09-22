@@ -26,7 +26,7 @@ import Layout from "../layouts/Layout.astro";
           <h2 class="h-section" id="listed-h">Instances that answer</h2>
           <p class="lede">
             An agent can reach any of these directly. The manifest link is the machine-readable version of the same
-            entry.
+            entry. The order follows kept promises, <a class="link" href="/network/#ranking">by rules anyone can read</a>.
           </p>
         </div>
       </div>
@@ -44,6 +44,7 @@ import Layout from "../layouts/Layout.astro";
           <div class="meta">
             <span class="pill pill-xs" data-online></span>
             <span class="s" data-takes></span>
+            <span class="s" data-receipts></span>
           </div>
           <div class="links">
             <a class="link" data-site rel="noopener">Their page</a>
@@ -178,6 +179,13 @@ import Layout from "../layouts/Layout.astro";
         set("[data-online]", online ? "Answering" : "Quiet");
         const types = Array.isArray(b.item_types) ? (b.item_types as string[]) : [];
         set("[data-takes]", types.length ? `Takes ${types.map((t) => WORDS[t] ?? t).join(", ")}` : "");
+        const receipts = (b.receipts ?? {}) as { issued?: number; acknowledged?: number };
+        const issued = Number(receipts.issued ?? 0);
+        const acked = Number(receipts.acknowledged ?? 0);
+        set(
+          "[data-receipts]",
+          issued > 0 ? `${issued} receipt${issued === 1 ? "" : "s"}${acked > 0 ? `, ${acked} counter-signed` : ""}` : "",
+        );
         const site = node.querySelector<HTMLAnchorElement>("[data-site]");
         if (site) site.href = `https://${domain}`;
         const manifest = node.querySelector<HTMLAnchorElement>("[data-manifest]");

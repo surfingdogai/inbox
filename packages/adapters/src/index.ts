@@ -1,13 +1,14 @@
 import type { Capabilities, Db } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest } from "./auth";
 import { ingestEmail } from "./email";
+import { clientAddress, consume, isCreateRoute, type LimitClass, mcpCreates } from "./limits";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin } from "./origin";
-import { forbidden, unauthorized } from "./problem";
+import { forbidden, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
@@ -15,6 +16,7 @@ import { authRoutes } from "./session";
 export * from "./auth";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./limits";
 export * from "./mcp";
 export * from "./network";
 export * from "./oauth";
@@ -57,6 +59,28 @@ function sameOrigin(request: Request, baseUrl: string | undefined): boolean {
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
 export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   const sandbox = deps.sandbox ?? (async () => false);
+  const clock = () => (deps.now ? deps.now() : Date.now());
+
+  /**
+   * Takes a token from each class in turn; the first refusal answers 429 (limits.ts). A caller with
+   * a verified key is counted by its key, so an integration posting for many visitors from one
+   * server is not lumped in with everyone else behind that address; everyone else, by address.
+   * The wording is for anyone: it can reach a visitor through a website the business runs.
+   */
+  const limited = async (
+    c: Context,
+    classes: readonly LimitClass[],
+    keyId?: string | undefined,
+  ): Promise<Response | null> => {
+    const who = keyId ? `key:${keyId}` : `ip:${clientAddress(c.req.raw)}`;
+    for (const cls of classes) {
+      const v = await consume(deps.db, cls, who, clock());
+      if (!v.allowed) {
+        return tooManyRequests(c, "Too many requests right now; wait a few minutes and try again.", v.retryAfterSec);
+      }
+    }
+    return null;
+  };
 
   app.use("/v1/*", async (c, next) => {
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() });
@@ -67,7 +91,37 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     ) {
       return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
     }
+    // Writes from anyone but the verified owner are limited. The inbound mail webhook is not: it is
+    // authenticated by its own secret, and every message arrives from the one gateway address.
+    if (
+      caller.auth?.kind !== "owner" &&
+      !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
+      c.req.path !== "/v1/email/inbound"
+    ) {
+      const refused = await limited(
+        c,
+        isCreateRoute(c.req.method, c.req.path) ? ["public", "create"] : ["public"],
+        caller.auth?.id,
+      );
+      if (refused) return refused;
+    }
     c.set("caller", caller);
+    await next();
+  });
+  // Sign-in links go to the owner's mailbox; nobody gets to fill it.
+  app.use("/auth/*", async (c, next) => {
+    if (c.req.method === "POST") {
+      const refused = await limited(c, ["auth"]);
+      if (refused) return refused;
+    }
+    await next();
+  });
+  // Client registration and token requests write rows; they get the flood guard.
+  app.use("/oauth/*", async (c, next) => {
+    if (c.req.method === "POST") {
+      const refused = await limited(c, ["public"]);
+      if (refused) return refused;
+    }
     await next();
   });
   app.route(
@@ -160,6 +214,15 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   });
   app.all("/mcp", async (c) => {
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_public", sandbox: await sandbox() });
+    // Every tool call is a POST; the ones that create an item also take a create token.
+    if (caller.auth?.kind !== "owner" && c.req.method === "POST") {
+      const refused = await limited(
+        c,
+        (await mcpCreates(c.req.raw)) ? ["public", "create"] : ["public"],
+        caller.auth?.id,
+      );
+      if (refused) return refused;
+    }
     return mcpPublic.fetch(c.req.raw, { authInfo: authInfo(caller) });
   });
 }

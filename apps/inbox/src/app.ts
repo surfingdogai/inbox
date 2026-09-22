@@ -29,6 +29,7 @@ import {
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut } from "@surfingdog/platform";
 import { Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 
 export interface AppDeps {
   readonly db: Db;
@@ -103,6 +104,31 @@ export function createInbox(deps: AppDeps): Inbox {
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
     .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }));
   const background = deps.background ?? ((work) => void work.catch(() => {}));
+
+  // Security headers on every response, owner app and API alike, set here rather than in a proxy
+  // so every self-hoster gets them whatever sits in front. Each one is chosen, not defaulted: Hono's
+  // defaults include Cross-Origin-Resource-Policy: same-origin, which blocks legitimate cross-origin
+  // loads, and Cross-Origin-Opener-Policy, which can break the OAuth window Claude and ChatGPT open
+  // to connect to the owner MCP. The CSP carries only frame-ancestors, so it forbids framing — the
+  // clickjacking defence for the owner app — and cannot break a single script or style.
+  app.use(
+    "*",
+    secureHeaders({
+      strictTransportSecurity: "max-age=15552000",
+      xFrameOptions: "DENY",
+      contentSecurityPolicy: { frameAncestors: ["'none'"] },
+      xContentTypeOptions: "nosniff",
+      referrerPolicy: "strict-origin-when-cross-origin",
+      crossOriginResourcePolicy: false,
+      crossOriginOpenerPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      originAgentCluster: false,
+      xDnsPrefetchControl: false,
+      xDownloadOptions: false,
+      xPermittedCrossDomainPolicies: false,
+      xXssProtection: "0",
+    }),
+  );
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {

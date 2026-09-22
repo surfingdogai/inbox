@@ -207,30 +207,48 @@ const never = [
             Listing by verified domain, ranking by kept promises. Neither can be bought.
           </p>
         </div>
-        <span class="pill">Coming</span>
+        <span class="pill">Live</span>
       </div>
 
       <div class="says">
         <p>
-          Every entry will be a real business at a domain it proved it controls, so the directory
-          cannot fill up with listings nobody stands behind.
+          Every entry is a real business at a domain it proved it controls, so the directory cannot
+          fill up with listings nobody stands behind.
         </p>
         <p>
-          Ranking will follow what a business actually did: confirmations honoured, quotes answered,
-          orders fulfilled, receipts issued, and how quickly someone replies. Not advertising spend,
-          and not the number of reviews collected.
-        </p>
-        <p>
-          Agents will find businesses through the directory and prefer the ones whose doors work and
-          whose record is clean. A good small business gets found the same way a large one does,
-          because the thing being measured is the same in both cases.
-        </p>
-        <p>
-          And because reviews are two-sided and revealed together, there is nothing to retaliate
-          against. Honest feedback costs nothing to give, so the businesses that issue receipts and
-          answer their reviews will sit above the ones that do not.
+          The order follows the receipts a business issued: signed records that a booking was
+          confirmed or an order was paid. Nothing else moves a business up. Not advertising spend,
+          not how long it has been listed, not the amounts on its receipts, and not anything it
+          writes about itself.
         </p>
       </div>
+
+      <ol class="rules" aria-label="What decides the order, most important first">
+        <li><b>Receipts issued.</b> The whole of the score; everything below adjusts it.</li>
+        <li><b>Counter-signed by the customer.</b> A receipt both sides hold counts double one the business holds alone.</li>
+        <li><b>Age.</b> A receipt counts half after 180 days, and not at all after 540.</li>
+        <li><b>One customer, one voice.</b> A single customer can add at most three receipts' worth.</li>
+        <li><b>Scale.</b> The total is log-scaled: a thousand receipts rank above fifty without burying them.</li>
+        <li><b>Answering.</b> An instance that has not reported in for a day counts half until it does.</li>
+      </ol>
+
+      <div class="says">
+        <p>
+          A business with no receipts yet is still listed and still found by name, category and
+          place. It sorts last because there is no evidence yet, not as a penalty, and no business
+          can push another one down. A good small business gets found the same way a large one
+          does, because the thing being measured is the same in both cases.
+        </p>
+        <p>
+          Reviews are not part of the order yet. When they are, they will be two-sided and revealed
+          together, so there is nothing to retaliate against, and this list will say so before
+          anything changes.
+        </p>
+      </div>
+
+      <p class="more">
+        <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">The same rules, machine-readable</a>
+      </p>
     </div>
   </section>
 
@@ -322,6 +340,17 @@ const never = [
   .says {
     display: grid;
     gap: var(--sp-4);
+  }
+  .rules {
+    margin: var(--sp-5) 0;
+    padding-left: 1.4em;
+    display: grid;
+    gap: var(--sp-2);
+    color: var(--ink-2);
+  }
+  .rules b {
+    color: var(--ink);
+    font-weight: 600;
   }
   .says.top {
     margin-top: var(--sp-6);

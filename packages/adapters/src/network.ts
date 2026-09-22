@@ -8,6 +8,7 @@ import {
   schema,
 } from "@surfingdog/core";
 import { eq } from "drizzle-orm";
+import { pruneRateLimits } from "./limits";
 import { isPublicHost } from "./safe-fetch";
 import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
 
@@ -96,6 +97,8 @@ export function networkPingHandler(deps: NetworkDeps): JobHandler {
     // The hourly tick is the instance's only housekeeping: an unbounded delivery log is how a
     // database reaches its size cap (ADR-015).
     await pruneWebhookDeliveries(db, webhookSettings(settings).retainDeliveryDays * 86_400_000, now);
+    // Rate-limit buckets untouched for a day are full again; keeping them is only a table that grows.
+    await pruneRateLimits(db, now);
     if (!settings.network.join) return { note: "not joined; enable network.join in Settings" };
     const base = deps.baseUrl ?? settings.notifications.appUrl;
     if (!base) return { note: "no public URL; set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };

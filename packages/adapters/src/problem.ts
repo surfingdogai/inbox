@@ -84,3 +84,18 @@ export function forbidden(c: Context, detail: string): Response {
   };
   return c.json(p, 403, { "Content-Type": "application/problem+json" });
 }
+
+/** 429 with Retry-After: the caller is told exactly how long to wait, in seconds. */
+export function tooManyRequests(c: Context, detail: string, retryAfterSec: number): Response {
+  const p: Problem = {
+    type: "https://surfingdog.ai/problems/too_many_requests",
+    title: "Too many requests",
+    status: 429,
+    detail,
+    code: "too_many_requests",
+  };
+  return c.json(p, 429, {
+    "Content-Type": "application/problem+json",
+    "Retry-After": String(Math.max(1, Math.ceil(retryAfterSec))),
+  });
+}
