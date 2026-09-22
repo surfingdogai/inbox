@@ -1,0 +1,106 @@
+---
+// The privacy policy. Written from what the software actually does, and checked against the
+// code: what a self-hosted instance sends us (a version string and four counts, only when the
+// owner turns it on), what the hosted service would hold, and what the site itself collects.
+// It is a draft for a lawyer to review before the hosted service opens, and it says so.
+import Layout from "../layouts/Layout.astro";
+
+const UPDATED = "22 September 2026";
+---
+
+<Layout
+  title="Privacy · Surfing Dog"
+  description="What Surfing Dog knows about you, which for a self-hosted inbox is almost nothing, and what changes when we host it for you."
+>
+  <section class="wrap wrap-read section is-head" id="privacy" aria-labelledby="privacy-h">
+    <p class="eyebrow">Privacy</p>
+    <h1 class="h-page" id="privacy-h">What we know about you</h1>
+    <p class="lede">
+      Surfing Dog Inbox runs on your computers, not ours. So for most people reading this, the answer is almost
+      nothing, and this page exists to say exactly how much almost nothing is.
+    </p>
+    <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: privacy@surfingdog.ai</p>
+  </section>
+
+  <section class="section" aria-labelledby="self-h">
+    <div class="wrap wrap-read prose">
+      <h2 class="h-section" id="self-h">If you run the inbox yourself</h2>
+      <p>
+        Your customers' messages, bookings and orders are in your database, on your machine. We cannot read them, we
+        cannot recover them, and we never receive them. That is not a promise about our intentions; it is a fact about
+        where the software runs. The code is open, so you can check it.
+      </p>
+      <p>
+        One thing does leave your instance, and only if you switch it on. In Settings, <b>Network</b> is off by
+        default. When it is on, your instance registers its domain once and then, every hour, sends its software
+        version, which runtime it is on, and how many bookings, orders, quotes and messages it created in the last
+        24 hours. Four numbers. No names, no addresses, no message text, no customer data of any kind.
+      </p>
+      <p>
+        Turn it off and that stops. Point <code>network.url</code> at a directory you run instead, and it never
+        reaches us at all.
+      </p>
+
+      <h2 class="h-section">If we host it for you</h2>
+      <p>
+        Hosted tenancy is not open yet. When it opens, the shape is this. For the data your customers send you, you
+        are the controller and we are your processor: we hold it to run the service for you, on our own servers in
+        the European Union, and we do not use it for anything else. For your own account, your address, your billing
+        and how you use the service, we are the controller.
+      </p>
+      <p>
+        You will be able to export everything as a file and delete everything, from the software, without asking us.
+        A written processing agreement will be part of the terms before the first customer is onboarded.
+      </p>
+
+      <h2 class="h-section">This website</h2>
+      <p>
+        No analytics, no advertising, no tracking pixels, no third-party scripts, no cookie banner, because there is
+        nothing to consent to. Our servers keep ordinary web logs, including your address and the page you asked for,
+        for a short period, to keep the site up and to stop abuse. Cloudflare sits in front of the site and keeps its
+        own logs for the same reason.
+      </p>
+      <p>
+        If you leave your address on the waitlist, or write to us, we keep that message and that address so we can
+        answer, and for no other purpose. If you post on the requests board, what you write is public, and the
+        address you give is used only to tell you when the thing you asked for ships.
+      </p>
+
+      <h2 class="h-section">Your rights</h2>
+      <p>
+        Under the General Data Protection Regulation you can ask for a copy of what we hold about you, ask us to
+        correct it, ask us to delete it, object to what we are doing with it, and complain to a supervisory authority.
+        In Portugal that is the <a class="link" href="https://www.cnpd.pt/" rel="noopener">CNPD</a>. Write to
+        privacy@surfingdog.ai and we will answer within a month.
+      </p>
+      <p>
+        Where we rely on a legitimate interest rather than your consent, it is to keep the service running and to
+        prevent abuse, and you can object to it.
+      </p>
+
+      <h2 class="h-section">The network and reviews</h2>
+      <p>
+        The directory and its two-sided reviews are not built yet, and nothing described here is live. When they are,
+        they will have their own notice, written before anything is collected, and an assessment of the risks done
+        first. Reviews will be tied to a real transaction, reputation will be advisory rather than a decision made
+        about anyone automatically, and identifiers will be pseudonymous. If any of that changes, the change will be
+        on this page before the feature is on.
+      </p>
+
+      <h2 class="h-section">Changes</h2>
+      <p>
+        This page has a date at the top and a history in public: the site is an open repository, so every edit to this
+        text is a commit anyone can read. Material changes will be announced on the blog rather than slipped in.
+      </p>
+
+      <div class="glass card" style="margin-top: var(--sp-6)">
+        <h3 class="h-card">A note on where this stands</h3>
+        <p class="card-text">
+          This is an honest description of what the software does today, written by the people who built it and
+          checked against the code. It has not yet been reviewed by a lawyer. That review happens before the hosted
+          service opens to anyone but us, and this notice comes off the page when it has.
+        </p>
+      </div>
+    </div>
+  </section>
+</Layout>
