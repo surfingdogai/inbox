@@ -1,256 +1,139 @@
 ---
 // apps/site/src/pages/network.astro
-// Why a directory of inboxes matters: how a business joins, how receipts become reputation on
-// both sides, and what the network is never allowed to see. LiveMetrics carries the live numbers
-// so the fetch, the fallback and the refresh live in one place.
+// The network, explained for a busy owner or an agent developer in about a minute: what it is,
+// how joining works, how reputation will work (decided, not built yet), what leaves an inbox, and
+// that anyone can run one. LiveMetrics carries the live numbers, so the fetch, the fallback and the
+// refresh live in one place. Its note says what an instance reports "is set out below", so it has
+// to sit above the "What leaves your inbox" section.
 import LiveMetrics from "../components/LiveMetrics.astro";
 import Layout from "../layouts/Layout.astro";
 
 const contents = [
-  { href: "#directory", label: "The directory" },
-  { href: "#receipts", label: "Receipts, not reviews" },
-  { href: "#clients", label: "Good clients" },
-  { href: "#ranking", label: "How it is ordered" },
-  { href: "#privacy", label: "What it never sees" },
+  { href: "#how", label: "How it works" },
+  { href: "#reputation", label: "Reputation" },
+  { href: "#network", label: "Live numbers" },
+  { href: "#shared", label: "What leaves your inbox" },
+  { href: "#open", label: "Launch your own" },
   { href: "#join", label: "Join" },
 ];
 
-const signals = [
+const steps = [
   {
-    title: "A customer you know",
-    text: "Their record is clean and their agent is verified. A rule confirms the booking the moment it arrives, at any hour.",
-    tint: "success",
+    title: "Switch it on",
+    text: "Flip the switch in your inbox's Settings. The network checks the address is really yours by reading your inbox's public profile there. Then you're listed.",
   },
   {
-    title: "A first-timer",
-    text: "No record yet, and nothing against them. A rule asks for a deposit, or holds the slot and sends the request to you.",
-    tint: "warning",
+    title: "Get found by agents",
+    text: "Agents search the directory by what you do, where you are, and what you take: bookings, orders, quotes or messages. Your listing shows the languages you answer in and how to reach you.",
   },
   {
-    title: "Anything unusual",
-    text: "A record with late cancellations behind it, or a request that does not fit your limits. It goes to a person, with the signal shown beside it.",
-    tint: "message",
+    title: "Build a record",
+    text: "When a booking is confirmed or an order is paid, your inbox makes a receipt: a signed note of that promise. Each one goes to the network and is counted on your listing. Reputation will be built on them.",
   },
 ];
 
-const never = [
+const principles = [
   {
-    k: "Stays in your instance",
-    v: "Conversations, your customers' names, email addresses, phone numbers and postal addresses, what was ordered, payment references, and every event in an item's history.",
+    title: "For businesses",
+    text: "A promise will count when it's kept (the booking happened, the order arrived), and a broken one will count too. Businesses will be ranked by how reliably they keep them. A small shop that always delivers can rank above a big one that sometimes doesn't.",
   },
   {
-    k: "Reaches the network",
-    v: "Your domain, the version and runtime the instance reports, hourly counts in four buckets, and every receipt it issues, with the customer agent's counter-signature when there is one. A receipt says which business, its reference for the booking or order, what kind of promise, when, a customer code the network cannot turn back into a person, and, when the booking or order states them, the amount and how it was paid. Later: reviews.",
+    title: "For customers",
+    text: "Each person will have one reputation, and it goes with them whichever agent they use. No sign-up: the first time they book, the inbox will get their key (a secret that proves it's them) from the network and pass it to their agent. Each business will reward good customers its own way, like instant confirmation or no deposit.",
   },
   {
-    k: "How long it is kept",
-    v: "Hourly counts for 90 days. Each receipt for 540 days after it arrives. The totals for each business, indefinitely.",
+    title: "Both ways",
+    text: "A good customer's word will count more when judging a business. A good business's word will count more when judging a customer. Recent months will weigh most, and nothing will ever be forgotten.",
+  },
+];
+
+const visibility = [
+  { k: "A business's reputation", v: "Public, in the directory." },
+  { k: "A customer's reputation", v: "Seen by a business only when the customer's agent shows it." },
+];
+
+const shared = [
+  {
+    k: "Every hour",
+    v: "How many bookings, orders, quotes and messages arrived in the last day, plus your software version and what it runs on. Counts only.",
+  },
+  {
+    k: "Every receipt",
+    v: "Which promise it was (a booking confirmed or an order paid), when, and your reference for it. The customer is a code the network can't turn back into a person. When known: the amount, how an order was paid, and the customer's agent's signature.",
+  },
+  {
+    k: "Never",
+    v: "Messages, names, email addresses, phone numbers, postal addresses, what was ordered, payment references.",
   },
 ];
 ---
 
 <Layout
   title="The network · Surfing Dog"
-  description="A directory of inboxes that agents can search, where listing is by verified domain and nothing about the order can be bought. How receipts will become reputation on both sides, how a business will know its good clients, and what the network is never allowed to see."
+  description="A directory of inboxes that AI agents can search. Join with one switch. Nobody can buy a place, and reputation will come from promises kept."
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="page-h">
     <p class="eyebrow">The network</p>
-    <h1 class="h-page" id="page-h">A directory of inboxes that keep their promises</h1>
+    <h1 class="h-page" id="page-h">Where AI agents find your business</h1>
     <p class="lede">
-      Every Surfing Dog inbox can join a network: a place where an agent can find a business, and a
-      record of promises kept on both sides of the exchange. It is off until you switch it on, and
-      it never sees what your customers write.
+      The network is a directory of inboxes. When someone asks an assistant like ChatGPT, Claude or Gemini to book or
+      order something, the assistant can search here for a business that does it. You join with one switch, and it's
+      off until you turn it on.
     </p>
     <nav class="contents" aria-label="On this page">
       {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
     </nav>
   </section>
 
-  <LiveMetrics />
-
-  <section class="section" id="directory" aria-labelledby="directory-h" data-reveal>
+  <section class="section" id="how" aria-labelledby="how-h" data-reveal>
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Membership</p>
-          <h2 class="h-section" id="directory-h">One directory, open format</h2>
-          <p class="lede">
-            An inbox joins by registering its own domain. After that it reports counts once an
-            hour, and publishes the receipts it issues.
-          </p>
+          <p class="eyebrow">How it works</p>
+          <h2 class="h-section" id="how-h">Three steps, one switch</h2>
+          <p class="lede">Join, and agents can find you. Every booking confirmed and order paid goes on your record.</p>
         </div>
       </div>
 
-      <div class="says">
-        <p>
-          Membership ships today. Switch it on and your instance registers its domain with the
-          network and sends an hourly ping: the version it runs, what it runs on, and how many
-          bookings, orders, quote requests and messages arrived in the last day. The ping is counts
-          only: no content, no names, no amounts. Test items are left out. The instance also
-          publishes every receipt it issues, described below.
-        </p>
-        <p>
-          The directory that lists those instances is a separate service. It verifies a domain
-          before listing it, by fetching the manifest at that address and checking that the
-          instance names itself. A listing carries the business name, where it is, what it does,
-          the languages it answers in, and the doors it offers.
-        </p>
-        <p>
-          surfingdog.ai runs the first network. The protocol is three HTTP calls, so a trade body, a
-          city or a franchise can run one of their own, and an inbox will be able to belong to more
-          than one.
-        </p>
-      </div>
+      <ol class="grid-cards cards three" data-reveal="stagger">
+        {
+          steps.map((s, i) => (
+            <li class="glass card">
+              <p class="eyebrow">Step {i + 1}</p>
+              <h3 class="h-card">{s.title}</h3>
+              <p class="card-text">{s.text}</p>
+            </li>
+          ))
+        }
+      </ol>
     </div>
   </section>
 
-  <section class="section" id="receipts" aria-labelledby="receipts-h" data-reveal>
+  <section class="section" id="reputation" aria-labelledby="reputation-h" data-reveal>
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
           <p class="eyebrow">Reputation</p>
-          <h2 class="h-section" id="receipts-h">Receipts, not reviews</h2>
-          <p class="lede">
-            A review should be proof that something happened, not an opinion anyone can post about
-            anyone.
-          </p>
+          <h2 class="h-section" id="reputation-h">Earned by keeping promises</h2>
+          <p class="lede">We're building it now. This is how it will work.</p>
         </div>
-        <span class="pill">Live</span>
-      </div>
-
-      <div class="says">
-        <p>
-          When a booking is confirmed or an order is paid, the instance issues a receipt: a small
-          signed record of what happened, and what it was worth when a price was stated, naming the
-          customer only by a pseudonym. The customer's agent can counter-sign it, and then both
-          sides hold the same proof, and neither can quietly change it afterwards.
-        </p>
-        <p>
-          A review will only be accepted against a receipt, in both directions. Nobody will be able
-          to review a business they never dealt with, and no business will be able to review a
-          customer it never served.
-        </p>
-        <p>
-          Both reviews will be sealed when they are written and revealed together when the window
-          closes. Neither side sees the other's words in time to react to them, which is the only
-          way honest feedback survives contact with a rating.
-        </p>
-      </div>
-
-      <p class="more">
-        <a class="link" href="/blog/receipts-not-reviews/">Read why we are starting with receipts</a>
-      </p>
-      <p class="fine">
-        Receipts are live on every instance that has a secret key and a public URL: issued, readable
-        on the item, verifiable against the instance's published keys, counter-signed through the
-        API or the MCP tool — and, once the instance joins, published to this network, which
-        verifies each one against that instance's own keys and counts it. Reviews and reputation
-        are still to come.
-      </p>
-    </div>
-  </section>
-
-  <section class="section" id="clients" aria-labelledby="clients-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">Both sides</p>
-          <h2 class="h-section" id="clients-h">Knowing who the good clients are</h2>
-          <p class="lede">
-            Businesses have been rated by their customers for twenty years. The other half of that
-            record has never existed.
-          </p>
-        </div>
-        <span class="pill">Coming</span>
-      </div>
-
-      <div class="says">
-        <p>
-          Receipts add up. Over time a customer, or the agent acting for them, will carry a record:
-          bookings kept, bookings cancelled late, no-shows, orders paid, disputes raised.
-        </p>
-        <p>
-          When a request arrives you will see that record as a short signal, something like
-          <span class="mono">verified, 14 receipts, 13 kept</span>. It will be advice, never a
-          verdict. The software will not decline anyone on its own, and a person will be able to see
-          what is held about them and contest it.
-        </p>
-        <p>
-          In practice it changes what your rules can safely do on their own.
-        </p>
+        <span class="pill">Being built</span>
       </div>
 
       <ul class="grid-cards cards three" data-reveal="stagger">
         {
-          signals.map((s) => (
+          principles.map((p) => (
             <li class="glass card">
-              <span class:list={["pill", `tint-${s.tint}`]}>
-                <i class:list={["dot", `dot-${s.tint}`]} />
-                {s.title}
-              </span>
-              <p class="card-text">{s.text}</p>
+              <h3 class="h-card">{p.title}</h3>
+              <p class="card-text">{p.text}</p>
             </li>
           ))
         }
       </ul>
 
-      <p class="fine">
-        The incentive runs both ways. An agent that keeps the bookings it makes earns faster
-        confirmations for the people it acts for, so behaving well is worth more to it than pushing.
-      </p>
-    </div>
-  </section>
-
-  <section class="section" id="ranking" aria-labelledby="ranking-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">Discovery</p>
-          <h2 class="h-section" id="ranking-h">How the directory is ordered</h2>
-          <p class="lede">
-            Every entry is a real business at a domain it proved it controls, so the directory cannot
-            fill up with listings nobody stands behind.
-          </p>
-        </div>
-        <span class="pill">Being redesigned</span>
-      </div>
-
-      <div class="says">
-        <p>
-          The ranking is being redesigned. Until its new rules are published here, the directory
-          lists verified businesses newest first, and a search near a place lists them nearest
-          first. Nothing about the order can be bought.
-        </p>
-        <p>
-          The new ranking will measure how reliably a business keeps its promises: completed
-          bookings and fulfilled orders, and broken promises too. Its full rules will be published
-          on this page and at network.surfingdog.ai/v1/ranking, with a new version, before they take
-          effect.
-        </p>
-      </div>
-
-      <p class="more">
-        <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">The current order, machine-readable</a>
-      </p>
-    </div>
-  </section>
-
-  <section class="section" id="privacy" aria-labelledby="privacy-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">Limits</p>
-          <h2 class="h-section" id="privacy-h">What the network never sees</h2>
-          <p class="lede">
-            The line is drawn in the code, not in a policy document: counts and signed receipts
-            leave the instance, content does not.
-          </p>
-        </div>
-      </div>
-
-      <dl class="glass spec">
+      <dl class="glass spec" aria-label="Who will see reputation">
         {
-          never.map((n) => (
+          visibility.map((n) => (
             <div class="row-spec">
               <dt>{n.k}</dt>
               <dd>{n.v}</dd>
@@ -259,19 +142,88 @@ const never = [
         }
       </dl>
 
-      <div class="says top">
-        <p>
-          Reputation will be a record, not a verdict: the network will show it, and each business's own
-          rules will decide what it earns. Recent months will weigh most, so a good record builds up and
-          an old mistake counts for less as time passes.
+      <div class="glass panel order" id="ranking">
+        <h3 class="h-card">Nobody can buy a place</h3>
+        <p class="card-text">
+          Not now, and not later. While reputation is being built, the order is neutral: verified businesses newest
+          first, or nearest first when an agent searches near a place.
         </p>
-        <p>
-          The design follows European data protection rules from the start, including the part that
-          matters most here: no decision about a person is made automatically by the software alone.
-          A refusal is always a person's refusal, or a rule that person wrote and can read back in
-          one sentence.
+        <p class="card-text">
+          Every rule will be published on this page and at network.surfingdog.ai/v1/ranking, with a version number,
+          before it counts.
+        </p>
+        <p class="more">
+          <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">Today's rules, as agents read them</a>
         </p>
       </div>
+    </div>
+  </section>
+
+  <LiveMetrics />
+
+  <section class="section" id="shared" aria-labelledby="shared-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Privacy</p>
+          <h2 class="h-section" id="shared-h">What leaves your inbox</h2>
+          <p class="lede">
+            Two things, and only once you switch the network on. Your customers' messages and personal details stay
+            with you.
+          </p>
+        </div>
+      </div>
+
+      <dl class="glass spec">
+        {
+          shared.map((n) => (
+            <div class="row-spec">
+              <dt>{n.k}</dt>
+              <dd>{n.v}</dd>
+            </div>
+          ))
+        }
+      </dl>
+
+      <p class="fine">
+        The network keeps the counts for 90 days, each receipt for 540 days, and each business's totals for good.
+        Switch it off and nothing more is sent.
+      </p>
+      <p class="more">
+        <a class="link" href="/privacy/">Every detail, on the privacy page</a>
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="open" aria-labelledby="open-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Open</p>
+          <h2 class="h-section" id="open-h">Launch your own network</h2>
+          <p class="lede">Anyone can run one: a trade body, a city, a franchise, a marketplace.</p>
+        </div>
+      </div>
+
+      <div class="says">
+        <p>
+          Your inbox makes just three kinds of web request to a network: one to register, an hourly ping, and one to
+          send receipts. Any directory that answers them works, and you choose which in Settings. surfingdog.ai runs the
+          first one.
+        </p>
+        <p>
+          The protocol is open, and the reputation rules will be published with it, so any network can rank the same
+          way or its own way.
+        </p>
+        <p>
+          Soon an inbox will join several networks at once: it will report to each, and show what each one says about a
+          customer.
+        </p>
+      </div>
+
+      <p class="more">
+        <a class="link" href="/docs/concepts/#networks">How networks work, in the docs</a>
+      </p>
     </div>
   </section>
 
@@ -279,34 +231,27 @@ const never = [
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Switch it on</p>
-          <h2 class="h-section" id="join-h">Join, or run your own</h2>
-          <p class="lede">
-            Membership is a switch in Settings, and it is off until you turn it on.
-          </p>
+          <p class="eyebrow">Get started</p>
+          <h2 class="h-section" id="join-h">Join the network</h2>
+          <p class="lede">One switch in your inbox's Settings.</p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          Open Settings, switch network membership on, and give the instance its public address. It
-          registers itself and starts reporting. Switch it off and the reporting stops the same
-          minute.
-        </p>
-        <p>
-          Running a network of your own is three HTTP calls: one that takes a registration, one that
-          takes the hourly ping, and one that takes receipts. The payloads are open and documented.
+          Open Settings, and under <b>Network</b>, switch on <b>Join the directory</b>. Your inbox needs a public https address so
+          the network can check it's yours. The rest happens on its own.
         </p>
       </div>
 
       <div class="glass panel cta">
         <p class="position">
           <span class="u-line" aria-hidden="true"></span>
-          <span>Your inbox first. The network is worth joining once it is answering for you.</span>
+          <span>No inbox yet? Set one up first. Joining is one switch after that.</span>
         </p>
         <div class="actions">
-          <a class="btn btn-primary" href="/#run">Get your inbox</a>
-          <a class="btn btn-secondary" href="/technical/">Read the technical page</a>
+          <a class="btn btn-primary" href="/install/">Get your inbox</a>
+          <a class="btn btn-secondary" href="/docs/concepts/#networks">How joining works</a>
         </div>
       </div>
     </div>
@@ -325,19 +270,12 @@ const never = [
     display: grid;
     gap: var(--sp-4);
   }
-  .says.top {
-    margin-top: var(--sp-6);
-  }
   .says p {
     max-width: var(--measure);
     margin: 0;
     font-size: var(--fs-body);
     line-height: var(--lh-body);
     color: var(--ink-2);
-  }
-  .says .mono {
-    font-size: 0.92em;
-    color: var(--ink);
   }
 
   .more {
@@ -355,8 +293,11 @@ const never = [
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
+  .card .eyebrow + .h-card {
+    margin-top: var(--sp-1);
+  }
   .card .card-text {
-    margin-top: var(--sp-3);
+    margin-top: var(--sp-2);
   }
 
   .spec {
@@ -394,6 +335,14 @@ const never = [
     font-size: var(--fs-card);
     line-height: var(--lh-body);
     color: var(--ink-2);
+  }
+
+  /* The ranking note is linked from the directory page, so its anchor lands below the sticky nav. */
+  .order {
+    scroll-margin-top: 88px;
+  }
+  .order .card-text {
+    margin-top: var(--sp-3);
   }
 
   .cta {
