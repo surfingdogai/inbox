@@ -5,11 +5,6 @@
 import Layout from "../layouts/Layout.astro";
 
 const NETWORK = "https://network.surfingdog.ai";
-const TIERS = [
-  { cents: 2500, label: "€25", note: "a month of the server this runs on" },
-  { cents: 10000, label: "€100", note: "a day of building" },
-  { cents: 50000, label: "€500", note: "a week of it" },
-];
 ---
 
 <Layout
@@ -32,7 +27,8 @@ const TIERS = [
           <p class="eyebrow">The board</p>
           <h2 class="h-section" id="board-h">Biggest first</h2>
           <p class="lede">
-            Ordered by what each has given in total. Give twice and you move up, rather than appearing twice.
+            Ordered by what each has given, but the amounts are nobody's business but theirs. Everyone gives what
+            they can, and the page says thank you rather than how much.
           </p>
         </div>
       </div>
@@ -48,7 +44,6 @@ const TIERS = [
             <b data-name></b>
             <span class="s" data-message></span>
           </span>
-          <span class="gave" data-total></span>
         </a>
       </template>
 
@@ -75,21 +70,12 @@ const TIERS = [
       </div>
 
       <form class="glass-strong panel give" data-give>
-        <div class="tiers" role="group" aria-label="Amount">
-          {
-            TIERS.map((t) => (
-              <button type="button" class="tier row-glass" data-amount={t.cents}>
-                <b>{t.label}</b>
-                <span class="s">{t.note}</span>
-              </button>
-            ))
-          }
-        </div>
-
         <div class="field">
-          <label class="label" for="sp-amount">Or your own amount, in euros</label>
-          <input id="sp-amount" class="input" name="amount" type="text" inputmode="numeric" value="25" />
-          <p class="hint" id="sp-amount-hint">One payment, not a subscription. Anything from €5.</p>
+          <label class="label" for="sp-amount">How much, in euros</label>
+          <input id="sp-amount" class="input" name="amount" type="text" inputmode="numeric" placeholder="25" />
+          <p class="hint" id="sp-amount-hint">
+            Whatever you can. One payment, not a subscription, and the amount is never shown on this page.
+          </p>
         </div>
 
         <div class="field">
@@ -136,7 +122,7 @@ const TIERS = [
 <style is:global>
   .sponsor {
     display: grid;
-    grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+    grid-template-columns: 2.2rem minmax(0, 1fr);
     gap: var(--sp-3);
     align-items: center;
     padding: var(--sp-4) var(--sp-5);
@@ -161,35 +147,6 @@ const TIERS = [
     color: var(--ink-2);
     font-size: var(--fs-fine);
   }
-  .sponsor .gave {
-    color: var(--ink-2);
-    font-size: var(--fs-ui);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .tiers {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: var(--sp-2);
-    margin-bottom: var(--sp-4);
-  }
-  .tier {
-    display: grid;
-    gap: 2px;
-    padding: var(--sp-3) var(--sp-4);
-    border: 1px solid transparent;
-    border-radius: var(--radius-tile);
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .tier .s {
-    color: var(--ink-2);
-    font-size: var(--fs-fine);
-  }
-  .tier.is-picked {
-    border-color: currentcolor;
-  }
   .give > .field + .field {
     margin-top: var(--sp-3);
   }
@@ -202,11 +159,6 @@ const TIERS = [
   const board = document.querySelector<HTMLElement>("[data-board]");
   const tpl = document.querySelector<HTMLTemplateElement>("[data-sponsor-template]");
   const emptyTpl = document.querySelector<HTMLTemplateElement>("[data-empty-template]");
-
-  const euros = (cents: number, currency: string) =>
-    new Intl.NumberFormat("en-GB", { style: "currency", currency: currency || "EUR", maximumFractionDigits: 0 }).format(
-      cents / 100,
-    );
 
   async function paint(): Promise<void> {
     if (!board || !tpl || !emptyTpl) return;
@@ -240,7 +192,6 @@ const TIERS = [
         set("[data-rank]", String(i + 1));
         set("[data-name]", String(s.name ?? "Anonymous"));
         set("[data-message]", String(s.message ?? ""));
-        set("[data-total]", euros(Number(s.total_cents ?? 0), String(s.currency ?? "EUR")));
         board.appendChild(node);
       });
     } catch {
@@ -254,16 +205,7 @@ const TIERS = [
   void paint();
 
   const form = document.querySelector<HTMLFormElement>("[data-give]");
-  const amount = document.querySelector<HTMLInputElement>("#sp-amount");
   const note = document.querySelector<HTMLParagraphElement>("[data-note]");
-
-  for (const tier of document.querySelectorAll<HTMLButtonElement>(".tier")) {
-    tier.addEventListener("click", () => {
-      for (const t of document.querySelectorAll(".tier")) t.classList.remove("is-picked");
-      tier.classList.add("is-picked");
-      if (amount) amount.value = String(Number(tier.dataset.amount ?? "0") / 100);
-    });
-  }
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
