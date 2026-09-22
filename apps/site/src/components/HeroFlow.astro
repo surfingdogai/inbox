@@ -72,12 +72,12 @@
 <path d="M56,104 C104,104 118,196 176,196" class="sd-line"/>
 <path d="M56,196 L176,196" class="sd-line"/>
 <path d="M56,288 C104,288 118,196 176,196" class="sd-line"/>
-<path d="M344,196 C380,196 388,112 420,112" class="sd-line"/>
+<path d="M344,196 C380,196 388,104 420,104" class="sd-line"/>
 <path d="M344,196 L420,196" class="sd-line"/>
-<path d="M344,196 C380,196 388,280 420,280" class="sd-line"/>
+<path d="M344,196 C380,196 388,288 420,288" class="sd-line"/>
 </g>
 <text x="30" y="60" font-size="8.2" class="sd-cap">AI AGENTS</text>
-<text x="504" y="60" font-size="8.2" class="sd-cap" text-anchor="end">YOUR SYSTEMS</text>
+<text x="420" y="60" font-size="8.2" class="sd-cap">YOUR SYSTEMS</text>
 <g>
 <rect x="176" y="76" width="168" height="240" rx="14" class="sd-glass"/>
 <path d="M188,105 A11,11 0 0 1 210,105 Z" fill="url(#sdseed-g)"/>
@@ -121,16 +121,16 @@
 <circle cx="42" cy="266.4" r="2.6" class="ant"/>
 </g>
 <g class="sd-node">
-<rect x="420" y="96" width="84" height="32" rx="10" class="pill"/>
-<text x="462" y="115.4" font-size="9.4" text-anchor="middle">POS</text>
+<rect x="420" y="88" width="84" height="32" rx="10" class="pill"/>
+<text x="462" y="107.4" font-size="9.4" text-anchor="middle">POS</text>
 </g>
 <g class="sd-node">
 <rect x="420" y="180" width="84" height="32" rx="10" class="pill"/>
 <text x="462" y="199.4" font-size="9.4" text-anchor="middle">Shop</text>
 </g>
 <g class="sd-node">
-<rect x="420" y="264" width="84" height="32" rx="10" class="pill"/>
-<text x="462" y="283.4" font-size="9.4" text-anchor="middle">Calendar</text>
+<rect x="420" y="272" width="84" height="32" rx="10" class="pill"/>
+<text x="462" y="291.4" font-size="9.4" text-anchor="middle">Calendar</text>
 </g>
 </svg>
 </figure>
@@ -368,10 +368,10 @@ var eSoft=bez(.2,.8,.2,1),                                  /* the brand easing 
 /* ---- geometry, all in the 520x390 viewBox ---------------------------- */
 var SEND=["M56,104 C104,104 118,196 176,196","M56,196 L176,196","M56,288 C104,288 118,196 176,196"],
     BACK=["M176,182 Q116,106 58,100","M176,206 Q116,252 58,200","M176,210 Q116,286 58,292"],
-    FAN =["M344,196 C380,196 388,112 420,112","M344,196 L420,196","M344,196 C380,196 388,280 420,280"],
+    FAN =["M344,196 C380,196 388,104 420,104","M344,196 L420,196","M344,196 C380,196 388,288 420,288"],
     AGY =[104,196,288],
     AGC =["var(--sd-violet)","var(--sd-lagoon)","var(--sd-flamingo)"],
-    NODES=[{y:112,l:"POS"},{y:196,l:"Shop"},{y:280,l:"Calendar"}],
+    NODES=[{y:104,l:"POS"},{y:196,l:"Shop"},{y:288,l:"Calendar"}],
     SLOT=[158,194,230,266], RX=188, RW=144, RH=28,
     NX=462, NW=84,             /* systems pills: centre, and the drawn width */
     PADL=19, PADR=.8,          /* the drawn pads either side of a chip's word */
@@ -421,7 +421,7 @@ function mount(fig){
 
   /* --- column captions ------------------------------------------------ */
   svg.appendChild(TX(30,60,8.2,"sd-cap","AI AGENTS"));
-  svg.appendChild(TX(504,60,8.2,"sd-cap","YOUR SYSTEMS","end"));
+  svg.appendChild(TX(420,60,8.2,"sd-cap","YOUR SYSTEMS"));
 
   /* --- the business ---------------------------------------------------- */
   var card=E("g");
