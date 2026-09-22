@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Publish @surfingdog/sdk to npm.
+# Publish @surfingdog/sdk to npm, by hand.
+#
+# The normal path is not this script. It is the release-sdk workflow in .github/workflows, which
+# publishes from CI with no token anywhere when a tag `sdk-v<version>` is pushed. This script is
+# the fallback for a machine with npm signed in, and for the very first publish, which has to
+# exist before npmjs.com will let the repository be authorised as its trusted publisher.
 #
 #   ~/surfingdog-inbox/scripts/publish-sdk.sh          # asks for the token, then publishes
 #   ~/surfingdog-inbox/scripts/publish-sdk.sh --dry    # everything except the publish
