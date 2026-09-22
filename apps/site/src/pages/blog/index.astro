@@ -81,15 +81,25 @@ const when = (d: Date) =>
     background: var(--row-bg);
     overflow: hidden;
   }
-  /* The animation is its own composed frame, so the card stops framing it again. */
+  /* The animation is its own composed frame, so the card stops framing it again — but it still
+     has to sit in the same 16/10 box as a still cover, or one card in the list is three times
+     the height of the other. The figure is scaled to fit rather than allowed its own size. */
   .cover.is-anim {
     padding: 0;
     border: 0;
     background: transparent;
   }
   .cover.is-anim :global(figure) {
+    display: block;
     width: 100%;
+    max-height: 100%;
     margin: 0;
+  }
+  .cover.is-anim :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
   }
   .cover :global(.art) {
     width: auto;
