@@ -38,7 +38,7 @@ Authenticate with an owner API key or an OAuth 2.1 access token as a Bearer toke
 | `transition_item` | `POST /v1/owner/items/{id}/transitions` | Fire one of the item's events with its `input`, a `reason` and `expected_version`. |
 | `reply` | `POST /v1/owner/items/{id}/replies` | Reply to the customer, or leave an internal note with `internal: true`. |
 | `get_settings` | `GET /v1/owner/settings` | The settings document and its version. |
-| `update_settings` | `PUT /v1/owner/settings` | Replace the document, with `expected_version`. |
+| `update_settings` | `PUT /v1/owner/settings` | Change settings: the document you send is merged over the current one, so send only what changes, with `expected_version`. |
 
 Three more owner operations are in the capability set and arrive with the owner app: `update_availability`, `update_catalogue` and `run_setup_step`.
 
