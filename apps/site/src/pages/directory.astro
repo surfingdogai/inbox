@@ -1,0 +1,197 @@
+---
+// Who is running one. Every entry here is a real instance that verified its own domain and
+// reports in: nobody is listed because they filled in a form, and nobody can list a business
+// that is not theirs, because listing requires serving a manifest at the domain itself.
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout
+  title="Directory · Surfing Dog"
+  description="Businesses running Surfing Dog Inbox. Each one verified its own domain and reports in, so the list is of instances that exist rather than businesses that signed up."
+>
+  <section class="wrap wrap-read section is-head" id="directory" aria-labelledby="directory-h">
+    <p class="eyebrow">Directory</p>
+    <h1 class="h-page" id="directory-h">Who is running one</h1>
+    <p class="lede">
+      Every business here verified its own domain and reports in. Nobody is listed for filling in a form, and nobody
+      can list a business that is not theirs.
+    </p>
+  </section>
+
+  <section class="section" id="listed" aria-labelledby="listed-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Listed</p>
+          <h2 class="h-section" id="listed-h">Instances that answer</h2>
+          <p class="lede">
+            An agent can reach any of these directly. The manifest link is the machine-readable version of the same
+            entry.
+          </p>
+        </div>
+      </div>
+
+      <div data-dir aria-live="polite">
+        <div class="skeleton sk-line"></div>
+      </div>
+
+      <template data-entry-template>
+        <div class="listing row-glass">
+          <div class="who">
+            <b data-name></b>
+            <span class="s" data-where></span>
+          </div>
+          <div class="meta">
+            <span class="pill pill-xs" data-online></span>
+            <span class="s" data-takes></span>
+          </div>
+          <div class="links">
+            <a class="link" data-site rel="noopener">Their page</a>
+            <a class="link" data-manifest rel="noopener">Manifest</a>
+          </div>
+        </div>
+      </template>
+
+      <template data-none-template>
+        <div class="state">
+          <h3>Only ours, so far</h3>
+          <p>
+            The first businesses to run one will be here. Joining is a switch in Settings, and nothing about your
+            customers ever leaves your instance.
+          </p>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <section class="section" id="join" aria-labelledby="join-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Getting listed</p>
+          <h2 class="h-section" id="join-h">Contribute and you appear</h2>
+        </div>
+      </div>
+      <ul class="checks">
+        <li><b>Run an inbox</b> on your own domain, on your own machine or on Cloudflare.</li>
+        <li><b>Turn on the network</b> in Settings. It is off until you do.</li>
+        <li>
+          <b>Your instance proves the domain is yours</b> by serving its manifest there. That is the whole
+          verification; there is nothing to apply for.
+        </li>
+        <li>
+          <b>It reports in hourly:</b> its version, its runtime, and how many bookings, orders, quotes and messages it
+          created in the last day. Four numbers. Nothing about a customer ever leaves your instance.
+        </li>
+      </ul>
+      <p class="hint">
+        Stop reporting and the entry goes quiet, then drops off. The list is of instances that are actually up, which
+        is the only thing that makes it worth reading.
+      </p>
+      <div class="rowx">
+        <a class="btn btn-primary" href="/install/">Get one running</a>
+        <a class="btn btn-secondary" href="/network/">What the network is for</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style is:global>
+  .listing {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--sp-2) var(--sp-4);
+    align-items: center;
+    padding: var(--sp-4) var(--sp-5);
+    border-radius: var(--radius-md);
+  }
+  .listing + .listing {
+    margin-top: var(--sp-2);
+  }
+  .listing .who {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .listing .s {
+    color: var(--ink-2);
+    font-size: var(--fs-fine);
+  }
+  .listing .meta {
+    display: flex;
+    gap: var(--sp-2);
+    align-items: center;
+    justify-self: end;
+  }
+  .listing .links {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: var(--sp-4);
+    font-size: var(--fs-fine);
+  }
+  @media (max-width: 620px) {
+    .listing {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .listing .meta {
+      justify-self: start;
+    }
+  }
+</style>
+
+<script>
+  const NETWORK = "https://network.surfingdog.ai";
+  const host = document.querySelector<HTMLElement>("[data-dir]");
+  const tpl = document.querySelector<HTMLTemplateElement>("[data-entry-template]");
+  const none = document.querySelector<HTMLTemplateElement>("[data-none-template]");
+
+  const WORDS: Record<string, string> = {
+    booking: "bookings",
+    order: "orders",
+    quote_request: "quotes",
+    message: "messages",
+    refund: "refunds",
+  };
+
+  async function paint(): Promise<void> {
+    if (!host || !tpl || !none) return;
+    try {
+      const res = await fetch(`${NETWORK}/v1/businesses?limit=100`, { headers: { accept: "application/json" } });
+      const data = (await res.json()) as { businesses?: Array<Record<string, unknown>> };
+      const list = data.businesses ?? [];
+      host.replaceChildren();
+      if (list.length === 0) {
+        host.appendChild(none.content.cloneNode(true));
+        return;
+      }
+      for (const b of list) {
+        const node = tpl.content.cloneNode(true) as DocumentFragment;
+        const domain = String(b.domain ?? "");
+        const set = (sel: string, text: string) => {
+          const el = node.querySelector<HTMLElement>(sel);
+          if (el) el.textContent = text;
+        };
+        set("[data-name]", String(b.name || domain));
+        const where = [b.city, b.country].filter(Boolean).join(", ");
+        set("[data-where]", where || domain);
+        const online = b.online === true;
+        set("[data-online]", online ? "Answering" : "Quiet");
+        const types = Array.isArray(b.item_types) ? (b.item_types as string[]) : [];
+        set("[data-takes]", types.length ? `Takes ${types.map((t) => WORDS[t] ?? t).join(", ")}` : "");
+        const site = node.querySelector<HTMLAnchorElement>("[data-site]");
+        if (site) site.href = `https://${domain}`;
+        const manifest = node.querySelector<HTMLAnchorElement>("[data-manifest]");
+        const mf = typeof b.manifest_url === "string" ? b.manifest_url : `https://${domain}/.well-known/agent-inbox.json`;
+        if (manifest) manifest.href = mf;
+        host.appendChild(node);
+      }
+    } catch {
+      host.replaceChildren();
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "The directory is not answering just now.";
+      host.appendChild(p);
+    }
+  }
+  void paint();
+</script>
