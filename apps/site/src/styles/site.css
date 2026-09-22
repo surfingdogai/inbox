@@ -689,6 +689,21 @@ kbd {
   height: auto;
   image-rendering: pixelated;
 }
+/* .art-box — the frame a hero drawing sits in, beside the words. It caps the
+   drawing at 700 when the columns stack, and seats it against the words in a
+   two-column hero. Used by the home page hero and the network page. */
+.art-box {
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  margin-inline: auto;
+}
+@media (min-width: 900px) {
+  .art-box {
+    margin-inline: 0 auto;
+    margin-top: var(--sp-1);
+  }
+}
 .shot {
   margin: 0;
   padding: var(--sp-3);
