@@ -1,6 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import Art from "../../components/Art.astro";
+import CoverReceipts from "../../components/CoverReceipts.astro";
 import Layout from "../../layouts/Layout.astro";
 
 const posts = (await getCollection("blog")).sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
@@ -17,7 +18,13 @@ const when = (d: Date) =>
       {
         posts.map((post) => (
           <li class="glass lift post">
-            {post.data.cover ? (
+            {/* A post with an animated cover shows THAT cover here, not a still of something
+                else: the index was showing pixel art beside the post's own moving artwork. */}
+            {post.data.coverAnim === "receipts" ? (
+              <a class="cover is-anim" href={`/blog/${post.id}/`} tabindex="-1" aria-hidden="true">
+                <CoverReceipts />
+              </a>
+            ) : post.data.cover ? (
               <a class="cover" href={`/blog/${post.id}/`} tabindex="-1" aria-hidden="true">
                 <Art src={post.data.cover} alt="" ratio="16 / 9" />
               </a>
@@ -73,6 +80,16 @@ const when = (d: Date) =>
     border-radius: var(--radius-control);
     background: var(--row-bg);
     overflow: hidden;
+  }
+  /* The animation is its own composed frame, so the card stops framing it again. */
+  .cover.is-anim {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .cover.is-anim :global(figure) {
+    width: 100%;
+    margin: 0;
   }
   .cover :global(.art) {
     width: auto;
