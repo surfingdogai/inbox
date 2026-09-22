@@ -77,6 +77,13 @@ const urls = [
 
 const ways = [
   {
+    title: "Let your AI do it",
+    text: "One line to Claude, Codex or Grok. It reads instructions written for a machine and sets up the server, your subdomain and email in.",
+    href: "/install/",
+    label: "Get the line",
+    external: false,
+  },
+  {
     title: "Cloudflare Workers",
     text: "One click on your own account. D1, R2 and a queue are provisioned for you.",
     href: DEPLOY,
@@ -85,7 +92,7 @@ const ways = [
   },
   {
     title: "Your own machine",
-    text: "Node 22.16 or newer, built from the repository today. One command will arrive with 0.1.",
+    text: "Node 22.16 or newer, built from the repository: clone, install, build, run. Four commands, or none if your AI runs them.",
     href: "/docs/quickstart/#your-own-server",
     label: "Read the quickstart",
     external: false,
@@ -115,6 +122,7 @@ const ways = [
       <a class="btn btn-primary" href="/docs/">Read the docs</a>
       <a class="btn btn-secondary" href={REPO} rel="noopener">GitHub</a>
       <a class="btn btn-secondary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
+      <a class="btn btn-secondary" href="/install/">Let your AI install it</a>
     </div>
     <p class="fine">
       Here for the product rather than the code? <a class="link" href="/how-it-works/">How it works</a> covers the same
@@ -252,7 +260,7 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Run it</p>
-          <h2 class="h-section" id="run-it-h">Three ways, same software</h2>
+          <h2 class="h-section" id="run-it-h">Four ways, same software</h2>
           <p class="lede">Pick the runtime. The home page carries the full version of this, with the waitlist.</p>
         </div>
       </div>
