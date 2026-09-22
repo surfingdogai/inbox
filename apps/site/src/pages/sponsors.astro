@@ -3,8 +3,6 @@
 // giving twice moves you up rather than listing you twice, and the amounts are the amounts
 // Stripe actually took — the page never sees a number a browser chose.
 import Layout from "../layouts/Layout.astro";
-
-const NETWORK = "https://network.surfingdog.ai";
 ---
 
 <Layout
@@ -155,7 +153,7 @@ const NETWORK = "https://network.surfingdog.ai";
 <script>
   // The board and the form. Everything about money is decided by the network service and by
   // Stripe; this only asks and shows.
-  const NETWORK = "https://network.surfingdog.ai";
+  const API = "/api/sponsors";
   const board = document.querySelector<HTMLElement>("[data-board]");
   const tpl = document.querySelector<HTMLTemplateElement>("[data-sponsor-template]");
   const emptyTpl = document.querySelector<HTMLTemplateElement>("[data-empty-template]");
@@ -163,7 +161,7 @@ const NETWORK = "https://network.surfingdog.ai";
   async function paint(): Promise<void> {
     if (!board || !tpl || !emptyTpl) return;
     try {
-      const res = await fetch(`${NETWORK}/v1/sponsors`, { headers: { accept: "application/json" } });
+      const res = await fetch(`${API}/v1/sponsors`, { headers: { accept: "application/json" } });
       const data = (await res.json()) as { sponsors?: Array<Record<string, unknown>> };
       const list = data.sponsors ?? [];
       board.replaceChildren();
@@ -220,7 +218,7 @@ const NETWORK = "https://network.surfingdog.ai";
     if (go) go.disabled = true;
     note.textContent = "Opening Stripe…";
     try {
-      const res = await fetch(`${NETWORK}/v1/sponsors/checkout`, {
+      const res = await fetch(`${API}/v1/sponsors/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
