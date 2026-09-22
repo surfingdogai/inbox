@@ -1,0 +1,9 @@
+{
+  "$schema": "../inbox/node_modules/wrangler/config-schema.json",
+  "name": "surfingdog-email-gateway",
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  "vars": { "INBOX_INBOUND_URL": "https://inbox.surfingdog.ai/v1/email/inbound" }
+  // INBOX_EMAIL_SECRET is a secret: `wrangler secret put INBOX_EMAIL_SECRET --config apps/email-gateway/wrangler.jsonc`
+}
