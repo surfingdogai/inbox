@@ -7,14 +7,13 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout
   title="Sponsors · Surfing Dog"
-  description="Surfing Dog Inbox is open source and free to run. Sponsors are what pays for the work. Those who give the most sit at the top, with their name, their link and their banner."
+  description="Surfing Dog Inbox is free and open source, and sponsors pay for the work. We never show amounts. Whoever has given the most sits at the top."
 >
   <section class="wrap wrap-read section is-head" id="sponsors" aria-labelledby="sponsors-h">
     <p class="eyebrow">Sponsors</p>
     <h1 class="h-page" id="sponsors-h">Who pays for this</h1>
     <p class="lede">
-      The inbox is free, open source, and yours to run on your own machine. Nobody pays a licence and nobody is the
-      product. That leaves sponsors, and this is the page that says who they are.
+      The inbox is free and open source. Sponsors pay for the work, and this page thanks them.
     </p>
   </section>
 
@@ -25,8 +24,8 @@ import Layout from "../layouts/Layout.astro";
           <p class="eyebrow">The board</p>
           <h2 class="h-section" id="board-h">Biggest first</h2>
           <p class="lede">
-            Ordered by what each has given, but the amounts are nobody's business but theirs. Everyone gives what
-            they can, and the page says thank you rather than how much.
+            Everyone gives what they can, so we never show amounts. Whoever has given the most in total sits at the
+            top.
           </p>
         </div>
       </div>
@@ -48,7 +47,7 @@ import Layout from "../layouts/Layout.astro";
       <template data-empty-template>
         <div class="state">
           <h3>Nobody yet</h3>
-          <p>This page has been honest about that from the first day. The first name here gets the top of it.</p>
+          <p>The first sponsor goes straight to the top.</p>
         </div>
       </template>
     </div>
@@ -58,11 +57,10 @@ import Layout from "../layouts/Layout.astro";
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Sponsor it</p>
+          <p class="eyebrow">Give</p>
           <h2 class="h-section" id="give-h">What it pays for</h2>
           <p class="lede">
-            Servers, the time to build, and keeping it free for a business that has no budget for software. Not
-            advertising, and not a sales team.
+            Servers and time to build, so the inbox can stay free for a bakery or a bike shop with no software budget.
           </p>
         </div>
       </div>
@@ -71,16 +69,14 @@ import Layout from "../layouts/Layout.astro";
         <div class="field">
           <label class="label" for="sp-amount">How much, in euros</label>
           <input id="sp-amount" class="input" name="amount" type="text" inputmode="numeric" placeholder="25" />
-          <p class="hint" id="sp-amount-hint">
-            Whatever you can. One payment, not a subscription, and the amount is never shown on this page.
-          </p>
+          <p class="hint" id="sp-amount-hint">From €5, paid once. Never shown publicly.</p>
         </div>
 
         <div class="field">
           <label class="label" for="sp-email">Email</label>
           <input id="sp-email" class="input" name="email" type="email" autocomplete="email" required
             placeholder="you@yourbusiness.com" />
-          <p class="hint">For the receipt. It is never shown on this page.</p>
+          <p class="hint">For your receipt. Never shown publicly.</p>
         </div>
 
         <div class="field">
@@ -91,7 +87,7 @@ import Layout from "../layouts/Layout.astro";
         <div class="field">
           <label class="label" for="sp-website">Your website <span class="opt">optional</span></label>
           <input id="sp-website" class="input" name="website" inputmode="url" placeholder="yourbusiness.com" />
-          <p class="hint">Linked from your name. An https address on a public host.</p>
+          <p class="hint">Linked from your name. It must be a public https address.</p>
         </div>
 
         <div class="field">
@@ -101,7 +97,7 @@ import Layout from "../layouts/Layout.astro";
 
         <label class="check">
           <span class="switch"><input type="checkbox" name="anonymous" /><span></span></span>
-          Keep me off the board
+          Show me as Anonymous
         </label>
 
         <div class="rowx">
@@ -109,8 +105,8 @@ import Layout from "../layouts/Layout.astro";
         </div>
         <p class="hint" data-note role="status"></p>
         <p class="fine">
-          Payment is handled by Stripe; we never see your card. Your name, link and banner appear once they have been
-          checked by a person, because a public page carrying somebody else's artwork is a page that can be abused.
+          Stripe handles the payment, so we never see your card. A person checks each sponsor before they go on the
+          board.
         </p>
       </form>
     </div>
@@ -196,7 +192,7 @@ import Layout from "../layouts/Layout.astro";
       board.replaceChildren();
       const p = document.createElement("p");
       p.className = "hint";
-      p.textContent = "The sponsor list is not answering just now.";
+      p.textContent = "The sponsor list isn't loading right now.";
       board.appendChild(p);
     }
   }
@@ -235,9 +231,9 @@ import Layout from "../layouts/Layout.astro";
         window.location.href = body.url;
         return;
       }
-      note.textContent = body.detail ?? `That did not work (${res.status}).`;
+      note.textContent = body.detail ?? `That didn't work (${res.status}).`;
     } catch {
-      note.textContent = "Could not reach the payment page. Check your connection and try again.";
+      note.textContent = "Couldn't reach the payment page. Check your connection and try again.";
     } finally {
       if (go) go.disabled = false;
     }
@@ -245,6 +241,6 @@ import Layout from "../layouts/Layout.astro";
 
   // Back from Stripe.
   if (new URLSearchParams(window.location.search).has("thanks") && note) {
-    note.textContent = "Thank you. Your name appears on the board once a person has checked the link.";
+    note.textContent = "Thank you. You'll appear on the board once a person has checked your details.";
   }
 </script>

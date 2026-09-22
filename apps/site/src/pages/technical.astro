@@ -1,6 +1,6 @@
 ---
 // apps/site/src/pages/technical.astro
-// Everything a developer needs in one place, so the rest of the navigation can stay about the
+// Everything a developer needs in one place, so the rest of the navigation can stay about the business.
 import Layout from "../layouts/Layout.astro";
 
 const REPO = "https://github.com/surfingdogai/inbox";
@@ -12,48 +12,48 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   {
     k: "Discovery",
     v: "GET /.well-known/agent-inbox.json",
-    note: "One document naming the instance, the item types it accepts, the trust tiers it recognises, and the REST, OpenAPI and MCP doors. The email door is not listed in it.",
+    note: "Names the instance, its item types, trust tiers and doors. Email is not listed.",
   },
   {
     k: "REST",
     v: "GET /openapi.json · /v1/*",
-    note: "38 operations: 11 public and 27 under /v1/owner. The OpenAPI document is generated from the same schemas as the MCP tools, so the two never drift apart.",
+    note: "55 operations: 11 public, 44 under /v1/owner. Built from the same schemas as the MCP tools.",
   },
   {
     k: "MCP public",
     v: "POST /mcp",
-    note: "11 tools for a customer's agent, no sign-in. All eleven do the work today, including acknowledge_receipt, which counter-signs a receipt the item earned.",
+    note: "11 tools for a customer's agent, no sign-in. acknowledge_receipt counter-signs a receipt.",
   },
   {
     k: "MCP owner",
     v: "POST /mcp/owner",
-    note: "24 tools for the owner and the AI the owner trusts. OAuth 2.1 with PKCE, or an owner API key in an Authorization header.",
+    note: "34 tools for the owner and their AI. OAuth 2.1 with PKCE, or an owner API key.",
   },
   {
     k: "Email in",
     v: "POST /v1/email/inbound",
-    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That is still to come.",
+    note: "Raw MIME. Off until you set an inbound secret in Settings and send it in X-Inbox-Email-Secret. Emails become messages or replies, not bookings yet.",
   },
   {
     k: "Web form",
     v: "channel: form",
     phase: "Being built",
-    note: "A page for a person who has no agent. The channel name is reserved in the schema. The door itself is not built.",
+    note: "For people with no agent. Reserved in the schema, not built yet.",
   },
   {
     k: "Idempotency",
     v: "Idempotency-Key · idempotency_key",
-    note: "The same key with the same request returns the same answer. A replay comes back 200 with Idempotent-Replayed: true, never as a second booking.",
+    note: "A repeated request with the same key gets the same answer: 200 with Idempotent-Replayed: true, never a second booking.",
   },
   {
     k: "Access tokens",
     v: "access_token · x-access-token",
-    note: "Issued when someone creates an item with no party attached. It is how that person reads or cancels their own item afterwards. The owner reads any item without one.",
+    note: "Given to a caller with no key, so they can read, cancel or follow up on their item later.",
   },
   {
     k: "Errors",
     v: "application/problem+json",
-    note: "For an invalid request: a code, a sentence, and fields[{path, problem, message}] naming exactly which field is wrong and why.",
+    note: "A code, a message, and fields[{path, problem, message}] for each bad field.",
   },
 ];
 
@@ -61,45 +61,45 @@ const urls = [
   {
     href: `${INSTANCE}/.well-known/agent-inbox.json`,
     link: true,
-    note: "The manifest. Read this first: it tells an agent which doors exist and where they are.",
+    note: "The manifest. Start here.",
   },
   {
     href: `${INSTANCE}/openapi.json`,
     link: true,
-    note: "The OpenAPI 3.1 document for every REST operation, public and owner.",
+    note: "OpenAPI 3.1 for every REST operation.",
   },
   {
     href: `${INSTANCE}/mcp`,
     link: false,
-    note: "The public MCP server. It answers POST, so point an MCP client at it rather than a browser.",
+    note: "The public MCP server. POST only, so use an MCP client.",
   },
 ];
 
 const ways = [
   {
     title: "Let your AI do it",
-    text: "One line to Claude, Codex or Grok. It reads instructions written for a machine and sets up the server, your subdomain and email in.",
+    text: "Give one line to Claude, Codex or Grok. It sets up the server, your subdomain and email in.",
     href: "/install/",
     label: "Get the line",
     external: false,
   },
   {
     title: "Cloudflare Workers",
-    text: "One click on your own account. D1, R2 and a queue are provisioned for you.",
+    text: "One click on your own account. D1, R2 and a queue are created for you.",
     href: DEPLOY,
     label: "Deploy to Cloudflare",
     external: true,
   },
   {
-    title: "Your own machine",
-    text: "Node 22.16 or newer, built from the repository: clone, install, build, run. Four commands, or none if your AI runs them.",
+    title: "Your own server",
+    text: "Node 22.16, 24 or 26. Clone, install, build, run.",
     href: "/docs/quickstart/#your-own-server",
     label: "Read the quickstart",
     external: false,
   },
   {
     title: "Hosted by us",
-    text: "The same inbox run for you, one database per business. It is not open yet, and the waitlist is on the home page.",
+    text: "We will run it for you, one database per business. Not open yet.",
     href: "/#run",
     label: "Join the waitlist",
     external: false,
@@ -109,25 +109,19 @@ const ways = [
 
 <Layout
   title="Technical · Surfing Dog"
-  description="The technical side of Surfing Dog Inbox: the doors an agent can use, the OpenAPI and MCP endpoints, how to run it on Cloudflare Workers or your own machine, and how to contribute."
+  description="Surfing Dog Inbox for developers: the REST and MCP endpoints, how to run it on Cloudflare or your own machine, and how to contribute."
 >
   <section class="wrap wrap-read section is-head" id="technical" aria-labelledby="technical-h">
     <p class="eyebrow">Technical</p>
-    <h1 class="h-page" id="technical-h">The doors, the code and how to run it</h1>
-    <p class="lede">
-      Surfing Dog Inbox is one open-source repository you can read, run and change. This page collects the doors, the
-      endpoints, the numbers and the licences, so the rest of the site can stay about the business.
-    </p>
+    <h1 class="h-page" id="technical-h">For developers and agent builders</h1>
+    <p class="lede">The endpoints an agent calls, and how to run your own inbox.</p>
     <div class="actions">
       <a class="btn btn-primary" href="/docs/">Read the docs</a>
       <a class="btn btn-secondary" href={REPO} rel="noopener">GitHub</a>
       <a class="btn btn-secondary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
       <a class="btn btn-secondary" href="/install/">Let your AI install it</a>
     </div>
-    <p class="fine">
-      Here for the product rather than the code? <a class="link" href="/how-it-works/">How it works</a> covers the same
-      inbox without the endpoints.
-    </p>
+    <p class="fine">For the plain version, read <a class="link" href="/how-it-works/">How it works</a>.</p>
   </section>
 
   <section class="section" id="what" aria-labelledby="what-h" data-reveal>
@@ -136,35 +130,28 @@ const ways = [
         <div>
           <p class="eyebrow">What it is</p>
           <h2 class="h-section" id="what-h">One repository, two runtimes</h2>
-          <p class="lede">
-            A TypeScript monorepo behind an inbox you host yourself. The same code runs on Cloudflare Workers and on
-            Node, and the whole suite runs on both before anything ships.
-          </p>
+          <p class="lede">The same TypeScript code runs on Cloudflare Workers and on Node. CI tests both.</p>
         </div>
       </div>
 
       <ul class="grid-cards cards" data-reveal="stagger">
         <li class="glass card">
-          <h3 class="h-card">Open source, all of it</h3>
+          <h3 class="h-card">Open source</h3>
           <p class="card-text">
-            Six packages and two apps: the domain core, the adapters that mount the doors, the platform bindings, the
-            shared UI, the spec and the client. 36 tables from 3 migrations, and 15 decision records explaining why the
-            architecture is the way it is.
+            Six packages, the inbox app, an email gateway and this website. Decision records in docs/adr explain the
+            design.
           </p>
         </li>
         <li class="glass card">
           <h3 class="h-card">Run it where you like</h3>
           <p class="card-text">
-            Cloudflare Workers with D1, queues and cron, or Node 22.16 and newer on any machine with a single SQLite
-            file. One instance is one business and one database, and the data stays there.
+            Workers with D1, queues and cron, or Node with one SQLite file. Each instance serves one business.
           </p>
         </li>
         <li class="glass card">
-          <h3 class="h-card">Licensed to be copied</h3>
+          <h3 class="h-card">Licences</h3>
           <p class="card-text">
-            AGPL-3.0-only for the server, the app and the shared UI. MIT for the spec and the SDK, so anyone can
-            implement the format without taking on the copyleft. The SDK is a stub today. It will be generated from the
-            OpenAPI document.
+            AGPL-3.0-only for the server, the apps and the UI. MIT for the spec and the SDK, which verifies webhooks.
           </p>
         </li>
       </ul>
@@ -177,11 +164,8 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">The doors</p>
-          <h2 class="h-section" id="doors-h">Three doors today, one more to come</h2>
-          <p class="lede">
-            REST, MCP and email ship now. A web form is being built. Everything below is what the code does, not what
-            it is meant to do one day.
-          </p>
+          <h2 class="h-section" id="doors-h">Three doors today, a web form next</h2>
+          <p class="lede">All of this works today unless marked.</p>
         </div>
         <a class="btn btn-secondary" href="/docs/api/">Read the API docs</a>
       </div>
@@ -210,11 +194,8 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Try it</p>
-          <h2 class="h-section" id="try-h">Point something at the live instance</h2>
-          <p class="lede">
-            inbox.surfingdog.ai is a real instance running this code. Its public doors need no key, so an agent can read
-            it from a standing start.
-          </p>
+          <h2 class="h-section" id="try-h">Try the live instance</h2>
+          <p class="lede">inbox.surfingdog.ai is our own instance. Its public doors need no key.</p>
         </div>
       </div>
 
@@ -241,15 +222,15 @@ const ways = [
       </ul>
 
       <div class="glass panel call">
-        <h3 class="h-card">One call you can make right now</h3>
+        <h3 class="h-card">One call to start with</h3>
         <pre class="cmd mono"><code>curl {INSTANCE}/v1/business</code><button
             class="btn btn-secondary btn-sm"
             type="button"
             data-copy={`curl ${INSTANCE}/v1/business`}
             hidden>Copy</button></pre>
         <p class="card-text">
-          It answers with the business profile: the name, the item types the instance accepts and where its doors are.
-          No key and no sign-up, and the answer is cached for five minutes.
+          Returns the business name, domain, timezone, currency, languages and item types. No key needed, cached for
+          five minutes.
         </p>
       </div>
     </div>
@@ -260,8 +241,8 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Run it</p>
-          <h2 class="h-section" id="run-it-h">Four ways, same software</h2>
-          <p class="lede">Pick the runtime. The home page carries the full version of this, with the waitlist.</p>
+          <h2 class="h-section" id="run-it-h">Four ways to set it up</h2>
+          <p class="lede">Same software each way.</p>
         </div>
       </div>
 
@@ -288,11 +269,8 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Connect your AI</p>
-          <h2 class="h-section" id="connect-h">Your own AI runs the inbox</h2>
-          <p class="lede">
-            The owner MCP server is the same surface the owner app uses. Claude, ChatGPT or anything that speaks
-            Streamable HTTP can work the inbox on your behalf.
-          </p>
+          <h2 class="h-section" id="connect-h">Let your own AI run the inbox</h2>
+          <p class="lede">Claude, ChatGPT or any Streamable HTTP client can work the inbox for you.</p>
         </div>
         <a class="btn btn-secondary" href="/docs/connect-your-ai/">How to connect</a>
       </div>
@@ -300,15 +278,12 @@ const ways = [
       <div class="glass panel connect">
         <p class="endpoint mono"><code>POST /mcp/owner</code></p>
         <p class="card-text">
-          Every instance is its own authorization server. A client connects with OAuth 2.1, authorization code and PKCE,
-          and identifies itself with a Client ID Metadata Document, so nothing has to be registered by hand. Dynamic
-          registration is there for clients that still need it. A client that cannot do OAuth sends an owner API key
-          instead.
+          Each instance is its own OAuth server. Clients use OAuth 2.1 with PKCE and a Client ID Metadata Document, so
+          nothing is registered by hand. Dynamic registration and owner API keys work too.
         </p>
         <p class="card-text">
-          24 tools cover the work: list and read items, fire the transitions an item allows, reply to a customer, and
-          set up the profile, the services, the products, the opening hours and the rules. Eight scopes bound what a
-          connected client may do, and a consent screen names them in plain words.
+          34 tools cover items, replies, the catalogue, opening hours, rules, webhooks and settings. Eight scopes, shown
+          on the consent screen in plain words, limit what a client can do.
         </p>
       </div>
     </div>
@@ -319,39 +294,29 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Contribute</p>
-          <h2 class="h-section" id="contribute-h">Issues, pull requests and feature requests</h2>
-          <p class="lede">
-            Read the plan and the decision records before changing the architecture. They are short, and they explain
-            why. Then open an issue or a pull request.
-          </p>
+          <h2 class="h-section" id="contribute-h">Help build it</h2>
+          <p class="lede">Read the decision records before you change the architecture.</p>
         </div>
       </div>
 
       <ul class="grid-cards cards" data-reveal="stagger">
         <li class="glass card lift">
           <h3 class="h-card">The code</h3>
-          <p class="card-text">
-            The repository, the issues and the decision records. Every change has to pass the suite on Node and inside
-            workerd.
-          </p>
+          <p class="card-text">Every change must pass the tests on Node and on workerd.</p>
           <span class="foot">
             <a class="btn btn-secondary" href={REPO} rel="noopener">Open the repository</a>
           </span>
         </li>
         <li class="glass card lift">
           <h3 class="h-card">How to work on it</h3>
-          <p class="card-text">
-            The toolchain, the rules of the repository, and what a change has to respect before it is merged.
-          </p>
+          <p class="card-text">The toolchain and the rules of the repository.</p>
           <span class="foot">
             <a class="btn btn-secondary" href="/docs/contributing/">Read contributing</a>
           </span>
         </li>
         <li class="glass card lift">
           <h3 class="h-card">Ask for something</h3>
-          <p class="card-text">
-            Not every idea needs a pull request. Say what you need, see what other people need, and vote on it.
-          </p>
+          <p class="card-text">Say what you need, and vote on what others have asked for.</p>
           <span class="foot">
             <a class="btn btn-secondary" href="/requests/">Feature requests</a>
           </span>
@@ -359,9 +324,8 @@ const ways = [
       </ul>
 
       <p class="fine">
-        The server, the app and the shared UI are AGPL-3.0-only: run a modified copy as a service and its source has to
-        be available. The spec and the SDK are MIT on purpose, so anyone can implement a compatible instance, agent or
-        integration without inheriting that.
+        If you run a modified copy as a service, the AGPL requires you to make its source available. The spec and the SDK
+        are MIT and carry no such duty.
       </p>
     </div>
   </section>

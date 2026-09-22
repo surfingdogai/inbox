@@ -10,8 +10,8 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
         <p class="eyebrow">Run it</p>
         <h2 class="h-section" id="run-h">Three ways to run</h2>
         <p class="lede">
-          The same software, whichever way you pick. Your data stays in one SQLite database that you own, and the
-          network is optional.
+          On Cloudflare or your own server, your data stays in your account or on your machine. Joining the network
+          is optional.
         </p>
       </div>
     </div>
@@ -20,8 +20,8 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
       <article class="glass card lift way">
         <h3 class="h-card">Deploy to Cloudflare</h3>
         <p class="card-text">
-          One click on your own Cloudflare account. The button provisions a D1 database, an R2 bucket and a queue, and
-          asks for two values. Starts on a free account; sending email needs Workers Paid.
+          One click on your Cloudflare account sets everything up and asks for two values. You can start free.
+          Sending email needs Workers Paid or a Resend key.
         </p>
         <div class="foot">
           <a class="btn btn-primary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
@@ -30,8 +30,8 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 
       <article class="glass card lift way">
         <h3 class="h-card">Your own server</h3>
-        <p class="card-text">One process, one SQLite file, Node 22.16 or newer. A single command is on its way with 0.1.</p>
-        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">0.1</span></pre>
+        <p class="card-text">One process and one SQLite file, on Node 22.16 or newer. A one-line install is coming.</p>
+        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">Coming</span></pre>
         <div class="foot">
           <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
         </div>
@@ -43,8 +43,7 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
           <span class="pill">Coming</span>
         </div>
         <p class="card-text">
-          The same inbox on our own servers, one database per business, email in and out, backups and one-click
-          connectors. Leave your address and we will write when it opens.
+          We'll run it for you, with email and backups included. Leave your address and we'll write when it opens.
         </p>
         <form class="foot wait" method="post" action={WAITLIST} data-waitlist>
           <label class="label" for="wait-email">Email</label>
@@ -144,7 +143,7 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) throw new Error(String(res.status));
-      status.textContent = "You are on the list. We will write when hosted opens.";
+      status.textContent = "You're on the list. We'll write when hosting opens.";
       form.reset();
     } catch {
       status.classList.add("error");

@@ -16,23 +16,23 @@ const sorts = [
 ];
 
 const legend = [
-  { status: "open", tint: "message", text: "Asked for, on the board, collecting votes." },
-  { status: "planned", tint: "quote", text: "Decided. It is on the plan and it will be built." },
-  { status: "building", tint: "warning", text: "Someone is writing it now." },
-  { status: "shipped", tint: "success", text: "Released. The blog says what changed and when." },
+  { status: "open", tint: "message", text: "Asked for and collecting votes." },
+  { status: "planned", tint: "quote", text: "We've decided to build it." },
+  { status: "building", tint: "warning", text: "Someone is working on it now." },
+  { status: "shipped", tint: "success", text: "Released." },
 ];
 ---
 
 <Layout
   title="Feature requests · Surfing Dog"
-  description="Ask for a feature in Surfing Dog Inbox, vote on what other people have asked for, and say why it matters. The inbox is open source, so the most wanted requests get built first."
+  description="Ask for a feature in Surfing Dog Inbox and vote on what others have asked for. The most wanted rise to the top."
 >
   <section class="wrap wrap-read section is-head" id="requests" aria-labelledby="requests-h">
     <p class="eyebrow">Feature requests</p>
-    <h1 class="h-page" id="requests-h">What should the inbox do next?</h1>
+    <h1 class="h-page" id="requests-h">Tell us what to build next</h1>
     <p class="lede">
-      Ask for what you need, and vote on what other people have asked for. The most wanted get built first. If you
-      would rather write it yourself, the code is open.
+      Ask for what you need, or vote for what others have asked for. Votes help us decide what comes next. The code
+      is open, so you can also build it yourself.
     </p>
 
     {/* Who you are, at the top of the page rather than buried in the board: a reader should not
@@ -41,7 +41,7 @@ const legend = [
     <div class="ident" data-ident>
       <div class="ident-say">
         <p class="card-text ident-line"><span data-ident-text
-          >Voting is open to everyone. Commenting needs an account.</span
+          >Anyone can vote. You need an account to comment.</span
           ><b class="ident-name" data-ident-name></b></p>
         <p class="hint" data-ident-status aria-live="polite"></p>
       </div>
@@ -75,11 +75,8 @@ const legend = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Ask</p>
-          <h2 class="h-section" id="ask-h">Tell us what you need</h2>
-          <p class="lede">
-            One request at a time. Keep the title short enough to read in a list, and use the box under it for the part
-            that matters: what you were trying to do.
-          </p>
+          <h2 class="h-section" id="ask-h">Your request</h2>
+          <p class="lede">One request at a time. Keep the title short.</p>
         </div>
       </div>
 
@@ -99,7 +96,7 @@ const legend = [
         </div>
 
         <div class="field">
-          <label class="label" for="req-body">What would it do? <span class="opt">optional</span></label>
+          <label class="label" for="req-body">What were you trying to do? <span class="opt">optional</span></label>
           <textarea
             class="input"
             id="req-body"
@@ -108,10 +105,7 @@ const legend = [
             maxlength="2000"
             aria-describedby="req-body-hint"
             placeholder="People turn up at the wrong time because nothing reminds them the day before."></textarea>
-          <p class="hint" id="req-body-hint">
-            Describe the situation you are in rather than the solution you have in mind. Two or three sentences is
-            plenty, and it is the part that gets a request built.
-          </p>
+          <p class="hint" id="req-body-hint">Tell us what happened. Two or three sentences is plenty.</p>
         </div>
 
         <div class="field">
@@ -125,7 +119,9 @@ const legend = [
             aria-describedby="req-email-hint"
             placeholder="you@yourbusiness.pt"
           />
-          <p class="hint" id="req-email-hint">Only to tell you when it ships. It is never shown on the board.</p>
+          <p class="hint" id="req-email-hint">
+            We'll only use it to tell you when it ships. It's never shown on the board.
+          </p>
         </div>
 
         <div class="ask-foot">
@@ -141,10 +137,8 @@ const legend = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">The board</p>
-          <h2 class="h-section" id="board-h">What everyone else is asking for</h2>
-          <p class="lede">
-            The most wanted sit at the top. Open one to read what people have said about it, and why they need it.
-          </p>
+          <h2 class="h-section" id="board-h">What others asked for</h2>
+          <p class="lede">Most votes at the top. Open one to read the comments.</p>
         </div>
       </div>
 
@@ -168,9 +162,7 @@ const legend = [
             />
             <button class="btn btn-primary" type="submit" data-name-save>Save</button>
           </div>
-          <p class="hint" id="board-name-hint">
-            It is shown next to your comments, and nothing else about you ever is.
-          </p>
+          <p class="hint" id="board-name-hint">Shown next to your comments. We never show anything else about you.</p>
           <p class="hint" data-name-error aria-live="polite"></p>
         </div>
       </form>
@@ -226,8 +218,7 @@ const legend = [
       <noscript>
         <div class="glass panel">
           <p class="card-text">
-            The board is filled in by the browser, so signing in, voting and commenting all need JavaScript. The form
-            above still works without it, and every request also lives in the issues.
+            The board needs JavaScript. The form above works without it, or you can open an issue on GitHub.
           </p>
           <p class="note-foot">
             <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues on GitHub</a>
@@ -326,13 +317,13 @@ const legend = [
 
       <template data-signin-line-template>
         <p class="hint talk-line">
-          <a class="link" href={SIGNIN}>Sign in</a> to comment. Voting does not need an account.
+          <a class="link" href={SIGNIN}>Sign in</a> to comment. You can vote without an account.
         </p>
       </template>
 
       <template data-name-line-template>
         <p class="hint talk-line">
-          Choose a display name before you comment.
+          Choose a display name to comment.
           <button class="linkish" type="button" data-name-jump>Choose one now</button>
         </p>
       </template>
@@ -354,10 +345,10 @@ const legend = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Before you ask</p>
-          <h2 class="h-section" id="asking-well-h">A good request is a real situation</h2>
+          <h2 class="h-section" id="asking-well-h">Tips for a good request</h2>
           <p class="lede">
-            Some of it is already built, and a request that describes the day you had is worth more than one that
-            describes the feature you imagined.
+            The best requests describe something that really happened, like a customer turning up at a bike shop on
+            the wrong day.
           </p>
         </div>
       </div>
@@ -366,20 +357,16 @@ const legend = [
         <li class="glass card lift">
           <h3 class="h-card">It may already exist</h3>
           <ul class="checks">
-            <li><a class="link" href="/how-it-works/">How it works</a> shows what an inbox does with a request today.</li>
-            <li><a class="link" href="/docs/">The docs</a> cover the doors, the rules language and the owner tools.</li>
-            <li><a class="link" href="/blog/">The blog</a> says what shipped and what changed with it.</li>
+            <li><a class="link" href="/how-it-works/">How it works</a> shows what an inbox does today.</li>
+            <li><a class="link" href="/docs/">The docs</a> cover the API and the rules.</li>
+            <li><a class="link" href="/blog/">The blog</a> has our latest news.</li>
           </ul>
         </li>
         <li class="glass card lift">
-          <h3 class="h-card">Prefer GitHub?</h3>
+          <h3 class="h-card">On GitHub</h3>
           <p class="card-text">
-            If you read code, the issues are the better room: you can attach a log, a schema or a patch, and argue about
-            the design in the open.
-          </p>
-          <p class="card-text">
-            A good issue is a real situation rather than a guessed solution. Say what you tried, what happened, and what
-            you needed to happen instead.
+            If you write code, open an issue instead. You can attach a log or a patch and talk through the design in
+            the open.
           </p>
           <span class="foot">
             <a class="btn btn-secondary" href={ISSUES} rel="noopener">Open the issues</a>
@@ -1043,7 +1030,7 @@ const legend = [
     if (!target) return;
     target.classList.add("error");
     target.replaceChildren(
-      document.createTextNode("The board is not reachable right now. Open an issue on GitHub instead: "),
+      document.createTextNode("That didn't send. Try again, or open an issue on GitHub: "),
     );
     const link = document.createElement("a");
     link.className = "link";
@@ -1071,8 +1058,8 @@ const legend = [
       if (typeof title === "string" && title.trim()) return title;
     }
     return status === 429
-      ? "That is a lot of requests from one address. Try again in an hour, or open an issue on GitHub."
-      : "That did not go through. Check what you wrote and try again.";
+      ? "Too many requests from this address. Try again in an hour, or open an issue on GitHub."
+      : "That didn't go through. Check what you wrote and try again.";
   }
 
   /** The same, for a refusal that names the field it is about. */
@@ -1136,11 +1123,11 @@ const legend = [
     if (identName) identName.textContent = view === "in" && me ? me.displayName : "";
     if (identText) {
       if (view === "out") {
-        identText.textContent = "Voting is open to everyone. Commenting needs an account.";
+        identText.textContent = "Anyone can vote. You need an account to comment.";
       } else if (view === "checking") {
-        identText.textContent = "Checking whether you are signed in.";
+        identText.textContent = "Checking if you're signed in.";
       } else if (view === "unknown") {
-        identText.textContent = "You are signed in, but the board is not answering, so your name is not showing.";
+        identText.textContent = "You're signed in, but the board isn't answering right now.";
       } else if (me && me.displayName.trim()) {
         identText.textContent = "Signed in as ";
       } else {
@@ -1240,7 +1227,7 @@ const legend = [
       nameInput.setAttribute("aria-invalid", "true");
       say(nameError, fieldText(payload, "display_name", res.status), true);
     } catch {
-      say(nameError, "That name did not reach the network. Nothing was lost, so try again in a moment.", true);
+      say(nameError, "That name didn't save. Try again in a moment.", true);
     } finally {
       if (button) button.disabled = false;
     }
@@ -1333,8 +1320,8 @@ const legend = [
     if (items.length === 0) {
       const text =
         current === "shipped"
-          ? "Nothing from the board has shipped yet. The blog carries every release."
-          : "Nothing here yet. Yours can be the first.";
+          ? "Nothing from the board has shipped yet."
+          : "Nothing here yet. Be the first to ask.";
       const empty = note(text, false);
       if (empty) board.replaceChildren(empty);
       return;
@@ -1402,7 +1389,7 @@ const legend = [
       paint(items);
       paintCounts(isRecord(data) ? data.counts : undefined);
     } catch {
-      const offline = note("The board is not reachable right now. Nothing is lost: the issues are the other way in.", true);
+      const offline = note("The board isn't loading. You can open an issue on GitHub instead.", true);
       if (offline) board.replaceChildren(offline);
       paintCounts(undefined);
     } finally {
@@ -1438,7 +1425,7 @@ const legend = [
       setVote(button, votes, now);
     } catch {
       setVote(button, before, wasVoted);
-      say(boardStatus, "That vote did not reach the network. Nothing was lost, so try it again in a moment.", true);
+      say(boardStatus, "Your vote didn't go through. Try again in a moment.", true);
     } finally {
       button.dataset.busy = "false";
     }
@@ -1538,7 +1525,7 @@ const legend = [
     const status = panel.querySelector<HTMLElement>("[data-talk-status]");
     const list = panel.querySelector<HTMLElement>("[data-comments]");
     if (!list) return;
-    say(status, "Loading the comments.");
+    say(status, "Loading comments.");
     try {
       const res = await read(`${API}/${encodeURIComponent(id)}/comments?limit=50`);
       if (!res.ok) throw new Error(String(res.status));
@@ -1556,8 +1543,8 @@ const legend = [
       }
       panel.dataset.loaded = "true";
       const more = isRecord(data) && typeof data.next_cursor === "string" && data.next_cursor !== "";
-      if (items.length === 0) say(status, "No comments yet. Yours would be the first.");
-      else if (more) say(status, "The first 50 comments are shown.");
+      if (items.length === 0) say(status, "No comments yet. Be the first.");
+      else if (more) say(status, "Showing the first 50 comments.");
       else {
         say(status, "");
         const row = panel.closest<HTMLElement>("[data-request]");
@@ -1566,7 +1553,7 @@ const legend = [
       }
     } catch {
       list.replaceChildren();
-      say(status, "The comments are not reachable right now. Try again in a moment.", true);
+      say(status, "Comments aren't loading right now. Try again in a moment.", true);
     } finally {
       paintFoot(panel, id);
     }
@@ -1634,7 +1621,7 @@ const legend = [
       if (res.status === 401) {
         forgetIdentity();
         paintFoot(panel, id);
-        say(status, "You are signed out now. Sign in again to post that comment.", true);
+        say(status, "You've been signed out. Sign in again to post your comment.", true);
         return;
       }
       if (res.status === 409 && codeOf(payload) === "needs_name") {
@@ -1649,7 +1636,7 @@ const legend = [
       }
       say(error, problemText(payload, res.status), true);
     } catch {
-      say(error, "That comment did not reach the network. Nothing was lost, so try again in a moment.", true);
+      say(error, "Your comment didn't post. It's still in the box, so try again.", true);
     } finally {
       if (button) button.disabled = false;
     }
@@ -1677,7 +1664,7 @@ const legend = [
         gone = true;
         el.remove();
         bumpTalk(row, -1);
-        if (list && list.childElementCount === 0) say(status, "No comments yet. Yours would be the first.");
+        if (list && list.childElementCount === 0) say(status, "No comments yet. Be the first.");
         // The focused button left with the comment, so put the cursor back on the thread.
         row.querySelector<HTMLElement>("[data-talk]")?.focus();
         return;
@@ -1685,13 +1672,13 @@ const legend = [
       if (res.status === 401) {
         forgetIdentity();
         paintFoot(panel, requestId);
-        say(status, "You are signed out now. Sign in again to delete that comment.", true);
+        say(status, "You've been signed out. Sign in again to delete it.", true);
         return;
       }
       const payload: unknown = await res.json().catch(() => null);
       say(status, problemText(payload, res.status), true);
     } catch {
-      say(status, "That comment was not deleted. Nothing was lost, so try again in a moment.", true);
+      say(status, "That comment wasn't deleted. Try again in a moment.", true);
     } finally {
       if (!gone) {
         for (const button of Array.from(el.querySelectorAll<HTMLButtonElement>("button"))) button.disabled = false;
@@ -1817,7 +1804,7 @@ const legend = [
           formStatus,
           isRecord(payload) && typeof payload.message === "string"
             ? payload.message
-            : "Thank you. We have your request.",
+            : "Thanks. We have your request.",
         );
         form.reset();
         if (created) remember(created.id, true);

@@ -9,11 +9,11 @@ const when = (d: Date) =>
   d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 ---
 
-<Layout title="Blog · Surfing Dog" description="Notes from building Surfing Dog Inbox: what is live, what is next, and why." type="website">
+<Layout title="Blog · Surfing Dog" description="Notes from building Surfing Dog Inbox, the open-source inbox where AI agents reach a business." type="website">
   <section class="wrap section" aria-labelledby="blog-h">
     <p class="eyebrow">Blog</p>
     <h1 class="h-page" id="blog-h">Notes from the water</h1>
-    <p class="lede">What is live, what is next, and why it was built that way.</p>
+    <p class="lede">What we've shipped, and what we're building next.</p>
     <ul class="posts" data-reveal="stagger">
       {
         posts.map((post) => (

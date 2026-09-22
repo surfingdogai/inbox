@@ -4,24 +4,21 @@ import Shot from "./Shot.astro";
 const shots = [
   {
     src: "/shots/rules-detail.png",
-    alt: "The rules screen of the inbox, listing plain rules with their triggers, conditions and actions",
+    alt: "The rules screen, listing rules with their triggers, conditions and actions",
     title: "Rules",
-    caption:
-      "Plain rules, read back in English, run the moment an item arrives or changes state. Turn one off, test it, or change the number in it.",
+    caption: "Each rule reads back in plain English. Test it before it goes live.",
   },
   {
     src: "/shots/availability-detail.png",
-    alt: "The availability and services screen: opening hours, services with duration and capacity, products with prices",
+    alt: "The availability screen: opening hours, services with duration and capacity, products with prices",
     title: "Availability and services",
-    caption:
-      "Opening hours, services with duration and capacity, products with prices: exactly what an agent may check, book or order.",
+    caption: "Your hours, services and prices. Agents book and order from these.",
   },
   {
     src: "/shots/settings-detail.png",
-    alt: "The settings screen: cancellation window, approval limit, email, test mode and the network the instance reports to",
+    alt: "The settings screen: cancellation window, approval limit, email, test mode and the network",
     title: "Settings",
-    caption:
-      "Cancellation windows, approval limits, email and test mode: one versioned document, edited by you or by your AI.",
+    caption: "Cancellation window, approval limit, email and test mode, changed by you or by your AI.",
   },
 ];
 ---
@@ -31,11 +28,10 @@ const shots = [
     <div class="sec-head">
       <div>
         <p class="eyebrow">Your rules</p>
-        <h2 class="h-section" id="rules-h">Set your rules once. Let any agent do the rest.</h2>
+        <h2 class="h-section" id="rules-h">Write your rules once. Agents work inside them.</h2>
         <p class="lede">
-          A business does not need to build agent tooling. It needs its opening hours, its services and its limits
-          written down once, so that any agent can book, order or ask within them, and its own AI can answer inside
-          them.
+          You don't build anything for agents. Write down your hours, services and limits, and agents book and order
+          within them.
         </p>
       </div>
     </div>

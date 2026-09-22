@@ -1,19 +1,19 @@
 ---
 import Shot from "./Shot.astro";
 
-const points = [
+/** `phase` marks a point that is not shipped yet; every point below is live today. */
+const points: { title: string; text: string; phase?: string }[] = [
   {
-    title: "Typed, not threaded",
-    text: "Every request becomes a booking, an order, a quote or a message with a state machine behind it. Rules handle the routine; you, or your own AI, handle the rest.",
+    title: "Each request has a type",
+    text: "Every request is a booking, an order, a quote or a message, and it moves step by step until it's done.",
   },
   {
-    title: "Three doors, one inbox",
-    text: "A REST API, two MCP servers and email. Agents pick their door and you see one list. The manifest at /.well-known/agent-inbox.json points them at the REST, OpenAPI and MCP doors on their own.",
+    title: "Many ways in, one list",
+    text: "Agents reach you through a REST API, MCP or email, and it all lands in one list. Your own AI connects over a separate owner MCP.",
   },
   {
-    title: "Receipts, not reviews",
-    text: "Completed work will end in a signed receipt that both sides hold. A review on the network will only count against one, in both directions.",
-    phase: "Coming",
+    title: "A signed receipt",
+    text: "When a booking is confirmed or an order is paid, the inbox signs a receipt. The customer's agent can counter-sign it.",
   },
 ];
 ---
@@ -23,16 +23,16 @@ const points = [
     <div class="sec-head">
       <div>
         <p class="eyebrow">One inbox</p>
-        <h2 class="h-section" id="inbox-h">Typed, three doors open, a receipt at the end</h2>
+        <h2 class="h-section" id="inbox-h">Every request in one list</h2>
       </div>
     </div>
     <div class="cols">
       <Shot
         src="/shots/inbox-day.png"
         night="/shots/inbox-night.png"
-        alt="The inbox: a rail of filters, the list of items with their type and state, and the selected item's detail"
+        alt="The inbox: filters on the left, the list of requests with their type and state, and the one selected"
         title="The inbox"
-        caption="Filters, the list, the item. Bookings, orders, quotes and messages side by side, each with its state."
+        caption="Bookings, orders, quotes and messages in one list, each showing where it stands."
       />
       <div class="glass panel points">
         {
