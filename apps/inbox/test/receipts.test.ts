@@ -7,6 +7,7 @@ import {
   generateKeyPair,
   MANIFEST_PATH,
   type PublicJwk,
+  receiptSha,
   schema,
   ulid,
   verifyReceipt,
@@ -61,11 +62,12 @@ const jsonPost = (path: string, body: unknown, headers: Record<string, string> =
     body: JSON.stringify(body),
   });
 
-async function counterSign(receiptId: string, iatSec: number) {
+async function counterSign(receiptId: string, receiptJws: string, iatSec: number) {
   const agent = await generateKeyPair();
   const enc = new TextEncoder();
   const header = { alg: ALG, typ: ACK_TYP, jwk: agent.publicJwk };
-  const input = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify({ rcp: receiptId, iat: iatSec })))}`;
+  const body = { rcp: receiptId, sha: await receiptSha(receiptJws), iat: iatSec };
+  const input = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify(body)))}`;
   const key = await crypto.subtle.importKey(
     "jwk",
     { ...agent.privateJwk, key_ops: ["sign"], ext: true },
@@ -121,6 +123,24 @@ async function bookAndConfirm(s: Awaited<ReturnType<typeof setup>>) {
   return { id: body.view.item.id, token: body.accessToken };
 }
 
+describe("the manifest", () => {
+  it("names the network under review_services once the owner joins", async () => {
+    const s = await setup();
+    const before = (await (await s.app.request(`${ORIGIN}${MANIFEST_PATH}`)).json()) as { review_services: string[] };
+    expect(before.review_services).toEqual([]);
+    const put = await s.app.request(
+      new Request(`${ORIGIN}/v1/owner/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: `Bearer ${s.ownerKey}` },
+        body: JSON.stringify({ doc: { network: { url: "https://network.surfingdog.ai", join: true } } }),
+      }),
+    );
+    expect(put.status).toBe(200);
+    const after = (await (await s.app.request(`${ORIGIN}${MANIFEST_PATH}`)).json()) as { review_services: string[] };
+    expect(after.review_services).toEqual(["https://network.surfingdog.ai"]);
+  });
+});
+
 describe("receipts over HTTP", () => {
   it("are issued on confirm, readable by the customer, verifiable by the JWKS and named in the manifest", async () => {
     const s = await setup();
@@ -164,14 +184,14 @@ describe("receipts over HTTP", () => {
 
     // Nobody's item without the token.
     const anon = await s.app.request(
-      jsonPost(`/v1/items/${id}/receipt-ack`, { counter_signature: await counterSign(rcp.id, nowSec) }),
+      jsonPost(`/v1/items/${id}/receipt-ack`, { counter_signature: await counterSign(rcp.id, rcp.jws, nowSec) }),
     );
     expect(anon.status).toBe(403);
 
     // A signature over the wrong receipt id.
     const wrong = await s.app.request(
       jsonPost(`/v1/items/${id}/receipt-ack`, {
-        counter_signature: await counterSign("01NOTAREALRECEIPT", nowSec),
+        counter_signature: await counterSign("01NOTAREALRECEIPT", rcp.jws, nowSec),
         access_token: token,
       }),
     );
@@ -182,7 +202,7 @@ describe("receipts over HTTP", () => {
     const ok = await s.app.request(
       jsonPost(
         `/v1/items/${id}/receipt-ack`,
-        { counter_signature: await counterSign(rcp.id, nowSec), receipt: rcp.jws },
+        { counter_signature: await counterSign(rcp.id, rcp.jws, nowSec), receipt: rcp.jws },
         { "x-access-token": token },
       ),
     );
@@ -215,7 +235,7 @@ describe("receipts over HTTP", () => {
       arguments: {
         item_id: id,
         access_token: token,
-        counter_signature: await counterSign(rcp.id, Math.floor(Date.now() / 1000)),
+        counter_signature: await counterSign(rcp.id, rcp.jws, Math.floor(Date.now() / 1000)),
       },
     });
     expect(res.isError ?? false).toBe(false);
@@ -227,7 +247,7 @@ describe("receipts over HTTP", () => {
       arguments: {
         item_id: id,
         access_token: token,
-        counter_signature: await counterSign(rcp.id, Math.floor(Date.now() / 1000) - 86_400),
+        counter_signature: await counterSign(rcp.id, rcp.jws, Math.floor(Date.now() / 1000) - 86_400),
       },
     });
     // Already acknowledged, so a stale second one is still refused on its own merits first.

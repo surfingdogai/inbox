@@ -82,6 +82,26 @@ that embedded key, records it, and from then on the receipt is *acked*: both sid
 An unacked receipt is still a receipt. It is simply weaker evidence, and the network is told which
 it is (ADR-012: paid 1.0, unpaid 0.7, unacked business-side 0.4) rather than being asked to guess.
 
+**Amended the same day, before any acknowledgement existed.** The payload is `{"rcp": "<receipt
+id>", "sha": "<base64url(SHA-256(receipt compact JWS))>", "iat": <seconds>}`. `rcp` alone bound the
+acknowledgement to an id only the issuing instance can resolve, so a network holding the two JWS
+strings could not tell whether the acknowledgement was of *this* receipt or of another from the
+same issuer. `sha` is the check anyone can repeat with nothing but the two strings. The instance
+checks both; a network checks `sha`.
+
+## Publishing to a network
+
+The instance pushes each receipt, and again once it is acknowledged, to every review service it
+names in the manifest under `review_services` — the network chosen in Settings, while `network.join`
+is on. `POST <service>/v1/receipts` with `{"receipt": "<jws>", "ack": "<jws>"?}`; the service
+answers `{"ok": true, "state": "issued" | "acknowledged", "duplicate": <bool>}`. The service trusts
+nothing in the body: it finds the issuer by `iss`, takes the keys from the manifest it fetched from
+that domain itself, verifies the receipt, verifies the acknowledgement against the key it carries
+and the receipt's hash, and deduplicates on `(issuer, nonce)`. A receipt from a domain the service
+has not verified is refused (404) and the instance retries, because registration and verification
+run on the hourly ping and will catch up. The customer's agent may present the same pair to a
+service itself; the verification is identical, and nothing in it depends on who delivered it.
+
 ## What this does not decide
 
 Reviews. A review is only accepted against a receipt, in both directions, and both are sealed

@@ -1,4 +1,13 @@
-import { type Db, ensureJob, type JobHandler, pruneJobs, readSettings } from "@surfingdog/core";
+import {
+  type Db,
+  ensureJob,
+  type JobHandler,
+  NETWORK_RECEIPT_KIND,
+  pruneJobs,
+  readSettings,
+  schema,
+} from "@surfingdog/core";
+import { eq } from "drizzle-orm";
 import { isPublicHost } from "./safe-fetch";
 import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
 
@@ -10,6 +19,7 @@ import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
  * endpoints works; `network.join` is the switch.
  */
 export const NETWORK_PING_KIND = "network_ping";
+export { NETWORK_RECEIPT_KIND };
 export const PING_PERIOD_MS = 60 * 60_000;
 const PRUNE_AFTER_MS = 7 * 24 * 3_600_000;
 
@@ -135,4 +145,40 @@ async function post(deps: NetworkDeps, url: string, body: string): Promise<{ sta
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Publishes one receipt to the joined network (ADR-016): `POST <network>/v1/receipts` with the
+ * receipt and, once there is one, the acknowledgement. The network verifies both against the
+ * keys in our own manifest, so there is nothing to authenticate here beyond the signatures.
+ *
+ * What retries and what does not: the network not knowing us yet (404: registration and
+ * verification happen on the hourly ping), a stale copy of our keys on its side (422 unknown_key:
+ * it refreshes on its own), rate limits and server errors all retry with the job's backoff. Any
+ * other refusal is the network's verdict on the receipt itself, and is recorded once.
+ */
+export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
+  return async (job, { db }) => {
+    const p = job.payload as { receiptId: string; stage: string };
+    const [row] = await db.orm.select().from(schema.receipts).where(eq(schema.receipts.id, p.receiptId));
+    if (!row) return { note: `receipt ${p.receiptId} is gone; nothing published` };
+    const settings = await readSettings(db);
+    if (!settings.network.join) return { note: "not joined; nothing published" };
+    const network = new URL(settings.network.url);
+    if (network.protocol !== "https:" || !isPublicHost(network.hostname)) {
+      return { note: `network URL ${network.origin} is not a public https origin` };
+    }
+    const body = JSON.stringify({ receipt: row.jws, ...(row.ackJws ? { ack: row.ackJws } : {}) });
+    const res = await post(deps, `${network.origin}/v1/receipts`, body);
+    if (res.status >= 200 && res.status < 300) {
+      return { note: `published ${p.stage} receipt ${row.id} to ${network.host}` };
+    }
+    const retry =
+      res.status === 404 ||
+      res.status === 429 ||
+      res.status >= 500 ||
+      (res.status === 422 && res.text.includes("unknown_key"));
+    if (retry) throw new Error(`publish to ${network.host}: HTTP ${res.status} ${res.text.slice(0, 200)}`);
+    return { note: `${network.host} refused receipt ${row.id}: HTTP ${res.status} ${res.text.slice(0, 200)}` };
+  };
 }

@@ -201,9 +201,20 @@ export async function verifyReceipt(jws: string, keys: readonly PublicJwk[]): Pr
  * the instance has no directory of customer agents and should not want one. The key proves only
  * that whoever acked held it, which is the whole claim being made.
  */
+/** base64url(SHA-256(compact JWS)), the value an acknowledgement carries as `sha`. */
+export async function receiptSha(receiptJws: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(receiptJws) as BufferSource);
+  return b64u(new Uint8Array(digest));
+}
+
+/**
+ * Verifies an acknowledgement: the agent's own signature under the key in its header, and that
+ * it names THIS receipt — by the id the instance gave it and by the hash of the receipt itself,
+ * which is the check a network can repeat without knowing any id.
+ */
 export async function verifyAck(
   jws: string,
-  expect: { receiptId: string; now: number; maxAgeSec?: number },
+  expect: { receiptId: string; receiptJws: string; now: number; maxAgeSec?: number },
 ): Promise<{ payload: ReceiptAckPayload; agentJwk: PublicJwk; agentKid: string }> {
   const { header, payload, signingInput, signature } = parse(jws);
   if (header.alg !== ALG) throw new ReceiptError("bad_alg", `an acknowledgement is signed ${ALG}`);
@@ -225,6 +236,9 @@ export async function verifyAck(
   const body = payload as unknown as ReceiptAckPayload;
   if (body.rcp !== expect.receiptId) {
     throw new ReceiptError("bad_payload", "this acknowledges a different receipt");
+  }
+  if (typeof body.sha !== "string" || body.sha !== (await receiptSha(expect.receiptJws))) {
+    throw new ReceiptError("bad_payload", "sha does not match the receipt being acknowledged");
   }
   const iat = Number(body.iat);
   if (!Number.isFinite(iat)) throw new ReceiptError("bad_payload", "iat is missing");

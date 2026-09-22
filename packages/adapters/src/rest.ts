@@ -212,7 +212,7 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
       tags: ["public"],
       summary: "Counter-sign a receipt on your item",
       description:
-        "Send a compact JWS signed with your agent's Ed25519 key: header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<public jwk>}, payload {rcp:<receipt id>, iat:<unix seconds>}. The receipt ids are on GET /items/{id}.",
+        "Send a compact JWS signed with your agent's Ed25519 key: header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<public jwk>}, payload {rcp:<receipt id>, sha:<base64url(SHA-256(receipt jws))>, iat:<unix seconds>}. The receipt ids are on GET /items/{id}.",
       responses: json("Receipt"),
     }),
     validator("json", acknowledgeReceiptInput.omit({ item_id: true }), hook),

@@ -87,10 +87,10 @@ The acknowledgement is a compact JWS **by the agent's own Ed25519 key**, which t
 
 ```
 header   {"alg":"EdDSA","typ":"sdi-receipt-ack+jws","jwk":{"kty":"OKP","crv":"Ed25519","x":"…"}}
-payload  {"rcp":"01M34X9PAFXES35PXPY6QT944T","iat":1790000500}
+payload  {"rcp":"01M34X9PAFXES35PXPY6QT944T","sha":"<base64url(SHA-256(receipt jws))>","iat":1790000500}
 ```
 
-`rcp` is the receipt's `id` from the item; `iat` is now, in seconds. Send it to `POST /v1/items/{id}/receipt-ack` with the access token (in the body as `access_token`, as `?access_token=`, or as `X-Access-Token`), or call the `acknowledge_receipt` tool. You may include `receipt` (the JWS) if you want the instance to confirm it is the one it holds.
+`rcp` is the receipt's `id` from the item; `sha` is the base64url SHA-256 of the receipt's `jws` string exactly as you received it, no padding — it is what lets a network that never sees the instance's ids check that your acknowledgement is of this receipt and no other; `iat` is now, in seconds. Send it to `POST /v1/items/{id}/receipt-ack` with the access token (in the body as `access_token`, as `?access_token=`, or as `X-Access-Token`), or call the `acknowledge_receipt` tool. You may include `receipt` (the JWS) if you want the instance to confirm it is the one it holds.
 
 ```ts
 const enc = new TextEncoder();
@@ -98,7 +98,8 @@ const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "
 const { publicKey, privateKey } = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
 const jwk = await crypto.subtle.exportKey("jwk", publicKey);
 const header = b64u(enc.encode(JSON.stringify({ alg: "EdDSA", typ: "sdi-receipt-ack+jws", jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x } })));
-const payload = b64u(enc.encode(JSON.stringify({ rcp: receipt.id, iat: Math.floor(Date.now() / 1000) })));
+const sha = b64u(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(receipt.jws))));
+const payload = b64u(enc.encode(JSON.stringify({ rcp: receipt.id, sha, iat: Math.floor(Date.now() / 1000) })));
 const sig = await crypto.subtle.sign({ name: "Ed25519" }, privateKey, enc.encode(`${header}.${payload}`));
 const counter_signature = `${header}.${payload}.${b64u(new Uint8Array(sig))}`;
 
@@ -109,9 +110,17 @@ await fetch(`${iss}/v1/items/${itemId}/receipt-ack`, {
 });
 ```
 
-The instance checks that the signature verifies against the key in the header, that `rcp` names a receipt on this item, that `iat` is no more than an hour old and no more than five minutes ahead, and keeps it. The response is the receipt with `acknowledged_at` set. **The first acknowledgement is the one both sides hold**: a second one, with the same key or another, is accepted and changes nothing. Keep the private key you signed with; it is how a network will know a later review comes from the same agent.
+The instance checks that the signature verifies against the key in the header, that `rcp` names a receipt on this item and `sha` is that receipt's hash, that `iat` is no more than an hour old and no more than five minutes ahead, and keeps it. The response is the receipt with `acknowledged_at` set. **The first acknowledgement is the one both sides hold**: a second one, with the same key or another, is accepted and changes nothing. Keep the private key you signed with; it is how a network will know a later review comes from the same agent.
 
 Refusals are problem documents: `403` when the item is not yours, `404` when `rcp` is not on this item, `422` with a `reason` (`bad_signature`, `expired`, `not_yet`, `bad_alg`, `malformed`) when the acknowledgement itself is wrong.
+
+## Networks
+
+When the owner has joined a network in Settings, the instance publishes every receipt to it — once when issued, again once acknowledged — with `POST <network>/v1/receipts` and the body `{"receipt": "<jws>", "ack": "<jws>"}` (`ack` only when there is one). The manifest names the networks an instance publishes to under `review_services`. The network answers `{"ok": true, "state": "issued" | "acknowledged", "duplicate": false}`.
+
+The network believes nothing it is sent. It finds the business by `iss`, takes the keys from the manifest it fetched from that domain itself, verifies the receipt, verifies the acknowledgement against the key in its header and the receipt's `sha`, and counts one receipt per `(issuer, nonce)`. It refuses a receipt from a domain it has not verified (`404`), one signed by a key the manifest does not publish (`422 unknown_key`, after refreshing its copy), a forgery (`422 bad_signature`), and anything older than 180 days. What it stores is what the receipt says: the pseudonym, the type, the kind, when — never an address, never a name. A directory listing shows how many receipts a business has issued and how many were counter-signed; the amounts are never published.
+
+Any service that speaks this one endpoint can be a review service; `https://network.surfingdog.ai` is only the default.
 
 ## For implementers
 

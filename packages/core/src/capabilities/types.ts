@@ -86,7 +86,7 @@ export const acknowledgeReceiptInput = z.object({
     .min(1)
     .max(8_192)
     .describe(
-      'A compact JWS by the customer\'s agent, EdDSA, header carrying its Ed25519 public `jwk`, payload `{"rcp": "<receipt id>", "iat": <unix seconds>}`.',
+      'A compact JWS by the customer\'s agent, EdDSA, header carrying its Ed25519 public `jwk`, payload `{"rcp": "<receipt id>", "sha": "<base64url(SHA-256(receipt JWS))>", "iat": <unix seconds>}`.',
     ),
   receipt: z
     .string()

@@ -73,7 +73,11 @@ describe("receipt vectors", () => {
 
   for (const v of vectors.acknowledgements) {
     it(`acknowledgement: ${v.name}`, async () => {
-      const out = await verifyAck(v.jws, { receiptId: v.receipt_id, now: v.verify_at * 1000 });
+      const out = await verifyAck(v.jws, {
+        receiptId: v.receipt_id,
+        receiptJws: v.receipt_jws,
+        now: v.verify_at * 1000,
+      });
       expect(out.payload).toEqual(v.payload);
       expect(out.agentKid).toBe(agent.kid);
     });
@@ -81,7 +85,9 @@ describe("receipt vectors", () => {
 
   for (const v of vectors.refused_acknowledgements) {
     it(`refused acknowledgement: ${v.name} → ${v.error}`, async () => {
-      expect(await codeOf(verifyAck(v.jws, { receiptId: v.receipt_id, now: v.verify_at * 1000 }))).toBe(v.error);
+      expect(
+        await codeOf(verifyAck(v.jws, { receiptId: v.receipt_id, receiptJws: v.receipt_jws, now: v.verify_at * 1000 })),
+      ).toBe(v.error);
     });
   }
 });

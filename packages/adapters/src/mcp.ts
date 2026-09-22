@@ -270,7 +270,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Acknowledge a receipt",
         description:
-          "Counter-sign a receipt this item earned, so both sides hold it. Read the item to find its receipts; then send a compact JWS signed with your own Ed25519 key — header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<your public jwk>}, payload {rcp:<receipt id>, iat:<unix seconds>}. The instance verifies it against the key you carry and keeps it. Acknowledging twice is harmless.",
+          "Counter-sign a receipt this item earned, so both sides hold it. Read the item to find its receipts; then send a compact JWS signed with your own Ed25519 key — header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<your public jwk>}, payload {rcp:<receipt id>, sha:<base64url(SHA-256(receipt jws))>, iat:<unix seconds>}. The instance verifies it against the key you carry and keeps it. Acknowledging twice is harmless.",
         inputSchema: acknowledgeReceiptInput,
         annotations: writes,
       },

@@ -40,7 +40,7 @@ const never = [
   },
   {
     k: "Reaches the network",
-    v: "Your domain, the version and runtime the instance reports, and hourly counts in four buckets. Later, once the network verifies them: receipt signatures and reviews.",
+    v: "Your domain, the version and runtime the instance reports, hourly counts in four buckets, and the receipts it issues: signed, pseudonymous, verified here against its own published keys. Later: reviews.",
   },
 ];
 ---
@@ -138,9 +138,10 @@ const never = [
       </p>
       <p class="fine">
         Receipts are live on every instance that has a secret key and a public URL: issued, readable
-        on the item, verifiable against the instance's published keys, and counter-signed through
-        the API or the MCP tool. The network does not yet collect them; reviews and reputation are
-        still to come.
+        on the item, verifiable against the instance's published keys, counter-signed through the
+        API or the MCP tool — and, once the instance joins, published to this network, which
+        verifies each one against that instance's own keys and counts it. Reviews and reputation
+        are still to come.
       </p>
     </div>
   </section>
