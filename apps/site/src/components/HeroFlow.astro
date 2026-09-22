@@ -76,8 +76,11 @@
 <path d="M344,196 L420,196" class="sd-line"/>
 <path d="M344,196 C380,196 388,288 420,288" class="sd-line"/>
 </g>
+<!-- The two captions hang off the two margins, not off their columns: AI AGENTS starts at the
+     left margin (30) and YOUR SYSTEMS ends at the right one (504). Left-aligning the right
+     caption to its pills reads as hanging, because the caption is narrower than a pill row. -->
 <text x="30" y="60" font-size="8.2" class="sd-cap">AI AGENTS</text>
-<text x="420" y="60" font-size="8.2" class="sd-cap">YOUR SYSTEMS</text>
+<text x="504" y="60" font-size="8.2" class="sd-cap" text-anchor="end">YOUR SYSTEMS</text>
 <g>
 <rect x="176" y="76" width="168" height="240" rx="14" class="sd-glass"/>
 <path d="M188,105 A11,11 0 0 1 210,105 Z" fill="url(#sdseed-g)"/>
@@ -421,7 +424,7 @@ function mount(fig){
 
   /* --- column captions ------------------------------------------------ */
   svg.appendChild(TX(30,60,8.2,"sd-cap","AI AGENTS"));
-  svg.appendChild(TX(420,60,8.2,"sd-cap","YOUR SYSTEMS"));
+  svg.appendChild(TX(504,60,8.2,"sd-cap","YOUR SYSTEMS","end"));
 
   /* --- the business ---------------------------------------------------- */
   var card=E("g");
