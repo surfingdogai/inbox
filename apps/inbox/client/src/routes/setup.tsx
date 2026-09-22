@@ -254,7 +254,6 @@ function SetupWizard() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Oficina Maré"
-                autoFocus
               />
             </Field>
             <div className="grid2">
