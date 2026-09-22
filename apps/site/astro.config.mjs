@@ -9,7 +9,7 @@ const GITHUB = "https://github.com/surfingdogai/inbox";
 /**
  * surfingdog.ai: a static Astro site. The landing page and the blog are plain Astro pages on the
  * shared design tokens; the docs are Starlight, mounted under /docs. Everything prerenders to
- * apps/site/dist and is served by Caddy on our server.
+ * apps/site/dist and is served from our own servers.
  */
 export default defineConfig({
   site: "https://surfingdog.ai",
@@ -66,7 +66,7 @@ export default defineConfig({
           details: [
             "Every instance publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. Email is a door as well, and it is not named in the manifest.",
             "A live instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
-            "The server is AGPL-3.0; the spec and the SDK are MIT. Hosted tenancy and the network's reviews arrive in a later release.",
+            "The server is AGPL-3.0; the spec and the SDK are MIT. Hosted tenancy and the network's reviews come later.",
           ].join("\n\n"),
           optionalLinks: [
             { label: "Live demo manifest", url: "https://inbox.surfingdog.ai/.well-known/agent-inbox.json" },

@@ -1,8 +1,8 @@
 /**
  * @surfingdog/sdk — MIT, so that verifying an Inbox's events costs no one an AGPL dependency.
  *
- * Today it carries the webhook verifier and the event types (ADR-015). The typed REST client is
- * generated from the OpenAPI document in the first release and lands beside them.
+ * Today it carries the webhook verifier and the event types (ADR-015). The typed REST client will
+ * be generated from the OpenAPI document and land beside them.
  */
 
 export type {

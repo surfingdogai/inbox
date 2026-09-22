@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
 
 /**
- * The settings document: one versioned, Zod-validated JSON. the first release grows this to the full
+ * The settings document: one versioned, Zod-validated JSON. It grows toward the full
  * wizard; these are the fields the write path needs today. Unknown keys are kept on read so a
  * newer document survives an older reader.
  */

@@ -13,7 +13,7 @@ wrapper with a trigram GIN index. Receipt JWS verification with stdlib `crypto/e
 hand-rolled compact-JWS parser (~120 lines) tested against the spec vectors; `go-jose` v4 is the
 fallback. RFC 9421 verification with `WebDecoy/web-bot-auth` or `yaronf/httpsign`.
 
-Schema and API as designed in the groundwork: businesses (domain, manifest snapshot, verification,
+Schema and API as first designed: businesses (domain, manifest snapshot, verification,
 geo, categories, protocols, maintained counters), key history with rotation grace, principals
 (pseudonymous, erasable), receipts with nonce dedup, reviews (sealed → revealed, commitment hash),
 fact and outcome code registries, reputation events with decay and contests, give-to-get credits,
