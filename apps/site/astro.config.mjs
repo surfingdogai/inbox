@@ -48,7 +48,7 @@ export default defineConfig({
         },
         {
           label: "Integrate",
-          items: ["docs/connect-your-ai", "docs/api", "docs/webhooks"],
+          items: ["docs/connect-your-ai", "docs/api", "docs/feeds", "docs/webhooks"],
         },
         {
           label: "Trust",
