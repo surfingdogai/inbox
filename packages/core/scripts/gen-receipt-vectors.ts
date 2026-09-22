@@ -10,7 +10,16 @@
  */
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { ACK_TYP, ALG, b64u, RECEIPT_TYP, signReceipt, subjectHash, thumbprint } from "../src/receipts/sign";
+import {
+  ACK_TYP,
+  ALG,
+  b64u,
+  RECEIPT_TYP,
+  receiptSha,
+  signReceipt,
+  subjectHash,
+  thumbprint,
+} from "../src/receipts/sign";
 import { createSecretBox } from "../src/secrets/box";
 
 const enc = new TextEncoder();
@@ -88,7 +97,9 @@ const jws1 = await signReceipt(confirmed as never, issuer as never);
 const jws2 = await signReceipt(paid as never, issuer as never);
 
 const ackHeader = { alg: ALG, typ: ACK_TYP, jwk: agent.publicJwk };
-const ackPayload = { rcp: "01M34X9PAFXES35PXPY6QT944T", iat: 1790000500 };
+// The acknowledgement is of the first receipt: rcp is the id the instance gave it, sha binds it
+// to the JWS itself so a network holding only the two strings can check the pair.
+const ackPayload = { rcp: "01M34X9PAFXES35PXPY6QT944T", sha: await receiptSha(jws1), iat: 1790000500 };
 const ack = await sign(ackHeader, ackPayload, agent.privateJwk);
 
 const [h1, p1, s1] = jws1.split(".") as [string, string, string];
@@ -120,6 +131,7 @@ const out = {
       header: ackHeader,
       payload: ackPayload,
       jws: ack,
+      receipt_jws: jws1,
       verify_at: 1790000500,
       receipt_id: ackPayload.rcp,
     },
@@ -133,8 +145,25 @@ const out = {
   ],
   refused_acknowledgements: [
     {
-      name: "names another receipt",
-      jws: await sign(ackHeader, { rcp: "01M34X9PAFXES35PXPY6QT9OTHER", iat: 1790000500 }, agent.privateJwk),
+      name: "names another receipt id",
+      jws: await sign(
+        ackHeader,
+        { rcp: "01M34X9PAFXES35PXPY6QT9OTHER", sha: ackPayload.sha, iat: 1790000500 },
+        agent.privateJwk,
+      ),
+      receipt_jws: jws1,
+      verify_at: 1790000500,
+      receipt_id: ackPayload.rcp,
+      error: "bad_payload",
+    },
+    {
+      name: "sha of a different receipt",
+      jws: await sign(
+        ackHeader,
+        { rcp: ackPayload.rcp, sha: await receiptSha(jws2), iat: 1790000500 },
+        agent.privateJwk,
+      ),
+      receipt_jws: jws1,
       verify_at: 1790000500,
       receipt_id: ackPayload.rcp,
       error: "bad_payload",
@@ -142,13 +171,19 @@ const out = {
     {
       name: "no jwk in the header",
       jws: await sign({ alg: ALG, typ: ACK_TYP }, ackPayload, agent.privateJwk),
+      receipt_jws: jws1,
       verify_at: 1790000500,
       receipt_id: ackPayload.rcp,
       error: "malformed",
     },
     {
       name: "two hours old",
-      jws: await sign(ackHeader, { rcp: ackPayload.rcp, iat: 1790000500 - 7200 }, agent.privateJwk),
+      jws: await sign(
+        ackHeader,
+        { rcp: ackPayload.rcp, sha: ackPayload.sha, iat: 1790000500 - 7200 },
+        agent.privateJwk,
+      ),
+      receipt_jws: jws1,
       verify_at: 1790000500,
       receipt_id: ackPayload.rcp,
       error: "expired",
@@ -156,6 +191,7 @@ const out = {
     {
       name: "dated ten minutes in the future",
       jws: ack,
+      receipt_jws: jws1,
       verify_at: 1790000500 - 600,
       receipt_id: ackPayload.rcp,
       error: "not_yet",

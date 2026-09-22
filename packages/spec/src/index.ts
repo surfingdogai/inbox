@@ -81,9 +81,38 @@ export type ReceiptHeader = z.infer<typeof receiptHeaderSchema>;
 /** What a customer's agent counter-signs, to say it holds the same receipt. */
 export const receiptAckPayloadSchema = z.object({
   rcp: z.string().min(1).max(64).describe("The receipt's id on the issuing instance."),
+  /**
+   * base64url(SHA-256(the receipt's compact JWS, as UTF-8)), no padding. This is what makes the
+   * acknowledgement verifiable by anyone holding the two JWS strings and nothing else: a network
+   * never sees the instance's receipt ids, but it can hash what it was handed.
+   */
+  sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .describe("base64url(SHA-256(receipt JWS))."),
   iat: z.number().int().positive(),
 });
 export type ReceiptAckPayload = z.infer<typeof receiptAckPayloadSchema>;
+
+/**
+ * What an instance sends a review service it publishes to: `POST <service>/v1/receipts`. The
+ * service verifies the receipt against the keys published at the issuer's own domain and, when
+ * an acknowledgement is present, the acknowledgement against the key it carries and the
+ * receipt's hash. Nothing in the body is trusted; everything in it is checked.
+ */
+export const receiptPublishSchema = z.object({
+  receipt: z.string().min(1).max(8_192).describe("The receipt, a compact JWS."),
+  ack: z.string().min(1).max(8_192).optional().describe("The customer agent's acknowledgement, when there is one."),
+});
+export type ReceiptPublish = z.infer<typeof receiptPublishSchema>;
+
+/** The service's answer. `duplicate` means it already held this receipt in this state. */
+export const receiptPublishResultSchema = z.object({
+  ok: z.literal(true),
+  state: z.enum(["issued", "acknowledged"]),
+  duplicate: z.boolean(),
+});
+export type ReceiptPublishResult = z.infer<typeof receiptPublishResultSchema>;
 
 export const manifestSchema = z.object({
   spec: z.literal("surfingdog-inbox/0"),

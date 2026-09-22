@@ -7,7 +7,8 @@ import type { Money } from "../domain/types";
 import { ulid } from "../ids";
 import { items, parties, receipts, signingKeys } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { hasActiveWebhook, webhookFanoutStatement } from "../write/common";
+import { readSettings } from "../settings/schema";
+import { hasActiveWebhook, networkReceiptStatement, webhookFanoutStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import type { ItemRow } from "../write/views";
 import { createKeyStore, type KeyStore } from "./keys";
@@ -151,6 +152,9 @@ export class ReceiptCapabilities {
     if (await hasActiveWebhook(this.db)) {
       statements.push(webhookFanoutStatement({ id, type: `${item.type}.receipt_issued`, itemId: item.id }, now));
     }
+    // The network the owner joined gets every receipt, so the directory can count what was kept.
+    // Nothing about the customer travels: the receipt names them by pseudonym only.
+    if ((await readSettings(this.db)).network.join) statements.push(networkReceiptStatement(id, "issued", now));
     await this.db.batch(statements);
     const written = await this.row(itemId, kind);
     if (!written) throw new WriteError("internal", "the receipt was written and then could not be read back");
@@ -197,7 +201,7 @@ export class ReceiptCapabilities {
       );
     }
     try {
-      await verifyAck(counterSignature, { receiptId: row.id, now });
+      await verifyAck(counterSignature, { receiptId: row.id, receiptJws: row.jws, now });
     } catch (error) {
       if (error instanceof ReceiptError) {
         throw new WriteError("invalid_input", `the counter-signature was refused: ${error.message}`, {
@@ -227,6 +231,8 @@ export class ReceiptCapabilities {
         );
       }
     }
+    if ((await readSettings(this.db)).network.join)
+      statements.push(networkReceiptStatement(row.id, "acknowledged", now));
     await this.db.batch(statements);
     const [after] = await this.db.orm.select().from(receipts).where(eq(receipts.id, row.id));
     if (!after) throw new WriteError("internal", "the receipt vanished while it was being acknowledged");

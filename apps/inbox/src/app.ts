@@ -5,7 +5,9 @@ import {
   feedImportHandler,
   mountDoors,
   NETWORK_PING_KIND,
+  NETWORK_RECEIPT_KIND,
   networkPingHandler,
+  networkReceiptHandler,
   publicOrigin,
   WEBHOOK_DELIVERY_KIND,
   WEBHOOK_FANOUT_KIND,
@@ -82,6 +84,10 @@ export function createInbox(deps: AppDeps): Inbox {
       NETWORK_PING_KIND,
       networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
     )
+    .register(
+      NETWORK_RECEIPT_KIND,
+      networkReceiptHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
+    )
     // Outbound webhooks (ADR-015): fanout is gated on there being an active endpoint, so these two
     // handlers cost an instance with no integrations nothing but their registration.
     .register(WEBHOOK_FANOUT_KIND, webhookFanoutHandler())
@@ -116,12 +122,18 @@ export function createInbox(deps: AppDeps): Inbox {
 
   app.get(MANIFEST_PATH, async (c) => {
     const origin = publicOrigin(c.req.raw, deps.baseUrl);
-    const [profile, jwks] = await Promise.all([caps.getBusinessProfile(), caps.receipts.jwks()]);
+    const [profile, jwks, settings] = await Promise.all([
+      caps.getBusinessProfile(),
+      caps.receipts.jwks(),
+      readSettings(deps.db),
+    ]);
     const manifest = buildManifest({
       instanceUrl: origin,
       itemTypes: profile.item_types,
       profile: profile.name ? { name: profile.name, languages: [...profile.languages], categories: [] } : undefined,
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
+      // The services this instance publishes receipts to: the network in Settings, once joined.
+      reviewServices: settings.network.join ? [settings.network.url] : [],
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

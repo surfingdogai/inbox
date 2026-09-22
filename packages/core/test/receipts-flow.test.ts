@@ -4,7 +4,7 @@ import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { ulid } from "../src/ids";
 import { createRunner } from "../src/jobs/index";
-import { ACK_TYP, ALG, b64u, generateKeyPair, verifyReceipt } from "../src/receipts/sign";
+import { ACK_TYP, ALG, b64u, generateKeyPair, receiptSha, verifyReceipt } from "../src/receipts/sign";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { jobs, receipts, services, signingKeys } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
@@ -67,12 +67,13 @@ async function book(caps: Capabilities, svc: string, email: string, sandbox = fa
 }
 
 /** An agent's counter-signature, built the way the docs tell an agent to build one. */
-async function counterSign(receiptId: string, iatSec: number, typ: string | undefined = ACK_TYP) {
+async function counterSign(receiptId: string, receiptJws: string, iatSec: number, typ: string | undefined = ACK_TYP) {
   const agent = await generateKeyPair();
   const header: Record<string, unknown> = { alg: ALG, jwk: agent.publicJwk };
   if (typ !== undefined) header.typ = typ;
   const enc = new TextEncoder();
-  const input = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify({ rcp: receiptId, iat: iatSec })))}`;
+  const body = { rcp: receiptId, sha: await receiptSha(receiptJws), iat: iatSec };
+  const input = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify(body)))}`;
   const key = await crypto.subtle.importKey(
     "jwk",
     { ...agent.privateJwk, key_ops: ["sign"], ext: true },
@@ -237,7 +238,7 @@ describe("the acknowledgement", () => {
   it("is kept when the agent signs the right receipt with the key it carries", async () => {
     const { caps, v, rcp } = await issued();
     const now = T0 + 120_000;
-    const ack = await counterSign(rcp.id, Math.floor(now / 1000));
+    const ack = await counterSign(rcp.id, rcp.jws, Math.floor(now / 1000));
     const out = await caps.acknowledgeReceipt(customer(now), {
       item_id: v.item.id,
       counter_signature: ack,
@@ -250,7 +251,7 @@ describe("the acknowledgement", () => {
     expect(status.receipts?.[0]?.acknowledged_at).toBe(new Date(now).toISOString());
 
     // A second acknowledgement keeps the first.
-    const later = await counterSign(rcp.id, Math.floor(now / 1000) + 10);
+    const later = await counterSign(rcp.id, rcp.jws, Math.floor(now / 1000) + 10);
     const again = await caps.acknowledgeReceipt(customer(now + 10_000), {
       item_id: v.item.id,
       counter_signature: later,
@@ -271,7 +272,7 @@ describe("the acknowledgement", () => {
     await expect(
       s.caps.acknowledgeReceipt(customer(now), {
         item_id: s.v.item.id,
-        counter_signature: await counterSign(otherRcp?.id ?? "x", Math.floor(now / 1000)),
+        counter_signature: await counterSign(otherRcp?.id ?? "x", otherRcp?.jws ?? "x.y.z", Math.floor(now / 1000)),
         access_token: s.v.token,
       }),
     ).rejects.toMatchObject({ code: "not_found" });
@@ -280,7 +281,7 @@ describe("the acknowledgement", () => {
     await expect(
       s.caps.acknowledgeReceipt(customer(now), {
         item_id: s.v.item.id,
-        counter_signature: await counterSign(s.rcp.id, Math.floor(now / 1000) - 7200),
+        counter_signature: await counterSign(s.rcp.id, s.rcp.jws, Math.floor(now / 1000) - 7200),
         access_token: s.v.token,
       }),
     ).rejects.toMatchObject({ code: "invalid_input", details: { reason: "expired" } });
@@ -298,7 +299,7 @@ describe("the acknowledgement", () => {
     await expect(
       s.caps.acknowledgeReceipt(customer(now), {
         item_id: s.v.item.id,
-        counter_signature: await counterSign(s.rcp.id, Math.floor(now / 1000)),
+        counter_signature: await counterSign(s.rcp.id, s.rcp.jws, Math.floor(now / 1000)),
         receipt: otherRcp?.jws,
         access_token: s.v.token,
       }),
@@ -308,7 +309,7 @@ describe("the acknowledgement", () => {
     await expect(
       s.caps.acknowledgeReceipt(customer(now), {
         item_id: s.v.item.id,
-        counter_signature: await counterSign(s.rcp.id, Math.floor(now / 1000)),
+        counter_signature: await counterSign(s.rcp.id, s.rcp.jws, Math.floor(now / 1000)),
       }),
     ).rejects.toMatchObject({ code: "not_allowed" });
 
@@ -363,7 +364,7 @@ describe("as developer events", () => {
     const now = T0 + 60_000;
     await caps.acknowledgeReceipt(customer(now), {
       item_id: v.item.id,
-      counter_signature: await counterSign(rcp.id, Math.floor(now / 1000)),
+      counter_signature: await counterSign(rcp.id, rcp.jws, Math.floor(now / 1000)),
       access_token: v.token,
     });
     // A pattern's `*` stands for a whole segment, so the two are named in full.

@@ -9,6 +9,7 @@ import {
   newNonce,
   RECEIPT_TYP,
   ReceiptError,
+  receiptSha,
   signReceipt,
   subjectHash,
   thumbprint,
@@ -131,12 +132,15 @@ describe("a receipt", () => {
 
 describe("the acknowledgement", () => {
   /** An agent counter-signs with its own key, carried in the header. */
-  async function ack(receiptId: string, iatSec: number, typ: string | undefined = ACK_TYP) {
+  /** The receipt these acknowledgements are about: any JWS string will do for the hash. */
+  const RECEIPT = "eyJhbGciOiJFZERTQSJ9.eyJpc3MiOiJ4In0.c2ln";
+  async function ack(receiptId: string, iatSec: number, typ: string | undefined = ACK_TYP, of: string = RECEIPT) {
     const agent = await generateKeyPair();
     const header: Record<string, unknown> = { alg: ALG, jwk: agent.publicJwk };
     if (typ !== undefined) header.typ = typ;
     const enc = new TextEncoder();
-    const signingInput = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify({ rcp: receiptId, iat: iatSec })))}`;
+    const body = { rcp: receiptId, sha: await receiptSha(of), iat: iatSec };
+    const signingInput = `${b64u(enc.encode(JSON.stringify(header)))}.${b64u(enc.encode(JSON.stringify(body)))}`;
     const key = await crypto.subtle.importKey(
       "jwk",
       { ...agent.privateJwk, key_ops: ["sign"], ext: true },
@@ -150,28 +154,41 @@ describe("the acknowledgement", () => {
 
   it("is accepted, and names the agent that signed it", async () => {
     const { jws, agent } = await ack("rcp_1", Math.floor(NOW / 1000));
-    const out = await verifyAck(jws, { receiptId: "rcp_1", now: NOW });
+    const out = await verifyAck(jws, { receiptId: "rcp_1", receiptJws: RECEIPT, now: NOW });
     expect(out.payload.rcp).toBe("rcp_1");
     expect(out.agentKid).toBe(agent.kid);
   });
 
   it("refuses one for a different receipt", async () => {
     const { jws } = await ack("rcp_1", Math.floor(NOW / 1000));
-    await expect(verifyAck(jws, { receiptId: "rcp_2", now: NOW })).rejects.toThrow(/different receipt/);
+    await expect(verifyAck(jws, { receiptId: "rcp_2", receiptJws: RECEIPT, now: NOW })).rejects.toThrow(
+      /different receipt/,
+    );
   });
 
   it("refuses a stale one, and one dated in the future", async () => {
     const old = await ack("rcp_1", Math.floor(NOW / 1000) - 7200);
-    await expect(verifyAck(old.jws, { receiptId: "rcp_1", now: NOW })).rejects.toThrow(/old/);
+    await expect(verifyAck(old.jws, { receiptId: "rcp_1", receiptJws: RECEIPT, now: NOW })).rejects.toThrow(/old/);
     const ahead = await ack("rcp_1", Math.floor(NOW / 1000) + 600);
-    await expect(verifyAck(ahead.jws, { receiptId: "rcp_1", now: NOW })).rejects.toThrow(/future/);
+    await expect(verifyAck(ahead.jws, { receiptId: "rcp_1", receiptJws: RECEIPT, now: NOW })).rejects.toThrow(/future/);
+  });
+
+  it("refuses one whose sha is of some other receipt", async () => {
+    const { jws } = await ack("rcp_1", Math.floor(NOW / 1000), ACK_TYP, "some.other.receipt");
+    await expect(verifyAck(jws, { receiptId: "rcp_1", receiptJws: RECEIPT, now: NOW })).rejects.toThrow(
+      /sha does not match/,
+    );
   });
 
   it("refuses one with no key in the header", async () => {
     const enc = new TextEncoder();
     const header = b64u(enc.encode(JSON.stringify({ alg: ALG, typ: ACK_TYP })));
-    const body = b64u(enc.encode(JSON.stringify({ rcp: "rcp_1", iat: Math.floor(NOW / 1000) })));
-    await expect(verifyAck(`${header}.${body}.AA`, { receiptId: "rcp_1", now: NOW })).rejects.toThrow(/public jwk/);
+    const body = b64u(
+      enc.encode(JSON.stringify({ rcp: "rcp_1", sha: await receiptSha(RECEIPT), iat: Math.floor(NOW / 1000) })),
+    );
+    await expect(
+      verifyAck(`${header}.${body}.AA`, { receiptId: "rcp_1", receiptJws: RECEIPT, now: NOW }),
+    ).rejects.toThrow(/public jwk/);
   });
 });
 
