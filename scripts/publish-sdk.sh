@@ -30,6 +30,7 @@ done
 
 say() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
+no()  { printf '\033[1;31m✗\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 # Who we are, before anything slow runs. An `npm login` already in place is used as it stands;
