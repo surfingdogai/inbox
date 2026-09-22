@@ -7,11 +7,11 @@ import Layout from "../layouts/Layout.astro";
 
 const contents = [
   { href: "#arrives", label: "What arrives" },
-  { href: "#rules", label: "Your rules run first" },
-  { href: "#your-ai", label: "Your own AI answers" },
-  { href: "#safer", label: "Why it is safer" },
-  { href: "#prepare", label: "Why prepare now" },
-  { href: "#use", label: "What to do next" },
+  { href: "#rules", label: "Your rules" },
+  { href: "#your-ai", label: "Your AI" },
+  { href: "#safer", label: "Safety" },
+  { href: "#prepare", label: "Why now" },
+  { href: "#use", label: "Get started" },
 ];
 
 /** The four public item types, with the states their machines actually hold. */
@@ -56,51 +56,39 @@ const rules = [
 
 const reasons = [
   {
-    title: "It already knows you",
-    text: "Your assistant has your history, your prices and your way of saying things. Ours would start from nothing and sound like it.",
-  },
-  {
-    title: "You choose the provider",
-    text: "Pick the model you trust, and change it the day you stop trusting it. The inbox speaks a protocol, not a brand.",
+    title: "You already use it",
+    text: "It may already know your business and the way you talk to customers. A new one would start from scratch.",
   },
   {
     title: "Your customers stay yours",
-    text: "Nothing about them is handed to a third party to train on. The data sits in your instance, and the instance is yours.",
-  },
-  {
-    title: "The inbox is the guardrail",
-    text: "The assistant is not the brain of the business. It can only take the steps the state machine allows, every action it takes is an event with its name on it, and test mode lets you watch it work on sandbox items before anything is real.",
+    text: "Their details live in your own database, and the inbox only sends them where you tell it to.",
   },
 ];
 
 const safety = [
   {
-    title: "Typed doors, not free text",
-    text: "An agent cannot ask for anything the door does not offer. It sends a booking, an order, a quote request or a message, with the fields those require, and a refusal names the field to fix.",
+    title: "Requests have a fixed shape",
+    text: "An agent can only send a booking, an order, a quote request or a message. If a detail is missing, the reply says which one.",
   },
   {
-    title: "The history is append-only",
-    text: "Every change is an event carrying who acted, through which door, at what time, and the reason when one was given. Nothing in that history is ever rewritten.",
+    title: "No double bookings",
+    text: "If two agents want your last Saturday slot at once, one gets it. If a connection drops and an agent retries with the same key, it gets the first answer back.",
   },
   {
-    title: "The same slot cannot be sold twice",
-    text: "Capacity is arbitrated by the database itself. When two agents ask for the last slot in the same instant, one claim is recorded and the other is refused.",
+    title: "The history is never rewritten",
+    text: "Every change is logged, with who made it and any reason given. Nothing in the log is edited later.",
   },
   {
-    title: "A retry cannot book twice",
-    text: "A request can carry a key. Send it again with the same key after a dropped connection and you get the original answer back, not a second booking.",
+    title: "Rules can check who is asking",
+    text: "A rule can confirm callers with a verified account and pass anonymous ones to you.",
   },
   {
-    title: "Callers carry a trust tier",
-    text: "The inbox knows whether a caller is anonymous or a verified account, and your rules can read that: confirm for a verified caller, send an anonymous one to a person.",
-  },
-  {
-    title: "The data stays with you",
-    text: "One database, on your Cloudflare account or your own server. Network membership is off until you switch it on, and even then what it sends is counts and pseudonymous receipts, never a name or a message.",
+    title: "Your data stays with you",
+    text: "It lives in one database on your Cloudflare account or your own server. If you join a network, it gets hourly counts and receipts, never names or messages.",
   },
   {
     title: "Receipts are signed by you",
-    text: "Each receipt is signed with a key your instance holds, and the customer's agent can counter-sign it. The network holds counts and signed receipts, never a conversation.",
+    text: "When a booking is confirmed or an order is paid, your inbox signs a receipt. The customer's agent can counter-sign it.",
   },
 ];
 
@@ -108,19 +96,19 @@ const safety = [
 const steps = [
   {
     title: "Pick where it runs",
-    text: "One click onto your own Cloudflare account, one process on a machine you already pay for, or hosted by us when that opens. The software is the same in all three.",
+    text: "Deploy to your own Cloudflare account in one click, or run it on your own server. We will also host it for you once that opens.",
     href: "/#run",
     cta: "See the three ways",
   },
   {
     title: "Write down the business",
-    text: "Opening hours and closed days, services with their duration and capacity, products with prices, your cancellation window and your approval limit. This is the afternoon's work.",
+    text: "Add your hours, services, prices and limits. For a bike shop or a bakery, that takes an afternoon.",
     href: "/docs/quickstart/",
     cta: "Read the quickstart",
   },
   {
-    title: "Connect your assistant",
-    text: "Point Claude or ChatGPT at your own inbox, leave test mode on, and watch it work through a day of sandbox items before anything is real.",
+    title: "Connect your AI",
+    text: "Point Claude or ChatGPT at your inbox and let it handle a day of practice requests in test mode first.",
     href: "/docs/connect-your-ai/",
     cta: "How to connect",
   },
@@ -129,15 +117,14 @@ const steps = [
 
 <Layout
   title="How it works · Surfing Dog"
-  description="What happens when a request reaches your business: typed items instead of threads, your own rules deciding the routine cases, your own AI answering inside them, and a history you can audit. Written for the owner, not the developer."
+  description="What happens, step by step, when a customer or their AI agent asks your business for something."
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="page-h">
     <p class="eyebrow">How it works</p>
-    <h1 class="h-page" id="page-h">How it works, in plain terms</h1>
+    <h1 class="h-page" id="page-h">What happens to a request</h1>
     <p class="lede">
-      Surfing Dog Inbox sits between your business and everyone who wants something from it, people
-      and their AI assistants alike. This page walks through what arrives, what your rules do with
-      it, who answers, and why it is worth setting up before the requests start.
+      Customers ask your business for things, and more and more often their AI agents do the
+      asking. Here is what happens to each request.
     </p>
     <nav class="contents" aria-label="On this page">
       {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
@@ -151,45 +138,30 @@ const steps = [
           <p class="eyebrow">Step one</p>
           <h2 class="h-section" id="arrives-h">What arrives</h2>
           <p class="lede">
-            A request comes in through a door, not a thread. It becomes an item with a type and a
-            state before anyone has read a word of it.
+            Every request becomes an item with a type and a state, before anyone has read it.
           </p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          Your customers already write by email, fill in a form or ring you. Their assistants now do
-          the same errands for them. Claude and ChatGPT speak MCP, the protocol an assistant uses to
-          call software directly, and other systems post to a plain web API.
+          Say someone wants their bike serviced on Saturday. Their agent can book it with you
+          directly. Claude and ChatGPT use MCP, and other software uses the REST
+          API. Email works too, for messages and replies. A web form is on the way.
+          <span class="pill">Being built</span>
         </p>
         <p>
-          Three doors are open today: the REST API, two MCP servers, and email. A web form door is
-          on the way. <span class="pill">Being built</span>
-        </p>
-        <p>
-          Email has the narrowest job for now. It opens a message, or adds a reply to an item you
-          already have. Bookings, orders and quote requests come in through the API and MCP. Reading
-          a free-text email and turning it into a typed booking is still to come.
-        </p>
-        <p>
-          Whichever door it used, the request lands as a typed item rather than a paragraph to
-          decode. Four types are offered to the outside world. Refunds are a fifth, with a machine
-          of their own, handled inside the app.
-        </p>
-        <p>
-          Each type carries a state machine, so the inbox knows what a request is and what may
-          happen to it next. Look at the booking states and you will see there are two ways to
-          cancel. Who walked away is part of the record, not a note in a mailbox.
+          Each request lands as one of four types, with its own set of states, so the inbox always
+          knows where it stands. Refunds are a fifth type, handled inside the app.
         </p>
       </div>
 
       <div class="cols">
         <Shot
           src="/shots/item-day.png"
-          alt="A booking open in the inbox: the customer, the time, the state, the valid next actions as buttons, and the event history underneath"
+          alt="A quote request open in the inbox, with the customer, the quote lines, the next step as a button and the conversation below"
           title="One item"
-          caption="The request, its state, the steps it may take next, and everything that has already happened to it."
+          caption="The request, its state and its history."
         />
         <div class="glass panel points">
           {
@@ -215,42 +187,31 @@ const steps = [
           <p class="eyebrow">Step two</p>
           <h2 class="h-section" id="rules-h">Your rules run first</h2>
           <p class="lede">
-            Your hours, your services and your limits, written down once. Then a handful of rules
-            that settle the routine cases without you.
+            Write down how your business works once. Simple rules then handle the routine without
+            you.
           </p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          You set the business up once: opening hours and closed days, services with their duration,
-          buffers and capacity, products with prices, a cancellation window, and the order value
-          above which you want the last word.
+          Start with your hours, services and prices, and the order size above which you want to
+          decide yourself. Then switch on a few rules. Six come ready-made for appointments, trades
+          and shops.
         </p>
         <p>
-          On top of that sit the rules. A rule is a small piece of structured data, and the app reads
-          it back to you as one sentence, so you can check what you have switched on without reading
-          code. Six rules come ready-made, in three sets: appointments, trades and quotes, and shops.
-        </p>
-        <p>
-          Rules are deterministic. No model decides whether a booking is accepted. The same item and
-          the same rules always reach the same answer, and each action is written into the item's
-          history with its reason attached.
-        </p>
-        <p>
-          They run just after an item is created or changes state, out of a queue, so they follow
-          within about a second instead of holding up the request. Before you switch a rule on, you
-          can try it against an item you already have. The test reports what the rule would do and
-          changes nothing.
+          Rules don't use AI, so the same request always gets the same answer. The reason goes in
+          the item's history. You can try a rule on a request you already have before you switch
+          it on.
         </p>
       </div>
 
       <div class="cols">
         <Shot
           src="/shots/rules-detail.png"
-          alt="The rules screen: each rule listed as one plain sentence with its trigger, its conditions and what it does"
-          title="Rules, read back in English"
-          caption="Every rule is one sentence. Turn it off, test it, or change the number in it."
+          alt="The rules screen, each rule written as one plain sentence with a switch beside it"
+          title="Rules in plain English"
+          caption="Each rule is one sentence you can switch off or edit."
         />
         <div class="glass panel points">
           {
@@ -273,8 +234,8 @@ const steps = [
           <p class="eyebrow">Step three</p>
           <h2 class="h-section" id="your-ai-h">Your own AI answers</h2>
           <p class="lede">
-            Connect the assistant you already use. It signs in as a member of staff, and it works
-            inside the same rules as one.
+            Connect the AI you already use. It works like a member of staff, with the same
+            limits.
           </p>
         </div>
       </div>
@@ -282,38 +243,35 @@ const steps = [
       <div class="cols">
         <Shot
           src="/shots/settings-detail.png"
-          alt="The settings screen: cancellation window, approval limit, email, test mode and the network the instance reports to"
+          alt="The settings screen with the business name, domain, time zone, currency and languages"
           title="The settings your AI works inside"
-          caption="Approval limits, cancellation windows and test mode. Your assistant is bound by the same page you are."
+          caption="Your AI follows the same settings you do."
         />
         <div class="glass panel points">
           <article class="point">
             <h3 class="h-card">It signs in as staff</h3>
             <p class="card-text">
-              Connect Claude, ChatGPT or anything else that speaks MCP to your own inbox. It signs in
-              with your account, with no key to paste, and from then on it can read the inbox, reply,
-              send a quote, propose another time, or change a setting.
+              Connect Claude, ChatGPT or any AI that speaks MCP. It signs in with your account
+              and can answer customers or suggest another time.
             </p>
           </article>
           <article class="point">
             <h3 class="h-card">It answers inside your rules</h3>
             <p class="card-text">
-              Everything it does runs through the same state machine and lands in the same history as
-              a person's work. There is no looser path for the machine.
+              It can only take the steps a person could, and everything it does is logged.
             </p>
           </article>
           <article class="point">
             <h3 class="h-card">You watch it first</h3>
             <p class="card-text">
-              Turn on test mode and every item is a sandbox item, counted separately and kept out of
-              the real numbers. Watch your assistant work through a day of them before you let it
-              near a customer.
+              In test mode, requests from agents are practice ones. Let it handle a day of them
+              before it meets a real customer.
             </p>
           </article>
         </div>
       </div>
 
-      <h3 class="h-sub sub-h">Why your own AI, and not ours</h3>
+      <h3 class="h-sub sub-h">Why use your own AI</h3>
       <ul class="grid-cards cards" data-reveal="stagger">
         {
           reasons.map((r) => (
@@ -331,11 +289,10 @@ const steps = [
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Why it is safer</p>
-          <h2 class="h-section" id="safer-h">Safer than a mailbox, by construction</h2>
+          <p class="eyebrow">Safety</p>
+          <h2 class="h-section" id="safer-h">Safer than a shared mailbox</h2>
           <p class="lede">
-            None of this depends on the agent behaving well. It depends on what the software will
-            accept, and on what it writes down.
+            These protections are built into the inbox, so they hold even when an agent misbehaves.
           </p>
         </div>
       </div>
@@ -350,9 +307,7 @@ const steps = [
         }
       </div>
       <p class="fine">
-        Everything above ships today except the last line, which is still to come. Signed agent
-        verification, which will let a rule tell a known agent from an anonymous caller, is still
-        to come as well.
+        All of this works today. Checking an agent's own signature is still to come.
       </p>
     </div>
   </section>
@@ -361,20 +316,18 @@ const steps = [
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">The shift</p>
+          <p class="eyebrow">Why now</p>
           <h2 class="h-section" id="prepare-h">Why prepare now</h2>
           <p class="lede">
-            The requests arrive whether a business is ready or not. Being ready is the difference
-            between work and noise.
+            People already ask their AI to book and buy things. Those requests will reach
+            you, ready or not.
           </p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          Assistants already shop and book on behalf of the people using them. Storefront platforms
-          expose agent endpoints by default, and an agent commerce protocol is live. None of that
-          waits for small businesses to agree to it.
+          Say someone asks their AI for a dentist with a free slot on Thursday.
         </p>
       </div>
 
@@ -382,29 +335,22 @@ const steps = [
         <div class="glass card">
           <h3 class="h-card">Unprepared</h3>
           <p class="card-text">
-            The request lands in a shared mailbox as text, behind forty others, and someone has to
-            read it, price it and answer it. Or it finds no door at all and bounces, and the customer
-            books the business next door.
+            The request sits in a mailbox behind forty others. Or the agent finds no way to
+            ask, and books the dentist down the road.
           </p>
         </div>
         <div class="glass card">
           <h3 class="h-card">Prepared</h3>
           <p class="card-text">
-            A manifest at your own address tells any agent where the doors are. Your availability and
-            your prices are readable by machine. Your rules settle the routine, and you see only what
-            needs a person.
+            Your inbox shows the agent your free times and how to book. Your rules confirm the
+            slot, and you only see what needs you.
           </p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          Preparing takes an afternoon, not a project. You write down what you already know: your
-          hours, your services, your prices, the limit above which you want to be asked.
-        </p>
-        <p>
-          Nothing is locked in either. The software is open source, and the data is one database you
-          own. If you stop liking the arrangement, you take the file and go.
+          Nothing locks you in. The software is open source and the data is yours to take with you.
         </p>
       </div>
     </div>
@@ -414,12 +360,9 @@ const steps = [
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">What next</p>
-          <h2 class="h-section" id="use-h">Three things to do, in this order</h2>
-          <p class="lede">
-            Setting an inbox up is a short afternoon. Most of it is writing down what you already
-            know about your own business.
-          </p>
+          <p class="eyebrow">Get started</p>
+          <h2 class="h-section" id="use-h">Three steps, in this order</h2>
+          <p class="lede">Most of it is writing down what you already know.</p>
         </div>
       </div>
 
@@ -442,7 +385,7 @@ const steps = [
       <div class="glass panel cta">
         <p class="position">
           <span class="u-line" aria-hidden="true"></span>
-          <span>An afternoon of writing things down, and the routine answers itself from then on.</span>
+          <span>You can start small and add more as you go.</span>
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="/#run">Get your inbox</a>

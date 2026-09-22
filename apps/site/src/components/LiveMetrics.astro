@@ -15,14 +15,14 @@ const NETWORK_STATS = "https://network.surfingdog.ai/v1/stats";
 const DEMO_SEED_DOMAIN = "oficinamare.pt";
 
 const tiles = [
-  { key: "instances_online", label: "Instances online", sub: "pinged in the last 24 h" },
+  { key: "instances_online", label: "Inboxes online", sub: "checked in within 24 h" },
   { key: "businesses_listed", label: "Businesses listed", sub: "registered with the network" },
-  { key: "activity_24h.bookings", label: "Bookings today", sub: "last 24 h, all instances" },
-  { key: "activity_24h.orders", label: "Orders today", sub: "last 24 h, all instances" },
-  { key: "activity_24h.quotes", label: "Quotes today", sub: "last 24 h, all instances" },
-  { key: "activity_24h.messages", label: "Messages today", sub: "last 24 h, all instances" },
-  { key: "receipts_issued", label: "Receipts issued", sub: "signed by instances, verified here" },
-  { key: "reviews_published", label: "Reviews published", sub: "after reveal, once reviews open" },
+  { key: "activity_24h.bookings", label: "Bookings today", sub: "last 24 h, all inboxes" },
+  { key: "activity_24h.orders", label: "Orders today", sub: "last 24 h, all inboxes" },
+  { key: "activity_24h.quotes", label: "Quotes today", sub: "last 24 h, all inboxes" },
+  { key: "activity_24h.messages", label: "Messages today", sub: "last 24 h, all inboxes" },
+  { key: "receipts_issued", label: "Receipts issued", sub: "signed by inboxes, checked here" },
+  { key: "reviews_published", label: "Reviews published", sub: "once reviews open" },
 ];
 
 const doors = [
@@ -93,7 +93,7 @@ try {
         {
           more ? (
             <p class="lede">
-              An inbox reports counts once an hour, and only if its owner switched membership on.
+              Only inboxes whose owners joined the network report here, once an hour.
               <a class="link" href="/network/">What the network is for</a>
             </p>
           ) : null
@@ -126,14 +126,13 @@ try {
     <div class="glass panel lift instance">
       <div class="inst-head">
         <div>
-          <p class="eyebrow">Live instance</p>
+          <p class="eyebrow">Our inbox</p>
           <h3 class="h-sub">{name}</h3>
           <p class="card-text who">
-            This is our own inbox. Surfing Dog runs on it: book a call, ask for a quote, or message us, as a person or
-            through your agent.
+            Try it here. Book a call, ask for a quote or send a message, yourself or through your agent.
           </p>
         </div>
-        <a class="btn btn-secondary" href={INSTANCE} rel="noopener">Open the instance</a>
+        <a class="btn btn-secondary" href={INSTANCE} rel="noopener">Open our inbox</a>
       </div>
       <div class="types" aria-label="Item types accepted">
         {
@@ -164,8 +163,8 @@ try {
     <p class="fine">
       {
         more
-          ? "Counts come from instances that share anonymous activity counts with network.surfingdog.ai: a version, a runtime and the number of items in the last 24 hours, with no content, no identities and no amounts. Receipts issued counts the signed receipts those instances publish. Refreshes every minute."
-          : "Refreshes every minute. What an instance reports, and what it never reports, is set out below."
+          ? "Each joined inbox sends network.surfingdog.ai its version, its runtime and how many requests it got in the last 24 hours. Those counts carry no content, customer details or amounts. Receipts issued counts the signed receipts those inboxes share. Refreshes every minute."
+          : "Refreshes every minute. What an inbox reports, and what it never reports, is set out below."
       }
     </p>
   </div>

@@ -7,14 +7,13 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout
   title="Directory · Surfing Dog"
-  description="Businesses running Surfing Dog Inbox. Each one verified its own domain and reports in, so the list is of instances that exist rather than businesses that signed up."
+  description="Businesses running Surfing Dog Inbox. Each one proved it owns its domain, and agents can reach it directly."
 >
   <section class="wrap wrap-read section is-head" id="directory" aria-labelledby="directory-h">
     <p class="eyebrow">Directory</p>
     <h1 class="h-page" id="directory-h">Who is running one</h1>
     <p class="lede">
-      Every business here verified its own domain and reports in. Nobody is listed for filling in a form, and nobody
-      can list a business that is not theirs.
+      Each business here proved it owns its domain, so nobody can list someone else's.
     </p>
   </section>
 
@@ -23,10 +22,10 @@ import Layout from "../layouts/Layout.astro";
       <div class="sec-head">
         <div>
           <p class="eyebrow">Listed</p>
-          <h2 class="h-section" id="listed-h">Instances that answer</h2>
+          <h2 class="h-section" id="listed-h">Inboxes on the network</h2>
           <p class="lede">
-            An agent can reach any of these directly. The manifest link is the machine-readable version of the same
-            entry. They are listed newest first while <a class="link" href="/network/#ranking">the ranking is redesigned</a>.
+            Agents can contact any of these directly. Newest first for now, while we build
+            <a class="link" href="/network/#ranking">the ranking</a>.
           </p>
         </div>
       </div>
@@ -55,10 +54,9 @@ import Layout from "../layouts/Layout.astro";
 
       <template data-none-template>
         <div class="state">
-          <h3>Only ours, so far</h3>
+          <h3>Nobody is listed right now</h3>
           <p>
-            The first businesses to run one will be here. Joining is a switch in Settings, and your customers' names,
-            addresses and messages never leave your instance.
+            Businesses appear here once they switch on the network in Settings.
           </p>
         </div>
       </template>
@@ -69,26 +67,25 @@ import Layout from "../layouts/Layout.astro";
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Getting listed</p>
-          <h2 class="h-section" id="join-h">Contribute and you appear</h2>
+          <p class="eyebrow">Joining</p>
+          <h2 class="h-section" id="join-h">How to get listed</h2>
         </div>
       </div>
       <ul class="checks">
-        <li><b>Run an inbox</b> on your own domain, on your own machine or on Cloudflare.</li>
-        <li><b>Turn on the network</b> in Settings. It is off until you do.</li>
+        <li><b>Run an inbox</b> on your own domain, on your own server or on Cloudflare.</li>
+        <li><b>Turn on the network</b> in Settings. It's off by default.</li>
         <li>
-          <b>Your instance proves the domain is yours</b> by serving its manifest there. That is the whole
-          verification; there is nothing to apply for.
+          <b>Your inbox proves the domain is yours</b> by serving its manifest. Nothing to apply for.
         </li>
         <li>
-          <b>It reports in hourly:</b> its version, its runtime, and how many bookings, orders, quotes and messages it
-          created in the last day. It also publishes the receipts it issues, which name each customer only by a code
-          the network cannot turn back into a person. <a class="link" href="/privacy/">What leaves, exactly</a>.
+          <b>It reports every hour</b> with its version, runtime and how many bookings, orders, quotes and messages
+          came in over the last 24 hours. It also sends the receipts it signs, which name customers only by a code the
+          network can't trace back to a person. <a class="link" href="/privacy/">What leaves, exactly</a>.
         </li>
       </ul>
       <p class="hint">
-        Stop reporting and the entry shows as quiet; if the manifest stops answering too, the entry drops off. The
-        list is of instances that are actually up, which is the only thing that makes it worth reading.
+        Stop reporting and your entry shows as quiet. If your manifest stays down for two or three days, you drop off
+        the list.
       </p>
       <div class="rowx">
         <a class="btn btn-primary" href="/install/">Get one running</a>

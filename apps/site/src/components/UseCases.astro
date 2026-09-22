@@ -8,23 +8,23 @@ import Shot from "./Shot.astro";
 const cases = [
   {
     who: "A bike shop",
-    rule: "Confirm a service booking when the slot is free and the time is inside opening hours.",
-    what: "An agent asks for a full service on Tuesday. The booking is confirmed and answered before the owner has looked at a screen.",
+    rule: "Confirm a service booking when the slot is free and the shop is open.",
+    what: "An agent books a full service for Tuesday. It's confirmed before the owner looks at a screen.",
   },
   {
     who: "A bakery",
-    rule: "Accept an order under €80. Send anything larger to a person.",
-    what: "Small orders go through the moment they arrive. A large one waits, and the customer is told that it is waiting.",
+    rule: "Accept orders under €80. Send bigger ones to a person.",
+    what: "Small orders go straight through. Big ones wait, and the customer is told so.",
   },
   {
     who: "A plumber",
-    rule: "Ask every quote request for the address, the job and the access before it reaches the owner.",
-    what: "The answers arrive as fields rather than a paragraph. The owner's AI drafts the quote from them, and the owner sends it.",
+    rule: "Send every quote request to the owner. Put leaks and anything urgent at the top.",
+    what: "The job, the address and the date arrive as fields, ready to price.",
   },
   {
     who: "A studio",
-    rule: "Leave messages to the owner's own AI, inside the prices and hours the owner wrote down.",
-    what: "Claude is connected over MCP and reads the real availability before it answers. It cannot invent a price that is not there.",
+    rule: "Let the owner's own AI answer messages, using the owner's prices and hours.",
+    what: "It connects over MCP and checks the real availability before it replies.",
   },
 ];
 ---
@@ -34,10 +34,9 @@ const cases = [
     <div class="sec-head">
       <div>
         <p class="eyebrow">In practice</p>
-        <h2 class="h-section" id="cases-h">The same inbox, four sets of rules</h2>
+        <h2 class="h-section" id="cases-h">Four businesses, four sets of rules</h2>
         <p class="lede">
-          A bike shop, a bakery, a plumber and a studio. The software is identical in all four. Only the rules differ,
-          and each set takes an afternoon to write.
+          They all run the same inbox. Only the rules differ.
         </p>
       </div>
     </div>
@@ -55,9 +54,9 @@ const cases = [
       </ol>
       <Shot
         src="/shots/item-day.png"
-        alt="An item in the inbox: a booking with its typed fields, its state, and the next actions as buttons"
+        alt="A booking in the inbox with its details, its state and buttons for the next step"
         title="What lands in the inbox"
-        caption="The typed item, its state, the conversation, and the valid next actions as the buttons."
+        caption="The booking, where it stands, the conversation and the next steps."
       />
     </div>
   </div>
