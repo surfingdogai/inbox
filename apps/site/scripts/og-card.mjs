@@ -15,7 +15,7 @@
  *
  * Run it again whenever the headline or the hero changes. Give the file a NEW
  * NAME when the picture changes — /art/* is cached for a day at the edge and
- * cannot be purged, so an overwrite keeps showing the old card.
+ * cannot be purged, so an overwrite keeps showing the old card for up to a day.
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
