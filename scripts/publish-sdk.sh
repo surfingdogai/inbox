@@ -92,7 +92,7 @@ if [ "$DRY" = "--dry" ]; then
   exit 0
 fi
 
-say "publishing $NAME@$VERSION as $WHO…"
+say "publishing $NAME@$VERSION as ${WHO}..."
 (cd "$PKG" && npm publish --access public)
 ok "published: https://www.npmjs.com/package/$NAME"
 echo
