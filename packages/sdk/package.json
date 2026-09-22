@@ -1,6 +1,6 @@
 {
   "name": "@surfingdog/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "description": "Verify Surfing Dog Inbox webhooks and type their events. Standard Webhooks over WebCrypto: no dependencies, runs unchanged on Node, Workers, Deno, Bun and in the browser.",
