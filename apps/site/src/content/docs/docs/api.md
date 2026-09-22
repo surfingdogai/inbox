@@ -76,4 +76,4 @@ Both servers are stateless per request, so a client connects with a plain `POST`
 
 ## SDK
 
-`@surfingdog/sdk` (MIT) will be generated from the OpenAPI document with `openapi-typescript` and `openapi-fetch`. Until it lands, any OpenAPI client works.
+`@surfingdog/sdk` (MIT) is on npm. Today it carries the [webhook verifier](/docs/webhooks/) and the event types; the typed REST client, generated from the OpenAPI document with `openapi-typescript` and `openapi-fetch`, lands beside them. Until then, any OpenAPI client works.

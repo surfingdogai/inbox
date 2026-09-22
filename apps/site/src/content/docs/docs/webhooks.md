@@ -90,7 +90,7 @@ The **signing secret is in that response and in no other**: `whsec_` and then ba
 
 Your AI can do all of it without you writing any of that: on the owner MCP server the same operations are `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `delete_webhook`, `send_test_event`, `list_webhook_deliveries`, `replay_webhook_delivery`, `replay_missing_webhook_deliveries` and `list_events` ([Connect your AI](/docs/connect-your-ai/)). Ask it to connect your shop to your Inbox and it will.
 
-An **Integrations screen** in the owner app, with the same endpoints and their deliveries in a list, is on its way. Until it lands, the API and the MCP tools above are the two ways in, and they are the same two the screen will use.
+The **Integrations** tab in the owner app, under Settings, does the same from a screen: add an endpoint, read the secret once, send a test and see the status it answered, pause, rotate, remove. It uses the same API above, so nothing is possible from the screen that is not possible from the API.
 
 ## The request we send
 
@@ -141,7 +141,13 @@ The signature is [Standard Webhooks](https://www.standardwebhooks.com/) v1.0.0, 
 3. `webhook-timestamp` is Unix seconds and must be within five minutes of now, in both directions. Without that check, anyone who captures one request can replay it at you forever;
 4. compare in constant time.
 
-With our helper, which is MIT so it costs you no licence, and WebCrypto so it runs in Node, in a Worker, in Deno, in Bun and in a browser. It ships in `@surfingdog/sdk`, which is not on npm yet; until it lands, use the `standardwebhooks` example underneath it, or the four rules above:
+With our helper, which is MIT so it costs you no licence, and WebCrypto so it runs in Node, in a Worker, in Deno, in Bun and in a browser. No dependencies, 15 kB:
+
+```bash
+npm install @surfingdog/sdk
+```
+
+Then:
 
 ```ts
 import { verifyWebhook, WebhookVerificationError } from "@surfingdog/sdk";
