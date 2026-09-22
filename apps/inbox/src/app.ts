@@ -77,7 +77,7 @@ export function createInbox(deps: AppDeps): Inbox {
     deps.eventSettleMs,
   );
   const mailOut = deps.mailOut ?? logMailOut();
-  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl })
+  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts })
     .register(
       NETWORK_PING_KIND,
       networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
@@ -116,14 +116,21 @@ export function createInbox(deps: AppDeps): Inbox {
 
   app.get(MANIFEST_PATH, async (c) => {
     const origin = publicOrigin(c.req.raw, deps.baseUrl);
-    const profile = await caps.getBusinessProfile();
+    const [profile, jwks] = await Promise.all([caps.getBusinessProfile(), caps.receipts.jwks()]);
     const manifest = buildManifest({
       instanceUrl: origin,
       itemTypes: profile.item_types,
       profile: profile.name ? { name: profile.name, languages: [...profile.languages], categories: [] } : undefined,
+      receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });
+
+  // The receipt-signing keys as a plain JWKS (ADR-016), for anything that verifies a JWS the
+  // usual way. The same keys sit in the manifest under `receipt_keys`; this is the shorter path.
+  app.get("/.well-known/jwks.json", async (c) =>
+    c.json(await caps.receipts.jwks(), 200, { "Cache-Control": "public, max-age=300" }),
+  );
 
   mountDoors(app, {
     db: deps.db,

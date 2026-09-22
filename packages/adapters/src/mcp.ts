@@ -1,5 +1,6 @@
 import { type CallToolResult, createMcpHandler, type McpHttpHandler, McpServer } from "@modelcontextprotocol/server";
 import {
+  acknowledgeReceiptInput,
   applyPresetInput,
   type Caller,
   type Capabilities,
@@ -268,14 +269,18 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "acknowledge_receipt",
       {
         title: "Acknowledge a receipt",
-        description: "Counter-sign a receipt (the next release).",
-        inputSchema: z.object({ item_id: z.string(), receipt: z.string(), counter_signature: z.string() }),
+        description:
+          "Counter-sign a receipt this item earned, so both sides hold it. Read the item to find its receipts; then send a compact JWS signed with your own Ed25519 key — header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<your public jwk>}, payload {rcp:<receipt id>, iat:<unix seconds>}. The instance verifies it against the key you carry and keeps it. Acknowledging twice is harmless.",
+        inputSchema: acknowledgeReceiptInput,
         annotations: writes,
       },
-      () =>
+      (args) =>
         run(async () => {
-          await caps.acknowledgeReceipt();
-          return { text: "", structured: {} };
+          const r = await caps.acknowledgeReceipt(caller, args);
+          return {
+            text: `Receipt ${r.id} (${r.kind}) acknowledged at ${r.acknowledged_at}.`,
+            structured: r,
+          };
         }),
     );
     return server;

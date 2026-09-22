@@ -47,6 +47,10 @@ export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.getSettings, staleTime: 60_000 });
 }
 
+export function useReceiptStatus() {
+  return useQuery({ queryKey: ["receipts", "status"], queryFn: api.receiptStatus, staleTime: 60_000 });
+}
+
 export function useItemPages(params: ListParams) {
   return useInfiniteQuery({
     queryKey: qk.items(params),

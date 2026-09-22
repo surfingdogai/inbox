@@ -23,7 +23,14 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 /** One derived key per purpose, so a connector config is never opened as a webhook secret. */
-export type SecretPurpose = "connector-config" | "webhook-secret";
+export type SecretPurpose = "connector-config" | "webhook-secret" | "receipt-key";
+
+/**
+ * What a deterministic key is derived for. Sealing is randomised and must be; these are the few
+ * places where the same input has to give the same output every time, and each gets its own key
+ * so one cannot be replayed as another.
+ */
+export type MacPurpose = "receipt-subject";
 
 export interface SecretBox {
   /**
@@ -33,6 +40,17 @@ export interface SecretBox {
   seal(purpose: SecretPurpose, rowId: string, plaintext: string): Promise<string>;
   /** Rejects on a wrong key, a wrong row or a tampered byte; it never returns rubbish. */
   open(purpose: SecretPurpose, rowId: string, sealed: string): Promise<string>;
+  /**
+   * An HMAC key derived from the newest secret, for turning an identity into a pseudonym that is
+   * stable on this instance and meaningless anywhere else. It is a `CryptoKey`, never bytes, so
+   * the pepper cannot be read out of the box, logged, or exported — only used to MAC.
+   *
+   * Rotation is deliberately not supported here: changing the key changes every pseudonym, which
+   * would break the link between a receipt already in the world and the party it is about. The
+   * newest key at the time of writing is the one that counts, so put a new key at the FRONT for
+   * sealing only once no pseudonym needs to match an old one.
+   */
+  mac(purpose: MacPurpose): Promise<CryptoKey>;
 }
 
 /** Splits an `INBOX_SECRET_KEY` value into its keys, newest first. Empty entries are dropped. */
@@ -68,7 +86,21 @@ export function createSecretBox(keys: readonly string[]): SecretBox | null {
     return pending;
   };
 
+  const macs = new Map<MacPurpose, Promise<CryptoKey>>();
+
   return {
+    mac(purpose) {
+      let pending = macs.get(purpose);
+      if (!pending) {
+        pending = deriveMac(newest, purpose).catch((error) => {
+          macs.delete(purpose);
+          throw error;
+        });
+        macs.set(purpose, pending);
+      }
+      return pending;
+    },
+
     async seal(purpose, rowId, plaintext) {
       const key = await keyFor(0, newest, purpose);
       const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
@@ -138,6 +170,24 @@ async function deriveKey(secret: string, purpose: SecretPurpose): Promise<Crypto
     { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"],
+  );
+}
+
+async function deriveMac(secret: string, purpose: MacPurpose): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey("raw", encoder.encode(secret) as BufferSource, "HKDF", false, [
+    "deriveKey",
+  ]);
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0) as BufferSource,
+      info: encoder.encode(`${INFO_PREFIX}mac/${purpose}`) as BufferSource,
+    },
+    base,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
   );
 }
 

@@ -1,6 +1,7 @@
 import {
   appendThreadEntry,
   type Caller,
+  Capabilities,
   createItem,
   createSecretBox,
   type Db,
@@ -9,6 +10,7 @@ import {
   matchesEvent,
   type RunReport,
   type SecretBox,
+  schema,
   setFlags,
   ulid,
   WebhookCapabilities,
@@ -607,6 +609,81 @@ describe("payload styles", () => {
     );
     const full = await buildEvent(db, event, "full", "https://inbox.example.com");
     expect((full.data as Record<string, { email?: string }>).party?.email).toBe("rita@example.com");
+  });
+});
+
+describe("receipt events (ADR-016)", () => {
+  /** A booking to earn a receipt on: one service, one confirmed request. */
+  async function confirmedBooking(db: Db) {
+    const svc = ulid();
+    await db.orm.insert(schema.services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const created = await createItem(db, customer(T0), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: svc, name: "Full service" },
+        startTime: "2026-09-23T08:00:00Z",
+        endTime: "2026-09-23T09:30:00Z",
+        totalPrice: { value: 4500, currency: "EUR" },
+      },
+      contact: { name: "Rita Amaral", email: "rita@example.com" },
+    });
+    return created.view.item.id;
+  }
+
+  it("delivers the issue and the acknowledgement, with the receipt in the full body", async () => {
+    const { db } = await freshDb();
+    const box = createSecretBox([KEY]);
+    if (!box) throw new Error("no box");
+    await addEndpoint(db, box, { url: "https://hooks.example.com/full", events: ["booking.*"], style: "full" });
+    const caps = new Capabilities(db, box, "https://inbox.example.com", 0);
+    const itemId = await confirmedBooking(db);
+
+    const issued = await caps.receipts.issue(itemId, "confirmed", T0 + 1_000);
+    if (issued.outcome !== "issued") throw new Error(`expected issued, got ${issued.outcome}`);
+    const receipt = issued.receipt;
+
+    // The fanout job was written under the receipt's id, and the view resolves it.
+    expect((await jobsOf(db, WEBHOOK_FANOUT_KIND)).map((r) => r[1])).toContain(`fanout:${receipt.id}`);
+    const event = await readEvent(db, receipt.id);
+    expect(event).toMatchObject({ type: "booking.receipt_issued", itemId, source: "receipt" });
+    if (!event) throw new Error("no event");
+    const full = await buildEvent(db, event, "full", "https://inbox.example.com");
+    const data = full.data as { receipt?: { id: string; jws: string; acknowledged_at: string | null }; item?: unknown };
+    expect(data.receipt).toMatchObject({ id: receipt.id, jws: receipt.jws, acknowledged_at: null });
+    expect(data.item).toBeDefined();
+    // The thin style stays a pointer: no receipt, no customer.
+    expect(Object.keys((await buildEvent(db, event, "thin", "https://inbox.example.com")).data as object)).toEqual([
+      "id",
+      "type",
+      "state",
+      "version",
+      "url",
+    ]);
+
+    // Delivered like any other event.
+    const net = receiver(() => 200);
+    await drain(runnerWith({ secrets: box, fetchImpl: net.fetchImpl }), db, T0 + 2_000);
+    const bodies = net.calls.map((c) => JSON.parse(c.body) as { type: string; data: { receipt?: { jws: string } } });
+    expect(bodies.map((b) => b.type)).toContain("booking.receipt_issued");
+    expect(bodies.find((b) => b.type === "booking.receipt_issued")?.data.receipt?.jws).toBe(receipt.jws);
+
+    // The acknowledgement is its own event, id `<receipt>:ack`, and carries the receipt as acked.
+    await db.orm.update(schema.receipts).set({ ackJws: "x.y.z", ackAt: T0 + 3_000 });
+    const ack = await readEvent(db, `${receipt.id}:ack`);
+    expect(ack).toMatchObject({ type: "booking.receipt_acknowledged", itemId, source: "receipt_ack" });
+    if (!ack) throw new Error("no ack event");
+    const fullAck = await buildEvent(db, ack, "full", "https://inbox.example.com");
+    expect((fullAck.data as { receipt?: { acknowledged_at: string | null } }).receipt?.acknowledged_at).toBe(
+      new Date(T0 + 3_000).toISOString(),
+    );
   });
 });
 

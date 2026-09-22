@@ -33,6 +33,8 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `booking.expire` | A rule expired a booking nobody answered. |
 | `booking.complete` | The booking happened. |
 | `booking.no_show` | The customer did not turn up. |
+| `booking.receipt_issued` | The instance signed a receipt for the confirmed booking ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
+| `booking.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `order.create` | An order arrived. |
 | `order.request_info` | You asked the customer for more details. |
 | `order.provide_info` | The customer answered. |
@@ -44,6 +46,8 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `order.complete` | The order is closed and done. |
 | `order.decline` | You declined the order. |
 | `order.cancel` | The order was cancelled. |
+| `order.receipt_issued` | The instance signed a receipt for the paid order. In the full style, `data.receipt` carries it. |
+| `order.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `quote_request.create` | Someone asked for a price. |
 | `quote_request.request_info` | You asked what exactly they need. |
 | `quote_request.provide_info` | They told you. |

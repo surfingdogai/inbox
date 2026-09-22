@@ -114,25 +114,16 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 5,
     name: "0004_feed_product_identity",
     statements: [
-      `-- ADR-015 §7.3. A feed's products are identified by (source, external_id), and nothing
--- enforced it, so two imports of one connector running at the same time both read an empty
--- catalogue and both inserted: 60 products became 120, permanently, with both imports
--- reporting success. A unique index makes the second writer lose instead of duplicate.
---
--- Any duplicates a live instance already carries have to go before the index can be built, and
--- a product is never deleted here: the earliest row of each pair keeps its identity, and the
--- later ones are unlinked from the feed and deactivated, so an order that points at one still
--- has its product.
-UPDATE \`products\`
-   SET \`external_id\` = NULL, \`active\` = 0
- WHERE \`external_id\` IS NOT NULL
-   AND \`source\` LIKE 'feed:%'
-   AND \`id\` NOT IN (
-     SELECT MIN(\`id\`) FROM \`products\`
-      WHERE \`external_id\` IS NOT NULL AND \`source\` LIKE 'feed:%'
-      GROUP BY \`source\`, \`external_id\`
-   );`,
+      "-- ADR-015 §7.3. A feed's products are identified by (source, external_id), and nothing\n-- enforced it, so two imports of one connector running at the same time both read an empty\n-- catalogue and both inserted: 60 products became 120, permanently, with both imports\n-- reporting success. A unique index makes the second writer lose instead of duplicate.\n--\n-- Any duplicates a live instance already carries have to go before the index can be built, and\n-- a product is never deleted here: the earliest row of each pair keeps its identity, and the\n-- later ones are unlinked from the feed and deactivated, so an order that points at one still\n-- has its product.\nUPDATE `products`\n   SET `external_id` = NULL, `active` = 0\n WHERE `external_id` IS NOT NULL\n   AND `source` LIKE 'feed:%'\n   AND `id` NOT IN (\n     SELECT MIN(`id`) FROM `products`\n      WHERE `external_id` IS NOT NULL AND `source` LIKE 'feed:%'\n      GROUP BY `source`, `external_id`\n   );",
       "CREATE UNIQUE INDEX IF NOT EXISTS `products_feed_once` ON `products` (`source`,`external_id`) WHERE `external_id` IS NOT NULL;",
+    ],
+  },
+  {
+    version: 6,
+    name: "0005_receipt_events",
+    statements: [
+      "-- ADR-016. A receipt being issued, and being counter-signed, are things that happened to an item,\n-- so they join the developer event stream and the webhooks like any transition: `<type>.receipt_issued`\n-- when the job signs one, `<type>.receipt_acknowledged` when the customer's agent counter-signs.\n-- The view is recreated rather than altered because SQLite has no ALTER VIEW; the two existing\n-- branches are byte-for-byte what 0003 created.\nDROP VIEW IF EXISTS `events_v1`;",
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\'\nUNION ALL\nSELECT\n  r."id",\n  i."type" || \'.receipt_issued\',\n  r."issued_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'system\',\n  NULL,\n  \'receipt_issued\',\n  \'receipt\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nUNION ALL\nSELECT\n  r."id" || \':ack\',\n  i."type" || \'.receipt_acknowledged\',\n  r."ack_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'customer_agent\',\n  NULL,\n  \'receipt_acknowledged\',\n  \'receipt_ack\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nWHERE r."ack_at" IS NOT NULL;',
     ],
   },
 ];

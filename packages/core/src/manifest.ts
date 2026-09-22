@@ -6,6 +6,8 @@ export function buildManifest(input: {
   itemTypes?: readonly string[];
   profile?: Profile | undefined;
   reviewServices?: readonly string[];
+  /** The instance's receipt-signing public keys (ADR-016), as `/.well-known/jwks.json` serves them. */
+  receiptKeys?: readonly Record<string, unknown>[] | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   return manifestSchema.parse({
@@ -20,7 +22,7 @@ export function buildManifest(input: {
       mcp_owner: `${origin}/mcp/owner`,
     },
     agent_policy: { tiers: ["anonymous", "verified_principal"] },
-    receipt_keys: { keys: [] },
+    receipt_keys: { keys: input.receiptKeys ?? [] },
     review_services: input.reviewServices ?? [],
   });
 }

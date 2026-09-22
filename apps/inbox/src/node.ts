@@ -3,7 +3,7 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey, ensureNetworkPing, NETWORK_PING_KIND } from "@surfingdog/adapters";
-import { createDb, ensureJob, MIGRATIONS } from "@surfingdog/core";
+import { Capabilities, createDb, createSecretBox, ensureJob, MIGRATIONS, parseSecretKeys } from "@surfingdog/core";
 import { cloudflareEmailRestMailOut, ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
@@ -33,19 +33,27 @@ const db = createDb(nodeSqliteClient(file));
 const command = process.argv[2];
 if (command) {
   await ensureMigrated(db.client, MIGRATIONS);
+  // Seeds confirm items, and a confirmed item earns a receipt when the host can sign one.
+  const seedDeps = {
+    receipts: new Capabilities(
+      db,
+      createSecretBox(parseSecretKeys(process.env.INBOX_SECRET_KEY)),
+      process.env.INBOX_PUBLIC_URL,
+    ).receipts,
+  };
   if (command === "create-owner-key") {
     const { key } = await createApiKey(db, { kind: "owner", name: process.argv[3] ?? "cli" });
     console.log(key);
   } else if (command === "seed-demo") {
-    const r = await seedDemo(db);
+    const r = await seedDemo(db, Date.now(), seedDeps);
     console.log(r.seeded ? "seeded the demo business" : "an instance business already exists; nothing changed");
   } else if (command === "seed-showcase") {
-    const r = await seedShowcase(db);
+    const r = await seedShowcase(db, Date.now(), seedDeps);
     console.log(
       r.seeded ? `seeded the showcase: ${r.items} items` : "an instance business already exists; nothing changed",
     );
   } else if (command === "seed-surfingdog") {
-    const r = await seedSurfingDog(db);
+    const r = await seedSurfingDog(db, Date.now(), seedDeps);
     console.log(r.seeded ? "seeded Surfing Dog's own inbox" : "an instance business already exists; nothing changed");
   } else if (command === "network-ping") {
     await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);

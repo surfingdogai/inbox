@@ -15,6 +15,7 @@ import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
 import { StatePill, TypePill } from "./Pills";
+import { Receipts } from "./Receipts";
 import { Sheet } from "./Sheet";
 import { Timeline } from "./Timeline";
 
@@ -134,6 +135,7 @@ export function ItemDetailView({
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
         <Fields item={item} tz={tz} />
+        <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         {transitions.length > 0 ? (
           <div className="actions">
             {transitions.map((t, i) => (

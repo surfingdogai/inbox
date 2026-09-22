@@ -17,7 +17,7 @@ Content never leaves the instance. What can leave, each by the owner's choice in
 
 - **activity counts**: once the owner joins a network (`network.join`, off by default), a ping every hour with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts;
 - **the public profile**, when the business chooses to be listed in a directory (coming);
-- **receipts and outcome codes**, when the business joins a review service (coming).
+- **receipts**, which name the customer by a pseudonym (an HMAC under a key only this instance holds), never by an address, so a receipt can be shown to a network without disclosing who it is about; and outcome codes, when the business joins a review service (coming).
 
 Personal data inside items is tracked by path so that an erasure request rewrites exactly those fields. Pseudonyms on the network will be HMACs with a server-held secret, never a bare hash of an email or phone number, and reputation stays advisory: decayed counts, no pass/fail, a human decision with a recorded reason, a contest procedure ([ADR-012](https://github.com/surfingdogai/inbox/blob/main/docs/adr/012-reputation-and-reviews-law.md)).
 
@@ -26,7 +26,7 @@ Personal data inside items is tracked by path so that an erasure request rewrite
 - Owner API keys (`sdi_own_…`) and agent keys (`sdi_agent_…`) are stored as SHA-256 hashes with a short prefix for identification. The key is shown once, when it is created.
 - OAuth access tokens (`sdi_at_…`, one hour) and refresh tokens (`sdi_rt_…`, thirty days) are opaque, hashed, and rotate on every refresh. A refresh token presented twice revokes the whole token family.
 - Magic-link tokens are hashed, single-use and expire in fifteen minutes. Sessions are hashed and expire after thirty days.
-- Receipts will be signed with Ed25519 keys the manifest publishes; rotation keeps the previous key valid for a grace period.
+- Receipts are signed with an Ed25519 key generated on the instance; the private half is sealed by `INBOX_SECRET_KEY` before it is stored, and the public half is published in the manifest and at `/.well-known/jwks.json`. A retired key stays published so old receipts still verify. Without `INBOX_SECRET_KEY` no key is created and no receipt is issued, rather than storing a signing key in the clear.
 
 ## Same-origin writes for cookies
 

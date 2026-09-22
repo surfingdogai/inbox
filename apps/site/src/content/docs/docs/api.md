@@ -23,7 +23,7 @@ No authentication. Anonymous callers receive an `accessToken` when they create a
 | `get_item_status` | `GET /v1/items/{id}` | The current state of an item you created, and what you may do next. |
 | `cancel_item` | `POST /v1/items/{id}/cancel` | Cancel an item you created, within the business's cancellation window. |
 | `send_message` | `POST /v1/messages` | Start a conversation, or reply on an item you own with `item_id`. |
-| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt. Answers `501` until receipts ship. |
+| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt on your item with your agent's own Ed25519 key, so both sides hold it. See [Receipts](/docs/receipts/). |
 
 Create calls take `payload` (the typed fields, schema.org names in camelCase), an optional `contact` (`name`, `email`, `phone`, `locale`), an optional free-text `message`, and `idempotency_key`.
 

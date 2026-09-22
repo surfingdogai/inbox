@@ -1,4 +1,5 @@
 import {
+  acknowledgeReceiptInput,
   addFeedInput,
   applyPresetInput,
   type Caller,
@@ -209,20 +210,23 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     "/items/:id/receipt-ack",
     describeRoute({
       tags: ["public"],
-      summary: "Counter-sign a receipt (the next release)",
-      responses: { 501: { description: "Not yet" } },
+      summary: "Counter-sign a receipt on your item",
+      description:
+        "Send a compact JWS signed with your agent's Ed25519 key: header {alg:'EdDSA', typ:'sdi-receipt-ack+jws', jwk:<public jwk>}, payload {rcp:<receipt id>, iat:<unix seconds>}. The receipt ids are on GET /items/{id}.",
+      responses: json("Receipt"),
     }),
-    (c) =>
-      c.json(
-        {
-          type: "https://surfingdog.ai/problems/not_implemented",
-          title: "Not implemented",
-          status: 501,
-          code: "not_implemented",
-          detail: "Receipts arrive in the next release.",
-        },
-        501,
-      ),
+    validator("json", acknowledgeReceiptInput.omit({ item_id: true }), hook),
+    async (c) => {
+      const body = c.req.valid("json");
+      const token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+      // Parsed once more with the path param folded in, so the capability sees one typed input.
+      const input = acknowledgeReceiptInput.parse({
+        ...body,
+        item_id: c.req.param("id"),
+        ...(token ? { access_token: token } : {}),
+      });
+      return c.json(await caps.acknowledgeReceipt(c.get("caller"), input));
+    },
   );
 
   return app;
@@ -279,6 +283,16 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     "/settings",
     describeRoute({ tags: ["owner"], summary: "The settings document", responses: json("Settings") }),
     async (c) => c.json(await caps.getSettings(c.get("caller"))),
+  );
+
+  app.get(
+    "/receipts",
+    describeRoute({
+      tags: ["owner"],
+      summary: "Whether this instance issues receipts, and how many it has",
+      responses: json("Receipt status"),
+    }),
+    async (c) => c.json(await caps.getReceiptStatus(c.get("caller"))),
   );
 
   app.put(

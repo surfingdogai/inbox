@@ -32,6 +32,59 @@ export const profileSchema = z.object({
 });
 export type Profile = z.infer<typeof profileSchema>;
 
+/**
+ * A receipt: the signed record an instance issues when an item completes, and the proof both
+ * sides end up holding (ADR-016).
+ *
+ * **These claim names are frozen.** A receipt outlives the software that wrote it, and renaming
+ * a claim later invalidates every receipt already issued. Three-letter names because a receipt
+ * travels in headers and URLs; `iss`, `sub` and `iat` are RFC 7519 and mean what they mean there.
+ */
+export const receiptKindSchema = z.enum(["confirmed", "paid"]);
+export type ReceiptKind = z.infer<typeof receiptKindSchema>;
+
+export const moneySchema = z.object({
+  value: z.number().int().describe("Minor units: 4500 is €45.00."),
+  currency: z.string().length(3),
+});
+
+export const receiptPayloadSchema = z.object({
+  /** The issuing instance, an https origin with no trailing slash. */
+  iss: z.url(),
+  /**
+   * Who the receipt is about, pseudonymously: base64url(HMAC-SHA-256(instance pepper, identity)).
+   * Never an address, and never a bare hash of one — an address space is small enough to enumerate. Two receipts for one customer on one instance share it, which is what
+   * makes a reputation possible; the same customer elsewhere does not, which is what stops one
+   * being assembled about them without their knowledge.
+   */
+  sub: z.string().min(16).max(64),
+  /** The item's id on the issuing instance. */
+  itm: z.string().min(1).max(64),
+  typ: itemTypeSchema,
+  knd: receiptKindSchema,
+  iat: z.number().int().positive().describe("Issued at, Unix seconds."),
+  /** 128 bits of hex. A network deduplicates on (iss, nonce), so a receipt shows once. */
+  nonce: z.string().regex(/^[0-9a-f]{32}$/),
+  amt: moneySchema.optional(),
+  pay: z.string().max(40).optional().describe("How it was paid, when the instance knows."),
+});
+export type ReceiptPayload = z.infer<typeof receiptPayloadSchema>;
+
+/** The JOSE header an instance signs with. `alg` is EdDSA and nothing else is accepted. */
+export const receiptHeaderSchema = z.object({
+  alg: z.literal("EdDSA"),
+  typ: z.literal("sdi-receipt+jws"),
+  kid: z.string().min(1).max(128),
+});
+export type ReceiptHeader = z.infer<typeof receiptHeaderSchema>;
+
+/** What a customer's agent counter-signs, to say it holds the same receipt. */
+export const receiptAckPayloadSchema = z.object({
+  rcp: z.string().min(1).max(64).describe("The receipt's id on the issuing instance."),
+  iat: z.number().int().positive(),
+});
+export type ReceiptAckPayload = z.infer<typeof receiptAckPayloadSchema>;
+
 export const manifestSchema = z.object({
   spec: z.literal("surfingdog-inbox/0"),
   instance: z.url(),

@@ -9,6 +9,8 @@ type Bindings = Env & {
   RESEND_API_KEY?: string;
   INBOX_OWNER_EMAIL?: string;
   INBOX_SECRET_KEY?: string;
+  /** The https URL this instance is reached at. Receipts name it as their issuer (ADR-016). */
+  INBOX_PUBLIC_URL?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -29,6 +31,7 @@ function inboxFor(env: Bindings): Inbox {
         .map((e) => e.trim())
         .filter(Boolean),
       secretKey: env.INBOX_SECRET_KEY,
+      baseUrl: env.INBOX_PUBLIC_URL,
     });
     inboxes.set(env.DB, inbox);
   }

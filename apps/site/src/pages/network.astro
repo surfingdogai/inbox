@@ -40,7 +40,7 @@ const never = [
   },
   {
     k: "Reaches the network",
-    v: "Your domain, the version and runtime the instance reports, and hourly counts in four buckets. Later, the public manifest at your domain, receipt signatures and reviews.",
+    v: "Your domain, the version and runtime the instance reports, and hourly counts in four buckets. Later, once the network verifies them: receipt signatures and reviews.",
   },
 ];
 ---
@@ -111,14 +111,15 @@ const never = [
             anyone.
           </p>
         </div>
-        <span class="pill">Coming</span>
+        <span class="pill">Live</span>
       </div>
 
       <div class="says">
         <p>
-          When an item completes, the instance will issue a receipt: a small signed record of what
-          was agreed and what happened. The customer's agent will counter-sign it, so both sides end
-          up holding the same proof, and neither can quietly change it afterwards.
+          When a booking is confirmed or an order is paid, the instance issues a receipt: a small
+          signed record of what happened and what it was worth, naming the customer only by a
+          pseudonym. The customer's agent counter-signs it, so both sides end up holding the same
+          proof, and neither can quietly change it afterwards.
         </p>
         <p>
           A review will only be accepted against a receipt, in both directions. Nobody will be able
@@ -136,8 +137,10 @@ const never = [
         <a class="link" href="/blog/receipts-not-reviews/">Read why we are starting with receipts</a>
       </p>
       <p class="fine">
-        Today the endpoint and the MCP tool exist and answer that receipts are not ready. Nothing
-        on this page is issuing a receipt yet.
+        Receipts are live on every instance that has a secret key and a public URL: issued, readable
+        on the item, verifiable against the instance's published keys, and counter-signed through
+        the API or the MCP tool. The network does not yet collect them; reviews and reputation are
+        still to come.
       </p>
     </div>
   </section>

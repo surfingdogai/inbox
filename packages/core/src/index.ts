@@ -14,10 +14,12 @@ export * from "./jobs/index";
 export * from "./machine/machine";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";
+export * from "./receipts/index";
 export * from "./rules/index";
 export { MIGRATIONS } from "./schema/migrations.generated";
 export {
   createSecretBox,
+  type MacPurpose,
   parseSecretKeys,
   requireSecretBox,
   type SecretBox,
