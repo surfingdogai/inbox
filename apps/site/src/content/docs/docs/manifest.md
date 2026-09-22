@@ -38,7 +38,7 @@ An instance publishes one small document at `/.well-known/agent-inbox.json`. It 
 | --- | --- |
 | `spec` | The format version. Always `surfingdog-inbox/0` today. |
 | `instance` | The instance's origin. |
-| `profile` | Public profile data the directory may index: name, description, up to ten categories and languages, a postal address, coordinates, a website, a contact email. Nothing else about a business ever leaves the instance. Optional. |
+| `profile` | Public profile data the directory may index: name, description, up to ten categories and languages, a postal address, coordinates, a website, a contact email. What else a joined instance sends a network is on [Security and privacy](/docs/security-and-privacy/). Optional. |
 | `item_types` | Which of `message`, `quote_request`, `booking`, `order`, `refund` this instance accepts. |
 | `protocols` | Protocol name to entry URL. Today: `openapi`, `rest`, `mcp`, `mcp_owner`. Adapters add their own keys as they ship (`a2a`, `ucp`, `arp`, `email`, `form`). |
 | `agent_policy.tiers` | The trust tiers the instance serves, from `anonymous`, `signed_agent`, `verified_principal`, `reputed_principal`. |

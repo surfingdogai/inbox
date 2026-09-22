@@ -10,7 +10,7 @@ const contents = [
   { href: "#directory", label: "The directory" },
   { href: "#receipts", label: "Receipts, not reviews" },
   { href: "#clients", label: "Good clients" },
-  { href: "#ranking", label: "How the best win" },
+  { href: "#ranking", label: "How it is ordered" },
   { href: "#privacy", label: "What it never sees" },
   { href: "#join", label: "Join" },
 ];
@@ -36,18 +36,22 @@ const signals = [
 const never = [
   {
     k: "Stays in your instance",
-    v: "Conversations, prices, names, addresses, payment references, every item and every event.",
+    v: "Conversations, your customers' names, email addresses, phone numbers and postal addresses, what was ordered, payment references, and every event in an item's history.",
   },
   {
     k: "Reaches the network",
-    v: "Your domain, the version and runtime the instance reports, hourly counts in four buckets, and the receipts it issues: signed, pseudonymous, verified here against its own published keys. Later: reviews.",
+    v: "Your domain, the version and runtime the instance reports, hourly counts in four buckets, and every receipt it issues, with the customer agent's counter-signature when there is one. A receipt says which business, its reference for the booking or order, what kind of promise, when, a customer code the network cannot turn back into a person, and, when the booking or order states them, the amount and how it was paid. Later: reviews.",
+  },
+  {
+    k: "How long it is kept",
+    v: "Hourly counts for 90 days. Each receipt for 540 days after it arrives. The totals for each business, indefinitely.",
   },
 ];
 ---
 
 <Layout
   title="The network · Surfing Dog"
-  description="A directory of inboxes that agents can search, where listing is by verified domain and ranking follows kept promises. How receipts will become reputation on both sides, how a business will know its good clients, and what the network is never allowed to see."
+  description="A directory of inboxes that agents can search, where listing is by verified domain and nothing about the order can be bought. How receipts will become reputation on both sides, how a business will know its good clients, and what the network is never allowed to see."
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="page-h">
     <p class="eyebrow">The network</p>
@@ -71,8 +75,8 @@ const never = [
           <p class="eyebrow">Membership</p>
           <h2 class="h-section" id="directory-h">One directory, open format</h2>
           <p class="lede">
-            An inbox joins by registering its own domain. After that it reports counts, once an
-            hour, and nothing else.
+            An inbox joins by registering its own domain. After that it reports counts once an
+            hour, and publishes the receipts it issues.
           </p>
         </div>
       </div>
@@ -81,18 +85,18 @@ const never = [
         <p>
           Membership ships today. Switch it on and your instance registers its domain with the
           network and sends an hourly ping: the version it runs, what it runs on, and how many
-          bookings, orders, quote requests and messages arrived in the last day. Counts only. No
-          content, no names, no amounts. Test items are left out.
+          bookings, orders, quote requests and messages arrived in the last day. The ping is counts
+          only: no content, no names, no amounts. Test items are left out. The instance also
+          publishes every receipt it issues, described below.
         </p>
         <p>
-          The directory that lists those instances is a separate service, and it is being built.
-          <span class="pill">Coming</span> It will verify a domain before listing it, by fetching
-          the manifest at that address and checking that the instance names itself. A listing will
-          carry the business name, where it is, what it does, the languages it answers in, and the
-          doors it offers.
+          The directory that lists those instances is a separate service. It verifies a domain
+          before listing it, by fetching the manifest at that address and checking that the
+          instance names itself. A listing carries the business name, where it is, what it does,
+          the languages it answers in, and the doors it offers.
         </p>
         <p>
-          surfingdog.ai runs the first network. The protocol is two HTTP calls, so a trade body, a
+          surfingdog.ai runs the first network. The protocol is three HTTP calls, so a trade body, a
           city or a franchise can run one of their own, and an inbox will be able to belong to more
           than one.
         </p>
@@ -117,9 +121,9 @@ const never = [
       <div class="says">
         <p>
           When a booking is confirmed or an order is paid, the instance issues a receipt: a small
-          signed record of what happened and what it was worth, naming the customer only by a
-          pseudonym. The customer's agent counter-signs it, so both sides end up holding the same
-          proof, and neither can quietly change it afterwards.
+          signed record of what happened, and what it was worth when a price was stated, naming the
+          customer only by a pseudonym. The customer's agent can counter-sign it, and then both
+          sides hold the same proof, and neither can quietly change it afterwards.
         </p>
         <p>
           A review will only be accepted against a receipt, in both directions. Nobody will be able
@@ -202,52 +206,31 @@ const never = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">Discovery</p>
-          <h2 class="h-section" id="ranking-h">How the best businesses win</h2>
+          <h2 class="h-section" id="ranking-h">How the directory is ordered</h2>
           <p class="lede">
-            Listing by verified domain, ranking by kept promises. Neither can be bought.
+            Every entry is a real business at a domain it proved it controls, so the directory cannot
+            fill up with listings nobody stands behind.
           </p>
         </div>
-        <span class="pill">Live</span>
+        <span class="pill">Being redesigned</span>
       </div>
 
       <div class="says">
         <p>
-          Every entry is a real business at a domain it proved it controls, so the directory cannot
-          fill up with listings nobody stands behind.
+          The ranking is being redesigned. Until its new rules are published here, the directory
+          lists verified businesses newest first, and a search near a place lists them nearest
+          first. Nothing about the order can be bought.
         </p>
         <p>
-          The order follows the receipts a business issued: signed records that a booking was
-          confirmed or an order was paid. Nothing else moves a business up. Not advertising spend,
-          not how long it has been listed, not the amounts on its receipts, and not anything it
-          writes about itself.
-        </p>
-      </div>
-
-      <ol class="rules" aria-label="What decides the order, most important first">
-        <li><b>Receipts issued.</b> The whole of the score; everything below adjusts it.</li>
-        <li><b>Counter-signed by the customer.</b> A receipt both sides hold counts double one the business holds alone.</li>
-        <li><b>Age.</b> A receipt counts half after 180 days, and not at all after 540.</li>
-        <li><b>One customer, one voice.</b> A single customer can add at most three receipts' worth.</li>
-        <li><b>Scale.</b> The total is log-scaled: a thousand receipts rank above fifty without burying them.</li>
-        <li><b>Answering.</b> An instance that has not reported in for a day counts half until it does.</li>
-      </ol>
-
-      <div class="says">
-        <p>
-          A business with no receipts yet is still listed and still found by name, category and
-          place. It sorts last because there is no evidence yet, not as a penalty, and no business
-          can push another one down. A good small business gets found the same way a large one
-          does, because the thing being measured is the same in both cases.
-        </p>
-        <p>
-          Reviews are not part of the order yet. When they are, they will be two-sided and revealed
-          together, so there is nothing to retaliate against, and this list will say so before
-          anything changes.
+          The new ranking will measure how reliably a business keeps its promises: completed
+          bookings and fulfilled orders, and broken promises too. Its full rules will be published
+          on this page and at network.surfingdog.ai/v1/ranking, with a new version, before they take
+          effect.
         </p>
       </div>
 
       <p class="more">
-        <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">The same rules, machine-readable</a>
+        <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">The current order, machine-readable</a>
       </p>
     </div>
   </section>
@@ -259,8 +242,8 @@ const never = [
           <p class="eyebrow">Limits</p>
           <h2 class="h-section" id="privacy-h">What the network never sees</h2>
           <p class="lede">
-            The line is drawn in the code, not in a policy document: counts leave the instance,
-            content does not.
+            The line is drawn in the code, not in a policy document: counts and signed receipts
+            leave the instance, content does not.
           </p>
         </div>
       </div>
@@ -278,8 +261,9 @@ const never = [
 
       <div class="says top">
         <p>
-          Reputation will be advisory. It will decay with time, so an old mistake stops counting
-          against someone forever, and it can be contested by the person it describes.
+          Reputation will be a record, not a verdict: the network will show it, and each business's own
+          rules will decide what it earns. Recent months will weigh most, so a good record builds up and
+          an old mistake counts for less as time passes.
         </p>
         <p>
           The design follows European data protection rules from the start, including the part that
@@ -310,8 +294,8 @@ const never = [
           minute.
         </p>
         <p>
-          Running a network of your own is two HTTP calls: one that takes a registration, one that
-          takes the hourly ping. The payloads are open, and so is everything that reads them.
+          Running a network of your own is three HTTP calls: one that takes a registration, one that
+          takes the hourly ping, and one that takes receipts. The payloads are open and documented.
         </p>
       </div>
 
@@ -341,17 +325,6 @@ const never = [
     display: grid;
     gap: var(--sp-4);
   }
-  .rules {
-    margin: var(--sp-5) 0;
-    padding-left: 1.4em;
-    display: grid;
-    gap: var(--sp-2);
-    color: var(--ink-2);
-  }
-  .rules b {
-    color: var(--ink);
-    font-weight: 600;
-  }
   .says.top {
     margin-top: var(--sp-6);
   }
@@ -361,9 +334,6 @@ const never = [
     font-size: var(--fs-body);
     line-height: var(--lh-body);
     color: var(--ink-2);
-  }
-  .says .pill {
-    margin-inline: var(--sp-1);
   }
   .says .mono {
     font-size: 0.92em;

@@ -26,7 +26,7 @@ import Layout from "../layouts/Layout.astro";
           <h2 class="h-section" id="listed-h">Instances that answer</h2>
           <p class="lede">
             An agent can reach any of these directly. The manifest link is the machine-readable version of the same
-            entry. The order follows kept promises, <a class="link" href="/network/#ranking">by rules anyone can read</a>.
+            entry. They are listed newest first while <a class="link" href="/network/#ranking">the ranking is redesigned</a>.
           </p>
         </div>
       </div>
@@ -57,8 +57,8 @@ import Layout from "../layouts/Layout.astro";
         <div class="state">
           <h3>Only ours, so far</h3>
           <p>
-            The first businesses to run one will be here. Joining is a switch in Settings, and nothing about your
-            customers ever leaves your instance.
+            The first businesses to run one will be here. Joining is a switch in Settings, and your customers' names,
+            addresses and messages never leave your instance.
           </p>
         </div>
       </template>
@@ -82,12 +82,13 @@ import Layout from "../layouts/Layout.astro";
         </li>
         <li>
           <b>It reports in hourly:</b> its version, its runtime, and how many bookings, orders, quotes and messages it
-          created in the last day. Four numbers. Nothing about a customer ever leaves your instance.
+          created in the last day. It also publishes the receipts it issues, which name each customer only by a code
+          the network cannot turn back into a person. <a class="link" href="/privacy/">What leaves, exactly</a>.
         </li>
       </ul>
       <p class="hint">
-        Stop reporting and the entry goes quiet, then drops off. The list is of instances that are actually up, which
-        is the only thing that makes it worth reading.
+        Stop reporting and the entry shows as quiet; if the manifest stops answering too, the entry drops off. The
+        list is of instances that are actually up, which is the only thing that makes it worth reading.
       </p>
       <div class="rowx">
         <a class="btn btn-primary" href="/install/">Get one running</a>

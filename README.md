@@ -69,4 +69,5 @@ Settings → Network. `network.url` is the directory this instance reports to (d
 the instance registers its domain once (the network verifies it by fetching
 `/.well-known/agent-inbox.json` and checking that `instance` is your https origin) and then sends,
 every hour, its software version, runtime and the number of bookings, orders, quotes and messages
-created in the last 24 hours. Nothing about customers leaves the instance.
+created in the last 24 hours. It also publishes every receipt it issues, which names the customer
+only by a pseudonym; no name, address or message content leaves the instance.

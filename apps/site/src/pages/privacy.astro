@@ -1,7 +1,8 @@
 ---
 // The privacy policy. Written from what the software actually does, and checked against the
-// code: what a self-hosted instance sends us (a version string and four counts, only when the
-// owner turns it on), what the hosted service would hold, and what the site itself collects.
+// code: what a self-hosted instance sends us (a version string, four counts and its signed
+// receipts, only when the owner turns it on), how long the network keeps them, what the hosted
+// service would hold, and what the site itself collects.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 
@@ -28,17 +29,37 @@ const UPDATED = "22 September 2026";
       <p>
         Your customers' messages, bookings and orders are in your database, on your machine. We cannot read them, we
         cannot recover them, and we never receive them. That is not a promise about our intentions; it is a fact about
-        where the software runs. The code is open, so you can check it.
+        where the software runs. The code is open, so you can check it. What can leave, if you switch it on, is set
+        out below.
       </p>
       <p>
-        One thing does leave your instance, and only if you switch it on. In Settings, <b>Network</b> is off by
+        Two things do leave your instance, and only if you switch them on. In Settings, <b>Network</b> is off by
         default. When it is on, your instance registers its domain once and then, every hour, sends its software
         version, which runtime it is on, and how many bookings, orders, quotes and messages it created in the last
-        24 hours. Four numbers. No names, no addresses, no message text, no customer data of any kind.
+        24 hours. Those counts say nothing about anyone.
       </p>
       <p>
-        Turn it off and that stops. Point <code>network.url</code> at a directory you run instead, and it never
-        reaches us at all.
+        It also sends the network every receipt it issues. A receipt is a signed record, made when a booking is
+        confirmed or an order is paid, of which business issued it, its reference for the booking or order, what
+        kind of promise it records, and when. The customer in it is a code, not a name: an HMAC made with a key that
+        only your instance holds, so the network cannot turn it back into a person, and the same customer at another
+        business has a different code. When the booking or order states a price, the receipt carries the amount; a
+        paid order's receipt also says how it was paid, such as by card, when your instance knows. If the
+        customer's agent counter-signs the receipt, that signature is sent too, with the agent's public key; an agent
+        that keeps its key presents the same one at every business, so the receipts it counter-signed can be linked
+        to each other. No names, no email addresses, no phone numbers, no postal addresses, no message text, no list
+        of what was ordered, no payment references.
+      </p>
+      <p>
+        The network keeps the hourly counts for 90 days, each receipt and its counter-signature for 540 days after
+        it arrives, and the totals for each business, how many receipts it issued and how many were counter-signed,
+        indefinitely. The directory lists the public profile your manifest already publishes, the version and runtime
+        your instance reports and whether it is answering; of the receipts it shows counts and the date of the latest,
+        never a receipt, an amount or a customer's code.
+      </p>
+      <p>
+        Turn it off and both stop; what the network already holds is kept for the periods above. Point
+        <code>network.url</code> at a directory you run instead, and none of it reaches us at all.
       </p>
 
       <h2 class="h-section">If we host it for you</h2>
@@ -80,11 +101,11 @@ const UPDATED = "22 September 2026";
 
       <h2 class="h-section">The network and reviews</h2>
       <p>
-        The directory and its two-sided reviews are not built yet, and nothing described here is live. When they are,
-        they will have their own notice, written before anything is collected, and an assessment of the risks done
-        first. Reviews will be tied to a real transaction, reputation will be advisory rather than a decision made
-        about anyone automatically, and identifiers will be pseudonymous. If any of that changes, the change will be
-        on this page before the feature is on.
+        The directory and the receipts described above are live. Reputation, for businesses and for customers, is
+        being built. Before it collects anything, this page will say exactly what it collects, how long it keeps it
+        and who can see it. It will be built only on real transactions, the network itself will decide nothing about
+        anyone (each business's own rules will), and identifiers will stay pseudonymous. If any of that changes, the
+        change will be on this page before the feature is on.
       </p>
 
       <h2 class="h-section">Changes</h2>

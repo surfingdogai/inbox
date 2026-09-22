@@ -1,0 +1,69 @@
+---
+/** Reputation on the network, told from the front page: earned on both sides, never bought. */
+const sides = [
+  {
+    title: "Businesses earn it.",
+    body: "Every booking that happens and every order delivered will add to it. A broken promise will count too. Recent months weigh most, and nothing is forgotten.",
+  },
+  {
+    title: "Customers earn it too.",
+    body: "A customer who turns up and pays will build a record that goes with them, whichever agent they use. A business can reward it: instant confirmation, no deposit.",
+  },
+  {
+    title: "Nobody can buy it.",
+    body: "No ads and no paid places. Every rule will be published on the network page before it counts.",
+  },
+];
+---
+
+<section class="section" id="reputation" aria-labelledby="reputation-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Reputation <span class="pill">Being built</span></p>
+        <h2 class="h-section" id="reputation-h">Reputation you earn, on both sides.</h2>
+        <p class="lede">
+          When your inbox joins a network, every kept promise becomes part of a record. Good businesses get found
+          first. Good customers get looked after first.
+        </p>
+      </div>
+    </div>
+    <ul class="grid-cards sides" data-reveal="stagger">
+      {
+        sides.map((s) => (
+          <li class="glass card side">
+            <h3 class="h-card">{s.title}</h3>
+            <p class="card-text">{s.body}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="more">
+      <a class="link" href="/network/">How the network works</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .sides {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 760px) {
+    .sides {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .side .card-text {
+    margin-top: var(--sp-2);
+  }
+  .eyebrow .pill {
+    margin-left: var(--sp-2);
+    vertical-align: middle;
+  }
+  .more {
+    margin: var(--sp-5) 0 0;
+    font-size: var(--fs-card);
+  }
+</style>

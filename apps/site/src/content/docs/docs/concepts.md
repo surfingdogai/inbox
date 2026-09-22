@@ -50,7 +50,7 @@ The manifest publishes which tiers an instance accepts. Defaults that stand unle
 
 ## Networks
 
-An instance may join a network from settings: `network.url` is the directory it reports to (default `https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and `POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on, the instance registers its domain once, which the network verifies by fetching the manifest and checking that `instance` is the https origin it was told, and then sends every hour its software version, its runtime and the number of bookings, orders, quotes and messages created in the last 24 hours. Nothing about customers leaves the instance. The numbers on the front page of surfingdog.ai are the sum of those pings.
+An instance may join a network from settings: `network.url` is the directory it reports to (default `https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and `POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on, the instance registers its domain once, which the network verifies by fetching the manifest and checking that `instance` is the https origin it was told, and then sends every hour its software version, its runtime and the number of bookings, orders, quotes and messages created in the last 24 hours. It also publishes every receipt it issues to that network (below), which names the customer only by a pseudonym; no name, address or message content leaves the instance. The numbers on the front page of surfingdog.ai are the sum of those pings.
 
 ## Receipts and two-sided reviews
 
