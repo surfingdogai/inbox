@@ -1,0 +1,310 @@
+---
+// Who pays for this to exist. The board is ordered by what someone has given in total, so
+// giving twice moves you up rather than listing you twice, and the amounts are the amounts
+// Stripe actually took — the page never sees a number a browser chose.
+import Layout from "../layouts/Layout.astro";
+
+const NETWORK = "https://network.surfingdog.ai";
+const TIERS = [
+  { cents: 2500, label: "€25", note: "a month of the server this runs on" },
+  { cents: 10000, label: "€100", note: "a day of building" },
+  { cents: 50000, label: "€500", note: "a week of it" },
+];
+---
+
+<Layout
+  title="Sponsors · Surfing Dog"
+  description="Surfing Dog Inbox is open source and free to run. Sponsors are what pays for the work. Those who give the most sit at the top, with their name, their link and their banner."
+>
+  <section class="wrap wrap-read section is-head" id="sponsors" aria-labelledby="sponsors-h">
+    <p class="eyebrow">Sponsors</p>
+    <h1 class="h-page" id="sponsors-h">Who pays for this</h1>
+    <p class="lede">
+      The inbox is free, open source, and yours to run on your own machine. Nobody pays a licence and nobody is the
+      product. That leaves sponsors, and this is the page that says who they are.
+    </p>
+  </section>
+
+  <section class="section" id="board" aria-labelledby="board-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">The board</p>
+          <h2 class="h-section" id="board-h">Biggest first</h2>
+          <p class="lede">
+            Ordered by what each has given in total. Give twice and you move up, rather than appearing twice.
+          </p>
+        </div>
+      </div>
+
+      <div data-board aria-live="polite">
+        <div class="skeleton sk-line"></div>
+      </div>
+
+      <template data-sponsor-template>
+        <a class="sponsor row-glass" href="#" rel="noopener sponsored" target="_blank">
+          <span class="rank" data-rank></span>
+          <span class="who">
+            <b data-name></b>
+            <span class="s" data-message></span>
+          </span>
+          <span class="gave" data-total></span>
+        </a>
+      </template>
+
+      <template data-empty-template>
+        <div class="state">
+          <h3>Nobody yet</h3>
+          <p>This page has been honest about that from the first day. The first name here gets the top of it.</p>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <section class="section" id="give" aria-labelledby="give-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Sponsor it</p>
+          <h2 class="h-section" id="give-h">What it pays for</h2>
+          <p class="lede">
+            Servers, the time to build, and keeping it free for a business that has no budget for software. Not
+            advertising, and not a sales team.
+          </p>
+        </div>
+      </div>
+
+      <form class="glass-strong panel give" data-give>
+        <div class="tiers" role="group" aria-label="Amount">
+          {
+            TIERS.map((t) => (
+              <button type="button" class="tier row-glass" data-amount={t.cents}>
+                <b>{t.label}</b>
+                <span class="s">{t.note}</span>
+              </button>
+            ))
+          }
+        </div>
+
+        <div class="field">
+          <label class="label" for="sp-amount">Or your own amount, in euros</label>
+          <input id="sp-amount" class="input" name="amount" type="text" inputmode="numeric" value="25" />
+          <p class="hint" id="sp-amount-hint">One payment, not a subscription. Anything from €5.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="sp-email">Email</label>
+          <input id="sp-email" class="input" name="email" type="email" autocomplete="email" required
+            placeholder="you@yourbusiness.com" />
+          <p class="hint">For the receipt. It is never shown on this page.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="sp-name">Name on the board <span class="opt">optional</span></label>
+          <input id="sp-name" class="input" name="name" maxlength="80" placeholder="Your business" />
+        </div>
+
+        <div class="field">
+          <label class="label" for="sp-website">Your website <span class="opt">optional</span></label>
+          <input id="sp-website" class="input" name="website" inputmode="url" placeholder="yourbusiness.com" />
+          <p class="hint">Linked from your name. An https address on a public host.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="sp-message">A line of your own <span class="opt">optional</span></label>
+          <input id="sp-message" class="input" name="message" maxlength="200" placeholder="We run our bookings on it." />
+        </div>
+
+        <label class="check">
+          <span class="switch"><input type="checkbox" name="anonymous" /><span></span></span>
+          Keep me off the board
+        </label>
+
+        <div class="rowx">
+          <button class="btn btn-primary" type="submit" data-go>Sponsor</button>
+        </div>
+        <p class="hint" data-note role="status"></p>
+        <p class="fine">
+          Payment is handled by Stripe; we never see your card. Your name, link and banner appear once they have been
+          checked by a person, because a public page carrying somebody else's artwork is a page that can be abused.
+        </p>
+      </form>
+    </div>
+  </section>
+</Layout>
+
+<style is:global>
+  .sponsor {
+    display: grid;
+    grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+    gap: var(--sp-3);
+    align-items: center;
+    padding: var(--sp-4) var(--sp-5);
+    border-radius: var(--radius-md);
+    color: inherit;
+    text-decoration: none;
+  }
+  .sponsor + .sponsor {
+    margin-top: var(--sp-2);
+  }
+  .sponsor .rank {
+    color: var(--ink-3);
+    font-size: var(--fs-fine);
+    font-variant-numeric: tabular-nums;
+  }
+  .sponsor .who {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .sponsor .s {
+    color: var(--ink-2);
+    font-size: var(--fs-fine);
+  }
+  .sponsor .gave {
+    color: var(--ink-2);
+    font-size: var(--fs-ui);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .tiers {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+  }
+  .tier {
+    display: grid;
+    gap: 2px;
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-tile);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .tier .s {
+    color: var(--ink-2);
+    font-size: var(--fs-fine);
+  }
+  .tier.is-picked {
+    border-color: currentcolor;
+  }
+  .give > .field + .field {
+    margin-top: var(--sp-3);
+  }
+</style>
+
+<script>
+  // The board and the form. Everything about money is decided by the network service and by
+  // Stripe; this only asks and shows.
+  const NETWORK = "https://network.surfingdog.ai";
+  const board = document.querySelector<HTMLElement>("[data-board]");
+  const tpl = document.querySelector<HTMLTemplateElement>("[data-sponsor-template]");
+  const emptyTpl = document.querySelector<HTMLTemplateElement>("[data-empty-template]");
+
+  const euros = (cents: number, currency: string) =>
+    new Intl.NumberFormat("en-GB", { style: "currency", currency: currency || "EUR", maximumFractionDigits: 0 }).format(
+      cents / 100,
+    );
+
+  async function paint(): Promise<void> {
+    if (!board || !tpl || !emptyTpl) return;
+    try {
+      const res = await fetch(`${NETWORK}/v1/sponsors`, { headers: { accept: "application/json" } });
+      const data = (await res.json()) as { sponsors?: Array<Record<string, unknown>> };
+      const list = data.sponsors ?? [];
+      board.replaceChildren();
+      if (list.length === 0) {
+        board.appendChild(emptyTpl.content.cloneNode(true));
+        return;
+      }
+      list.forEach((s, i) => {
+        const node = tpl.content.cloneNode(true) as DocumentFragment;
+        const link = node.querySelector("a");
+        const website = typeof s.website === "string" ? s.website : "";
+        if (link) {
+          if (website) link.href = website;
+          else {
+            // Without a link it is not a link: a dead anchor is a trap for a keyboard.
+            const span = document.createElement("div");
+            span.className = link.className;
+            span.innerHTML = link.innerHTML;
+            link.replaceWith(span);
+          }
+        }
+        const set = (sel: string, text: string) => {
+          const el = node.querySelector<HTMLElement>(sel) ?? board.querySelector<HTMLElement>(sel);
+          if (el) el.textContent = text;
+        };
+        set("[data-rank]", String(i + 1));
+        set("[data-name]", String(s.name ?? "Anonymous"));
+        set("[data-message]", String(s.message ?? ""));
+        set("[data-total]", euros(Number(s.total_cents ?? 0), String(s.currency ?? "EUR")));
+        board.appendChild(node);
+      });
+    } catch {
+      board.replaceChildren();
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "The sponsor list is not answering just now.";
+      board.appendChild(p);
+    }
+  }
+  void paint();
+
+  const form = document.querySelector<HTMLFormElement>("[data-give]");
+  const amount = document.querySelector<HTMLInputElement>("#sp-amount");
+  const note = document.querySelector<HTMLParagraphElement>("[data-note]");
+
+  for (const tier of document.querySelectorAll<HTMLButtonElement>(".tier")) {
+    tier.addEventListener("click", () => {
+      for (const t of document.querySelectorAll(".tier")) t.classList.remove("is-picked");
+      tier.classList.add("is-picked");
+      if (amount) amount.value = String(Number(tier.dataset.amount ?? "0") / 100);
+    });
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!note) return;
+    const data = new FormData(form);
+    const euro = Number(String(data.get("amount") ?? "").replace(",", "."));
+    if (!Number.isFinite(euro) || euro < 5) {
+      note.textContent = "Choose an amount of €5 or more.";
+      return;
+    }
+    const go = form.querySelector<HTMLButtonElement>("[data-go]");
+    if (go) go.disabled = true;
+    note.textContent = "Opening Stripe…";
+    try {
+      const res = await fetch(`${NETWORK}/v1/sponsors/checkout`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          amount_cents: Math.round(euro * 100),
+          email: String(data.get("email") ?? ""),
+          name: String(data.get("name") ?? ""),
+          website: String(data.get("website") ?? ""),
+          message: String(data.get("message") ?? ""),
+          anonymous: data.get("anonymous") === "on",
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { url?: string; detail?: string };
+      if (res.ok && body.url) {
+        window.location.href = body.url;
+        return;
+      }
+      note.textContent = body.detail ?? `That did not work (${res.status}).`;
+    } catch {
+      note.textContent = "Could not reach the payment page. Check your connection and try again.";
+    } finally {
+      if (go) go.disabled = false;
+    }
+  });
+
+  // Back from Stripe.
+  if (new URLSearchParams(window.location.search).has("thanks") && note) {
+    note.textContent = "Thank you. Your name appears on the board once a person has checked the link.";
+  }
+</script>
