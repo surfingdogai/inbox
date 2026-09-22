@@ -1,0 +1,100 @@
+---
+// The terms. Two different things are covered and they are kept apart on purpose: the software,
+// which is AGPL and carries the licence's terms, and the services we run, which are ours.
+import Layout from "../layouts/Layout.astro";
+
+const UPDATED = "22 September 2026";
+---
+
+<Layout
+  title="Terms · Surfing Dog"
+  description="The licence on the software, and the terms of the services we run: this website, the requests board, and the directory when it opens."
+>
+  <section class="wrap wrap-read section is-head" id="terms" aria-labelledby="terms-h">
+    <p class="eyebrow">Terms</p>
+    <h1 class="h-page" id="terms-h">The software, and the services</h1>
+    <p class="lede">
+      Two different things, with different rules. The software is open source and yours to run. The services we
+      operate are ours to run, and these are the terms for them.
+    </p>
+    <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: hello@surfingdog.ai</p>
+  </section>
+
+  <section class="section" aria-labelledby="sw-h">
+    <div class="wrap wrap-read prose">
+      <h2 class="h-section" id="sw-h">The software</h2>
+      <p>
+        Surfing Dog Inbox is licensed under the <b>GNU Affero General Public License v3.0</b>. You may run it, read
+        it, change it and share it. If you run a modified version as a service for other people, the licence asks you
+        to offer them your changes. Three parts are MIT instead, so that speaking to an inbox costs no one a copyleft
+        obligation: the open formats, the client SDK, and the connector SDK.
+      </p>
+      <p>
+        The licence text governs, and it is in the repository. It includes what every open-source licence includes:
+        the software comes with no warranty, and the authors are not liable for what happens when you run it. If you
+        run it, you are the one running it.
+      </p>
+
+      <h2 class="h-section">The services we run</h2>
+      <p>
+        This website, the documentation, the requests board and the directory are services we operate. Using them
+        means accepting what follows. If you do not, do not use them; the software works without any of them.
+      </p>
+
+      <h3 class="h-card">What you may not do</h3>
+      <ul class="checks">
+        <li>Post anything unlawful, or anything you have no right to post.</li>
+        <li>Impersonate somebody else, or claim to speak for a business that is not yours.</li>
+        <li>Attack the services, or try to reach data that is not yours.</li>
+        <li>Scrape at a rate that degrades the service for other people.</li>
+      </ul>
+      <p>
+        We may remove a post or refuse service for these reasons. If we do, and you ask, we will tell you which
+        reason it was.
+      </p>
+
+      <h3 class="h-card">The requests board</h3>
+      <p>
+        What you post there is public and stays public. You keep ownership of what you write and give us permission
+        to show it on the site. Votes decide what we look at first; they are not a promise that anything gets built,
+        and nothing said there is a commitment to ship.
+      </p>
+
+      <h3 class="h-card">Availability</h3>
+      <p>
+        These services are offered as they are, with no uptime guarantee and no warranty. They are free, and we may
+        change or withdraw them. If something goes down, we fix it because we use it too, not because a contract says
+        we must.
+      </p>
+
+      <h2 class="h-section">Hosting, when it opens</h2>
+      <p>
+        Paid hosted tenancy is not open. When it is, it gets its own agreement with the things a paid service needs
+        and this page does not have: what the service promises, what it costs, how to leave and take your data with
+        you, and a written data processing agreement. Nothing on this page is an offer to sell anything.
+      </p>
+
+      <h2 class="h-section">Liability</h2>
+      <p>
+        To the extent the law allows, we are not liable for indirect or consequential loss, for lost profit, or for
+        lost data, arising from the free services or from the software. Nothing here limits liability that cannot be
+        limited, including for death or personal injury caused by negligence, or for fraud. If you are a consumer,
+        your statutory rights are unaffected.
+      </p>
+
+      <h2 class="h-section">Law</h2>
+      <p>
+        Portuguese law, and the courts of Portugal. If you are a consumer in the European Union, you keep the
+        protection of the law where you live and may bring a claim there.
+      </p>
+
+      <div class="glass card" style="margin-top: var(--sp-6)">
+        <h3 class="h-card">A note on where this stands</h3>
+        <p class="card-text">
+          Written plainly by the people who built the thing, and not yet reviewed by a lawyer. The review happens
+          before anything is sold, and this notice comes off the page when it has.
+        </p>
+      </div>
+    </div>
+  </section>
+</Layout>
