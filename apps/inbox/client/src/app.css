@@ -1095,3 +1095,111 @@ textarea.json-editor {
     padding: 16px 18px;
   }
 }
+
+/* ---- Setup wizard ------------------------------------------------------- */
+/* Five steps across the top. On a phone the labels go and the dots stay, because
+   knowing there are five and you are on the second is the whole job. */
+.steps {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  list-style: none;
+}
+.stepdot {
+  display: flex;
+  flex: 1 1 0;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-tile);
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.stepdot .n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.stepdot .l {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepdot.is-now {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.stepdot.is-now .n {
+  border-color: currentcolor;
+}
+.stepdot.is-done {
+  color: var(--ink-2);
+}
+.stepdot.is-done .n {
+  border-color: transparent;
+  background: color-mix(in oklab, var(--good, var(--ink)) 18%, transparent);
+}
+@media (max-width: 620px) {
+  .stepdot .l {
+    display: none;
+  }
+  .stepdot {
+    flex: 0 0 auto;
+    padding: 6px;
+  }
+}
+
+/* A choice you make by pressing the whole thing, not by hunting for a radio. */
+.pick {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pick .s {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.pick:hover {
+  border-color: var(--hairline);
+}
+.pick.is-picked {
+  border-color: currentcolor;
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.pick:focus-visible {
+  outline: 2px solid var(--focus, currentcolor);
+  outline-offset: 2px;
+}
+
+/* One row per thing offered: name, then the small numbers, then the bin. */
+.offer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px 110px auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+@media (max-width: 620px) {
+  .offer {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+.wizard-nav {
+  justify-content: flex-end;
+  margin-top: var(--sp-3);
+}

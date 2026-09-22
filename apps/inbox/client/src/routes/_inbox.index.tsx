@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { StatePill } from "../components/Pills";
 import { api, problemOf } from "../lib/api";
 import {
@@ -12,8 +13,9 @@ import {
   TYPE_PLURAL,
   TYPE_WORD,
 } from "../lib/format";
-import { useBusiness, useCounts, useSettings } from "../lib/queries";
+import { useBusiness, useCounts, useProducts, useServices, useSettings } from "../lib/queries";
 import type { ItemType, ItemView } from "../lib/types";
+import { looksUnconfigured, setupSkipped } from "./setup";
 
 export const Route = createFileRoute("/_inbox/")({
   component: TodayPane,
@@ -28,6 +30,18 @@ const TYPES: readonly ItemType[] = ["booking", "order", "quote_request", "messag
 function TodayPane() {
   const settings = useSettings();
   const business = useBusiness();
+  const services = useServices();
+  const products = useProducts();
+  // A brand-new instance is walked through setup rather than shown an empty inbox it cannot
+  // explain. The redirect waits for the three reads, so it never fires on a slow network and
+  // sends a configured business to the wizard.
+  const ready = business.isSuccess && services.isSuccess && products.isSuccess;
+  const unconfigured =
+    ready && looksUnconfigured(business.data?.name, services.data?.items.length ?? 0, products.data?.items.length ?? 0);
+  const navigate = Route.useNavigate();
+  useEffect(() => {
+    if (unconfigured && !setupSkipped()) void navigate({ to: "/setup" });
+  }, [unconfigured, navigate]);
   const sandbox = settings.data?.doc.testMode ?? false;
   const tz = business.data?.timezone ?? settings.data?.doc.business.timezone;
   const counts = useCounts(sandbox);

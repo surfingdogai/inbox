@@ -2,7 +2,7 @@ import { and, eq, isNull, or } from "drizzle-orm";
 import type { Db } from "../db";
 import { availabilityRules, services } from "../schema/tables";
 import { WriteError } from "../write/errors";
-import { bucketsFor, planClaims, readClaims, type SlotSpec } from "../write/slots";
+import { bucketRange, bucketsFor, planClaims, readClaims, type SlotSpec } from "../write/slots";
 import { dateLocaliser, isClosed, readClosures } from "./closures";
 
 /**
@@ -73,7 +73,9 @@ export async function findSlots(
   const limit = input.limit ?? 200;
   const first = Math.ceil(from / step) * step;
   // One read of the claims across the whole window, then pure arithmetic per candidate.
-  const allBuckets = bucketsFor(
+  // The whole window in one read. bucketRange, not bucketsFor: this is a range to read, not a
+  // booking to place, and the booking cap here made any window longer than a day fail.
+  const allBuckets = bucketRange(
     { ...spec, bufferBeforeMin: 0, bufferAfterMin: 0 },
     new Date(first).toISOString(),
     new Date(Math.min(to + duration, first + 14 * 86_400_000 + duration)).toISOString(),
