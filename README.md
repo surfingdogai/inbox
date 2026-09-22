@@ -5,10 +5,11 @@ requests, orders and bookings from people and from AI agents — through email, 
 and MCP (and every agent protocol we can reasonably speak) — and turns them into structured
 items with a lifecycle that can be handled by rules, by the owner, or by the owner's own AI.
 
-Status: **the first release in progress.** The core, the REST + MCP doors, email in, sessions, OAuth for the
-owner's AI and network membership work on both runtimes; the owner app, passkeys, receipts and the
-setup wizard are being built. A demo instance runs at https://inbox.surfingdog.ai and the network at
-https://network.surfingdog.ai. Read the ADRs in [docs/adr/](docs/adr/) first.
+Status: **0.1, in production on our own instance.** The core, the REST and MCP doors, email in,
+sessions, OAuth for the owner's AI, the owner app and its setup wizard, webhooks, feeds, signed
+receipts and network membership all work on both runtimes. An instance runs at
+https://inbox.surfingdog.ai and the network at https://network.surfingdog.ai. Read the decision
+records in [docs/adr/](docs/adr/) first.
 
 - `apps/inbox` — the product: a Hono server + React SPA that runs on Cloudflare Workers and on Node/Bun.
 - `packages/core` — domain model, state machines, rules, receipts (AGPL-3.0).

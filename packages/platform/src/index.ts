@@ -2,7 +2,7 @@
  * @surfingdog/platform — the five seams between the core and a runtime.
  * Cloudflare: D1 or Durable Object SQLite · R2 · Queues + Cron · Email Workers · Email Service.
  * Node/Bun:   node:sqlite / bun:sqlite · S3-compatible or a directory · SQLite job table · provider webhook · Resend/Postmark/SMTP.
- * Draft signatures; a later design pass finalises them.
+ * The seams between the core and each runtime.
  */
 
 import type { SqliteClient } from "./db";
