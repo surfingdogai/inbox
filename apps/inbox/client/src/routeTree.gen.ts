@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as InboxRouteImport } from "./routes/_inbox";
 import { Route as LoginRouteImport } from "./routes/login";
 import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SetupRouteImport } from "./routes/setup";
 import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
@@ -32,6 +33,11 @@ const LoginRoute = LoginRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SetupRoute = SetupRouteImport.update({
+  id: "/setup",
+  path: "/setup",
   getParentRoute: () => rootRouteImport,
 } as any);
 const InboxIndexRoute = InboxIndexRouteImport.update({
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   "/": typeof InboxIndexRoute;
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
+  "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
@@ -83,6 +90,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
+  "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   "/_inbox": typeof InboxRouteWithChildren;
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
+  "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
     | "/"
     | "/login"
     | "/settings"
+    | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
     | "/settings/rules"
@@ -119,6 +129,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/login"
+    | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
     | "/settings/rules"
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | "/_inbox"
     | "/login"
     | "/settings"
+    | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
     | "/settings/rules"
@@ -144,6 +156,7 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRouteWithChildren;
   LoginRoute: typeof LoginRoute;
   SettingsRoute: typeof SettingsRouteWithChildren;
+  SetupRoute: typeof SetupRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -167,6 +180,13 @@ declare module "@tanstack/react-router" {
       path: "/settings";
       fullPath: "/settings";
       preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/setup": {
+      id: "/setup";
+      path: "/setup";
+      fullPath: "/setup";
+      preLoaderRoute: typeof SetupRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/_inbox/": {
@@ -257,6 +277,7 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRouteWithChildren,
   LoginRoute: LoginRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  SetupRoute: SetupRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

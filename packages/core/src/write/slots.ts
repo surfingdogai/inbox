@@ -19,7 +19,17 @@ export interface SlotSpec {
 
 export const MAX_BUCKETS = 96;
 
-export function bucketsFor(spec: SlotSpec, startTime: string, endTime: string): number[] {
+/**
+ * Every bucket a span touches, with no cap on how many.
+ *
+ * Reading is not booking. `readClaims` uses only the first and last bucket, as a range, so a
+ * long span costs nothing to query — and the availability search needs exactly that: one read
+ * across its whole window. Putting the booking cap on this made a perfectly ordinary question,
+ * "what is free on Monday", fail with "a booking may span at most 96 slots" for any service on
+ * 15-minute granularity, because a day is 96 buckets and the search asks for slightly more.
+ * The endpoint's own documented 14-day window could never have worked at all.
+ */
+export function bucketRange(spec: SlotSpec, startTime: string, endTime: string): number[] {
   const g = spec.granularityMin * 60_000;
   const start = Date.parse(startTime) - spec.bufferBeforeMin * 60_000;
   const end = Date.parse(endTime) + spec.bufferAfterMin * 60_000;
@@ -32,6 +42,12 @@ export function bucketsFor(spec: SlotSpec, startTime: string, endTime: string): 
   const last = Math.ceil(end / g) * g;
   const buckets: number[] = [];
   for (let b = first; b < last; b += g) buckets.push(b);
+  return buckets;
+}
+
+/** The buckets ONE booking occupies, which is capped: a booking is not a search window. */
+export function bucketsFor(spec: SlotSpec, startTime: string, endTime: string): number[] {
+  const buckets = bucketRange(spec, startTime, endTime);
   if (buckets.length > MAX_BUCKETS) {
     throw new WriteError(
       "invalid_input",

@@ -1,11 +1,13 @@
 import { runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
+import { serviceInput } from "../src/capabilities/setup-types";
 import { createDb, type Db } from "../src/db";
 import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, business, products, services, slotClaims } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
+import { bucketRange, bucketsFor } from "../src/write/slots";
 import { makeClient, resetTables } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
@@ -238,5 +240,63 @@ describe("owner capabilities", () => {
     expect(
       (await fail(caps.updateSettings(owner, { doc: { business: { currency: "EURO" } } }))).fields?.[0]?.path,
     ).toBe("doc.business.currency");
+  });
+});
+
+/**
+ * Found by walking the setup wizard on a brand-new instance: the wizard creates a service on the
+ * schema's default 15-minute granularity, and the first thing any agent does is ask what is free
+ * on a given day. That asked for slightly more than 96 buckets and was refused with a booking
+ * error — so a freshly set-up inbox answered "a booking may span at most 96 slots" to the one
+ * question it exists to answer.
+ */
+describe("availability over a real window", () => {
+  /** A service on the schema's DEFAULT granularity, which is what the setup wizard creates. */
+  async function lawyer(caps: Capabilities, weekly: Record<string, [string, string][]>) {
+    // Through the schema, exactly as the HTTP door does it, so the defaults under test are the
+    // real ones rather than numbers written twice.
+    const service = await caps.setup.createService(
+      owner,
+      serviceInput.parse({ name: "Initial consultation", duration_min: 60, active: true }),
+    );
+    expect(service.granularityMin).toBe(15);
+    await caps.setup.setWeekly(owner, { weekly });
+    return service;
+  }
+
+  it("answers a whole day on the default granularity", async () => {
+    const { caps } = await setup();
+    const service = await lawyer(caps, { mon: [["09:00", "17:00"]] });
+    // A Monday, midnight to midnight: 96 buckets of 15 minutes, and the search looks one
+    // duration past the end. That was refused with "a booking may span at most 96 slots".
+    const { slots } = await caps.checkAvailability({
+      service_id: service.id,
+      from: "2026-09-28T00:00:00.000Z",
+      to: "2026-09-29T00:00:00.000Z",
+    });
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots[0]?.startTime).toBe("2026-09-28T08:00:00.000Z");
+  });
+
+  it("answers the fourteen days the endpoint documents", async () => {
+    const { caps } = await setup();
+    const service = await lawyer(caps, { mon: [["09:00", "10:00"]], tue: [["09:00", "10:00"]] });
+    const { slots } = await caps.checkAvailability({
+      service_id: service.id,
+      from: "2026-09-28T00:00:00.000Z",
+      to: "2026-10-12T00:00:00.000Z",
+    });
+    // Two Mondays and two Tuesdays, one hour each.
+    expect(slots).toHaveLength(4);
+  });
+
+  it("still caps one booking's span, which is what the cap was for", () => {
+    // The cap belongs to a booking, not to a window someone is searching. bucketsFor keeps it;
+    // bucketRange, which the search uses, does not have it.
+    const spec = { resourceKey: "svc:x", capacity: 1, granularityMin: 15, bufferBeforeMin: 0, bufferAfterMin: 0 };
+    expect(() => bucketsFor(spec, "2026-09-28T00:00:00.000Z", "2026-09-30T00:00:00.000Z")).toThrow(/at most 96 slots/);
+    expect(bucketRange(spec, "2026-09-28T00:00:00.000Z", "2026-09-30T00:00:00.000Z")).toHaveLength(192);
+    // And a real booking, inside the cap, still measures the same either way.
+    expect(bucketsFor(spec, "2026-09-28T09:00:00.000Z", "2026-09-28T10:00:00.000Z")).toHaveLength(4);
   });
 });
