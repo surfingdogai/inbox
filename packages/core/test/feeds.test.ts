@@ -255,3 +255,107 @@ describe("identity", () => {
     expect(result.skipped[0]?.reason).toBe("no_id");
   });
 });
+
+/**
+ * Everything below was found by an adversarial review of the first cut, and every case here was
+ * demonstrated against the real code before it was believed. They are all the same class of
+ * failure: a product imported at the wrong price or the wrong stock, silently, with no skip and
+ * no error, and the wrong value then persisting through every later import.
+ */
+describe("prices that carry words", () => {
+  it("does not read the punctuation of a trailing abbreviation as a thousands mark", () => {
+    // `12,99 € inkl. MwSt.` became the digit string `12,99..`, so the real decimal comma was
+    // read as a grouping mark and the product was imported at one hundred times its price.
+    expect(parsePrice("12,99 € inkl. MwSt.", "EUR")).toEqual({ value: 1299, currency: "EUR" });
+    expect(parsePrice("12.99 EUR incl. VAT", "EUR")).toEqual({ value: 1299, currency: "EUR" });
+    expect(parsePrice("£12.99.", "EUR")).toEqual({ value: 1299, currency: "GBP" });
+    expect(parsePrice("$19.99 / ea.", "EUR")).toEqual({ value: 1999, currency: "USD" });
+    expect(parsePrice("Price: 12.99.", "EUR")).toEqual({ value: 1299, currency: "EUR" });
+    expect(parsePrice("12.99 USD (incl. tax)", "EUR")).toEqual({ value: 1299, currency: "USD" });
+  });
+
+  it("takes the first number, so a percentage in the sentence is not the price", () => {
+    expect(parsePrice("12.99 EUR incl. 20% VAT", "EUR")).toEqual({ value: 1299, currency: "EUR" });
+    expect(parsePrice("ab 12,99 €", "EUR")).toEqual({ value: 1299, currency: "EUR" });
+  });
+
+  it("reads a thousands group written with a space", () => {
+    expect(parsePrice("1 234,56 EUR", "EUR")).toEqual({ value: 123_456, currency: "EUR" });
+    expect(parsePrice("1 234,56 EUR", "EUR")).toEqual({ value: 123_456, currency: "EUR" });
+  });
+
+  it("refuses a three-letter word that is not a currency", () => {
+    // `VAT`, `RRP` and `NEW` are not currencies, and storing a product in one is not a typo the
+    // owner can see: the number is right and the code beside it is nonsense.
+    expect(parsePrice("12.99 incl VAT", "EUR")?.currency).toBe("EUR");
+    expect(parsePrice("RRP 12.99", "GBP")?.currency).toBe("GBP");
+    expect(parsePrice("12.99 NEW", "EUR")?.currency).toBe("EUR");
+    // A real code still wins over the default.
+    expect(parsePrice("12.99 SEK", "EUR")?.currency).toBe("SEK");
+  });
+
+  it("reads R$ as reais rather than dollars", () => {
+    // "R$".includes("$") is true, so a shorter symbol tested first claimed every price.
+    expect(parsePrice("R$ 49,90", "EUR")).toEqual({ value: 4990, currency: "BRL" });
+    expect(parsePrice("$49.90", "EUR")).toEqual({ value: 4990, currency: "USD" });
+    expect(parsePrice("399 zł", "EUR")?.currency).toBe("PLN");
+  });
+});
+
+describe("stock counts", () => {
+  it("reads 10.00 as ten, not as a thousand", () => {
+    const ten = parseFeed("id,title,price,quantity\nA1,Chain lube,8.50,10.00").products[0];
+    expect(ten?.stock).toBe(10);
+    const dozen = parseFeed("id,title,price,quantity\nA1,Chain lube,8.50,12,00").products[0];
+    expect(dozen?.stock).toBe(12);
+    const plain = parseFeed("id,title,price,quantity\nA1,Chain lube,8.50,1 250").products[0];
+    expect(plain?.stock).toBe(1250);
+  });
+
+  it("reads an oversold negative count as none", () => {
+    const row = parseFeed("id,title,price,quantity\nA1,Chain lube,8.50,-3").products[0];
+    expect(row?.stock).toBe(0);
+    expect(row?.available).toBe(false);
+  });
+});
+
+describe("XML fields belong to the item, not to something inside it", () => {
+  it("does not take a nested shipping charge as the price", () => {
+    const xml = `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item>
+      <g:id>SKU-1</g:id><title>Track pump</title>
+      <g:shipping><g:country>GB</g:country><g:price>3.99 GBP</g:price></g:shipping>
+      <g:price>49.99 GBP</g:price>
+    </item></channel></rss>`;
+    const product = parseFeed(xml).products[0];
+    expect(product?.name).toBe("Track pump");
+    expect(product?.price).toEqual({ value: 4999, currency: "GBP" });
+  });
+
+  it("does not take an author's name as the product name", () => {
+    const atom = `<feed><entry>
+      <id>a1</id><author><name>Bob Smith</name></author><price>10 GBP</price>
+    </entry></feed>`;
+    // No title at all, so there is no name to find: the entry is skipped rather than invented.
+    const result = parseFeed(atom);
+    expect(result.products).toHaveLength(0);
+    expect(result.skipped[0]?.reason).toBe("no_name");
+  });
+
+  it("still reads a nested value when the item has no direct one of its own", () => {
+    const xml = `<rss><channel><item><id>X1</id><title>Bell</title><price>4.00 EUR</price></item></channel></rss>`;
+    expect(parseFeed(xml).products[0]?.price).toEqual({ value: 400, currency: "EUR" });
+  });
+
+  it("survives a closing tag written inside CDATA", () => {
+    const xml = `<rss><channel><item>
+      <id>C1</id>
+      <description><![CDATA[Fits the </item> bracket]]></description>
+      <title>Clamp</title>
+      <price>7.50 EUR</price>
+    </item></channel></rss>`;
+    const product = parseFeed(xml).products[0];
+    expect(product?.name).toBe("Clamp");
+    expect(product?.description).toBe("Fits the </item> bracket");
+    expect(product?.price).toEqual({ value: 750, currency: "EUR" });
+  });
+});

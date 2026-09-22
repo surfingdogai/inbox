@@ -122,16 +122,76 @@ function mapColumns(headers: readonly string[]): { index: Record<string, number>
 
 /* --- Money -------------------------------------------------------------- */
 
-const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = {
-  "€": "EUR",
-  "£": "GBP",
-  $: "USD",
-  "¥": "JPY",
-  R$: "BRL",
-  zł: "PLN",
-  Kč: "CZK",
-  kr: "SEK",
-};
+/**
+ * Longest symbol first, and the lookup honours that order. `"R$".includes("$")` is true, so a
+ * shorter symbol tested first claims every price carrying the longer one, and Brazilian reais
+ * were stored as dollars.
+ */
+const CURRENCY_SYMBOLS: ReadonlyArray<readonly [string, string]> = [
+  ["R$", "BRL"],
+  ["zł", "PLN"],
+  ["Kč", "CZK"],
+  ["kr", "SEK"],
+  ["€", "EUR"],
+  ["£", "GBP"],
+  ["¥", "JPY"],
+  ["$", "USD"],
+];
+
+/**
+ * ISO 4217: what a small European shop prices in, plus the majors. The check exists because a
+ * price cell reads `12.99 EUR incl. VAT` as often as it reads `12.99 EUR`, and matching any
+ * three-letter uppercase token stored the product in a currency called VAT. Or RRP. Or NEW.
+ */
+const ISO_CURRENCIES = new Set([
+  "AED",
+  "ARS",
+  "AUD",
+  "BGN",
+  "BRL",
+  "CAD",
+  "CHF",
+  "CLP",
+  "CNY",
+  "COP",
+  "CZK",
+  "DKK",
+  "EGP",
+  "EUR",
+  "GBP",
+  "HKD",
+  "HRK",
+  "HUF",
+  "IDR",
+  "ILS",
+  "INR",
+  "ISK",
+  "JPY",
+  "KRW",
+  "MAD",
+  "MXN",
+  "MYR",
+  "NGN",
+  "NOK",
+  "NZD",
+  "PEN",
+  "PHP",
+  "PLN",
+  "RON",
+  "RSD",
+  "RUB",
+  "SAR",
+  "SEK",
+  "SGD",
+  "THB",
+  "TRY",
+  "TWD",
+  "UAH",
+  "USD",
+  "UYU",
+  "VND",
+  "ZAR",
+]);
 
 /** Currencies whose amounts have no minor unit at all, so 500 JPY is 500 and not 50,000. */
 const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "XOF", "RWF", "UGX"]);
@@ -150,10 +210,15 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
   if (text === "") return null;
 
   let currency = "";
-  const isoMatch = text.match(/\b([A-Z]{3})\b/);
-  if (isoMatch?.[1]) currency = isoMatch[1];
+  for (const match of text.matchAll(/\b([A-Z]{3})\b/g)) {
+    const code = match[1] as string;
+    if (ISO_CURRENCIES.has(code)) {
+      currency = code;
+      break;
+    }
+  }
   if (currency === "") {
-    for (const [symbol, code] of Object.entries(CURRENCY_SYMBOLS)) {
+    for (const [symbol, code] of CURRENCY_SYMBOLS) {
       if (text.includes(symbol)) {
         currency = code;
         break;
@@ -162,40 +227,53 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
   }
   if (currency === "") currency = defaultCurrency.toUpperCase();
 
-  const digits = text.replace(/[^0-9.,-]/g, "");
-  if (digits === "" || !/[0-9]/.test(digits)) return null;
-  const negative = digits.startsWith("-");
-  const body = digits.replace(/-/g, "");
+  const number = readNumber(text);
+  if (!number) return null;
+  const exponent = ZERO_DECIMAL.has(currency) ? 0 : 2;
+  // A zero-decimal currency written with a fraction is someone's formatter, not money.
+  const value =
+    exponent === 0 ? Number(number.whole) : Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
+  if (!Number.isFinite(value)) return null;
+  return { value: number.negative ? -value : value, currency };
+}
 
-  const lastComma = body.lastIndexOf(",");
-  const lastDot = body.lastIndexOf(".");
-  const lastSeparator = Math.max(lastComma, lastDot);
+/**
+ * The first number in a cell that may carry anything around it.
+ *
+ * The first cut of this stripped every non-numeric character from the WHOLE cell, which is wrong
+ * in a way that costs real money: `12,99 € inkl. MwSt.` became the digit string `12,99..`, the
+ * full stop of the abbreviation became the last separator with nothing behind it, so the genuine
+ * decimal comma was read as a thousands mark and the product imported at €1,299.00. Reading the
+ * first numeric RUN instead leaves the sentence outside the number, where it belongs. The first
+ * run and not the last, because `12.99 EUR incl. 20% VAT` has to be twelve ninety-nine.
+ */
+function readNumber(text: string): { whole: string; fraction: string; negative: boolean } | null {
+  const match = text.match(/-?\d[\d.,\u00a0\u202f' ]*/);
+  if (!match) return null;
+  const negative = match[0].startsWith("-");
+  const body = match[0]
+    .replace(/^-/, "")
+    .replace(/[\u00a0\u202f' ]/g, "")
+    // A separator at the very end belonged to the sentence, not to the number.
+    .replace(/[.,]+$/, "");
+  if (body === "" || !/\d/.test(body)) return null;
+
+  const lastSeparator = Math.max(body.lastIndexOf(","), body.lastIndexOf("."));
   let whole = body;
   let fraction = "";
   if (lastSeparator >= 0) {
     const tail = body.slice(lastSeparator + 1);
     // Two digits or fewer after the last separator: it is the decimal point. Three, and it was a
-    // thousands mark, which is why `1.234` is read as 1234 rather than 1.234.
-    if (tail.length > 0 && tail.length <= 2 && /^[0-9]+$/.test(tail)) {
+    // thousands mark, which is why `1.234` reads as 1234 rather than 1.234.
+    if (tail.length > 0 && tail.length <= 2 && /^\d+$/.test(tail)) {
       whole = body.slice(0, lastSeparator);
       fraction = tail;
     }
   }
   whole = whole.replace(/[.,]/g, "");
   if (whole === "") whole = "0";
-  if (!/^[0-9]+$/.test(whole)) return null;
-
-  const exponent = ZERO_DECIMAL.has(currency) ? 0 : 2;
-  let value: number;
-  if (exponent === 0) {
-    // A zero-decimal currency written with a fraction is someone's formatter, not money.
-    value = Number(whole);
-  } else {
-    const padded = `${fraction}00`.slice(0, 2);
-    value = Number(whole) * 100 + Number(padded);
-  }
-  if (!Number.isFinite(value)) return null;
-  return { value: negative ? -value : value, currency };
+  if (!/^\d+$/.test(whole)) return null;
+  return { whole, fraction, negative };
 }
 
 const IN_STOCK = new Set([
@@ -226,14 +304,14 @@ export function parseAvailability(raw: string): boolean | null {
 }
 
 function parseCount(raw: string): number | null {
-  const text = raw.trim();
-  if (text === "") return null;
-  const digits = text.replace(/[^0-9-]/g, "");
-  if (digits === "" || !/^-?[0-9]+$/.test(digits)) return null;
-  const n = Number(digits);
+  const number = readNumber(raw);
+  if (!number) return null;
+  // `10.00` is ten. Deleting the decimal point rather than truncating made it a thousand, and a
+  // shop with ten in stock told every agent it had a thousand.
+  const n = Number(number.whole);
   if (!Number.isFinite(n)) return null;
   // A negative count is a platform's way of saying oversold. Zero is the honest reading.
-  return Math.max(0, Math.trunc(n));
+  return number.negative ? 0 : Math.trunc(n);
 }
 
 /* --- Delimited text ----------------------------------------------------- */
@@ -322,16 +400,48 @@ const ENTITIES: Readonly<Record<string, string>> = {
   gt: ">",
   quot: '"',
   apos: "'",
-  nbsp: " ",
+  nbsp: "\u00a0",
 };
 
+/**
+ * CDATA is taken out of the document before any tag is looked at, and put back only when a
+ * field's text is read. A feed that writes `<description><![CDATA[Fits the </item> bracket]]>`
+ * is legal XML, and scanning for tags without masking it first ends the item early and loses
+ * every field after it.
+ */
+interface MaskedXml {
+  readonly text: string;
+  readonly sections: readonly string[];
+}
+
+const MASK = "\u0000";
+
+function maskCdata(xml: string): MaskedXml {
+  const sections: string[] = [];
+  const text = xml.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_, body: string) => {
+    sections.push(body);
+    return `${MASK}${sections.length - 1}${MASK}`;
+  });
+  return { text, sections };
+}
+
+function unmask(text: string, sections: readonly string[]): string {
+  return text.replace(new RegExp(`${MASK}(\\d+)${MASK}`, "g"), (whole, index: string) => {
+    const at = Number(index);
+    return Number.isInteger(at) && at >= 0 && at < sections.length ? (sections[at] as string) : whole;
+  });
+}
+
 export function decodeXmlText(raw: string): string {
+  const masked = maskCdata(raw);
+  return decodeEntities(unmask(masked.text, masked.sections)).trim();
+}
+
+function decodeEntities(raw: string): string {
   return raw
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => codePoint(Number.parseInt(hex, 16)))
     .replace(/&#([0-9]+);/g, (_, dec: string) => codePoint(Number.parseInt(dec, 10)))
-    .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole)
-    .trim();
+    .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole);
 }
 
 function codePoint(value: number): string {
@@ -343,7 +453,7 @@ function codePoint(value: number): string {
   }
 }
 
-/** Every `<item>` or `<entry>`, whole, in document order. */
+/** Every `<item>` or `<entry>` body, in document order, still masked. */
 function xmlEntries(xml: string): string[] {
   const out: string[] = [];
   const re = /<(item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/\1\s*>/gi;
@@ -355,31 +465,95 @@ function xmlEntries(xml: string): string[] {
   return out;
 }
 
-/** The text of the first child with this local name, namespace prefix or not. */
-function xmlField(entry: string, names: readonly string[]): string {
-  for (const name of names) {
-    const re = new RegExp(
-      `<(?:[A-Za-z0-9_-]+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[A-Za-z0-9_-]+:)?${name}\\s*>`,
-      "i",
-    );
-    const match = entry.match(re);
-    if (match?.[1] !== undefined) {
-      const value = decodeXmlText(match[1]);
-      if (value !== "") return value;
+interface XmlChild {
+  readonly name: string;
+  readonly inner: string;
+  readonly attrs: string;
+}
+
+/**
+ * The DIRECT children of an item, in document order.
+ *
+ * Matching a field with a plain regex over the whole item body finds the first element with that
+ * name ANYWHERE inside it, and in a Google Merchant feed that is routinely the wrong one:
+ *
+ *   <item>
+ *     <g:shipping><g:price>3.99 GBP</g:price></g:shipping>
+ *     <g:price>49.99 GBP</g:price>
+ *   </item>
+ *
+ * The nested shipping charge comes first in document order, so the £49.99 product was imported
+ * at £3.99, silently, with no skip and no error, and the wrong price then persisted through
+ * every later import. So the children are walked with a depth counter and only depth-one
+ * elements are offered to the field lookup.
+ */
+function directChildren(entry: string): XmlChild[] {
+  const out: XmlChild[] = [];
+  // Comments and processing instructions are skipped whole; CDATA is already masked.
+  const body = entry.replace(/<!--[\s\S]*?-->/g, "").replace(/<\?[\s\S]*?\?>/g, "");
+  const tag = /<(\/?)([A-Za-z_][\w.-]*(?::[A-Za-z_][\w.-]*)?)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g;
+  let depth = 0;
+  let openName = "";
+  let openAttrs = "";
+  let contentStart = 0;
+  let match = tag.exec(body);
+  while (match !== null) {
+    const whole = match[0];
+    const closing = match[1] === "/";
+    const name = localName(match[2] ?? "");
+    const attrs = match[3] ?? "";
+    const selfClosing = match[4] === "/";
+    if (closing) {
+      // A stray closing tag must not drive the depth negative and swallow the rest of the item.
+      if (depth > 0) depth -= 1;
+      if (depth === 0 && name === openName) {
+        out.push({ name: openName, inner: body.slice(contentStart, match.index), attrs: openAttrs });
+        openName = "";
+      }
+    } else if (selfClosing) {
+      if (depth === 0) out.push({ name, inner: "", attrs });
+    } else {
+      if (depth === 0) {
+        openName = name;
+        openAttrs = attrs;
+        contentStart = match.index + whole.length;
+      }
+      depth += 1;
     }
-    // `<link href="…"/>`, which is how Atom writes a URL.
-    const attr = entry.match(new RegExp(`<(?:[A-Za-z0-9_-]+:)?${name}[^>]*\\shref="([^"]*)"`, "i"));
-    if (attr?.[1]) return decodeXmlText(attr[1]);
+    match = tag.exec(body);
+  }
+  return out;
+}
+
+/** `g:price` and `price` are one name; the prefix is a namespace, not part of the name. */
+function localName(raw: string): string {
+  const at = raw.lastIndexOf(":");
+  return (at >= 0 ? raw.slice(at + 1) : raw).toLowerCase();
+}
+
+/** The text of the first DIRECT child with one of these names, or its href when it has no text. */
+function xmlField(children: readonly XmlChild[], names: readonly string[], sections: readonly string[]): string {
+  for (const name of names) {
+    const wanted = name.toLowerCase();
+    for (const child of children) {
+      if (child.name !== wanted) continue;
+      const text = decodeEntities(unmask(child.inner, sections)).trim();
+      if (text !== "") return text;
+      // `<link href="…"/>`, which is how Atom writes a URL.
+      const href = child.attrs.match(/\shref\s*=\s*"([^"]*)"/i) ?? child.attrs.match(/\shref\s*=\s*'([^']*)'/i);
+      if (href?.[1]) return decodeEntities(href[1]).trim();
+    }
   }
   return "";
 }
 
-/** The XML names for each field, which are Google's, plus the Atom and RSS spellings. */
+/** The XML names for each field: Google's, plus the Atom and RSS spellings. */
 const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
   externalId: ["id", "item_group_id", "guid", "sku", "mpn"],
   name: ["title", "name"],
   description: ["description", "summary", "content"],
   sku: ["mpn", "sku", "gtin", "identifier"],
+  // Sale price first: it is what the shop is actually selling at today.
   price: ["sale_price", "price"],
   stock: ["quantity", "inventory", "stock"],
   available: ["availability", "in_stock", "stock_status"],
@@ -399,8 +573,10 @@ export function parseFeed(text: string, options: FeedParseOptions = {}): FeedPar
   return looksXml ? parseXmlFeed(body, currency, limit) : parseCsvFeed(body, currency, limit);
 }
 
-function parseXmlFeed(body: string, currency: string, limit: number): FeedParseResult {
-  const entries = xmlEntries(body);
+function parseXmlFeed(raw: string, currency: string, limit: number): FeedParseResult {
+  // Masked once for the whole document, so an item boundary can never fall inside CDATA.
+  const masked = maskCdata(raw);
+  const entries = xmlEntries(masked.text);
   if (entries.length === 0) {
     throw new FeedParseError("no_rows", "this looks like XML but has no <item> or <entry> elements");
   }
@@ -415,14 +591,15 @@ function parseXmlFeed(body: string, currency: string, limit: number): FeedParseR
       break;
     }
     const entry = entries[i] as string;
-    const read = (field: string): string => xmlField(entry, XML_FIELDS[field] ?? []);
+    const children = directChildren(entry);
+    const read = (field: string): string => xmlField(children, XML_FIELDS[field] ?? [], masked.sections);
     const name = read("name");
     // Never the title: a title is edited, and an identity that changes makes a second product on
     // the next import instead of updating the first. Both formats mandate an id anyway.
     const externalId = read("externalId") || read("sku") || read("url");
     const row = i + 1;
     if (externalId === "") {
-      skipped.push({ row, reason: "no_id", sample: sample(entry) });
+      skipped.push({ row, reason: "no_id", sample: sample(unmask(entry, masked.sections)) });
       continue;
     }
     if (name === "") {

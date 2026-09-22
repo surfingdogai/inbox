@@ -17,6 +17,12 @@ import {
 } from "../lib/queries";
 import type { CreateWebhookBody, FeedConnector, TestEventResult, WebhookView, WebhookWithSecret } from "../lib/types";
 
+/** A message and how it went. Everything used to render green, including the failures. */
+interface Notice {
+  readonly tone: "success" | "danger";
+  readonly text: string;
+}
+
 export const Route = createFileRoute("/settings/integrations")({
   component: IntegrationsPage,
 });
@@ -42,14 +48,18 @@ function FeedsCard() {
   const write = useFeedWrite();
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // Which row's button is in flight. Without it a failed "Import now" had nowhere to render:
+  // `confirm` was null, so the error was passed to no row and the owner saw nothing at all.
+  const [acting, setActing] = useState<string | null>(null);
   const rows = feeds.data?.items ?? [];
   const problem = write.error ? problemOf(write.error) : null;
 
   const done = (text: string) => {
     setAdding(false);
     setConfirm(null);
-    setNotice(text);
+    setActing(null);
+    setNotice({ tone: "success", text });
   };
 
   return (
@@ -72,7 +82,7 @@ function FeedsCard() {
         A feed is a URL your shop already publishes, usually for Google. Paste it and the catalogue fills itself, then
         keeps up on its own. There is no password to hand over and nothing to install.
       </p>
-      {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {feeds.isPending && <div className="skeleton sk-line" />}
       {feeds.isError && (
         <ErrorState
@@ -104,13 +114,20 @@ function FeedsCard() {
             feed={feed}
             confirming={confirm === feed.id}
             pending={write.isPending}
-            error={confirm === feed.id ? problem : null}
-            onImport={() =>
-              write.mutate({ id: feed.id }, { onSuccess: () => done("Importing now. Give it a moment, then refresh.") })
-            }
+            error={acting === feed.id ? problem : null}
+            onImport={() => {
+              write.reset();
+              setNotice(null);
+              setActing(feed.id);
+              write.mutate(
+                { id: feed.id },
+                { onSuccess: () => done("Importing now. Give it a moment, then refresh.") },
+              );
+            }}
             onAskRemove={() => {
               write.reset();
               setNotice(null);
+              setActing(feed.id);
               setConfirm(feed.id);
             }}
             onRemove={() =>
@@ -168,6 +185,11 @@ function FeedLine({
         {failing && feed.last_error && (
           <div className="hint error" role="alert">
             {feed.last_error}
+          </div>
+        )}
+        {error && !confirming && (
+          <div className="hint error" role="alert">
+            {error.detail}
           </div>
         )}
       </div>
@@ -293,8 +315,9 @@ function WebhooksCard() {
   const rotate = useRotateSecret();
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<WebhookWithSecret | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<{ id: string; webhook: WebhookWithSecret } | null>(null);
   const [tested, setTested] = useState<{ id: string; result: TestEventResult } | null>(null);
   const rows = webhooks.data?.items ?? [];
   const problem = create.error
@@ -326,8 +349,8 @@ function WebhooksCard() {
         Every booking, order, quote and message is sent to the URLs here, signed so you can prove it came from this
         inbox. Point them at Zapier, n8n, Make, a Slack bot or your own server.
       </p>
-      {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
-      {revealed && <SecretPanel webhook={revealed} onDone={() => setRevealed(null)} />}
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
+      {revealed && <SecretPanel webhook={revealed.webhook} onDone={() => setRevealed(null)} />}
       {webhooks.isPending && <div className="skeleton sk-line" />}
       {webhooks.isError && (
         <ErrorState
@@ -351,7 +374,7 @@ function WebhooksCard() {
             create.mutate(body, {
               onSuccess: (created) => {
                 setAdding(false);
-                setRevealed(created);
+                setRevealed({ id: created.id, webhook: created });
               },
             })
           }
@@ -364,35 +387,50 @@ function WebhooksCard() {
             webhook={hook}
             confirming={confirm === hook.id}
             pending={write.isPending || test.isPending || rotate.isPending}
-            error={confirm === hook.id ? problem : null}
+            error={acting === hook.id ? problem : null}
             test={tested?.id === hook.id ? tested.result : null}
-            onTest={() =>
+            onTest={() => {
+              test.reset();
+              setNotice(null);
+              setActing(hook.id);
               test.mutate(hook.id, {
                 onSuccess: (result) => setTested({ id: hook.id, result }),
-                onError: (e) => setNotice(problemOf(e).detail),
-              })
-            }
-            onToggle={() =>
+                // A test that could not even be sent is not good news, and it used to be shown
+                // in the same green toast as a success.
+                onError: (e) => setNotice({ tone: "danger", text: problemOf(e).detail }),
+              });
+            }}
+            onToggle={() => {
+              write.reset();
+              setActing(hook.id);
               write.mutate(
                 { id: hook.id, body: { active: !hook.active } },
                 {
-                  onSuccess: () => {
-                    setNotice(hook.active ? "Endpoint paused. Nothing is sent to it." : "Endpoint resumed.");
-                  },
+                  onSuccess: () =>
+                    setNotice({
+                      tone: "success",
+                      text: hook.active ? "Endpoint paused. Nothing is sent to it." : "Endpoint resumed.",
+                    }),
                 },
-              )
-            }
-            onRotate={() =>
+              );
+            }}
+            onRotate={() => {
+              rotate.reset();
+              setNotice(null);
+              setActing(hook.id);
               rotate.mutate(hook.id, {
-                onSuccess: (rotated) => {
-                  setRevealed(rotated);
-                  setNotice(null);
-                },
-              })
-            }
+                onSuccess: (rotated) => setRevealed({ id: hook.id, webhook: rotated }),
+                // A rotation that failed used to render nothing at all, so the owner believed
+                // the secret had changed and then saw the reason later, against another row.
+                onError: (e) => setNotice({ tone: "danger", text: problemOf(e).detail }),
+              });
+            }}
             onAskRemove={() => {
               write.reset();
+              rotate.reset();
+              test.reset();
               setNotice(null);
+              setActing(hook.id);
               setConfirm(hook.id);
             }}
             onRemove={() =>
@@ -401,7 +439,11 @@ function WebhooksCard() {
                 {
                   onSuccess: () => {
                     setConfirm(null);
-                    setNotice("Endpoint removed, with its delivery log.");
+                    setActing(null);
+                    // The panel showed a secret for an endpoint that no longer exists.
+                    setRevealed((current) => (current?.id === hook.id ? null : current));
+                    setTested((current) => (current?.id === hook.id ? null : current));
+                    setNotice({ tone: "success", text: "Endpoint removed, with its delivery log." });
                   },
                 },
               )
@@ -502,6 +544,11 @@ function WebhookLine({
         {w.last_error && (
           <div className="hint error" role="alert">
             {w.last_error}
+          </div>
+        )}
+        {error && !confirming && (
+          <div className="hint error" role="alert">
+            {error.detail}
           </div>
         )}
         {test && (

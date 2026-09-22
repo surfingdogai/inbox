@@ -110,4 +110,29 @@ export const MIGRATIONS: readonly Migration[] = [
       'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\';',
     ],
   },
+  {
+    version: 5,
+    name: "0004_feed_product_identity",
+    statements: [
+      `-- ADR-015 §7.3. A feed's products are identified by (source, external_id), and nothing
+-- enforced it, so two imports of one connector running at the same time both read an empty
+-- catalogue and both inserted: 60 products became 120, permanently, with both imports
+-- reporting success. A unique index makes the second writer lose instead of duplicate.
+--
+-- Any duplicates a live instance already carries have to go before the index can be built, and
+-- a product is never deleted here: the earliest row of each pair keeps its identity, and the
+-- later ones are unlinked from the feed and deactivated, so an order that points at one still
+-- has its product.
+UPDATE \`products\`
+   SET \`external_id\` = NULL, \`active\` = 0
+ WHERE \`external_id\` IS NOT NULL
+   AND \`source\` LIKE 'feed:%'
+   AND \`id\` NOT IN (
+     SELECT MIN(\`id\`) FROM \`products\`
+      WHERE \`external_id\` IS NOT NULL AND \`source\` LIKE 'feed:%'
+      GROUP BY \`source\`, \`external_id\`
+   );`,
+      "CREATE UNIQUE INDEX IF NOT EXISTS `products_feed_once` ON `products` (`source`,`external_id`) WHERE `external_id` IS NOT NULL;",
+    ],
+  },
 ];
