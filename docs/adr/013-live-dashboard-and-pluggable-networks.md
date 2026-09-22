@@ -32,6 +32,6 @@ will not use Cloudflare or our hosting must still be first-class. One network ru
 be a lock-in: the value is the open receipt and review format, not the host.
 
 ## Consequences
-the first release gains a minimal Go app: the ping endpoint with counters, the dashboard, hosted sign-up and
-the deploy paths. The full directory, reviews and reputation stay a later release. The map's `HOST` moves
+The first release gains a minimal Go app: the ping endpoint with counters, the dashboard, hosted sign-up and
+the deploy paths. The full directory, reviews and reputation come later. The map's `HOST` moves
 to `map.surfingdog.ai` when the dashboard takes the root.

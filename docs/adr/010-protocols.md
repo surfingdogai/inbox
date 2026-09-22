@@ -10,15 +10,15 @@ types it can produce, and the spec version it pins; it ships fixtures and its co
 and can be disabled per instance.
 
 Order by cost and reach:
-- **the first release:** REST + OpenAPI, public MCP, owner MCP, email in, web form, manifest + DNS TXT +
+- **First:** REST + OpenAPI, public MCP, owner MCP, email in, web form, manifest + DNS TXT +
   JSON-LD + llms.txt.
-- **the next release:** RFC 9421 signed agents (Web Bot Auth `web-bot-auth` tag and Visa TAP
+- **Next:** RFC 9421 signed agents (Web Bot Auth `web-bot-auth` tag and Visa TAP
   `agent-browser-auth` / `agent-payer-auth` tags), A2A (card, `SendMessage`, `GetTask`,
   `CancelTask`; no streaming), receipts and acknowledgement.
-- **a later release:** UCP profile + checkout (`requires_escalation` ↔ `needs_human`; payment deferred
+- **Later:** UCP profile + checkout (`requires_escalation` ↔ `needs_human`; payment deferred
   with `continue_url`), ACP product feed + checkout behind a flag, AP2 SD-JWT mandates stored as
   evidence and hashed into receipts, ARP (Tiago's protocol, v0.7.1) as one more door.
-- **a later release:** x402 per-request pricing through a seam left now.
+- **After that:** x402 per-request pricing through a seam left now.
 
 Discovery: the manifest lists every endpoint so an agent can choose a door without fetching each
 card; the same item semantics and the same receipt come back through every door.

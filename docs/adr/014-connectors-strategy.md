@@ -6,8 +6,8 @@ other software; regarding Shopify, we can redirect the agent to it but can have 
 
 ## Decision
 - **One connector SDK in the open source**, MIT, with the same connectors for everyone: Shopify,
-  WooCommerce, Google Calendar, Stripe, Mollie in the next release; Microsoft 365, CalDAV, Cal.com, Calendly,
-  WordPress in a later release; more later. A connector declares capabilities, a Zod config schema and sync
+  WooCommerce, Google Calendar, Stripe, Mollie next; Microsoft 365, CalDAV, Cal.com, Calendly,
+  WordPress after them; more later. A connector declares capabilities, a Zod config schema and sync
   handlers; the settings form and the wizard step render from the schema.
 - **Self-hosted instances bring their own credentials**: a Shopify custom app token from the Dev
   Dashboard, a WooCommerce key pair, a Google OAuth client (Workspace "Internal" audience needs no

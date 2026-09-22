@@ -1,6 +1,6 @@
 # ADR-012 — Reputation is advisory; reviews carry their rules
 
-**Status:** accepted (21 Sep 2026). Research, not legal advice; a DPIA and counsel follow in a later release.
+**Status:** accepted (21 Sep 2026). Research, not legal advice; a DPIA and counsel come before reviews and reputation go live.
 
 ## Decision
 - **Pseudonyms** are HMACs with a server-held secret, never a bare hash of an email or phone.
@@ -11,7 +11,7 @@
   describe the procedure and what would change the result (C-203/22). Retention 12–18 months with
   half-lives as the storage-limitation mechanism; single-event weight capped; nothing feeds
   credit, housing or employment decisions.
-- **Compliance work in a later release:** legitimate-interest assessment (Art. 6(1)(f)), DPIA (CNPD
+- **Compliance work before reviews and reputation go live:** legitimate-interest assessment (Art. 6(1)(f)), DPIA (CNPD
   Regulation 1/2018 items 4–5), DPO notified to CNPD, Art. 14 notice delivered inside the receipt
   co-sign flow, Art. 26 joint-controller terms with businesses and Art. 28 processing terms,
   Cloudflare DPA on file with minimal personal data crossing the proxy and a DNS-only fallback.

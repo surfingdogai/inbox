@@ -4,10 +4,9 @@
 
 ## Decision
 - The Inbox is a new repository, `surfingdogai/inbox` (GitHub org `surfingdogai`, created by Tiago on
-  21 Sep 2026; public since the same day), a pnpm monorepo: `apps/inbox` (Hono server + React SPA), `apps/site` (Astro + Starlight,
-  the first release), `packages/{core,platform,spec,sdk,ui,channels,adapters,connectors,ai,hosted}`.
-- The network service is an app in our **private platform repo**: the network app in our private platform repo, deployed with `./go network`
-  to `network.surfingdog.ai`. It is not part of the OSS repo.
+  21 Sep 2026; public since the same day), a pnpm monorepo: `apps/inbox` (Hono server + React SPA), `apps/site` (Astro + Starlight), `packages/{core,platform,spec,sdk,ui,channels,adapters,connectors,ai,hosted}`.
+- The network service is an app in our **private platform repo**, deployed to
+  `network.surfingdog.ai`. It is not part of the OSS repo.
 - `packages/spec` (MIT) holds the wire formats and test vectors; the Go service copies the vectors
   with a pinned tag and sha256 check.
 
