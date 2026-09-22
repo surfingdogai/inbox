@@ -22,7 +22,7 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   {
     k: "MCP public",
     v: "POST /mcp",
-    note: "11 tools for a customer's agent, no sign-in. Ten do the work today. acknowledge_receipt answers that receipts will arrive in Not yet.",
+    note: "11 tools for a customer's agent, no sign-in. All eleven do the work today, including acknowledge_receipt, which counter-signs a receipt the item earned.",
   },
   {
     k: "MCP owner",
@@ -32,7 +32,7 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   {
     k: "Email in",
     v: "POST /v1/email/inbound",
-    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That will come in Not yet.",
+    note: "Raw MIME. Off until you set an inbound secret in Settings and the sender returns it in X-Inbox-Email-Secret. It opens a message, or threads a reply onto an existing item. A free-text email does not become a typed booking yet. That is still to come.",
   },
   {
     k: "Web form",

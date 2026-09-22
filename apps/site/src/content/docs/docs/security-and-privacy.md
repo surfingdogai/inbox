@@ -9,17 +9,20 @@ Everything that arrives through a door is data, never instructions. An email, a 
 
 Raw email reaches the instance only through a path the receiving mail system authenticated (Email Routing on Workers, which checks DKIM and SPF) or through the `POST /v1/email/inbound` webhook, which requires the shared secret from settings in the `X-Inbox-Email-Secret` header. Email that arrived unauthenticated is treated as anonymous.
 
-The instance fetches remote documents in one place, to resolve OAuth Client ID Metadata Documents, through a fetcher that refuses IP literals, local and internal hostnames, redirects to another host, large bodies and slow servers. Its own outbound calls go to the network it joined, and carry counts only.
+The instance fetches remote documents in one place, to resolve OAuth Client ID Metadata Documents, through a fetcher that refuses IP literals, local and internal hostnames, redirects to another host, large bodies and slow servers. Its calls to the network it joined carry its domain, its software version and runtime, counts and receipts, nothing else.
 
-## Nothing personal reaches the network
+## What reaches the network
 
-Content never leaves the instance. What can leave, each by the owner's choice in settings, is:
+Content never leaves the instance: no message text, no customer's name, email address, phone number or postal address, no line items, no payment references. What can leave, only once the owner joins a network (`network.join`, off by default), is:
 
-- **activity counts**: once the owner joins a network (`network.join`, off by default), a ping every hour with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts;
-- **the public profile**, when the business chooses to be listed in a directory (coming);
-- **receipts**, which name the customer by a pseudonym (an HMAC under a key only this instance holds), never by an address, so a receipt can be shown to a network without disclosing who it is about; and outcome codes, when the business joins a review service (coming).
+- **activity counts**: a ping every hour with the software version, the runtime, and the number of items created in the last 24 hours per type. No content, no identities, no amounts;
+- **receipts**: every receipt the instance issues (a booking confirmed, an order paid) is published to the network, and published again with the customer agent's counter-signature when one arrives. A receipt carries the issuer, the item's id on the instance, its type, what it attests, when, a nonce, the customer's pseudonym (an HMAC under a key only this instance holds, never an address), and, when the item states them, the amount and, for a paid order, the payment method. The counter-signature carries the agent's public key, which is the same at every business where that agent uses it, so the receipts it counter-signed can be linked to each other. The fields are on the [Receipts](/docs/receipts/) page;
+- **the public profile** in the manifest, which the network reads from the instance's own domain when it verifies it, and lists in its directory;
+- **outcome codes**, when the business joins a review service (coming).
 
-Personal data inside items is tracked by path so that an erasure request rewrites exactly those fields. Pseudonyms on the network will be HMACs with a server-held secret, never a bare hash of an email or phone number, and reputation stays advisory: decayed counts, no pass/fail, a human decision with a recorded reason, a contest procedure ([ADR-012](https://github.com/surfingdogai/inbox/blob/main/docs/adr/012-reputation-and-reviews-law.md)).
+The network at `network.surfingdog.ai` keeps the hourly counts for 90 days, each receipt and its counter-signature for 540 days after it arrives, and each business's totals (receipts issued and counter-signed) indefinitely. Its directory shows counts and the date of the latest receipt: never a receipt, an amount or a pseudonym.
+
+Personal data inside items is tracked by path so that an erasure request rewrites exactly those fields. Pseudonyms on the network are HMACs with a server-held secret, never a bare hash of an email or phone number, and reputation, when it arrives, will be a record the network shows, not a decision it makes: each business's own rules decide what a customer's record earns them, and what the network collects will be listed here before it collects it.
 
 ## Keys and tokens are hashed
 
