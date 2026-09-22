@@ -1,0 +1,61 @@
+name: release-sdk
+
+# Publishes @surfingdog/sdk to npm from CI, with no token anywhere.
+#
+# npm "trusted publishing": the repository is authorised once on npmjs.com (package → Settings →
+# Trusted Publisher → GitHub Actions, owner `surfingdogai`, repo `inbox`, workflow
+# `release-sdk.yml`), and from then on this job proves who it is with a short-lived OIDC token
+# GitHub mints for the run. Nothing to rotate, nothing to leak, nobody at a keyboard.
+#
+# Release = push a tag `sdk-v<version>` whose version matches packages/sdk/package.json:
+#
+#   git tag sdk-v0.1.1 && git push origin sdk-v0.1.1
+#
+# The tag is the only manual step.
+on:
+  push:
+    tags: ["sdk-v*"]
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token npm trusts; no NODE_AUTH_TOKEN is used
+
+jobs:
+  publish:
+    name: publish @surfingdog/sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+
+      - name: the tag must be the version in package.json
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#sdk-v}"
+          PKG="$(node -p "require('./packages/sdk/package.json').version")"
+          SRC="$(grep -oE 'SDK_VERSION = "[^"]+"' packages/sdk/src/index.ts | grep -oE '[0-9][^"]*')"
+          echo "tag=$TAG package.json=$PKG SDK_VERSION=$SRC"
+          [ "$TAG" = "$PKG" ] || { echo "::error::tag sdk-v$TAG does not match package.json $PKG"; exit 1; }
+          [ "$SRC" = "$PKG" ] || { echo "::error::SDK_VERSION $SRC does not match package.json $PKG"; exit 1; }
+
+      # The same gate the local script applies. A release is a release only if everything is green.
+      - run: pnpm typecheck
+      - run: pnpm test:node
+      - run: pnpm test:workers
+      - run: pnpm exec biome check packages apps/inbox
+      - run: pnpm --filter @surfingdog/sdk build
+
+      - name: npm needs a version that can do trusted publishing
+        run: npm install -g npm@latest && npm --version
+
+      - name: publish
+        working-directory: packages/sdk
+        # --provenance attaches a signed attestation linking the tarball to this exact commit and
+        # workflow, so a consumer can check the package was built from the public source.
+        run: npm publish --access public --provenance
