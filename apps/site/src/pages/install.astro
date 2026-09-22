@@ -1,0 +1,96 @@
+---
+// The install page. Its whole job is to hand one line to the person so their AI does the work,
+// and the instructions the AI reads are a plain file at /install.md, not this page: a page is
+// for a person, a file is what an agent can fetch and follow.
+import Layout from "../layouts/Layout.astro";
+
+const PROMPT =
+  "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
+const REPO = "https://github.com/surfingdogai/inbox";
+---
+
+<Layout
+  title="Install · Surfing Dog"
+  description="Tell your AI to install it. One line, and the instructions it needs are written for it, step by step, with a check after each one."
+>
+  <section class="wrap wrap-read section is-head" id="install" aria-labelledby="install-h">
+    <p class="eyebrow">Install</p>
+    <h1 class="h-page" id="install-h">Let your AI do it</h1>
+    <p class="lede">
+      You do not have to read any of this. Give the line below to Claude, ChatGPT, Codex, Grok or whatever you use,
+      and it will set the whole thing up: the server, your subdomain, email in, and your first sign-in.
+    </p>
+  </section>
+
+  <section class="section" aria-labelledby="prompt-h">
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Step one, and often the only step</p>
+          <h2 class="h-section" id="prompt-h">Paste this to your AI</h2>
+        </div>
+      </div>
+      <pre class="glass panel prompt"><code>{PROMPT}</code></pre>
+      <p class="hint">
+        It will ask you a few things it cannot know: where you want it to run, which subdomain, which address signs in
+        as the owner. It is told to ask before anything that costs money or touches your DNS, and to check its work
+        after every step rather than assume.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="what-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What it does</p>
+          <h2 class="h-section" id="what-h">The same five things, either way</h2>
+        </div>
+      </div>
+      <ul class="checks">
+        <li><b>Puts it somewhere.</b> Cloudflare, about five dollars a month, or your own server.</li>
+        <li><b>Gives it your subdomain.</b> Usually <code>inbox.yourdomain.com</code>, with a certificate.</li>
+        <li><b>Turns on email in,</b> so a customer can simply write to it, and proves it with a test message.</li>
+        <li><b>Signs you in</b> and hands you the key, once.</li>
+        <li><b>Sets your business up:</b> hours, services, products, and the rules that answer for you.</li>
+      </ul>
+      <p class="hint">
+        The instructions it follows are at <a class="link" href="/install.md">/install.md</a>. They are written for a
+        machine: every secret is generated rather than guessed, every step has a command that proves it worked, and it
+        is told to stop and tell you rather than carry on when a check fails. Read them yourself if you like.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="hands-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Or do it yourself</p>
+          <h2 class="h-section" id="hands-h">It is four commands</h2>
+        </div>
+      </div>
+      <pre class="glass panel"><code>git clone {REPO} && cd inbox
+pnpm install
+pnpm --filter @surfingdog/inbox build
+node apps/inbox/dist/server.mjs</code></pre>
+      <p class="hint">
+        That is a working inbox on <code>localhost:8787</code> with its database in a file beside it. The
+        <a class="link" href="/docs/quickstart/">Quickstart</a> takes it from there to a real domain.
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .prompt {
+    padding: var(--sp-5);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: var(--fs-mono);
+    line-height: 1.6;
+  }
+  .panel code {
+    font-size: var(--fs-mono);
+  }
+</style>
