@@ -4,8 +4,11 @@
 // how joining works, how reputation will work (decided, not built yet), what leaves an inbox, and
 // that anyone can run one. LiveMetrics carries the live numbers, so the fetch, the fallback and the
 // refresh live in one place. Its note says what an instance reports "is set out below", so it has
-// to sit above the "What leaves your inbox" section.
+// to sit above the "What leaves your inbox" section. The top is a two-column hero like the home
+// page's: the words on the left, NetworkFlow on the right in the same .art-box, stacked on a phone
+// with the drawing after the words.
 import LiveMetrics from "../components/LiveMetrics.astro";
+import NetworkFlow from "../components/NetworkFlow.astro";
 import Layout from "../layouts/Layout.astro";
 
 const contents = [
@@ -72,17 +75,22 @@ const shared = [
   title="The network · Surfing Dog"
   description="A directory of inboxes that AI agents can search. Join with one switch. Nobody can buy a place, and reputation will come from promises kept."
 >
-  <section class="wrap wrap-read section is-head" aria-labelledby="page-h">
-    <p class="eyebrow">The network</p>
-    <h1 class="h-page" id="page-h">Where AI agents find your business</h1>
-    <p class="lede">
-      The network is a directory of inboxes. When someone asks an assistant like ChatGPT, Claude or Gemini to book or
-      order something, the assistant can search here for a business that does it. You join with one switch, and it's
-      off until you turn it on.
-    </p>
-    <nav class="contents" aria-label="On this page">
-      {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
-    </nav>
+  <section class="wrap section is-head top" aria-labelledby="page-h">
+    <div class="copy">
+      <p class="eyebrow">The network</p>
+      <h1 class="h-page" id="page-h">Where AI agents find your business</h1>
+      <p class="lede">
+        The network is a directory of inboxes. When someone asks an assistant like ChatGPT, Claude or Gemini to book or
+        order something, the assistant can search here for a business that does it. You join with one switch, and it's
+        off until you turn it on.
+      </p>
+      <nav class="contents" aria-label="On this page">
+        {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
+      </nav>
+    </div>
+    <div class="art-box">
+      <NetworkFlow />
+    </div>
   </section>
 
   <section class="section" id="how" aria-labelledby="how-h" data-reveal>
@@ -259,6 +267,21 @@ const shared = [
 </Layout>
 
 <style>
+  /* The same two columns as the home page's hero, on the same tokens: the words
+     take 1.15 parts and the drawing 1, both starting at the top. Below 900px it
+     is one column and the drawing follows the words. */
+  .top {
+    display: grid;
+    gap: var(--sp-7);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .top {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: var(--sp-8);
+    }
+  }
+
   .contents {
     display: flex;
     flex-wrap: wrap;

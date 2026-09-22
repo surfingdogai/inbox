@@ -1,0 +1,1475 @@
+---
+/**
+ * The network page's opening animation, "the hop". An AI agent asks the network for a business,
+ * the directory lights the best match, and the agent then books with that business directly: the
+ * booking hops over the network card rather than through it, because the network lists businesses
+ * and never carries their work. The business keeps the promise, its inbox sends a signed receipt
+ * back to the network, and the record grows on both sides — a notch on the business's row and a
+ * pip under the agent that carried the customer. A second pass does the same with an order.
+ *
+ * What is drawn is what the page says. Agents searching the directory and inboxes sending signed
+ * receipts are live today; reputation built from those receipts is being built, and the page says
+ * so beside it. So the record is a gentle meter of notches: no numbers, no stars, nothing that
+ * reads as a live score. The shop, the bakery and the clinic are illustrations.
+ *
+ * The timings are deliberate; do not retune them by accident.
+ *  - TRAVEL (search line) and HOP (booking arc) are unequal per agent, so the two passes never
+ *    land on the same beat and the loop never reads as a metronome.
+ *  - LOOP is 13.8 s for two passes starting at 0.30 and 6.90 s. Each pass puts the four caption
+ *    phrases up in order. For the first pass they change at 0.30, 3.14, 4.44 and 5.64 s, and the
+ *    second pass's first phrase comes at 6.90 s, so the phrases hold 2.8, 1.3, 1.2 and 1.26 s
+ *    (the second pass: 3.0, 1.3, 1.2 and 1.7 s). 1.2 s is the shortest that five words can be
+ *    read in; the loop is a little over 12 s because of it. Exactly one phrase is ever on screen:
+ *    the strip has one text node, and a new phrase is written only after the old one has faded.
+ *  - The second pass's pip lands at 13.2 s. The loop runs 0.6 s past it so the pip's pop
+ *    (0.6 s) finishes before the wrap fades it back; at 13.4 the wrap cut the pop off mid-scale
+ *    and the "both ways" half of the second pass was gone before it could be seen.
+ *  - The hop arc is inked only while a booking or an order is travelling it, and the agent's
+ *    route home only while the "both ways" disc is on it. An always-on arc would say agents and
+ *    businesses hold an open channel through the network, which they do not.
+ *  - The meters return to where they started at the wrap. It happens while the last phrase is
+ *    still on screen and fades over a second, so it reads as the loop resetting, not as a loss.
+ *
+ * Every static part is drawn once, below, as a server-rendered SVG built from the numbers in GEO.
+ * mount() clones that picture, adds the pieces that move, and swaps the clone in when it is ready,
+ * so there is never a hole where the figure is: with JavaScript off, or if mount() throws, the
+ * picture at rest is what a visitor keeps. The same GEO reaches the script as JSON on the figure,
+ * so the drawing and the machine cannot disagree about where anything is. The figure carries
+ * aspect-ratio 520/390, so the box holds its height from first paint and nothing below it jumps.
+ *
+ * The styles are global because the moving pieces are made at run time, where Astro's scoped
+ * selectors cannot reach. Nothing leaks: every selector begins with .snf, every keyframe is named
+ * snf-*, and the nf- class names exist only inside .snf. None of them overlap HeroFlow's
+ * .sdf / sdf- / sd- names, so both pieces can share a page.
+ *
+ * Colours come from the site's tokens — --ground, --ink, --ink-2, --ink-3, --hairline,
+ * --glass-bg, --glass-border, --row-bg, --c-booking/-ink, --c-order/-ink, --c-success/-ink and
+ * the brand hues — with a literal fallback only for a host that has not declared them; night
+ * redefines the fallbacks under both the prefers-color-scheme query and [data-theme="dark"], the
+ * way HeroFlow does. Type words are drawn in their ink pulled toward --ink (18% by day, 32% by
+ * night): on the day ground the site's own order ink measures 4.2:1 on its tinted chip, under the
+ * 4.5:1 floor, and at night the booking ink measured 4.7:1 on a row over the lagoon glow. The mix
+ * lifts them past 5:1 and keeps their hue. The small secondary words (kinds, statuses, the
+ * placeholder) are --ink-2, not --ink-3, for the same reason: over that glow --ink-3 fell to 3.4:1.
+ * Every text in the figure was measured this way, rendered, in both themes and on a phone.
+ *
+ * Chips, the query, the inbox title and the caption strip are measured at run time (fit()), so a
+ * wider fallback font or the phone type scale can never push a word out of its box.
+ *
+ * With reduced motion the same machine is stepped to a composed still frame, and the preference
+ * is honoured if it is turned on later. Off-screen or in a hidden tab the clock stops.
+ *
+ * No max-width of its own: the piece is whatever its container is (the page's .art-box caps it).
+ */
+
+/** The world, in the 520x390 viewBox. The drawing below and the script both read this. */
+const GEO = {
+  agents: [
+    { y: 118, tint: "var(--nf-violet)", level: 1 },
+    { y: 184, tint: "var(--nf-lagoon)", level: 2 },
+    { y: 250, tint: "var(--nf-flamingo)", level: 1 },
+  ],
+  /** agent to the network's door */
+  send: ["M56,118 C90,118 92,184 124,184", "M56,184 L124,184", "M56,250 C90,250 92,184 124,184"],
+  /** agent straight to the business's door, over or under the network card; only the outer
+   *  agents have one, because the middle one would have to pass through the card */
+  hop: [
+    "M56,118 C94,50 296,36 344,106 C356,123.5 358,184 384,184",
+    "",
+    "M56,250 C94,318 296,332 344,262 C356,244.5 358,184 384,184",
+  ],
+  /** the business's inbox back to the network: the route receipts take */
+  link: "M384,184 L308,184",
+  /** the three doors all sit on one level: the network's two and the inbox's one */
+  door: { y: 184, netIn: 124, netOut: 308, inbox: 384 },
+  net: { x: 124, y: 92, w: 184, h: 184 },
+  field: { x: 136, y: 140, w: 160, h: 20, mag: [147, 149.6] as const },
+  rows: [
+    { name: "Oficina Maré", kind: "bikes", y: 170, level: 2 },
+    { name: "Padaria Sol", kind: "bakery", y: 202, level: 3 },
+    { name: "Clínica Luz", kind: "dentist", y: 234, level: 2 },
+  ],
+  row: { x: 136, w: 160, h: 28, notchX: 126.2, notchStep: 5.4, notches: 5 },
+  inbox: {
+    x: 384,
+    y: 130,
+    w: 120,
+    h: 84,
+    rowX: 392,
+    rowY: 170,
+    rowW: 104,
+    rowH: 28,
+    nameX: [416, 396],
+    room: [76, 96],
+  },
+  say: {
+    cx: 260,
+    y: 330,
+    h: 20,
+    w: 196,
+    phrases: [
+      "Agents search the network",
+      "The business keeps its promise",
+      "A signed receipt comes back",
+      "Reputation grows, both ways",
+    ],
+  },
+  /** Two passes. The bike shop is the showcase business, so it goes first. */
+  beats: [
+    { t: 0.3, a: 0, r: 0, ty: "booking", lb: "Booking", st: "Kept", q: "Bike repair · Lisbon" },
+    { t: 6.9, a: 2, r: 1, ty: "order", lb: "Order", st: "Delivered", q: "Fresh bread · Lisbon" },
+  ],
+};
+
+const { net, field, row, inbox, say, door } = GEO;
+/* the inbox's mark: the striped half sun, as on the home page's business card */
+const sunY = inbox.y + 24;
+const sun = `M${inbox.x + 12},${sunY} A7,7 0 0 1 ${inbox.x + 26},${sunY} Z`;
+const sayX = say.cx - say.w / 2;
+/* the network's mark: three listings, linked, sitting on the title's baseline */
+const glyph = [
+  [net.x + 14.5, net.y + 26.5],
+  [net.x + 22, net.y + 15.5],
+  [net.x + 29.5, net.y + 26.5],
+];
+const first = GEO.rows[GEO.beats[0]?.r ?? 0]?.name ?? "";
+---
+
+<figure class="snf" aria-label="How AI agents use the network" data-nf={JSON.stringify(GEO)}>
+  <svg class="nf-seed" viewBox="0 0 520 390" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="nfseed-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--nf-tangerine)"></stop>
+        <stop offset="58%" stop-color="var(--nf-flamingo)"></stop>
+        <stop offset="100%" stop-color="var(--nf-violet)"></stop>
+      </linearGradient>
+      <clipPath id="nfseed-c"><path d={sun}></path></clipPath>
+    </defs>
+
+    <g class="nf-lines">
+      {GEO.send.map((d) => <path d={d} class="nf-line nf-send" />)}
+      <path d={GEO.link} class="nf-line nf-link" />
+    </g>
+
+    <text x="30" y="60" font-size="8.2" class="nf-cap">AI AGENTS</text>
+
+    <g class="nf-net">
+      <rect x={net.x} y={net.y} width={net.w} height={net.h} rx="14" class="nf-glass" />
+      <!-- the network's mark: three listings, linked -->
+      <g class="nf-glyph">
+        <path d={`M${glyph.map(([x, y]) => `${x},${y}`).join(" L")} Z`} />
+        {glyph.map(([x, y]) => <circle cx={x} cy={y} r="2.3" />)}
+      </g>
+      <text x={net.x + 38} y={net.y + 27} font-size="12.5" class="nf-title">The network</text>
+      <line x1={net.x + 12} y1={net.y + 40} x2={net.x + net.w - 12} y2={net.y + 40} class="nf-hair" />
+      <g class="nf-field">
+        <rect x={field.x} y={field.y} width={field.w} height={field.h} rx={field.h / 2} />
+        <circle cx={field.mag[0]} cy={field.mag[1]} r="3" class="nf-mag" />
+        <line x1={field.mag[0] + 2.2} y1={field.mag[1] + 2.2} x2={field.mag[0] + 4.8} y2={field.mag[1] + 4.8} class="nf-mag" />
+        <text x={field.x + 21} y={field.y + 13.2} font-size="8.6" class="nf-q nf-ph">Search the directory</text>
+      </g>
+      {
+        GEO.rows.map((r) => (
+          <g class="nf-dir" transform={`translate(${row.x},${r.y})`}>
+            <rect width={row.w} height={row.h} rx="8" class="bg" />
+            <rect width={row.w} height={row.h} rx="8" class="ring" />
+            <rect y="5" width="2.5" height={row.h - 10} rx="1.25" class="bar" />
+            <text x="10" y="17.8" font-size="9.2" class="nm">{r.name}<tspan class="kd" font-size="8.4"> · {r.kind}</tspan></text>
+            {Array.from({ length: row.notches }, (_, k) => (
+              <rect
+                x={row.notchX + k * row.notchStep}
+                y="9"
+                width="3.2"
+                height="10"
+                rx="1.4"
+                class={k < r.level ? "nf-notch on" : "nf-notch"}
+              />
+            ))}
+          </g>
+        ))
+      }
+      <circle cx={door.netIn} cy={door.y} r="2.6" class="nf-port" />
+      <circle cx={door.netOut} cy={door.y} r="2.6" class="nf-port" />
+    </g>
+
+    <g class="nf-ib">
+      <rect x={inbox.x} y={inbox.y} width={inbox.w} height={inbox.h} rx="14" class="nf-glass" />
+      <g class="nf-ibsun">
+        <path d={sun} fill="url(#nfseed-g)"></path>
+        <g clip-path="url(#nfseed-c)">
+          {[5.5, 4, 2.7].map((d) => (
+            <rect x={inbox.x + 11} y={sunY - d} width="16" height=".6" fill="var(--nf-ground)" />
+          ))}
+        </g>
+      </g>
+      <text x={inbox.nameX[0]} y={sunY} font-size="10.5" class="nf-ibname">{first}</text>
+      <line x1={inbox.x + 12} y1={inbox.y + 34} x2={inbox.x + inbox.w - 12} y2={inbox.y + 34} class="nf-hair" />
+      <circle cx={door.inbox} cy={door.y} r="2.6" class="nf-port" />
+    </g>
+
+    {
+      GEO.agents.map((ag) => (
+        <g class="nf-agent" style={`--ag:${ag.tint}`}>
+          <rect x="30" y={ag.y - 12} width="24" height="24" rx="7" class="bodyfill" />
+          <rect x="30" y={ag.y - 12} width="24" height="24" rx="7" />
+          <rect x="26" y={ag.y - 16} width="32" height="32" rx="10" class="halo" />
+          <circle cx="37.6" cy={ag.y - 1} r="1.7" class="eye" />
+          <circle cx="46.4" cy={ag.y - 1} r="1.7" class="eye" />
+          <line x1="42" y1={ag.y - 12} x2="42" y2={ag.y - 19} />
+          <circle cx="42" cy={ag.y - 21.6} r="2.6" class="ant" />
+          {[36, 42, 48].map((x, k) => (
+            <circle cx={x} cy={ag.y + 19} r="1.9" class={k < ag.level ? "nf-pip on" : "nf-pip"} />
+          ))}
+        </g>
+      ))
+    }
+
+    <g class="nf-say">
+      <rect x={sayX} y={say.y} width={say.w} height={say.h} rx={say.h / 2} />
+      <circle cx={sayX + 12} cy={say.y + say.h / 2} r="3" class="nf-beat" />
+      <text x={say.cx + 5} y={say.y + 13.2} font-size="9" text-anchor="middle" class="nf-phrase on">{say.phrases[0]}</text>
+    </g>
+  </svg>
+  <figcaption class="nf-sr">
+    An AI agent asks the network for bike repair in Lisbon, and the directory points it to Oficina Maré. The agent books
+    with the shop directly. The shop keeps the booking, and its inbox sends a signed receipt back to the network.
+    Reputation will grow from those receipts, for the business and for the customer. Then the same happens with a bread
+    order from Padaria Sol.
+  </figcaption>
+</figure>
+
+<style is:global>
+  /* Every selector below begins with .snf and every keyframe is named snf-*. */
+  .snf {
+    --nf-ground: var(--ground, #f6f5ff);
+    --nf-ink: var(--ink, #14163c);
+    --nf-ink2: var(--ink-2, #3f4472);
+    --nf-ink3: var(--ink-3, #565a86);
+    --nf-hair: var(--hairline, rgba(20, 22, 60, 0.08));
+    --nf-glass: var(--glass-bg, rgba(255, 255, 255, 0.32));
+    --nf-glassb: var(--glass-border, rgba(255, 255, 255, 0.55));
+    --nf-row: var(--row-bg, rgba(255, 255, 255, 0.24));
+    --nf-booking: var(--c-booking, #ff6fa8);
+    --nf-booking-i: var(--c-booking-ink, #b02a6b);
+    --nf-order: var(--c-order, #ff9650);
+    --nf-order-i: var(--c-order-ink, #9c4409);
+    --nf-palm: var(--c-success, #2fd3a5);
+    --nf-palm-i: var(--c-success-ink, #147a5c);
+    --nf-flamingo: var(--flamingo, #ff6fa8);
+    --nf-violet: var(--violet, #8a6bff);
+    --nf-lagoon: var(--lagoon, #25cfe0);
+    --nf-tangerine: var(--tangerine, #ff9650);
+    --nf-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    /* how much of a type's ink is kept when its words are pulled toward --ink */
+    --nf-tmix: 82%;
+    position: relative;
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 520 / 390;
+    container-type: inline-size;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .snf {
+      --nf-ground: var(--ground, #0d0e26);
+      --nf-ink: var(--ink, #f2f1ff);
+      --nf-ink2: var(--ink-2, #b9bce0);
+      --nf-ink3: var(--ink-3, #9a9dc4);
+      --nf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+      --nf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+      --nf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+      --nf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+      --nf-booking-i: var(--c-booking-ink, #ff8fbc);
+      --nf-order-i: var(--c-order-ink, #ffb27c);
+      --nf-palm-i: var(--c-success-ink, #72e6c3);
+      --nf-tmix: 68%;
+    }
+  }
+  [data-theme="dark"] .snf {
+    --nf-ground: var(--ground, #0d0e26);
+    --nf-ink: var(--ink, #f2f1ff);
+    --nf-ink2: var(--ink-2, #b9bce0);
+    --nf-ink3: var(--ink-3, #9a9dc4);
+    --nf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+    --nf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+    --nf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+    --nf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+    --nf-booking-i: var(--c-booking-ink, #ff8fbc);
+    --nf-order-i: var(--c-order-ink, #ffb27c);
+    --nf-palm-i: var(--c-success-ink, #72e6c3);
+    --nf-tmix: 68%;
+  }
+  /* One pair of properties carries an item's type wherever it goes. --ti is the
+     type's ink pulled toward --ink, which is darker by day and lighter by night:
+     more contrast in both themes, the same hue. */
+  .snf .t-booking {
+    --tc: var(--nf-booking);
+    --ti: color-mix(in srgb, var(--nf-booking-i) var(--nf-tmix), var(--nf-ink));
+  }
+  .snf .t-order {
+    --tc: var(--nf-order);
+    --ti: color-mix(in srgb, var(--nf-order-i) var(--nf-tmix), var(--nf-ink));
+  }
+
+  .snf svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .snf text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--nf-ink2);
+  }
+  .snf .nf-cap {
+    letter-spacing: 0.11em;
+  }
+  .snf .nf-title,
+  .snf .nf-ibname {
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .snf .nf-ibname {
+    transition: opacity 0.22s var(--nf-ease);
+  }
+  .snf .nf-ibname.swap {
+    opacity: 0;
+  }
+
+  /* the lines: the doors in and out of the network */
+  .snf .nf-line {
+    fill: none;
+    stroke: var(--nf-ink3);
+    stroke-opacity: 0.34;
+    stroke-width: 1.1;
+    transition: stroke-dashoffset 0.95s var(--nf-ease);
+  }
+  .snf .nf-port {
+    fill: var(--nf-ink3);
+    fill-opacity: 0.55;
+  }
+  /* routes inked only for the journey */
+  .snf .nf-trail {
+    fill: none;
+    stroke-width: 1.1;
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+  .snf .nf-trail.hop {
+    stroke: var(--tc);
+  }
+  .snf .nf-trail.home {
+    stroke: var(--nf-palm);
+  }
+
+  /* glass: a wash and a hairline, never a shadow */
+  .snf .nf-glass {
+    fill: var(--nf-glass);
+    stroke: var(--nf-glassb);
+    stroke-width: 1;
+  }
+  .snf .nf-hair {
+    stroke: var(--nf-hair);
+    stroke-width: 1;
+  }
+  .snf .nf-glyph path {
+    fill: none;
+    stroke: var(--nf-ink3);
+    stroke-opacity: 0.5;
+    stroke-width: 1;
+    stroke-linejoin: round;
+  }
+  .snf .nf-glyph circle {
+    fill: var(--nf-ink3);
+  }
+
+  /* the search field */
+  .snf .nf-field rect {
+    fill: none;
+    stroke: var(--nf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+    transition: stroke-opacity 0.3s var(--nf-ease);
+  }
+  .snf .nf-field.lit rect {
+    stroke-opacity: 0.66;
+  }
+  .snf .nf-mag {
+    fill: none;
+    stroke: var(--nf-ink2);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+  }
+  .snf .nf-q {
+    fill: var(--nf-ink);
+    font-weight: 500;
+  }
+  .snf .nf-q.nf-ph {
+    fill: var(--nf-ink2);
+    font-weight: 400;
+  }
+
+  /* the directory */
+  .snf .nf-dir .bg {
+    fill: var(--nf-row);
+    stroke: var(--tc, var(--nf-ink3));
+    stroke-opacity: 0;
+    stroke-width: 1;
+    transition: stroke-opacity 0.36s var(--nf-ease);
+  }
+  .snf .nf-dir .bar {
+    fill: var(--tc, var(--nf-ink3));
+    opacity: 0;
+    transition: opacity 0.36s var(--nf-ease);
+  }
+  .snf .nf-dir.hit .bg {
+    stroke-opacity: 0.6;
+  }
+  .snf .nf-dir.hit .bar {
+    opacity: 1;
+  }
+  .snf .nf-dir .ring {
+    fill: none;
+    stroke: var(--tc, var(--nf-ink3));
+    stroke-width: 1.2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .snf .nf-dir.ping .ring {
+    animation: snf-ping 0.72s var(--nf-ease);
+  }
+  @keyframes snf-ping {
+    0% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.06, 1.3);
+    }
+  }
+  .snf .nf-dir .nm {
+    fill: var(--nf-ink);
+    font-weight: 600;
+  }
+  .snf .nf-dir .kd {
+    fill: var(--nf-ink2);
+    font-weight: 400;
+  }
+
+  /* The record: a few notches, never a number. A notch that has just been
+     earned comes in palm and grows up out of its slot. */
+  .snf .nf-notch,
+  .snf .nf-pip {
+    fill: var(--nf-ink3);
+    fill-opacity: 0.2;
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    transition:
+      fill 1s var(--nf-ease),
+      fill-opacity 1s var(--nf-ease);
+  }
+  .snf .nf-notch.on,
+  .snf .nf-pip.on {
+    fill-opacity: 0.62;
+  }
+  .snf .nf-notch.new,
+  .snf .nf-pip.new {
+    fill: var(--nf-palm);
+    fill-opacity: 1;
+    transition: none;
+  }
+  .snf .nf-notch.new {
+    animation: snf-grow 0.7s var(--nf-ease);
+  }
+  .snf .nf-pip {
+    transform-origin: 50% 50%;
+  }
+  .snf .nf-pip.new {
+    animation: snf-pop 0.6s var(--nf-ease);
+  }
+  @keyframes snf-grow {
+    0% {
+      transform: scaleY(0.2);
+    }
+    60% {
+      transform: scaleY(1.18);
+    }
+    100% {
+      transform: scaleY(1);
+    }
+  }
+  @keyframes snf-pop {
+    0% {
+      transform: scale(0.4);
+    }
+    55% {
+      transform: scale(1.7);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* Agents are drawn in ink and carry their identity in one small tinted dot. */
+  .snf .nf-agent rect,
+  .snf .nf-agent line {
+    fill: none;
+    stroke: var(--nf-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.2;
+  }
+  .snf .nf-agent .bodyfill {
+    fill: var(--ag);
+    fill-opacity: 0.07;
+    stroke: none;
+  }
+  .snf .nf-agent .eye {
+    fill: var(--nf-ink2);
+    fill-opacity: 0.5;
+  }
+  .snf .nf-agent .ant {
+    fill: var(--ag);
+  }
+  .snf .nf-agent .halo {
+    stroke: var(--ag);
+    stroke-opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .snf .nf-agent.wake .halo {
+    animation: snf-halo 0.62s var(--nf-ease);
+  }
+  .snf .nf-agent.glow .halo {
+    stroke: var(--nf-palm);
+    animation: snf-halo 0.8s var(--nf-ease);
+  }
+  @keyframes snf-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.82);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.3);
+    }
+  }
+
+  /* the inbox rows */
+  .snf .nf-row {
+    opacity: 0;
+    transition: opacity 0.3s linear;
+  }
+  .snf .nf-row.on {
+    opacity: 1;
+  }
+  .snf .nf-row .in {
+    transform: translateY(6px);
+    opacity: 0;
+    transition:
+      transform 0.42s var(--nf-ease),
+      opacity 0.42s var(--nf-ease);
+  }
+  .snf .nf-row.on .in {
+    transform: none;
+    opacity: 1;
+  }
+  .snf .nf-row .bg {
+    fill: var(--nf-row);
+  }
+  .snf .nf-row .bar {
+    fill: var(--tc);
+  }
+  .snf .nf-row .lb {
+    fill: var(--ti);
+    font-weight: 600;
+  }
+  .snf .nf-row .st {
+    fill: var(--nf-ink2);
+  }
+  .snf .nf-row .res {
+    opacity: 0;
+    transition: opacity 0.36s var(--nf-ease);
+  }
+  .snf .nf-row.res .res {
+    opacity: 1;
+  }
+  .snf .nf-tick {
+    fill: none;
+    stroke: var(--nf-palm-i);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* the pieces that travel */
+  .snf .nf-chip .bg {
+    fill: color-mix(in srgb, var(--tc) 15%, var(--nf-ground));
+    stroke: color-mix(in srgb, var(--tc) 44%, transparent);
+    stroke-width: 1;
+  }
+  .snf .nf-chip .dot {
+    fill: var(--tc);
+  }
+  .snf .nf-chip .lb {
+    fill: var(--ti);
+    font-weight: 600;
+  }
+  .snf .nf-seek .disc {
+    fill: var(--nf-ground);
+    stroke: var(--nf-ink3);
+    stroke-opacity: 0.6;
+    stroke-width: 1.1;
+  }
+  .snf .nf-slip .paper {
+    fill: color-mix(in srgb, var(--tc) 15%, var(--nf-ground));
+    stroke: color-mix(in srgb, var(--tc) 55%, transparent);
+    stroke-width: 1;
+  }
+  .snf .nf-slip .ln {
+    stroke: var(--ti);
+    stroke-opacity: 0.45;
+    stroke-width: 1;
+    stroke-linecap: round;
+  }
+  .snf .nf-slip .seal {
+    fill: var(--tc);
+  }
+  .snf .nf-home .disc {
+    fill: var(--nf-ground);
+    stroke: var(--nf-palm);
+    stroke-opacity: 0.65;
+    stroke-width: 1.1;
+  }
+  .snf .nf-home .mark {
+    fill: none;
+    stroke: var(--nf-palm-i);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .snf .nf-off {
+    display: none;
+  }
+
+  /* the caption strip: one phrase, faded out before the next is written */
+  .snf .nf-say rect {
+    fill: none;
+    stroke: var(--nf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+  }
+  .snf .nf-beat {
+    fill: var(--nf-palm);
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .snf .nf-say.beat .nf-beat {
+    animation: snf-beat 0.7s var(--nf-ease);
+  }
+  @keyframes snf-beat {
+    0% {
+      transform: scale(1);
+    }
+    36% {
+      transform: scale(1.5);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .snf .nf-phrase {
+    fill: var(--nf-ink2);
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.16s linear;
+  }
+  .snf .nf-phrase.on {
+    opacity: 1;
+    transition: opacity 0.24s var(--nf-ease);
+  }
+
+  /* Read by a screen reader, not drawn. */
+  .snf .nf-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Below the breakpoint the viewBox shrinks the type past reading size, so the
+     words that carry the story grow in user units: the captions, the card
+     titles, the business names, the query, the typed words and the phrase.
+     Targets are CSS pixels at a 342-wide art-box (a 390px phone) divided by
+     the container scale. Three things step out because they cannot grow inside
+     their boxes: the kinds after the business names, the inbox statuses (the
+     tick still says kept) and the inbox's own small mark. The script measures
+     everything it can after the switch, so a bigger word gets a bigger box. */
+  @container (max-width: 460px) {
+    .snf .nf-dir .kd,
+    .snf .nf-row .st,
+    .snf .nf-ibsun {
+      display: none;
+    }
+    .snf .nf-cap {
+      font-size: 12.4px;
+    }
+    .snf .nf-title {
+      font-size: 15px;
+    }
+    .snf .nf-ibname {
+      font-size: 14px;
+    }
+    .snf .nf-q {
+      font-size: 12px;
+    }
+    .snf .nf-dir .nm {
+      font-size: 12.6px;
+    }
+    .snf .nf-row .lb,
+    .snf .nf-chip .lb {
+      font-size: 13px;
+    }
+    .snf .nf-phrase {
+      font-size: 12.4px;
+    }
+  }
+
+  /* Reduced motion: the machine is stepped to a composed frame and then every
+     transition and keyframe inside the figure is switched off. Paused, the CSS
+     keyframes stop with the clock. */
+  .snf.nf-still *,
+  .snf.nf-still {
+    animation: none !important;
+    transition: none !important;
+  }
+  .snf.nf-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .snf * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  /* The drawing machine. It clones the server-rendered picture, adds the pieces
+     that move, and steps every piece from one clock. */
+  type Geo = {
+    agents: { y: number; level: number }[];
+    send: string[];
+    hop: string[];
+    link: string;
+    door: { y: number; netIn: number; netOut: number; inbox: number };
+    field: { mag: [number, number] };
+    rows: { name: string; y: number; level: number }[];
+    row: { x: number; h: number; notchX: number; notchStep: number };
+    inbox: { rowX: number; rowY: number; rowW: number; rowH: number; nameX: number[]; room: number[] };
+    say: { cx: number; y: number; h: number; w: number; phrases: string[] };
+    beats: { t: number; a: number; r: number; ty: string; lb: string; st: string; q: string }[];
+  };
+  type Pt = { x: number; y: number };
+  type Beat = Geo["beats"][number] & {
+    f: Record<string, boolean>;
+    p0: number;
+    p1: number;
+    p2: number;
+    q1: number;
+    m: number;
+    s: number;
+    s1: number;
+    s2: number;
+    k: number;
+    r0: number;
+    r1: number;
+    r2: number;
+    r3: number;
+    d0: number;
+    d1: number;
+    dur: number;
+    typed: number;
+    qSize: string;
+    chip: SVGGElement;
+    chipBg: SVGRectElement;
+    chipDot: SVGCircleElement;
+    chipLb: SVGTextElement;
+    w: number;
+    seek: SVGGElement;
+    slip: SVGGElement;
+    home: SVGGElement;
+    row: SVGGElement;
+    hopTrail: SVGPathElement;
+    homeTrail: SVGPathElement;
+  };
+
+  const NS = "http://www.w3.org/2000/svg";
+  function E<K extends keyof SVGElementTagNameMap>(
+    n: K,
+    a: Record<string, string | number> = {},
+    t?: string,
+  ): SVGElementTagNameMap[K] {
+    const e = document.createElementNS(NS, n);
+    for (const k in a) e.setAttribute(k, String(a[k]));
+    if (t !== undefined) e.textContent = t;
+    return e;
+  }
+  function all<T extends Element>(root: ParentNode, sel: string): T[] {
+    return Array.from(root.querySelectorAll<T>(sel));
+  }
+  function one<T extends Element>(root: ParentNode, sel: string): T {
+    const e = root.querySelector<T>(sel);
+    if (!e) throw new Error(`network flow: missing ${sel}`);
+    return e;
+  }
+
+  /* Newton solve for a CSS cubic-bezier, so the travel uses the same curve as
+     the CSS transitions around it. */
+  function bez(x1: number, y1: number, x2: number, y2: number) {
+    const cx = 3 * x1;
+    const bx = 3 * (x2 - x1) - cx;
+    const ax = 1 - cx - bx;
+    const cy = 3 * y1;
+    const by = 3 * (y2 - y1) - cy;
+    const ay = 1 - cy - by;
+    return (x: number) => {
+      let t = x;
+      for (let i = 0; i < 5; i++) {
+        const e = ((ax * t + bx) * t + cx) * t - x;
+        if (Math.abs(e) < 1e-4) break;
+        const d = (3 * ax * t + 2 * bx) * t + cx;
+        if (Math.abs(d) < 1e-6) break;
+        t -= e / d;
+      }
+      return ((ay * t + by) * t + cy) * t;
+    };
+  }
+  const eSoft = bez(0.2, 0.8, 0.2, 1);
+  const eSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+  const cl = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+
+  /* ---- timings, in seconds -------------------------------------------- */
+  const TRAVEL = [0.6, 0.64, 0.7]; /* search line, per agent: deliberately unequal */
+  const HOP = [0.9, 0, 0.96]; /* booking arc, per agent */
+  const LOOP = 13.8;
+  const PADL = 19; /* word start: the dot sits at 11, as on the home page's chips */
+  const PADR = 9; /* and a real pad after the word, so a grown word never touches the edge */
+
+  let seq = 0;
+
+  function mount(fig: HTMLElement) {
+    if (fig.dataset.nfOn === "on") return; /* one scene per figure, however often this runs */
+    fig.dataset.nfOn = "on";
+    const G = JSON.parse(fig.dataset.nf ?? "") as Geo;
+    const seed = one<SVGSVGElement>(fig, "svg.nf-seed");
+
+    /* The live scene is the picture at rest plus the pieces that move. It is
+       built off the page and swapped in whole, so the figure is never empty. */
+    const svg = seed.cloneNode(true) as SVGSVGElement;
+    svg.classList.remove("nf-seed");
+    const uid = `nf${++seq}`;
+    one(svg, "#nfseed-g").id = `${uid}g`;
+    one(svg, "#nfseed-c").id = `${uid}c`;
+    for (const el of all(svg, '[fill="url(#nfseed-g)"]')) el.setAttribute("fill", `url(#${uid}g)`);
+    for (const el of all(svg, '[clip-path="url(#nfseed-c)"]')) el.setAttribute("clip-path", `url(#${uid}c)`);
+
+    const sends = all<SVGPathElement>(svg, ".nf-send");
+    const lines = all<SVGPathElement>(svg, ".nf-line");
+    const agents = all<SVGGElement>(svg, ".nf-agent");
+    const pips = agents.map((a) => all<SVGCircleElement>(a, ".nf-pip"));
+    const dirs = all<SVGGElement>(svg, ".nf-dir");
+    const notches = dirs.map((d) => all<SVGRectElement>(d, ".nf-notch"));
+    const fieldG = one<SVGGElement>(svg, ".nf-field");
+    const q = one<SVGTextElement>(svg, ".nf-q");
+    const ib = one<SVGGElement>(svg, ".nf-ib");
+    const ibName = one<SVGTextElement>(svg, ".nf-ibname");
+    const sayG = one<SVGGElement>(svg, ".nf-say");
+    const sayRect = one<SVGRectElement>(sayG, "rect");
+    const sayDot = one<SVGCircleElement>(sayG, ".nf-beat");
+    const phrase = one<SVGTextElement>(sayG, ".nf-phrase");
+    const placeholder = q.textContent ?? "";
+    const restName = ibName.textContent ?? "";
+
+    const trails = E("g");
+    one(svg, ".nf-lines").appendChild(trails);
+    const rowsG = E("g");
+    ib.appendChild(rowsG);
+    const fly = E("g");
+    svg.appendChild(fly);
+
+    /* ---- one set of pieces per pass, built once and reused ------------- */
+    const IB = G.inbox;
+    const D = G.door;
+    const EV: Beat[] = G.beats.map((b) => {
+      const p0 = 0.12;
+      const p1 = p0 + (TRAVEL[b.a] ?? 0.7); /* at the network's door */
+      const p2 = p1 + 0.26; /* docked in the search field */
+      const q1 = p2 + 0.3; /* the query is typed */
+      const m = q1 + 0.14; /* the best match lights */
+      const s = m + 0.26; /* the agent sends the booking itself */
+      const s1 = s + (HOP[b.a] ?? 1); /* at the business's door */
+      const s2 = s1 + 0.26; /* in the inbox */
+      const k = s2 + 0.5; /* kept */
+      const r0 = s2 + 1.3; /* a signed receipt is made */
+      const r1 = r0 + 0.2;
+      const r2 = r1 + 0.74; /* at the network's other door */
+      const r3 = r2 + 0.26; /* counted on the listing */
+      const d0 = r3 + 0.08;
+      const d1 = d0 + 0.72; /* and on the customer's side */
+
+      const w = b.ty === "order" ? 50 : 60;
+      const chip = E("g", { class: `nf-chip t-${b.ty} nf-off` });
+      const chipBg = E("rect", { x: -w / 2, y: -10, width: w, height: 20, rx: 10, class: "bg" });
+      const chipDot = E("circle", { cx: -w / 2 + 11, cy: 0, r: 3, class: "dot" });
+      const chipLb = E("text", { x: -w / 2 + PADL, y: 3.3, "font-size": 9.4, class: "lb" }, b.lb);
+      chip.append(chipBg, chipDot, chipLb);
+
+      const seek = E("g", { class: "nf-seek nf-off" });
+      seek.append(
+        E("circle", { r: 7.5, class: "disc" }),
+        E("circle", { cx: -0.8, cy: -0.8, r: 2.5, class: "nf-mag" }),
+        E("line", { x1: 1.1, y1: 1.1, x2: 3.1, y2: 3.1, class: "nf-mag" }),
+      );
+
+      const slip = E("g", { class: `nf-slip t-${b.ty} nf-off` });
+      slip.append(
+        E("rect", { x: -6.5, y: -8.5, width: 13, height: 17, rx: 2.2, class: "paper" }),
+        E("line", { x1: -3.4, y1: -4.4, x2: 3.4, y2: -4.4, class: "ln" }),
+        E("line", { x1: -3.4, y1: -1.4, x2: 1.6, y2: -1.4, class: "ln" }),
+        E("circle", { cx: 2.4, cy: 3.9, r: 2.8, class: "seal" }),
+      );
+
+      const home = E("g", { class: "nf-home nf-off" });
+      home.append(E("circle", { r: 7.6, class: "disc" }), E("path", { d: "M-3.1,.2 L-.9,2.5 L3.3,-2.7", class: "mark" }));
+      fly.append(seek, chip, slip, home);
+
+      const row = E("g", {
+        class: `nf-row t-${b.ty}`,
+        transform: `translate(${IB.rowX},${IB.rowY})`,
+      });
+      const ri = E("g", { class: "in" });
+      const res = E("g", { class: "res" });
+      res.append(
+        E("text", { x: IB.rowW - 24, y: 17.8, "font-size": 8.4, class: "st", "text-anchor": "end" }, b.st),
+        E("path", { d: `M${IB.rowW - 18.6},14.4 l2.7,2.9 l5.1,-6.2`, class: "nf-tick" }),
+      );
+      ri.append(
+        E("rect", { width: IB.rowW, height: IB.rowH, rx: 8, class: "bg" }),
+        E("rect", { y: 5, width: 2.5, height: IB.rowH - 10, rx: 1.25, class: "bar" }),
+        E("text", { x: 10, y: 17.8, "font-size": 9.6, class: "lb" }, b.lb),
+        res,
+      );
+      row.appendChild(ri);
+      rowsG.appendChild(row);
+
+      const hopTrail = E("path", { d: G.hop[b.a] ?? "", class: `nf-trail hop t-${b.ty}` });
+      const homeTrail = E("path", { d: G.send[b.a] ?? "", class: "nf-trail home" });
+      trails.append(hopTrail, homeTrail);
+
+      return {
+        ...b,
+        f: {},
+        p0,
+        p1,
+        p2,
+        q1,
+        m,
+        s,
+        s1,
+        s2,
+        k,
+        r0,
+        r1,
+        r2,
+        r3,
+        d0,
+        d1,
+        dur: d1 + 0.45,
+        typed: -1,
+        qSize: "",
+        chip,
+        chipBg,
+        chipDot,
+        chipLb,
+        w,
+        seek,
+        slip,
+        home,
+        row,
+        hopTrail,
+        homeTrail,
+      };
+    });
+
+    /* Anything that throws from here on leaves a drawn scene, not a hole. */
+    seed.replaceWith(svg);
+
+    const len = (p: SVGPathElement) => p.getTotalLength();
+    const LSEND = sends.map(len);
+    const LHOP = EV.map((e) => len(e.hopTrail));
+
+    /* ---- words are measured, never guessed ------------------------------ */
+    function bx(t: SVGGraphicsElement): DOMRect | null {
+      try {
+        const b = t.getBBox();
+        return b?.width ? b : null;
+      } catch {
+        return null;
+      }
+    }
+    let narrow: boolean | null = null;
+    let phSize = "";
+    const QROOM = 131; /* the field's text runs from 157 to 288, inside its rounded end */
+    let measured = false;
+    function fitTitle() {
+      /* the inbox title grows left over its mark on a phone, and shrinks only if it must */
+      ibName.style.fontSize = "";
+      const n = narrow ? 1 : 0;
+      ibName.setAttribute("x", String(G.inbox.nameX[n] ?? 416));
+      const b = bx(ibName);
+      const room = G.inbox.room[n] ?? 76;
+      if (b && b.width > room) {
+        const px = Number.parseFloat(getComputedStyle(ibName).fontSize) || 10.5;
+        ibName.style.fontSize = `${((px * room) / b.width).toFixed(2)}px`;
+      }
+    }
+    function fit() {
+      for (const e of EV) {
+        const hid = e.chip.classList.contains("nf-off");
+        if (hid) e.chip.classList.remove("nf-off");
+        const b = bx(e.chipLb);
+        if (hid) e.chip.classList.add("nf-off");
+        if (b) {
+          const w = Math.max(e.w, Math.round(b.width + PADL + PADR));
+          e.chipBg.setAttribute("x", String(-w / 2));
+          e.chipBg.setAttribute("width", String(w));
+          e.chipDot.setAttribute("cx", String(-w / 2 + 11));
+          e.chipLb.setAttribute("x", String(-w / 2 + PADL));
+        }
+      }
+      /* the query must fit its field: measured at full length, shrunk only if it must */
+      const keep = q.textContent ?? "";
+      const keepPh = q.classList.contains("nf-ph");
+      const sizeFor = (text: string, ph: boolean) => {
+        q.classList.toggle("nf-ph", ph);
+        q.style.fontSize = "";
+        q.textContent = text;
+        const b = bx(q);
+        if (!b || b.width <= QROOM) return "";
+        const px = Number.parseFloat(getComputedStyle(q).fontSize) || 8.6;
+        return `${((px * QROOM) / b.width).toFixed(2)}px`;
+      };
+      for (const e of EV) e.qSize = sizeFor(e.q, false);
+      phSize = sizeFor(placeholder, true);
+      q.classList.toggle("nf-ph", keepPh);
+      q.textContent = keep;
+      q.style.fontSize = keepPh ? phSize : (EV.find((e) => e.q.startsWith(keep) && keep)?.qSize ?? "");
+      /* the caption strip holds its widest phrase, so it never changes size under a phrase */
+      const said = phrase.textContent;
+      let widest = 0;
+      for (const p of G.say.phrases) {
+        phrase.textContent = p;
+        widest = Math.max(widest, bx(phrase)?.width ?? 0);
+      }
+      phrase.textContent = said;
+      const W = Math.max(G.say.w, Math.ceil(widest + 34));
+      const x0 = G.say.cx - W / 2;
+      sayRect.setAttribute("x", String(x0));
+      sayRect.setAttribute("width", String(W));
+      sayDot.setAttribute("cx", String(x0 + 12));
+      phrase.setAttribute("x", String(x0 + (W + 10) / 2));
+      fitTitle();
+    }
+    /* The type scale changes at the container breakpoint, so the words are
+       re-measured when the piece crosses it, when a hidden piece is first
+       revealed, and once more when the webfonts have arrived. */
+    function gauge() {
+      const w = fig.clientWidth;
+      const nw = w > 0 && w <= 460;
+      if (nw === narrow && measured) return;
+      narrow = nw;
+      if (w > 0) {
+        fit();
+        measured = true;
+      }
+    }
+    gauge();
+    if ("ResizeObserver" in window) new ResizeObserver(gauge).observe(fig);
+    document.fonts?.ready.then(fit, () => {});
+
+    /* ---- the pieces ------------------------------------------------------ */
+    function put(el: SVGElement, x: number, y: number, s = 1) {
+      el.setAttribute("transform", `translate(${x},${y})${s === 1 ? "" : ` scale(${s})`}`);
+      el.classList.remove("nf-off");
+    }
+    function off(el: SVGElement) {
+      el.classList.add("nf-off");
+    }
+    const at = (p: SVGPathElement, l: number): Pt => p.getPointAtLength(l);
+    /* Highlights are wall-clock, so every timer is held here: a paused or
+       stilled piece must not have a late timer reach in and undo it. */
+    const timers: number[] = [];
+    function hold(ms: number, fn: () => void) {
+      timers.push(window.setTimeout(fn, ms));
+    }
+    function flash(el: Element, cls: string, ms: number) {
+      el.classList.remove(cls);
+      void el.getBoundingClientRect(); /* a reflow, so a repeated highlight starts again */
+      el.classList.add(cls);
+      hold(ms, () => el.classList.remove(cls));
+    }
+
+    /* One phrase on screen at a time: a single text node, faded out before the
+       next phrase is written into it. */
+    let want = phrase.textContent ?? "";
+    function sayIt(i: number, live: boolean) {
+      const text = G.say.phrases[i] ?? "";
+      if (text === want) return;
+      want = text;
+      if (!live) {
+        phrase.textContent = text;
+        phrase.classList.add("on");
+        return;
+      }
+      phrase.classList.remove("on");
+      flash(sayG, "beat", 720);
+      hold(170, () => {
+        phrase.textContent = want;
+        phrase.classList.add("on");
+      });
+    }
+
+    /* The inbox shows the business the agent chose. When the choice changes,
+       the old rows leave and the title changes under a short fade. */
+    let shown = restName;
+    function openInbox(e: Beat, live: boolean) {
+      const name = G.rows[e.r]?.name ?? "";
+      for (const o of EV) if (o !== e) o.row.classList.remove("on", "res");
+      if (name === shown) return;
+      shown = name;
+      if (!live) {
+        ibName.textContent = name;
+        fitTitle();
+        return;
+      }
+      ibName.classList.add("swap");
+      hold(230, () => {
+        ibName.textContent = shown;
+        fitTitle();
+        ibName.classList.remove("swap");
+      });
+    }
+
+    function grow(e: Beat, on: boolean) {
+      const n = notches[e.r]?.[G.rows[e.r]?.level ?? 0];
+      const p = pips[e.a]?.[G.agents[e.a]?.level ?? 0];
+      n?.classList.toggle("new", on);
+      if (!on) p?.classList.remove("new");
+    }
+    /* The type class stays on the row after it rests: taking it off with "hit"
+       flipped the fading outline and bar to grey on their way out. The next
+       match on that row replaces it. */
+    function rest(e: Beat) {
+      dirs[e.r]?.classList.remove("hit");
+      fieldG.classList.remove("lit");
+    }
+
+    function once(e: Beat, k: string) {
+      if (e.f[k]) return false;
+      e.f[k] = true;
+      return true;
+    }
+
+    /* ---- one pass, one frame -------------------------------------------- */
+    function step(e: Beat, ph: number, live: boolean) {
+      if (ph < 0 || ph > e.dur) {
+        if (ph < 0) {
+          /* the wrap: whatever this pass grew goes back, softly */
+          if (e.f.grow) grow(e, false);
+          if (e.f.match && !e.f.rest) rest(e);
+          e.f = {};
+          e.typed = -1;
+        }
+        off(e.seek);
+        off(e.chip);
+        off(e.slip);
+        off(e.home);
+        e.hopTrail.style.opacity = "0";
+        e.homeTrail.style.opacity = "0";
+        return;
+      }
+      const agent = agents[e.a];
+      const send = sends[e.a];
+      const Ls = LSEND[e.a] ?? 0;
+      if (!agent || !send) return;
+
+      /* 1. an agent asks the network */
+      if (once(e, "wake")) {
+        sayIt(0, live);
+        if (live) flash(agent, "wake", 640);
+      }
+      if (ph >= e.p0 && ph < e.p2) {
+        let x: number;
+        let y: number;
+        let o = 1;
+        if (ph < e.p1) {
+          const p = at(send, eSine((ph - e.p0) / (e.p1 - e.p0)) * Ls);
+          x = p.x;
+          y = p.y;
+          if (ph < e.p0 + 0.16) o = (ph - e.p0) / 0.16;
+        } else {
+          const u = eSoft((ph - e.p1) / (e.p2 - e.p1));
+          x = lerp(D.netIn, G.field.mag[0], u);
+          y = lerp(D.y, G.field.mag[1], u);
+          if (ph > e.p2 - 0.12) o = cl((e.p2 - ph) / 0.12);
+        }
+        e.seek.style.opacity = String(o);
+        put(e.seek, x, y);
+      } else off(e.seek);
+
+      /* 2. the query lands in the field and types itself; the best match lights */
+      if (ph >= e.p2) {
+        if (once(e, "dock")) {
+          fieldG.classList.add("lit");
+          q.classList.remove("nf-ph");
+          q.style.fontSize = e.qSize;
+        }
+        const n = ph >= e.q1 ? e.q.length : Math.ceil((e.q.length * (ph - e.p2)) / (e.q1 - e.p2));
+        if (n !== e.typed) {
+          e.typed = n;
+          q.textContent = e.q.slice(0, n);
+          q.style.fontSize = e.qSize; /* fit() may have re-measured since the dock */
+        }
+      }
+      if (ph >= e.m && once(e, "match")) {
+        const d = dirs[e.r];
+        if (d) {
+          d.classList.remove("t-booking", "t-order");
+          d.classList.add("hit", `t-${e.ty}`);
+          if (live) flash(d, "ping", 760);
+        }
+        openInbox(e, live);
+      }
+
+      /* 3. the agent books with the business itself, over the network's head */
+      const Lh = LHOP[EV.indexOf(e)] ?? 0;
+      if (ph >= e.s && ph < e.s2) {
+        let x: number;
+        let y: number;
+        let o = 1;
+        if (ph < e.s1) {
+          const v = (ph - e.s) / (e.s1 - e.s);
+          const p = at(e.hopTrail, eSine(v) * Lh);
+          x = p.x;
+          y = p.y;
+          if (v < 0.12) o = v / 0.12;
+          e.hopTrail.style.opacity = String((v < 0.15 ? v / 0.15 : v > 0.75 ? cl((1 - v) / 0.25) : 1) * 0.6);
+          if (once(e, "send")) {
+            fieldG.classList.remove("lit");
+            if (live) flash(agent, "wake", 640);
+          }
+        } else {
+          e.hopTrail.style.opacity = "0";
+          const u = eSoft((ph - e.s1) / (e.s2 - e.s1));
+          x = lerp(D.inbox, IB.rowX + IB.rowW / 2, u);
+          y = D.y;
+          if (ph > e.s2 - 0.13) o = cl((e.s2 - ph) / 0.13);
+        }
+        e.chip.style.opacity = String(o);
+        put(e.chip, x, y);
+      } else {
+        off(e.chip);
+        if (ph >= e.s2) e.hopTrail.style.opacity = "0";
+      }
+      if (ph >= e.s2 && once(e, "row")) {
+        if (live) requestAnimationFrame(() => e.row.classList.add("on"));
+        else e.row.classList.add("on");
+        sayIt(1, live);
+      }
+      /* 4. the promise is kept */
+      if (ph >= e.k && once(e, "kept")) e.row.classList.add("res");
+
+      /* 5. a signed receipt goes back to the network and is counted on the listing */
+      if (ph >= e.r0 && once(e, "seal")) sayIt(2, live);
+      const rowY = (G.rows[e.r]?.y ?? D.y) + G.row.h / 2;
+      const notchX = G.row.x + G.row.notchX + (G.rows[e.r]?.level ?? 0) * G.row.notchStep + 1.6;
+      if (ph >= e.r0 && ph < e.r3) {
+        if (ph < e.r1) {
+          const u = eSoft((ph - e.r0) / (e.r1 - e.r0));
+          e.slip.style.opacity = String(u);
+          put(e.slip, D.inbox - 7, D.y, 0.4 + 0.6 * u);
+        } else if (ph < e.r2) {
+          /* the link is straight, so the slip simply runs along it */
+          e.slip.style.opacity = "1";
+          put(e.slip, lerp(D.inbox - 7, D.netOut, eSine((ph - e.r1) / (e.r2 - e.r1))), D.y);
+        } else {
+          const u = eSoft((ph - e.r2) / (e.r3 - e.r2));
+          e.slip.style.opacity = String(ph > e.r3 - 0.1 ? cl((e.r3 - ph) / 0.1) : 1);
+          put(e.slip, lerp(D.netOut, notchX, u), lerp(D.y, rowY, u), 1 - 0.45 * u);
+        }
+      } else off(e.slip);
+
+      /* 6. reputation grows, both ways: the listing's meter, then the customer's */
+      if (ph >= e.r3 && once(e, "grow")) {
+        grow(e, true);
+        sayIt(3, live);
+      }
+      if (ph >= e.d0 && ph < e.d1) {
+        const v = (ph - e.d0) / (e.d1 - e.d0);
+        const p = at(send, (1 - eSine(v)) * Ls);
+        e.home.style.opacity = String(v < 0.14 ? v / 0.14 : v > 0.88 ? cl((1 - v) / 0.12) : 1);
+        put(e.home, p.x, p.y);
+        e.homeTrail.style.opacity = String((v < 0.2 ? v / 0.2 : v > 0.7 ? cl((1 - v) / 0.3) : 1) * 0.6);
+      } else {
+        off(e.home);
+        if (ph >= e.d1) e.homeTrail.style.opacity = "0";
+      }
+      if (ph >= e.d1 && once(e, "badge")) {
+        pips[e.a]?.[G.agents[e.a]?.level ?? 0]?.classList.add("new");
+        if (live) flash(agent, "glow", 820);
+      }
+      if (ph >= e.d1 + 0.3 && once(e, "rest")) rest(e);
+    }
+
+    function render(t: number, live: boolean) {
+      for (const e of EV) step(e, t - e.t, live);
+    }
+
+    /* ---- the clock ------------------------------------------------------- */
+    let clock = -1.1; /* negative: the lines draw themselves first */
+    let last = 0;
+    let raf = 0;
+    let run = false;
+    let seen = true;
+    const mq = matchMedia("(prefers-reduced-motion: reduce)");
+
+    function frame(now: number) {
+      if (!run) return;
+      clock += Math.min((now - last) / 1000, 0.05); /* clamped: a stall slows the piece, never teleports it */
+      last = now;
+      if (clock >= 0) render(clock % LOOP, true);
+      raf = requestAnimationFrame(frame);
+    }
+    /* Resume from a settled state: timers that were cut off by a pause must not
+       leave a half-faded phrase or a lit halo behind. */
+    function settle() {
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+      phrase.textContent = want;
+      phrase.classList.add("on");
+      ibName.textContent = shown;
+      ibName.classList.remove("swap");
+      fitTitle();
+      sayG.classList.remove("beat");
+      for (const a of agents) a.classList.remove("wake", "glow");
+      for (const d of dirs) d.classList.remove("ping");
+    }
+    function sync() {
+      if (fig.classList.contains("nf-still")) return;
+      const go = seen && !document.hidden;
+      if (go === run) return;
+      run = go;
+      if (run) {
+        fig.classList.remove("nf-paused");
+        settle();
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else {
+        cancelAnimationFrame(raf);
+        fig.classList.add("nf-paused");
+      }
+    }
+
+    /* The lines draw themselves in on arrival, unless the browser has already
+       painted the picture at rest, where replaying it would blink them. */
+    let painted = false;
+    try {
+      painted = performance.getEntriesByType("paint").length > 0;
+    } catch {}
+    lines.forEach((p, i) => {
+      const L = len(p);
+      p.style.strokeDasharray = String(L);
+      p.style.strokeDashoffset = painted ? "0" : String(L);
+      p.style.transitionDelay = `${i * 0.08}s`;
+    });
+    function draw() {
+      for (const p of lines) p.style.strokeDashoffset = "0";
+    }
+
+    /* The still is this same machine stepped forward. It is taken just after the
+       first listing has grown, with the "both ways" disc part of the way home,
+       and the receipt held on its route — so one frame shows the search, the
+       match, the kept booking, the receipt and both records. */
+    function still() {
+      fig.classList.add("nf-still");
+      settle();
+      for (const e of EV) {
+        step(e, -1, false);
+        e.row.classList.remove("on", "res");
+      }
+      for (const d of dirs) d.classList.remove("hit", "t-booking", "t-order");
+      q.textContent = placeholder;
+      q.classList.add("nf-ph");
+      q.style.fontSize = phSize;
+      shown = restName;
+      ibName.textContent = restName;
+      draw();
+      const A = EV[0];
+      if (!A) return;
+      const STILL = A.t + A.d0 + 0.36 * (A.d1 - A.d0);
+      for (let t = 0; t < STILL; t += 0.05) render(t, false);
+      render(STILL, false);
+      A.slip.style.opacity = "1";
+      put(A.slip, lerp(D.inbox - 7, D.netOut, 0.5), D.y);
+      fitTitle();
+    }
+
+    if (mq.matches) {
+      still();
+      return;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(draw));
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(
+        (es) => {
+          seen = es[0]?.isIntersecting ?? true;
+          sync();
+        },
+        { threshold: 0.01 },
+      ).observe(fig);
+    }
+    document.addEventListener("visibilitychange", sync);
+    /* The preference can be turned on after the page has loaded; both paths end
+       in the same composed frame. */
+    mq.addEventListener("change", () => {
+      if (!mq.matches || fig.classList.contains("nf-still")) return;
+      run = false;
+      cancelAnimationFrame(raf);
+      still();
+    });
+    sync();
+  }
+
+  /* One figure that throws must not take the page's other figures with it, and
+     leaves its own picture at rest standing. */
+  function mountAll() {
+    for (const f of document.querySelectorAll<HTMLElement>(".snf")) {
+      try {
+        mount(f);
+      } catch (err) {
+        console.warn("network flow", err);
+      }
+    }
+  }
+  mountAll();
+  document.addEventListener("astro:page-load", mountAll);
+</script>
