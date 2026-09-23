@@ -153,6 +153,9 @@ describe("webhook routes", () => {
       state: "requested",
       version: 1,
       url: `/v1/owner/items/${ITEM}`,
+      actor: { kind: "customer_agent", id: null },
+      channel: "rest",
+      sandbox: false,
     });
     expect(page.next_cursor).toBe("01JD00000000000000000000A2");
 

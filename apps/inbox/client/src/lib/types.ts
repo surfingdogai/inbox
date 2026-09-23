@@ -4,18 +4,22 @@ import type {
   BusinessProfile,
   Closure,
   Condition,
+  CreatedKey,
   DeliveryView,
   FeedConnector,
   Item,
   ItemDetail,
   ItemType,
   ItemView,
+  KeyList,
+  KeyView,
   Money,
   NetworkView,
   Page,
   Profile,
   ReceiptStatus,
   ReceiptView,
+  RefusalView,
   RuleDefinition,
   RuleView,
   Settings,
@@ -36,18 +40,22 @@ export type {
   BusinessProfile,
   Closure,
   Condition,
+  CreatedKey,
   DeliveryView,
   FeedConnector,
   Item,
   ItemDetail,
   ItemType,
   ItemView,
+  KeyList,
+  KeyView,
   Money,
   NetworkView,
   Page,
   Profile,
   ReceiptStatus,
   ReceiptView,
+  RefusalView,
   RuleDefinition,
   RuleView,
   Settings,
@@ -71,6 +79,8 @@ export type Party = NonNullable<ItemView["party"]>;
 export interface SettingsDoc {
   readonly doc: Settings;
   readonly version: number;
+  /** Settings paths that hold a secret the read left out, e.g. `email.inboundSecret`. */
+  readonly redacted?: readonly string[] | undefined;
 }
 
 /** RFC 9457 problem document, as every refusal comes back. */
@@ -229,6 +239,23 @@ export interface CreateWebhookBody {
   readonly url: string;
   readonly events: readonly string[];
   readonly payload_style: "thin" | "full";
+  /** Extra headers sent with every delivery; values are sealed and never shown again. */
+  readonly headers?: Readonly<Record<string, string>> | undefined;
 }
 
-export type PatchWebhookBody = Partial<CreateWebhookBody & { readonly active: boolean }>;
+export type PatchWebhookBody = Partial<
+  Omit<CreateWebhookBody, "headers"> & {
+    readonly active: boolean;
+    /** Merged: a name with null removes that header. */
+    readonly headers: Readonly<Record<string, string | null>>;
+  }
+>;
+
+// ---- keys: one named, scoped, revocable key per system that connects ----------------------
+
+export interface CreateKeyBody {
+  readonly name: string;
+  readonly preset?: string | undefined;
+  readonly scopes?: readonly string[] | undefined;
+  readonly expires_at?: string | undefined;
+}

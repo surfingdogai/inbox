@@ -1,4 +1,4 @@
-import { type Db, randomToken, schema, ulid } from "@surfingdog/core";
+import { type Db, randomToken, SCOPE_NAMES, SCOPES, schema, ulid } from "@surfingdog/core";
 import { sha256Hex } from "@surfingdog/platform";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -13,16 +13,8 @@ import { userFromCookie } from "./session";
  * only, public clients, opaque hashed tokens, rotating refresh tokens, Client ID Metadata
  * Documents first with dynamic registration as the fallback.
  */
-export const OWNER_SCOPES = [
-  "inbox:read",
-  "inbox:write",
-  "catalogue:write",
-  "availability:write",
-  "settings:read",
-  "settings:write",
-  "setup:run",
-  "offline_access",
-] as const;
+/** Every owner scope (core's `SCOPES`); a client may ask for any of them, and the owner sees each on the consent page. */
+export const OWNER_SCOPES: readonly string[] = SCOPE_NAMES;
 export const ACCESS_TTL_MS = 3_600_000;
 export const REFRESH_TTL_MS = 30 * 86_400_000;
 export const CODE_TTL_MS = 10 * 60_000;
@@ -49,6 +41,8 @@ export interface OAuthGrant {
   readonly userId: string;
   readonly clientId: string;
   readonly scopes: string[];
+  /** The AI app's name as it registered, for the history. Only on a resolved access token. */
+  readonly clientName?: string | null;
 }
 
 export function protectedResourceMetadata(origin: string) {
@@ -93,7 +87,16 @@ export async function resolveAccessToken(db: Db, token: string, now = Date.now()
       ),
     );
   if (!row) return null;
-  return { userId: row.userId, clientId: row.clientId, scopes: row.scope.split(" ").filter(Boolean) };
+  const [client] = await db.orm
+    .select({ name: schema.oauthClients.name })
+    .from(schema.oauthClients)
+    .where(eq(schema.oauthClients.id, row.clientId));
+  return {
+    userId: row.userId,
+    clientId: row.clientId,
+    scopes: row.scope.split(" ").filter(Boolean),
+    clientName: client?.name ?? null,
+  };
 }
 
 export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
@@ -467,18 +470,7 @@ h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;opacity:.8}ul{margin:0 0 18px
 }
 
 function scopeLabel(scope: string): string {
-  return (
-    {
-      "inbox:read": "read items and conversations",
-      "inbox:write": "confirm, propose, decline and reply on items",
-      "catalogue:write": "change services and products",
-      "availability:write": "change opening hours and availability",
-      "settings:read": "read settings",
-      "settings:write": "change settings",
-      "setup:run": "run setup steps",
-      offline_access: "stay connected without asking again",
-    }[scope] ?? scope
-  );
+  return (SCOPES as Record<string, string>)[scope] ?? scope;
 }
 
 export { sha256Hex };

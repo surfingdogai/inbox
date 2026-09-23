@@ -4,6 +4,7 @@ import { countsFrom } from "./filters";
 import type {
   AddFeedBody,
   Closure,
+  CreateKeyBody,
   CreateWebhookBody,
   FeedConnector,
   ListParams,
@@ -37,6 +38,7 @@ export const qk = {
   presets: ["presets"] as const,
   feeds: ["feeds"] as const,
   webhooks: ["webhooks"] as const,
+  keys: ["keys"] as const,
   deliveries: (id: string) => ["deliveries", id] as const,
 };
 
@@ -300,5 +302,27 @@ export function useRotateSecret() {
   return useMutation({
     mutationFn: (id: string) => api.rotateWebhookSecret(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.webhooks }),
+  });
+}
+
+// ---- keys ---------------------------------------------------------------------------------------
+
+export function useKeys() {
+  return useQuery({ queryKey: qk.keys, queryFn: api.keys, staleTime: 15_000 });
+}
+
+export function useCreateKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateKeyBody) => api.createKey(body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.keys }),
+  });
+}
+
+export function useRevokeKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.revokeKey(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.keys }),
   });
 }

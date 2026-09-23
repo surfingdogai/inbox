@@ -135,4 +135,18 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE TABLE IF NOT EXISTS `network_status` (\n\t`network` text PRIMARY KEY NOT NULL,\n\t`registration` text DEFAULT 'unregistered' NOT NULL,\n\t`registered_at` integer,\n\t`last_ping_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`failing_since` integer,\n\t`failures` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
     ],
   },
+  {
+    version: 8,
+    name: "0007_keys_attribution",
+    statements: [
+      "-- Keys, scopes and attribution. Keys minted in the product are named, scoped and revocable, may\n-- expire, and say who minted them; `last4` lets the owner tell two apart without the key itself.\nALTER TABLE `api_keys` ADD `expires_at` integer;",
+      "ALTER TABLE `api_keys` ADD `created_by` text;",
+      "ALTER TABLE `api_keys` ADD `last4` text;",
+      "-- What a key or an AI app called outside its scopes, counted per principal and operation: the\n-- record the owner reads while scopes are logged rather than enforced.\nCREATE TABLE IF NOT EXISTS `scope_refusals` (\n\t`principal_id` text NOT NULL,\n\t`operation` text NOT NULL,\n\t`principal_kind` text NOT NULL,\n\t`principal_name` text,\n\t`scope` text NOT NULL,\n\t`count` integer DEFAULT 1 NOT NULL,\n\t`enforced` integer DEFAULT 0 NOT NULL,\n\t`first_at` integer NOT NULL,\n\t`last_at` integer NOT NULL,\n\tPRIMARY KEY(`principal_id`, `operation`)\n);",
+      "-- Extra request headers per webhook endpoint, sealed like the signing secret; the names in the clear.\nALTER TABLE `webhooks` ADD `headers_enc` text;",
+      "ALTER TABLE `webhooks` ADD `header_names` text DEFAULT '[]' NOT NULL;",
+      "-- Every event says who caused it and through which door, so a two-way sync can skip its own echo.\n-- The view is recreated rather than altered because SQLite has no ALTER VIEW; the arms are those\n-- of 0005 with two columns added: `actor_name` and `channel`.\nDROP VIEW IF EXISTS `events_v1`;",
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  json_extract(e."meta", \'$.actor_name\') AS "actor_name",\n  COALESCE(json_extract(e."meta", \'$.channel\'), i."channel") AS "channel",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  NULL,\n  t."channel",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\'\nUNION ALL\nSELECT\n  r."id",\n  i."type" || \'.receipt_issued\',\n  r."issued_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'system\',\n  NULL,\n  NULL,\n  \'system\',\n  \'receipt_issued\',\n  \'receipt\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nUNION ALL\nSELECT\n  r."id" || \':ack\',\n  i."type" || \'.receipt_acknowledged\',\n  r."ack_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'customer_agent\',\n  NULL,\n  NULL,\n  NULL,\n  \'receipt_acknowledged\',\n  \'receipt_ack\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nWHERE r."ack_at" IS NOT NULL;',
+    ],
+  },
 ];

@@ -29,23 +29,53 @@ Create calls take `payload` (the typed fields, schema.org names in camelCase), a
 
 ## Owner operations
 
-Authenticate with an owner API key or an OAuth 2.1 access token as a Bearer token, or with the owner session from the app.
+Authenticate with a Bearer token: an owner key, an integration key (see [Keys and scopes](#keys-and-scopes)) or an OAuth 2.1 access token. The owner app uses its session.
 
 | Operation | REST | Does |
 | --- | --- | --- |
 | `list_items` | `GET /v1/owner/items` | Items newest first. Filters: `type`, `state`, `needs_human`, `open_only` (default true), `sandbox`, full-text `q`. Paged. |
-| `get_item` | `GET /v1/owner/items/{id}` | One item with its typed fields, events, conversation and the valid next transitions. |
+| `get_item` | `GET /v1/owner/items/{id}` | One item with its typed fields, events, conversation and the valid next transitions. Each event says who caused it (`by`: `kind`, `id`, and the key's or AI app's `name`) and through which door (`channel`). |
 | `transition_item` | `POST /v1/owner/items/{id}/transitions` | Fire one of the item's events with its `input`, a `reason` and `expected_version`. |
 | `reply` | `POST /v1/owner/items/{id}/replies` | Reply to the customer, or leave an internal note with `internal: true`. |
-| `get_settings` | `GET /v1/owner/settings` | The settings document and its version. |
+| `get_settings` | `GET /v1/owner/settings` | The settings document and its version. Secrets are never returned: a secret that is set reads `(redacted)`, and `redacted` names its path, such as `email.inboundSecret`. Writing the document back as read, or without it, keeps it. |
 | `update_settings` | `PUT /v1/owner/settings` | Change settings: the document you send is merged over the current one, so send only what changes, with `expected_version`. `null` removes a key, so its default applies again. Networks are keyed by origin: `{"networks": {"https://network.example.com": {"enabled": true}}}` adds or switches on one and leaves the others as they are. |
 | `get_networks` | `GET /v1/owner/networks` | Each network in settings: on or off, what it gets, whether it has verified this instance, the last ping it took, the last error in a few words, and its receipts published, waiting and refused. |
+| `list_api_keys` | `GET /v1/owner/api-keys` | The owner and integration keys: name, scopes, last use, and every call each made outside its scopes. Never a key itself. |
+| `create_api_key` | `POST /v1/owner/api-keys` | A named, scoped, revocable integration key. The key is in this answer and in no other. |
+| `revoke_api_key` | `DELETE /v1/owner/api-keys/{id}` | Revoke a key at once and for good. |
 
-Three more owner operations are in the capability set and arrive with the owner app: `update_availability`, `update_catalogue` and `run_setup_step`.
+Setup (profile, services, products, opening hours, closed days, rules) is under `/v1/owner/profile`, `/services`, `/products`, `/availability` and `/rules`, with the MCP tools `update_profile`, `upsert_service`, `upsert_product`, `set_opening_hours`, `set_closures`, `upsert_rule` and their neighbours. Webhooks, deliveries and the event stream are in [Webhooks](/docs/webhooks/); product feeds (`list_feeds`, `add_feed`, `import_feed_now`, `remove_feed`) in [Feeds](/docs/feeds/). The OpenAPI document lists every owner operation with its query parameters, its response schema and its security.
+
+## Keys and scopes
+
+Give every system that calls the inbox its own key: Zapier, a shop, a till, a form plugin. Create one in the owner app under **Settings → Keys**, or with `POST /v1/owner/api-keys`:
+
+```json
+{ "name": "Zapier", "preset": "automation" }
+```
+
+The answer holds the key (`sdi_own_…`) once. Send it as `Authorization: Bearer …`. It works on `/v1/owner` and `/mcp/owner` until it is revoked or reaches its optional `expires_at`.
+
+| Preset | Scopes | For |
+| --- | --- | --- |
+| `automation` | `inbox:read inbox:write events:read` | Zapier, Make, n8n |
+| `shop_sync` | `catalogue:write inbox:read inbox:write events:read` | A shop or a point of sale |
+| `calendar_sync` | `availability:write inbox:read inbox:write events:read` | A calendar or a booking tool |
+| `read_only` | `inbox:read events:read settings:read` | Reports and dashboards |
+
+The scopes are `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run` (rules), `integrations:write` (webhooks and feeds) and `keys:write`. OAuth clients ask for the same names. A key never carries `keys:write`: an integration key cannot mint keys.
+
+**The owner's AI** may create and revoke integration keys (`create_api_key`, `revoke_api_key`) only after the owner switches on **Let my AI create keys** in Settings → Keys (`security.aiMayCreateKeys`). It can never create a key with `settings:write`, and it can revoke only keys an AI made: the owner's own keys (the command-line key and every key the owner made in Settings → Keys) are the owner's to revoke. Only the owner, in the owner app, can change the `security` section; a document written back with that section unchanged is accepted and leaves it as it is.
+
+**Scopes are logged first.** In this release a call outside a key's scopes, or outside an AI app's granted scopes, still goes through, and it is recorded: `list_api_keys` shows each key's calls outside its scopes, with the scope it needed, and the same for AI apps. The owner can refuse them now with **Refuse calls outside a key's scopes** (`security.enforceScopes`); a later release turns that on for everyone. An AI that sets things up should ask for the scopes it needs when it connects.
+
+**Limits.** An integration key has a generous bucket of its own, about ten calls a second, so a loop between the inbox and another system cannot run for ever. The owner's own session, keys and AI are not limited.
 
 ## Conventions
 
-**Idempotency.** Every mutation from an agent or an API client carries an idempotency key, in the body as `idempotency_key` or in the `Idempotency-Key` header. The scope is the caller and the door, so keys never collide across principals. Same key and same request: the stored answer is replayed with status `200` and `Idempotent-Replayed: true`. Same key and a different request: `422 idempotency_mismatch`.
+**Idempotency.** Every write takes an idempotency key: in the `Idempotency-Key` header or as `idempotency_key` in the body on REST, as the `idempotency_key` argument on MCP. That includes the owner's setup writes (services, products, hours, rules, settings, webhooks, feeds, keys). Same key and same request: the stored answer is replayed with status `200` and `Idempotent-Replayed: true`, and nothing is done twice. Same key and a different request: `422 idempotency_mismatch`. The owner's and the owner's AI's keys are scoped to the business, so a retry through MCP of a request first sent through REST is the same request; an integration key's keys are its own, so two systems that pick the same key never collide; a customer's keys are scoped to the customer and the door. An answer that carries a secret (a signing secret, a key) is stored sealed, and a replay shows the secret only to whoever made the first request. Keys are kept for 30 days: they are for retries, not a record.
+
+**Who did it.** Every event, in the history, the [event stream and webhooks](/docs/webhooks/), carries `actor` (`kind`: `owner`, `owner_ai`, `integration`, `connector`, `rule`, `system`, `customer_agent` or `customer_human`; `id`; and `name` for a key or an AI app), the `channel` it came through and `sandbox`. A customer's id is never given out. A two-way sync skips the events whose actor is its own key.
 
 **Access tokens.** A create call from a caller without an account returns `accessToken`. Send it back as `access_token` (query or body) or as the `x-access-token` header to read or cancel the item. It is a capability, not an identity: whoever holds it may act on that one item.
 
@@ -53,7 +83,7 @@ Three more owner operations are in the capability set and arrive with the owner 
 
 **Errors** are RFC 9457 problem documents, `application/problem+json`, with `type` (`https://surfingdog.ai/problems/<code>`), `title`, `status`, `detail`, `code` and, for input problems, `fields` listing `path`, `problem` (`missing` or `invalid`) and `message`. Codes and statuses: `invalid_input` 422, `not_found` 404, `not_allowed` 403, `wrong_state` 409, `unknown_event` 400, `guard_failed` 409, `slot_taken` 409, `version_conflict` 409, `idempotency_mismatch` 422, `unauthorized` 401. In MCP the same document comes back in `structuredContent.error` with `isError: true`, and the text names the fields to fix.
 
-**Paging.** List endpoints take `cursor` and `limit` (1 to 100, default 50) and return `items` and a `cursor` for the next page.
+**Paging.** List endpoints take `cursor` and `limit` (1 to 100, default 50) and return `items` and `next_cursor`. Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last one.
 
 **Money and time.** Amounts are integers in minor units with an ISO 4217 `currency`. Instants are ISO 8601 with an offset. Durations are minutes.
 
@@ -66,7 +96,7 @@ Three more owner operations are in the capability set and arrive with the owner 
 Both servers are stateless per request, so a client connects with a plain `POST` per call. Tools carry annotations (`readOnlyHint`, `idempotentHint`, `destructiveHint`) and short server instructions:
 
 - public: start with `get_business_profile`, then `list_services` or `list_products`; for a booking, `check_availability`, then `create_booking` with an idempotency key you generate and keep; keep the access token;
-- owner: `list_items` shows what needs a person, `get_item` shows the full story, `transition_item` moves an item with one of the events its view lists, `reply` speaks to the customer; never invent facts about availability or prices.
+- owner: `list_items` shows what needs a person, `get_item` shows the full story, `transition_item` moves an item with one of the events its view lists, `reply` speaks to the customer; never invent facts about availability or prices; give each system its own key; send an idempotency key with every write.
 
 ## Discovery
 

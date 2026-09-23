@@ -9,6 +9,10 @@ import type { Settings } from "./types";
  * newer version added — keeps its value, and no default is written back as if the owner had
  * chosen it. A field the owner emptied is sent as `null`, which removes it; leaving it out would
  * keep the old value and still say "saved".
+ *
+ * The inbound email secret is the exception: a read never returns it (it is `redacted`), so the
+ * field starts empty and means "a new one". Empty keeps the stored secret; only the owner asking
+ * for it to be removed sends `null`.
  */
 export interface SettingsForm {
   readonly cancellationWindowMin: string;
@@ -20,11 +24,16 @@ export interface SettingsForm {
   readonly fromAddress: string;
   readonly fromName: string;
   readonly replyTo: string;
+  /** A new inbound secret; empty keeps the one stored. */
   readonly inboundSecret: string;
+  /** Whether a secret is stored now (the read says so in `redacted`; it never returns the value). */
+  readonly inboundSecretSet: boolean;
+  /** The owner asked for the stored secret to be removed. */
+  readonly removeInboundSecret: boolean;
   readonly testMode: boolean;
 }
 
-export function toSettingsForm(doc: Settings): SettingsForm {
+export function toSettingsForm(doc: Settings, redacted: readonly string[] = []): SettingsForm {
   return {
     cancellationWindowMin: String(doc.booking.cancellationWindowMin),
     holdOnPropose: doc.booking.holdOnPropose,
@@ -37,7 +46,10 @@ export function toSettingsForm(doc: Settings): SettingsForm {
     fromAddress: doc.email.fromAddress ?? "",
     fromName: doc.email.fromName ?? "",
     replyTo: doc.email.replyTo ?? "",
-    inboundSecret: doc.email.inboundSecret ?? "",
+    // A read never returns the secret; the field is for a new one.
+    inboundSecret: "",
+    inboundSecretSet: redacted.includes("email.inboundSecret") || !!doc.email.inboundSecret,
+    removeInboundSecret: false,
     testMode: doc.testMode,
   };
 }
@@ -63,7 +75,12 @@ export function toSettingsDoc(f: SettingsForm): Record<string, unknown> {
       fromAddress: opt(f.fromAddress),
       fromName: opt(f.fromName),
       replyTo: opt(f.replyTo),
-      inboundSecret: opt(f.inboundSecret),
+      // Left out keeps the stored secret: a merge never touches a key it is not sent.
+      ...(f.inboundSecret.trim()
+        ? { inboundSecret: f.inboundSecret.trim() }
+        : f.removeInboundSecret
+          ? { inboundSecret: null }
+          : {}),
     },
     testMode: f.testMode,
   };

@@ -8,7 +8,7 @@ import { machines, noteInput } from "../machine/tables";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { hashJson, hashText } from "../util/canonical";
-import { type Caller, isCustomer, nowOf } from "./caller";
+import { actorMeta, type Caller, isCustomer, nowOf, permissionKind } from "./caller";
 import {
   diagnoseFailure,
   eventStatement,
@@ -81,7 +81,7 @@ async function attempt_(
   if (isCustomer(caller)) await assertOwnership(caller, row.partyId, row.accessTokenHash);
 
   const machine = machines[item.type];
-  const resolved = resolveTransition(machine, item.state, input.event, caller.actor.kind);
+  const resolved = resolveTransition(machine, item.state, input.event, permissionKind(caller));
   if (!resolved.ok) {
     switch (resolved.error.code) {
       case "unknown_event":
@@ -97,7 +97,7 @@ async function attempt_(
           },
         );
       case "not_allowed":
-        throw new WriteError("not_allowed", `${caller.actor.kind} may not "${input.event}" this ${item.type}`, {
+        throw new WriteError("not_allowed", `${permissionKind(caller)} may not "${input.event}" this ${item.type}`, {
           details: { allowedFor: resolved.error.by },
         });
     }
@@ -198,7 +198,7 @@ async function attempt_(
     linkedEvent = { id: linked.eventId, type: `${linked.type}.create`, itemId: linked.id };
   }
   updated.linkedItemId = linkedId;
-  const view = viewFor(updated, caller.actor.kind);
+  const view = viewFor(updated, permissionKind(caller));
   const response = { view, linked: linkedView };
 
   if (idem && requestHash) statements.unshift(idempotencyStatement(idem, requestHash, 200, response, item.id, now));
@@ -214,7 +214,7 @@ async function attempt_(
       actorId: caller.actor.id,
       reason: input.reason ?? null,
       diff: { state: [item.state, t.to], payload: changedKeys(item.payload as Record<string, unknown>, payload) },
-      meta: { channel: caller.actor.channel, tier: caller.tier, input: data },
+      meta: { channel: caller.actor.channel, tier: caller.tier, input: data, ...actorMeta(caller) },
       causationId: input.causation?.id ?? null,
       depth: input.causation?.depth ?? 0,
       now,
@@ -439,6 +439,7 @@ async function planLinkedItem(
       actorKind: caller.actor.kind,
       actorId: caller.actor.id,
       reason: `from quote ${quote.id}`,
+      meta: { channel: caller.actor.channel, tier: caller.tier, ...actorMeta(caller) },
       causationId,
       depth: 1,
       now,
@@ -447,7 +448,7 @@ async function planLinkedItem(
       dedupeKey: `notify:create:${id}:owner`,
     }),
   ];
-  return { id, type, eventId: linkedEventId, statements, view: viewFor(item, caller.actor.kind) };
+  return { id, type, eventId: linkedEventId, statements, view: viewFor(item, permissionKind(caller)) };
 }
 
 function orderFromQuote(

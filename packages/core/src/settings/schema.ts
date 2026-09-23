@@ -141,8 +141,40 @@ const sections = {
         .prefault({}),
     })
     .prefault({}),
+  /**
+   * Who may do what with keys and scopes. Only the owner in person — signed in to the owner app, or
+   * with a full owner key — can change this section; the owner's AI and integration keys cannot.
+   */
+  security: z
+    .object({
+      aiMayCreateKeys: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Let the owner's AI create and revoke integration keys itself. Every key is named, scoped, listed in Settings → Keys and revocable in one click.",
+        ),
+      enforceScopes: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Refuse a call outside the scopes of the key or AI app that makes it. Off, such a call goes through and is recorded under Settings → Keys; a later release turns this on for everyone.",
+        ),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 };
+
+/** Settings paths that hold a secret: never returned by a read, only ever written. */
+export const SECRET_SETTINGS_PATHS: readonly (readonly [string, string])[] = [["email", "inboundSecret"]];
+
+/**
+ * What a read shows in place of a secret that is set. The key stays in the document, so a client
+ * that read the previous shape keeps working: one that writes the document back as it read it
+ * sends this, and a write that carries it keeps the stored secret (it is too short to be one). An
+ * owner app tab opened before the upgrade therefore saves General without wiping the secret the
+ * mail gateway authenticates with; leaving the key out would have made it send `null`, which removes.
+ */
+export const REDACTED_SECRET = "(redacted)";
 
 export const NETWORK_KEY_RULE =
   "a network is an https origin on a public host, like https://network.example.com: no path, no port other than 443";

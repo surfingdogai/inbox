@@ -55,6 +55,17 @@ export interface ThinEventData {
   readonly version: number;
   /** Where to fetch the item: `https://<inbox>/v1/owner/items/<id>`. Needs an owner key. */
   readonly url: string;
+  /**
+   * Who caused the event. `kind` is `owner`, `owner_ai`, `integration`, `connector`, `rule`,
+   * `system`, `customer_agent` or `customer_human`; `id` is the user, AI app or key id (null for a
+   * customer); `name` is the key's or AI app's name. A two-way sync skips events whose actor is
+   * its own key. Absent on events from instances older than this field.
+   */
+  readonly actor?: { readonly kind: string; readonly id: string | null; readonly name?: string };
+  /** The door it came through: `rest`, `mcp_owner`, `mcp_public`, `email`, `owner_ui`, `system`, … */
+  readonly channel?: string | null;
+  /** Whether the item is a sandbox (test) item. */
+  readonly sandbox?: boolean;
 }
 
 /** An item as the owner doors return it. `payload` holds the typed fields for its `type`. */

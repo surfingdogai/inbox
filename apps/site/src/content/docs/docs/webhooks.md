@@ -13,7 +13,9 @@ An event is one thing that happened to one item. Items are the five kinds of thi
 
 Events are emitted for what the Inbox itself records, whoever caused it: a customer's agent calling `create_booking`, you pressing **Confirm** in the app, your AI firing a transition through the owner MCP, a rule expiring a quote at midnight. An event is sent after the write has committed, so by the time you receive one, `GET /v1/owner/items/{id}` already answers with the new state.
 
-Sandbox items ([Concepts](/docs/concepts/)) produce events too — in the full style you can tell them by `data.item.flags.sandbox` — so you can build against a test item without touching anything real.
+Sandbox items ([Concepts](/docs/concepts/)) produce events too — every event says so in `data.sandbox` — so you can build against a test item without touching anything real.
+
+Every event also says who caused it and through which door: `data.actor` is `{kind, id, name}`, where `kind` is `owner`, `owner_ai` (your AI, over OAuth), `integration` (a key you made for another system), `connector`, `rule`, `system`, `customer_agent` or `customer_human`, `id` is the user, AI app or key id, and `name` is the key's or AI app's name; `data.channel` is the door (`rest`, `mcp_owner`, `mcp_public`, `email`, `owner_ui`, …). A customer's id is never sent. **A two-way sync should skip the events whose `data.actor.id` is its own key's id**: those are its own writes coming back, and acting on them again is how two systems end up in a loop.
 
 ## The event types
 
@@ -82,15 +84,18 @@ curl -s -X POST https://your-inbox.example.com/v1/owner/webhooks \
   -d '{"url":"https://shop.example.com/hooks/inbox","events":["booking.*","order.*"],"payload_style":"thin"}'
 ```
 
-Three fields, and only the first is required:
+Four fields, and only the first is required:
 
 - **`url`** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk;
 - **`events`** — the patterns you want; `["*"]`, everything, is the default;
-- **`payload_style`** — thin or full, see [thin and full](#thin-and-full) at the bottom of this page. Thin is the default and the right answer for almost everyone; full sends the customer's data to that address.
+- **`payload_style`** — thin or full, see [thin and full](#thin-and-full) at the bottom of this page. Thin is the default and the right answer for almost everyone; full sends the customer's data to that address;
+- **`headers`** — up to five extra headers sent with every delivery, for a receiver that checks a header rather than the signature: n8n's and Make's webhook triggers, Pipedream, a gateway. `{"Authorization": "Bearer …"}` or `{"Authorization": "Basic …"}` is the usual one. The values are sealed like the signing secret and never shown again; the endpoint lists only the names. `PATCH` merges: a name with a value sets it, a name with `null` removes it. Headers the delivery sets itself (`content-type`, `user-agent`, `webhook-*`, `sdi-*` and the connection's own) are refused.
+
+The answer is `201` with a `Location` header naming the new endpoint. Send an `Idempotency-Key` header and a retried request returns the same endpoint and the same secret instead of making a second one.
 
 The **signing secret is in that response and in no other**: `whsec_` and then base64, 32 random bytes. Copy it into your own configuration there and then. It is sealed in the database with your instance key, no endpoint and no tool will ever read it back, and if you lose it you rotate it, which shows you a new one. During a rotation both signatures travel on every delivery for 24 hours, so nothing is dropped while you deploy the new secret.
 
-`POST /v1/owner/webhooks/{id}/test` then sends a real, signed, clearly marked test event — its type is `inbox.test`, it carries `"test": true`, and no item exists behind it — and tells you the status your server answered. It is the fastest way to find out that a framework is redirecting you.
+`POST /v1/owner/webhooks/{id}/test` then sends a real, signed, clearly marked test event, with the endpoint's extra headers — its type is `inbox.test`, it carries `"test": true`, and no item exists behind it — and tells you the status your server answered. It is the fastest way to find out that a framework is redirecting you, or that a header check is refusing you. The owner app's **Send test** button and the `send_test_event` tool do the same.
 
 Your AI can do all of it without you writing any of that: on the owner MCP server the same operations are `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `delete_webhook`, `send_test_event`, `list_webhook_deliveries`, `replay_webhook_delivery`, `replay_missing_webhook_deliveries` and `list_events` ([Connect your AI](/docs/connect-your-ai/)). Ask it to connect your shop to your Inbox and it will.
 
@@ -112,7 +117,7 @@ webhook-signature: v1,ceSnlptw5xQUh4NhglImizWi+wQ7rjsL2Dyjl4kXX9U=
 sdi-event-type: booking.create
 sdi-delivery-attempt: 1
 
-{"id":"01K5RJ3B4C5D6E7F8G9H0JKMNP","type":"booking.create","timestamp":"2026-09-21T12:00:00.000Z","data":{"id":"01K5RJ2X9Y8Z7W6V5U4T3S2R1Q","type":"booking","state":"requested","version":1,"url":"https://inbox.example.com/v1/owner/items/01K5RJ2X9Y8Z7W6V5U4T3S2R1Q"}}
+{"id":"01K5RJ3B4C5D6E7F8G9H0JKMNP","type":"booking.create","timestamp":"2026-09-21T12:00:00.000Z","data":{"id":"01K5RJ2X9Y8Z7W6V5U4T3S2R1Q","type":"booking","state":"requested","version":1,"url":"https://inbox.example.com/v1/owner/items/01K5RJ2X9Y8Z7W6V5U4T3S2R1Q","actor":{"kind":"customer_agent","id":null},"channel":"mcp_public","sandbox":false}}
 ```
 
 The three `webhook-*` headers are the signature and are all you need. `sdi-event-type` and `sdi-delivery-attempt` are conveniences: route on the first without parsing the body, and log the second, which counts from 1, so a `3` in your logs tells you the first two attempts never landed.
@@ -129,7 +134,10 @@ That body, spaced out so you can read it, is a thin event:
     "type": "booking",
     "state": "requested",
     "version": 1,
-    "url": "https://inbox.example.com/v1/owner/items/01K5RJ2X9Y8Z7W6V5U4T3S2R1Q"
+    "url": "https://inbox.example.com/v1/owner/items/01K5RJ2X9Y8Z7W6V5U4T3S2R1Q",
+    "actor": { "kind": "customer_agent", "id": null },
+    "channel": "mcp_public",
+    "sandbox": false
   }
 }
 ```
@@ -243,7 +251,7 @@ Deliveries are pruned after thirty days. For anything older, use the cursor belo
 
 ## Thin and full
 
-A **thin** event carries a pointer: the ids, the type, the new state, the version and a URL. A **full** event is the same envelope with more inside `data`: `item`, the whole item with its typed payload and its flags; `transitions`, the events it accepts right now, each with a label; `human`, a sentence describing it; `party`, the customer, with the name, email address and phone number you hold for them; and, on a `<type>.message` event, `message`, the message itself.
+A **thin** event carries a pointer: the ids, the type, the new state, the version, a URL, who caused it, the door and whether it is a sandbox item. A **full** event is the same envelope with more inside `data`: `item`, the whole item with its typed payload and its flags; `transitions`, the events it accepts right now, each with a label; `human`, a sentence describing it; `party`, the customer, with the name, email address and phone number you hold for them; and, on a `<type>.message` event, `message`, the message itself.
 
 Thin is the default, for two reasons. A thin transition event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. (A `<type>.message` event is the exception in both styles: a message does not change the item, so its `state` and `version` are the item's as they stand when we send.) And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
 

@@ -1,4 +1,4 @@
-import type { Capabilities, Db } from "@surfingdog/core";
+import { type Capabilities, type Db, WriteError } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -8,11 +8,12 @@ import { clientAddress, consume, isCreateRoute, type LimitClass, mcpCreates } fr
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin } from "./origin";
-import { forbidden, tooManyRequests, unauthorized } from "./problem";
+import { forbidden, problemResponse, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
 
+export * from "./access";
 export * from "./auth";
 export * from "./email";
 export * from "./feeds/index";
@@ -22,6 +23,7 @@ export * from "./network";
 export * from "./oauth";
 export * from "./origin";
 export * from "./problem";
+export * from "./responses";
 export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
@@ -56,6 +58,9 @@ function sameOrigin(request: Request, baseUrl: string | undefined): boolean {
   return origin === publicOrigin(request, baseUrl) || origin === new URL(request.url).origin;
 }
 
+/** The longest idempotency key a door accepts, header or field. */
+const MAX_IDEMPOTENCY_KEY = 200;
+
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
 export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   const sandbox = deps.sandbox ?? (async () => false);
@@ -83,6 +88,18 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   };
 
   app.use("/v1/*", async (c, next) => {
+    // The header is held to the same bound as the `idempotency_key` field every schema checks: it
+    // is stored as the key, so an unbounded one is an unbounded row.
+    if ((c.req.header("idempotency-key")?.length ?? 0) > MAX_IDEMPOTENCY_KEY) {
+      return problemResponse(
+        c,
+        new WriteError("invalid_input", `Idempotency-Key is over ${MAX_IDEMPOTENCY_KEY} characters`, {
+          fields: [
+            { path: "Idempotency-Key", problem: "invalid", message: `at most ${MAX_IDEMPOTENCY_KEY} characters` },
+          ],
+        }),
+      );
+    }
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() });
     if (
       caller.auth?.via === "session" &&
@@ -90,6 +107,12 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       !sameOrigin(c.req.raw, deps.baseUrl)
     ) {
       return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
+    }
+    // An integration key has a soft bucket of its own, on every call, so a loop between this inbox
+    // and the system it is pasted into cannot run for ever. The owner's session and AI are not counted.
+    if (caller.principal?.keyKind === "integration") {
+      const refused = await limited(c, ["integration"], caller.principal.id);
+      if (refused) return refused;
     }
     // Writes from anyone but the verified owner are limited. The inbound mail webhook is not: it is
     // authenticated by its own secret, and every message arrives from the one gateway address.
@@ -186,7 +209,14 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
             "Typed inbox for people and AI agents. Public routes need no auth; /v1/owner needs an owner API key.",
         },
         components: {
-          securitySchemes: { ownerKey: { type: "http", scheme: "bearer", description: "Owner API key (sdi_own_…)" } },
+          securitySchemes: {
+            ownerKey: {
+              type: "http",
+              scheme: "bearer",
+              description:
+                "An owner or integration key (sdi_own_…), an OAuth access token from /oauth, or the owner app's session.",
+            },
+          },
         },
       },
     }),
@@ -210,10 +240,18 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         `${publicOrigin(c.req.raw, deps.baseUrl)}/.well-known/oauth-protected-resource/mcp/owner`,
       );
     }
+    if (caller.principal?.keyKind === "integration") {
+      const refused = await limited(c, ["integration"], caller.principal.id);
+      if (refused) return refused;
+    }
     return mcpOwner.fetch(c.req.raw, { authInfo: authInfo(caller) });
   });
   app.all("/mcp", async (c) => {
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_public", sandbox: await sandbox() });
+    if (caller.principal?.keyKind === "integration") {
+      const refused = await limited(c, ["integration"], caller.principal.id);
+      if (refused) return refused;
+    }
     // Every tool call is a POST; the ones that create an item also take a create token.
     if (caller.auth?.kind !== "owner" && c.req.method === "POST") {
       const refused = await limited(

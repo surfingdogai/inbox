@@ -20,6 +20,7 @@ import {
   PING_PERIOD_MS,
   type PublishPayload,
   pingDedupeKey,
+  pruneIdempotencyKeys,
   pruneJobs,
   publishKey,
   type ReceiptStage,
@@ -163,6 +164,8 @@ export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
     await pruneWebhookDeliveries(db, webhookSettings(settings).retainDeliveryDays * 86_400_000, now);
     // Rate-limit buckets untouched for a day are full again; keeping them is only a table that grows.
     await pruneRateLimits(db, now);
+    // Idempotency keys are for retries, not a record: thirty days is long past any retry.
+    await pruneIdempotencyKeys(db, now);
     const force = (job.payload as { force?: unknown } | null)?.force === true;
     const on = Object.entries(settings.networks).filter(([, entry]) => reportsTo(entry));
     if (on.length === 0) return { note: "no network is switched on; add or switch one on in Settings → Networks" };

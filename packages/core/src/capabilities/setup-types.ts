@@ -133,6 +133,62 @@ export const payloadStyleSchema = z
     "thin sends a pointer — id, type, state, version and a URL — and never goes stale or leaks. full also sends the customer's data to this address.",
   );
 
+/** At most this many extra headers per endpoint. */
+export const MAX_WEBHOOK_HEADERS = 5;
+
+/**
+ * Headers the delivery sets itself, or that belong to the connection: an extra header may not
+ * name one. `Authorization` is allowed, and is what most receivers want.
+ */
+export const RESERVED_WEBHOOK_HEADERS: readonly string[] = [
+  "host",
+  "content-type",
+  "content-length",
+  "content-encoding",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "upgrade",
+  "te",
+  "trailer",
+  "expect",
+  "accept",
+  "user-agent",
+];
+const RESERVED_HEADER_PREFIXES = ["webhook-", "sdi-", "proxy-", "sec-"];
+
+export function reservedWebhookHeader(name: string): boolean {
+  const n = name.toLowerCase();
+  return RESERVED_WEBHOOK_HEADERS.includes(n) || RESERVED_HEADER_PREFIXES.some((p) => n.startsWith(p));
+}
+
+export const webhookHeaderNameSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/, "a header name like Authorization or X-Api-Key")
+  .refine((n) => !reservedWebhookHeader(n), {
+    message: "this header is set by the delivery itself; use another name",
+  });
+
+export const webhookHeaderValueSchema = z
+  .string()
+  .min(1)
+  .max(1_024)
+  // Printable ASCII and tabs only: no line breaks (header injection), no other control characters,
+  // and nothing a runtime's fetch would refuse at send time, which would fail every delivery.
+  .regex(/^[\t\x20-\x7e]*$/, "one line of printable ASCII, no line breaks");
+
+export const webhookHeadersSchema = z
+  .record(webhookHeaderNameSchema, webhookHeaderValueSchema)
+  .refine((h) => Object.keys(h).length <= MAX_WEBHOOK_HEADERS, {
+    message: `at most ${MAX_WEBHOOK_HEADERS} headers`,
+  })
+  .refine((h) => new Set(Object.keys(h).map((k) => k.toLowerCase())).size === Object.keys(h).length, {
+    message: "a header is named twice",
+  })
+  .describe(
+    `Up to ${MAX_WEBHOOK_HEADERS} extra headers sent with every delivery, e.g. {"Authorization": "Bearer …"} for an n8n or Make webhook that checks a header. The values are sealed like the signing secret and never shown again; only the names are.`,
+  );
+
 export const createWebhookInput = z.object({
   url: z
     .url()
@@ -145,6 +201,7 @@ export const createWebhookInput = z.object({
     .default(["*"])
     .describe('Which events to send, e.g. ["booking.*", "order.*"]. Default: everything.'),
   payload_style: payloadStyleSchema.default("thin"),
+  headers: webhookHeadersSchema.optional(),
 });
 
 export const webhookIdInput = z.object({ webhook_id: z.string().min(1) });
@@ -174,6 +231,12 @@ export const updateWebhookInput = z.object({
   events: z.array(eventPatternSchema).min(1).max(50).optional(),
   payload_style: payloadStyleSchema.optional(),
   active: z.boolean().optional().describe("Setting it back to true also clears a failure run, so deliveries resume."),
+  headers: z
+    .record(webhookHeaderNameSchema, webhookHeaderValueSchema.nullable())
+    .optional()
+    .describe(
+      `Changes to the extra headers, merged: a name with a value sets or replaces it, a name with null removes it, and headers you leave out keep their values. At most ${MAX_WEBHOOK_HEADERS} in all.`,
+    ),
 });
 
 export const deliveryStatusSchema = z.enum(["pending", "delivered", "failed"]);

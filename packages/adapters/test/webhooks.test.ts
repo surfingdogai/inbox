@@ -562,12 +562,17 @@ describe("payload styles", () => {
     expect(Object.keys(thin).sort()).toEqual(["data", "id", "timestamp", "type"]);
     expect(thin.type).toBe("message.create");
     expect(thin.timestamp).toBe(new Date(T0).toISOString());
+    // Who caused it, through which door, and whether it is test traffic — but never who the
+    // customer is: a customer's actor id is a fingerprint and is not given out.
     expect(thin.data).toEqual({
       id,
       type: "message",
       state: "open",
       version: 1,
       url: `https://inbox.example.com/v1/owner/items/${id}`,
+      actor: { kind: "customer_human", id: null },
+      channel: "form",
+      sandbox: false,
     });
     const thinText = JSON.stringify(thin);
     expect(thinText).not.toContain("rita@example.com");
@@ -660,14 +665,13 @@ describe("receipt events (ADR-016)", () => {
     const data = full.data as { receipt?: { id: string; jws: string; acknowledged_at: string | null }; item?: unknown };
     expect(data.receipt).toMatchObject({ id: receipt.id, jws: receipt.jws, acknowledged_at: null });
     expect(data.item).toBeDefined();
-    // The thin style stays a pointer: no receipt, no customer.
-    expect(Object.keys((await buildEvent(db, event, "thin", "https://inbox.example.com")).data as object)).toEqual([
-      "id",
-      "type",
-      "state",
-      "version",
-      "url",
-    ]);
+    // The thin style stays a pointer: no receipt, no customer. A receipt is issued by the system.
+    const thinReceipt = (await buildEvent(db, event, "thin", "https://inbox.example.com")).data as Record<
+      string,
+      unknown
+    >;
+    expect(Object.keys(thinReceipt)).toEqual(["id", "type", "state", "version", "url", "actor", "channel", "sandbox"]);
+    expect(thinReceipt.actor).toEqual({ kind: "system", id: null });
 
     // Delivered like any other event.
     const net = receiver(() => 200);

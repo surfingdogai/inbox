@@ -11,7 +11,7 @@ import {
 import { randomToken, ulid } from "../ids";
 import { machines } from "../machine/tables";
 import { hashJson, hashText } from "../util/canonical";
-import { type Caller, isCustomer, nowOf } from "./caller";
+import { actorMeta, type Caller, isCustomer, nowOf, permissionKind } from "./caller";
 import {
   diagnoseFailure,
   eventStatement,
@@ -95,7 +95,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     closedAt: null,
     payload,
   } as Item;
-  const view = viewFor(item, caller.actor.kind);
+  const view = viewFor(item, permissionKind(caller));
   const response = { view, accessToken };
   const eventId = ulid();
 
@@ -130,7 +130,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       toState: machine.initial,
       actorKind: caller.actor.kind,
       actorId: caller.actor.id,
-      meta: { channel: caller.actor.channel, tier: caller.tier, sandbox: flags.sandbox },
+      meta: { channel: caller.actor.channel, tier: caller.tier, sandbox: flags.sandbox, ...actorMeta(caller) },
       now,
     }),
   );

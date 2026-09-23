@@ -4,11 +4,15 @@ import type {
   Availability,
   BusinessProfile,
   Closure,
+  CreatedKey,
+  CreateKeyBody,
   CreateWebhookBody,
   DeliveryView,
   FeedConnector,
   ItemDetail,
   ItemView,
+  KeyList,
+  KeyView,
   ListParams,
   NetworkView,
   Page,
@@ -225,4 +229,11 @@ export const api = {
   testWebhook: (id: string) => call<TestEventResult>("POST", `/v1/owner/webhooks/${encodeURIComponent(id)}/test`),
   deliveries: (id: string) =>
     call<{ items: DeliveryView[] }>("GET", `/v1/owner/webhooks/${encodeURIComponent(id)}/deliveries`),
+
+  // ---- keys: one named, scoped, revocable key per system that connects ----
+  keys: () => call<KeyList>("GET", "/v1/owner/api-keys"),
+  /** The only call that ever returns a key. Show it once; it cannot be read back. */
+  createKey: (body: CreateKeyBody) => call<CreatedKey>("POST", "/v1/owner/api-keys", { body, idempotent: true }),
+  revokeKey: (id: string) =>
+    call<KeyView>("DELETE", `/v1/owner/api-keys/${encodeURIComponent(id)}`, { idempotent: true }),
 };

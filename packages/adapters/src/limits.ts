@@ -4,7 +4,8 @@ import type { Db } from "@surfingdog/core";
  * Rate limits for the doors anyone can open (ADR-007's `rate_limits` table, unused until 22 Sep
  * 2026). Without them one script could post ten thousand bookings, and every one of them mails the
  * owner: an email bill, a sender reputation, and an owner who cannot find the real customer in the
- * pile. The owner's own calls — a verified owner key, session or OAuth token — are never limited.
+ * pile. The owner's own calls — a verified owner key, session or OAuth token — are never limited;
+ * an integration key the owner minted for another system has a soft bucket of its own.
  *
  * A token bucket per client address and class, kept in SQLite as one row and moved by ONE
  * statement, so it holds on D1, node:sqlite and a Durable Object alike with no transaction:
@@ -38,6 +39,13 @@ export const LIMITS = {
   create: { capacity: 20, perMs: 20 / 3_600_000 } satisfies Limit,
   /** Asking for a sign-in link, so nobody can fill an owner's mailbox with them. */
   auth: { capacity: 5, perMs: 1 / 180_000 } satisfies Limit,
+  /**
+   * One integration key (a key the owner minted for Zapier, a shop, a till), every call it makes.
+   * Soft: ten a second for as long as it likes, and a minute's burst on top. It is there to stop a
+   * loop — a webhook that triggers a Zap that moves the item that fires the webhook — from running
+   * for ever, not to meter a real integration. The owner's own session, key and AI are never counted.
+   */
+  integration: { capacity: 600, perMs: 600 / 60_000 } satisfies Limit,
 } as const;
 
 export type LimitClass = keyof typeof LIMITS;
