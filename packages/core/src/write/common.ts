@@ -162,22 +162,6 @@ export const WEBHOOK_DELIVERY_KIND = "webhook_delivery";
  */
 export const deliverJobPrefix = (deliveryId: string): string => `whsend:${deliveryId}:`;
 
-/**
- * Publishing a receipt to the review service the owner joined (ADR-016). Enqueued by the receipt
- * capability when a receipt is issued and again when it is acknowledged, only while
- * `network.join` is on; the handler lives in `@surfingdog/adapters` (`network.ts`) beside the
- * hourly ping, because it is the same conversation with the same service.
- */
-export const NETWORK_RECEIPT_KIND = "network_receipt";
-
-export type ReceiptStage = "issued" | "acknowledged";
-
-export function networkReceiptStatement(receiptId: string, stage: ReceiptStage, now: number): Statement {
-  return jobStatement(NETWORK_RECEIPT_KIND, { receiptId, stage }, now, {
-    dedupeKey: `${NETWORK_RECEIPT_KIND}:${receiptId}:${stage}`,
-  });
-}
-
 export async function hasActiveWebhook(db: Db): Promise<boolean> {
   const { rows } = await db.client.query({
     sql: "SELECT 1 FROM webhooks WHERE active = 1 LIMIT 1",

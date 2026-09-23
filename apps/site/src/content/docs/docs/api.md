@@ -38,7 +38,8 @@ Authenticate with an owner API key or an OAuth 2.1 access token as a Bearer toke
 | `transition_item` | `POST /v1/owner/items/{id}/transitions` | Fire one of the item's events with its `input`, a `reason` and `expected_version`. |
 | `reply` | `POST /v1/owner/items/{id}/replies` | Reply to the customer, or leave an internal note with `internal: true`. |
 | `get_settings` | `GET /v1/owner/settings` | The settings document and its version. |
-| `update_settings` | `PUT /v1/owner/settings` | Change settings: the document you send is merged over the current one, so send only what changes, with `expected_version`. |
+| `update_settings` | `PUT /v1/owner/settings` | Change settings: the document you send is merged over the current one, so send only what changes, with `expected_version`. `null` removes a key, so its default applies again. Networks are keyed by origin: `{"networks": {"https://network.example.com": {"enabled": true}}}` adds or switches on one and leaves the others as they are. |
+| `get_networks` | `GET /v1/owner/networks` | Each network in settings: on or off, what it gets, whether it has verified this instance, the last ping it took, the last error in a few words, and its receipts published, waiting and refused. |
 
 Three more owner operations are in the capability set and arrive with the owner app: `update_availability`, `update_catalogue` and `run_setup_step`.
 

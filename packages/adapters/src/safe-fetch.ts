@@ -6,7 +6,7 @@
 import { isPublicHost } from "@surfingdog/core";
 
 /**
- * The host rule itself lives in `@surfingdog/core` (`capabilities/webhooks.ts`), because the
+ * The host rule itself lives in `@surfingdog/core` (`util/hosts.ts`), because the
  * webhook capability has to apply it when an endpoint is added and core cannot import adapters.
  * It is re-exported rather than copied: two allow-lists drifting apart is how one door ends up
  * laxer than the other.
@@ -70,7 +70,8 @@ export async function safeFetchJson<T = unknown>(url: string, opts: SafeFetchOpt
   return null;
 }
 
-async function readCapped(res: Response, maxBytes: number): Promise<string | null> {
+/** The body as text, or null past `maxBytes`; a body that keeps coming is cut off, not buffered. */
+export async function readCapped(res: Response, maxBytes: number): Promise<string | null> {
   const reader = res.body?.getReader();
   if (!reader) return await res.text();
   const chunks: Uint8Array[] = [];

@@ -116,11 +116,13 @@ Refusals are problem documents: `403` when the item is not yours, `404` when `rc
 
 ## Networks
 
-When the owner has joined a network in Settings, the instance publishes every receipt to it — once when issued, again once acknowledged — with `POST <network>/v1/receipts` and the body `{"receipt": "<jws>", "ack": "<jws>"}` (`ack` only when there is one). The manifest names the networks an instance publishes to under `review_services`. The network answers `{"ok": true, "state": "issued" | "acknowledged", "duplicate": false}`.
+The instance publishes every receipt to each network switched on in Settings → Networks — once when issued, again once acknowledged — with `POST <network>/v1/receipts` and the body `{"receipt": "<jws>", "ack": "<jws>"}` (`ack` only when there is one). The manifest names the networks an instance publishes to under `review_services`. The network answers `{"ok": true, "state": "issued" | "acknowledged", "duplicate": false}`.
+
+Each network is kept track of on its own, receipt by receipt, so nothing is lost to one that is down: a receipt waits for a network that does not answer, or does not know the instance yet, and goes out when it does. A network switched on later is sent every receipt issued before it, oldest first, up to a thousand an hour. The instance tries again when the network answers `404`, `408`, `425`, `429`, a redirect or a server error, or a problem document whose `code` is `unknown_key`, `unknown_ref`, `unknown_instance` or `unknown_issuer`; any other refusal is the network's verdict on that receipt, recorded once and not sent again. Settings → Networks shows how many receipts each network has.
 
 The network believes nothing it is sent. It finds the business by `iss`, takes the keys from the manifest it fetched from that domain itself, verifies the receipt, verifies the acknowledgement against the key in its header and the receipt's `sha`, and counts one receipt per `(issuer, nonce)`. It refuses a receipt from a domain it has not verified (`404`), one signed by a key the manifest does not publish (`422 unknown_key`, after refreshing its copy), a forgery (`422 bad_signature`), and anything older than 180 days. It stores the receipt whole, with the acknowledgement when there is one: the pseudonym, the type, the kind, when, and the amount and payment method when the receipt carries them — never an address, never a name. It keeps each receipt for 540 days after it arrives, and each business's totals indefinitely. A directory listing shows how many receipts a business has issued and how many were counter-signed; the amounts are never published.
 
-Any service that speaks this one endpoint can be a review service; `https://network.surfingdog.ai` is only the default.
+Any service that speaks this one endpoint can be a review service, and an instance can publish to several; `https://network.surfingdog.ai` is only the default.
 
 ## For implementers
 

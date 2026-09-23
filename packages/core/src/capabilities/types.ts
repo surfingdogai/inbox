@@ -128,8 +128,17 @@ export const replyInput = z.object({
 });
 
 export const updateSettingsInput = z.object({
-  doc: z.record(z.string(), z.unknown()),
-  expected_version: z.number().int().min(1).optional(),
+  doc: z
+    .record(z.string(), z.unknown())
+    .describe(
+      'The changes, merged over the current settings: objects merge key by key, anything you leave out keeps its value, null removes a key (its default applies again), and arrays replace. Networks are a map keyed by https origin, e.g. {"networks": {"https://network.example.com": {"enabled": true}}}: that adds or switches on one network and leaves the others as they are; {"enabled": false} switches one off. At most 8.',
+    ),
+  expected_version: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("The version you read; a write over a newer version is refused instead of overwriting it."),
 });
 
 export type ListServicesInput = z.infer<typeof listServicesInput>;

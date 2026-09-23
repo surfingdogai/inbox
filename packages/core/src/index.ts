@@ -14,6 +14,7 @@ export * from "./jobs/index";
 export * from "./machine/machine";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";
+export * from "./network/index";
 export * from "./receipts/index";
 export * from "./rules/index";
 export { MIGRATIONS } from "./schema/migrations.generated";
@@ -25,6 +26,8 @@ export {
   type SecretBox,
   type SecretPurpose,
 } from "./secrets/box";
+export { mergeSettings } from "./settings/merge";
 export * from "./settings/schema";
+export { canonicalNetworkOrigin } from "./util/hosts";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

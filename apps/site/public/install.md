@@ -308,6 +308,42 @@ sign-in.
 
 ---
 
+## Step 5. Networks, optional
+
+A network is a directory of businesses. An inbox can report to several networks, and each one lists
+it in its own directory. Joining is the person's choice: ask first, and tell them what each network
+they switch on receives, in these words: the inbox's address, a count of new bookings, orders,
+quotes and messages every hour, and every receipt the inbox signs, which names customers by a
+pseudonym only. No names, email addresses or messages.
+
+If they say yes, switch the network on in Settings → Networks, or over the API. Networks are keyed
+by their https address, so adding one leaves the others as they are:
+
+```bash
+VERSION=$(curl -s https://inbox.theirdomain.com/v1/owner/settings -H "authorization: Bearer $OWNER_KEY" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+curl -s -X PUT https://inbox.theirdomain.com/v1/owner/settings \
+  -H "authorization: Bearer $OWNER_KEY" -H 'content-type: application/json' \
+  -d "{\"expected_version\":$VERSION,\"doc\":{\"networks\":{\"https://network.surfingdog.ai\":{\"enabled\":true}}}}"
+```
+
+To switch one off later, send `{"enabled": false}` for that address alone. Never send the whole list
+back to change one entry. At most eight networks.
+
+A minute later, check that it is reporting:
+
+```bash
+curl -s https://inbox.theirdomain.com/v1/owner/networks -H "authorization: Bearer $OWNER_KEY"
+```
+
+Expect the network with `"enabled": true`, `last_ping_at` set and `registration` `"registered"`,
+or `"pending"` for a few minutes while the network checks the inbox's manifest. `last_error` says in
+a few words what went wrong; most often the inbox has no public https address (`INBOX_PUBLIC_URL`,
+or the Inbox address in Settings). The manifest's `review_services` names every network that
+receives receipts; it can take five minutes to show a new one.
+
+---
+
 ## Final checklist
 
 Run all of these and show the person the output.
@@ -328,6 +364,7 @@ Then tell the person:
 
 - the address of their inbox, and that `/login` is where they sign in;
 - that their owner key, if you minted one, is shown once and you have given it to them;
+- which networks, if any, the inbox reports to, and what each one receives;
 - what is not set up yet, naming each thing, rather than implying everything is done.
 
 ## If something breaks
@@ -337,5 +374,7 @@ Then tell the person:
 - `401` on the inbound email door → the secret in settings and the secret on the gateway differ.
 - `403` writing settings → the owner key is wrong or expired.
 - A version conflict on settings → read the current settings and retry with the version it gives.
+- A network says "not reachable" in `/v1/owner/networks` → it is down or the address is wrong; the
+  inbox keeps retrying on its own and sends it everything it missed once it answers.
 
 Documentation: https://surfingdog.ai/docs/ · Source: https://github.com/surfingdogai/inbox

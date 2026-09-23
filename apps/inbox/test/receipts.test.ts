@@ -124,20 +124,65 @@ async function bookAndConfirm(s: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("the manifest", () => {
-  it("names the network under review_services once the owner joins", async () => {
+  it("names every network that is on and takes receipts under review_services, by origin", async () => {
     const s = await setup();
-    const before = (await (await s.app.request(`${ORIGIN}${MANIFEST_PATH}`)).json()) as { review_services: string[] };
-    expect(before.review_services).toEqual([]);
-    const put = await s.app.request(
-      new Request(`${ORIGIN}/v1/owner/settings`, {
-        method: "PUT",
-        headers: { "content-type": "application/json", authorization: `Bearer ${s.ownerKey}` },
-        body: JSON.stringify({ doc: { network: { url: "https://network.surfingdog.ai", join: true } } }),
-      }),
+    const manifest = async () =>
+      ((await (await s.app.request(`${ORIGIN}${MANIFEST_PATH}`)).json()) as { review_services: string[] })
+        .review_services;
+    const put = (doc: unknown) =>
+      s.app.request(
+        new Request(`${ORIGIN}/v1/owner/settings`, {
+          method: "PUT",
+          headers: { "content-type": "application/json", authorization: `Bearer ${s.ownerKey}` },
+          body: JSON.stringify({ doc }),
+        }),
+      );
+    expect(await manifest()).toEqual([]);
+    // What older clients still send keeps working.
+    expect((await put({ network: { url: "https://network.surfingdog.ai", join: true } })).status).toBe(200);
+    expect(await manifest()).toEqual(["https://network.surfingdog.ai"]);
+    const r = await put({
+      networks: {
+        "https://Directory.Example.com/": { enabled: true },
+        "https://quiet.example.com": { enabled: true, share: { receipts: false } },
+        "https://off.example.com": { enabled: false },
+      },
+    });
+    expect(r.status).toBe(200);
+    expect(await manifest()).toEqual(["https://directory.example.com", "https://network.surfingdog.ai"]);
+
+    // And a key that is not an origin is refused on the field, with nothing stored.
+    const bad = await put({ networks: { "https://directory.example.com/v1": { enabled: true } } });
+    expect(bad.status).toBe(422);
+    expect(((await bad.json()) as { fields: { path: string }[] }).fields[0]?.path).toBe(
+      "doc.networks.https://directory.example.com/v1",
     );
-    expect(put.status).toBe(200);
-    const after = (await (await s.app.request(`${ORIGIN}${MANIFEST_PATH}`)).json()) as { review_services: string[] };
-    expect(after.review_services).toEqual(["https://network.surfingdog.ai"]);
+  });
+
+  it("shows the owner each network and how it is doing", async () => {
+    const s = await setup();
+    const get = await s.app.request(`${ORIGIN}/v1/owner/networks`, {
+      headers: { authorization: `Bearer ${s.ownerKey}` },
+    });
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual({
+      networks: [
+        {
+          origin: "https://network.surfingdog.ai",
+          enabled: false,
+          issue: true,
+          share: { listing: true, counts: true, receipts: true },
+          registration: "unregistered",
+          registered_at: null,
+          last_ping_at: null,
+          last_error: null,
+          last_error_at: null,
+          failing_since: null,
+          receipts: { published: 0, queued: 0, refused: 0 },
+        },
+      ],
+    });
+    expect((await s.app.request(`${ORIGIN}/v1/owner/networks`)).status).toBe(401);
   });
 });
 

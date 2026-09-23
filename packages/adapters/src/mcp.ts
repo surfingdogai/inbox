@@ -862,11 +862,35 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         }),
     );
     server.registerTool(
+      "get_networks",
+      {
+        title: "Networks and how they are doing",
+        description:
+          "The networks this inbox reports to, each with whether it is on, what it shares, whether it has verified this inbox, the last ping it took, the last error and how many receipts it has published. To add, switch on or switch off a network, use update_settings with networks keyed by origin.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        run(async () => {
+          const r = await caps.getNetworks(caller);
+          return {
+            text:
+              r.networks
+                .map(
+                  (n) =>
+                    `${n.origin}: ${n.enabled ? "on" : "off"}${n.enabled ? `, ${n.registration}` : ""}${n.last_ping_at ? `, last ping ${n.last_ping_at}` : ""}${n.failing_since ? `, not answering since ${n.failing_since}` : ""}${n.last_error ? `, last error: ${JSON.stringify(n.last_error)}` : ""}; receipts ${n.receipts.published} published, ${n.receipts.queued} queued, ${n.receipts.refused} refused`,
+                )
+                .join("\n") || "No networks in settings.",
+            structured: r,
+          };
+        }),
+    );
+    server.registerTool(
       "update_settings",
       {
         title: "Update settings",
         description:
-          "Change settings. Send only the sections and keys you want to change: anything left out keeps its value. Send expected_version from get_settings so a concurrent change is refused rather than overwritten.",
+          'Change settings. Send only the sections and keys you want to change: anything left out keeps its value, and null removes a key so its default applies again. Networks are a map keyed by https origin: {"networks": {"https://network.example.com": {"enabled": true}}} adds or switches on that one and leaves the others alone; {"enabled": false} switches it off. Send expected_version from get_settings so a concurrent change is refused rather than overwritten.',
         inputSchema: updateSettingsInput,
         annotations: writes,
       },

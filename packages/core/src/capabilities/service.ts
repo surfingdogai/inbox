@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
+import { z } from "zod";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
+import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
   business,
@@ -14,12 +16,21 @@ import {
   threadEntries,
 } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { mergeSettings } from "../settings/merge";
-import { readSettings, SETTINGS_SCHEMA_VERSION, type Settings, settingsSchema } from "../settings/schema";
+import { mergeSettings, patchPaths } from "../settings/merge";
+import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
+import {
+  isPlainObject,
+  parseStoredSettings,
+  readSettings,
+  reportsTo,
+  SETTINGS_SCHEMA_VERSION,
+  type Settings,
+  settingsWriteSchema,
+} from "../settings/schema";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { type CreateResult, createItem } from "../write/create";
-import { fromZod, WriteError } from "../write/errors";
+import { type FieldProblem, fromZod, WriteError } from "../write/errors";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
@@ -343,38 +354,91 @@ export class Capabilities {
       .select({ doc: settingsTable.doc, version: settingsTable.version })
       .from(settingsTable)
       .limit(1);
-    const doc = row ? settingsSchema.safeParse(row.doc) : undefined;
-    return { doc: doc?.success ? doc.data : await readSettings(this.db), version: row?.version ?? 0 };
+    // Leniently, like every other reader: a stored value this version rejects is shown as its
+    // default, and the owner app saving the page writes only what the owner changed.
+    return { doc: parseStoredSettings(row?.doc ?? {}).settings, version: row?.version ?? 0 };
   }
 
+  /**
+   * A merge, never a replace (`settings/merge.ts`): the caller's changes are laid over the stored
+   * document as it was written — not over what this version parsed out of it — and that raw
+   * document is what is stored. So a section, a key or a network the caller left out keeps its
+   * value, a key only a newer version knows survives, and no default is written back as if it had
+   * been chosen. The result is checked along the paths the caller changed; a stored value that
+   * was valid once and is not now does not block a change to something else.
+   */
   async updateSettings(caller: Caller, input: T.UpdateSettingsInput): Promise<{ doc: Settings; version: number }> {
     requireBusiness(caller);
     const now = nowOf(caller);
-    const [row] = await this.db.orm.select({ version: settingsTable.version }).from(settingsTable).limit(1);
-    // What the caller sends is laid over what is there: a section left out keeps its values. The
-    // owner's AI, the Settings page and a script may each change one thing without knowing the rest.
-    const merged = mergeSettings(row ? await readSettings(this.db) : {}, input.doc) as Record<string, unknown>;
-    const parsed = settingsSchema.safeParse({ ...merged, schemaVersion: SETTINGS_SCHEMA_VERSION });
-    if (!parsed.success) throw fromZod(parsed.error, "doc");
+    const [row] = await this.db.orm
+      .select({ doc: settingsTable.doc, version: settingsTable.version })
+      .from(settingsTable)
+      .limit(1);
+    const stored = row && isPlainObject(row.doc) ? row.doc : {};
+    const prepared = prepareSettingsWrite(stored, input.doc);
+    if ("problems" in prepared) {
+      throw new WriteError("invalid_input", `Invalid input: ${describeProblems(prepared.problems)}`, {
+        fields: prepared.problems,
+      });
+    }
+    const merged = mergeSettings(prepared.base, prepared.patch) as Record<string, unknown>;
+    merged.schemaVersion = SETTINGS_SCHEMA_VERSION;
+    syncLegacyPair(merged);
+    const checked = settingsWriteSchema.safeParse(merged);
+    if (!checked.success) {
+      const changed = patchPaths(prepared.patch);
+      const issues = checked.error.issues.filter((issue) => {
+        const at = issue.path.map(String);
+        return changed.some((p) => startsWith(at, p) || startsWith(p, at));
+      });
+      if (issues.length) throw fromZod(new z.ZodError(issues), "doc");
+    }
+    const json = JSON.stringify(merged);
+    // What is stored is what was sent, unknown keys included, so its size is bounded here.
+    if (json.length > MAX_SETTINGS_BYTES) {
+      throw new WriteError("invalid_input", `the settings document would be over ${MAX_SETTINGS_BYTES / 1024} KB`, {
+        fields: [{ path: "doc", problem: "invalid", message: "too large" }],
+      });
+    }
+    const before = parseStoredSettings(stored).settings;
+    const after = parseStoredSettings(merged).settings;
+    let version: number;
     if (!row) {
       await this.db.client.query({
         sql: "INSERT INTO settings (id, schema_version, doc, version, updated_at) VALUES ('singleton', ?, ?, 1, ?)",
-        params: [SETTINGS_SCHEMA_VERSION, JSON.stringify(parsed.data), now],
+        params: [SETTINGS_SCHEMA_VERSION, json, now],
         method: "run",
       });
-      return { doc: parsed.data, version: 1 };
-    }
-    const expected = input.expected_version ?? row.version;
-    const res = await this.db.client.query({
-      sql: "UPDATE settings SET doc = ?, version = version + 1, updated_at = ? WHERE id = 'singleton' AND version = ?",
-      params: [JSON.stringify(parsed.data), now, expected],
-      method: "run",
-    });
-    if (res.changes !== 1)
-      throw new WriteError("version_conflict", "settings changed since you read them", {
-        details: { currentVersion: row.version },
+      version = 1;
+    } else {
+      const expected = input.expected_version ?? row.version;
+      const res = await this.db.client.query({
+        sql: "UPDATE settings SET doc = ?, version = version + 1, updated_at = ? WHERE id = 'singleton' AND version = ?",
+        params: [json, now, expected],
+        method: "run",
       });
-    return { doc: parsed.data, version: expected + 1 };
+      if (res.changes !== 1)
+        throw new WriteError("version_conflict", "settings changed since you read them", {
+          details: { currentVersion: row.version },
+        });
+      version = expected + 1;
+    }
+    // A network just switched on hears from this inbox now, not at the top of the next hour: its
+    // ping, and its publisher, which queues every receipt already issued (ADR-017 §8.1). Losing
+    // this insert costs nothing but the wait: the hourly tick queues the same jobs by the same keys.
+    const started = Object.entries(after.networks).filter(
+      ([origin, entry]) => reportsTo(entry) && !reportsTo(before.networks[origin]),
+    );
+    if (started.length) {
+      await this.db.batch(started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)));
+    }
+    return { doc: after, version };
+  }
+
+  /** Every network in settings, switched on or not, with how it is going and what it has been sent. */
+  async getNetworks(caller: Caller): Promise<{ networks: NetworkView[] }> {
+    requireBusiness(caller);
+    return { networks: await networkViews(this.db, await readSettings(this.db)) };
   }
 
   // ---- helpers ---------------------------------------------------------------
@@ -473,4 +537,14 @@ export function ftsQuery(q: string): string {
     .slice(0, 8);
   if (terms.length === 0) return '""';
   return terms.map((t) => `"${t}"*`).join(" ");
+}
+
+const MAX_SETTINGS_BYTES = 64 * 1024;
+
+function startsWith(path: readonly string[], prefix: readonly string[]): boolean {
+  return prefix.every((p, i) => path[i] === p);
+}
+
+function describeProblems(problems: readonly FieldProblem[]): string {
+  return problems.map((p) => `${p.path} ${p.message}`).join("; ");
 }

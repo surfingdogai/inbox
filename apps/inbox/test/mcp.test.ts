@@ -120,6 +120,7 @@ describe("MCP doors", () => {
       "replay_missing_webhook_deliveries",
       "list_events",
       "get_settings",
+      "get_networks",
       "update_settings",
     ]);
     const settings = await client.callTool({ name: "get_settings", arguments: {} });

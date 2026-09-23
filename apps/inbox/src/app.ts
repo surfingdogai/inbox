@@ -5,8 +5,12 @@ import {
   feedImportHandler,
   mountDoors,
   NETWORK_PING_KIND,
+  NETWORK_PING_ONE_KIND,
+  NETWORK_PUBLISH_KIND,
   NETWORK_RECEIPT_KIND,
   networkPingHandler,
+  networkPingOneHandler,
+  networkPublishHandler,
   networkReceiptHandler,
   publicOrigin,
   WEBHOOK_DELIVERY_KIND,
@@ -20,9 +24,11 @@ import {
   createRunner,
   createSecretBox,
   type Db,
+  enabledNetworks,
   type JobRunner,
   MANIFEST_PATH,
   MIGRATIONS,
+  networkLane,
   parseSecretKeys,
   readSettings,
   VERSION,
@@ -80,15 +86,14 @@ export function createInbox(deps: AppDeps): Inbox {
     deps.eventSettleMs,
   );
   const mailOut = deps.mailOut ?? logMailOut();
+  const network = { baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl };
   const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts })
-    .register(
-      NETWORK_PING_KIND,
-      networkPingHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
-    )
-    .register(
-      NETWORK_RECEIPT_KIND,
-      networkReceiptHandler({ baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl }),
-    )
+    // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
+    // call to a network runs in that network's own lane, so a slow one never delays another.
+    .register(NETWORK_PING_KIND, networkPingHandler(network))
+    .register(NETWORK_PING_ONE_KIND, networkPingOneHandler(network), { lane: networkLane })
+    .register(NETWORK_PUBLISH_KIND, networkPublishHandler(network), { lane: networkLane })
+    .register(NETWORK_RECEIPT_KIND, networkReceiptHandler(network), { lane: networkLane })
     // Outbound webhooks (ADR-015): fanout is gated on there being an active endpoint, so these two
     // handlers cost an instance with no integrations nothing but their registration.
     .register(WEBHOOK_FANOUT_KIND, webhookFanoutHandler())
@@ -158,8 +163,8 @@ export function createInbox(deps: AppDeps): Inbox {
       itemTypes: profile.item_types,
       profile: profile.name ? { name: profile.name, languages: [...profile.languages], categories: [] } : undefined,
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
-      // The services this instance publishes receipts to: the network in Settings, once joined.
-      reviewServices: settings.network.join ? [settings.network.url] : [],
+      // The services this instance publishes receipts to: every network switched on that takes them.
+      reviewServices: enabledNetworks(settings, "receipts"),
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

@@ -2,8 +2,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { createApiKey, ensureNetworkPing, NETWORK_PING_KIND } from "@surfingdog/adapters";
-import { Capabilities, createDb, createSecretBox, ensureJob, MIGRATIONS, parseSecretKeys } from "@surfingdog/core";
+import { createApiKey, ensureNetworkPing, pingNetworksNow } from "@surfingdog/adapters";
+import { Capabilities, createDb, createSecretBox, MIGRATIONS, parseSecretKeys } from "@surfingdog/core";
 import { cloudflareEmailRestMailOut, ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
@@ -24,7 +24,7 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs seed-demo          add the demo bike shop if the instance is empty
  *   node server.mjs seed-showcase      the demo bike shop with a week of items, rules and hours (screenshots)
  *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
- *   node server.mjs network-ping       report to the network now instead of at the next hour
+ *   node server.mjs network-ping       report to every network now instead of at the next hour
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 mkdirSync(path.dirname(file), { recursive: true });
@@ -56,8 +56,8 @@ if (command) {
     const r = await seedSurfingDog(db, Date.now(), seedDeps);
     console.log(r.seeded ? "seeded Surfing Dog's own inbox" : "an instance business already exists; nothing changed");
   } else if (command === "network-ping") {
-    await ensureJob(db, NETWORK_PING_KIND, `${NETWORK_PING_KIND}:manual:${Date.now()}`);
-    console.log("queued a network ping; the running server sends it within a second");
+    await pingNetworksNow(db);
+    console.log("queued a ping to every network that is on; the running server sends them within a second");
   } else {
     console.error(
       `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog or network-ping`,

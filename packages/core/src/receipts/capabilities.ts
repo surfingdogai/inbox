@@ -5,10 +5,11 @@ import { asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Money } from "../domain/types";
 import { ulid } from "../ids";
+import { networkReceiptStatements } from "../network/index";
 import { items, parties, receipts, signingKeys } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { readSettings } from "../settings/schema";
-import { hasActiveWebhook, networkReceiptStatement, webhookFanoutStatement } from "../write/common";
+import { enabledNetworks, readSettings } from "../settings/schema";
+import { hasActiveWebhook, webhookFanoutStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import type { ItemRow } from "../write/views";
 import { createKeyStore, type KeyStore } from "./keys";
@@ -152,9 +153,12 @@ export class ReceiptCapabilities {
     if (await hasActiveWebhook(this.db)) {
       statements.push(webhookFanoutStatement({ id, type: `${item.type}.receipt_issued`, itemId: item.id }, now));
     }
-    // The network the owner joined gets every receipt, so the directory can count what was kept.
-    // Nothing about the customer travels: the receipt names them by pseudonym only.
-    if ((await readSettings(this.db)).network.join) statements.push(networkReceiptStatement(id, "issued", now));
+    // Every network the owner switched on gets every receipt, so each directory can count what
+    // was kept. Nothing about the customer travels: the receipt names them by pseudonym only. The
+    // rows name the receipt by (item, kind), so a writer that loses the race queues the winner's.
+    for (const network of enabledNetworks(await readSettings(this.db), "receipts")) {
+      statements.push(...networkReceiptStatements(network, "issued", now, { itemId: item.id, kind }));
+    }
     await this.db.batch(statements);
     const written = await this.row(itemId, kind);
     if (!written) throw new WriteError("internal", "the receipt was written and then could not be read back");
@@ -231,8 +235,9 @@ export class ReceiptCapabilities {
         );
       }
     }
-    if ((await readSettings(this.db)).network.join)
-      statements.push(networkReceiptStatement(row.id, "acknowledged", now));
+    for (const network of enabledNetworks(await readSettings(this.db), "receipts")) {
+      statements.push(...networkReceiptStatements(network, "acknowledged", now, { id: row.id }));
+    }
     await this.db.batch(statements);
     const [after] = await this.db.orm.select().from(receipts).where(eq(receipts.id, row.id));
     if (!after) throw new WriteError("internal", "the receipt vanished while it was being acknowledged");

@@ -5,7 +5,8 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
 import { qk, useProfile, useReceiptStatus, useSaveProfile, useSaveSettings, useSettings } from "../lib/queries";
-import type { Profile, Settings, SettingsDoc } from "../lib/types";
+import { type SettingsForm as SettingsFormState, toSettingsDoc, toSettingsForm } from "../lib/settings";
+import type { Profile, SettingsDoc } from "../lib/types";
 
 export const Route = createFileRoute("/settings/")({
   component: GeneralPage,
@@ -185,71 +186,7 @@ function ProfileForm({ initial, onSaved }: { initial: Profile; onSaved: () => vo
 }
 
 // ---- the settings document ------------------------------------------------------------------
-
-interface Form {
-  readonly cancellationWindowMin: string;
-  readonly holdOnPropose: boolean;
-  readonly autoExpireHours: string;
-  readonly approvalLimit: string;
-  readonly ownerEmail: string;
-  readonly appUrl: string;
-  readonly fromAddress: string;
-  readonly fromName: string;
-  readonly replyTo: string;
-  readonly inboundSecret: string;
-  readonly networkUrl: string;
-  readonly networkJoin: boolean;
-  readonly testMode: boolean;
-}
-
-function toForm(doc: Settings): Form {
-  return {
-    cancellationWindowMin: String(doc.booking.cancellationWindowMin),
-    holdOnPropose: doc.booking.holdOnPropose,
-    autoExpireHours: String(doc.booking.autoExpireHours),
-    approvalLimit: doc.orders.maxValueWithoutApprovalMinor
-      ? (doc.orders.maxValueWithoutApprovalMinor / 100).toFixed(2)
-      : "",
-    ownerEmail: doc.notifications.ownerEmail ?? "",
-    appUrl: doc.notifications.appUrl ?? "",
-    fromAddress: doc.email.fromAddress ?? "",
-    fromName: doc.email.fromName ?? "",
-    replyTo: doc.email.replyTo ?? "",
-    inboundSecret: doc.email.inboundSecret ?? "",
-    networkUrl: doc.network.url,
-    networkJoin: doc.network.join,
-    testMode: doc.testMode,
-  };
-}
-
-/** The whole document goes back: fields this screen does not know stay as they were. */
-function toDoc(base: Settings, f: Form): Record<string, unknown> {
-  const num = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
-  const opt = (s: string) => (s.trim() ? s.trim() : undefined);
-  const limit = f.approvalLimit.trim() ? Math.round(Number(f.approvalLimit.replace(",", ".")) * 100) : 0;
-  return {
-    ...base,
-    booking: {
-      ...base.booking,
-      cancellationWindowMin: num(f.cancellationWindowMin),
-      holdOnPropose: f.holdOnPropose,
-      autoExpireHours: num(f.autoExpireHours),
-    },
-    orders: { ...base.orders, maxValueWithoutApprovalMinor: Number.isFinite(limit) ? limit : Number.NaN },
-    notifications: {
-      ...(opt(f.ownerEmail) ? { ownerEmail: opt(f.ownerEmail) } : {}),
-      ...(opt(f.appUrl) ? { appUrl: opt(f.appUrl) } : {}),
-    },
-    email: {
-      ...(opt(f.fromAddress) ? { fromAddress: opt(f.fromAddress) } : {}),
-      ...(opt(f.fromName) ? { fromName: opt(f.fromName) } : {}),
-      ...(opt(f.replyTo) ? { replyTo: opt(f.replyTo) } : {}),
-      ...(opt(f.inboundSecret) ? { inboundSecret: opt(f.inboundSecret) } : {}),
-    },
-    network: { url: f.networkUrl.trim() || base.network.url, join: f.networkJoin },
-    testMode: f.testMode,
-  };
-}
+// The form and what a save sends live in lib/settings.ts, where they are tested.
 
 function SettingsForm({
   initial,
@@ -260,17 +197,18 @@ function SettingsForm({
   onSaved: () => void;
   onReload: () => void;
 }) {
-  const [form, setForm] = useState<Form>(() => toForm(initial.doc));
+  const [form, setForm] = useState<SettingsFormState>(() => toSettingsForm(initial.doc));
   const save = useSaveSettings();
   const problem = save.error ? problemOf(save.error) : null;
   const conflict = problem?.code === "version_conflict";
-  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const set = <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
   const field = (path: string) => problem?.field(path);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (save.isPending) return;
-    save.mutate({ doc: toDoc(initial.doc, form), expected_version: initial.version }, { onSuccess: onSaved });
+    save.mutate({ doc: toSettingsDoc(form), expected_version: initial.version }, { onSuccess: onSaved });
   };
 
   return (
@@ -372,7 +310,7 @@ function SettingsForm({
             label="Inbox address"
             optional
             error={field("notifications.appUrl")}
-            hint="Used in email links, like https://inbox.example.com."
+            hint="Used in email links, like https://inbox.example.com. Networks also know your inbox by it."
           >
             <input
               id="s-app-url"
@@ -430,34 +368,6 @@ function SettingsForm({
               onChange={(e) => set("inboundSecret", e.target.value)}
             />
           </Field>
-        </div>
-      </section>
-
-      <section className="card glass">
-        <h3 className="sec">Network</h3>
-        <div className="settings-grid">
-          <Field
-            id="s-network"
-            label="Directory"
-            error={field("network.url")}
-            hint="The network this inbox reports to and appears in."
-          >
-            <input
-              id="s-network"
-              className="input"
-              type="url"
-              value={form.networkUrl}
-              onChange={(e) => set("networkUrl", e.target.value)}
-            />
-          </Field>
-          <div className="wide">
-            <Switch checked={form.networkJoin} onChange={(v) => set("networkJoin", v)}>
-              Join the directory
-            </Switch>
-            <div className="hint">
-              Registers your domain and sends counts only, every hour. Nothing about customers leaves.
-            </div>
-          </div>
         </div>
       </section>
 

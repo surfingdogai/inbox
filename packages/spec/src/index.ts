@@ -124,6 +124,7 @@ export const manifestSchema = z.object({
   agent_policy: z.object({ tiers: z.array(trustTierSchema).min(1) }),
   /** JWKS with the instance's Ed25519 receipt-signing keys. */
   receipt_keys: z.object({ keys: z.array(z.record(z.string(), z.unknown())) }),
+  /** The networks this instance publishes its receipts to, as https origins; empty when none. */
   review_services: z.array(z.url()),
 });
 export type Manifest = z.infer<typeof manifestSchema>;

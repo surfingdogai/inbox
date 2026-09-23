@@ -115,13 +115,14 @@ function runnerWith(deps: { secrets: SecretBox | null; fetchImpl?: typeof fetch 
  * claims what was due when it started, which is exactly how the outbox behaves in production.
  */
 async function drain(runner: JobRunner, db: Db, now: number): Promise<RunReport> {
-  const total = { claimed: 0, done: 0, failed: 0, dead: 0 };
+  const total = { claimed: 0, done: 0, failed: 0, dead: 0, released: 0 };
   for (let pass = 0; pass < 6; pass++) {
     const r = await runner.runDue(db, { now });
     total.claimed += r.claimed;
     total.done += r.done;
     total.failed += r.failed;
     total.dead += r.dead;
+    total.released += r.released;
     if (r.claimed === 0) break;
   }
   return total;

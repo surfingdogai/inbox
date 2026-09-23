@@ -1,6 +1,6 @@
 import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
-import { createDb } from "@surfingdog/core";
-import { cloudflareEmailMailOut, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
+import { createDb, MIGRATIONS } from "@surfingdog/core";
+import { cloudflareEmailMailOut, ensureMigrated, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
 
@@ -45,14 +45,19 @@ function inboxFor(env: Bindings): Inbox {
 export default {
   fetch: (request, env, ctx) => inboxFor(env).app.fetch(request, env, ctx),
 
+  // Cron, the queue and email run jobs without an HTTP request, so each migrates first, as the
+  // Node server does at boot: the first tick after a deploy must not meet a table that is missing.
   async queue(batch, env) {
     const inbox = inboxFor(env);
-    await inbox.runner.runDue(createDb(d1Client(env.DB)), { workerId: "queue" });
+    const db = createDb(d1Client(env.DB));
+    await ensureMigrated(db.client, MIGRATIONS);
+    await inbox.runner.runDue(db, { workerId: "queue" });
     for (const message of batch.messages) message.ack();
   },
 
   async scheduled(_controller, env) {
     const db = createDb(d1Client(env.DB));
+    await ensureMigrated(db.client, MIGRATIONS);
     await ensureNetworkPing(db);
     await inboxFor(env).runner.runDue(db, { workerId: "cron", limit: 100 });
   },
@@ -60,13 +65,15 @@ export default {
   // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.
   async email(message, env) {
     const inbox = inboxFor(env);
-    const result = await ingestEmail(createDb(d1Client(env.DB)), inbox.caps, {
+    const db = createDb(d1Client(env.DB));
+    await ensureMigrated(db.client, MIGRATIONS);
+    const result = await ingestEmail(db, inbox.caps, {
       raw: message.raw,
       envelopeTo: message.to,
       envelopeFrom: message.from,
       authenticated: true,
     });
     if (result.outcome === "rejected") message.setReject(result.reason);
-    await inbox.runner.runDue(createDb(d1Client(env.DB)), { workerId: "email" });
+    await inbox.runner.runDue(db, { workerId: "email" });
   },
 } satisfies ExportedHandler<Bindings>;
