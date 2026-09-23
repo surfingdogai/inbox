@@ -1,0 +1,1225 @@
+---
+/**
+ * The how-it-works page's opening animation, "one request". An AI agent asks the business for a
+ * bike service on Saturday. The request travels as a typed chip, the same "Booking" chip the home
+ * page and the network page draw, and its word lands on the item's own type label. It becomes a
+ * Booking item in the state "requested", one of the owner's rules reads it ("Slot is free →
+ * confirm"), the state turns "confirmed", the answer travels back to the agent, and the inbox signs
+ * a receipt for the confirmed booking. Then a second, shorter beat: a quote request lands, the
+ * owner's rule sends quotes to a person (the shipped preset "Quotes always need a person"), and it
+ * waits with an amber "Needs you". That is what the product does today: requests arrive by MCP,
+ * REST and email as typed items with states, rules confirm or flag inside the owner's limits, and a
+ * confirmed booking gets a signed receipt. No stars, no scores, no numbers that could be read as
+ * live data; the bike shop is an illustration.
+ *
+ * The timings are deliberate; do not retune them by accident.
+ *  - TRAVEL is unequal per agent (1.30 / 1.16 s) and the two beats are not the same length, so
+ *    the loop never reads as a metronome. LOOP is 12.6 s.
+ *  - Exactly one caption is on screen at a time. They change at 0.30, 2.62, 3.95, 5.62, 7.10 and
+ *    9.32 s, so the shortest holds 1.33 s ("Your rule checks the slot"); the last one holds over
+ *    the wrap until 0.30 s of the next pass, 3.58 s. Each is written only after the old one has
+ *    faded, into one text node.
+ *  - The route home is inked only while the answer is on it. The quote gets no answer: it waits
+ *    for a person, and drawing a reply would claim one was sent.
+ *  - The piece starts from the picture at rest (both items settled, 11.2 s into the loop) and
+ *    lets it go at 11.95 s, so the first thing a visitor sees move is the inbox clearing, not a
+ *    drawing that blinks out.
+ *
+ * Every static part is drawn once below, as a server-rendered SVG built from GEO, in the same
+ * settled state the loop rests in. mount() clones it, adds the pieces that move and swaps the
+ * clone in whole, so there is never a hole where the figure is: with JavaScript off, or if mount()
+ * throws, the picture at rest is what a visitor keeps. The figure holds aspect-ratio 520/390 from
+ * first paint, so nothing below it jumps.
+ *
+ * The styles are global because the moving pieces are made at run time, where Astro's scoped
+ * selectors cannot reach. Nothing leaks: every selector begins with .shf, every keyframe is named
+ * shf-*, and the hf- class names exist only inside .shf. None of them overlap HeroFlow's .sdf or
+ * NetworkFlow's .snf, so the pieces can share a page.
+ *
+ * Colours are the site's tokens, with a literal fallback only for a host that has not declared
+ * them; night redefines the fallbacks under both the prefers-color-scheme query and
+ * [data-theme="dark"]. Words drawn in a type's or a state's ink are pulled toward --ink (18% by
+ * day, 32% by night), as NetworkFlow does, so they clear 4.5:1 on their tinted pills and keep
+ * their hue. Chips, state pills, badges and the caption strip are measured at run time (fit()).
+ *
+ * With reduced motion the same machine is stepped to a composed still frame, and the preference is
+ * honoured if it is turned on later. Off-screen or in a hidden tab the clock stops.
+ */
+
+/** The world, in the 520x390 viewBox. The drawing below and the script both read this. */
+const GEO = {
+  agents: [
+    { y: 128, tint: "var(--hf-violet)" },
+    { y: 264, tint: "var(--hf-lagoon)" },
+  ],
+  /** agent to the item's own door on the inbox's edge */
+  send: ["M56,128 C128,128 146,189 220,189", "M56,264 C128,264 146,261 220,261"],
+  /** the route an answer takes home to the first agent */
+  back: "M220,180 C152,180 126,122 60,122",
+  card: { x: 220, y: 76, w: 276, h: 236 },
+  rule: { x: 232, y: 127, w: 252, h: 20 },
+  item: { x: 232, w: 252, h: 62, slots: [158, 230] },
+  say: {
+    cx: 260,
+    y: 336,
+    h: 20,
+    w: 204,
+    phrases: [
+      "An agent asks for a booking",
+      "Your rule checks the slot",
+      "Confirmed. The agent hears back",
+      "Your inbox signs a receipt",
+      "A quote request arrives",
+      "You price this one yourself",
+    ],
+  },
+  rules: ["Slot is free → confirm", "Quotes → always to you"],
+  items: [
+    {
+      ty: "booking",
+      lb: "Booking",
+      title: "Bike service · Sat 10:00",
+      from: "requested",
+      to: "confirmed",
+      badge: "Receipt",
+    },
+    { ty: "quote", lb: "Quote", title: "Custom wheel build", from: "received", to: "", badge: "Needs you" },
+  ],
+};
+
+const { card, rule, item, say } = GEO;
+/* the inbox's mark: the striped half sun, as on the home page's business card */
+const sunX = card.x + 12;
+const sun = `M${sunX},105 A11,11 0 0 1 ${sunX + 22},105 Z`;
+/* A rough width for the picture at rest; the script measures the real one. */
+const est = (s: string, fs: number) => Math.round(s.length * fs * 0.54);
+const PR = item.w - 10; /* a state pill's right edge */
+const pillW = (s: string) => est(s, 8.4) + 16;
+const badgeEnd = item.w - 12;
+const sayW = Math.max(say.w, ...say.phrases.map((p) => est(p, 9) + 34));
+const sayX = say.cx - sayW / 2;
+const last = say.phrases.length - 1;
+---
+
+<figure class="shf" aria-label="How one request is handled" data-hf={JSON.stringify(GEO)}>
+  <svg class="hf-seed" viewBox="0 0 520 390" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="hfseed-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--hf-tangerine)"></stop>
+        <stop offset="58%" stop-color="var(--hf-flamingo)"></stop>
+        <stop offset="100%" stop-color="var(--hf-violet)"></stop>
+      </linearGradient>
+      <clipPath id="hfseed-c"><path d={sun}></path></clipPath>
+    </defs>
+
+    <g class="hf-lines">
+      {GEO.send.map((d) => <path d={d} class="hf-line hf-send" />)}
+    </g>
+
+    <text x="30" y="60" font-size="8.2" class="hf-cap">AI AGENTS</text>
+
+    <g class="hf-card">
+      <rect x={card.x} y={card.y} width={card.w} height={card.h} rx="14" class="hf-glass" />
+      <path d={sun} fill="url(#hfseed-g)"></path>
+      <g clip-path="url(#hfseed-c)">
+        {[96.4, 98.7, 100.8].map((y) => (
+          <rect x={sunX - 1} y={y} width="24" height=".9" fill="var(--hf-ground)" />
+        ))}
+      </g>
+      <text x={sunX + 30} y="105" font-size="12.5" class="hf-title">Your inbox</text>
+      <text x={card.x + card.w - 12} y="104.6" font-size="8.2" text-anchor="end" class="hf-via">MCP · REST · email</text>
+      <line x1={card.x + 12} y1="118" x2={card.x + card.w - 12} y2="118" class="hf-hair" />
+
+      <g class="hf-rule warn">
+        <rect x={rule.x} y={rule.y} width={rule.w} height={rule.h} rx={rule.h / 2} class="frame" />
+        <g class="hf-switch">
+          <rect x={rule.x + 8} y={rule.y + 5} width="17" height="10" rx="5" class="track" />
+          <circle cx={rule.x + 20} cy={rule.y + 10} r="3.3" class="knob" />
+        </g>
+        <text x={rule.x + 32} y={rule.y + 13.3} font-size="8.8" class="hf-sentence">{GEO.rules[1]}</text>
+        <circle cx={rule.x + rule.w - 12} cy={rule.y + 10} r="3.2" class="hf-beat" />
+      </g>
+
+      {GEO.send.map((_, i) => <circle cx={card.x} cy={(item.slots[i] ?? 0) + item.h / 2} r="2.6" class="hf-port" />)}
+
+      {
+        GEO.items.map((it, i) => {
+          const state = it.to || it.from;
+          const w = pillW(state);
+          const quote = it.ty === "quote";
+          const tx = est(it.badge, 8.2);
+          return (
+            <g class:list={["hf-row", `t-${it.ty}`, "on"]} transform={`translate(${item.x},${item.slots[i]})`}>
+              <g class="in">
+                <rect width={item.w} height={item.h} rx="10" class="bg" />
+                <rect y="9" width="2.5" height={item.h - 18} rx="1.25" class="bar" />
+                <text x="14" y="23" font-size="9.4" class="lb">{it.lb}</text>
+                <text x="14" y="46.4" font-size="10.6" class="ttl">{it.title}</text>
+                <g class:list={["hf-state", { ok: Boolean(it.to) }]}>
+                  <rect x={PR - w} y="10" width={w} height="18" rx="9" class="pb" />
+                  <text x={PR - 8} y="22.1" font-size="8.4" text-anchor="end" class="tx">{state}</text>
+                </g>
+                <g class:list={["hf-badge", quote ? "hf-flag" : "hf-receipt", "on"]}>
+                  <g class="ic" transform={`translate(${badgeEnd - tx - 10},42.6)`}>
+                    <g class="icn">
+                    {quote ? (
+                      <>
+                        <circle r="5.8" class="rg" />
+                        <circle r="3.3" class="dot" />
+                      </>
+                    ) : (
+                      <>
+                        <rect x="-4.6" y="-6" width="9.2" height="12" rx="1.6" class="paper" />
+                        <line x1="-2.4" y1="-2.8" x2="2.4" y2="-2.8" class="ln" />
+                        <line x1="-2.4" y1="-.4" x2="1" y2="-.4" class="ln" />
+                        <circle cx="2.7" cy="3.5" r="2.5" class="seal" />
+                      </>
+                    )}
+                    </g>
+                  </g>
+                  <text x={badgeEnd} y="46.2" font-size="8.2" text-anchor="end" class="tx">{it.badge}</text>
+                </g>
+              </g>
+            </g>
+          );
+        })
+      }
+    </g>
+
+    {
+      GEO.agents.map((ag) => (
+        <g class="hf-agent" style={`--ag:${ag.tint}`}>
+          <rect x="30" y={ag.y - 12} width="24" height="24" rx="7" class="bodyfill" />
+          <rect x="30" y={ag.y - 12} width="24" height="24" rx="7" />
+          <rect x="26" y={ag.y - 16} width="32" height="32" rx="10" class="halo" />
+          <circle cx="37.6" cy={ag.y - 1} r="1.7" class="eye" />
+          <circle cx="46.4" cy={ag.y - 1} r="1.7" class="eye" />
+          <line x1="42" y1={ag.y - 12} x2="42" y2={ag.y - 19} />
+          <circle cx="42" cy={ag.y - 21.6} r="2.6" class="ant" />
+        </g>
+      ))
+    }
+
+    <g class="hf-say">
+      <rect x={sayX} y={say.y} width={sayW} height={say.h} rx={say.h / 2} />
+      <circle cx={sayX + 12} cy={say.y + say.h / 2} r="3" class="hf-dot" />
+      <text x={say.cx + 5} y={say.y + 13.2} font-size="9" text-anchor="middle" class="hf-phrase on">{say.phrases[last]}</text>
+    </g>
+  </svg>
+  <figcaption class="hf-sr">
+    An AI agent asks a bike shop for a service on Saturday at 10:00. The request lands in the shop's inbox as a booking,
+    marked requested. The shop's rule sees the slot is free and confirms it, the agent gets the answer, and the inbox
+    signs a receipt. Then a quote request arrives. The shop's rule sends quotes to a person, so it waits, marked needs
+    you.
+  </figcaption>
+</figure>
+
+<style is:global>
+  /* Every selector below begins with .shf and every keyframe is named shf-*. */
+  .shf {
+    --hf-ground: var(--ground, #f6f5ff);
+    --hf-ink: var(--ink, #14163c);
+    --hf-ink2: var(--ink-2, #3f4472);
+    --hf-ink3: var(--ink-3, #565a86);
+    --hf-hair: var(--hairline, rgba(20, 22, 60, 0.08));
+    --hf-glass: var(--glass-bg, rgba(255, 255, 255, 0.32));
+    --hf-glassb: var(--glass-border, rgba(255, 255, 255, 0.55));
+    --hf-row: var(--row-bg, rgba(255, 255, 255, 0.24));
+    --hf-booking: var(--c-booking, #ff6fa8);
+    --hf-booking-i: var(--c-booking-ink, #b02a6b);
+    --hf-quote: var(--c-quote, #8a6bff);
+    --hf-quote-i: var(--c-quote-ink, #5a3fd0);
+    --hf-palm: var(--c-success, #2fd3a5);
+    --hf-palm-i: var(--c-success-ink, #147a5c);
+    --hf-sun: var(--c-warning, #ffcf5c);
+    --hf-sun-i: var(--c-warning-ink, #866000);
+    --hf-flamingo: var(--flamingo, #ff6fa8);
+    --hf-violet: var(--violet, #8a6bff);
+    --hf-lagoon: var(--lagoon, #25cfe0);
+    --hf-tangerine: var(--tangerine, #ff9650);
+    --hf-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    /* how much of an ink is kept when its words are pulled toward --ink */
+    --hf-tmix: 82%;
+    --hf-ok-i: color-mix(in srgb, var(--hf-palm-i) var(--hf-tmix), var(--hf-ink));
+    --hf-wait-i: color-mix(in srgb, var(--hf-sun-i) var(--hf-tmix), var(--hf-ink));
+    position: relative;
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 520 / 390;
+    container-type: inline-size;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .shf {
+      --hf-ground: var(--ground, #0d0e26);
+      --hf-ink: var(--ink, #f2f1ff);
+      --hf-ink2: var(--ink-2, #b9bce0);
+      --hf-ink3: var(--ink-3, #9a9dc4);
+      --hf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+      --hf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+      --hf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+      --hf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+      --hf-booking-i: var(--c-booking-ink, #ff8fbc);
+      --hf-quote-i: var(--c-quote-ink, #ab95ff);
+      --hf-palm-i: var(--c-success-ink, #72e6c3);
+      --hf-sun-i: var(--c-warning-ink, #ffda80);
+      --hf-tmix: 68%;
+    }
+  }
+  [data-theme="dark"] .shf {
+    --hf-ground: var(--ground, #0d0e26);
+    --hf-ink: var(--ink, #f2f1ff);
+    --hf-ink2: var(--ink-2, #b9bce0);
+    --hf-ink3: var(--ink-3, #9a9dc4);
+    --hf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+    --hf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+    --hf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+    --hf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+    --hf-booking-i: var(--c-booking-ink, #ff8fbc);
+    --hf-quote-i: var(--c-quote-ink, #ab95ff);
+    --hf-palm-i: var(--c-success-ink, #72e6c3);
+    --hf-sun-i: var(--c-warning-ink, #ffda80);
+    --hf-tmix: 68%;
+  }
+  /* One pair of properties carries an item's type wherever it goes. */
+  .shf .t-booking {
+    --tc: var(--hf-booking);
+    --ti: color-mix(in srgb, var(--hf-booking-i) var(--hf-tmix), var(--hf-ink));
+  }
+  .shf .t-quote {
+    --tc: var(--hf-quote);
+    --ti: color-mix(in srgb, var(--hf-quote-i) var(--hf-tmix), var(--hf-ink));
+  }
+
+  .shf svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .shf text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--hf-ink2);
+  }
+  .shf .hf-cap {
+    letter-spacing: 0.11em;
+  }
+  .shf .hf-title {
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* the lines: each agent's way in, and the one route home */
+  .shf .hf-line {
+    fill: none;
+    stroke: var(--hf-ink3);
+    stroke-opacity: 0.34;
+    stroke-width: 1.1;
+    transition: stroke-dashoffset 0.95s var(--hf-ease);
+  }
+  .shf .hf-port {
+    fill: var(--hf-ink3);
+    fill-opacity: 0.55;
+  }
+  .shf .hf-trail {
+    fill: none;
+    stroke: var(--hf-palm);
+    stroke-width: 1.1;
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+
+  /* glass: a wash and a hairline, never a shadow */
+  .shf .hf-glass {
+    fill: var(--hf-glass);
+    stroke: var(--hf-glassb);
+    stroke-width: 1;
+  }
+  .shf .hf-hair {
+    stroke: var(--hf-hair);
+    stroke-width: 1;
+  }
+
+  /* The rule strip: a switch that is on, the rule in the owner's words, and a
+     beat that says a rule just ran — palm when it settled the item, amber when
+     it handed it to a person. */
+  .shf .hf-rule .frame {
+    fill: none;
+    stroke: var(--hf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+    transition: stroke-opacity 0.3s var(--hf-ease);
+  }
+  .shf .hf-rule.lit .frame {
+    stroke-opacity: 0.66;
+  }
+  .shf .hf-switch .track {
+    fill: color-mix(in srgb, var(--hf-palm) 30%, transparent);
+    stroke: color-mix(in srgb, var(--hf-palm) 70%, transparent);
+    stroke-width: 0.8;
+  }
+  .shf .hf-switch .knob {
+    fill: var(--hf-palm-i);
+  }
+  .shf .hf-sentence {
+    fill: var(--hf-ink);
+    font-weight: 500;
+    transition: opacity 0.2s var(--hf-ease);
+  }
+  .shf .hf-sentence.swap {
+    opacity: 0;
+  }
+  .shf .hf-beat {
+    fill: var(--hf-ink3);
+    fill-opacity: 0.4;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    transition:
+      fill 0.28s var(--hf-ease),
+      fill-opacity 0.28s var(--hf-ease);
+  }
+  .shf .hf-rule.ok .hf-beat {
+    fill: var(--hf-palm);
+    fill-opacity: 1;
+  }
+  .shf .hf-rule.warn .hf-beat {
+    fill: var(--hf-sun);
+    fill-opacity: 1;
+  }
+  .shf .hf-rule.lit .hf-beat {
+    animation: shf-beat 0.7s var(--hf-ease);
+  }
+  @keyframes shf-beat {
+    0% {
+      transform: scale(1);
+    }
+    36% {
+      transform: scale(1.6);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* The items: faded in where they stand on arrival, faded in place at the
+     wrap, reset unseen. The chip has already carried the motion and its word
+     sits exactly on the item's type label, so the item does not slide as well:
+     a slide left the two labels a few units apart while they crossed. */
+  .shf .hf-row .in {
+    opacity: 0;
+  }
+  .shf .hf-row.on .in {
+    opacity: 1;
+    transition: opacity 0.42s var(--hf-ease);
+  }
+  .shf .hf-row.leaving .in {
+    opacity: 0;
+    transition: opacity 0.5s var(--hf-ease);
+  }
+  .shf .hf-row .bg {
+    fill: var(--hf-row);
+    stroke: var(--hf-glassb);
+    stroke-width: 1;
+  }
+  .shf .hf-row .bar {
+    fill: var(--tc);
+  }
+  .shf .hf-row .lb {
+    fill: var(--ti);
+    font-weight: 600;
+  }
+  .shf .hf-row .ttl {
+    fill: var(--hf-ink);
+    font-weight: 600;
+  }
+  .shf .hf-state {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  /* The neutral pill carries a wash of the ground, so its word never sits on
+     the sky's glow: over the lagoon at night a plain row fill left --ink-2 at
+     4.2:1. */
+  .shf .hf-state .pb {
+    fill: color-mix(in srgb, var(--hf-ground) 55%, transparent);
+    stroke: var(--hf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+  }
+  .shf .hf-state .tx {
+    fill: var(--hf-ink2);
+  }
+  .shf .hf-state.ok .pb {
+    fill: color-mix(in srgb, var(--hf-palm) 16%, var(--hf-ground));
+    stroke: var(--hf-palm);
+    stroke-opacity: 0.55;
+  }
+  .shf .hf-state.ok .tx {
+    fill: var(--hf-ok-i);
+    font-weight: 600;
+  }
+  .shf .hf-state.pop,
+  .shf .hf-badge.pop .icn {
+    animation: shf-pop 0.6s var(--hf-ease);
+  }
+  @keyframes shf-pop {
+    0% {
+      transform: scale(0.8);
+    }
+    50% {
+      transform: scale(1.12);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .shf .hf-badge {
+    opacity: 0;
+    transition: opacity 0.36s var(--hf-ease);
+  }
+  .shf .hf-badge.on {
+    opacity: 1;
+  }
+  /* the mark pops inside the group that places it, so the pop never moves it */
+  .shf .hf-badge .icn {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .shf .hf-receipt .tx {
+    fill: var(--hf-ok-i);
+    font-weight: 600;
+  }
+  .shf .hf-receipt .paper {
+    fill: color-mix(in srgb, var(--hf-palm) 14%, var(--hf-ground));
+    stroke: var(--hf-palm);
+    stroke-opacity: 0.8;
+    stroke-width: 0.9;
+  }
+  .shf .hf-receipt .ln {
+    stroke: var(--hf-ok-i);
+    stroke-opacity: 0.55;
+    stroke-width: 0.9;
+    stroke-linecap: round;
+  }
+  .shf .hf-receipt .seal {
+    fill: var(--hf-palm);
+  }
+  .shf .hf-flag .tx {
+    fill: var(--hf-wait-i);
+    font-weight: 600;
+  }
+  .shf .hf-flag .dot {
+    fill: var(--hf-sun);
+  }
+  .shf .hf-flag .rg {
+    fill: none;
+    stroke: var(--hf-sun);
+    stroke-width: 1.2;
+    opacity: 0.3;
+  }
+  .shf .hf-flag.on .rg {
+    animation: shf-breathe 2.8s var(--hf-ease) infinite;
+  }
+  @keyframes shf-breathe {
+    0%,
+    100% {
+      opacity: 0.16;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Agents are drawn in ink and carry their identity in one small tinted dot. */
+  .shf .hf-agent rect,
+  .shf .hf-agent line {
+    fill: none;
+    stroke: var(--hf-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.2;
+  }
+  .shf .hf-agent .bodyfill {
+    fill: var(--ag);
+    fill-opacity: 0.07;
+    stroke: none;
+  }
+  .shf .hf-agent .eye {
+    fill: var(--hf-ink2);
+    fill-opacity: 0.5;
+  }
+  .shf .hf-agent .ant {
+    fill: var(--ag);
+  }
+  .shf .hf-agent .halo {
+    stroke: var(--ag);
+    stroke-opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .shf .hf-agent.wake .halo {
+    animation: shf-halo 0.62s var(--hf-ease);
+  }
+  .shf .hf-agent.glow .halo {
+    stroke: var(--hf-palm);
+    animation: shf-halo 0.8s var(--hf-ease);
+  }
+  @keyframes shf-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.82);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.3);
+    }
+  }
+
+  /* the pieces that travel */
+  .shf .hf-chip .bg {
+    fill: color-mix(in srgb, var(--tc) 15%, var(--hf-ground));
+    stroke: color-mix(in srgb, var(--tc) 44%, transparent);
+    stroke-width: 1;
+  }
+  .shf .hf-chip .dot {
+    fill: var(--tc);
+  }
+  .shf .hf-chip .lb {
+    fill: var(--ti);
+    font-weight: 600;
+  }
+  .shf .hf-home .disc {
+    fill: var(--hf-ground);
+    stroke: var(--hf-palm);
+    stroke-opacity: 0.65;
+    stroke-width: 1.1;
+  }
+  .shf .hf-home .mark {
+    fill: none;
+    stroke: var(--hf-palm-i);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .shf .hf-off {
+    display: none;
+  }
+
+  /* the caption strip: one phrase, faded out before the next is written */
+  .shf .hf-say rect {
+    fill: none;
+    stroke: var(--hf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+  }
+  .shf .hf-dot {
+    fill: var(--hf-palm);
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .shf .hf-say.beat .hf-dot {
+    animation: shf-beat 0.7s var(--hf-ease);
+  }
+  .shf .hf-phrase {
+    fill: var(--hf-ink2);
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.16s linear;
+  }
+  .shf .hf-phrase.on {
+    opacity: 1;
+    transition: opacity 0.24s var(--hf-ease);
+  }
+
+  /* Read by a screen reader, not drawn. */
+  .shf .hf-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Below the breakpoint the viewBox shrinks the type past reading size, so the
+     words that carry the story grow in user units, to the same targets as the
+     home page's and the network page's pieces. Two things step out because
+     they cannot grow inside their boxes: the channel line in the inbox's
+     heading, and the badge words (the receipt and the amber dot still say it).
+     The script measures after the switch, so a bigger word gets a bigger box. */
+  @container (max-width: 460px) {
+    .shf .hf-via,
+    .shf .hf-badge .tx {
+      display: none;
+    }
+    .shf .hf-cap {
+      font-size: 12.4px;
+    }
+    .shf .hf-title {
+      font-size: 15px;
+    }
+    .shf .hf-sentence {
+      font-size: 12.2px;
+    }
+    .shf .hf-row .lb,
+    .shf .hf-row .ttl,
+    .shf .hf-chip .lb {
+      font-size: 12.8px;
+    }
+    .shf .hf-state .tx {
+      font-size: 11.6px;
+    }
+    .shf .hf-phrase {
+      font-size: 12.4px;
+    }
+  }
+
+  /* Reduced motion: the machine is stepped to a composed frame and then every
+     transition and keyframe inside the figure is switched off. Paused, the CSS
+     keyframes stop with the clock. */
+  .shf.hf-still *,
+  .shf.hf-still {
+    animation: none !important;
+    transition: none !important;
+  }
+  .shf.hf-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shf * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  /* The drawing machine. It clones the server-rendered picture, adds the pieces
+     that move, and derives every piece from one clock: where a thing is, and
+     which state it shows, is a function of the phase; the small flourishes (a
+     halo, a pop, a beat) fire when the phase crosses their moment. */
+  type Item = { ty: string; lb: string; title: string; from: string; to: string; badge: string };
+  type Geo = {
+    agents: { y: number }[];
+    send: string[];
+    back: string;
+    card: { x: number };
+    item: { x: number; w: number; h: number; slots: number[] };
+    say: { cx: number; y: number; h: number; w: number; phrases: string[] };
+    rules: string[];
+    items: Item[];
+  };
+  type Piece = Item & {
+    row: SVGGElement;
+    state: SVGGElement;
+    stateBg: SVGRectElement;
+    stateTx: SVGTextElement;
+    badgeG: SVGGElement;
+    badgeIc: SVGGElement;
+    badgeTx: SVGTextElement;
+    chip: SVGGElement;
+    chipBg: SVGRectElement;
+    chipDot: SVGCircleElement;
+    chipLb: SVGTextElement;
+    w: number;
+    widths: Record<string, number>;
+  };
+
+  const NS = "http://www.w3.org/2000/svg";
+  function E<K extends keyof SVGElementTagNameMap>(
+    n: K,
+    a: Record<string, string | number> = {},
+    t?: string,
+  ): SVGElementTagNameMap[K] {
+    const e = document.createElementNS(NS, n);
+    for (const k in a) e.setAttribute(k, String(a[k]));
+    if (t !== undefined) e.textContent = t;
+    return e;
+  }
+  function all<T extends Element>(root: ParentNode, sel: string): T[] {
+    return Array.from(root.querySelectorAll<T>(sel));
+  }
+  function one<T extends Element>(root: ParentNode, sel: string): T {
+    const e = root.querySelector<T>(sel);
+    if (!e) throw new Error(`how flow: missing ${sel}`);
+    return e;
+  }
+
+  /* Newton solve for a CSS cubic-bezier, so the travel uses the same curve as
+     the CSS transitions around it. */
+  function bez(x1: number, y1: number, x2: number, y2: number) {
+    const cx = 3 * x1;
+    const bx = 3 * (x2 - x1) - cx;
+    const ax = 1 - cx - bx;
+    const cy = 3 * y1;
+    const by = 3 * (y2 - y1) - cy;
+    const ay = 1 - cy - by;
+    return (x: number) => {
+      let t = x;
+      for (let i = 0; i < 5; i++) {
+        const e = ((ax * t + bx) * t + cx) * t - x;
+        if (Math.abs(e) < 1e-4) break;
+        const d = (3 * ax * t + 2 * bx) * t + cx;
+        if (Math.abs(d) < 1e-6) break;
+        t -= e / d;
+      }
+      return ((ay * t + by) * t + cy) * t;
+    };
+  }
+  const eSoft = bez(0.2, 0.8, 0.2, 1);
+  const eSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+  const cl = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+
+  /* ---- timings, in seconds into the loop ------------------------------- */
+  const LOOP = 12.6;
+  /* per item: when its agent wakes, how long the trip takes, and its beats */
+  const BEAT = [
+    { wake: 0.3, travel: 1.3, rule: 2.62, settle: 3.4, badge: 5.62 },
+    { wake: 7.1, travel: 1.16, rule: 9.32, settle: -1, badge: 10.02 },
+  ];
+  const GO = 0.12; /* the chip leaves this long after its agent wakes */
+  const GLIDE = 0.36; /* from the door into the item's place */
+  const HOME = [3.95, 5.01]; /* the answer's trip back to the first agent */
+  const RULE_SWAP = 8.8; /* the strip turns to the quote rule once the quote has landed */
+  const RESET = 11.95; /* the inbox clears */
+  const RULE_BACK = 12.3; /* and the strip returns to the booking rule */
+  const SAY = [0.3, 2.62, 3.95, 5.62, 7.1, 9.32];
+  const START = 11.2; /* the picture at rest is this moment */
+  const STILL = 11.2; /* and so is the reduced-motion frame, with the answer held on its way */
+  const PADL = 19; /* word start: the dot sits at 11, as on the other pieces' chips */
+  const PADR = 9;
+  const DOOR_X = 58; /* a chip never reaches back over its agent */
+
+  let seq = 0;
+
+  function mount(fig: HTMLElement) {
+    if (fig.dataset.hfOn === "on") return; /* one scene per figure, however often this runs */
+    fig.dataset.hfOn = "on";
+    const G = JSON.parse(fig.dataset.hf ?? "") as Geo;
+    const seed = one<SVGSVGElement>(fig, "svg.hf-seed");
+
+    /* The live scene is the picture at rest plus the pieces that move. It is
+       built off the page and swapped in whole, so the figure is never empty. */
+    const svg = seed.cloneNode(true) as SVGSVGElement;
+    svg.classList.remove("hf-seed");
+    const uid = `hf${++seq}`;
+    one(svg, "#hfseed-g").id = `${uid}g`;
+    one(svg, "#hfseed-c").id = `${uid}c`;
+    for (const el of all(svg, '[fill="url(#hfseed-g)"]')) el.setAttribute("fill", `url(#${uid}g)`);
+    for (const el of all(svg, '[clip-path="url(#hfseed-c)"]')) el.setAttribute("clip-path", `url(#${uid}c)`);
+
+    const sends = all<SVGPathElement>(svg, ".hf-send");
+    const lines = all<SVGPathElement>(svg, ".hf-line");
+    const agents = all<SVGGElement>(svg, ".hf-agent");
+    const ruleG = one<SVGGElement>(svg, ".hf-rule");
+    const sentence = one<SVGTextElement>(ruleG, ".hf-sentence");
+    const sayG = one<SVGGElement>(svg, ".hf-say");
+    const sayRect = one<SVGRectElement>(sayG, "rect");
+    const sayDot = one<SVGCircleElement>(sayG, ".hf-dot");
+    const phrase = one<SVGTextElement>(sayG, ".hf-phrase");
+    const rows = all<SVGGElement>(svg, ".hf-row");
+
+    const trail = E("path", { d: G.back, class: "hf-trail" });
+    one(svg, ".hf-lines").appendChild(trail);
+    const fly = E("g");
+    svg.appendChild(fly);
+    const home = E("g", { class: "hf-home hf-off" });
+    home.append(E("circle", { r: 7.6, class: "disc" }), E("path", { d: "M-3.1,.2 L-.9,2.5 L3.3,-2.7", class: "mark" }));
+
+    const P: Piece[] = G.items.map((it, i) => {
+      const row = rows[i];
+      if (!row) throw new Error("how flow: missing row");
+      const w = Math.round(it.lb.length * 9.4 * 0.54) + PADL + PADR;
+      const chip = E("g", { class: `hf-chip t-${it.ty} hf-off` });
+      const chipBg = E("rect", { x: -w / 2, y: -10, width: w, height: 20, rx: 10, class: "bg" });
+      const chipDot = E("circle", { cx: -w / 2 + 11, cy: 0, r: 3, class: "dot" });
+      const chipLb = E("text", { x: -w / 2 + PADL, y: 3.3, "font-size": 9.4, class: "lb" }, it.lb);
+      chip.append(chipBg, chipDot, chipLb);
+      fly.appendChild(chip);
+      const state = one<SVGGElement>(row, ".hf-state");
+      const badge = one<SVGGElement>(row, ".hf-badge");
+      return {
+        ...it,
+        row,
+        state,
+        stateBg: one<SVGRectElement>(state, "rect"),
+        stateTx: one<SVGTextElement>(state, "text"),
+        badgeG: badge,
+        badgeIc: one<SVGGElement>(badge, ".ic"),
+        badgeTx: one<SVGTextElement>(badge, "text"),
+        chip,
+        chipBg,
+        chipDot,
+        chipLb,
+        w,
+        widths: {},
+      };
+    });
+    fly.appendChild(home);
+
+    /* Anything that throws from here on leaves a drawn scene, not a hole. */
+    seed.replaceWith(svg);
+
+    const len = (p: SVGPathElement) => p.getTotalLength();
+    const LSEND = sends.map(len);
+    const LBACK = len(trail);
+    const IT = G.item;
+    const PR = IT.w - 10;
+    const BADGE_END = IT.w - 12;
+
+    /* ---- words are measured, never guessed ------------------------------ */
+    function bx(t: SVGGraphicsElement): DOMRect | null {
+      try {
+        const b = t.getBBox();
+        return b?.width ? b : null;
+      } catch {
+        return null;
+      }
+    }
+    function shown(t: Element) {
+      return getComputedStyle(t).display !== "none";
+    }
+    function fitState(p: Piece) {
+      const w = p.widths[p.stateTx.textContent ?? ""];
+      if (!w) return;
+      p.stateBg.setAttribute("x", String(PR - w));
+      p.stateBg.setAttribute("width", String(w));
+    }
+    function fit() {
+      for (const p of P) {
+        /* the chip: a word that grows gets a bigger chip, never a clipped one */
+        const hid = p.chip.classList.contains("hf-off");
+        if (hid) p.chip.classList.remove("hf-off");
+        const b = bx(p.chipLb);
+        if (hid) p.chip.classList.add("hf-off");
+        if (b) {
+          p.w = Math.round(b.width + PADL + PADR);
+          p.chipBg.setAttribute("x", String(-p.w / 2));
+          p.chipBg.setAttribute("width", String(p.w));
+          p.chipDot.setAttribute("cx", String(-p.w / 2 + 11));
+          p.chipLb.setAttribute("x", String(-p.w / 2 + PADL));
+        }
+        /* the state pill holds each of its words, measured once per scale */
+        const keep = (p.stateTx.textContent ?? "").trim();
+        for (const s of [p.from, p.to]) {
+          if (!s) continue;
+          p.stateTx.textContent = s;
+          const sb = bx(p.stateTx);
+          if (sb) p.widths[s] = Math.ceil(sb.width + 16);
+        }
+        p.stateTx.textContent = keep;
+        fitState(p);
+        /* the badge's mark sits just before its word, or alone at the edge */
+        const tb = shown(p.badgeTx) ? bx(p.badgeTx) : null;
+        const ix = tb ? tb.x - (p.ty === "quote" ? 10 : 9) : BADGE_END - 6;
+        p.badgeIc.setAttribute("transform", `translate(${ix.toFixed(1)},42.6)`);
+      }
+      /* the caption strip holds its widest phrase, so it never changes size under a phrase */
+      const said = phrase.textContent;
+      let widest = 0;
+      for (const s of G.say.phrases) {
+        phrase.textContent = s;
+        widest = Math.max(widest, bx(phrase)?.width ?? 0);
+      }
+      phrase.textContent = said;
+      const W = Math.max(G.say.w, Math.ceil(widest + 34));
+      const x0 = G.say.cx - W / 2;
+      sayRect.setAttribute("x", String(x0));
+      sayRect.setAttribute("width", String(W));
+      sayDot.setAttribute("cx", String(x0 + 12));
+      phrase.setAttribute("x", String(x0 + (W + 10) / 2));
+    }
+    let narrow: boolean | null = null;
+    let measured = false;
+    function gauge() {
+      const w = fig.clientWidth;
+      const nw = w > 0 && w <= 460;
+      if (nw === narrow && measured) return;
+      narrow = nw;
+      if (w > 0) {
+        fit();
+        measured = true;
+      }
+    }
+    gauge();
+    if ("ResizeObserver" in window) new ResizeObserver(gauge).observe(fig);
+    document.fonts?.ready.then(fit, () => {});
+
+    /* ---- the pieces ------------------------------------------------------ */
+    function put(el: SVGElement, x: number, y: number, s = 1) {
+      el.setAttribute("transform", `translate(${x.toFixed(2)},${y.toFixed(2)})${s === 1 ? "" : ` scale(${s.toFixed(3)})`}`);
+      el.classList.remove("hf-off");
+    }
+    function off(el: SVGElement) {
+      el.classList.add("hf-off");
+    }
+    /* Flourishes are wall-clock, so every timer is held here: a paused or
+       stilled piece must not have a late timer reach in and undo it. */
+    const timers: number[] = [];
+    function hold(ms: number, fn: () => void) {
+      timers.push(window.setTimeout(fn, ms));
+    }
+    function flash(el: Element, cls: string, ms: number) {
+      el.classList.remove(cls);
+      void el.getBoundingClientRect(); /* a reflow, so a repeated flourish starts again */
+      el.classList.add(cls);
+      hold(ms, () => el.classList.remove(cls));
+    }
+
+    /* One phrase on screen at a time: a single text node, faded out before the
+       next phrase is written into it. */
+    let want = phrase.textContent ?? "";
+    function sayIt(text: string, live: boolean) {
+      if (text === want) return;
+      want = text;
+      if (!live) {
+        phrase.textContent = text;
+        phrase.classList.add("on");
+        return;
+      }
+      phrase.classList.remove("on");
+      flash(sayG, "beat", 720);
+      hold(170, () => {
+        phrase.textContent = want;
+        phrase.classList.add("on");
+      });
+    }
+    /* The rule strip shows the rule that is about to run, changed under a fade. */
+    let rule = sentence.textContent ?? "";
+    function ruleIt(text: string, live: boolean) {
+      if (text === rule) return;
+      rule = text;
+      if (!live) {
+        sentence.textContent = text;
+        sentence.classList.remove("swap");
+        return;
+      }
+      sentence.classList.add("swap");
+      hold(210, () => {
+        sentence.textContent = rule;
+        sentence.classList.remove("swap");
+      });
+    }
+
+    /* ---- one frame -------------------------------------------------------- */
+    let prev = -1;
+    function crossed(t: number, ph: number) {
+      if (prev < 0) return false;
+      return prev <= ph ? prev < t && t <= ph : t > prev || t <= ph;
+    }
+
+    function render(ph: number, live: boolean) {
+      /* the caption: the last one whose moment has come, or the last of the loop */
+      let si = SAY.length - 1;
+      for (let i = 0; i < SAY.length; i++) if (ph >= (SAY[i] ?? 0)) si = i;
+      sayIt(G.say.phrases[si] ?? "", live);
+
+      /* the rule strip: which rule, and what it last did */
+      const quoteRule = ph >= RULE_SWAP && ph < RULE_BACK;
+      ruleIt(G.rules[quoteRule ? 1 : 0] ?? "", live);
+      const b0 = BEAT[0];
+      const b1 = BEAT[1];
+      if (!b0 || !b1) return;
+      ruleG.classList.toggle("ok", ph >= b0.rule && ph < b1.rule);
+      ruleG.classList.toggle("warn", ph >= b1.rule && ph < RULE_BACK);
+
+      P.forEach((p, i) => {
+        const B = BEAT[i];
+        const agent = agents[i];
+        const send = sends[i];
+        if (!B || !agent || !send) return;
+        const p1 = B.wake + GO + B.travel; /* at the item's door */
+        const p2 = p1 + GLIDE; /* in its place */
+
+        /* 1. the agent wakes and the request leaves it */
+        if (live && crossed(B.wake, ph)) flash(agent, "wake", 640);
+        if (ph >= B.wake + GO && ph < p2) {
+          let x: number;
+          let y: number;
+          let s = 1;
+          let o = 1;
+          if (ph < p1) {
+            const pt = send.getPointAtLength(eSine((ph - B.wake - GO) / B.travel) * (LSEND[i] ?? 0));
+            x = pt.x;
+            y = pt.y;
+            /* it grows out of the agent rather than sitting on top of it */
+            s = Math.max(0.14, Math.min(1, (x - DOOR_X) / (p.w / 2)));
+            o = Math.min(1, s * 1.8);
+          } else {
+            /* 2. it glides in and becomes the item: its word lands on the item's own
+               type label, which is set at the same size, as on the home page */
+            const u = eSoft((ph - p1) / GLIDE);
+            const door = (IT.slots[i] ?? 0) + IT.h / 2;
+            x = lerp(G.card.x, IT.x + 14 - PADL + p.w / 2, u);
+            y = lerp(door, (IT.slots[i] ?? 0) + 23 - 3.3, u);
+            if (ph > p2 - 0.14) o = cl((p2 - ph) / 0.14);
+          }
+          p.chip.style.opacity = String(o);
+          put(p.chip, x, y, s);
+        } else off(p.chip);
+
+        /* 3. the item is on from its arrival to the wrap, then fades where it is */
+        const on = ph >= p2 - 0.1 && ph < RESET;
+        p.row.classList.toggle("on", on);
+        p.row.classList.toggle("leaving", ph >= RESET);
+
+        /* 4. the rule runs; a booking it can settle turns confirmed */
+        if (live && crossed(B.rule, ph)) flash(ruleG, "lit", 760);
+        if (p.to) {
+          const settled = ph >= B.settle;
+          const text = settled ? p.to : p.from;
+          if (p.stateTx.textContent !== text) {
+            p.stateTx.textContent = text;
+            fitState(p);
+          }
+          p.state.classList.toggle("ok", settled);
+          if (live && crossed(B.settle, ph)) flash(p.state, "pop", 620);
+        }
+
+        /* 5. the receipt, or the amber "needs you" */
+        p.badgeG.classList.toggle("on", ph >= B.badge);
+        if (live && crossed(B.badge, ph)) flash(p.badgeG, "pop", 620);
+      });
+
+      /* the answer goes home along a route inked only for the journey */
+      const [h0, h1] = HOME as [number, number];
+      if (ph >= h0 && ph < h1) {
+        const v = (ph - h0) / (h1 - h0);
+        const pt = trail.getPointAtLength(eSine(v) * LBACK);
+        put(home, pt.x, pt.y);
+        home.style.opacity = String(v < 0.14 ? v / 0.14 : v > 0.88 ? cl((1 - v) / 0.12) : 1);
+        trail.style.opacity = String((v < 0.2 ? v / 0.2 : v > 0.7 ? cl((1 - v) / 0.3) : 1) * 0.6);
+      } else {
+        off(home);
+        trail.style.opacity = "0";
+      }
+      const a0 = agents[0];
+      if (live && a0 && crossed(h1, ph)) flash(a0, "glow", 820);
+      prev = ph;
+    }
+
+    /* ---- the clock ------------------------------------------------------- */
+    let clock = START;
+    let last = 0;
+    let raf = 0;
+    let run = false;
+    let seen = true;
+    const mq = matchMedia("(prefers-reduced-motion: reduce)");
+
+    function frame(now: number) {
+      if (!run) return;
+      clock += Math.min((now - last) / 1000, 0.05); /* clamped: a stall slows the piece, never teleports it */
+      last = now;
+      render(clock % LOOP, true);
+      raf = requestAnimationFrame(frame);
+    }
+    /* Resume from a settled state: timers cut off by a pause must not leave a
+       half-faded phrase, a lit strip or a halo behind. */
+    function settle() {
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+      phrase.textContent = want;
+      phrase.classList.add("on");
+      sentence.textContent = rule;
+      sentence.classList.remove("swap");
+      sayG.classList.remove("beat");
+      ruleG.classList.remove("lit");
+      for (const a of agents) a.classList.remove("wake", "glow");
+      for (const p of P) {
+        p.state.classList.remove("pop");
+        p.badgeG.classList.remove("pop");
+      }
+    }
+    function sync() {
+      if (fig.classList.contains("hf-still")) return;
+      const go = seen && !document.hidden;
+      if (go === run) return;
+      run = go;
+      if (run) {
+        fig.classList.remove("hf-paused");
+        settle();
+        prev = -1;
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else {
+        cancelAnimationFrame(raf);
+        fig.classList.add("hf-paused");
+      }
+    }
+
+    /* The lines draw themselves in on arrival, unless the browser has already
+       painted the picture at rest, where replaying it would blink them. */
+    let painted = false;
+    try {
+      painted = performance.getEntriesByType("paint").length > 0;
+    } catch {}
+    lines.forEach((p, i) => {
+      const L = len(p);
+      p.style.strokeDasharray = String(L);
+      p.style.strokeDashoffset = painted ? "0" : String(L);
+      p.style.transitionDelay = `${i * 0.08}s`;
+    });
+    function draw() {
+      for (const p of lines) p.style.strokeDashoffset = "0";
+    }
+
+    /* The still is this same machine at the moment the picture rests on: the
+       booking confirmed with its receipt, the quote waiting for a person. The
+       answer is held part of the way home, so one frame also says the agent
+       heard back. */
+    function still() {
+      fig.classList.add("hf-still");
+      settle();
+      prev = -1;
+      render(STILL, false);
+      draw();
+      const pt = trail.getPointAtLength(0.55 * LBACK);
+      put(home, pt.x, pt.y);
+      home.style.opacity = "1";
+      trail.style.opacity = "0.6";
+    }
+
+    if (mq.matches) {
+      still();
+      return;
+    }
+    render(START, false); /* the same frame as the picture at rest, now owned by the machine */
+    requestAnimationFrame(() => requestAnimationFrame(draw));
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(
+        (es) => {
+          seen = es[0]?.isIntersecting ?? true;
+          sync();
+        },
+        { threshold: 0.01 },
+      ).observe(fig);
+    }
+    document.addEventListener("visibilitychange", sync);
+    /* The preference can be turned on after the page has loaded; both paths end
+       in the same composed frame. */
+    mq.addEventListener("change", () => {
+      if (!mq.matches || fig.classList.contains("hf-still")) return;
+      run = false;
+      cancelAnimationFrame(raf);
+      still();
+    });
+    sync();
+  }
+
+  /* One figure that throws must not take the page's other figures with it, and
+     leaves its own picture at rest standing. */
+  function mountAll() {
+    for (const f of document.querySelectorAll<HTMLElement>(".shf")) {
+      try {
+        mount(f);
+      } catch (err) {
+        console.warn("how flow", err);
+      }
+    }
+  }
+  mountAll();
+  document.addEventListener("astro:page-load", mountAll);
+</script>
