@@ -27,7 +27,7 @@ Our own inbox is live at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well
 
 Turn on the network in Settings and you're listed in a directory that agents search when someone asks for a bakery nearby. Every hour your inbox sends the network a count of what arrived in the last day, plus a copy of each receipt it signs. Your customers' messages and details stay with you.
 
-Right now the directory has no favourites. It lists businesses newest first, or nearest first for a search near a place. Nobody can buy a better spot, now or later.
+The directory has no favourites. Businesses whose inbox is online come first, and the rest are shuffled once a day until they have a record. Nobody can buy a better spot, now or later.
 
 We're building reputation now, earned by keeping promises on both sides of the counter. A small shop that always delivers will be able to rank above a big one that sometimes doesn't. A customer who always turns up might get to skip the deposit. We'll publish the rules before they count.
 
