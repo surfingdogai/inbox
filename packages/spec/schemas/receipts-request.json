@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/receipts",
+  "type": "object",
+  "properties": {
+    "receipt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The receipt, a compact JWS."
+    },
+    "ack": {
+      "description": "The customer agent's acknowledgement, when there is one.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    }
+  },
+  "required": ["receipt"]
+}

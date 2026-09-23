@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/presentations",
+  "type": "object",
+  "properties": {
+    "pass": {
+      "description": "The pass's secret form; a bound pass needs agent_key instead.",
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}_[a-z2-7]{32}$"
+    },
+    "key": {
+      "description": "Exchanged for a pass (returned in `pass`), reused for 24 h per agent.",
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdkey1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}_[a-z2-7]{32}$"
+    },
+    "agent_key": {
+      "type": "object",
+      "properties": {
+        "jkt": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "pass_ref": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+          "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+        },
+        "label": {
+          "type": "string",
+          "pattern": "^[a-z*][a-z0-9_.*-]{0,63}$"
+        },
+        "signature_input": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "signature": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "signature_base": {
+          "type": "string",
+          "maxLength": 16384
+        }
+      },
+      "required": ["jkt", "pass_ref", "label", "signature_input", "signature", "signature_base"]
+    },
+    "purpose": {
+      "default": "request",
+      "type": "string",
+      "enum": ["request", "ack"]
+    },
+    "sha": {
+      "description": "With purpose ack: the receipt acknowledged.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "email": {
+      "description": "The item's email, so the answer says whether it is the person's.",
+      "type": "string",
+      "maxLength": 320
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "jkt": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "directory": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https:\\/\\/"
+        }
+      }
+    },
+    "email_proof": {
+      "description": "How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7).",
+      "type": "string",
+      "enum": ["otp", "dkim"]
+    }
+  }
+}

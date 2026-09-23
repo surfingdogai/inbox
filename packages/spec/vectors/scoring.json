@@ -1,0 +1,2617 @@
+{
+  "description": "ADR-017 §5 scoring vectors (network rules 0.1, /v1/ranking version 3). Every worked example of §5.1–§5.3 with its scoring_time, the R5 grid, the ageing word cap, hold and release (R31) and R32. A piece of evidence weighs x = o × t × q × r × d; evidence groups list count pieces alike, pair \"each\" giving every piece its own business–customer pair. adr_score is the value the ADR prints (4 decimals); score is the stored value (6 decimals), score_int = floor(score × 10^4 + 0.5), ranked from 4000 (R32). A report (mirror) takes the weight of the kept row it names and counts as verified; a replaced row is weighed for it but not summed. Persons: n = K + B, and a customer's broken pieces from one business have r cap 1.",
+  "rules": "0.1",
+  "version": 3,
+  "z": 1.2816,
+  "z2": 1.64249856,
+  "time": [
+    {
+      "age_seconds": 0,
+      "t": 1
+    },
+    {
+      "age_seconds": 2592000,
+      "t": 1
+    },
+    {
+      "age_seconds": 2592001,
+      "t": 0.75
+    },
+    {
+      "age_seconds": 15724800,
+      "t": 0.75
+    },
+    {
+      "age_seconds": 15724801,
+      "t": 0.5
+    },
+    {
+      "age_seconds": 31536000,
+      "t": 0.5
+    },
+    {
+      "age_seconds": 31536001,
+      "t": 0.25
+    },
+    {
+      "age_seconds": 63072000,
+      "t": 0.25
+    },
+    {
+      "age_seconds": 315360000,
+      "t": 0.25
+    }
+  ],
+  "repeat": [
+    {
+      "m": 1,
+      "cap": 3,
+      "r": 1
+    },
+    {
+      "m": 2,
+      "cap": 3,
+      "r": 0.625
+    },
+    {
+      "m": 3,
+      "cap": 3,
+      "r": 0.5
+    },
+    {
+      "m": 4,
+      "cap": 3,
+      "r": 0.4375
+    },
+    {
+      "m": 8,
+      "cap": 3,
+      "r": 0.34375
+    },
+    {
+      "m": 9,
+      "cap": 3,
+      "r": 0.3333333333333333
+    },
+    {
+      "m": 12,
+      "cap": 3,
+      "r": 0.25
+    },
+    {
+      "m": 100,
+      "cap": 3,
+      "r": 0.03
+    },
+    {
+      "m": 1,
+      "cap": 1,
+      "r": 1
+    },
+    {
+      "m": 2,
+      "cap": 1,
+      "r": 0.5
+    },
+    {
+      "m": 3,
+      "cap": 1,
+      "r": 0.3333333333333333
+    }
+  ],
+  "counterparty": [
+    {
+      "s": 0,
+      "unrelated": 9,
+      "c": 1
+    },
+    {
+      "s": 0.8,
+      "unrelated": 5,
+      "c": 1.8
+    },
+    {
+      "s": 0.8,
+      "unrelated": 12,
+      "c": 1.8
+    },
+    {
+      "s": 0.8,
+      "unrelated": 2,
+      "c": 1.32
+    },
+    {
+      "s": 0.9,
+      "unrelated": 5,
+      "c": 1.9
+    },
+    {
+      "s": 1,
+      "unrelated": 5,
+      "c": 2
+    },
+    {
+      "s": 0.5,
+      "unrelated": 0,
+      "c": 1
+    }
+  ],
+  "release": [
+    {
+      "days_since_verification": 0,
+      "n_cap": 0
+    },
+    {
+      "days_since_verification": 29,
+      "n_cap": 0
+    },
+    {
+      "days_since_verification": 30,
+      "n_cap": 30
+    },
+    {
+      "days_since_verification": 59,
+      "n_cap": 30
+    },
+    {
+      "days_since_verification": 60,
+      "n_cap": 60
+    },
+    {
+      "days_since_verification": 89,
+      "n_cap": 60
+    },
+    {
+      "days_since_verification": 90,
+      "n_cap": null
+    },
+    {
+      "days_since_verification": 400,
+      "n_cap": null
+    }
+  ],
+  "wilson": [
+    {
+      "p": 1,
+      "n": 1,
+      "score": 0.37843,
+      "score_int": 3784
+    },
+    {
+      "p": 1,
+      "n": 1.095,
+      "score": 0.4,
+      "score_int": 4000
+    },
+    {
+      "p": 1,
+      "n": 4.9275,
+      "score": 0.75,
+      "score_int": 7500
+    },
+    {
+      "p": 1,
+      "n": 20,
+      "score": 0.924108,
+      "score_int": 9241
+    },
+    {
+      "p": 1,
+      "n": 50,
+      "score": 0.968195,
+      "score_int": 9682
+    },
+    {
+      "p": 0.9,
+      "n": 50,
+      "score": 0.832284,
+      "score_int": 8323
+    },
+    {
+      "p": 0.9,
+      "n": 2500,
+      "score": 0.892046,
+      "score_int": 8920
+    },
+    {
+      "p": 0.95,
+      "n": 20,
+      "score": 0.846775,
+      "score_int": 8468
+    },
+    {
+      "p": 0.5,
+      "n": 20,
+      "score": 0.362257,
+      "score_int": 3623
+    },
+    {
+      "p": 0,
+      "n": 10,
+      "score": -0,
+      "score_int": 0
+    }
+  ],
+  "cases": [
+    {
+      "name": "20 kept of 20",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9241,
+        "score": 0.924108,
+        "score_int": 9241,
+        "k": 20,
+        "b": 0,
+        "n": 20,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "900 kept of 1000, the business's word (n capped at 50)",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 900,
+      "evidence": [
+        {
+          "count": 900,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 100,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8323,
+        "score": 0.832284,
+        "score_int": 8323,
+        "k": 900,
+        "b": 100,
+        "n": 50,
+        "p": 0.9,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "900 kept of 1000, all verified",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 900,
+      "evidence": [
+        {
+          "count": 900,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each"
+        },
+        {
+          "count": 100,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.892,
+        "score": 0.892046,
+        "score_int": 8920,
+        "k": 2250,
+        "b": 250,
+        "n": 2500,
+        "p": 0.9,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "2 kept of 2",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.5491,
+        "score": 0.549074,
+        "score_int": 5491,
+        "k": 2,
+        "b": 0,
+        "n": 2,
+        "p": 1,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "2 kept of 2 from customers at c 2",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 2,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7089,
+        "score": 0.708906,
+        "score_int": 7089,
+        "k": 4,
+        "b": 0,
+        "n": 4,
+        "p": 1,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "2 kept of 2, verified",
+      "adr": "§5.2",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7527,
+        "score": 0.752729,
+        "score_int": 7527,
+        "k": 5,
+        "b": 0,
+        "n": 5,
+        "p": 1,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "20 of 20, 1–6 months old",
+      "adr": "§5.2 (R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9013,
+        "score": 0.901307,
+        "score_int": 9013,
+        "k": 15,
+        "b": 0,
+        "n": 15,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "20 of 20, 6–12 months old",
+      "adr": "§5.2 (R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-03-06T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8589,
+        "score": 0.858922,
+        "score_int": 8589,
+        "k": 10,
+        "b": 0,
+        "n": 10,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "20 of 20, 2 years old",
+      "adr": "§5.2 (R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2024-12-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7527,
+        "score": 0.752729,
+        "score_int": 7527,
+        "k": 5,
+        "b": 0,
+        "n": 5,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "900 of 1000, 2 years old",
+      "adr": "§5.2 (R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 900,
+      "evidence": [
+        {
+          "count": 900,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2024-12-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 100,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2024-12-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7412,
+        "score": 0.741247,
+        "score_int": 7412,
+        "k": 225,
+        "b": 25,
+        "n": 12.5,
+        "p": 0.9,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "1000 of 1000, fresh",
+      "adr": "§5.2 (the word cap)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1000,
+      "evidence": [
+        {
+          "count": 1000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9682,
+        "score": 0.968195,
+        "score_int": 9682,
+        "k": 1000,
+        "b": 0,
+        "n": 50,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "1000 of 1000, 2 years old",
+      "adr": "§5.2 (the word cap ages)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1000,
+      "evidence": [
+        {
+          "count": 1000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2024-12-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8839,
+        "score": 0.883861,
+        "score_int": 8839,
+        "k": 250,
+        "b": 0,
+        "n": 12.5,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "18 kept now, 2 broken over a year ago",
+      "adr": "§5.2 (R14, R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 18,
+      "evidence": [
+        {
+          "count": 18,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 2,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2025-10-27T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8741,
+        "score": 0.87414,
+        "score_int": 8741,
+        "k": 18,
+        "b": 0.5,
+        "n": 18.5,
+        "p": 0.972972972972973,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "18 kept over a year ago, 2 broken now",
+      "adr": "§5.2 (R14, R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 18,
+      "evidence": [
+        {
+          "count": 18,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2025-10-27T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 2,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.4426,
+        "score": 0.442625,
+        "score_int": 4426,
+        "k": 4.5,
+        "b": 2,
+        "n": 6.5,
+        "p": 0.6923076923076923,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "10 kept from customers at c 1.8",
+      "adr": "§5.2 (R13)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 10,
+      "evidence": [
+        {
+          "count": 10,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.8,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9164,
+        "score": 0.91638,
+        "score_int": 9164,
+        "k": 18.000000000000004,
+        "b": 0,
+        "n": 18.000000000000004,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "10 kept from new customers",
+      "adr": "§5.2 (R13)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 10,
+      "evidence": [
+        {
+          "count": 10,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8589,
+        "score": 0.858922,
+        "score_int": 8589,
+        "k": 10,
+        "b": 0,
+        "n": 10,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "one customer 12 times",
+      "adr": "§5.2 (R7)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1,
+      "evidence": [
+        {
+          "count": 12,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "ana"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.6462,
+        "score": 0.646204,
+        "score_int": 6462,
+        "k": 3,
+        "b": 0,
+        "n": 3,
+        "p": 1,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "12 customers once each",
+      "adr": "§5.2 (R7)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 12,
+      "evidence": [
+        {
+          "count": 12,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8796,
+        "score": 0.879604,
+        "score_int": 8796,
+        "k": 12,
+        "b": 0,
+        "n": 12,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "1 kept of 1: not ranked",
+      "adr": "§5.2 (R32)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.3784,
+        "score": 0.37843,
+        "score_int": 3784,
+        "k": 1,
+        "b": 0,
+        "n": 1,
+        "p": 1,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "2 of 2 aged 6–12 months: not ranked",
+      "adr": "§5.2 (R32)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-03-06T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.3784,
+        "score": 0.37843,
+        "score_int": 3784,
+        "k": 1,
+        "b": 0,
+        "n": 1,
+        "p": 1,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "1 kept, 50 broken: shuffled with the newcomers",
+      "adr": "§5.2 (R32)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 50,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.0058,
+        "score": 0.005821,
+        "score_int": 58,
+        "k": 1,
+        "b": 50,
+        "n": 50,
+        "p": 0.0196078431372549,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "19 kept, 1 promise unclosed",
+      "adr": "§5.2 (R30)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 19,
+      "evidence": [
+        {
+          "count": 19,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8468,
+        "score": 0.846775,
+        "score_int": 8468,
+        "k": 19,
+        "b": 1,
+        "n": 20,
+        "p": 0.95,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "19 kept, 1 cancellation by the business with notice (o 0.5)",
+      "adr": "§5.2 (R30)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 19,
+      "evidence": [
+        {
+          "count": 19,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 0.5,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8801,
+        "score": 0.880071,
+        "score_int": 8801,
+        "k": 19,
+        "b": 0.5,
+        "n": 19.5,
+        "p": 0.9743589743589743,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "10 kept, 10 unclosed: not ranked",
+      "adr": "§5.2 (R30)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 10,
+      "evidence": [
+        {
+          "count": 10,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 10,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.3623,
+        "score": 0.362257,
+        "score_int": 3623,
+        "k": 10,
+        "b": 10,
+        "n": 20,
+        "p": 0.5,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "R31: 20 kept in the first week, day 29 (held)",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-11-02T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-03T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-04T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-05T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-06T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-07T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-08T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0,
+        "score": 0,
+        "score_int": 0,
+        "k": 20,
+        "b": 0,
+        "n": 0,
+        "p": 1,
+        "n_cap": 0,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "R31: 20 kept in the first week, day 30",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-11-01T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-03T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-04T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-05T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-06T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-07T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9241,
+        "score": 0.924108,
+        "score_int": 9241,
+        "k": 20,
+        "b": 0,
+        "n": 20,
+        "p": 1,
+        "n_cap": 30,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "R31: 20 kept in the first week, day 60",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-10-02T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-03T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-04T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-05T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-06T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 3,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-07T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-08T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9013,
+        "score": 0.901307,
+        "score_int": 9013,
+        "k": 15,
+        "b": 0,
+        "n": 15,
+        "p": 1,
+        "n_cap": 60,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, day 0 (held)",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-12-01T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-12-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0,
+        "score": 0,
+        "score_int": 0,
+        "k": 5000,
+        "b": 0,
+        "n": 0,
+        "p": 1,
+        "n_cap": 0,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, day 30 (released: 30 units)",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-11-01T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-01T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9481,
+        "score": 0.948092,
+        "score_int": 9481,
+        "k": 5000,
+        "b": 0,
+        "n": 30,
+        "p": 1,
+        "n_cap": 30,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, day 59",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-10-03T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-03T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9481,
+        "score": 0.948092,
+        "score_int": 9481,
+        "k": 3750,
+        "b": 0,
+        "n": 30,
+        "p": 1,
+        "n_cap": 30,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, day 60 (37.5 units under a cap of 60)",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-10-02T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.958,
+        "score": 0.958038,
+        "score_int": 9580,
+        "k": 3750,
+        "b": 0,
+        "n": 37.5,
+        "p": 1,
+        "n_cap": 60,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, day 182",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2026-06-02T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-06-02T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.958,
+        "score": 0.958038,
+        "score_int": 9580,
+        "k": 3750,
+        "b": 0,
+        "n": 37.5,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "5,000 invented on day 0, after a year",
+      "adr": "§5.2 (R31)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 5000,
+      "evidence": [
+        {
+          "count": 5000,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2025-10-27T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8839,
+        "score": 0.883861,
+        "score_int": 8839,
+        "k": 1250,
+        "b": 0,
+        "n": 12.5,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "honest 990 of 1000",
+      "adr": "§5.2, §10",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1000,
+      "evidence": [
+        {
+          "count": 990,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 10,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9508,
+        "score": 0.950799,
+        "score_int": 9508,
+        "k": 990,
+        "b": 10,
+        "n": 50,
+        "p": 0.99,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "50 kept of 50 on the word: the ceiling any word record reaches",
+      "adr": "§4, §10",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 50,
+      "evidence": [
+        {
+          "count": 50,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.9682,
+        "score": 0.968195,
+        "score_int": 9682,
+        "k": 50,
+        "b": 0,
+        "n": 50,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "20 of 20 from new customers under R13's proposed c = 0.5 + 0.5 × s (not used: it would break R5)",
+      "adr": "§5 (why c = 1 + s)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 0.5,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8589,
+        "score": 0.858922,
+        "score_int": 8589,
+        "k": 10,
+        "b": 0,
+        "n": 10,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "verified 900 of 1000, over six months old",
+      "adr": "§5.1 (R29)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 900,
+      "evidence": [
+        {
+          "count": 900,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-03-06T00:00:00Z",
+          "q": "verified",
+          "pair": "each"
+        },
+        {
+          "count": 100,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-03-06T00:00:00Z",
+          "q": "verified",
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.8886,
+        "score": 0.888595,
+        "score_int": 8886,
+        "k": 1125,
+        "b": 125,
+        "n": 1250,
+        "p": 0.9,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "a customer: 1 kept",
+      "adr": "§5.3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 1,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.3784,
+        "score": 0.37843,
+        "score_int": 3784,
+        "k": 1,
+        "b": 0,
+        "n": 1,
+        "p": 1,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "a customer: 2 kept",
+      "adr": "§5.3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.5491,
+        "score": 0.549074,
+        "score_int": 5491,
+        "k": 2,
+        "b": 0,
+        "n": 2,
+        "p": 1,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "a customer: 1 kept at a business at 0.80 (c 1.8)",
+      "adr": "§5.3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 1,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.8,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.5229,
+        "score": 0.522876,
+        "score_int": 5229,
+        "k": 1.8,
+        "b": 0,
+        "n": 1.8,
+        "p": 1,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "a customer: 4 visits at each of 3 unrelated businesses",
+      "adr": "§5.3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "b1"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "b2"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "b3"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7617,
+        "score": 0.761698,
+        "score_int": 7617,
+        "k": 5.25,
+        "b": 0,
+        "n": 5.25,
+        "p": 1,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "a customer: the same, a month after the last visit",
+      "adr": "§5.3 (R29)",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-31T00:00:00Z",
+          "q": 1,
+          "pair": "b1"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-27T00:00:00Z",
+          "q": 1,
+          "pair": "b2"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-10-22T00:00:00Z",
+          "q": 1,
+          "pair": "b3"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7056,
+        "score": 0.705645,
+        "score_int": 7056,
+        "k": 3.9375,
+        "b": 0,
+        "n": 3.9375,
+        "p": 1,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "a customer: the same, after a year",
+      "adr": "§5.3 (R29)",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2025-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "b1"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2025-11-26T00:00:00Z",
+          "q": 1,
+          "pair": "b2"
+        },
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2025-11-16T00:00:00Z",
+          "q": 1,
+          "pair": "b3"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.4442,
+        "score": 0.444163,
+        "score_int": 4442,
+        "k": 1.3125,
+        "b": 0,
+        "n": 1.3125,
+        "p": 1,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "a trusted person: 3 kept at c 1.9",
+      "adr": "§5.3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b1"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b2"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b3"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.7763,
+        "score": 0.776303,
+        "score_int": 7763,
+        "k": 5.699999999999999,
+        "b": 0,
+        "n": 5.699999999999999,
+        "p": 1,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "the same person recorded as 3 no-shows by one business at c 2.0 (r cap 1)",
+      "adr": "§5.3 (R7)",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b1"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b2"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b3"
+        },
+        {
+          "count": 3,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 2,
+          "pair": "b4"
+        }
+      ],
+      "expect": {
+        "adr_score": 0.5094,
+        "score": 0.509372,
+        "score_int": 5094,
+        "k": 5.699999999999999,
+        "b": 2,
+        "n": 7.699999999999999,
+        "p": 0.7402597402597403,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "the same no-shows, contested",
+      "adr": "§5.3 (§3.4)",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 3,
+      "evidence": [
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b1"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b2"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1.9,
+          "pair": "b3"
+        },
+        {
+          "count": 3,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 2,
+          "pair": "b4",
+          "disputed": true
+        }
+      ],
+      "expect": {
+        "adr_score": 0.6092,
+        "score": 0.609155,
+        "score_int": 6092,
+        "k": 5.699999999999999,
+        "b": 1,
+        "n": 6.699999999999999,
+        "p": 0.8507462686567164,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "20 kept, all auto-completed (presumed: o × 0.5)",
+      "adr": "§3, §5",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each",
+          "presumed": true
+        }
+      ],
+      "expect": {
+        "score": 0.858922,
+        "score_int": 8589,
+        "k": 10,
+        "b": 0,
+        "n": 10,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "20 kept, presumed, each backed by a verified acknowledgement",
+      "adr": "§3, §4",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 20,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each",
+          "presumed": true,
+          "acked": true
+        }
+      ],
+      "expect": {
+        "score": 0.968195,
+        "score_int": 9682,
+        "k": 50,
+        "b": 0,
+        "n": 50,
+        "p": 1,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "19 kept, and 1 kept replaced by a report that stands (at that row's weight)",
+      "adr": "§3.4",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 19,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each",
+          "replaced": true
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each",
+          "mirror": 1
+        }
+      ],
+      "expect": {
+        "score": 0.846775,
+        "score_int": 8468,
+        "k": 19,
+        "b": 1,
+        "n": 20,
+        "p": 0.95,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "19 kept, and 1 kept disputed by a report (both d 0.5)",
+      "adr": "§3.4",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 20,
+      "evidence": [
+        {
+          "count": 19,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each",
+          "disputed": true
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each",
+          "disputed": true,
+          "mirror": 1
+        }
+      ],
+      "expect": {
+        "score": 0.882832,
+        "score_int": 8828,
+        "k": 19.5,
+        "b": 0.5,
+        "n": 20,
+        "p": 0.975,
+        "ranked": true,
+        "tier": "trusted"
+      }
+    },
+    {
+      "name": "a report against a presumed kept outcome weighs what that outcome weighed (never more)",
+      "adr": "§3.4, §10",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 3,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each",
+          "presumed": true,
+          "replaced": true
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": "verified",
+          "pair": "each",
+          "mirror": 1
+        }
+      ],
+      "expect": {
+        "score": 0.402502,
+        "score_int": 4025,
+        "k": 2,
+        "b": 0.5,
+        "n": 2.5,
+        "p": 0.8,
+        "ranked": true,
+        "tier": "building"
+      }
+    },
+    {
+      "name": "one customer 4 times, the business's broken piece is not diluted by the visits",
+      "adr": "§5 (r)",
+      "subject": "business",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "verified_at": "2025-10-27T00:00:00Z",
+      "distinct_customers": 1,
+      "evidence": [
+        {
+          "count": 4,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "ana"
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "ana"
+        }
+      ],
+      "expect": {
+        "score": 0.286826,
+        "score_int": 2868,
+        "k": 1.75,
+        "b": 1,
+        "n": 2.75,
+        "p": 0.6363636363636364,
+        "ranked": false,
+        "tier": "new"
+      }
+    },
+    {
+      "name": "a customer: 2 kept and 1 late cancellation (o 0.5)",
+      "adr": "§3",
+      "subject": "person",
+      "scoring_time": "2026-12-01T00:00:00Z",
+      "unrelated_businesses": 2,
+      "evidence": [
+        {
+          "count": 2,
+          "ledger": "kept",
+          "o": 1,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        },
+        {
+          "count": 1,
+          "ledger": "broken",
+          "o": 0.5,
+          "dated": "2026-11-30T00:00:00Z",
+          "q": 1,
+          "pair": "each"
+        }
+      ],
+      "expect": {
+        "score": 0.402502,
+        "score_int": 4025,
+        "k": 2,
+        "b": 0.5,
+        "n": 2.5,
+        "p": 0.8,
+        "tier": "building"
+      }
+    }
+  ],
+  "r5_grid": {
+    "scoring_time": "2026-12-01T00:00:00Z",
+    "claims": [
+      "20 of 20 kept within six months (t ≥ 0.75, any q) outranks 900 of 1000 of any age and source",
+      "2 of 2 (any t, any q) never outranks 900 of 1000 (any q) of the same age or fresher",
+      "on the word (q 1, 1.5 or 2 on both sides), 20 of 20 outranks 900 of 1000 at every equal age",
+      "both over six months old (t 0.5), a verified 900 of 1000 (0.8886) passes 20 of 20 on the word at c 1 (0.8589)"
+    ],
+    "entries": [
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 1,
+        "t": 1,
+        "q": 1,
+        "score": 0.924108
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 1,
+        "t": 1,
+        "q": 1.5,
+        "score": 0.948092
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 1,
+        "t": 1,
+        "q": 2,
+        "score": 0.960557
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 1,
+        "t": 1,
+        "q": "verified",
+        "score": 0.968195
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1,
+        "score": 0.901307
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1.5,
+        "score": 0.931967
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 2,
+        "score": 0.948092
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 60,
+        "t": 0.75,
+        "q": "verified",
+        "score": 0.958038
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1,
+        "score": 0.858922
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1.5,
+        "score": 0.901307
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 2,
+        "score": 0.924108
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 270,
+        "t": 0.5,
+        "q": "verified",
+        "score": 0.93835
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1,
+        "score": 0.752729
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1.5,
+        "score": 0.820345
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 2,
+        "score": 0.858922
+      },
+      {
+        "record": "20/20",
+        "kept": 20,
+        "of": 20,
+        "age_days": 730,
+        "t": 0.25,
+        "q": "verified",
+        "score": 0.883861
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 1,
+        "t": 1,
+        "q": 1,
+        "score": 0.832284
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 1,
+        "t": 1,
+        "q": 1.5,
+        "score": 0.832284
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 1,
+        "t": 1,
+        "q": 2,
+        "score": 0.832284
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 1,
+        "t": 1,
+        "q": "verified",
+        "score": 0.892046
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1,
+        "score": 0.81951
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1.5,
+        "score": 0.81951
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 2,
+        "score": 0.81951
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 60,
+        "t": 0.75,
+        "q": "verified",
+        "score": 0.890768
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1,
+        "score": 0.796876
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1.5,
+        "score": 0.796876
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 2,
+        "score": 0.796876
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 270,
+        "t": 0.5,
+        "q": "verified",
+        "score": 0.888595
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1,
+        "score": 0.741247
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1.5,
+        "score": 0.741247
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 2,
+        "score": 0.741247
+      },
+      {
+        "record": "900/1000",
+        "kept": 900,
+        "of": 1000,
+        "age_days": 730,
+        "t": 0.25,
+        "q": "verified",
+        "score": 0.883557
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 1,
+        "t": 1,
+        "q": 1,
+        "score": 0.549074
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 1,
+        "t": 1,
+        "q": 1.5,
+        "score": 0.646204
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 1,
+        "t": 1,
+        "q": 2,
+        "score": 0.708906
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 1,
+        "t": 1,
+        "q": "verified",
+        "score": 0.752729
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1,
+        "score": 0.477327
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 1.5,
+        "score": 0.578035
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 60,
+        "t": 0.75,
+        "q": 2,
+        "score": 0.646204
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 60,
+        "t": 0.75,
+        "q": "verified",
+        "score": 0.69541
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1,
+        "score": 0.37843
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 1.5,
+        "score": 0.477327
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 270,
+        "t": 0.5,
+        "q": 2,
+        "score": 0.549074
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 270,
+        "t": 0.5,
+        "q": "verified",
+        "score": 0.603501
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1,
+        "score": 0.233372
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 1.5,
+        "score": 0.31348
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 730,
+        "t": 0.25,
+        "q": 2,
+        "score": 0.37843
+      },
+      {
+        "record": "2/2",
+        "kept": 2,
+        "of": 2,
+        "age_days": 730,
+        "t": 0.25,
+        "q": "verified",
+        "score": 0.432152
+      }
+    ]
+  }
+}

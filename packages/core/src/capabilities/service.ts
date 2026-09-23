@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
+import type { IdentityAnswer } from "../identity/types";
 import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
@@ -10,7 +11,7 @@ import {
   itemEvents,
   items,
   parties,
-  partyIdentities,
+  partyContacts,
   products,
   services,
   settings as settingsTable,
@@ -41,7 +42,8 @@ import {
   permissionKind,
   withIdempotencyKey,
 } from "../write/caller";
-import { type CreateResult, createItem } from "../write/create";
+import { hiddenTransitions } from "../write/corrections";
+import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, WriteError } from "../write/errors";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { appendThreadEntry } from "../write/thread";
@@ -49,6 +51,7 @@ import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
 import { FeedCapabilities } from "./feeds";
+import { type CustomerView, IdentityCapabilities } from "./identity";
 import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
 import { WebhookCapabilities } from "./webhooks";
@@ -71,7 +74,14 @@ export interface Page<T> {
   readonly next_cursor: string | null;
 }
 
+/** A customer's view of their item (the status door): the item, its receipts, and who the inbox takes them for. */
+export interface ItemStatus extends ItemView {
+  readonly identity: IdentityAnswer;
+}
+
 export interface ItemDetail extends ItemView {
+  /** Who is asking, as the owner sees it (ADR-017 §8.2): the match, the history, the networks, the agent. */
+  readonly customer?: CustomerView | undefined;
   readonly events: readonly {
     seq: number;
     event: string;
@@ -121,6 +131,13 @@ export class Capabilities {
   readonly access: AccessCapabilities;
 
   /**
+   * People and customers (ADR-017 §2, §8): what agents carry, first keys, customers the business
+   * already knows, one-time codes. The host plugs in the network calls (`people.attachPort`) and the
+   * mail codes go out by (`people.attachMail`).
+   */
+  readonly people: IdentityCapabilities;
+
+  /**
    * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
    * `INBOX_SECRET_KEY`: everything else works, and anything that would store a secret refuses
    * through `requireSecretBox`.
@@ -148,6 +165,7 @@ export class Capabilities {
     this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.access = new AccessCapabilities(db);
+    this.people = new IdentityCapabilities(db, secrets);
   }
 
   /**
@@ -244,59 +262,117 @@ export class Capabilities {
   }
 
   requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
-    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
-      type: "quote_request",
-      payload: input.payload,
-      contact: input.contact,
-      message: input.message,
-    });
+    return this.people.create(
+      withIdempotencyKey(caller, input.idempotency_key),
+      { type: "quote_request", payload: input.payload, contact: input.contact, message: input.message },
+      input,
+    );
   }
 
+  /**
+   * A booking request. What the agent carried for its person is presented to the networks first;
+   * with an email and nothing carried, each network that issues is asked for a first key (ADR-017
+   * §2.1). The answer's `identity` says who the inbox takes the customer for.
+   */
   createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
-    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
-      type: "booking",
-      payload: input.payload,
-      contact: input.contact,
-      message: input.message,
-    });
+    return this.people.create(
+      withIdempotencyKey(caller, input.idempotency_key),
+      { type: "booking", payload: input.payload, contact: input.contact, message: input.message },
+      input,
+    );
   }
 
   createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
-    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
-      type: "order",
-      payload: input.payload,
-      contact: input.contact,
-      message: input.message,
-    });
+    return this.people.create(
+      withIdempotencyKey(caller, input.idempotency_key),
+      { type: "order", payload: input.payload, contact: input.contact, message: input.message },
+      input,
+    );
   }
 
-  async getItemStatus(caller: Caller, input: T.GetItemStatusInput): Promise<ItemView> {
+  async getItemStatus(caller: Caller, input: T.GetItemStatusInput): Promise<ItemStatus> {
     await this.access.requireScope(caller, ["inbox:read"], "public:get_item_status");
-    const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
+    const { caller: c, presented } = await this.people.recognise(caller, input);
+    const row = await this.loadOwned(withToken(c, input.access_token), input.item_id);
     const receipts = await this.receipts.forItem(row.id);
-    return { ...viewFor(rowToItem(row), permissionKind(caller)), receipts };
+    // The item's first passes go back to its creator (its access token, or the agent key it was
+    // made with); a pass alone gets back only what it presented; the business, none of them.
+    const creator =
+      (caller.actor.partyId !== undefined && caller.actor.partyId === row.partyId) ||
+      (input.access_token !== undefined &&
+        row.accessTokenHash !== null &&
+        (await hashText(input.access_token)) === row.accessTokenHash);
+    return {
+      ...viewFor(rowToItem(row), permissionKind(caller)),
+      receipts,
+      // A key presented here was exchanged for a pass: this answer is the one that hands it back.
+      identity: await this.people.answer(
+        row.id,
+        { presented },
+        !isCustomer(caller) ? "business" : creator ? "creator" : "presenter",
+      ),
+    };
   }
 
+  /**
+   * One-time codes for a customer the business already knows (ADR-017 §8.2): without `code`, six
+   * digits go to the address it has for them (`202 {sent_to}`); with it, the code is checked and the
+   * customer recognised (`{recognised: "strong"}`).
+   */
+  async verifyCustomer(
+    caller: Caller,
+    input: T.VerifyCustomerInput,
+  ): Promise<{ sent_to: string } | { recognised: "strong" }> {
+    await this.access.requireScope(caller, ["inbox:write"], "public:verify_customer");
+    const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
+    return this.people.verify(
+      { itemId: row.id, partyId: row.partyId, match: row.customerMatch, possiblePartyId: row.possiblePartyId },
+      input.code,
+      nowOf(caller),
+    );
+  }
+
+  /**
+   * The customer cancels. A confirmed booking whose cancellation window has closed is cancelled
+   * late (`cancel_late`, ADR-017 §3.1) where the owner records late cancellations
+   * (`booking.lateCancellation: "record"`), and refused as before where they do not.
+   */
   async cancelItem(caller: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     await this.access.requireScope(caller, ["inbox:write"], "public:cancel_item");
-    return transitionItem(this.db, withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token), {
-      itemId: input.item_id,
-      event: "cancel",
-      ...(input.reason ? { input: { note: input.reason }, reason: input.reason } : {}),
-    });
+    const { caller: recognised } = await this.people.recognise(caller, input);
+    const c = withToken(withIdempotencyKey(recognised, input.idempotency_key), input.access_token);
+    const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    try {
+      return await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
+    } catch (error) {
+      if (!(error instanceof WriteError)) throw error;
+      const closed =
+        error.code === "guard_failed" &&
+        (error.details as { guard?: unknown } | undefined)?.guard === "within_cancellation_window" &&
+        (await readSettings(this.db)).booking.lateCancellation === "record";
+      // A retried request whose first try was the late cancellation: its key is stored for
+      // `cancel_late`, so that is the request to replay.
+      const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
+      if (!closed && !retried) throw error;
+      return transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
+    }
   }
 
   /** A new conversation, or a reply on an item the caller owns (which reopens an answered message). */
   async sendMessage(caller: Caller, input: T.SendMessageInput): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
-      return createItem(this.db, c, {
-        type: "message",
-        payload: { text: input.body, subject: input.subject },
-        contact: input.contact,
-        message: input.body,
-        messageId: input.message_id,
-      });
+      return this.people.create(
+        c,
+        {
+          type: "message",
+          payload: { text: input.body, subject: input.subject },
+          contact: input.contact,
+          message: input.body,
+          messageId: input.message_id,
+        },
+        input,
+      );
     }
     await this.access.requireScope(caller, ["inbox:write"], "public:send_message");
     const row = await this.loadOwned(c, input.item_id);
@@ -313,10 +389,31 @@ export class Capabilities {
    * proved the same way as reading it — the party on the caller, or the access token the creator
    * received — and the acknowledgement itself is checked by the receipt capability.
    */
-  async acknowledgeReceipt(caller: Caller, input: T.AcknowledgeReceiptInput): Promise<ReceiptView> {
+  async acknowledgeReceipt(
+    caller: Caller,
+    input: T.AcknowledgeReceiptInput,
+  ): Promise<ReceiptView & { forwarded?: { network: string; presentation: string }[] }> {
     await this.access.requireScope(caller, ["inbox:write"], "public:acknowledge_receipt");
-    const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
-    return this.receipts.acknowledge(row, input.counter_signature, { now: nowOf(caller), receipt: input.receipt });
+    if ((input.counter_signature === undefined) === (input.receipt_id === undefined)) {
+      throw new WriteError("invalid_input", "send counter_signature, or receipt_id in a signed request", {
+        fields: [{ path: "counter_signature", problem: "missing", message: "one of counter_signature or receipt_id" }],
+      });
+    }
+    // A signature is forwarded to a network once: an acknowledgement by `receipt_id` spends it on
+    // the acknowledgement, so it is not presented as a request first (the item is the caller's by
+    // its access token or key).
+    const recognised = input.receipt_id === undefined ? (await this.people.recognise(caller, input)).caller : caller;
+    const row = await this.loadOwned(withToken(recognised, input.access_token), input.item_id);
+    if (input.counter_signature !== undefined) {
+      return this.receipts.acknowledge(row, input.counter_signature, { now: nowOf(caller), receipt: input.receipt });
+    }
+    // An agent that signs its requests instead of counter-signing (ADR-017 §3.4): its signature,
+    // with the pass reference it carries, goes to the network as the acknowledgement.
+    const receipt = (await this.receipts.forItem(row.id)).find((r) => r.id === input.receipt_id);
+    if (!receipt) throw new WriteError("not_found", "no such receipt on this item");
+    const sha = await this.receipts.shaOf(receipt.id);
+    const forwarded = await this.people.forwardAck(recognised, input, sha);
+    return { ...receipt, forwarded };
   }
 
   // ---- owner -----------------------------------------------------------------
@@ -345,7 +442,11 @@ export class Capabilities {
       .orderBy(desc(items.updatedAt), desc(items.id))
       .limit(input.limit + 1);
     const partyViews = await this.partyViews(rows.map((r) => r.partyId));
-    const views = rows.map((r) => viewFor(rowToItem(r), permissionKind(caller), partyViews.get(r.partyId)));
+    const listed = rows.map((r) => ({ item: rowToItem(r), legacyPromise: r.legacyPromise }));
+    const hidden = await hiddenTransitions(this.db, listed, await readSettings(this.db), nowOf(caller));
+    const views = listed.map(({ item }) =>
+      viewFor(item, permissionKind(caller), partyViews.get(item.partyId), hidden.get(item.id)),
+    );
     const last = rows[input.limit - 1];
     return {
       items: views.slice(0, input.limit),
@@ -364,7 +465,7 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
-    const [events, thread, partyViews, receipts] = await Promise.all([
+    const [events, thread, partyViews, receipts, hidden] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
         .select()
@@ -373,10 +474,15 @@ export class Capabilities {
         .orderBy(threadEntries.createdAt),
       this.partyViews([row.partyId]),
       this.receipts.forItem(item.id),
+      // The one-time corrections that can no longer be made are not offered (ADR-017 §3).
+      readSettings(this.db).then((settings) =>
+        hiddenTransitions(this.db, [{ item, legacyPromise: row.legacyPromise }], settings, nowOf(caller)),
+      ),
     ]);
     return {
-      ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId)),
+      ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
       receipts,
+      customer: await this.people.customerView(row),
       events: events.map((e) => ({
         seq: e.seq,
         event: e.event,
@@ -433,7 +539,13 @@ export class Capabilities {
       { item_id: input.item_id, body: input.body, internal: input.internal },
       async () => {
         await this.appendEntry(caller, item, input.body, input.internal ? "note" : "out");
-        return viewFor(item, permissionKind(caller));
+        const hidden = await hiddenTransitions(
+          this.db,
+          [{ item, legacyPromise: row.legacyPromise }],
+          await readSettings(this.db),
+          nowOf(caller),
+        );
+        return viewFor(item, permissionKind(caller), undefined, hidden.get(item.id));
       },
     );
     return result;
@@ -568,9 +680,9 @@ export class Capabilities {
     const [rows, verified] = await Promise.all([
       this.db.orm.select().from(parties).where(inArray(parties.id, unique)),
       this.db.orm
-        .select({ partyId: partyIdentities.partyId })
-        .from(partyIdentities)
-        .where(and(inArray(partyIdentities.partyId, unique), isNotNull(partyIdentities.verifiedAt))),
+        .select({ partyId: partyContacts.partyId })
+        .from(partyContacts)
+        .where(and(inArray(partyContacts.partyId, unique), isNotNull(partyContacts.verifiedAt))),
     ]);
     const verifiedIds = new Set(verified.map((v) => v.partyId));
     for (const p of rows) {

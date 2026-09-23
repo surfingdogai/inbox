@@ -91,7 +91,10 @@ describe("createItem", () => {
       channel: "form",
     });
     expect(res.view.transitions.map((t) => t.event)).toEqual(["cancel"]);
-    expect(res.view.human).toMatch(/Booking "Full service" for 2026-09-23 14:00 UTC is requested/);
+    // The customer is answered in the business's voice.
+    expect(res.view.human).toMatch(
+      /^Your booking "Full service" for 2026-09-23 14:00 UTC is with us; we will confirm it or suggest another time\. Reference /,
+    );
     const [party] = await db.orm.select().from(parties).where(eq(parties.id, res.view.item.partyId));
     expect(party).toMatchObject({ kind: "human", displayName: "Rita Amaral" });
     const events = await db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, res.view.item.id));

@@ -1,8 +1,10 @@
 import {
   type CallerEnv,
   type ClientMetadata,
+  createIdentityPort,
   FEED_IMPORT_KIND,
   feedImportHandler,
+  identityIssueHandler,
   mountDoors,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
@@ -25,6 +27,7 @@ import {
   createSecretBox,
   type Db,
   enabledNetworks,
+  IDENTITY_ISSUE_KIND,
   type JobRunner,
   MANIFEST_PATH,
   MIGRATIONS,
@@ -86,14 +89,29 @@ export function createInbox(deps: AppDeps): Inbox {
     deps.eventSettleMs,
   );
   const mailOut = deps.mailOut ?? logMailOut();
-  const network = { baseUrl: deps.baseUrl, version: VERSION, fetchImpl: deps.fetchImpl };
-  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts })
+  const network = {
+    baseUrl: deps.baseUrl,
+    version: VERSION,
+    fetchImpl: deps.fetchImpl,
+    // The hourly ping is signed with the receipt key when there is one (ADR-017 §7.3), and is then
+    // answered with the business's own standing at each network.
+    instanceKey: async () => (caps.secrets ? caps.receipts.keys.active() : null),
+  };
+  // People (ADR-017 §2, §8): the network calls a create makes about its customer, and the mail a
+  // one-time code goes out by. Without INBOX_SECRET_KEY the port cannot sign, and nothing is asked.
+  const identity = { db: deps.db, caps, ...network };
+  const port = createIdentityPort(identity);
+  caps.people.attachPort(port);
+  caps.people.attachMail(mailOut);
+  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts, secrets: caps.secrets })
     // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
     // call to a network runs in that network's own lane, so a slow one never delays another.
     .register(NETWORK_PING_KIND, networkPingHandler(network))
     .register(NETWORK_PING_ONE_KIND, networkPingOneHandler(network), { lane: networkLane })
     .register(NETWORK_PUBLISH_KIND, networkPublishHandler(network), { lane: networkLane })
     .register(NETWORK_RECEIPT_KIND, networkReceiptHandler(network), { lane: networkLane })
+    // A first contact the request could not finish is asked again, in that network's lane.
+    .register(IDENTITY_ISSUE_KIND, identityIssueHandler({ ...identity, port }), { lane: networkLane })
     // Outbound webhooks (ADR-015): fanout is gated on there being an active endpoint, so these two
     // handlers cost an instance with no integrations nothing but their registration.
     .register(WEBHOOK_FANOUT_KIND, webhookFanoutHandler())
@@ -165,6 +183,8 @@ export function createInbox(deps: AppDeps): Inbox {
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
       // The services this instance publishes receipts to: every network switched on that takes them.
       reviewServices: enabledNetworks(settings, "receipts"),
+      // Whose people it recognises (ADR-017 §8.4): every network switched on, when it can sign.
+      identity: { passes: await port.canSign(), networks: enabledNetworks(settings) },
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });
@@ -184,6 +204,7 @@ export function createInbox(deps: AppDeps): Inbox {
     mailOut,
     businessName: async () => (await caps.getBusinessProfile()).name,
     fetchClientMetadata: deps.fetchClientMetadata,
+    fetchImpl: deps.fetchImpl,
     now: deps.now,
     inboundEmailSecret: async () => (await readSettings(deps.db)).email.inboundSecret ?? null,
     ownerEmails: async () => {

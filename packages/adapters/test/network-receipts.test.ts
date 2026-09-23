@@ -226,7 +226,7 @@ describe("publishing receipts to the networks", () => {
       "issued:published",
     ]);
     const view = (await caps.getNetworks(owner())).networks.find((n) => n.origin === A);
-    expect(view?.receipts).toEqual({ published: 2, queued: 0, refused: 0 });
+    expect(view?.receipts).toEqual({ published: 2, queued: 0, refused: 0, held: 0 });
     // Nothing about Rita in either body.
     for (const c of net.calls) expect(JSON.stringify(c.body)).not.toMatch(/rita/i);
   });

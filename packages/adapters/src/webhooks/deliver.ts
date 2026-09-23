@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   deliverJobPrefix,
   eventBaseUrl,
+  hiddenTransitions,
   type JobHandler,
   openWebhookHeaders,
   readSettings,
@@ -200,7 +201,7 @@ export function webhookDeliverHandler(deps: DeliverDeps): JobHandler {
     // Settings, then relative. A webhook body and `GET /v1/owner/events` must not disagree here.
     const baseUrl = eventBaseUrl(deps.baseUrl, settings.notifications.appUrl);
     const body = JSON.stringify(
-      await buildEvent(db, event, endpoint.payloadStyle === "full" ? "full" : "thin", baseUrl),
+      await buildEvent(db, event, endpoint.payloadStyle === "full" ? "full" : "thin", baseUrl, now),
     );
     const attemptNumber = attempt + 1;
     const timestampSec = Math.floor(now / 1000);
@@ -336,6 +337,7 @@ export async function buildEvent(
   event: EventRow,
   style: "thin" | "full",
   baseUrl: string,
+  now: number = Date.now(),
 ): Promise<Record<string, unknown>> {
   // The thin event is built by core's `thinEvent`, the very function `GET /v1/owner/events`
   // returns, so what a webhook carries and what the cursor hands back are the same object by
@@ -348,7 +350,10 @@ export async function buildEvent(
   const [row] = await db.orm.select().from(schema.items).where(eq(schema.items.id, event.itemId));
   if (!row) return envelope;
   const party = await partyView(db, row.partyId);
-  const view = viewFor(rowToItem(row), "owner", party);
+  const item = rowToItem(row);
+  // What the owner may do next, as the owner app lists it: no correction whose time has passed.
+  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], await readSettings(db), now);
+  const view = viewFor(item, "owner", party, hidden.get(item.id));
   data.item = view.item;
   data.transitions = view.transitions;
   data.human = view.human;
@@ -375,6 +380,8 @@ export async function buildEvent(
       data.receipt = {
         id: r.id,
         kind: r.kind,
+        // How a promise ended (ADR-017 §3), on an outcome receipt; null on a promise.
+        outcome: r.outcome || null,
         jws: r.jws,
         payload: r.payload,
         issued_at: new Date(r.issuedAt).toISOString(),
@@ -388,10 +395,12 @@ export async function buildEvent(
 async function partyView(db: Db, partyId: string) {
   const [p] = await db.orm.select().from(schema.parties).where(eq(schema.parties.id, partyId));
   if (!p) return undefined;
+  // The verified badge reads the party's contacts (ADR-017 §8.2): an address authenticated mail or a
+  // one-time code proved.
   const verified = await db.orm
-    .select({ id: schema.partyIdentities.partyId })
-    .from(schema.partyIdentities)
-    .where(and(eq(schema.partyIdentities.partyId, partyId), isNotNull(schema.partyIdentities.verifiedAt)));
+    .select({ id: schema.partyContacts.partyId })
+    .from(schema.partyContacts)
+    .where(and(eq(schema.partyContacts.partyId, partyId), isNotNull(schema.partyContacts.verifiedAt)));
   const contact = (p.contact ?? {}) as { email?: string; phone?: string; name?: string };
   return {
     id: p.id,

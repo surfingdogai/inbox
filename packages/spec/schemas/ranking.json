@@ -1,0 +1,1804 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /v1/ranking",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 4
+        },
+        "rules": {
+          "type": "string",
+          "description": "The rules name, \"0.1.1\"."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["announced", "in_force", "retired"]
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "order": {
+          "type": "object",
+          "properties": {
+            "listed": {
+              "type": "string"
+            },
+            "answering": {
+              "type": "string"
+            },
+            "answering_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "not_answering_since": {
+              "type": "string"
+            },
+            "snapshot": {
+              "type": "string"
+            },
+            "rank_score_int": {
+              "type": "string"
+            },
+            "ranked_from": {
+              "type": "number"
+            },
+            "ranked_from_int": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "rank_shuffle": {
+              "type": "string"
+            },
+            "rank_pos": {
+              "type": "string"
+            },
+            "near": {
+              "type": "object",
+              "properties": {
+                "parameter": {
+                  "type": "string"
+                },
+                "radius_km": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "radius_km_max": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "order": {
+                  "type": "string"
+                },
+                "distance": {
+                  "type": "string"
+                }
+              },
+              "required": ["parameter", "radius_km", "radius_km_max", "order", "distance"]
+            },
+            "cursor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "listed",
+            "answering",
+            "answering_hours",
+            "not_answering_since",
+            "snapshot",
+            "rank_score_int",
+            "ranked_from",
+            "ranked_from_int",
+            "rank_shuffle",
+            "rank_pos",
+            "near",
+            "cursor"
+          ]
+        },
+        "score": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "z": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "z2": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "share": {
+              "type": "string"
+            },
+            "confidence_business": {
+              "type": "string"
+            },
+            "confidence_person": {
+              "type": "string"
+            },
+            "word_cap_units": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "stored_decimals": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "compared_as": {
+              "type": "string"
+            },
+            "computed": {
+              "type": "string"
+            },
+            "perfect_record": {
+              "type": "string"
+            },
+            "counterparty_snapshot": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "formula",
+            "z",
+            "z2",
+            "share",
+            "confidence_business",
+            "confidence_person",
+            "word_cap_units",
+            "stored_decimals",
+            "compared_as",
+            "computed",
+            "perfect_record",
+            "counterparty_snapshot"
+          ]
+        },
+        "weights": {
+          "type": "object",
+          "properties": {
+            "piece": {
+              "type": "string"
+            },
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "booking.completed",
+                      "order.fulfilled",
+                      "booking.cancelled_by_business",
+                      "order.not_fulfilled",
+                      "booking.no_show_business",
+                      "order.not_received",
+                      "promise.unclosed",
+                      "booking.no_show_customer",
+                      "booking.cancelled_late_by_customer",
+                      "order.payment_failed",
+                      "order.charged_back",
+                      "booking.cancelled_by_customer",
+                      "order.cancelled_by_customer",
+                      "order.lapsed"
+                    ]
+                  },
+                  "business": {
+                    "type": "string"
+                  },
+                  "customer": {
+                    "type": "string"
+                  },
+                  "o": {
+                    "type": ["number", "null"]
+                  },
+                  "o_with_notice": {
+                    "type": "number"
+                  },
+                  "by": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "o", "by"]
+              }
+            },
+            "presumed": {
+              "type": "number"
+            },
+            "presumed_when": {
+              "type": "string"
+            },
+            "time": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "up_to_days": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "t": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": ["up_to_days", "t"]
+              }
+            },
+            "time_from": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "verified": {
+                  "type": "number"
+                },
+                "counterparty": {
+                  "type": "string"
+                },
+                "counterparty_full_at": {
+                  "type": "number"
+                },
+                "u": {
+                  "type": "string"
+                }
+              },
+              "required": ["verified", "counterparty", "counterparty_full_at", "u"]
+            },
+            "repeat": {
+              "type": "object",
+              "properties": {
+                "formula": {
+                  "type": "string"
+                },
+                "cap": {
+                  "type": "number"
+                },
+                "step": {
+                  "type": "number"
+                },
+                "customer_broken_cap": {
+                  "type": "number"
+                },
+                "pair": {
+                  "type": "string"
+                }
+              },
+              "required": ["formula", "cap", "step", "customer_broken_cap", "pair"]
+            },
+            "dispute": {
+              "type": "number"
+            },
+            "never_counts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "which_outcome_stands": {
+              "type": "string"
+            },
+            "report_weighs": {
+              "type": "string"
+            },
+            "contest_weighs": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "piece",
+            "outcomes",
+            "presumed",
+            "presumed_when",
+            "time",
+            "time_from",
+            "source",
+            "repeat",
+            "dispute",
+            "never_counts",
+            "which_outcome_stands",
+            "report_weighs",
+            "contest_weighs"
+          ]
+        },
+        "timing": {
+          "type": "object",
+          "properties": {
+            "hold_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_units_per_month": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_month_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_until_day": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unclosed_after_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "business_notice_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "late_customer_cancel_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "late_promise_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "broken_dated_arrival_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "auto_complete_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "order_lapse_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "order_due_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "report_opens_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "report_window_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "dispute_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "future_iat_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rules_notice_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "nightly": {
+              "type": "string"
+            },
+            "rank_snapshot": {
+              "type": "string"
+            },
+            "shuffle": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hold_days",
+            "release_units_per_month",
+            "release_month_days",
+            "release_until_day",
+            "unclosed_after_days",
+            "business_notice_hours",
+            "late_customer_cancel_hours",
+            "late_promise_hours",
+            "broken_dated_arrival_hours",
+            "auto_complete_hours",
+            "order_lapse_days",
+            "order_due_days",
+            "report_opens_hours",
+            "report_window_days",
+            "dispute_days",
+            "future_iat_seconds",
+            "rules_notice_days",
+            "nightly",
+            "rank_snapshot",
+            "shuffle"
+          ]
+        },
+        "verified": {
+          "type": "object",
+          "properties": {
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "recognised_platforms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Platforms whose Web Bot Auth directory vouches a key (§4)."
+            },
+            "established": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string"
+                },
+                "unrelated_businesses": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "each_trusted_when_issued": {
+                  "type": "boolean"
+                },
+                "span_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": ["tier", "unrelated_businesses", "each_trusted_when_issued", "span_days", "email"]
+            },
+            "related": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mutually_unrelated": {
+              "type": "string"
+            },
+            "psl_snapshot": {
+              "type": "string",
+              "description": "The date of the embedded Public Suffix List."
+            },
+            "private_suffixes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "egress_ignored": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "customers_one_domain": {
+              "type": "string"
+            },
+            "not_observed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "routes",
+            "recognised_platforms",
+            "established",
+            "related",
+            "mutually_unrelated",
+            "psl_snapshot",
+            "private_suffixes",
+            "egress_ignored",
+            "customers_one_domain"
+          ]
+        },
+        "tiers": {
+          "type": "object",
+          "properties": {
+            "business": {
+              "type": "object",
+              "properties": {
+                "trusted": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "building": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "new": {
+                  "type": "string"
+                }
+              },
+              "required": ["trusted", "building", "new"]
+            },
+            "person": {
+              "type": "object",
+              "properties": {
+                "trusted": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "building": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "new": {
+                  "type": "string"
+                }
+              },
+              "required": ["trusted", "building", "new"]
+            },
+            "distinct_customer": {
+              "type": "string"
+            },
+            "ranked": {
+              "type": "string"
+            }
+          },
+          "required": ["business", "person", "distinct_customer", "ranked"]
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "issuance_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "passes_per_key_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "instance_calls_per_minute": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "presentations_per_person_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "pass_strings": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "pass_string_chars": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "per_entries": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "promises_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "unusual_use_businesses_per_24h": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "signature_seconds": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "signature_skew_seconds": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_digits": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_minutes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_tries": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "codes_per_hour_per_address": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "session_hours": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "issuance_replay_days": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "networks_per_inbox": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "listing_limit_max": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "unusual_use_signing_keys": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "issuance_per_business_per_day",
+            "passes_per_key_per_day",
+            "instance_calls_per_minute",
+            "presentations_per_person_per_business_per_day",
+            "pass_strings",
+            "pass_string_chars",
+            "per_entries",
+            "promises_per_business_per_day",
+            "unusual_use_businesses_per_24h",
+            "signature_seconds",
+            "signature_skew_seconds",
+            "code_digits",
+            "code_minutes",
+            "code_tries",
+            "codes_per_hour_per_address",
+            "session_hours",
+            "issuance_replay_days",
+            "networks_per_inbox",
+            "listing_limit_max",
+            "unusual_use_signing_keys"
+          ]
+        },
+        "never_used": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What the order never reads: advertising, money, amounts, who is searching…"
+        },
+        "changelog": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rules": {
+                "type": "string"
+              },
+              "published_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "effective_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "required": ["version", "published_at", "effective_at", "summary", "url"]
+          }
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "effective_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": ["version", "effective_at", "url"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "rules",
+        "status",
+        "published_at",
+        "effective_at",
+        "summary",
+        "order",
+        "score",
+        "weights",
+        "timing",
+        "verified",
+        "tiers",
+        "limits",
+        "never_used",
+        "changelog",
+        "next"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 3
+        },
+        "rules": {
+          "type": "string",
+          "description": "The rules name, \"0.1\"."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["announced", "in_force", "retired"]
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "order": {
+          "type": "object",
+          "properties": {
+            "listed": {
+              "type": "string"
+            },
+            "answering": {
+              "type": "string"
+            },
+            "answering_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "not_answering_since": {
+              "type": "string"
+            },
+            "snapshot": {
+              "type": "string"
+            },
+            "rank_score_int": {
+              "type": "string"
+            },
+            "ranked_from": {
+              "type": "number"
+            },
+            "ranked_from_int": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "rank_shuffle": {
+              "type": "string"
+            },
+            "rank_pos": {
+              "type": "string"
+            },
+            "near": {
+              "type": "object",
+              "properties": {
+                "parameter": {
+                  "type": "string"
+                },
+                "radius_km": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "radius_km_max": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "order": {
+                  "type": "string"
+                },
+                "distance": {
+                  "type": "string"
+                }
+              },
+              "required": ["parameter", "radius_km", "radius_km_max", "order", "distance"]
+            },
+            "cursor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "listed",
+            "answering",
+            "answering_hours",
+            "not_answering_since",
+            "snapshot",
+            "rank_score_int",
+            "ranked_from",
+            "ranked_from_int",
+            "rank_shuffle",
+            "rank_pos",
+            "near",
+            "cursor"
+          ]
+        },
+        "score": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "z": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "z2": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "share": {
+              "type": "string"
+            },
+            "confidence_business": {
+              "type": "string"
+            },
+            "confidence_person": {
+              "type": "string"
+            },
+            "word_cap_units": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "stored_decimals": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "compared_as": {
+              "type": "string"
+            },
+            "computed": {
+              "type": "string"
+            },
+            "perfect_record": {
+              "type": "string"
+            },
+            "counterparty_snapshot": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method",
+            "formula",
+            "z",
+            "z2",
+            "share",
+            "confidence_business",
+            "confidence_person",
+            "word_cap_units",
+            "stored_decimals",
+            "compared_as",
+            "computed",
+            "perfect_record",
+            "counterparty_snapshot"
+          ]
+        },
+        "weights": {
+          "type": "object",
+          "properties": {
+            "piece": {
+              "type": "string"
+            },
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "booking.completed",
+                      "order.fulfilled",
+                      "booking.cancelled_by_business",
+                      "order.not_fulfilled",
+                      "booking.no_show_business",
+                      "order.not_received",
+                      "promise.unclosed",
+                      "booking.no_show_customer",
+                      "booking.cancelled_late_by_customer",
+                      "order.payment_failed",
+                      "order.charged_back",
+                      "booking.cancelled_by_customer",
+                      "order.cancelled_by_customer",
+                      "order.lapsed"
+                    ]
+                  },
+                  "business": {
+                    "type": "string"
+                  },
+                  "customer": {
+                    "type": "string"
+                  },
+                  "o": {
+                    "type": ["number", "null"]
+                  },
+                  "o_with_notice": {
+                    "type": "number"
+                  },
+                  "by": {
+                    "type": "string"
+                  }
+                },
+                "required": ["code", "o", "by"]
+              }
+            },
+            "presumed": {
+              "type": "number"
+            },
+            "presumed_when": {
+              "type": "string"
+            },
+            "time": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "up_to_days": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "t": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": ["up_to_days", "t"]
+              }
+            },
+            "time_from": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "verified": {
+                  "type": "number"
+                },
+                "counterparty": {
+                  "type": "string"
+                },
+                "counterparty_full_at": {
+                  "type": "number"
+                },
+                "u": {
+                  "type": "string"
+                }
+              },
+              "required": ["verified", "counterparty", "counterparty_full_at", "u"]
+            },
+            "repeat": {
+              "type": "object",
+              "properties": {
+                "formula": {
+                  "type": "string"
+                },
+                "cap": {
+                  "type": "number"
+                },
+                "step": {
+                  "type": "number"
+                },
+                "customer_broken_cap": {
+                  "type": "number"
+                },
+                "pair": {
+                  "type": "string"
+                }
+              },
+              "required": ["formula", "cap", "step", "customer_broken_cap", "pair"]
+            },
+            "dispute": {
+              "type": "number"
+            },
+            "never_counts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "which_outcome_stands": {
+              "type": "string"
+            },
+            "report_weighs": {
+              "type": "string"
+            },
+            "contest_weighs": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "piece",
+            "outcomes",
+            "presumed",
+            "presumed_when",
+            "time",
+            "time_from",
+            "source",
+            "repeat",
+            "dispute",
+            "never_counts",
+            "which_outcome_stands",
+            "report_weighs",
+            "contest_weighs"
+          ]
+        },
+        "timing": {
+          "type": "object",
+          "properties": {
+            "hold_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_units_per_month": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_month_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "release_until_day": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unclosed_after_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "business_notice_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "late_customer_cancel_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "late_promise_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "broken_dated_arrival_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "auto_complete_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "order_lapse_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "order_due_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "report_opens_hours": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "report_window_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "dispute_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "future_iat_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rules_notice_days": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "nightly": {
+              "type": "string"
+            },
+            "rank_snapshot": {
+              "type": "string"
+            },
+            "shuffle": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hold_days",
+            "release_units_per_month",
+            "release_month_days",
+            "release_until_day",
+            "unclosed_after_days",
+            "business_notice_hours",
+            "late_customer_cancel_hours",
+            "late_promise_hours",
+            "broken_dated_arrival_hours",
+            "auto_complete_hours",
+            "order_lapse_days",
+            "order_due_days",
+            "report_opens_hours",
+            "report_window_days",
+            "dispute_days",
+            "future_iat_seconds",
+            "rules_notice_days",
+            "nightly",
+            "rank_snapshot",
+            "shuffle"
+          ]
+        },
+        "verified": {
+          "type": "object",
+          "properties": {
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "recognised_platforms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Platforms whose Web Bot Auth directory vouches a key (§4)."
+            },
+            "established": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string"
+                },
+                "unrelated_businesses": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "each_trusted_when_issued": {
+                  "type": "boolean"
+                },
+                "span_days": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": ["tier", "unrelated_businesses", "each_trusted_when_issued", "span_days", "email"]
+            },
+            "related": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mutually_unrelated": {
+              "type": "string"
+            },
+            "psl_snapshot": {
+              "type": "string",
+              "description": "The date of the embedded Public Suffix List."
+            },
+            "private_suffixes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "egress_ignored": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "customers_one_domain": {
+              "type": "string"
+            },
+            "not_observed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "routes",
+            "recognised_platforms",
+            "established",
+            "related",
+            "mutually_unrelated",
+            "psl_snapshot",
+            "private_suffixes",
+            "egress_ignored",
+            "customers_one_domain"
+          ]
+        },
+        "tiers": {
+          "type": "object",
+          "properties": {
+            "business": {
+              "type": "object",
+              "properties": {
+                "trusted": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "building": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "new": {
+                  "type": "string"
+                }
+              },
+              "required": ["trusted", "building", "new"]
+            },
+            "person": {
+              "type": "object",
+              "properties": {
+                "trusted": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "building": {
+                  "type": "object",
+                  "properties": {
+                    "min_score": {
+                      "type": "number"
+                    },
+                    "distinct_customers": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "unrelated_businesses": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["min_score"]
+                },
+                "new": {
+                  "type": "string"
+                }
+              },
+              "required": ["trusted", "building", "new"]
+            },
+            "distinct_customer": {
+              "type": "string"
+            },
+            "ranked": {
+              "type": "string"
+            }
+          },
+          "required": ["business", "person", "distinct_customer", "ranked"]
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "issuance_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "passes_per_key_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "instance_calls_per_minute": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "presentations_per_person_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "pass_strings": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "pass_string_chars": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "per_entries": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "promises_per_business_per_day": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "unusual_use_businesses_per_24h": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "signature_seconds": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "signature_skew_seconds": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_digits": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_minutes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "code_tries": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "codes_per_hour_per_address": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "session_hours": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "issuance_replay_days": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "networks_per_inbox": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "listing_limit_max": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "unusual_use_signing_keys": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "issuance_per_business_per_day",
+            "passes_per_key_per_day",
+            "instance_calls_per_minute",
+            "presentations_per_person_per_business_per_day",
+            "pass_strings",
+            "pass_string_chars",
+            "per_entries",
+            "promises_per_business_per_day",
+            "unusual_use_businesses_per_24h",
+            "signature_seconds",
+            "signature_skew_seconds",
+            "code_digits",
+            "code_minutes",
+            "code_tries",
+            "codes_per_hour_per_address",
+            "session_hours",
+            "issuance_replay_days",
+            "networks_per_inbox",
+            "listing_limit_max",
+            "unusual_use_signing_keys"
+          ]
+        },
+        "never_used": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What the order never reads: advertising, money, amounts, who is searching…"
+        },
+        "changelog": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rules": {
+                "type": "string"
+              },
+              "published_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "effective_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "required": ["version", "published_at", "effective_at", "summary", "url"]
+          }
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "effective_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": ["version", "effective_at", "url"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "rules",
+        "status",
+        "published_at",
+        "effective_at",
+        "summary",
+        "order",
+        "score",
+        "weights",
+        "timing",
+        "verified",
+        "tiers",
+        "limits",
+        "never_used",
+        "changelog",
+        "next"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 2
+        },
+        "status": {
+          "type": "string",
+          "enum": ["in_force", "retired"]
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "order": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string"
+            },
+            "near": {
+              "type": "string"
+            }
+          },
+          "required": ["default", "near"]
+        },
+        "never_used": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "effective_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": ["version", "effective_at", "url"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["version", "status", "effective_at", "summary", "order", "never_used", "next"]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "status": {
+          "type": "string",
+          "const": "withdrawn"
+        }
+      },
+      "required": ["version", "status"],
+      "additionalProperties": {}
+    }
+  ]
+}

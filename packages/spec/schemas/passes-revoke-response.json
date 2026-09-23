@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/passes/revoke: 200",
+  "type": "object",
+  "properties": {
+    "revoked": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": ["revoked"]
+}

@@ -6,7 +6,15 @@ import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, problemOf } from "../lib/api";
-import { hostOf, MAX_NETWORKS, networkStatus, parseNetworkOrigin, receiptWords } from "../lib/networks";
+import {
+  hostOf,
+  MAX_NETWORKS,
+  networkStatus,
+  parseNetworkOrigin,
+  receiptWords,
+  rulesWords,
+  standingWords,
+} from "../lib/networks";
 import { qk, useNetworks, useSaveSettings, useSettings } from "../lib/queries";
 import type { NetworkView } from "../lib/types";
 
@@ -38,7 +46,8 @@ function NetworksPage() {
 
   const change = (
     origin: string,
-    entry: { enabled: boolean } | null,
+    /** One network's keys to change, merged into what is stored; null removes the network. */
+    entry: { enabled?: boolean; issue?: boolean } | null,
     done: string,
     from: string = origin,
     after?: () => void,
@@ -70,8 +79,19 @@ function NetworksPage() {
       <p className="lede small">Your inbox can report to several networks. Each one lists you in its own directory.</p>
       <p className="hint">
         A network you switch on gets your inbox's address, a count of new bookings, orders, quotes and messages every
-        hour, and every receipt your inbox signs. Receipts name customers by a pseudonym only: no names, email addresses
-        or messages leave your inbox.
+        hour, and every receipt your inbox signs: each booking confirmed and order accepted, and how it ended. Receipts
+        name customers by a pseudonym only: no names, messages or what was ordered.
+      </p>
+      <p className="hint">
+        Customers' assistants may carry a pass from a network. Your inbox shows it to the network that issued it, with
+        the customer's email, to learn whether the network knows them; you then see their standing there. With "Give
+        first-time customers a key" on, a customer's first booking or order with an email sends that email to the
+        network, which keeps only a keyed hash of it and gives your inbox a key to email to them.
+      </p>
+      <p className="hint">
+        A network you switch on later gets your older receipts too. It counts a booking or an order whose promise
+        reaches it more than a day late at half its weight, until the customer's assistant confirms it, so switching on
+        early is what counts.
       </p>
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {conflict && (
@@ -116,6 +136,15 @@ function NetworksPage() {
                   : `${hostOf(n.origin)} is off. Nothing more is sent to it; switch it on again to send what it missed.`,
               )
             }
+            onIssue={(on) =>
+              change(
+                n.origin,
+                { issue: on },
+                on
+                  ? `${hostOf(n.origin)} gives your first-time customers a key from now on.`
+                  : `${hostOf(n.origin)} no longer gives your customers a key; nothing about a first-time customer goes to it.`,
+              )
+            }
             onRemove={() => change(n.origin, null, `${hostOf(n.origin)} removed from the list.`)}
           />
         ))}
@@ -145,16 +174,20 @@ function NetworkLine({
   pending,
   error,
   onToggle,
+  onIssue,
   onRemove,
 }: {
   network: NetworkView;
   pending: boolean;
   error: ApiProblem | null;
   onToggle: (on: boolean) => void;
+  onIssue: (on: boolean) => void;
   onRemove: () => void;
 }) {
   const status = networkStatus(n);
   const counts = n.share.receipts && (n.enabled || n.receipts.published > 0) ? receiptWords(n.receipts) : [];
+  const rules = n.enabled ? rulesWords(n.rules) : null;
+  const standing = standingWords(n);
   return (
     <div className={clsx("catalogue-row row-glass", !n.enabled && "is-archived")}>
       <div className="catalogue-main">
@@ -166,6 +199,24 @@ function NetworkLine({
           {status.line}
         </div>
         {status.detail && <div className="hint">{status.detail}</div>}
+        {standing && (
+          <div className="s net-status">
+            <i className={clsx("dot", standing.tone !== "neutral" && `dot-${standing.tone}`)} aria-hidden="true" />
+            Your standing here: {standing.line}
+          </div>
+        )}
+        {rules && <div className="hint">{rules}</div>}
+        {n.enabled && (
+          <div className="net-issue">
+            <Switch checked={n.issue} onChange={onIssue} disabled={pending}>
+              Give first-time customers a key
+            </Switch>
+            <div className="hint">
+              On a first booking or order with an email and no pass, your inbox asks this network for a key and emails
+              it to the customer, so any business on the network recognises them next time.
+            </div>
+          </div>
+        )}
         {error && (
           <div className="hint error" role="alert">
             {error.detail}

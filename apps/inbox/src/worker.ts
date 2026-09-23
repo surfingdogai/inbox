@@ -1,5 +1,5 @@
 import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
-import { createDb, MIGRATIONS } from "@surfingdog/core";
+import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
 import { cloudflareEmailMailOut, ensureMigrated, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
@@ -59,6 +59,8 @@ export default {
     const db = createDb(d1Client(env.DB));
     await ensureMigrated(db.client, MIGRATIONS);
     await ensureNetworkPing(db);
+    // Bookings that ended, payments that never came (ADR-017 §3.1): every quarter hour.
+    await ensureLifecycleSweep(db);
     await inboxFor(env).runner.runDue(db, { workerId: "cron", limit: 100 });
   },
 

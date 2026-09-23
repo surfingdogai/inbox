@@ -76,7 +76,8 @@ export function RuleEditor({
     staleTime: 60_000,
   });
   const test = useMutation({
-    mutationFn: (input: { definition: RuleDefinition; itemId: string }) => api.testRule(input.definition, input.itemId),
+    mutationFn: (input: { definition: RuleDefinition; itemId: string }) =>
+      api.testRule(input.definition, input.itemId, form.name),
   });
 
   const submit = (e: FormEvent) => {
@@ -398,6 +399,11 @@ export function RuleEditor({
               `Slot free: ${yesNo(test.data.facts.slotIsFree)} · inside opening hours: ${yesNo(test.data.facts.withinBusinessHours)}.`}
           </p>
         )}
+        {test.data?.skipped?.map((line) => (
+          <p key={line} className="hint">
+            {line}.
+          </p>
+        ))}
         {test.error && (
           <p className="hint error" role="alert">
             {problemOf(test.error).detail}

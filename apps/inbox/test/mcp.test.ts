@@ -47,6 +47,7 @@ describe("MCP doors", () => {
       "cancel_item",
       "send_message",
       "acknowledge_receipt",
+      "verify_customer",
     ]);
     const booked = await client.callTool({
       name: "create_booking",
@@ -67,7 +68,8 @@ describe("MCP doors", () => {
     expect(booked.isError, JSON.stringify(booked.content)).toBeFalsy();
     expect(structured.view.item.state).toBe("requested");
     const text = (booked.content as { type: string; text: string }[])[0]?.text ?? "";
-    expect(text).toMatch(/Booking "Full service" .* is requested/);
+    // The business answers its customer in its own voice.
+    expect(text).toMatch(/^Your booking "Full service" .* is with us; we will confirm it or suggest another time\./);
     expect(text).toContain(structured.accessToken);
 
     const bad = await client.callTool({
@@ -77,6 +79,51 @@ describe("MCP doors", () => {
     expect(bad.isError).toBe(true);
     // The SDK validates arguments before the tool runs and names the offending fields itself.
     expect((bad.content as { text: string }[])[0]?.text).toMatch(/startTime/);
+  });
+
+  it("does not offer the owner's AI a correction whose time has passed", async () => {
+    const db = await freshDb();
+    const app = createApp({ db });
+    const now = Date.now();
+    const HOUR = 3_600_000;
+    const booked = (id: string, end: number) => [
+      {
+        sql: "INSERT INTO items (id, type, state, version, party_id, channel, payload, flags, created_at, updated_at, closed_at) VALUES (?, 'booking', 'completed', 3, 'p1', 'form', ?, ?, ?, ?, ?)",
+        params: [
+          id,
+          JSON.stringify({
+            reservationFor: { serviceId: "svc_1", name: "Surf lesson" },
+            startTime: new Date(end - 90 * 60_000).toISOString(),
+            endTime: new Date(end).toISOString(),
+          }),
+          JSON.stringify({ needsHuman: false, sandbox: false, priority: 0 }),
+          end,
+          end,
+          end,
+        ],
+        method: "run" as const,
+      },
+      ...["create:requested", "confirm:confirmed", "complete:completed"].map((step, i) => {
+        const [event, to] = step.split(":");
+        return {
+          sql: "INSERT INTO item_events (id, item_id, seq, event, from_state, to_state, actor_kind, actor_id, depth, created_at) VALUES (?, ?, ?, ?, NULL, ?, 'owner', 'u1', 0, ?)",
+          params: [ulid(), id, i + 1, event, to, end],
+          method: "run" as const,
+        };
+      }),
+    ];
+    await db.client.batch([
+      { sql: "INSERT INTO parties (id, kind, created_at, updated_at) VALUES ('p1', 'human', 0, 0)", method: "run" },
+      ...booked("bk_old", now - 5 * 24 * HOUR),
+      ...booked("bk_new", now - HOUR),
+    ]);
+    const owner = await createApiKey(db, { kind: "owner", name: "t" });
+    const client = await connect(app, "/mcp/owner", { authorization: `Bearer ${owner.key}` });
+    const text = async (id: string) =>
+      ((await client.callTool({ name: "get_item", arguments: { item_id: id } })).content as { text: string }[])[0]
+        ?.text ?? "";
+    expect(await text("bk_old")).toMatch(/Next: nothing\.$/);
+    expect(await text("bk_new")).toContain("Next: no_show (Correct: no-show).");
   });
 
   it("guards the owner tools behind an owner key", async () => {

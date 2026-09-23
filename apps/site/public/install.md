@@ -313,7 +313,9 @@ https://inbox.theirdomain.com/mcp/owner
 It signs in with OAuth. If the client lets them choose, grant the scopes the work needs; today a
 call outside the granted scopes still goes through and is listed under Settings → Keys, where they
 can see it and switch on refusing such calls. The public tools, for their customers' agents, are at
-`/mcp` and need no sign-in.
+`/mcp` and need no sign-in. How a customer's agent says who it carries — the person's pass, their
+details, a one-time code when asked — is in https://surfingdog.ai/for-agents.md, which every inbox's
+manifest links under `agent_policy.guide`.
 
 If they want their AI to make the keys other systems need, they switch on "Let my AI create keys"
 in Settings → Keys. Only they can switch it on, in the owner app.
@@ -322,11 +324,22 @@ in Settings → Keys. Only they can switch it on, in the owner app.
 
 ## Step 5. Networks, optional
 
-A network is a directory of businesses. An inbox can report to several networks, and each one lists
+A network is a directory of businesses, and it keeps a record of how reliably businesses and
+customers keep their bookings and orders. An inbox can report to several networks, and each one lists
 it in its own directory. Joining is the person's choice: ask first, and tell them what each network
-they switch on receives, in these words: the inbox's address, a count of new bookings, orders,
-quotes and messages every hour, and every receipt the inbox signs, which names customers by a
-pseudonym only. No names, email addresses or messages.
+they switch on receives, in these words:
+
+- the inbox's address, and every hour a count of new bookings, orders, quotes and messages;
+- every receipt the inbox signs — each booking confirmed or order accepted, and how it ended — which
+  names the customer by a pseudonym (and, when their assistant presented a pass, by that
+  presentation, so the outcome counts for them): no names, messages or what was ordered;
+- when a customer's assistant presents a pass from that network, the pass and the customer's email
+  address, so the network can say whether it knows them;
+- unless they switch it off ("Give first-time customers a key", or `"issue": false`), a first-time
+  customer's email address with their first booking or order, so the network can give them a key;
+  the network keeps only a keyed hash of the address, and the inbox emails the key to the customer.
+
+Full detail: https://surfingdog.ai/privacy.
 
 If they say yes, switch the network on in Settings → Networks, or over the API. Networks are keyed
 by their https address, so adding one leaves the others as they are:
@@ -339,8 +352,9 @@ curl -s -X PUT https://inbox.theirdomain.com/v1/owner/settings \
   -d "{\"expected_version\":$VERSION,\"doc\":{\"networks\":{\"https://network.surfingdog.ai\":{\"enabled\":true}}}}"
 ```
 
-To switch one off later, send `{"enabled": false}` for that address alone. Never send the whole list
-back to change one entry. At most eight networks.
+To switch one off later, send `{"enabled": false}` for that address alone; to stop it giving
+first-time customers a key, `{"issue": false}`. Never send the whole list back to change one entry.
+At most eight networks.
 
 A minute later, check that it is reporting:
 
@@ -352,7 +366,8 @@ Expect the network with `"enabled": true`, `last_ping_at` set and `registration`
 or `"pending"` for a few minutes while the network checks the inbox's manifest. `last_error` says in
 a few words what went wrong; most often the inbox has no public https address (`INBOX_PUBLIC_URL`,
 or the Inbox address in Settings). The manifest's `review_services` names every network that
-receives receipts; it can take five minutes to show a new one.
+receives receipts; it can take five minutes to show a new one. With `INBOX_SECRET_KEY` set, the hourly
+ping is signed, and `standing` then shows the business's own standing at each network.
 
 ---
 

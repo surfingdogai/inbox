@@ -92,6 +92,7 @@ export const applyPresetInput = z.object({
 export const testRuleInput = z.object({
   definition: ruleDefinitionSchema,
   item_id: z.string().min(1).describe("An existing item to evaluate the conditions against; nothing is changed."),
+  name: z.string().max(200).optional().describe("The rule's name, for the words the test answers with."),
 });
 
 export type WeeklyHours = z.infer<typeof weeklySchema>;

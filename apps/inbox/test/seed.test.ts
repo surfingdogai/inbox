@@ -1,4 +1,4 @@
-import { schema } from "@surfingdog/core";
+import { PRESETS, schema } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { localTime, seedShowcase } from "../src/seed";
 import { freshDb } from "./harness";
@@ -48,7 +48,8 @@ describe("seed-showcase", () => {
     });
     expect(["rule", "owner"]).toContain(String(confirmedBy.rows[0]?.[0]));
     const rules = await db.orm.select({ name: schema.rules.name }).from(schema.rules);
-    expect(rules.length).toBe(4);
+    // The appointments preset (ADR-017 §8.3 added the known-customer rules) and two of its own.
+    expect(rules.length).toBe((PRESETS.appointments ?? []).length + 2);
     const hours = await db.orm.select({ weekly: schema.availabilityRules.weekly }).from(schema.availabilityRules);
     const weekly = hours[0]?.weekly as { sat?: unknown[] } | undefined;
     expect(weekly?.sat).toEqual([["09:00", "13:00"]]);

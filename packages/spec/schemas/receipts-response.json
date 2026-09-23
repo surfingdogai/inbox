@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/receipts: answer",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true
+    },
+    "state": {
+      "type": "string",
+      "enum": ["issued", "acknowledged"]
+    },
+    "duplicate": {
+      "type": "boolean"
+    }
+  },
+  "required": ["ok", "state", "duplicate"]
+}

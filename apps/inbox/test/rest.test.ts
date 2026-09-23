@@ -90,6 +90,66 @@ describe("REST door", () => {
     expect(((await list.json()) as { items: unknown[] }).items).toHaveLength(1);
   });
 
+  it("cancels late through the customer's door, and gives the owner the new transitions", async () => {
+    const { app, svc, ownerKey } = await setup();
+    const owner = { authorization: `Bearer ${ownerKey}` };
+    // Two hours from now: inside the default 24-hour window, so a cancellation now is late.
+    const start = Math.ceil((Date.now() + 2 * 3_600_000) / 1_800_000) * 1_800_000;
+    const created = (await (
+      await app.request(
+        jsonPost("/v1/bookings", {
+          payload: {
+            reservationFor: { serviceId: svc, name: "Full service" },
+            startTime: new Date(start).toISOString(),
+            endTime: new Date(start + 90 * 60_000).toISOString(),
+          },
+          contact: { name: "Rita", email: "rita@example.com" },
+        }),
+      )
+    ).json()) as { view: { item: { id: string } }; accessToken: string };
+    const id = created.view.item.id;
+    expect((await app.request(jsonPost(`/v1/owner/items/${id}/transitions`, { event: "confirm" }, owner))).status).toBe(
+      200,
+    );
+    const cancelled = await app.request(
+      jsonPost(`/v1/items/${id}/cancel`, { access_token: created.accessToken, reason: "flight delayed" }),
+    );
+    expect(cancelled.status).toBe(200);
+    expect(((await cancelled.json()) as { view: { item: { state: string } } }).view.item.state).toBe(
+      "cancelled_by_customer",
+    );
+    const detail = (await (
+      await app.request(`https://inbox.test/v1/owner/items/${id}`, { headers: owner })
+    ).json()) as {
+      events: { event: string }[];
+    };
+    expect(detail.events.map((e) => e.event)).toEqual(["create", "confirm", "cancel_late"]);
+
+    // An order's payment can fail, and the owner is offered what can follow.
+    const order = (await (
+      await app.request(
+        jsonPost("/v1/orders", {
+          payload: {
+            orderedItem: [{ name: "Chain", quantity: 1, price: { value: 1500, currency: "EUR" } }],
+            totalPrice: { value: 1500, currency: "EUR" },
+          },
+          contact: { email: "rita@example.com" },
+        }),
+      )
+    ).json()) as { view: { item: { id: string } } };
+    const oid = order.view.item.id;
+    for (const event of ["accept", "request_payment"]) {
+      expect((await app.request(jsonPost(`/v1/owner/items/${oid}/transitions`, { event }, owner))).status).toBe(200);
+    }
+    const failed = await app.request(
+      jsonPost(`/v1/owner/items/${oid}/transitions`, { event: "payment_failed", input: { note: "declined" } }, owner),
+    );
+    expect(failed.status).toBe(200);
+    const view = (await failed.json()) as { view: { item: { state: string }; transitions: { event: string }[] } };
+    expect(view.view.item.state).toBe("payment_failed");
+    expect(view.view.transitions.map((t) => t.event)).toEqual(["record_payment", "cancel"]);
+  });
+
   it("explains invalid input as a problem document with fields", async () => {
     const { app } = await setup();
     const res = await app.request(jsonPost("/v1/bookings", { payload: { reservationFor: { serviceId: "x" } } }));

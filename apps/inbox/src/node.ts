@@ -3,7 +3,14 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey, ensureNetworkPing, pingNetworksNow } from "@surfingdog/adapters";
-import { Capabilities, createDb, createSecretBox, MIGRATIONS, parseSecretKeys } from "@surfingdog/core";
+import {
+  Capabilities,
+  createDb,
+  createSecretBox,
+  ensureLifecycleSweep,
+  MIGRATIONS,
+  parseSecretKeys,
+} from "@surfingdog/core";
 import { cloudflareEmailRestMailOut, ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
@@ -70,6 +77,8 @@ if (command) {
 // Migrate before the job loop starts, so a fresh database never sees a query for a missing table.
 await ensureMigrated(db.client, MIGRATIONS);
 await ensureNetworkPing(db);
+// The quarter-hourly lifecycle sweep (ADR-017 §3.1) queues its own successor from here on.
+await ensureLifecycleSweep(db);
 const mailOut: MailOut =
   process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_TOKEN && process.env.MAIL_FROM
     ? cloudflareEmailRestMailOut({
@@ -110,11 +119,15 @@ const loop = setInterval(() => {
 }, 1_000);
 loop.unref();
 
-/** No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the terminal. */
+/**
+ * No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the
+ * terminal. A customer's network key or pass is not the operator's to copy: its secret is cut.
+ */
 function consoleMailOut(): MailOut {
   return {
     async send(mail) {
       const body = mail.text
+        .replace(/\b(sd(?:key|pass)1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}\b/g, "$1…")
         .split("\n")
         .map((line) => `    ${line}`)
         .join("\n");

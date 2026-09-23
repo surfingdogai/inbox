@@ -4,6 +4,7 @@ import type { Db } from "../db";
 import { type Item, type ItemType, payloadSchemas } from "../domain/types";
 import { ulid } from "../ids";
 import { resolveTransition, type Transition } from "../machine/machine";
+import { outcomeOf } from "../machine/outcomes";
 import { machines, noteInput } from "../machine/tables";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
@@ -19,6 +20,7 @@ import {
   threadEntryStatement,
   webhookFanoutStatement,
 } from "./common";
+import { CHARGED_BACK_SQL, CORRECTED_SQL, correctionFacts, correctionUntil, deadCorrections } from "./corrections";
 import { fromZod, WriteError } from "./errors";
 import { bucketsFor, claimStatements, planClaims, readClaims, releaseStatement, type SlotSpec } from "./slots";
 import { defaultSubject, type ItemView, rowToItem, viewFor } from "./views";
@@ -137,7 +139,7 @@ async function attempt_(
         break;
       case "has_quote":
         if (!payload.quote)
-          throw new WriteError("guard_failed", "the business has not quoted yet", { details: { guard } });
+          throw new WriteError("guard_failed", "we have not sent a quote yet", { details: { guard } });
         break;
       case "within_cancellation_window": {
         if (item.type === "booking" && item.state === "confirmed") {
@@ -148,10 +150,78 @@ async function attempt_(
               "guard_failed",
               `confirmed bookings can be cancelled up to ${settings.booking.cancellationWindowMin} minutes before the start`,
               {
-                details: { guard, cancellationWindowMin: settings.booking.cancellationWindowMin },
+                details: {
+                  guard,
+                  cancellationWindowMin: settings.booking.cancellationWindowMin,
+                  lateCancellation: settings.booking.lateCancellation,
+                },
               },
             );
           }
+        }
+        break;
+      }
+      case "outside_cancellation_window": {
+        // The door fires this once `cancel` found the window closed (ADR-017 §3.1): recorded as a
+        // late cancellation where the owner chose to record them, refused where they did not.
+        if (item.type !== "booking") break;
+        const windowMs = settings.booking.cancellationWindowMin * 60_000;
+        if (Date.parse(item.payload.startTime) - now >= windowMs) {
+          throw new WriteError("guard_failed", "the cancellation window is still open; cancel as usual", {
+            details: { guard, cancellationWindowMin: settings.booking.cancellationWindowMin },
+          });
+        }
+        if (settings.booking.lateCancellation !== "record") {
+          throw new WriteError(
+            "guard_failed",
+            `confirmed bookings can be cancelled up to ${settings.booking.cancellationWindowMin} minutes before the start; after that, please contact us`,
+            { details: { guard, lateCancellation: settings.booking.lateCancellation } },
+          );
+        }
+        break;
+      }
+      case "within_correction_window": {
+        if (item.type !== "booking") break;
+        // Made before outcomes were recorded, it has none to correct: closed by hand, it stays so.
+        if (row.legacyPromise === 1) {
+          throw new WriteError(
+            "guard_failed",
+            "this booking was made before outcomes were recorded, so it has no outcome to correct",
+            { details: { guard, legacy: true } },
+          );
+        }
+        const hours = settings.booking.autoCompleteHours;
+        const until = correctionUntil(item.payload.endTime, settings);
+        if (now > until) {
+          throw new WriteError(
+            "guard_failed",
+            `a booking's outcome can be corrected until ${hours} hours after it ended`,
+            { details: { guard, autoCompleteHours: hours, until: new Date(until).toISOString() } },
+          );
+        }
+        if (await hasEvent(db, item.id, CORRECTED_SQL)) {
+          throw new WriteError("guard_failed", "this booking's outcome was corrected already", { details: { guard } });
+        }
+        break;
+      }
+      case "payment_overdue": {
+        const requested = await lastEventAt(db, item.id, "request_payment");
+        const due = requested === null ? null : requested + settings.orders.payDays * 86_400_000;
+        if (due === null || now < due) {
+          throw new WriteError("guard_failed", `payment was requested less than ${settings.orders.payDays} days ago`, {
+            details: { guard, payDays: settings.orders.payDays },
+          });
+        }
+        if (await hasEvent(db, item.id, "event = 'lapse'")) {
+          throw new WriteError("guard_failed", "this order has lapsed already", { details: { guard } });
+        }
+        break;
+      }
+      case "not_charged_back": {
+        if (await hasEvent(db, item.id, CHARGED_BACK_SQL)) {
+          throw new WriteError("guard_failed", "a charge-back is recorded on this order already", {
+            details: { guard },
+          });
         }
         break;
       }
@@ -198,7 +268,21 @@ async function attempt_(
     linkedEvent = { id: linked.eventId, type: `${linked.type}.create`, itemId: linked.id };
   }
   updated.linkedItemId = linkedId;
-  const view = viewFor(updated, permissionKind(caller));
+  // The corrections the item is left with: what its history said before this, and this.
+  const facts = (await correctionFacts(db, [{ ...row, state: t.to }])).get(item.id);
+  const hidden = facts
+    ? deadCorrections(
+        updated,
+        {
+          legacy: facts.legacy,
+          corrected: facts.corrected || (t.amends === true && item.type === "booking"),
+          chargedBack: facts.chargedBack || t.event === "charge_back" || t.event === "record_charge_back",
+        },
+        settings,
+        now,
+      )
+    : undefined;
+  const view = viewFor(updated, permissionKind(caller), undefined, hidden);
   const response = { view, linked: linkedView };
 
   if (idem && requestHash) statements.unshift(idempotencyStatement(idem, requestHash, 200, response, item.id, now));
@@ -247,13 +331,33 @@ async function attempt_(
     );
   }
   for (const effect of effects) {
-    if (effect === "issue_receipt:confirmed" || effect === "issue_receipt:paid") {
+    if (
+      effect === "issue_receipt:confirmed" ||
+      effect === "issue_receipt:paid" ||
+      effect === "issue_receipt:accepted"
+    ) {
       const kind = effect.slice("issue_receipt:".length);
       statements.push(
         jobStatement("issue_receipt", { itemId: item.id, kind, eventId }, now, {
           dedupeKey: `receipt:${item.id}:${kind}`,
         }),
       );
+    } else if (effect === "issue_receipt:outcome") {
+      // One pure function names the outcome (ADR-017 §3.1); the machines and it are checked
+      // against each other over every path, so a transition with this effect always has one. A
+      // promise made before outcomes were recorded closes without one (R18): its owner closes it.
+      const outcome =
+        row.legacyPromise === 1 ? null : outcomeOf(item.type, t.event, item.state, permissionKind(caller));
+      if (outcome) {
+        statements.push(
+          jobStatement(
+            "issue_receipt",
+            { itemId: item.id, kind: "outcome", outcome: outcome.code, aut: outcome.aut ?? 0, eventId },
+            now,
+            { dedupeKey: `receipt:${item.id}:outcome:${outcome.code}` },
+          ),
+        );
+      }
     } else if (effect === "review_fact") {
       statements.push(
         jobStatement("review_fact", { itemId: item.id, event: t.event, eventId }, now, {
@@ -292,6 +396,27 @@ async function attempt_(
     return replay(hit, requestHash);
   }
   return { view, linked: linkedView, replayed: false };
+}
+
+/** Whether the item has an event matching `where` (a fixed SQL condition on `item_events`). */
+async function hasEvent(db: Db, itemId: string, where: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM item_events WHERE item_id = ? AND ${where} LIMIT 1`,
+    params: [itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+/** When the item last had `event`, or null. */
+async function lastEventAt(db: Db, itemId: string, event: string): Promise<number | null> {
+  const { rows } = await db.client.query({
+    sql: "SELECT MAX(created_at) FROM item_events WHERE item_id = ? AND event = ?",
+    params: [itemId, event],
+    method: "all",
+  });
+  const at = rows[0]?.[0];
+  return at === null || at === undefined ? null : Number(at);
 }
 
 async function assertOwnership(caller: Caller, partyId: string, accessTokenHash: string | null): Promise<void> {
@@ -411,7 +536,13 @@ async function planLinkedItem(
   const linkedEventId = ulid();
   const statements: Statement[] = [
     {
-      sql: "INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags, created_at, updated_at, closed_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, (SELECT access_token_hash FROM items WHERE id = ?), ?, ?, ?, ?, NULL)",
+      // The quote's customer, as the create established it (ADR-017 §3.1): the access token, and the
+      // identity columns — the agent that signed, the match, the possible known party.
+      sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
+              agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at)
+            SELECT ?, ?, ?, 1, ?, ?, ?, ?, ?, q.access_token_hash, ?, ?,
+                   q.agent_thumbprint, q.agent_level, q.agent_directory, q.customer_match, q.possible_party_id, ?, ?, NULL
+              FROM items q WHERE q.id = ?`,
       params: [
         id,
         type,
@@ -421,11 +552,11 @@ async function planLinkedItem(
         caller.actor.channel,
         subject,
         quote.id,
-        quote.id,
         JSON.stringify(parsed),
         JSON.stringify(quote.flags),
         now,
         now,
+        quote.id,
       ],
       method: "run",
     },
@@ -447,6 +578,14 @@ async function planLinkedItem(
     jobStatement("notify", { to: "owner", itemId: id, event: "create" }, now, {
       dedupeKey: `notify:create:${id}:owner`,
     }),
+    // The customer each network presented for the quote is the customer of what it became
+    // (ADR-017 §3.1): its receipts name the same presentations.
+    {
+      sql: `INSERT OR IGNORE INTO item_presentations (item_id, network, presentation_id, ppid, person, created_at)
+            SELECT ?, network, presentation_id, ppid, person, created_at FROM item_presentations WHERE item_id = ?`,
+      params: [id, quote.id],
+      method: "run",
+    },
   ];
   return { id, type, eventId: linkedEventId, statements, view: viewFor(item, permissionKind(caller)) };
 }

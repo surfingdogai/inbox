@@ -3,6 +3,8 @@ import {
   type Db,
   enabledNetworks,
   ensureJob,
+  ensureLifecycleSweep,
+  type InstanceSigningKey,
   isNetworkDown,
   type JobHandler,
   type JobRow,
@@ -13,13 +15,17 @@ import {
   type NetworkJobPayload,
   type NetworkReceiptPayload,
   networkFailureStatement,
+  networkPingSignatureStatement,
   networkPublicationStatement,
   networkReceiptStatements,
+  networkRulesStatement,
   networkStartStatements,
   networkSuccessStatement,
   PING_PERIOD_MS,
+  type PingSignature,
   type PublishPayload,
   pingDedupeKey,
+  platformHost,
   pruneIdempotencyKeys,
   pruneJobs,
   publishKey,
@@ -30,8 +36,13 @@ import {
   reportsTo,
   type Settings,
   shortError,
+  signInstanceRequest,
+  takesV2,
+  V2_ONLY_KINDS,
 } from "@surfingdog/core";
 import type { Statement } from "@surfingdog/platform";
+import { z } from "zod";
+import { pruneIdentity } from "./identity";
 import { pruneRateLimits } from "./limits";
 import { isPublicHost, readCapped } from "./safe-fetch";
 import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
@@ -71,6 +82,11 @@ const PUBLISH_TIME_BOX_MS = 10_000;
 /** Receipts queued and posted per network per hour, at most (ADR-017 §3.3). */
 const PUBLISH_PER_HOUR = 1_000;
 const MAX_BODY = 16 * 1024;
+/** `/v1/ranking` carries every number and the changelog: read up to this much. */
+const MAX_RULES_BODY = 256 * 1024;
+/** How often a network's rules are read (ADR-017 §2.5: daily), and again after a failed read. */
+const RULES_EVERY_MS = 24 * 3_600_000;
+const RULES_RETRY_MS = 3_600_000;
 
 export interface NetworkDeps {
   /**
@@ -86,6 +102,12 @@ export interface NetworkDeps {
   /** Receipts per publisher run (25) and per network per hour (1000); smaller only in tests. */
   readonly publishBatch?: number | undefined;
   readonly publishPerHour?: number | undefined;
+  /**
+   * The receipt key the hourly ping is signed with (sdi-instance/1, ADR-017 §7.3), or null when
+   * this instance cannot sign (no INBOX_SECRET_KEY). A signed ping is answered with the business's
+   * own standing at the network; an unsigned one is taken as it always was.
+   */
+  readonly instanceKey?: (() => Promise<InstanceSigningKey | null>) | undefined;
 }
 
 export interface PingCounts {
@@ -166,10 +188,27 @@ export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
     await pruneRateLimits(db, now);
     // Idempotency keys are for retries, not a record: thirty days is long past any retry.
     await pruneIdempotencyKeys(db, now);
+    // Kept signatures past their expiry, cached network answers and directories, old codes (ADR-017 §8).
+    await pruneIdentity(db, now);
+    // The lifecycle sweep queues its own successor; this re-queues it should a chain ever break.
+    await ensureLifecycleSweep(db, now);
     const force = (job.payload as { force?: unknown } | null)?.force === true;
     const on = Object.entries(settings.networks).filter(([, entry]) => reportsTo(entry));
     if (on.length === 0) return { note: "no network is switched on; add or switch one on in Settings → Networks" };
-    await db.batch(on.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now, { force })));
+    // A network that no longer takes receipts may still be owed the outcomes of promises it has.
+    const owed = new Set(
+      (
+        await db.client.query({
+          sql: `SELECT DISTINCT p.network FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
+                 WHERE p.state = 'queued' AND r.kind = 'outcome'`,
+          params: [],
+          method: "all",
+        })
+      ).rows.map((r) => String(r[0])),
+    );
+    await db.batch(
+      on.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now, { force, owed: owed.has(origin) })),
+    );
     return { note: `reporting to ${on.map(([origin]) => new URL(origin).host).join(", ")}` };
   };
 }
@@ -202,13 +241,21 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
       ...(entry.share.counts ? { counts: await countLast24h(db, now) } : {}),
     });
     const pingUrl = `${network}/v1/instances/${encodeURIComponent(domain)}/ping`;
+    const ping = () => signedPing(deps, pingUrl, body, domain);
 
-    const first = await call(deps, pingUrl, body);
-    if (isOk(first)) {
-      await db.client.query(networkSuccessStatement(network, now, { registration: "registered", pinged: true }));
-      return { note: `pinged ${host} as ${domain}` };
+    const first = await ping();
+    if (isOk(first.res)) {
+      await db.batch([
+        networkSuccessStatement(network, now, { registration: "registered", pinged: true }),
+        ...pingAnswerStatements(network, now, first),
+      ]);
+      // Which rules it applies, once a day: what decides whether it is sent claims v2 (§2.5). A
+      // signed ping's answer has just said it, and then nothing more is asked today.
+      const rules = await networkRules(deps, db, network, now);
+      return { note: `pinged ${host} as ${domain}${signatureNote(first.signature)}${rulesNote(rules)}` };
     }
-    if (!("status" in first) || first.status !== 404) return fail(db, job, network, now, "ping", first);
+    const firstRes = first.res;
+    if (!("status" in firstRes) || firstRes.status !== 404) return fail(db, job, network, now, "ping", firstRes);
 
     const status = await readNetworkStatus(db, network);
     if (status?.registeredAt && now - status.registeredAt < REGISTER_EVERY_MS) {
@@ -220,18 +267,127 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
     const reg = await call(deps, `${network}/v1/instances`, JSON.stringify({ domain }));
     // 409: it knows the domain already, which is as good as a registration.
     if (!isOk(reg) && !("status" in reg && reg.status === 409)) return fail(db, job, network, now, "register", reg);
-    const second = await call(deps, pingUrl, body);
-    if (isOk(second)) {
-      await db.client.query(
+    const second = await ping();
+    if (isOk(second.res)) {
+      await db.batch([
         networkSuccessStatement(network, now, { registration: "registered", registeredAt: now, pinged: true }),
-      );
-      return { note: `registered ${domain} at ${host} and pinged` };
+        ...pingAnswerStatements(network, now, second),
+      ]);
+      return { note: `registered ${domain} at ${host} and pinged${signatureNote(second.signature)}` };
     }
     await db.client.query(networkSuccessStatement(network, now, { registration: "pending", registeredAt: now }));
+    const res = second.res;
     return {
-      note: `registered ${domain} at ${host}; verification pending (ping ${"status" in second ? `HTTP ${second.status}` : second.error})`,
+      note: `registered ${domain} at ${host}; verification pending (ping ${"status" in res ? `HTTP ${res.status}` : res.error})`,
     };
   };
+}
+
+/** A ping as it went: the answer, and what became of its signature. */
+interface PingResult {
+  readonly res: CallResult;
+  readonly signature: PingSignature;
+}
+
+/**
+ * The ping, signed sdi-instance/1 with the receipt key when this instance has one (ADR-017 §7.3):
+ * signed, it is answered with the business's standing; unsigned, it is taken as it always was
+ * (R18). A network that answers a signed ping 401 is pinged again unsigned at once, so a network
+ * that does not take signatures never stops hearing from this inbox. Each call is signed afresh:
+ * a signature is good once.
+ */
+async function signedPing(deps: NetworkDeps, url: string, body: string, domain: string): Promise<PingResult> {
+  let key: InstanceSigningKey | null = null;
+  try {
+    key = deps.instanceKey ? await deps.instanceKey() : null;
+  } catch {
+    key = null;
+  }
+  if (!key) return { res: await call(deps, url, body), signature: "unsigned" };
+  const signed = await signInstanceRequest({ method: "POST", url, body, instance: `https://${domain}`, key });
+  const res = await call(deps, url, body, MAX_BODY, signed.headers);
+  if ("status" in res && res.status === 401) return { res: await call(deps, url, body), signature: "refused" };
+  if (!("status" in res) || res.status !== 204) return { res, signature: "verified" };
+  // 204 to a signed ping: the network either could not check it (and says why) or does not read signatures.
+  const reason = res.sdiSignature ? /reason="([a-z_]{1,40})"/.exec(res.sdiSignature)?.[1] : undefined;
+  return { res, signature: res.sdiSignature ? `invalid: ${reason ?? "unknown"}` : "ignored" };
+}
+
+/**
+ * What an answered ping writes beside the success: the signature's fate, and from a signed ping's
+ * `200` the business's standing and the rules the network applies (the same two numbers
+ * `/v1/ranking` gives, so the daily read is not needed that day).
+ */
+function pingAnswerStatements(network: string, now: number, ping: PingResult): Statement[] {
+  const res = ping.res;
+  if (ping.signature !== "verified" || !("status" in res) || res.status !== 200) {
+    return [networkPingSignatureStatement(network, now, ping.signature === "verified" ? "ignored" : ping.signature)];
+  }
+  const answer = signedPingAnswer(res.text);
+  if (!answer) return [networkPingSignatureStatement(network, now, "ignored")];
+  return [
+    networkPingSignatureStatement(network, now, "verified", answer.standing),
+    networkRulesStatement(network, now, answer.rules),
+  ];
+}
+
+/**
+ * A signed ping's `200`, read leniently: the standing and the two rules numbers. Reports and
+ * contests are in it too; answering them from the inbox is not built yet, and a network settles
+ * them without an answer (a report is disputed automatically when the inbox recorded the
+ * customer's own broken outcome).
+ */
+const signedPingAnswerSchema = z.looseObject({
+  rules: z.looseObject({ version: z.int().min(1) }),
+  next_rules: z
+    .looseObject({ version: z.int().min(1), effective_at: z.string().optional() })
+    .nullable()
+    .optional(),
+  standing: z.looseObject({
+    score: z.number().min(0).max(1),
+    tier: z.enum(["new", "building", "trusted"]),
+    ranked: z.boolean().catch(false),
+  }),
+});
+
+function signedPingAnswer(text: string): {
+  standing: { tier: "new" | "building" | "trusted"; score: number; ranked: boolean };
+  rules: { version: number; next: number | null; nextAt: number | null };
+} | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const doc = signedPingAnswerSchema.safeParse(parsed);
+  if (!doc.success) return null;
+  const at = doc.data.next_rules?.effective_at ? Date.parse(doc.data.next_rules.effective_at) : Number.NaN;
+  const { tier, score, ranked } = doc.data.standing;
+  return {
+    standing: { tier, score, ranked },
+    rules: {
+      version: doc.data.rules.version,
+      next: doc.data.next_rules?.version ?? null,
+      nextAt: Number.isFinite(at) ? at : null,
+    },
+  };
+}
+
+function signatureNote(signature: PingSignature): string {
+  switch (signature) {
+    case "verified":
+      return ", signed";
+    case "unsigned":
+      // As every ping was before signatures: nothing to say.
+      return "";
+    case "ignored":
+      return ", signed (the network did not read the signature)";
+    case "refused":
+      return ", unsigned (the network refused the signed ping)";
+    default:
+      return `, signature ${signature}`;
+  }
 }
 
 // ---- publishing ---------------------------------------------------------------------------
@@ -255,24 +411,41 @@ export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
     }
     const network = p.network;
     const entry = (await readSettings(db)).networks[network];
-    if (!entry?.enabled || !entry.share.receipts) {
-      return { note: `${network} is switched off; the receipt stays queued for it` };
-    }
-    // The row normally exists already (it is written with the receipt); this covers any that do not.
-    await db.client.query(networkPublicationStatement(network, p.stage, now, { id: p.receiptId }));
+    if (!entry?.enabled) return { note: `${network} is switched off; the receipt stays queued for it` };
     const { rows } = await db.client.query({
-      sql: `SELECT p.state, r.jws, r.ack_jws FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-             WHERE p.receipt_id = ? AND p.network = ? AND p.stage = ?`,
-      params: [p.receiptId, network, p.stage],
+      sql: `SELECT r.jws, r.ack_jws, r.kind, r.item_id FROM receipts r WHERE r.id = ?`,
+      params: [p.receiptId],
       method: "all",
     });
     const row = rows[0];
     if (!row) return { note: `receipt ${p.receiptId} is gone; nothing published` };
-    if (String(row[0]) !== "queued") return { note: `${p.stage} receipt ${p.receiptId} already ${String(row[0])}` };
-    if (isNetworkDown(await readNetworkStatus(db, network), now)) {
+    const receipt: PublishedReceipt = {
+      id: p.receiptId,
+      jws: String(row[0]),
+      ackJws: row[1] === null ? null : String(row[1]),
+      kind: String(row[2]),
+      itemId: String(row[3]),
+    };
+    // With receipts switched off, a network still gets the outcome of a promise it holds (§3.2).
+    if (
+      !entry.share.receipts &&
+      !(receipt.kind === "outcome" && (await promisePublished(db, network, receipt.itemId)))
+    ) {
+      return { note: `${network} does not take receipts now; the receipt stays queued for it` };
+    }
+    // The row normally exists already (it is written with the receipt); this covers any that do not.
+    await db.client.query(networkPublicationStatement(network, p.stage, now, { id: p.receiptId }));
+    const state = await publicationState(db, network, p.receiptId, p.stage);
+    if (state !== "queued") return { note: `${p.stage} receipt ${p.receiptId} already ${state ?? "gone"}` };
+    const status = await readNetworkStatus(db, network);
+    if (isNetworkDown(status, now)) {
       throw new Error(`deferred: ${hostOf(network)} is not answering; the hourly publisher will send it`);
     }
-    const receipt = { id: p.receiptId, jws: String(row[1]), ackJws: row[2] === null ? null : String(row[2]) };
+    // Acceptances and outcomes are claims v2: they wait until the network applies rules that read
+    // them, and go then, with the hourly publisher (§2.5).
+    if (V2_ONLY_KINDS.includes(receipt.kind) && !takesV2(await networkRules(deps, db, network, now, status))) {
+      return { note: `${hostOf(network)} does not take claims v2 yet; ${receipt.kind} receipt ${p.receiptId} waits` };
+    }
     const outcome = await publishOne(deps, db, network, receipt, p.stage, now);
     if (outcome.kind === "published")
       return { note: `published ${p.stage} receipt ${p.receiptId} to ${hostOf(network)}` };
@@ -295,24 +468,31 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
   return async (job, { db, now }) => {
     const { network, hour, link } = job.payload as PublishPayload;
     const entry = (await readSettings(db)).networks[network];
-    if (!entry?.enabled || !entry.share.receipts) {
-      return { note: `${network} is switched off; its receipts stay queued` };
-    }
+    if (!entry?.enabled) return { note: `${network} is switched off; its receipts stay queued` };
     const batch = deps.publishBatch ?? PUBLISH_BATCH;
     const perHour = deps.publishPerHour ?? PUBLISH_PER_HOUR;
     let queuedNow = 0;
-    if (link === 0) queuedNow = await backfill(db, network, now, perHour);
+    if (link === 0 && entry.share.receipts) queuedNow = await backfill(db, network, now, perHour);
+    const v2 = takesV2(await networkRules(deps, db, network, now));
 
+    // What this network is sent: everything it takes (a network below rules version 3 is sent no
+    // acceptance and no outcome, which wait here for it), and with receipts switched off only the
+    // outcomes of promises it already holds.
+    const kinds = v2 ? "" : ` AND r.kind NOT IN (${V2_ONLY_KINDS.map(() => "?").join(", ")})`;
+    const owedOnly = entry.share.receipts
+      ? ""
+      : ` AND r.kind = 'outcome' AND EXISTS (SELECT 1 FROM network_publications q JOIN receipts pr ON pr.id = q.receipt_id
+             WHERE pr.item_id = r.item_id AND pr.kind <> 'outcome' AND q.network = p.network AND q.stage = 'issued' AND q.state = 'published')`;
     const started = Date.now();
     const { rows } = await db.client.query({
-      sql: `SELECT p.receipt_id, p.stage, r.jws, r.ack_jws
+      sql: `SELECT p.receipt_id, p.stage, r.jws, r.ack_jws, r.kind, r.item_id
               FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-             WHERE p.network = ? AND p.state = 'queued'
+             WHERE p.network = ? AND p.state = 'queued'${kinds}${owedOnly}
                AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.dedupe_key = ? || ':' || p.network || ':' || p.receipt_id || ':' || p.stage
                                 AND j.status IN ('queued', 'running'))
              ORDER BY p.attempts, p.receipt_id, CASE p.stage WHEN 'issued' THEN 0 ELSE 1 END
              LIMIT ?`,
-      params: [network, NETWORK_RECEIPT_KIND, batch],
+      params: [network, ...(v2 ? [] : V2_ONLY_KINDS), NETWORK_RECEIPT_KIND, batch],
       method: "all",
     });
     let published = 0;
@@ -322,7 +502,13 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
     for (const r of rows) {
       if (Date.now() - started > PUBLISH_TIME_BOX_MS) break;
       handled++;
-      const receipt = { id: String(r[0]), jws: String(r[2]), ackJws: r[3] === null ? null : String(r[3]) };
+      const receipt: PublishedReceipt = {
+        id: String(r[0]),
+        jws: String(r[2]),
+        ackJws: r[3] === null ? null : String(r[3]),
+        kind: String(r[4]),
+        itemId: String(r[5]),
+      };
       const stage = String(r[1]) as ReceiptStage;
       // An acknowledged receipt went out whole, acknowledgement included, with its issued row.
       if (delivered.has(receipt.id) && receipt.ackJws) continue;
@@ -377,24 +563,172 @@ async function backfill(db: Db, network: string, now: number, perHour: number): 
   return issued.changes + acked.changes;
 }
 
+/** Whether this network was sent one of the item's promises and took it. */
+async function promisePublished(db: Db, network: string, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
+           WHERE r.item_id = ? AND r.kind <> 'outcome' AND p.network = ? AND p.stage = 'issued' AND p.state = 'published'
+           LIMIT 1`,
+    params: [itemId, network],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+async function publicationState(
+  db: Db,
+  network: string,
+  receiptId: string,
+  stage: ReceiptStage,
+): Promise<string | null> {
+  const { rows } = await db.client.query({
+    sql: "SELECT state FROM network_publications WHERE receipt_id = ? AND network = ? AND stage = ?",
+    params: [receiptId, network, stage],
+    method: "all",
+  });
+  return rows[0] ? String(rows[0][0]) : null;
+}
+
+/** The item's promises this network has not taken yet, oldest first, each with a queued row. */
+async function promisesOwed(db: Db, network: string, itemId: string, now: number): Promise<PublishedReceipt[]> {
+  const { rows } = await db.client.query({
+    sql: `SELECT r.id, r.jws, r.ack_jws, r.kind, p.state FROM receipts r
+            LEFT JOIN network_publications p ON p.receipt_id = r.id AND p.network = ? AND p.stage = 'issued'
+           WHERE r.item_id = ? AND r.kind <> 'outcome' ORDER BY r.id`,
+    params: [network, itemId],
+    method: "all",
+  });
+  const owed: PublishedReceipt[] = [];
+  for (const r of rows) {
+    const state = r[4] === null ? null : String(r[4]);
+    if (state !== null && state !== "queued") continue;
+    if (state === null)
+      await db.client.query(networkPublicationStatement(network, "issued", now, { id: String(r[0]) }));
+    owed.push({
+      id: String(r[0]),
+      jws: String(r[1]),
+      ackJws: r[2] === null ? null : String(r[2]),
+      kind: String(r[3]),
+      itemId,
+    });
+  }
+  return owed;
+}
+
+/**
+ * The rules a network applies, as its `GET /v1/ranking` says: read once a day (an hour after a
+ * failed read), cached in `network_status`. What matters here is whether the version in force or
+ * the one announced is 3 or later: only then is the network sent claims v2 (ADR-017 §2.5); and
+ * which platforms it recognises (`verified.recognised_platforms`, §4), which a signed ping's answer
+ * does not say, so a day after they were last read the document is read even when the rules are fresh.
+ */
+export async function networkRules(
+  deps: NetworkDeps,
+  db: Db,
+  network: string,
+  now: number,
+  known?: Awaited<ReturnType<typeof readNetworkStatus>>,
+): Promise<Awaited<ReturnType<typeof readNetworkStatus>>> {
+  const status = known ?? (await readNetworkStatus(db, network));
+  const fresh = (at: number | null | undefined) => at != null && now - at < RULES_EVERY_MS;
+  if (fresh(status?.rulesCheckedAt) && fresh(status?.platformsCheckedAt)) return status;
+  const res = await call(deps, `${network}/v1/ranking`, null, MAX_RULES_BODY);
+  const rules = "status" in res && res.status === 200 ? rulesFrom(res.text) : null;
+  if (!rules) {
+    // Asked and not answered: try again in an hour, keeping whatever it said last time.
+    await db.client.query(networkRulesStatement(network, now, null, now - RULES_EVERY_MS + RULES_RETRY_MS));
+    return status;
+  }
+  await db.client.query(networkRulesStatement(network, now, rules, now, rules.platforms));
+  return readNetworkStatus(db, network);
+}
+
+function rulesNote(status: Awaited<ReturnType<typeof readNetworkStatus>>): string {
+  if (status?.rulesVersion == null) return "";
+  const next = status.rulesNextVersion ? `, next ${status.rulesNextVersion}` : "";
+  return `; rules ${status.rulesVersion}${next}${takesV2(status) ? ", takes claims v2" : ""}`;
+}
+
+/**
+ * The two numbers read from a ranking document, leniently: a version this inbox has never heard
+ * of is still a version, so no other member is required.
+ */
+const rankingVersionSchema = z.looseObject({
+  version: z.int().min(1),
+  next: z
+    .looseObject({ version: z.int().min(1), effective_at: z.string().optional() })
+    .nullable()
+    .optional(),
+  // A list that does not parse recognises nobody; it never fails the rules beside it.
+  verified: z
+    .looseObject({ recognised_platforms: z.array(z.unknown()).max(1_000).catch([]) })
+    .optional()
+    .catch(undefined),
+});
+
+function rulesFrom(
+  text: string,
+): { version: number; next: number | null; nextAt: number | null; platforms: string[] } | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const doc = rankingVersionSchema.safeParse(parsed);
+  if (!doc.success) return null;
+  const at = doc.data.next?.effective_at ? Date.parse(doc.data.next.effective_at) : Number.NaN;
+  const platforms = [
+    ...new Set(
+      (doc.data.verified?.recognised_platforms ?? []).flatMap((p) => {
+        const host = platformHost(p);
+        return host ? [host] : [];
+      }),
+    ),
+  ].slice(0, 256);
+  return {
+    version: doc.data.version,
+    next: doc.data.next?.version ?? null,
+    nextAt: Number.isFinite(at) ? at : null,
+    platforms,
+  };
+}
+
 type Outcome =
   | { readonly kind: "published" }
   | { readonly kind: "refused"; readonly error: string }
   | { readonly kind: "retry"; readonly error: string };
 
+/** A receipt as the publisher sends it: the JWS, its acknowledgement once there is one, and what it is. */
+interface PublishedReceipt {
+  readonly id: string;
+  readonly jws: string;
+  readonly ackJws: string | null;
+  readonly kind: string;
+  readonly itemId: string;
+}
+
 /**
  * Posts one receipt (and its acknowledgement, once there is one) and writes what came of it: the
  * publication row, and the network's status. A post that carried the acknowledgement delivered
- * both stages, so both rows are marked.
+ * both stages, so both rows are marked. An outcome goes after its item's promises (ADR-017 §3.2):
+ * any this network has not had yet are posted first, so the outcome's `ref` names a receipt the
+ * network holds; one it answers `unknown_ref` anyway is retried.
  */
 async function publishOne(
   deps: NetworkDeps,
   db: Db,
   network: string,
-  receipt: { id: string; jws: string; ackJws: string | null },
+  receipt: PublishedReceipt,
   stage: ReceiptStage,
   now: number,
 ): Promise<Outcome> {
+  if (receipt.kind === "outcome" && stage === "issued") {
+    for (const promise of await promisesOwed(db, network, receipt.itemId, now)) {
+      const first = await publishOne(deps, db, network, promise, "issued", now);
+      if (first.kind === "retry") return first;
+    }
+  }
   const body = JSON.stringify({ receipt: receipt.jws, ...(receipt.ackJws ? { ack: receipt.ackJws } : {}) });
   const res = await call(deps, `${network}/v1/receipts`, body);
   const verdict = classifyPublish(res);
@@ -454,18 +788,27 @@ function classifyPublish(
 
 // ---- calls --------------------------------------------------------------------------------
 
-type CallResult = { readonly status: number; readonly text: string } | { readonly error: string };
+type CallResult =
+  | { readonly status: number; readonly text: string; readonly sdiSignature?: string | null }
+  | { readonly error: string };
 
 function isOk(r: CallResult): boolean {
   return "status" in r && r.status >= 200 && r.status < 300;
 }
 
 /**
- * One POST, time-boxed end to end (the body read included), never following a redirect, and only
- * ever to a network origin: the host rule is checked here, on every call, and not only where the
- * address came from, so no caller can hand this a URL that was never checked.
+ * One POST (a GET when there is no body), time-boxed end to end (the body read included), never
+ * following a redirect, and only ever to a network origin: the host rule is checked here, on every
+ * call, and not only where the address came from, so no caller can hand this a URL that was never
+ * checked.
  */
-async function call(deps: NetworkDeps, url: string, body: string): Promise<CallResult> {
+async function call(
+  deps: NetworkDeps,
+  url: string,
+  body: string | null,
+  maxBody = MAX_BODY,
+  signedHeaders: Readonly<Record<string, string>> = {},
+): Promise<CallResult> {
   let target: URL;
   try {
     target = new URL(url);
@@ -481,18 +824,19 @@ async function call(deps: NetworkDeps, url: string, body: string): Promise<CallR
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(target.href, {
-      method: "POST",
-      body,
+      method: body === null ? "GET" : "POST",
+      ...(body === null ? {} : { body }),
       redirect: "manual",
       signal: controller.signal,
       headers: {
-        "content-type": "application/json",
+        ...signedHeaders,
+        ...(body === null ? {} : { "content-type": "application/json" }),
         accept: "application/json",
         "user-agent": `surfingdog-inbox/${deps.version}`,
       },
     });
-    const text = (await readCapped(res, MAX_BODY)) ?? "";
-    return { status: res.status, text };
+    const text = (await readCapped(res, maxBody)) ?? "";
+    return { status: res.status, text, sdiSignature: res.headers.get("sdi-signature") };
   } catch (error) {
     if (controller.signal.aborted) {
       return {
@@ -569,7 +913,10 @@ function hostOf(origin: string): string {
  * Settings. A network verifies it by fetching the manifest over https on port 443, so anything
  * else would only ever be refused; saying so here is kinder than a failure every hour.
  */
-function instanceDomain(deps: NetworkDeps, settings: Settings): { domain: string } | { problem: string } {
+export function instanceDomain(
+  deps: Pick<NetworkDeps, "baseUrl">,
+  settings: Settings,
+): { domain: string } | { problem: string } {
   const base = deps.baseUrl ?? settings.notifications.appUrl;
   if (!base) return { problem: "no public address: set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };
   let url: URL;

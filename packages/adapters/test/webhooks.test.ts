@@ -12,6 +12,7 @@ import {
   type SecretBox,
   schema,
   setFlags,
+  transitionItem,
   ulid,
   WebhookCapabilities,
 } from "@surfingdog/core";
@@ -692,6 +693,42 @@ describe("receipt events (ADR-016)", () => {
   });
 });
 
+describe("what a full event offers the owner next", () => {
+  it("leaves out a one-time correction once its window has passed", async () => {
+    const { db } = await freshDb();
+    const svc = ulid();
+    await db.orm.insert(schema.services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const created = await createItem(db, customer(T0), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: svc, name: "Full service" },
+        startTime: "2026-09-23T08:00:00Z",
+        endTime: "2026-09-23T09:30:00Z",
+      },
+      contact: { name: "Rita Amaral", email: "rita@example.com" },
+    });
+    const id = created.view.item.id;
+    const end = Date.parse("2026-09-23T09:30:00Z");
+    await transitionItem(db, owner(T0 + 1_000), { itemId: id, event: "confirm" });
+    const done = await transitionItem(db, owner(end + 60_000), { itemId: id, event: "complete" });
+    const event = await readEvent(db, (await lastEventId(db, id)) ?? "");
+    if (!event) throw new Error("no event");
+    expect(done.view.transitions.map((t) => t.event)).toContain("no_show");
+    const within = await buildEvent(db, event, "full", "https://inbox.example.com", end + 3_600_000);
+    expect((within.data as { transitions: { event: string }[] }).transitions.map((t) => t.event)).toContain("no_show");
+    const past = await buildEvent(db, event, "full", "https://inbox.example.com", end + 49 * 3_600_000);
+    expect((past.data as { transitions: { event: string }[] }).transitions).toEqual([]);
+  });
+});
+
 describe("working with the owner's Integrations screen", () => {
   it("delivers a job that carries only a delivery id, taking the attempt from the row", async () => {
     const { db } = await freshDb();
@@ -793,4 +830,13 @@ async function firstEventId(db: Db, itemId: string): Promise<string | undefined>
     method: "all",
   });
   return r[0] ? String(r[0][0]) : undefined;
+}
+
+async function lastEventId(db: Db, itemId: string): Promise<string | undefined> {
+  const { rows } = await db.client.query({
+    sql: "SELECT id FROM item_events WHERE item_id = ? ORDER BY seq DESC LIMIT 1",
+    params: [itemId],
+    method: "all",
+  });
+  return rows[0]?.[0] === undefined ? undefined : String(rows[0][0]);
 }

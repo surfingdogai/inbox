@@ -46,6 +46,15 @@ export const LIMITS = {
    * for ever, not to meter a real integration. The owner's own session, key and AI are never counted.
    */
   integration: { capacity: 600, perMs: 600 / 60_000 } satisfies Limit,
+  /**
+   * One-time codes for customers the business knows (ADR-017 §8.2): asking for one and checking it,
+   * 30 an hour per address. Each address a code goes to has its own limit besides (3 an hour).
+   */
+  verify: { capacity: 30, perMs: 30 / 3_600_000 } satisfies Limit,
+  /** Every request a platform's agents sign (Web Bot Auth), together: wide, since a platform speaks for many people (§2.4). */
+  platform: { capacity: 6_000, perMs: 100 / 1000 } satisfies Limit,
+  /** A Web Bot Auth directory this inbox has not fetched before: one new origin a minute per address (§2.4). */
+  directory: { capacity: 1, perMs: 1 / 60_000 } satisfies Limit,
 } as const;
 
 export type LimitClass = keyof typeof LIMITS;
@@ -92,11 +101,31 @@ export async function pruneRateLimits(db: Db, now: number): Promise<void> {
   });
 }
 
+/** The one-time code routes (ADR-017 §8.2). */
+export function isVerifyRoute(method: string, path: string): boolean {
+  return method === "POST" && /^\/v1\/customers\/verify\/?$/.test(path);
+}
+
 /** Public REST routes that create an item, and so mail the owner. */
 const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages)\/?$/;
 
 export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);
+}
+
+/** MCP tools that send or check a one-time code. */
+export async function mcpVerifies(request: Request): Promise<boolean> {
+  if (request.method !== "POST") return false;
+  try {
+    const body = (await request.clone().json()) as unknown;
+    const calls = Array.isArray(body) ? body : [body];
+    return calls.some((m) => {
+      const msg = m as { method?: unknown; params?: { name?: unknown } };
+      return msg.method === "tools/call" && msg.params?.name === "verify_customer";
+    });
+  } catch {
+    return false;
+  }
 }
 
 /** MCP tools that create an item. The body is JSON-RPC, a single call or a batch. */

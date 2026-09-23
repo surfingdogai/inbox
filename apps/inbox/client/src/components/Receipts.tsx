@@ -1,6 +1,6 @@
 import { BadgeCheck, Check, Copy, ReceiptText } from "lucide-react";
 import { useState } from "react";
-import { formatDateTime, formatMoney } from "../lib/format";
+import { formatDateTime, formatMoney, receiptWord } from "../lib/format";
 import type { Receipt } from "../lib/types";
 
 /**
@@ -22,7 +22,7 @@ export function Receipts({ receipts, tz }: { receipts: readonly Receipt[]; tz: s
           <li className="receipt" key={r.id}>
             <ReceiptText className="icon" aria-hidden="true" />
             <span className="what">
-              <b>{r.kind === "paid" ? "Paid" : "Confirmed"}</b>
+              <b>{receiptWord(r)}</b>
               {r.payload.amt ? ` · ${formatMoney(r.payload.amt)}` : ""}
               {r.payload.pay ? ` · ${r.payload.pay}` : ""}
             </span>

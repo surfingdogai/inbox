@@ -37,6 +37,7 @@ import {
   updateServiceInput,
   updateSettingsInput,
   updateWebhookInput,
+  verifyCustomerInput,
   withIdempotencyKey,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
@@ -287,6 +288,30 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => {
       const r = await caps.sendMessage(c.get("caller"), withIdem(c, c.req.valid("json")) as never);
       return "replayed" in r ? created(c, r) : c.json(r, 200);
+    },
+  );
+
+  app.post(
+    "/customers/verify",
+    describeRoute({
+      tags: ["public"],
+      summary: "Prove you are a customer the business knows (one-time code)",
+      description:
+        "When an item's identity says recognised: weak, the customer gave the email of someone the business knows. Send {item_id, access_token} to have six digits emailed to that address (202 {sent_to}); send them back with code to be recognised (200 {recognised: strong}). 409 nothing_to_verify or already_verified; 422 bad_code or code_expired; 429 too_many_attempts.",
+      responses: {
+        200: { description: "Recognised", content: { "application/json": { schema: resolver(R.verifiedSchema) } } },
+        202: { description: "Code sent", content: { "application/json": { schema: resolver(R.codeSentSchema) } } },
+        409: { description: "Nothing to verify, or already verified." },
+        422: { description: "Wrong or expired code, or invalid input." },
+        429: { description: "Too many attempts or codes." },
+      },
+    }),
+    validator("json", verifyCustomerInput, hook),
+    async (c) => {
+      const body = c.req.valid("json");
+      const token = body.access_token ?? c.req.header("x-access-token");
+      const r = await caps.verifyCustomer(c.get("caller"), { ...body, ...(token ? { access_token: token } : {}) });
+      return c.json(r, "sent_to" in r ? 202 : 200);
     },
   );
 

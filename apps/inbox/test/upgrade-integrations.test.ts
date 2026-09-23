@@ -221,8 +221,8 @@ describe("upgrading to keys, scopes and attribution", () => {
       },
     ]);
 
-    expect(await runMigrations(client, MIGRATIONS)).toBe(8);
-    expect(await runMigrations(client, MIGRATIONS)).toBe(8);
+    expect(await runMigrations(client, MIGRATIONS)).toBe(MIGRATIONS.length);
+    expect(await runMigrations(client, MIGRATIONS)).toBe(MIGRATIONS.length);
 
     const { request } = inboxOn(db);
     const auth = { authorization: `Bearer ${key}` };

@@ -1,4 +1,5 @@
 import type { Actor, ActorKind } from "../domain/types";
+import type { AgentSeen } from "../identity/types";
 
 export type TrustTier = "anonymous" | "signed_agent" | "verified_principal" | "reputed_principal";
 
@@ -43,6 +44,13 @@ export interface Caller {
   readonly idempotency?: { readonly scope: string; readonly key: string };
   /** Capability secret an anonymous creator received with its item. */
   readonly accessToken?: string;
+  /**
+   * How the agent signed the request (ADR-017 §2.4), as the door verified it: recorded on what it
+   * creates, forwarded to a network as `agent_key` when it carries a pass reference. Absent: unsigned.
+   */
+  readonly agent?: AgentSeen | undefined;
+  /** The strings the agent carried in `Sdi-Pass` (passes, pass references), at most eight. */
+  readonly carried?: readonly string[] | undefined;
   readonly now?: () => number;
 }
 

@@ -11,6 +11,7 @@ import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
 import { Conversation } from "./Conversation";
+import { CustomerBlock } from "./Customer";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
@@ -134,6 +135,7 @@ export function ItemDetailView({
         </div>
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
+        <CustomerBlock customer={query.data.customer} currency={money} tz={tz} />
         <Fields item={item} tz={tz} />
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         {transitions.length > 0 ? (

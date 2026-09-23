@@ -28,6 +28,27 @@ const idempotencyKey = z
   .describe("Same key + same request = same answer. Required for agents.");
 const paging = { cursor: z.string().max(200).optional(), limit: z.number().int().min(1).max(100).default(50) };
 
+/**
+ * What an agent carries for its person (ADR-017 §2, §8.4): passes, at most eight, space-separated,
+ * each at most 200 characters (the `Sdi-Pass` header works the same way, and a GET reads only the
+ * header). Presented to the network that issued each one; never stored, never hashed with the request.
+ */
+const pass = z
+  .string()
+  .max(8 * 201)
+  .optional()
+  .describe(
+    "The person's passes (sdpass1_…), space-separated, at most 8: presented to the network that issued each, so the business recognises the customer. Or send them in the Sdi-Pass header. Never stored.",
+  );
+const key = z
+  .string()
+  .max(200)
+  .optional()
+  .describe(
+    "The person's key (sdkey1_…), if that is all you have: it is exchanged once for a pass, which comes back in identity.passes — keep the pass and send it next time instead. Never stored.",
+  );
+const carried = { pass, key };
+
 export const listServicesInput = z.object(paging);
 export const listProductsInput = z.object({ ...paging, q: z.string().max(100).optional() });
 
@@ -43,6 +64,7 @@ export const requestQuoteInput = z.object({
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
+  ...carried,
 });
 
 export const createBookingInput = z.object({
@@ -50,6 +72,7 @@ export const createBookingInput = z.object({
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
+  ...carried,
 });
 
 export const createOrderInput = z.object({
@@ -57,15 +80,17 @@ export const createOrderInput = z.object({
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
+  ...carried,
 });
 
-export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_token: accessToken });
+export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_token: accessToken, ...carried });
 
 export const cancelItemInput = z.object({
   item_id: z.string().min(1),
   reason: z.string().max(2_000).optional(),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
+  ...carried,
 });
 
 export const sendMessageInput = z.object({
@@ -77,6 +102,7 @@ export const sendMessageInput = z.object({
   message_id: z.string().min(1).max(998).optional(),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
+  ...carried,
 });
 
 export const acknowledgeReceiptInput = z.object({
@@ -85,8 +111,17 @@ export const acknowledgeReceiptInput = z.object({
     .string()
     .min(1)
     .max(8_192)
+    .optional()
     .describe(
-      'A compact JWS by the customer\'s agent, EdDSA, header carrying its Ed25519 public `jwk`, payload `{"rcp": "<receipt id>", "sha": "<base64url(SHA-256(receipt JWS))>", "iat": <unix seconds>}`.',
+      'A compact JWS by the customer\'s agent, EdDSA, header carrying its Ed25519 public `jwk`, payload `{"rcp": "<receipt id>", "sha": "<base64url(SHA-256(receipt JWS))>", "iat": <unix seconds>}`. Or, for an agent that signs its requests instead (sdi-agent/1) and carries a pass reference, `receipt_id` alone.',
+    ),
+  receipt_id: z
+    .string()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe(
+      "The receipt to acknowledge, for an agent that signs this request (sdi-agent/1) with a key delegated to the pass reference it sends: the inbox forwards the signature to the network (ADR-017 §3.4). Send this or counter_signature.",
     ),
   receipt: z
     .string()
@@ -95,6 +130,21 @@ export const acknowledgeReceiptInput = z.object({
     .optional()
     .describe("The receipt JWS being acknowledged, if you want the instance to check it is the one it holds."),
   access_token: accessToken,
+  ...carried,
+});
+
+/**
+ * ADR-017 §8.2: proves the customer is one the business already knows. Without `code`, six digits
+ * are emailed to the address the business has for them; with it, the code is checked.
+ */
+export const verifyCustomerInput = z.object({
+  item_id: z.string().min(1),
+  access_token: accessToken,
+  code: z
+    .string()
+    .regex(/^[0-9]{6}$/)
+    .optional()
+    .describe("The six digits the customer received. Omit to have them sent."),
 });
 
 // ---- owner -----------------------------------------------------------------
@@ -151,6 +201,7 @@ export type GetItemStatusInput = z.infer<typeof getItemStatusInput>;
 export type AcknowledgeReceiptInput = z.infer<typeof acknowledgeReceiptInput>;
 export type CancelItemInput = z.infer<typeof cancelItemInput>;
 export type SendMessageInput = z.infer<typeof sendMessageInput>;
+export type VerifyCustomerInput = z.infer<typeof verifyCustomerInput>;
 export type ListItemsInput = z.infer<typeof listItemsInput>;
 export type GetItemInput = z.infer<typeof getItemInput>;
 export type TransitionItemInput = z.infer<typeof transitionItemInput>;

@@ -770,6 +770,9 @@ a {
   gap: 6px;
   margin-top: 4px;
 }
+.net-issue {
+  margin-top: 10px;
+}
 .net-add {
   display: flex;
   gap: 10px;
@@ -989,6 +992,46 @@ textarea.json-editor {
 .who-line .btn-icon {
   width: 28px;
   height: 28px;
+}
+
+/* Who the customer is to the business and to each network that knows them (ADR-017 §8.2) */
+.customer {
+  margin-top: 8px;
+}
+.standing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.standing {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.standing .icon {
+  color: var(--ink-3);
+  margin-top: 2px;
+  flex: none;
+}
+.standing-main {
+  min-width: 0;
+}
+.standing-main .mono {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.standing .hint {
+  margin-top: 2px;
+}
+.standing .caution {
+  color: var(--c-warning-ink);
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
 }
 
 /* Details disclosure under the actions */

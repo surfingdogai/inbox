@@ -46,6 +46,7 @@ export const itemViewSchema = z.looseObject({
   human: z.string(),
   party: partyViewSchema.optional(),
   receipts: z.array(receiptViewSchema).optional(),
+  identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
 });
 
 export const eventActorSchema = z.object({
@@ -88,6 +89,22 @@ export const transitionResultSchema = z.object({
   replayed: z.boolean(),
 });
 
+/** Who the inbox takes the customer for (ADR-017 §8.4), on every create and status answer. */
+export const identityAnswerSchema = z.looseObject({
+  recognised: z
+    .enum(["strong", "weak", "none"])
+    .describe("strong: a customer the business knows, proven; weak: same email or phone, not proven; none."),
+  passes: z
+    .array(z.object({ network: z.string(), pass: z.string() }))
+    .describe("Passes to keep for the person, one per network: present them next time (pass or Sdi-Pass)."),
+  verify: z.object({
+    available: z.boolean().describe("A one-time code can prove the customer: POST /v1/customers/verify."),
+    sent_to: nullableString.describe("The masked address a code went to."),
+  }),
+  networks: z.array(z.object({ network: z.string(), state: z.string() })),
+  guide: z.string().describe("How an agent identifies itself and its person: https://surfingdog.ai/for-agents.md"),
+});
+
 export const createResultSchema = z.object({
   view: itemViewSchema,
   accessToken: z
@@ -95,7 +112,11 @@ export const createResultSchema = z.object({
     .optional()
     .describe("Shown once, to an anonymous creator: keep it to read or cancel the item."),
   replayed: z.boolean(),
+  identity: identityAnswerSchema.optional(),
 });
+
+export const codeSentSchema = z.object({ sent_to: z.string().describe("The masked address, like a•••@e•••.pt.") });
+export const verifiedSchema = z.object({ recognised: z.literal("strong") });
 
 export const thinEventSchema = z.object({
   id: z.string(),
@@ -182,7 +203,17 @@ export const ruleViewSchema = z.looseObject({
   updated_at: iso,
 });
 
-export const ruleTestSchema = z.looseObject({ matched: z.boolean(), summary: z.string(), would: z.array(z.string()) });
+export const ruleTestSchema = z.looseObject({
+  matched: z.boolean(),
+  summary: z.string(),
+  would: z.array(z.string()),
+  skipped: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "What a run would hold back on this item, in plain words: a rule reading a customer's record only helps.",
+    ),
+});
 
 export const deliverySummarySchema = z.object({
   pending: z.number().int(),

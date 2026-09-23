@@ -208,8 +208,10 @@ export const api = {
   patchRule: (id: string, body: RuleBody) =>
     call<RuleView>("PATCH", `/v1/owner/rules/${encodeURIComponent(id)}`, { body }),
   deleteRule: (id: string) => call<{ deleted: true }>("DELETE", `/v1/owner/rules/${encodeURIComponent(id)}`),
-  testRule: (definition: RuleDefinition, itemId: string) =>
-    call<RuleTest>("POST", "/v1/owner/rules/test", { body: { definition, item_id: itemId } }),
+  testRule: (definition: RuleDefinition, itemId: string, name?: string) =>
+    call<RuleTest>("POST", "/v1/owner/rules/test", {
+      body: { definition, item_id: itemId, ...(name?.trim() ? { name: name.trim() } : {}) },
+    }),
 
   // ---- integrations: what comes in, and where events go ----
   feeds: () => call<{ items: FeedConnector[] }>("GET", "/v1/owner/feeds"),

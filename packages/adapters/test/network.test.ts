@@ -59,6 +59,14 @@ function fakeNetworks(opts: { known?: string[]; reply?: Record<string, (url: str
       known.add((body as { domain: string }).domain);
       return new Response(JSON.stringify({ status: "pending" }), { status: 202 });
     }
+    // Rules version 2 in force and 3 announced, as the live network answered on 23 September 2026.
+    if (url.endsWith("/v1/ranking")) {
+      return Response.json({
+        version: 2,
+        status: "in_force",
+        next: { version: 3, effective_at: "2026-10-09T00:00:00Z", url: `${new URL(url).origin}/v1/ranking?version=3` },
+      });
+    }
     return new Response("nope", { status: 500 });
   }) as typeof fetch;
   return { calls, fetchImpl, known };
@@ -346,8 +354,27 @@ describe("pinging a network", () => {
     );
     const net = fakeNetworks({ known: ["shop.example.com"] });
     await runnerFor({ version: "0.0.0", fetchImpl: net.fetchImpl }).runDue(db, { now });
-    expect((await jobs(db, NETWORK_PING_ONE_KIND))[0]?.note).toBe("pinged network.surfingdog.ai as shop.example.com");
-    expect(net.calls.map((c) => c.url)).toEqual(["https://network.surfingdog.ai/v1/instances/shop.example.com/ping"]);
+    expect((await jobs(db, NETWORK_PING_ONE_KIND))[0]?.note).toBe(
+      "pinged network.surfingdog.ai as shop.example.com; rules 2, next 3, takes claims v2",
+    );
+    // The ping, then once a day which rules it applies (ADR-017 §2.5).
+    expect(net.calls.map((c) => c.url)).toEqual([
+      "https://network.surfingdog.ai/v1/instances/shop.example.com/ping",
+      "https://network.surfingdog.ai/v1/ranking",
+    ]);
+    const view = (await caps.getNetworks(system)).networks.find((n) => n.origin === DEFAULT_NETWORK);
+    expect(view?.rules).toEqual({
+      version: 2,
+      next: 3,
+      next_at: "2026-10-09T00:00:00.000Z",
+      v2: true,
+      checked_at: new Date(now).toISOString(),
+    });
+    // A day's cache: the next hour's ping does not ask again.
+    await pingNetworksNow(db, now + HOUR);
+    await drain(runnerFor({ version: "0.0.0", fetchImpl: net.fetchImpl }), db, now + HOUR);
+    expect(net.calls.filter((c) => c.url.endsWith("/ping"))).toHaveLength(2);
+    expect(net.calls.filter((c) => c.url.endsWith("/v1/ranking"))).toHaveLength(1);
   });
 
   it("keeps the live instance reporting after the upgrade, with nothing for the owner to do", async () => {
@@ -368,6 +395,7 @@ describe("pinging a network", () => {
     );
     expect(net.calls.map((c) => c.url)).toEqual([
       "https://network.surfingdog.ai/v1/instances/inbox.surfingdog.ai/ping",
+      "https://network.surfingdog.ai/v1/ranking",
     ]);
   });
 

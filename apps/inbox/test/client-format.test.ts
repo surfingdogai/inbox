@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   currencyOf,
+  customerNotes,
   formatAddress,
+  formatDateTime,
   formatMoney,
   formatWhen,
   localDateKey,
   partyName,
+  personStandings,
+  receiptWord,
   relativeTime,
   rowTitle,
   snippetFor,
@@ -41,6 +45,19 @@ const booking: Item = {
   },
 };
 
+describe("receipts in words", () => {
+  it("names a promise by its kind and an outcome by how it ended", () => {
+    const r = (kind: string, outcome: string | null, payload: Record<string, unknown> = {}) =>
+      ({ kind, outcome, payload }) as Parameters<typeof receiptWord>[0];
+    expect(receiptWord(r("confirmed", null))).toBe("Confirmed");
+    expect(receiptWord(r("accepted", null))).toBe("Accepted");
+    expect(receiptWord(r("outcome", "booking.completed"))).toBe("Completed");
+    expect(receiptWord(r("outcome", "booking.completed", { aut: 1 }))).toBe("Completed automatically");
+    expect(receiptWord(r("outcome", "booking.cancelled_late_by_customer"))).toBe("Cancelled late by the customer");
+    expect(receiptWord(r("outcome", "order.lapsed", { aut: 1 }))).toBe("Lapsed unpaid automatically");
+  });
+});
+
 describe("client format", () => {
   it("says states in words with a tone", () => {
     expect(stateWord("needs_info")).toBe("Needs info");
@@ -49,6 +66,9 @@ describe("client format", () => {
     expect(stateTone("confirmed")).toBe("success");
     expect(stateTone("needs_info")).toBe("warning");
     expect(stateTone("declined")).toBe("danger");
+    expect(stateWord("payment_failed")).toBe("Payment failed");
+    expect(stateTone("payment_failed")).toBe("warning");
+    expect([stateWord("charged_back"), stateTone("charged_back")]).toEqual(["Charged back", "danger"]);
     expect(stateTone("open")).toBe("neutral");
   });
 
@@ -130,5 +150,128 @@ describe("client party words", () => {
     expect(rowTitle({ item: { ...booking, subject: null }, transitions: [], human: "" })).toBe("Someone · Booking");
     expect(localDateKey("2026-09-23T09:00:00Z", "Europe/Lisbon")).toBe("2026-09-23");
     expect(localDateKey("2026-09-23T23:30:00Z", "Europe/Lisbon")).toBe("2026-09-24");
+  });
+});
+
+describe("who is asking (ADR-017 §8.2)", () => {
+  const base = {
+    match: null,
+    possible: null,
+    known: false,
+    history: {
+      items: 0,
+      completed: 0,
+      paid: 0,
+      no_shows: 0,
+      late_cancellations: 0,
+      payment_failed: 0,
+      charged_back: 0,
+      largest_paid: 0,
+      open_bookings: 0,
+      first_seen: null,
+      last_seen: null,
+    },
+    persons: [],
+    agent: { level: "none", platform: null },
+  };
+
+  it("says nothing more than the party for an item from before, or a stranger", () => {
+    expect(customerNotes(undefined, "EUR")).toEqual([]);
+    expect(customerNotes(base, "EUR")).toEqual([]);
+  });
+
+  it("names the customer a weak match may be, unconfirmed", () => {
+    expect(customerNotes({ ...base, match: "weak", possible: { party_id: "p", name: "Ana Silva" } }, "EUR")).toEqual([
+      { tone: "warning", text: "May be Ana Silva, unconfirmed" },
+    ]);
+  });
+
+  const trusted = {
+    network: "https://network.surfingdog.ai",
+    tier: "trusted" as const,
+    score: 0.81,
+    kept: 6,
+    broken: 1,
+    businesses: 3,
+    email_proven: true,
+    since: "2026-03-14T09:00:00Z",
+    unusual_use: false,
+    seen: "this_item" as const,
+    as_of: "2026-09-21T10:00:00Z",
+  };
+
+  it("says a customer you know with the history that says so, and the agent", () => {
+    const notes = customerNotes(
+      {
+        ...base,
+        match: "strong",
+        known: true,
+        history: { ...base.history, items: 4, completed: 3, no_shows: 1, largest_paid: 4200 },
+        persons: [trusted],
+        agent: { level: "vouched", platform: "https://agents.example.net" },
+      },
+      "EUR",
+      "en-GB",
+    );
+    expect(notes).toEqual([
+      { tone: "success", text: "A customer you know: 3 completed, 1 no-show, largest paid €42.00" },
+      { tone: "neutral", text: "Signed agent of agents.example.net" },
+    ]);
+    // A platform's key no network the business uses recognises is signed, and nothing more.
+    expect(customerNotes({ ...base, agent: { level: "self", platform: "https://agents.example.net" } }, "EUR")).toEqual(
+      [
+        {
+          tone: "neutral",
+          text: "Signed agent (key from agents.example.net, a platform your networks do not recognise)",
+        },
+      ],
+    );
+  });
+
+  it("says, per network that knows the person, their standing there in plain words", () => {
+    expect(personStandings(undefined)).toEqual([]);
+    const rows = personStandings(
+      {
+        ...base,
+        persons: [
+          trusted,
+          {
+            ...trusted,
+            network: "https://people.example.org",
+            tier: "new",
+            score: 0,
+            kept: 0,
+            broken: 0,
+            businesses: 0,
+            email_proven: false,
+            since: null,
+            unusual_use: true,
+            seen: "earlier",
+            as_of: "2026-09-12T08:30:00Z",
+          },
+        ],
+      },
+      "en-GB",
+      "UTC",
+    );
+    expect(rows).toEqual([
+      {
+        network: "network.surfingdog.ai",
+        tier: "Trusted",
+        tone: "success",
+        text: "6 kept, 1 broken, at 3 businesses. Known there since March 2026; address proven.",
+        when: "With this request",
+        caution: null,
+      },
+      {
+        network: "people.example.org",
+        tier: "New",
+        tone: "neutral",
+        text: "No record there yet.",
+        when: `As last presented, ${formatDateTime("2026-09-12T08:30:00Z", "UTC", "en-GB")}`,
+        caution:
+          "Their pass was used at many businesses in a day, or by two assistants' keys. It still works; the person can replace it.",
+      },
+    ]);
   });
 });

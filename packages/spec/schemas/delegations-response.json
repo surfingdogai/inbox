@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/delegations: 201",
+  "type": "object",
+  "properties": {
+    "pass_ref": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+      "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+    },
+    "jkt": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "bound": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": ["pass_ref", "jkt", "bound"]
+}

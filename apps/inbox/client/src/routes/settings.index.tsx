@@ -204,6 +204,8 @@ function SettingsForm({
   const set = <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const field = (path: string) => problem?.field(path);
+  // A list's error names the entry ("identity.extraAuthorities.1"): shown on the list's one field.
+  const listField = (path: string) => field(path) ?? problem?.fields?.find((f) => f.path.includes(`${path}.`))?.message;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -277,6 +279,73 @@ function SettingsForm({
               inputMode="decimal"
               value={form.approvalLimit}
               onChange={(e) => set("approvalLimit", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-late"
+            label="After the cancellation window"
+            error={field("booking.lateCancellation")}
+            hint="Record a late cancellation, or refuse it and send the customer to you. Networks weigh one only when it comes under 48 hours before the start."
+          >
+            <select
+              id="s-late"
+              className="input"
+              value={form.lateCancellation}
+              onChange={(e) => set("lateCancellation", e.target.value === "refuse" ? "refuse" : "record")}
+            >
+              <option value="record">Take it, recorded as late</option>
+              <option value="refuse">Refuse it</option>
+            </select>
+          </Field>
+          <Field
+            id="s-complete"
+            label="Completed automatically after (hours)"
+            error={field("booking.autoCompleteHours")}
+            hint="After a confirmed booking ends, this long for you to mark a no-show; then it counts as completed. Either can be corrected once until then."
+          >
+            <input
+              id="s-complete"
+              className="input"
+              type="number"
+              min={1}
+              max={168}
+              step={1}
+              value={form.autoCompleteHours}
+              onChange={(e) => set("autoCompleteHours", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-pay"
+            label="Unpaid orders lapse after (days)"
+            error={field("orders.payDays")}
+            hint="Days after you ask for payment. The order stays open for you; networks see it closed, counted against nobody."
+          >
+            <input
+              id="s-pay"
+              className="input"
+              type="number"
+              min={1}
+              max={90}
+              step={1}
+              value={form.payDays}
+              onChange={(e) => set("payDays", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-due"
+            label="Orders are due within (days)"
+            error={field("orders.dueDays")}
+            hint="For an order with no delivery time: when networks expect it fulfilled, counted from when you accepted it."
+          >
+            <input
+              id="s-due"
+              className="input"
+              type="number"
+              min={1}
+              max={365}
+              step={1}
+              value={form.dueDays}
+              onChange={(e) => set("dueDays", e.target.value)}
             />
           </Field>
           <div className="wide">
@@ -382,6 +451,126 @@ function SettingsForm({
       </section>
 
       <section className="card glass">
+        <h3 className="sec">Customers you already know</h3>
+        <p className="hint">
+          When someone gives the email of a customer you know and nothing proves it is them, their assistant can ask for
+          a six-digit code sent to that address. Until the code comes back they are served as a new customer, never
+          refused, and they see nothing of the other customer's bookings or orders.
+        </p>
+        <div className="settings-grid">
+          <Field
+            id="s-code-minutes"
+            label="A code works for (minutes)"
+            error={field("customers.otp.ttlMinutes")}
+            hint="From 1 to 60."
+          >
+            <input
+              id="s-code-minutes"
+              className="input"
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={form.codeMinutes}
+              onChange={(e) => set("codeMinutes", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-code-tries"
+            label="Wrong tries per code"
+            error={field("customers.otp.attempts")}
+            hint="After these the code stops working; a new one can be asked for."
+          >
+            <input
+              id="s-code-tries"
+              className="input"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={form.codeAttempts}
+              onChange={(e) => set("codeAttempts", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-code-sends"
+            label="Codes to one address per hour"
+            error={field("customers.otp.sendsPerHour")}
+            hint="So nobody can fill a customer's mailbox with codes."
+          >
+            <input
+              id="s-code-sends"
+              className="input"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={form.codesPerHour}
+              onChange={(e) => set("codesPerHour", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-code-sends-day"
+            label="Codes to one address per day"
+            error={field("customers.otp.sendsPerDay")}
+            hint="From 1 to 50."
+          >
+            <input
+              id="s-code-sends-day"
+              className="input"
+              type="number"
+              min={1}
+              max={50}
+              step={1}
+              value={form.codesPerDay}
+              onChange={(e) => set("codesPerDay", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-code-tries-day"
+            label="Tries at a code per address per day"
+            error={field("customers.otp.guessesPerDay")}
+            hint="Right or wrong, over every code sent there, so nobody can guess their way in over the day."
+          >
+            <input
+              id="s-code-tries-day"
+              className="input"
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={form.triesPerDay}
+              onChange={(e) => set("triesPerDay", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-hosts"
+            label="Other addresses of this inbox"
+            optional
+            error={listField("identity.extraAuthorities")}
+            hint="Hosts this inbox also answers on, like an old domain, comma-separated. An assistant's signature names the host it was made for; one made for these still counts. Usually empty."
+          >
+            <input
+              id="s-hosts"
+              className="input"
+              spellCheck={false}
+              autoCapitalize="none"
+              placeholder="old.example.com"
+              value={form.extraHosts}
+              onChange={(e) => set("extraHosts", e.target.value)}
+            />
+          </Field>
+        </div>
+        <Switch checked={form.emailKey} onChange={(v) => set("emailKey", v)}>
+          End a new customer's first email with a code for their assistant
+        </Switch>
+        <div className="hint">
+          One quiet line, in your name: “If you use an assistant, it can show this code next time so we recognise you.”
+          Off, no email carries it; an assistant still gets what it needs when it books.
+        </div>
+      </section>
+
+      <section className="card glass">
         <h3 className="sec">Receipts</h3>
         <ReceiptsStatus />
       </section>
@@ -421,7 +610,8 @@ function ReceiptsStatus() {
       {r.ready ? (
         <div className="hint">
           Issuing receipts as <span className="mono">{r.issuer}</span>. A booking gets one when it is confirmed, an
-          order when it is paid; the customer's agent can counter-sign it.
+          order when it is accepted or paid, and each another for how it ended; the customer's assistant can
+          counter-sign them.
         </div>
       ) : (
         <div className="hint">Not issuing receipts. {r.reason}</div>

@@ -11,9 +11,11 @@ import {
   createBookingInput,
   createOrderInput,
   createWebhookInput,
+  customerSummary,
   deliveryIdInput,
   getItemInput,
   getItemStatusInput,
+  type IdentityAnswer,
   listDeliveriesInput,
   listEventsInput,
   listItemsInput,
@@ -38,6 +40,7 @@ import {
   transitionItemInput,
   updateSettingsInput,
   updateWebhookInput,
+  verifyCustomerInput,
   webhookIdInput,
   withIdempotencyKey,
 } from "@surfingdog/core";
@@ -59,6 +62,7 @@ export const PUBLIC_INSTRUCTIONS = [
   "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
   "For a booking: check_availability, then create_booking with an idempotency_key you generate and keep.",
   "Keep the access_token in a create result: it is the only way to read (get_item_status) or cancel that item later.",
+  "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
   "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
 ].join(" ");
 
@@ -96,6 +100,39 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>): Pr
 
 const humanOf = (r: { view: { human: string }; accessToken?: string | undefined; replayed?: boolean }) =>
   `${r.view.human}${r.accessToken ? ` Access token (keep it): ${r.accessToken}.` : ""}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}`;
+
+/**
+ * The end of a create or status text (ADR-017 §8.4): many assistants read only a tool result's
+ * text, so the pass to keep, and what to do on a weak match, are said in words there too. It is
+ * said to the assistant: the person asked a business for something, and nothing here is theirs to
+ * be told, except, when the network knows them, the code a business once emailed them.
+ */
+export function identityText(identity: IdentityAnswer | undefined, name: string | undefined): string {
+  if (!identity) return "";
+  const who = name?.trim() || "this person";
+  const lines: string[] = [];
+  for (const n of identity.networks) {
+    if (n.state === "person_exists") {
+      lines.push(
+        `${hostOf(n.network)} already knows ${who}: if a business emailed them a code for their assistant (sdkey1_…), send it as key next time.`,
+      );
+    }
+  }
+  // The text ends with what to keep and what to do (ADR-017 §8.4).
+  for (const p of identity.passes) {
+    lines.push(`Keep this pass for ${who}: ${p.pass} (network ${hostOf(p.network)}).`);
+  }
+  if (identity.recognised === "weak") lines.push("Ask the person for the emailed code and call verify_customer.");
+  return lines.length ? ` ${lines.join(" ")}` : "";
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
 
 function callerOf(ctx: { authInfo?: { extra?: Record<string, unknown> } | undefined }): Caller {
   const caller = ctx.authInfo?.extra?.caller as Caller | undefined;
@@ -195,7 +232,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const r = await caps.requestQuote(caller, args);
-          return { text: humanOf(r), structured: r };
+          return { text: `${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, structured: r };
         }),
     );
     server.registerTool(
@@ -210,7 +247,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const r = await caps.createBooking(caller, args);
-          return { text: humanOf(r), structured: r };
+          return { text: `${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, structured: r };
         }),
     );
     server.registerTool(
@@ -224,7 +261,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const r = await caps.createOrder(caller, args);
-          return { text: humanOf(r), structured: r };
+          return { text: `${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, structured: r };
         }),
     );
     server.registerTool(
@@ -238,14 +275,15 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const v = await caps.getItemStatus(caller, args);
-          return { text: v.human, structured: v };
+          return { text: `${v.human}${identityText(v.identity, undefined)}`, structured: v };
         }),
     );
     server.registerTool(
       "cancel_item",
       {
         title: "Cancel",
-        description: "Cancel an item you created, within the business's cancellation window.",
+        description:
+          "Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations (it may count against the customer), and refused where it does not.",
         inputSchema: cancelItemInput,
         annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
       },
@@ -267,7 +305,10 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         run(async () => {
           const r = await caps.sendMessage(caller, args);
           return {
-            text: "view" in r ? humanOf(r as { view: { human: string } }) : (r as { human: string }).human,
+            text:
+              "view" in r
+                ? `${humanOf(r as { view: { human: string } })}${identityText((r as { identity?: IdentityAnswer }).identity, args.contact?.name)}`
+                : (r as { human: string }).human,
             structured: r,
           };
         }),
@@ -285,7 +326,30 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         run(async () => {
           const r = await caps.acknowledgeReceipt(caller, args);
           return {
-            text: `Receipt ${r.id} (${r.kind}) acknowledged at ${r.acknowledged_at}.`,
+            text: r.forwarded
+              ? `Receipt ${r.id} (${r.kind}): your signed acknowledgement went to ${r.forwarded.length} network(s).`
+              : `Receipt ${r.id} (${r.kind}) acknowledged at ${r.acknowledged_at}.`,
+            structured: r,
+          };
+        }),
+    );
+    server.registerTool(
+      "verify_customer",
+      {
+        title: "Prove a known customer",
+        description:
+          "When a result says identity.recognised is weak, the person gave the email of a customer the business knows. Call this with item_id and access_token to email them six digits; ask the person for the code and call it again with code. Then the business recognises them.",
+        inputSchema: verifyCustomerInput,
+        annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false },
+      },
+      (args) =>
+        run(async () => {
+          const r = await caps.verifyCustomer(caller, args);
+          return {
+            text:
+              "sent_to" in r
+                ? `A code was emailed to ${r.sent_to}. Ask the person for it, then call verify_customer again with code.`
+                : "Recognised: the business knows this customer now.",
             structured: r,
           };
         }),
@@ -364,8 +428,10 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       (args) =>
         guarded("get_item", async () => {
           const d = await caps.getItem(caller, args);
+          // Who the customer is to the business and to each network that presented them (ADR-017 §8.2).
+          const who = customerSummary(d.customer);
           return {
-            text: `${d.human} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`,
+            text: `${d.human}${who ? ` Customer: ${who}` : ""} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`,
             structured: d,
           };
         }),
@@ -729,16 +795,17 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Test a rule",
         description:
-          "Evaluates a rule's conditions against an existing item and says whether it would fire and what it would do. Changes nothing.",
+          "Evaluates a rule's conditions against an existing item and says whether it would fire and what it would do, and what it would hold back: a rule that reads a customer's record can only help them. Pass the rule's name to have it named. Changes nothing.",
         inputSchema: testRuleInput,
         annotations: readOnly,
       },
       (args) =>
         guarded("test_rule", async () => {
           const r = await caps.setup.testRule(caller, args);
+          const held = r.skipped?.length ? ` ${r.skipped.map((l) => `${l}.`).join(" ")}` : "";
           return {
             text: r.matched
-              ? `Would fire on ${r.item.type} ${r.item.id}: ${r.would.join(", then ")}.`
+              ? `Would fire on ${r.item.type} ${r.item.id}: ${r.would.join(", then ") || "nothing"}.${held}`
               : `Would not fire on ${r.item.type} ${r.item.id} (${r.summary}).`,
             structured: r,
           };
@@ -1078,7 +1145,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Networks and how they are doing",
         description:
-          "The networks this inbox reports to, each with whether it is on, what it shares, whether it has verified this inbox, the last ping it took, the last error and how many receipts it has published. To add, switch on or switch off a network, use update_settings with networks keyed by origin.",
+          "The networks this inbox reports to, each with whether it is on, what it shares, whether it gives first-time customers a key (issue), whether it has verified this inbox, the last ping it took, the last error, the rules it applies, the business's own standing there (from the last signed ping) and how many receipts it has published. To add, switch on or switch off a network, use update_settings with networks keyed by origin.",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
@@ -1090,7 +1157,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
               r.networks
                 .map(
                   (n) =>
-                    `${n.origin}: ${n.enabled ? "on" : "off"}${n.enabled ? `, ${n.registration}` : ""}${n.last_ping_at ? `, last ping ${n.last_ping_at}` : ""}${n.failing_since ? `, not answering since ${n.failing_since}` : ""}${n.last_error ? `, last error: ${JSON.stringify(n.last_error)}` : ""}; receipts ${n.receipts.published} published, ${n.receipts.queued} queued, ${n.receipts.refused} refused`,
+                    `${n.origin}: ${n.enabled ? "on" : "off"}${n.enabled ? `, ${n.registration}` : ""}${n.last_ping_at ? `, last ping ${n.last_ping_at}` : ""}${n.failing_since ? `, not answering since ${n.failing_since}` : ""}${n.last_error ? `, last error: ${JSON.stringify(n.last_error)}` : ""}${n.enabled && n.issue ? ", gives first-time customers a key" : ""}${n.standing ? `; your standing: ${n.standing.tier}, score ${n.standing.score}${n.standing.ranked ? ", ranked" : ""} (as of ${n.standing.at})` : ""}; receipts ${n.receipts.published} published, ${n.receipts.queued} queued, ${n.receipts.refused} refused`,
                 )
                 .join("\n") || "No networks in settings.",
             structured: r,

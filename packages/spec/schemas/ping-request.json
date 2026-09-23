@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/instances/{domain}/ping",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "runtime": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "bookings": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "orders": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "quotes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "messages": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        }
+      },
+      "required": ["bookings", "orders", "quotes", "messages"]
+    }
+  },
+  "required": ["version", "runtime"]
+}

@@ -71,6 +71,8 @@ export type Receipt = ReceiptView;
 
 export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
 export type ThreadEntry = ItemDetail["thread"][number];
+/** Who is asking, as the owner sees it (ADR-017 §8.2). */
+export type Customer = NonNullable<ItemDetail["customer"]>;
 export type ItemEvent = ItemDetail["events"][number];
 export type Transition = ItemView["transitions"][number];
 /** Who is asking, as the owner sees it; never sent to customers. */
@@ -223,6 +225,8 @@ export interface RuleTest {
   readonly matched: boolean;
   readonly summary: string;
   readonly would: readonly string[];
+  /** What a run would hold back on this item, in plain words: a rule reading a customer's record only helps them. */
+  readonly skipped?: readonly string[];
   readonly item: { readonly id: string; readonly type: string; readonly state: string };
   readonly facts: { readonly slotIsFree: boolean | null; readonly withinBusinessHours: boolean | null };
 }

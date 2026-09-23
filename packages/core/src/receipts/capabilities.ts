@@ -1,19 +1,29 @@
 import type { Statement } from "@surfingdog/platform";
-import type { ReceiptKind, ReceiptPayload } from "@surfingdog/spec";
-import { receiptPayloadSchema } from "@surfingdog/spec";
+import type { InboxOutcomeCode, ReceiptKind, ReceiptPayload, ReceiptPayloadV2 } from "@surfingdog/spec";
+import { PROMISE_KINDS, receiptPayloadSchema, receiptPayloadV2Schema } from "@surfingdog/spec";
 import { asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Db } from "../db";
-import type { Money } from "../domain/types";
+import { CUSTOMER_ACTORS, type Money } from "../domain/types";
+import { identityPending } from "../identity/pending";
 import { ulid } from "../ids";
-import { networkReceiptStatements } from "../network/index";
+import { networkReceiptStatements, type ReceiptRef } from "../network/index";
 import { items, parties, receipts, signingKeys } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { enabledNetworks, readSettings } from "../settings/schema";
+import { enabledNetworks, readSettings, type Settings } from "../settings/schema";
 import { hasActiveWebhook, webhookFanoutStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import type { ItemRow } from "../write/views";
 import { createKeyStore, type KeyStore } from "./keys";
-import { newNonce, type PublicJwk, peekAckReceiptId, ReceiptError, signReceipt, subjectHash, verifyAck } from "./sign";
+import {
+  newNonce,
+  type PublicJwk,
+  peekAckReceiptId,
+  ReceiptError,
+  receiptSha,
+  signReceipt,
+  subjectHash,
+  verifyAck,
+} from "./sign";
 
 /**
  * Receipts (ADR-016): the signed record an instance issues when an item reaches a state that
@@ -27,11 +37,14 @@ import { newNonce, type PublicJwk, peekAckReceiptId, ReceiptError, signReceipt, 
 /** What a door returns: the receipt itself plus the two facts about it the JWS does not carry. */
 export interface ReceiptView {
   readonly id: string;
+  /** A promise (`confirmed`, `paid`, `accepted`) or the `outcome` that closed one. */
   readonly kind: ReceiptKind;
+  /** The outcome an `outcome` receipt records (ADR-017 §3), e.g. `booking.completed`; null on a promise. */
+  readonly outcome: InboxOutcomeCode | null;
   /** The compact JWS. Verifiable against `/.well-known/jwks.json` on the issuing instance. */
   readonly jws: string;
-  /** The claims inside `jws`, decoded, for readers that do not want to. */
-  readonly payload: ReceiptPayload;
+  /** The claims inside `jws`, decoded, for readers that do not want to. `ver: 2` marks claims v2. */
+  readonly payload: ReceiptPayload | ReceiptPayloadV2;
   readonly issued_at: string;
   /** When the customer's agent counter-signed it, or null while it has not. */
   readonly acknowledged_at: string | null;
@@ -51,9 +64,29 @@ export interface ReceiptStatus {
 export type IssueOutcome =
   | { readonly outcome: "issued"; readonly receipt: ReceiptView }
   | { readonly outcome: "already"; readonly receipt: ReceiptView }
-  | { readonly outcome: "skipped"; readonly note: string };
+  | { readonly outcome: "skipped"; readonly note: string }
+  /** The item's person is still being asked for (ADR-017 §3.2): try again in a minute. */
+  | { readonly outcome: "deferred"; readonly note: string };
+
+/** How long a promise waits for its item's first contact to be answered, so it can name the person (§3.2). */
+export const PROMISE_WAITS_FOR_IDENTITY_MS = 15 * 60_000;
+
+/** What an issue job knows beyond the item and the kind. */
+export interface IssueOptions {
+  /** The outcome an `outcome` receipt records; required for that kind, refused for the others. */
+  readonly outcome?: InboxOutcomeCode | undefined;
+  /** Nobody decided it (the sweep, a rule): `aut: 1` on the outcome. */
+  readonly aut?: boolean | undefined;
+  /** The event that caused the receipt: its time is the receipt's `iat` (ADR-017 §3.1). */
+  readonly eventId?: string | undefined;
+}
 
 type ReceiptRow = typeof receipts.$inferSelect;
+
+/** Who may create an item whose receipts carry claims v2: customers, and a shop's connector. */
+const V2_CREATORS: ReadonlySet<string> = new Set([...CUSTOMER_ACTORS, "connector"]);
+
+const DAY_S = 86_400;
 
 export class ReceiptCapabilities {
   readonly keys: KeyStore;
@@ -95,12 +128,24 @@ export class ReceiptCapabilities {
   }
 
   /**
-   * Issues the `kind` receipt for an item, once. A second call — a retried job, a second runner —
-   * finds the row and returns it; the unique index on (item, kind) settles the race between two
-   * that arrive together.
+   * Issues the `kind` receipt for an item, once — for an `outcome`, once per outcome. A second call
+   * (a retried job, a second runner) finds the row and returns it; the unique index on (item, kind,
+   * outcome) settles the race between two that arrive together.
+   *
+   * Bookings and orders a customer made carry claims v2 (ADR-017 §3.2): `ver`, `due`, a booking's
+   * `end`, the networks' presentations as `per`, and on an outcome its code, `ref` to the item's
+   * earliest promise and `aut`. An outcome whose item has no promise yet issues that promise first.
+   * Items the business made itself keep v1 promises and record no outcomes (§3.1).
    */
-  async issue(itemId: string, kind: ReceiptKind, now: number = this.clock()): Promise<IssueOutcome> {
-    const existing = await this.row(itemId, kind);
+  async issue(
+    itemId: string,
+    kind: ReceiptKind,
+    now: number = this.clock(),
+    opts: IssueOptions = {},
+  ): Promise<IssueOutcome> {
+    const outcome = kind === "outcome" ? (opts.outcome ?? null) : null;
+    if (kind === "outcome" && !outcome) return { outcome: "skipped", note: "an outcome receipt needs its outcome" };
+    const existing = await this.row(itemId, kind, outcome ?? "");
     if (existing) return { outcome: "already", receipt: view(existing) };
 
     const ready = this.readiness();
@@ -112,6 +157,53 @@ export class ReceiptCapabilities {
     // A sandbox item is a rehearsal. A receipt for one would be a signed statement that something
     // happened when nothing did, and a network cannot tell it from the real thing.
     if (flags.sandbox) return { outcome: "skipped", note: "sandbox items never get a receipt" };
+    // Promised before outcomes were recorded (0008): made under the rules of the day, closed by hand.
+    if (kind === "outcome" && item.legacyPromise === 1) {
+      return {
+        outcome: "skipped",
+        note: `this ${item.type} was promised before outcomes were recorded, so it records no outcome (R18)`,
+      };
+    }
+
+    const v2 = (item.type === "booking" || item.type === "order") && V2_CREATORS.has(await this.creatorOf(item.id));
+    if (!v2 && (kind === "accepted" || kind === "outcome")) {
+      return {
+        outcome: "skipped",
+        note:
+          item.type === "booking" || item.type === "order"
+            ? `the business made this ${item.type} itself, so it records no ${kind === "outcome" ? outcome : kind} receipt (ADR-017 §3.1)`
+            : `a ${item.type} promises nothing, so it has no ${kind} receipt`,
+      };
+    }
+    const settings = await readSettings(this.db);
+
+    // A promise names the person each network presented for the item (`per`). While a first
+    // contact is still waiting for a network's answer it waits too, for at most fifteen minutes
+    // from the item's creation, and then goes without (§3.2).
+    if (
+      v2 &&
+      kind !== "outcome" &&
+      now - item.createdAt < PROMISE_WAITS_FOR_IDENTITY_MS &&
+      (await identityPending(this.db, item.id))
+    ) {
+      return {
+        outcome: "deferred",
+        note: "waiting for a network to answer the first contact, so the promise can name the person",
+      };
+    }
+
+    // An outcome closes the item's earliest promise; an item that has none yet (its promise job
+    // failed, or it was promised before receipts were on) gets it first, dated by its own event.
+    let promises = await this.promisesOf(item.id);
+    if (kind === "outcome" && promises.length === 0) {
+      const first = await this.firstPromiseEvent(item.id, item.type);
+      if (!first)
+        return { outcome: "skipped", note: `this ${item.type} never made a promise, so no outcome closes one` };
+      const made = await this.issue(item.id, first.kind, now, { eventId: first.eventId });
+      if (made.outcome === "skipped" || made.outcome === "deferred") return made;
+      promises = await this.promisesOf(item.id);
+    }
+    const earliest = promises[0];
 
     const [party] = await this.db.orm
       .select({ contact: parties.contact })
@@ -121,32 +213,64 @@ export class ReceiptCapabilities {
     const box = this.secrets as SecretBox; // readiness() proved it above
     const sub = await subjectHash(await box.mac("receipt-subject"), identity);
 
-    const key = await this.keys.active();
-    const money = amountOf(item, kind);
-    const payload = receiptPayloadSchema.parse({
+    const iat = Math.floor((opts.eventId ? ((await this.eventTime(opts.eventId)) ?? now) : now) / 1000);
+    const base = {
       iss: this.issuer(),
       sub,
       itm: item.id,
       typ: item.type,
       knd: kind,
-      iat: Math.floor(now / 1000),
+      iat,
       nonce: newNonce(),
-      ...(money ? { amt: money } : {}),
-      ...(paymentOf(item, kind) ? { pay: paymentOf(item, kind) } : {}),
-    });
+    };
+    let payload: ReceiptPayload | ReceiptPayloadV2;
+    if (!v2) {
+      const money = amountOf(item, kind);
+      const pay = paymentOf(item, kind);
+      payload = receiptPayloadSchema.parse({ ...base, ...(money ? { amt: money } : {}), ...(pay ? { pay } : {}) });
+    } else {
+      // The item's due and end come from its earliest promise, so every receipt of the item agrees
+      // on them; the first promise works them out from the item (§3.2).
+      const dates = earliest ? datesOf(item, earliest, settings) : datesOf(item, { iat }, settings);
+      const per = await this.perOf(item.id);
+      const claims: Record<string, unknown> = { ...base, ver: 2, due: dates.due };
+      if (dates.end !== undefined) claims.end = dates.end;
+      if (kind === "outcome") {
+        claims.out = outcome;
+        claims.ref = (earliest?.payload as { nonce?: unknown } | undefined)?.nonce;
+        if (opts.aut) claims.aut = 1;
+      } else {
+        const money = amountOf(item, kind);
+        const pay = paymentOf(item, kind);
+        if (money) claims.amt = money;
+        if (pay) claims.pay = pay;
+      }
+      if (per.length) claims.per = per;
+      const parsed = receiptPayloadV2Schema.safeParse(claims);
+      if (!parsed.success) {
+        return {
+          outcome: "skipped",
+          note: `the ${kind} receipt's claims do not hold: ${parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ")}`,
+        };
+      }
+      payload = parsed.data;
+    }
+
+    const key = await this.keys.active();
     const jws = await signReceipt(payload, key);
+    const sha = await receiptSha(jws);
 
     const id = ulid(now);
     // The row and, when someone is listening, the webhook fanout for `<type>.receipt_issued` go in
     // one batch (ADR-015 §5): the event id is the receipt id, which is what `events_v1` shows.
-    // A losing writer in the (item, kind) race inserts nothing, and its fanout job then finds an
-    // event with the winner's id missing and stops — one line of noise, no duplicate delivery.
+    // A losing writer in the (item, kind, outcome) race inserts nothing, and its fanout job then
+    // finds an event with the winner's id missing and stops — one line of noise, no duplicate.
     const statements: Statement[] = [
       {
-        sql: `INSERT INTO receipts (id, item_id, kind, jws, payload, kid, subject_hash, issued_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (item_id, kind) DO NOTHING`,
-        params: [id, item.id, kind, jws, JSON.stringify(payload), key.kid, sub, now],
+        sql: `INSERT INTO receipts (id, item_id, kind, outcome, jws, payload, kid, subject_hash, issued_at, sha)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (item_id, kind, outcome) DO NOTHING`,
+        params: [id, item.id, kind, outcome ?? "", jws, JSON.stringify(payload), key.kid, sub, now, sha],
         method: "run",
       },
     ];
@@ -154,15 +278,27 @@ export class ReceiptCapabilities {
       statements.push(webhookFanoutStatement({ id, type: `${item.type}.receipt_issued`, itemId: item.id }, now));
     }
     // Every network the owner switched on gets every receipt, so each directory can count what
-    // was kept. Nothing about the customer travels: the receipt names them by pseudonym only. The
-    // rows name the receipt by (item, kind), so a writer that loses the race queues the winner's.
-    for (const network of enabledNetworks(await readSettings(this.db), "receipts")) {
-      statements.push(...networkReceiptStatements(network, "issued", now, { itemId: item.id, kind }));
+    // was kept; which of them a network is sent is the publisher's call, by the rules it applies.
+    // Nothing about the customer travels: the receipt names them by pseudonym only. The rows name
+    // the receipt by (item, kind, outcome), so a writer that loses the race queues the winner's.
+    const ref: ReceiptRef = { itemId: item.id, kind, outcome: outcome ?? "" };
+    for (const network of await this.networksFor(settings, item.id, kind)) {
+      statements.push(...networkReceiptStatements(network, "issued", now, ref));
     }
     await this.db.batch(statements);
-    const written = await this.row(itemId, kind);
+    const written = await this.row(itemId, kind, outcome ?? "");
     if (!written) throw new WriteError("internal", "the receipt was written and then could not be read back");
     return { outcome: written.jws === jws ? "issued" : "already", receipt: view(written) };
+  }
+
+  /** base64url(SHA-256(jws)): how a network names a receipt (ADR-017 §3.4). */
+  async shaOf(receiptId: string): Promise<string> {
+    const [row] = await this.db.orm
+      .select({ sha: receipts.sha, jws: receipts.jws })
+      .from(receipts)
+      .where(eq(receipts.id, receiptId));
+    if (!row) throw new WriteError("not_found", "no such receipt");
+    return row.sha ?? (await receiptSha(row.jws));
   }
 
   /** The receipts on one item, oldest first. Empty for an item that has not earned one. */
@@ -235,7 +371,7 @@ export class ReceiptCapabilities {
         );
       }
     }
-    for (const network of enabledNetworks(await readSettings(this.db), "receipts")) {
+    for (const network of await this.networksFor(await readSettings(this.db), row.itemId, row.kind as ReceiptKind)) {
       statements.push(...networkReceiptStatements(network, "acknowledged", now, { id: row.id }));
     }
     await this.db.batch(statements);
@@ -267,18 +403,143 @@ export class ReceiptCapabilities {
     return { keys: await this.keys.published() };
   }
 
-  private async row(itemId: string, kind: ReceiptKind): Promise<ReceiptRow | undefined> {
+  private async row(itemId: string, kind: ReceiptKind, outcome = ""): Promise<ReceiptRow | undefined> {
     const rows = await this.db.orm.select().from(receipts).where(eq(receipts.itemId, itemId));
-    return rows.find((r) => r.kind === kind);
+    return rows.find((r) => r.kind === kind && r.outcome === outcome);
   }
+
+  /** The item's promises, earliest first: by `iat`, then nonce, as a network orders them (§3.3). */
+  private async promisesOf(itemId: string): Promise<ReceiptRow[]> {
+    const rows = await this.db.orm.select().from(receipts).where(eq(receipts.itemId, itemId));
+    const claims = (r: ReceiptRow) => r.payload as { iat?: number; nonce?: string };
+    return rows
+      .filter((r) => (PROMISE_KINDS as readonly string[]).includes(r.kind))
+      .sort(
+        (a, b) =>
+          Number(claims(a).iat ?? 0) - Number(claims(b).iat ?? 0) ||
+          String(claims(a).nonce ?? "").localeCompare(String(claims(b).nonce ?? "")),
+      );
+  }
+
+  /** The kind of the item's first promise and the event that made it: a confirmation, an acceptance. */
+  private async firstPromiseEvent(
+    itemId: string,
+    type: string,
+  ): Promise<{ kind: ReceiptKind; eventId: string } | null> {
+    const promised =
+      type === "booking"
+        ? { kind: "confirmed" as const, state: "confirmed" }
+        : type === "order"
+          ? { kind: "accepted" as const, state: "accepted" }
+          : null;
+    if (!promised) return null;
+    const { rows } = await this.db.client.query({
+      sql: "SELECT id FROM item_events WHERE item_id = ? AND to_state = ? ORDER BY seq LIMIT 1",
+      params: [itemId, promised.state],
+      method: "all",
+    });
+    const eventId = rows[0]?.[0];
+    return eventId === undefined ? null : { kind: promised.kind, eventId: String(eventId) };
+  }
+
+  /** Who created the item: the actor kind on its first event. */
+  private async creatorOf(itemId: string): Promise<string> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT actor_kind FROM item_events WHERE item_id = ? AND seq = 1",
+      params: [itemId],
+      method: "all",
+    });
+    return rows[0]?.[0] === undefined ? "" : String(rows[0][0]);
+  }
+
+  private async eventTime(eventId: string): Promise<number | null> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT created_at FROM item_events WHERE id = ?",
+      params: [eventId],
+      method: "all",
+    });
+    const at = rows[0]?.[0];
+    return at === undefined || at === null ? null : Number(at);
+  }
+
+  /** `per`: each network's presentation for the item, at most eight, each named by its host. */
+  private async perOf(itemId: string): Promise<{ n: string; p: string }[]> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT network, presentation_id FROM item_presentations WHERE item_id = ? AND presentation_id <> '' ORDER BY network LIMIT 8",
+      params: [itemId],
+      method: "all",
+    });
+    const per: { n: string; p: string }[] = [];
+    for (const r of rows) {
+      // A stored link that stood in while a network was unreachable has no presentation to name.
+      if (!/^[A-Za-z0-9_-]{22}$/.test(String(r[1]))) continue;
+      try {
+        per.push({ n: new URL(String(r[0])).host, p: String(r[1]) });
+      } catch {
+        // Not an origin: never written by this inbox, and never sent.
+      }
+    }
+    return per;
+  }
+
+  /**
+   * The networks a receipt of this item goes to: every one switched on that takes receipts, and —
+   * for an outcome — also one that stopped taking them after it was sent the item's promise, which
+   * is owed the outcome that closes it (ADR-017 §3.2).
+   */
+  private async networksFor(settings: Settings, itemId: string, kind: ReceiptKind): Promise<string[]> {
+    const networks = new Set(enabledNetworks(settings, "receipts"));
+    if (kind === "outcome") {
+      const { rows } = await this.db.client.query({
+        sql: `SELECT DISTINCT p.network FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
+               WHERE r.item_id = ? AND r.kind <> 'outcome' AND p.stage = 'issued' AND p.state = 'published'`,
+        params: [itemId],
+        method: "all",
+      });
+      for (const r of rows) {
+        const network = String(r[0]);
+        if (settings.networks[network]?.enabled) networks.add(network);
+      }
+    }
+    return [...networks].sort();
+  }
+}
+
+/**
+ * When the item is due and, for a booking, when it ends, in Unix seconds (ADR-017 §3.2): a
+ * booking's start and end; an order's delivery time, else its promise's `iat` plus
+ * `orders.dueDays`. A v2 promise already says, and is copied; a v1 promise is worked out again.
+ */
+function datesOf(
+  item: ItemRow,
+  promise: { payload?: unknown; iat?: number },
+  settings: Settings,
+): { due: number; end?: number } {
+  const claims = (promise.payload ?? {}) as { ver?: unknown; due?: unknown; end?: unknown; iat?: unknown };
+  if (claims.ver === 2 && typeof claims.due === "number") {
+    return typeof claims.end === "number" ? { due: claims.due, end: claims.end } : { due: claims.due };
+  }
+  const iat = Number(promise.iat ?? claims.iat ?? 0);
+  const p = item.payload as { startTime?: string; endTime?: string; delivery?: { when?: string } };
+  const seconds = (iso: string | undefined) => {
+    const ms = iso ? Date.parse(iso) : Number.NaN;
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : undefined;
+  };
+  if (item.type === "booking") {
+    const due = seconds(p.startTime) ?? iat;
+    const end = seconds(p.endTime);
+    return end === undefined ? { due } : { due, end };
+  }
+  return { due: seconds(p.delivery?.when) ?? iat + settings.orders.dueDays * DAY_S };
 }
 
 function view(row: ReceiptRow): ReceiptView {
   return {
     id: row.id,
     kind: row.kind as ReceiptKind,
+    outcome: row.outcome ? (row.outcome as InboxOutcomeCode) : null,
     jws: row.jws,
-    payload: row.payload as ReceiptPayload,
+    payload: row.payload as ReceiptPayload | ReceiptPayloadV2,
     issued_at: new Date(row.issuedAt).toISOString(),
     acknowledged_at: row.ackAt === null ? null : new Date(row.ackAt).toISOString(),
   };

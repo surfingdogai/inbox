@@ -27,6 +27,13 @@ const TITLES: Record<string, string> = {
   slot_taken: "Slot taken",
   version_conflict: "Changed since you read it",
   idempotency_mismatch: "Idempotency key reused",
+  nothing_to_verify: "Nothing to verify",
+  already_verified: "Already verified",
+  bad_code: "Wrong code",
+  code_expired: "Code expired",
+  too_many_attempts: "Too many attempts",
+  positive_only: "A reputation may only speed things up",
+  replayed_signature: "Signature already used",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };
@@ -98,4 +105,20 @@ export function tooManyRequests(c: Context, detail: string, retryAfterSec: numbe
     "Content-Type": "application/problem+json",
     "Retry-After": String(Math.max(1, Math.ceil(retryAfterSec))),
   });
+}
+
+/**
+ * 401 `replayed_signature` (ADR-017 §2.4): a signed request that changes something, seen before,
+ * without the idempotency key that would make it a retry. A retry carries its key and gets the
+ * first answer; a copy does not.
+ */
+export function replayedSignature(c: Context): Response {
+  const p: Problem = {
+    type: "https://surfingdog.ai/problems/replayed_signature",
+    title: TITLES.replayed_signature ?? "Signature already used",
+    status: 401,
+    detail: "This signature was already used. Sign the request again; a retry sends the same Idempotency-Key.",
+    code: "replayed_signature",
+  };
+  return c.json(p, 401, { "Content-Type": "application/problem+json" });
 }

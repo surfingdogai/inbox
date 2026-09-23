@@ -1,12 +1,13 @@
 ---
 // The privacy policy. Written from what the software actually does, and checked against the
-// code: what a self-hosted instance sends us (a version string, four counts and its signed
-// receipts, only when the owner turns it on), how long the network keeps them, what the hosted
-// service would hold, and what the site itself collects.
+// code: what a self-hosted instance sends a network (counts, signed receipts, and for customers a
+// first-contact email and the passes their assistants carry), only for networks the owner turns
+// on; what our network keeps and for how long; what a customer can do about it; what the hosted
+// service would hold; and what the site itself collects.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 
-const UPDATED = "22 September 2026";
+const UPDATED = "23 September 2026";
 ---
 
 <Layout
@@ -31,37 +32,63 @@ const UPDATED = "22 September 2026";
         or recover them. The code is open if you want to check.
       </p>
       <p>
-        Two things leave your inbox, and only if you turn on <b>Network</b> in Settings. It is off by default.
-        First, your inbox registers its domain once, then every hour sends its software version, its runtime, and
-        how many bookings, orders, quotes and messages it created in the last 24 hours. Counts only, nothing about
-        any person.
+        Some things leave your inbox, and only for a <b>network</b> you switch on in Settings → Networks. None is on
+        until you switch one on, and you can switch each off again. A network you switch on gets:
+      </p>
+      <ul>
+        <li>
+          <b>Your inbox's address</b>, once, so it can check your inbox's public profile, and <b>every hour</b> your
+          software version, what it runs on, and how many bookings, orders, quotes and messages arrived in the last 24
+          hours. Counts only. With your secret key set, this hourly message is signed, and the network answers it with
+          your own standing there.
+        </li>
+        <li>
+          <b>Every receipt your inbox signs</b>: when a booking is confirmed or an order accepted or paid, and again
+          when it ends (it happened, the customer did not turn up, either side cancelled, it was delivered). A receipt
+          says which business issued it, your reference for the booking or order, what kind of promise it is, when it
+          was due and when it was made, the amount if there is a price, and how an order was paid when your inbox
+          knows. The customer appears as a code, never a name: an HMAC made with a key only your inbox holds, which
+          the network can't turn back into a person, and the same customer at another business gets a different
+          code. When the customer's assistant presented their pass, the receipt also names that presentation, one
+          per network, so the network that issued the pass counts the outcome on that person's record; every network
+          the receipt goes to sees these references.
+        </li>
+        <li>
+          <b>A counter-signature</b>, if the customer's assistant signs a receipt: its signature and its public key.
+          An assistant that keeps its key uses the same one at every business, so the receipts it signed can be
+          linked to each other. It may also name the customer's pass, by a reference that is not the pass itself.
+        </li>
+        <li>
+          <b>A new customer's email address</b>, when a customer books or orders with an email and their assistant
+          carries no pass. With it go your reference for that booking or order and the name of their assistant
+          (and a fingerprint of its public key, and its platform, when it signs). The network uses the address to give the customer a
+          <b>key</b>, a secret that lets any business on that network recognise them later; your inbox emails the key
+          to the customer as one line in your name, a code for their assistant, and names no network. Turn the line
+          off under Customers you already know; turn the key off for a network with "Give first-time customers a key".
+        </li>
+        <li>
+          <b>A pass or a key the customer's assistant carries</b>, only to the network that issued it, with the
+          customer's email address when their request has one, so the network can say how that customer keeps their
+          bookings and whether the address is theirs. An assistant that signs its requests carries a reference
+          instead of the pass, and your inbox passes on its signature: the address, path and query of the request, a
+          hash of what it sent, its content type, its public key and the pass references it signed. Your inbox never
+          passes on a signature that holds a secret, or that covers any other header.
+        </li>
+      </ul>
+      <p>
+        Never sent: message text, names, phone numbers, postal addresses, what was ordered, payment references.
       </p>
       <p>
-        Second, it sends every receipt it issues. Your inbox signs one when a booking is confirmed or an order is paid.
-        It records which business issued it, your reference for the booking or order, what kind of promise it is, and
-        when, plus the amount if there is a price. A paid order's receipt also says how it was paid (by card, say) when
-        your inbox knows.
+        What your inbox keeps of this, in your database: what each network said about a customer (a code for that
+        customer at your business, and their standing) on the booking or order and on the customer; a hash of each
+        pass it saw, to recognise it again; a network's answers for an hour, a day for "already known", filed under
+        hashes. A key a customer's assistant presents is passed on and never stored. A new customer's key is kept
+        sealed with your secret key until it is emailed to them, and their first pass sealed so the assistant that
+        made the booking or order can collect it again; neither longer than seven days, and neither shown to you.
       </p>
       <p>
-        The customer appears as a code, never a name. The code is an HMAC made with a key only your inbox holds, so
-        the network can't turn it back into a person, and the same customer at another business gets a different code.
-      </p>
-      <p>
-        If the customer's agent counter-signs a receipt, that signature and the agent's public key are sent too. An
-        agent that keeps its key uses the same one at every business, so the receipts it counter-signed can be linked
-        to each other. A receipt never carries names, email or postal addresses, phone numbers, message text, what was
-        ordered or payment references.
-      </p>
-      <p>
-        The network keeps the hourly counts for 90 days, each receipt and its counter-signature for 540 days after it
-        arrives, and each business's totals (receipts issued, and how many were counter-signed) indefinitely. The
-        directory shows the public profile your manifest already publishes, the version and runtime your inbox
-        reports, and whether it is answering. For receipts it shows only counts and the date of the latest one, never a
-        receipt, an amount or a customer's code.
-      </p>
-      <p>
-        Turn Network off and both stop. What the network already holds is kept for the periods above. Point
-        <code>network.url</code> at a directory you run yourself and none of it reaches us.
+        Turn a network off and nothing more is sent to it. What it already holds, it keeps under its own rules. Anyone
+        can run a network, and one we don't run is not covered by this page: add only networks you trust.
       </p>
 
       <h2 class="h-section">If we host it for you</h2>
@@ -92,7 +119,9 @@ const UPDATED = "22 September 2026";
       <h2 class="h-section">Your rights</h2>
       <p>
         Under the GDPR you can ask for a copy of what we hold about you, ask us to correct or delete it, object to what
-        we do with it, and complain to a supervisory authority. In Portugal that is the
+        we do with it, and complain to a supervisory authority. For the network, deleting means we remove what links a
+        record to you (your email's code, your keys and passes); the coded records of past bookings stay, because
+        businesses' records are made of them. In Portugal that is the
         <a class="link" href="https://www.cnpd.pt/" rel="noopener">CNPD</a>. Write to privacy@surfingdog.ai and we will
         answer within a month.
       </p>
@@ -101,13 +130,62 @@ const UPDATED = "22 September 2026";
         abuse, and you can object to that too.
       </p>
 
-      <h2 class="h-section">The network and reviews</h2>
+      <h2 class="h-section" id="network-h">Our network, and the customers of businesses on it</h2>
       <p>
-        The directory and the receipts above are live. Reputation, for businesses and for customers, is still being
-        built. Before it collects anything, this page will say exactly what it collects, how long it keeps it and who
-        can see it. It will use only real transactions. The network itself will decide nothing about anyone; each
-        business's own rules will. Identifiers will stay pseudonymous. If any of this changes, this page will say so
-        before the feature is switched on.
+        We run the network at <code>network.surfingdog.ai</code>. Businesses whose inbox reports to it are listed in
+        its directory, and it keeps a record of how reliably businesses and their customers keep bookings and orders.
+        It uses only real transactions, and it never refuses or blocks anyone: it orders its directory by rules it
+        publishes, and each business's own rules decide what a customer's record earns them, rules that may only
+        speed things up or bring in a person, never refuse.
+      </p>
+      <p><b>What it keeps, and for how long.</b></p>
+      <ul>
+        <li>
+          The hourly messages, with the internet address they came from, for 90 days. A business's listing (its public
+          profile, version, whether it is answering, its counts and its standing), and snapshots of it, for good.
+        </li>
+        <li>
+          Every receipt, counter-signature, and record of which business was shown which customer's standing, for
+          good. A record that could quietly disappear would be worth nothing, so none does.
+        </li>
+        <li>
+          For a customer: a record with no name, keyed by an HMAC of their email address, and an HMAC of its domain
+          (never the address itself); the hashes of their key and passes (never the secrets, except a new customer's
+          key and pass, kept encrypted for seven days so a retry never loses them, and a pass made from a key, kept
+          encrypted for a day); the name, public key and platform of the assistants that carried
+          them; and the outcomes of their bookings and orders, from receipts that name them by a code.
+        </li>
+        <li>
+          Sign-in sessions for 24 hours, and emailed codes for ten minutes. A code is sent to the address as typed,
+          and the address is not stored.
+        </li>
+      </ul>
+      <p><b>Who sees what.</b></p>
+      <ul>
+        <li>
+          A business's standing (its score and tier, and how many promises it kept and broke) is public, in the
+          directory. Nothing about any customer is ever in it.
+        </li>
+        <li>
+          A customer's standing is seen by a business only when the customer's assistant presents their pass there.
+          There is no way to look a person up. The business sees their tier, their score, how many promises they kept
+          and broke and at how many businesses, since when the network has known them, whether they proved their
+          email address, and whether their pass was used unusually. It never sees their email address or which other
+          businesses they used, and each business gets a different code for the same person.
+        </li>
+      </ul>
+      <p><b>If you are a customer.</b></p>
+      <p>
+        You never sign up. If you book or order with an email at a business on the network, you may get an email with
+        your key. You can give it to any assistant, or ignore it. With a code sent to your address you can sign in at
+        the network to see your record, every business that was shown it, and the passes your assistants hold; revoke
+        a pass; replace a lost key (your record carries over); and contest an outcome you think is wrong. Or write to
+        us.
+      </p>
+      <p>
+        The network's rules, in plain words and as numbers, are on <a class="link" href="/network/">the network page</a>
+        and at <code>network.surfingdog.ai/v1/ranking</code>, with every change announced fifteen days before it
+        applies.
       </p>
 
       <h2 class="h-section">Changes</h2>
