@@ -83,6 +83,7 @@ function BookingFields({ item, tz }: { item: ItemOf<"booking">; tz: string | und
       )}
       <F label="Service">{p.reservationFor.name}</F>
       {p.totalPrice && <F label="Price">{formatMoney(p.totalPrice)}</F>}
+      {p.customerStatedPrice && <F label="Customer suggested">{formatMoney(p.customerStatedPrice)}</F>}
       {p.partySize !== undefined && <F label="Party size">{p.partySize}</F>}
       {p.notes && (
         <F label="Notes" wide prose>
@@ -100,6 +101,9 @@ function OrderFields({ item, tz }: { item: ItemOf<"order">; tz: string | undefin
   const payment = [p.paymentMethod, p.paymentRef ? `ref ${p.paymentRef}` : undefined].filter(Boolean).join(" · ");
   return (
     <>
+      {p.customerStatedPrice && (
+        <F label="Customer suggested">{formatMoney(p.customerStatedPrice)} for the whole order</F>
+      )}
       {p.delivery && (
         <F label="Delivery">
           {capitalise(p.delivery.method)}

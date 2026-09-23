@@ -18,6 +18,7 @@ import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import { setFlags } from "../write/flags";
+import { withoutStatedPrices } from "../write/pricing";
 import { recordRuleSkipped } from "../write/skipped";
 import { bucketsFor, planClaims, readClaims } from "../write/slots";
 import { appendThreadEntry } from "../write/thread";
@@ -75,7 +76,7 @@ export async function runRulesForEvent(
     if (runs >= rule.maxRunsPerItem) continue;
     let matched: boolean;
     try {
-      matched = evaluate(rule.if, { ...ctx, item: current as unknown as Record<string, unknown> });
+      matched = evaluate(rule.if, { ...ctx, item: forRules(current) });
     } catch (error) {
       report.errors.push(`${rule.name}: ${error instanceof Error ? error.message : String(error)}`);
       continue;
@@ -143,7 +144,7 @@ export async function runRulesForEvent(
               db,
               ruleActor,
               current,
-              renderTemplate(action.template, { ...ctx, item: current as unknown as Record<string, unknown> }),
+              renderTemplate(action.template, { ...ctx, item: forRules(current) }),
               action.internal ? "note" : "out",
             );
             break;
@@ -168,6 +169,21 @@ export async function runRulesForEvent(
               ? error.message
               : String(error);
         report.errors.push(`${rule.name}: ${message}`);
+        // The promise waits for a person to price it (ADR-018 §3.2): the rule asks one instead.
+        if (error instanceof WriteError && error.details?.guard === "business_priced") {
+          try {
+            current = (
+              await setFlags(db, ruleActor, {
+                itemId: current.id,
+                flags: { needsHuman: true },
+                reason: `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`,
+                causation,
+              })
+            ).item;
+          } catch (flagError) {
+            report.errors.push(`${rule.name}: ${flagError instanceof Error ? flagError.message : String(flagError)}`);
+          }
+        }
         break;
       }
     }
@@ -271,7 +287,7 @@ export async function buildRuleContext(
   const facts = await bookingFacts(db, item, settings.business.timezone);
   const who = await identityContext(db, item, settings);
   return {
-    item: item as unknown as Record<string, unknown>,
+    item: forRules(item),
     event: {
       event: eventRow.event,
       from: eventRow.fromState,
@@ -292,6 +308,14 @@ export async function buildRuleContext(
     text,
     facts,
   };
+}
+
+/**
+ * The item a condition reads: the business's price is `totalPrice`, and the price the customer's
+ * request stated is not there at all (ADR-018 §3.2), so no rule confirms or accepts on it.
+ */
+function forRules(item: Item): Record<string, unknown> {
+  return withoutStatedPrices(item) as unknown as Record<string, unknown>;
 }
 
 function payloadText(item: Item): string[] {

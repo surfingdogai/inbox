@@ -81,6 +81,40 @@ describe("MCP doors", () => {
     expect((bad.content as { text: string }[])[0]?.text).toMatch(/startTime/);
   });
 
+  it("orders at the business's price through the public tools, whatever price the assistant sends", async () => {
+    const db = await freshDb();
+    const product = ulid();
+    await db.orm.insert(schema.products).values({
+      id: product,
+      sku: "SD-1",
+      name: "Saddle",
+      price: { value: 15_000, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const client = await connect(createApp({ db }), "/mcp");
+    const tools = await client.listTools();
+    expect(tools.tools.find((t) => t.name === "create_order")?.description).toContain("business's price");
+    const ordered = await client.callTool({
+      name: "create_order",
+      arguments: {
+        payload: {
+          orderedItem: [{ productId: product, name: "Saddle", quantity: 1, price: { value: 100, currency: "EUR" } }],
+          totalPrice: { value: 100, currency: "EUR" },
+        },
+        idempotency_key: "mcp-order-1",
+      },
+    });
+    expect(ordered.isError, JSON.stringify(ordered.content)).toBeFalsy();
+    const structured = ordered.structuredContent as { view: { item: { payload: object } } };
+    expect(structured.view.item.payload).toMatchObject({
+      totalPrice: { value: 15_000, currency: "EUR" },
+      customerStatedPrice: { value: 100, currency: "EUR" },
+    });
+    // Many assistants read only the text: it carries the business's price, in the business's words.
+    expect((ordered.content as { text: string }[])[0]?.text).toContain("Our price is €150.00.");
+  });
+
   it("does not offer the owner's AI a correction whose time has passed", async () => {
     const db = await freshDb();
     const app = createApp({ db });

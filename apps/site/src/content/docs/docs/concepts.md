@@ -37,6 +37,8 @@ A rule can also read who is asking: `person` (the best `tier` and `score` across
 
 Nothing in a condition does I/O; everything a rule may read is fetched into a frozen context first. Limits keep rules honest: at most 20 rules per event, a chain depth of 3, and a per-rule cap on runs per item.
 
+**A rule reads your price, and promises only on it.** A booking's or an order's `totalPrice` is the one your catalogue gives; a different figure the customer's request carried is kept as `customerStatedPrice`, which no condition can read. A request that holds a price your catalogue does not give (an order line naming no product you sell, a booking of a service priced `from`, by `quote` or not at all that names a price, or a fixed-price service booked for longer than it lasts) is never confirmed or accepted by a rule: a rule that tries flags it for a person instead, and the rule's run and "Try it" say so.
+
 Presets exist for three verticals. Appointments: confirm at once a customer you know (two completed, no no-show) or a trusted one (at most two open bookings, up to 200.00), otherwise auto-confirm bookings under a limit when the slot is free and inside opening hours, and ask a person about everything else. Trades: quotes always need a person, urgent words raise priority, trusted customers and customers you know go first. Shop: accept at once an order within a customer's limit, accept small orders and ask a new customer to pay, flag large ones for approval. All three offer a one-time code to someone who gives a known customer's address and asks about earlier items. A new customer's booking is never refused: it waits for a person.
 
 ## Agent policy and trust tiers

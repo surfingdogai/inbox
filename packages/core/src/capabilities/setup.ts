@@ -6,7 +6,7 @@ import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
 import { PRESETS } from "../rules/presets";
 import { isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
-import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
+import { type Action, type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   availabilityRules,
   business,
@@ -19,6 +19,7 @@ import {
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
+import { heldForPrice } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
 import { DEFAULT_WEEKLY, type Weekly } from "./availability";
@@ -444,13 +445,29 @@ export class SetupCapabilities {
     // What a run would hold back here, as the engine decides it, and so what it would really do.
     const held = matched ? await heldBack(this.db, item.id, eventRow, parsed.data.if) : null;
     const skippedActions = held ? parsed.data.actions.filter(isNegative) : [];
+    // A promise on a price the business did not set waits for a person (ADR-018 §3.2): the run
+    // asks one instead, and stops there.
+    const actions = parsed.data.actions.filter((a) => !skippedActions.includes(a));
+    let unpriced: Action[] = [];
+    for (const [i, a] of actions.entries()) {
+      if (!matched || a.action !== "transition" || !(await heldForPrice(this.db, item, a.event))) continue;
+      unpriced = actions.slice(i);
+      break;
+    }
+    const skipped = [
+      ...(held ? skippedActions.map((a) => skippedSentence(input.name, a, held)) : []),
+      ...(unpriced[0] ? [priceSentence(input.name, unpriced[0])] : []),
+    ];
     return {
       matched,
       summary: summarizeRule(parsed.data),
-      would: matched ? parsed.data.actions.filter((a) => !skippedActions.includes(a)).map(describeAction) : [],
-      ...(skippedActions.length && held
-        ? { skipped: skippedActions.map((a) => skippedSentence(input.name, a, held)) }
-        : {}),
+      would: matched
+        ? [
+            ...actions.filter((a) => !unpriced.includes(a)).map(describeAction),
+            ...(unpriced.length ? [ASK_A_PERSON] : []),
+          ]
+        : [],
+      ...(skipped.length ? { skipped } : {}),
       item: { id: item.id, type: item.type, state: item.state },
       facts: ctx.facts as unknown as Record<string, unknown>,
       // What the reputation conditions read (ADR-017 §8.3), from local rows only.
@@ -543,4 +560,13 @@ function validTimezone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** What a rule does instead of a promise on a price the business did not set (ADR-018 §3.2). */
+const ASK_A_PERSON = "flag it for a person";
+
+/** Why a rule's promise waits for a person, in the owner's words, for a rule's test. */
+function priceSentence(ruleName: string | undefined, action: Action): string {
+  const rule = ruleName?.trim() ? `Rule '${ruleName.trim()}'` : "This rule";
+  return `${rule} wanted to ${describeAction(action)}, but the request holds a price that is not in your catalogue, so it asks a person to price it first`;
 }

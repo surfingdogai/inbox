@@ -26,6 +26,7 @@ import {
 } from "./common";
 import { fromZod, WriteError } from "./errors";
 import { planParty } from "./party";
+import { priceFromCatalogue } from "./pricing";
 import { defaultSubject, type ItemView, viewFor } from "./views";
 
 export interface CreateInput {
@@ -63,7 +64,6 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   if (!schema) throw new WriteError("invalid_input", `unknown item type ${String(input.type)}`);
   const parsed = schema.safeParse(input.payload);
   if (!parsed.success) throw fromZod(parsed.error, "payload");
-  const payload = parsed.data as Record<string, unknown>;
 
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
@@ -74,6 +74,16 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     const hit = await findIdempotent(db, idem);
     if (hit) return replay(hit, requestHash);
   }
+  // The business sets its prices (ADR-018 §3.1, §3.2): what a customer's request says a catalogue
+  // product or a fixed-price service costs is kept beside the price, never as it.
+  const priced = isCustomer(caller)
+    ? await priceFromCatalogue(db, input.type, parsed.data as Record<string, unknown>)
+    : { payload: parsed.data as Record<string, unknown>, unpriced: false };
+  // What is stored is read back through the same schema: a priced payload it would refuse (a total
+  // too large to write down exactly) is refused here, never written for every later read to fail on.
+  const checked = schema.safeParse(priced.payload);
+  if (!checked.success) throw fromZod(checked.error, "payload");
+  const payload = checked.data as Record<string, unknown>;
 
   // Customers the business already knows (ADR-017 §8.2): a strong match joins its party, a weak one
   // gets a party of its own that names the known one; either way the create does it, in its batch.
@@ -160,7 +170,14 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       toState: machine.initial,
       actorKind: caller.actor.kind,
       actorId: caller.actor.id,
-      meta: { channel: caller.actor.channel, tier: caller.tier, sandbox: flags.sandbox, ...actorMeta(caller) },
+      meta: {
+        channel: caller.actor.channel,
+        tier: caller.tier,
+        sandbox: flags.sandbox,
+        // A price the business did not set: no rule confirms or accepts it (ADR-018 §3.2).
+        ...(priced.unpriced ? { unpriced: true } : {}),
+        ...actorMeta(caller),
+      },
       now,
     }),
   );

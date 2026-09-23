@@ -240,7 +240,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Request a booking",
         description:
-          "Request a service at a time. Check availability first. Returns the item and, if you have no account, an access_token.",
+          "Request a service at a time. Check availability first. A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. Returns the item and, if you have no account, an access_token.",
         inputSchema: createBookingInput,
         annotations: writes,
       },
@@ -254,7 +254,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "create_order",
       {
         title: "Place an order",
-        description: "Order products. Prices are in minor units.",
+        description:
+          "Order products. Prices are in minor units. A line naming a product (productId or sku) costs the business's price from list_products, and the total follows; a different price you send is only noted for the business. A line naming no product waits for the business to price it.",
         inputSchema: createOrderInput,
         annotations: writes,
       },
