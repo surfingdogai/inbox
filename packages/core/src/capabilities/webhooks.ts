@@ -7,10 +7,11 @@ import { requireSecretBox, type SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
 import { isPublicHost } from "../util/hosts";
 import { USER_AGENT } from "../version";
-import { type Caller, isCustomer, nowOf } from "../write/caller";
+import { actorMeta, type Caller, type EventActor, eventActor, isCustomer, nowOf } from "../write/caller";
 import { deliverJobPrefix, jobStatement, WEBHOOK_DELIVERY_KIND, WEBHOOK_FANOUT_KIND } from "../write/common";
 import { WriteError } from "../write/errors";
 import type * as S from "./setup-types";
+import { MAX_WEBHOOK_HEADERS, reservedWebhookHeader } from "./setup-types";
 
 /**
  * Outbound webhooks and the developer event cursor (ADR-015 §3–§6).
@@ -75,7 +76,12 @@ export interface WebhookSecrets {
   readonly previousUntil?: number;
 }
 
-/** A thin event (ADR-015 §3): a pointer that never goes stale and never copies customer data. */
+/**
+ * A thin event (ADR-015 §3): a pointer that never goes stale and never copies customer data. It
+ * also says who caused the event, through which door, and whether the item is a sandbox item, so a
+ * two-way sync can skip its own writes (compare `data.actor` with its own key) and a receiver can
+ * skip test traffic without a second call.
+ */
 export interface ThinEvent {
   readonly id: string;
   readonly type: string;
@@ -86,6 +92,10 @@ export interface ThinEvent {
     readonly state: string;
     readonly version: number;
     readonly url: string;
+    readonly actor: EventActor;
+    /** The door: `rest`, `mcp_owner`, `mcp_public`, `email`, `owner_ui`, `system`, … */
+    readonly channel: string | null;
+    readonly sandbox: boolean;
   };
 }
 
@@ -101,6 +111,8 @@ export interface WebhookView {
   readonly url: string;
   readonly events: readonly string[];
   readonly payload_style: S.PayloadStyle;
+  /** The names of the extra headers each delivery carries. Their values are never returned. */
+  readonly headers: readonly string[];
   readonly active: boolean;
   readonly failing_since: string | null;
   readonly disabled_at: string | null;
@@ -207,10 +219,19 @@ export interface WebhookHeaderInput {
   /** 1-based: the first attempt is 1. */
   readonly attempt: number;
   readonly userAgent?: string | undefined;
+  /** The endpoint's extra headers (`headers` on the webhook). Never one of the names set here. */
+  readonly extra?: Readonly<Record<string, string>> | undefined;
 }
 
 export function webhookHeaders(input: WebhookHeaderInput): Record<string, string> {
+  // The owner's extra headers go first, so that whatever happens the delivery's own headers win:
+  // the input schema refuses those names, and this ordering is the second lock on the same door.
+  const extra: Record<string, string> = {};
+  for (const [name, value] of Object.entries(input.extra ?? {})) {
+    if (!reservedWebhookHeader(name)) extra[name.toLowerCase()] = value;
+  }
   return {
+    ...extra,
     "content-type": "application/json",
     accept: "application/json",
     "user-agent": input.userAgent ?? USER_AGENT,
@@ -231,6 +252,30 @@ export async function openWebhookSecrets(box: SecretBox, webhookId: string, seal
 
 export function sealWebhookSecrets(box: SecretBox, webhookId: string, secrets: WebhookSecrets): Promise<string> {
   return box.seal("webhook-secret", webhookId, JSON.stringify(secrets));
+}
+
+/** The endpoint's extra headers, opened. An endpoint with none has no sealed blob at all. */
+export async function openWebhookHeaders(
+  box: SecretBox,
+  webhookId: string,
+  sealed: string | null,
+): Promise<Record<string, string>> {
+  if (!sealed) return {};
+  const parsed = JSON.parse(await box.open("webhook-headers", webhookId, sealed)) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed)) if (typeof v === "string") out[k] = v;
+  return out;
+}
+
+async function sealWebhookHeaders(
+  box: SecretBox,
+  webhookId: string,
+  headers: Record<string, string>,
+): Promise<{ sealed: string | null; names: string[] }> {
+  const names = Object.keys(headers);
+  if (names.length === 0) return { sealed: null, names };
+  return { sealed: await box.seal("webhook-headers", webhookId, JSON.stringify(headers)), names };
 }
 
 // ---- subscriptions -----------------------------------------------------------------
@@ -288,6 +333,11 @@ type EventRow = {
   itemType: string;
   itemState: string;
   itemVersion: number;
+  sandbox?: number | null | undefined;
+  actorKind?: string | null | undefined;
+  actorId?: string | null | undefined;
+  actorName?: string | null | undefined;
+  channel?: string | null | undefined;
 };
 
 export class WebhookCapabilities {
@@ -322,6 +372,7 @@ export class WebhookCapabilities {
     if (bad) throw bad;
     const id = ulid(now);
     const secret = mintWebhookSecret();
+    const headers = await sealWebhookHeaders(box, id, input.headers ?? {});
     await this.db.orm.insert(webhooksTable).values({
       id,
       url: input.url,
@@ -329,6 +380,8 @@ export class WebhookCapabilities {
       events: [...input.events],
       payloadStyle: input.payload_style,
       active: 1,
+      headersEnc: headers.sealed,
+      headerNames: headers.names,
       createdAt: now,
       updatedAt: now,
     });
@@ -338,7 +391,7 @@ export class WebhookCapabilities {
   async updateWebhook(caller: Caller, input: S.UpdateWebhookInput): Promise<WebhookView> {
     requireOwner(caller);
     const now = nowOf(caller);
-    await this.row(input.webhook_id);
+    const current = await this.row(input.webhook_id);
     if (input.url !== undefined) {
       const bad = checkWebhookUrl(input.url, (await this.config()).allowPrivateTargets);
       if (bad) throw bad;
@@ -362,6 +415,26 @@ export class WebhookCapabilities {
       params.push(input.active ? 1 : 0);
       // Waking an endpoint clears the failure run, so five more days have to pass before it sleeps.
       if (input.active) sets.push("failing_since = NULL", "disabled_at = NULL", "last_error = NULL");
+    }
+    if (input.headers !== undefined && Object.keys(input.headers).length > 0) {
+      // A merge, like settings: the names given change, the rest keep their values. The values are
+      // sealed, so the current ones are opened to lay the change over them.
+      const box = requireSecretBox(this.box);
+      const merged = await openWebhookHeaders(box, current.id, current.headersEnc);
+      for (const [name, value] of Object.entries(input.headers)) {
+        for (const existing of Object.keys(merged)) {
+          if (existing.toLowerCase() === name.toLowerCase()) delete merged[existing];
+        }
+        if (value !== null) merged[name] = value;
+      }
+      if (Object.keys(merged).length > MAX_WEBHOOK_HEADERS) {
+        throw new WriteError("invalid_input", `at most ${MAX_WEBHOOK_HEADERS} headers per endpoint`, {
+          fields: [{ path: "headers", problem: "invalid", message: "remove one first (set it to null)" }],
+        });
+      }
+      const sealed = await sealWebhookHeaders(box, current.id, merged);
+      sets.push("headers_enc = ?", "header_names = ?");
+      params.push(sealed.sealed, JSON.stringify(sealed.names));
     }
     params.push(input.webhook_id);
     await this.db.client.query({
@@ -545,6 +618,7 @@ export class WebhookCapabilities {
     const row = await this.row(input.webhook_id);
     const secrets = await openWebhookSecrets(box, row.id, row.secretEnc);
     const settings = await readSettings(this.db);
+    const extra = await openWebhookHeaders(box, row.id, row.headersEnc);
     const eventId = ulid(now);
     const event = {
       id: eventId,
@@ -558,6 +632,9 @@ export class WebhookCapabilities {
         state: "test",
         version: 1,
         url: `${eventBaseUrl(this.baseUrl, settings.notifications.appUrl)}/v1/owner/webhooks/${row.id}`,
+        actor: eventActor(caller.actor.kind, caller.actor.id, actorMeta(caller).actor_name),
+        channel: caller.actor.channel,
+        sandbox: false,
       },
     };
     const body = JSON.stringify(event);
@@ -587,6 +664,7 @@ export class WebhookCapabilities {
           signature,
           eventType: TEST_EVENT_TYPE,
           attempt: 1,
+          extra,
         }),
       });
       status = res.status;
@@ -693,11 +771,12 @@ export class WebhookCapabilities {
     }
     params.push(opts.limit);
     const { rows } = await this.db.client.query({
-      sql: `SELECT id, type, created_at, item_id, item_type, item_state, item_version
+      sql: `SELECT id, type, created_at, item_id, item_type, item_state, item_version, sandbox, actor_kind, actor_id, actor_name, channel
             FROM events_v1 WHERE ${where.join(" AND ")} ORDER BY id LIMIT ?`,
       params,
       method: "all",
     });
+    const text = (v: unknown) => (v === null || v === undefined ? null : String(v));
     return rows.map((r) => ({
       id: String(r[0]),
       type: String(r[1]),
@@ -706,6 +785,11 @@ export class WebhookCapabilities {
       itemType: String(r[4]),
       itemState: String(r[5]),
       itemVersion: Number(r[6]),
+      sandbox: Number(r[7] ?? 0),
+      actorKind: text(r[8]),
+      actorId: text(r[9]),
+      actorName: text(r[10]),
+      channel: text(r[11]),
     }));
   }
 
@@ -788,6 +872,9 @@ export function thinEvent(row: EventRow, appBaseUrl: string): ThinEvent {
       state: row.itemState,
       version: row.itemVersion,
       url: `${base}/v1/owner/items/${row.itemId}`,
+      actor: eventActor(row.actorKind ?? "system", row.actorId ?? null, row.actorName),
+      channel: row.channel ?? null,
+      sandbox: Number(row.sandbox ?? 0) === 1,
     },
   };
 }
@@ -798,6 +885,7 @@ function webhookView(row: typeof webhooksTable.$inferSelect, summary: DeliverySu
     url: row.url,
     events: row.events,
     payload_style: row.payloadStyle as S.PayloadStyle,
+    headers: Array.isArray(row.headerNames) ? row.headerNames : [],
     active: row.active === 1,
     failing_since: row.failingSince === null ? null : new Date(row.failingSince).toISOString(),
     disabled_at: row.disabledAt === null ? null : new Date(row.disabledAt).toISOString(),

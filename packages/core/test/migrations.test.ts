@@ -22,6 +22,65 @@ import { makeClient, resetTables } from "./harness";
  * Migration 4 (ADR-015) on both runtimes: D1 and node:sqlite have to accept the same DDL, the view
  * included, or half the fleet starts and half does not.
  */
+describe("migration 8 — keys, scope refusals, webhook headers and attribution", () => {
+  it("adds the key columns, the refusal record, the header columns, and who and which door to the view", async () => {
+    const db = await fresh();
+    expect(await names(db, "table")).toContain("scope_refusals");
+    const columns = async (table: string) =>
+      (await db.client.query({ sql: `PRAGMA table_info(${table})`, method: "all" })).rows.map((r) => String(r[1]));
+    expect(await columns("api_keys")).toEqual(expect.arrayContaining(["expires_at", "created_by", "last4"]));
+    expect(await columns("webhooks")).toEqual(expect.arrayContaining(["headers_enc", "header_names"]));
+    expect(await columns("events_v1")).toEqual(expect.arrayContaining(["actor_name", "channel"]));
+
+    const now = Date.now();
+    const partyId = ulid();
+    const itemId = ulid();
+    await db.orm.insert(parties).values({ id: partyId, kind: "human", createdAt: now, updatedAt: now });
+    await db.orm.insert(items).values({
+      id: itemId,
+      type: "booking",
+      state: "confirmed",
+      version: 2,
+      partyId,
+      channel: "form",
+      payload: {},
+      flags: { needsHuman: false, sandbox: true, priority: 0 },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.orm.insert(itemEvents).values([
+      // Written before this migration: no meta, so the door is the item's.
+      {
+        id: ulid(),
+        itemId,
+        seq: 1,
+        event: "create",
+        toState: "requested",
+        actorKind: "customer_human",
+        actorId: "x",
+        createdAt: now,
+      },
+      {
+        id: ulid(),
+        itemId,
+        seq: 2,
+        event: "confirm",
+        fromState: "requested",
+        toState: "confirmed",
+        actorKind: "integration",
+        actorId: "key_1",
+        meta: { channel: "rest", actor_name: "Zapier" },
+        createdAt: now + 1,
+      },
+    ]);
+    const stream = await db.orm.select().from(eventsV1).orderBy(eventsV1.id);
+    expect(stream.map((e) => [e.actorKind, e.actorName, e.channel, e.sandbox])).toEqual([
+      ["customer_human", null, "form", 1],
+      ["integration", "Zapier", "rest", 1],
+    ]);
+  });
+});
+
 describe("migration 4 — connectors, webhooks and the event view", () => {
   it("applies on a fresh database and creates every table, index and the view", async () => {
     const db = await fresh();

@@ -197,7 +197,7 @@ function SettingsForm({
   onSaved: () => void;
   onReload: () => void;
 }) {
-  const [form, setForm] = useState<SettingsFormState>(() => toSettingsForm(initial.doc));
+  const [form, setForm] = useState<SettingsFormState>(() => toSettingsForm(initial.doc, initial.redacted ?? []));
   const save = useSaveSettings();
   const problem = save.error ? problemOf(save.error) : null;
   const conflict = problem?.code === "version_conflict";
@@ -357,17 +357,27 @@ function SettingsForm({
             label="Inbound email secret"
             optional
             error={field("email.inboundSecret")}
-            hint="At least 16 characters; sent by your mail provider's webhook in X-Inbox-Email-Secret."
+            hint={
+              form.inboundSecretSet
+                ? "A secret is set. It is never shown again; type a new one to replace it, or leave this empty to keep it."
+                : "At least 16 characters; sent by your mail provider's webhook in X-Inbox-Email-Secret."
+            }
           >
             <input
               id="s-inbound"
               className="input"
               autoComplete="off"
               spellCheck={false}
+              placeholder={form.inboundSecretSet ? "Set; type a new one to replace it" : ""}
               value={form.inboundSecret}
               onChange={(e) => set("inboundSecret", e.target.value)}
             />
           </Field>
+          {form.inboundSecretSet && (
+            <Switch checked={form.removeInboundSecret} onChange={(v) => set("removeInboundSecret", v)}>
+              Remove the inbound email secret: inbound email stops until a new one is set
+            </Switch>
+          )}
         </div>
       </section>
 

@@ -4,6 +4,7 @@ import {
   deliverJobPrefix,
   eventBaseUrl,
   type JobHandler,
+  openWebhookHeaders,
   readSettings,
   rowToItem,
   type SecretBox,
@@ -165,10 +166,14 @@ export function webhookDeliverHandler(deps: DeliverDeps): JobHandler {
     const attempt = Number.isFinite(p.attempt) ? Number(p.attempt) : delivery.attempts;
 
     let secrets: string[];
+    let extra: Record<string, string>;
     try {
       if (!deps.secrets) throw new Error("this instance has no INBOX_SECRET_KEY, so the secret cannot be opened");
       secrets = splitSecrets(await deps.secrets.open("webhook-secret", endpoint.id, endpoint.secretEnc), now);
       if (secrets.length === 0) throw new Error("the stored secret is empty");
+      // The owner's extra headers are sealed the same way; a blob that no longer opens is the same
+      // configuration problem as a signing secret that does not, and is recorded the same way.
+      extra = await openWebhookHeaders(deps.secrets, endpoint.id, endpoint.headersEnc);
     } catch (error) {
       // Our configuration, not the receiver's fault: record it and stop. Nothing retries a missing
       // key, and the delivery stays replayable once the key is back.
@@ -208,6 +213,7 @@ export function webhookDeliverHandler(deps: DeliverDeps): JobHandler {
       eventType: event.type,
       attempt: attemptNumber,
       userAgent: deps.version ? `surfingdog-inbox/${deps.version}` : USER_AGENT,
+      extra,
     });
     const result = await post(endpoint.url, body, headers, conf, deps.fetchImpl);
 
@@ -289,6 +295,10 @@ export interface EventRow {
   readonly partyId: string;
   readonly sandbox: number;
   readonly source: string;
+  readonly actorKind: string;
+  readonly actorId: string | null;
+  readonly actorName: string | null;
+  readonly channel: string | null;
 }
 
 export async function readEvent(db: Db, eventId: string): Promise<EventRow | undefined> {
@@ -304,6 +314,10 @@ export async function readEvent(db: Db, eventId: string): Promise<EventRow | und
       partyId: schema.eventsV1.partyId,
       sandbox: schema.eventsV1.sandbox,
       source: schema.eventsV1.source,
+      actorKind: schema.eventsV1.actorKind,
+      actorId: schema.eventsV1.actorId,
+      actorName: schema.eventsV1.actorName,
+      channel: schema.eventsV1.channel,
     })
     .from(schema.eventsV1)
     .where(eq(schema.eventsV1.id, eventId));

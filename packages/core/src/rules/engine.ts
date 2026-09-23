@@ -175,7 +175,7 @@ export async function buildRuleContext(
 ): Promise<RuleContext> {
   const settings = await readSettings(db);
   const [party] = await db.orm.select({ kind: parties.kind }).from(parties).where(eq(parties.id, item.partyId));
-  const meta = (eventRow.meta ?? {}) as { tier?: string };
+  const meta = (eventRow.meta ?? {}) as { tier?: string; acts_as?: string };
   const thread = await db.orm
     .select({ body: threadEntries.bodyText })
     .from(threadEntries)
@@ -190,7 +190,10 @@ export async function buildRuleContext(
       event: eventRow.event,
       from: eventRow.fromState,
       to: eventRow.toState,
-      actorKind: eventRow.actorKind,
+      // Rules judge an actor the way the state machines do: the owner's AI and an integration key
+      // act as the owner (`acts_as`), so a rule the owner wrote for their own decisions still fires
+      // on the ones made for them. The history, the event stream and the webhooks say who it was.
+      actorKind: typeof meta.acts_as === "string" ? meta.acts_as : eventRow.actorKind,
       tier: meta.tier,
       depth: eventRow.depth,
     },

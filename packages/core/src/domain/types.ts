@@ -13,6 +13,8 @@ export const actorKindSchema = z.enum([
   "owner",
   "staff",
   "owner_ai",
+  /** A key the owner minted for another system (Zapier, a shop, a till). Acts with the owner's rights; scopes narrow it. */
+  "integration",
   "rule",
   "connector",
   "system",

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { actorWord, eventWord, formatDateTime, stateTone, TYPE_CLASS } from "../lib/format";
+import { byWord, eventWord, formatDateTime, stateTone, TYPE_CLASS } from "../lib/format";
 import type { ItemEvent, ItemType } from "../lib/types";
 
 /** Every transition as one line: what happened, by whom, why, when. Dots take the colour of the outcome. */
@@ -23,7 +23,7 @@ export function Timeline({
             <div className="event" key={e.seq}>
               <i className={clsx("dot", dot)} />
               <span>
-                <b>{eventWord(e.event)}</b> by {actorWord(e.actor)}
+                <b>{eventWord(e.event)}</b> by {byWord(e.by, e.actor)}
                 {e.reason ? ` — ${e.reason}` : ""}
               </span>
               <time dateTime={e.at}>{formatDateTime(e.at, tz)}</time>

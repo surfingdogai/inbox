@@ -218,6 +218,13 @@ node /opt/inbox/server.mjs create-owner-key laptop
 
 It prints `sdi_own_…` once. Give it to the person and tell them to store it; it is not shown again.
 
+On Cloudflare there is no command line. Once the person is signed in, they create the key in the
+owner app: Settings → Keys → New key, named after what it is for, with the scopes the steps below
+need (all of them but `keys:write`). It is shown once. Use it as `$OWNER_KEY` below.
+
+Every other system that will call the inbox later (Zapier, a shop, a till) gets a key of its own,
+made the same way with only the scopes it needs, so that one can be revoked without the others.
+
 ---
 
 ## Step 2. Email in
@@ -303,8 +310,13 @@ connector pointing at:
 https://inbox.theirdomain.com/mcp/owner
 ```
 
-It signs in with OAuth. The public tools, for their customers' agents, are at `/mcp` and need no
-sign-in.
+It signs in with OAuth. If the client lets them choose, grant the scopes the work needs; today a
+call outside the granted scopes still goes through and is listed under Settings → Keys, where they
+can see it and switch on refusing such calls. The public tools, for their customers' agents, are at
+`/mcp` and need no sign-in.
+
+If they want their AI to make the keys other systems need, they switch on "Let my AI create keys"
+in Settings → Keys. Only they can switch it on, in the owner app.
 
 ---
 

@@ -1,5 +1,6 @@
-import { and, desc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
+import { AccessCapabilities } from "../access/keys";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
@@ -21,16 +22,28 @@ import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
 import {
   isPlainObject,
   parseStoredSettings,
+  REDACTED_SECRET,
   readSettings,
   reportsTo,
+  SECRET_SETTINGS_PATHS,
   SETTINGS_SCHEMA_VERSION,
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
 import { hashText } from "../util/canonical";
-import { type Caller, isCustomer, nowOf } from "../write/caller";
+import {
+  type Caller,
+  type EventActor,
+  eventActor,
+  isCustomer,
+  isOwnerInPerson,
+  nowOf,
+  permissionKind,
+  withIdempotencyKey,
+} from "../write/caller";
 import { type CreateResult, createItem } from "../write/create";
 import { type FieldProblem, fromZod, WriteError } from "../write/errors";
+import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
@@ -64,7 +77,12 @@ export interface ItemDetail extends ItemView {
     event: string;
     from: string | null;
     to: string;
+    /** `kind:id`, as it always was. */
     actor: string;
+    /** Who caused it: the actor's kind and id, and the name of the key or AI app when there is one. */
+    by: EventActor;
+    /** The door it came through: `rest`, `mcp_owner`, `owner_ui`, `email`, … */
+    channel: string | null;
     reason: string | null;
     at: string;
   }[];
@@ -76,6 +94,14 @@ export interface ItemDetail extends ItemView {
     body: string;
     at: string;
   }[];
+}
+
+/** The settings document as a read returns it: secrets masked, and named in `redacted`. */
+export interface SettingsView {
+  readonly doc: Settings;
+  readonly version: number;
+  /** Settings paths that hold a secret this read masks as `REDACTED_SECRET`, e.g. `email.inboundSecret`. */
+  readonly redacted: readonly string[];
 }
 
 export class Capabilities {
@@ -90,6 +116,9 @@ export class Capabilities {
 
   /** Signed receipts and their acknowledgements (ADR-016). Issued by a job, read by every door. */
   readonly receipts: ReceiptCapabilities;
+
+  /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */
+  readonly access: AccessCapabilities;
 
   /**
    * Seals connector credentials and webhook secrets (ADR-015 §2). Null when the instance has no
@@ -118,6 +147,23 @@ export class Capabilities {
     this.secrets = secrets;
     this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
+    this.access = new AccessCapabilities(db);
+  }
+
+  /**
+   * Runs one of the owner's writes at most once per idempotency key (`write/idempotency.ts`): the
+   * caller's key, when it carries one, is reserved, the write runs, and a retry gets the stored
+   * answer with `replayed: true`. Item writes do not need this; their answer is stored in the
+   * batch that makes them.
+   */
+  once<T>(
+    caller: Caller,
+    op: string,
+    input: unknown,
+    run: () => Promise<T>,
+    opts?: OnceOptions,
+  ): Promise<OnceResult<T>> {
+    return once(this.db, caller, op, input, run, opts);
   }
 
   // ---- public ----------------------------------------------------------------
@@ -135,25 +181,52 @@ export class Capabilities {
     };
   }
 
+  /**
+   * Active services in the order the owner gave them. `next_cursor` is the id of the last service on
+   * the page; passed back as `cursor`, the next page starts right after it (keyset on sort, name, id).
+   */
   async listServices(input: T.ListServicesInput): Promise<Page<typeof services.$inferSelect>> {
+    const conditions: SQL[] = [eq(services.active, 1)];
+    if (input.cursor) {
+      const [c] = await this.db.orm
+        .select({ sort: services.sort, name: services.name, id: services.id })
+        .from(services)
+        .where(eq(services.id, input.cursor));
+      if (!c) throw badCursor();
+      conditions.push(
+        or(
+          gt(services.sort, c.sort),
+          and(eq(services.sort, c.sort), gt(services.name, c.name)),
+          and(eq(services.sort, c.sort), eq(services.name, c.name), gt(services.id, c.id)),
+        ) ?? sql`1`,
+      );
+    }
     const rows = await this.db.orm
       .select()
       .from(services)
-      .where(eq(services.active, 1))
-      .orderBy(services.sort, services.name)
+      .where(and(...conditions))
+      .orderBy(services.sort, services.name, services.id)
       .limit(input.limit + 1);
     return page(rows, input.limit, (r) => r.id);
   }
 
+  /** Active products by name; the cursor works as for services (keyset on name, id). */
   async listProducts(input: T.ListProductsInput): Promise<Page<typeof products.$inferSelect>> {
-    const where = input.q
-      ? and(eq(products.active, 1), sql`lower(${products.name}) LIKE ${`%${input.q.toLowerCase()}%`}`)
-      : eq(products.active, 1);
+    const conditions: SQL[] = [eq(products.active, 1)];
+    if (input.q) conditions.push(sql`lower(${products.name}) LIKE ${`%${input.q.toLowerCase()}%`}`);
+    if (input.cursor) {
+      const [c] = await this.db.orm
+        .select({ name: products.name, id: products.id })
+        .from(products)
+        .where(eq(products.id, input.cursor));
+      if (!c) throw badCursor();
+      conditions.push(or(gt(products.name, c.name), and(eq(products.name, c.name), gt(products.id, c.id))) ?? sql`1`);
+    }
     const rows = await this.db.orm
       .select()
       .from(products)
-      .where(where)
-      .orderBy(products.name)
+      .where(and(...conditions))
+      .orderBy(products.name, products.id)
       .limit(input.limit + 1);
     return page(rows, input.limit, (r) => r.id);
   }
@@ -171,7 +244,7 @@ export class Capabilities {
   }
 
   requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
-    return createItem(this.db, withKey(caller, input.idempotency_key), {
+    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
       type: "quote_request",
       payload: input.payload,
       contact: input.contact,
@@ -180,7 +253,7 @@ export class Capabilities {
   }
 
   createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
-    return createItem(this.db, withKey(caller, input.idempotency_key), {
+    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
       type: "booking",
       payload: input.payload,
       contact: input.contact,
@@ -189,7 +262,7 @@ export class Capabilities {
   }
 
   createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
-    return createItem(this.db, withKey(caller, input.idempotency_key), {
+    return createItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
       type: "order",
       payload: input.payload,
       contact: input.contact,
@@ -198,13 +271,15 @@ export class Capabilities {
   }
 
   async getItemStatus(caller: Caller, input: T.GetItemStatusInput): Promise<ItemView> {
+    await this.access.requireScope(caller, ["inbox:read"], "public:get_item_status");
     const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
     const receipts = await this.receipts.forItem(row.id);
-    return { ...viewFor(rowToItem(row), caller.actor.kind), receipts };
+    return { ...viewFor(rowToItem(row), permissionKind(caller)), receipts };
   }
 
-  cancelItem(caller: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
-    return transitionItem(this.db, withToken(withKey(caller, input.idempotency_key), input.access_token), {
+  async cancelItem(caller: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
+    await this.access.requireScope(caller, ["inbox:write"], "public:cancel_item");
+    return transitionItem(this.db, withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token), {
       itemId: input.item_id,
       event: "cancel",
       ...(input.reason ? { input: { note: input.reason }, reason: input.reason } : {}),
@@ -213,7 +288,7 @@ export class Capabilities {
 
   /** A new conversation, or a reply on an item the caller owns (which reopens an answered message). */
   async sendMessage(caller: Caller, input: T.SendMessageInput): Promise<CreateResult | TransitionResult | ItemView> {
-    const c = withToken(withKey(caller, input.idempotency_key), input.access_token);
+    const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
       return createItem(this.db, c, {
         type: "message",
@@ -223,13 +298,14 @@ export class Capabilities {
         messageId: input.message_id,
       });
     }
+    await this.access.requireScope(caller, ["inbox:write"], "public:send_message");
     const row = await this.loadOwned(c, input.item_id);
     const item = rowToItem(row);
     if (item.type === "message" && item.state !== "open") {
       return transitionItem(this.db, c, { itemId: item.id, event: "reopen", input: { note: input.body } });
     }
     await this.appendEntry(c, item, input.body, "in", input.message_id);
-    return viewFor(item, caller.actor.kind);
+    return viewFor(item, permissionKind(caller));
   }
 
   /**
@@ -238,6 +314,7 @@ export class Capabilities {
    * received — and the acknowledgement itself is checked by the receipt capability.
    */
   async acknowledgeReceipt(caller: Caller, input: T.AcknowledgeReceiptInput): Promise<ReceiptView> {
+    await this.access.requireScope(caller, ["inbox:write"], "public:acknowledge_receipt");
     const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
     return this.receipts.acknowledge(row, input.counter_signature, { now: nowOf(caller), receipt: input.receipt });
   }
@@ -268,7 +345,7 @@ export class Capabilities {
       .orderBy(desc(items.updatedAt), desc(items.id))
       .limit(input.limit + 1);
     const partyViews = await this.partyViews(rows.map((r) => r.partyId));
-    const views = rows.map((r) => viewFor(rowToItem(r), caller.actor.kind, partyViews.get(r.partyId)));
+    const views = rows.map((r) => viewFor(rowToItem(r), permissionKind(caller), partyViews.get(r.partyId)));
     const last = rows[input.limit - 1];
     return {
       items: views.slice(0, input.limit),
@@ -298,7 +375,7 @@ export class Capabilities {
       this.receipts.forItem(item.id),
     ]);
     return {
-      ...viewFor(item, caller.actor.kind, partyViews.get(row.partyId)),
+      ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId)),
       receipts,
       events: events.map((e) => ({
         seq: e.seq,
@@ -306,6 +383,8 @@ export class Capabilities {
         from: e.fromState,
         to: e.toState,
         actor: `${e.actorKind}:${e.actorId}`,
+        by: eventActor(e.actorKind, e.actorId, metaString(e.meta, "actor_name")),
+        channel: metaString(e.meta, "channel") ?? row.channel,
         reason: e.reason,
         at: new Date(e.createdAt).toISOString(),
       })),
@@ -322,7 +401,7 @@ export class Capabilities {
 
   transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
-    return transitionItem(this.db, withKey(caller, input.idempotency_key), {
+    return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
       itemId: input.item_id,
       event: input.event,
       ...(input.input ? { input: input.input } : {}),
@@ -338,17 +417,35 @@ export class Capabilities {
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
     if (!input.internal && item.type === "message" && item.state === "open") {
-      return transitionItem(this.db, withKey(caller, input.idempotency_key), {
+      return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
         itemId: item.id,
         event: "answer",
         input: { note: input.body },
       });
     }
-    await this.appendEntry(caller, item, input.body, input.internal ? "note" : "out");
-    return viewFor(item, caller.actor.kind);
+    // Not a transition, so not stored in a batch: the key is held around the append instead, and a
+    // retried note is written once.
+    const keyed = withIdempotencyKey(caller, input.idempotency_key);
+    const { result } = await once(
+      this.db,
+      keyed,
+      "items.reply",
+      { item_id: input.item_id, body: input.body, internal: input.internal },
+      async () => {
+        await this.appendEntry(caller, item, input.body, input.internal ? "note" : "out");
+        return viewFor(item, permissionKind(caller));
+      },
+    );
+    return result;
   }
 
-  async getSettings(caller: Caller): Promise<{ doc: Settings; version: number }> {
+  /**
+   * The settings document and its version, with every secret masked (`SECRET_SETTINGS_PATHS`,
+   * shown as `REDACTED_SECRET`) and named in `redacted`: the owner's AI reads this, and a secret it
+   * can read is a secret every connected tool can read. A secret is only ever written; writing the
+   * document back as read, or without it, keeps it.
+   */
+  async getSettings(caller: Caller): Promise<SettingsView> {
     requireBusiness(caller);
     const [row] = await this.db.orm
       .select({ doc: settingsTable.doc, version: settingsTable.version })
@@ -356,7 +453,7 @@ export class Capabilities {
       .limit(1);
     // Leniently, like every other reader: a stored value this version rejects is shown as its
     // default, and the owner app saving the page writes only what the owner changed.
-    return { doc: parseStoredSettings(row?.doc ?? {}).settings, version: row?.version ?? 0 };
+    return redact(parseStoredSettings(row?.doc ?? {}).settings, row?.version ?? 0);
   }
 
   /**
@@ -367,7 +464,7 @@ export class Capabilities {
    * been chosen. The result is checked along the paths the caller changed; a stored value that
    * was valid once and is not now does not block a change to something else.
    */
-  async updateSettings(caller: Caller, input: T.UpdateSettingsInput): Promise<{ doc: Settings; version: number }> {
+  async updateSettings(caller: Caller, input: T.UpdateSettingsInput): Promise<SettingsView> {
     requireBusiness(caller);
     const now = nowOf(caller);
     const [row] = await this.db.orm
@@ -375,7 +472,27 @@ export class Capabilities {
       .from(settingsTable)
       .limit(1);
     const stored = row && isPlainObject(row.doc) ? row.doc : {};
-    const prepared = prepareSettingsWrite(stored, input.doc);
+    let doc = withoutMaskedSecrets(input.doc);
+    // `security` is the owner's own: what their AI may do with keys, and whether scopes are
+    // enforced. An AI, or a key handed to another system, must not be able to grant itself either.
+    // Sending it back unchanged is not a change: a client that writes back the whole document it
+    // read (every read has the section) keeps working, and the section is left as it is stored.
+    if (Object.hasOwn(doc, "security") && (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner")) {
+      const { security, ...rest } = doc;
+      const current = parseStoredSettings(stored).settings.security;
+      const wanted = parseStoredSettings(mergeSettings(stored, { security })).settings.security;
+      if (JSON.stringify(current) !== JSON.stringify(wanted)) {
+        throw new WriteError(
+          "not_allowed",
+          "Only the owner can change the security settings, signed in to the owner app (Settings → Keys).",
+          {
+            fields: [{ path: "doc.security", problem: "invalid", message: "only the owner in person can change this" }],
+          },
+        );
+      }
+      doc = rest;
+    }
+    const prepared = prepareSettingsWrite(stored, doc);
     if ("problems" in prepared) {
       throw new WriteError("invalid_input", `Invalid input: ${describeProblems(prepared.problems)}`, {
         fields: prepared.problems,
@@ -432,7 +549,7 @@ export class Capabilities {
     if (started.length) {
       await this.db.batch(started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)));
     }
-    return { doc: after, version };
+    return redact(after, version);
   }
 
   /** Every network in settings, switched on or not, with how it is going and what it has been sent. */
@@ -470,6 +587,12 @@ export class Capabilities {
     return out;
   }
 
+  /**
+   * The item, if the caller may touch it through a public door: a customer only their own, by
+   * party or access token; an owner-side caller any item, which is why the public reads and writes
+   * on an existing item also check the owner-side caller's scopes (`inbox:read`, `inbox:write`) —
+   * a key must not reach through the public door what the owner door would refuse it.
+   */
   private async loadOwned(caller: Caller, itemId: string) {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
     if (!row) throw new WriteError("not_found", "no such item");
@@ -493,10 +616,43 @@ export class Capabilities {
   }
 }
 
-function withKey(caller: Caller, key: string | undefined): Caller {
-  if (!key) return caller;
-  const scope = caller.idempotency?.scope ?? `${caller.actor.kind}:${caller.actor.id}:${caller.actor.channel}`;
-  return { ...caller, idempotency: { scope, key } };
+function metaString(meta: unknown, key: string): string | null {
+  if (!meta || typeof meta !== "object") return null;
+  const v = (meta as Record<string, unknown>)[key];
+  return typeof v === "string" ? v : null;
+}
+
+function redact(settings: Settings, version: number): SettingsView {
+  const doc = structuredClone(settings) as unknown as Record<string, Record<string, unknown> | undefined>;
+  const redacted: string[] = [];
+  for (const [section, key] of SECRET_SETTINGS_PATHS) {
+    const s = doc[section];
+    if (s && s[key] !== undefined) {
+      // Masked, not removed: the key keeps its place and type for every client of the old shape.
+      s[key] = REDACTED_SECRET;
+      redacted.push(`${section}.${key}`);
+    }
+  }
+  return { doc: doc as unknown as Settings, version, redacted };
+}
+
+/** A write that carries a secret as a read masked it means "keep it": that value is left out. */
+function withoutMaskedSecrets(doc: Record<string, unknown>): Record<string, unknown> {
+  let out = doc;
+  for (const [section, key] of SECRET_SETTINGS_PATHS) {
+    const s = out[section];
+    if (isPlainObject(s) && s[key] === REDACTED_SECRET) {
+      const { [key]: _masked, ...rest } = s;
+      out = { ...out, [section]: rest };
+    }
+  }
+  return out;
+}
+
+function badCursor(): WriteError {
+  return new WriteError("invalid_input", "invalid cursor", {
+    fields: [{ path: "cursor", problem: "invalid", message: "pass the next_cursor of the previous page" }],
+  });
 }
 
 function withToken(caller: Caller, token: string | undefined): Caller {

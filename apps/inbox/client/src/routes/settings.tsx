@@ -38,6 +38,9 @@ function SettingsLayout() {
         <Link to="/settings/integrations" className="tab">
           Integrations
         </Link>
+        <Link to="/settings/keys" className="tab">
+          Keys
+        </Link>
         <Link to="/settings/networks" className="tab">
           Networks
         </Link>

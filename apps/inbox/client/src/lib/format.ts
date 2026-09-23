@@ -111,6 +111,7 @@ const ACTOR_WORDS: Record<string, string> = {
   owner: "you",
   staff: "staff",
   owner_ai: "your AI",
+  integration: "a key",
   rule: "a rule",
   customer_human: "the customer",
   customer_agent: "the customer's agent",
@@ -122,6 +123,14 @@ const ACTOR_WORDS: Record<string, string> = {
 export function actorWord(actor: string): string {
   const kind = actor.split(":")[0] ?? actor;
   return ACTOR_WORDS[kind] ?? kind;
+}
+
+/** Who caused an event, with the key's or the AI app's name when the history has it: "the key “Zapier”". */
+export function byWord(by: { kind: string; name?: string | undefined } | undefined, actor: string): string {
+  if (!by) return actorWord(actor);
+  const word = ACTOR_WORDS[by.kind] ?? by.kind;
+  if (!by.name) return word;
+  return by.kind === "owner_ai" ? `your AI “${by.name}”` : by.kind === "integration" ? `the key “${by.name}”` : word;
 }
 
 const CHANNEL_WORDS: Record<string, string> = {

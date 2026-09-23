@@ -526,6 +526,7 @@ function WebhookLine({
   const meta = [
     w.events.join(", "),
     w.payload_style === "full" ? "full payloads" : "thin payloads",
+    w.headers.length ? `headers ${w.headers.join(", ")}` : null,
     `${d.delivered} delivered`,
     d.pending > 0 ? `${d.pending} waiting` : null,
     d.failed > 0 ? `${d.failed} failed` : null,
@@ -613,13 +614,20 @@ function WebhookForm({
   const [everything, setEverything] = useState(true);
   const [chosen, setChosen] = useState<string[]>([]);
   const [full, setFull] = useState(false);
+  const [headers, setHeaders] = useState<{ name: string; value: string }[]>([]);
   const events = everything ? ["*"] : chosen;
+  const filled = headers.filter((h) => h.name.trim() && h.value.trim());
   return (
     <form
       className="confirm row-glass stack"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ url: url.trim(), events, payload_style: full ? "full" : "thin" });
+        onSubmit({
+          url: url.trim(),
+          events,
+          payload_style: full ? "full" : "thin",
+          ...(filled.length ? { headers: Object.fromEntries(filled.map((h) => [h.name.trim(), h.value.trim()])) } : {}),
+        });
       }}
     >
       <Field
@@ -676,7 +684,64 @@ function WebhookForm({
         A thin payload carries the item's id, state and a URL to fetch it, so a retry is never out of date and no
         customer's details are copied to a server you pasted once. Turn this on only if you need everything inline.
       </p>
-      {error && !error.field("url") && !error.field("events") && (
+      <div>
+        <span className="label">Extra headers · optional</span>
+        <div className="hint">
+          For a receiver that checks a header rather than the signature, such as an n8n or Make webhook: for example
+          Authorization with the value it expects. Values are sealed and never shown again.
+        </div>
+        <div className="stack sub">
+          {headers.map((h, i) => (
+            <div className="rowx" key={`header-${i.toString()}`}>
+              <input
+                className="input"
+                aria-label="Header name"
+                placeholder="Authorization"
+                autoComplete="off"
+                value={h.name}
+                onChange={(e) =>
+                  setHeaders((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                }
+              />
+              <input
+                className="input"
+                aria-label="Header value"
+                placeholder="Bearer …"
+                autoComplete="off"
+                spellCheck={false}
+                value={h.value}
+                onChange={(e) =>
+                  setHeaders((prev) => prev.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+                }
+              />
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setHeaders((prev) => prev.filter((_, j) => j !== i))}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {headers.length < 5 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setHeaders((prev) => [...prev, { name: "", value: "" }])}
+              disabled={pending}
+            >
+              <Plus className="icon" aria-hidden="true" />
+              Add a header
+            </button>
+          )}
+        </div>
+        {error?.field("headers") && (
+          <div className="hint error" role="alert">
+            {error.field("headers")}
+          </div>
+        )}
+      </div>
+      {error && !error.field("url") && !error.field("events") && !error.field("headers") && (
         <p className="hint error" role="alert">
           {error.detail}
         </p>

@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import { type ItemFlags, itemFlagsSchema } from "../domain/types";
 import { ulid } from "../ids";
 import { items } from "../schema/tables";
-import { type Caller, nowOf } from "./caller";
+import { actorMeta, type Caller, nowOf, permissionKind } from "./caller";
 import { diagnoseFailure, eventStatement, hasActiveWebhook, webhookFanoutStatement } from "./common";
 import { WriteError } from "./errors";
 import { type ItemView, rowToItem, viewFor } from "./views";
@@ -34,6 +34,7 @@ export async function setFlags(
       actorId: caller.actor.id,
       reason: input.reason ?? null,
       diff: { flags: [item.flags, flags] },
+      meta: { channel: caller.actor.channel, ...actorMeta(caller) },
       causationId: input.causation?.id ?? null,
       depth: input.causation?.depth ?? 0,
       now,
@@ -58,6 +59,6 @@ export async function setFlags(
   }
   return viewFor(
     { ...item, flags, version: seq, updatedAt: new Date(now).toISOString() } as typeof item,
-    caller.actor.kind,
+    permissionKind(caller),
   );
 }

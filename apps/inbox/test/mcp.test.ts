@@ -1,5 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { createApiKey } from "@surfingdog/adapters";
+import { createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
@@ -119,10 +119,21 @@ describe("MCP doors", () => {
       "replay_webhook_delivery",
       "replay_missing_webhook_deliveries",
       "list_events",
+      "list_feeds",
+      "add_feed",
+      "import_feed_now",
+      "remove_feed",
       "get_settings",
       "get_networks",
       "update_settings",
+      "list_api_keys",
+      "create_api_key",
+      "revoke_api_key",
     ]);
+    // Every owner tool names the scopes that let a caller through; one missing is a gap in the
+    // log-first record and, once scopes are enforced, a tool only the owner could call.
+    for (const t of tools.tools) expect(TOOL_SCOPES[t.name], t.name).toBeDefined();
+    expect(Object.keys(TOOL_SCOPES).sort()).toEqual(tools.tools.map((t) => t.name).sort());
     const settings = await client.callTool({ name: "get_settings", arguments: {} });
     expect((settings.structuredContent as { version: number }).version).toBe(0);
   });

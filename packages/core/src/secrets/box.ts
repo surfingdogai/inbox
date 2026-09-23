@@ -23,7 +23,13 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 /** One derived key per purpose, so a connector config is never opened as a webhook secret. */
-export type SecretPurpose = "connector-config" | "webhook-secret" | "receipt-key";
+export type SecretPurpose =
+  | "connector-config"
+  | "webhook-secret"
+  | "webhook-headers"
+  | "receipt-key"
+  /** A stored idempotent answer that carries a secret shown once (a signing secret, a key). */
+  | "idempotent-response";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few

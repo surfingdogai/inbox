@@ -312,8 +312,22 @@ describe("the developer event cursor", () => {
       id: "01JD00000000000000000000A1",
       type: "booking.create",
       timestamp: new Date(T0).toISOString(),
-      data: { id: itemId, type: "booking", state: "requested", version: 1, url: `/v1/owner/items/${itemId}` },
+      data: {
+        id: itemId,
+        type: "booking",
+        state: "requested",
+        version: 1,
+        url: `/v1/owner/items/${itemId}`,
+        // A customer's id is a fingerprint and is not given out; the door falls back to the item's.
+        actor: { kind: "customer_agent", id: null },
+        channel: "rest",
+        sandbox: false,
+      },
     });
+    // The business side is named: this is what a two-way sync compares with its own key.
+    expect(second.events[0]?.data.actor).toEqual({ kind: "owner", id: "user_1" });
+    // An inbound message says which door it came through.
+    expect(first.events[1]?.data.channel).toBe("email");
   });
 
   it("filters by type pattern and by since, and puts the app URL on the pointer", async () => {

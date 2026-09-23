@@ -431,6 +431,13 @@ export const webhooks = sqliteTable("webhooks", {
   failingSince: integer("failing_since"),
   disabledAt: integer("disabled_at"),
   lastError: text("last_error"),
+  /**
+   * Extra request headers the owner asked for (an `Authorization` for an n8n or Make webhook, say),
+   * sealed by the secret box like the signing secret: the values are never returned. Null for none.
+   */
+  headersEnc: text("headers_enc"),
+  /** The names of those headers, in the clear, so Settings can say which are set. */
+  headerNames: text("header_names", { mode: "json" }).$type<string[]>().notNull().default([]),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -518,8 +525,35 @@ export const apiKeys = sqliteTable("api_keys", {
   rateTier: text("rate_tier"),
   lastUsedAt: integer("last_used_at"),
   revokedAt: integer("revoked_at"),
+  /** After this instant the key no longer works. Null: until revoked. */
+  expiresAt: integer("expires_at"),
+  /** Who minted it: `owner:<user id>`, `owner_ai:<client id>`, or `cli`. */
+  createdBy: text("created_by"),
+  /** The key's last four characters, so the owner can tell two keys apart. Never the key. */
+  last4: text("last4"),
   createdAt: createdAt(),
 });
+
+/**
+ * What a key, or an AI app, called outside its scopes (ADR-004, log first). One row per principal
+ * and operation, counted, so a loop does not grow the table. `enforced` says whether the last such
+ * call was refused (scopes enforced) or only recorded.
+ */
+export const scopeRefusals = sqliteTable(
+  "scope_refusals",
+  {
+    principalId: text("principal_id").notNull(),
+    operation: text("operation").notNull(),
+    principalKind: text("principal_kind").notNull(),
+    principalName: text("principal_name"),
+    scope: text("scope").notNull(),
+    count: integer("count").notNull().default(1),
+    enforced: integer("enforced").notNull().default(0),
+    firstAt: integer("first_at").notNull(),
+    lastAt: integer("last_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.principalId, t.operation] })],
+);
 
 export const oauthClients = sqliteTable("oauth_clients", {
   id: id(),
@@ -650,6 +684,10 @@ export const eventsV1 = sqliteView("events_v1", {
   sandbox: integer("sandbox").notNull(),
   actorKind: text("actor_kind").notNull(),
   actorId: text("actor_id"),
+  /** The name the owner knows the actor by (a key's name, an AI app's name); null for everyone else. */
+  actorName: text("actor_name"),
+  /** The door it came through: `rest`, `mcp_owner`, `email`, … Null where no door was involved. */
+  channel: text("channel"),
   event: text("event").notNull(),
   source: text("source").notNull(),
 }).as(sql`SELECT
@@ -664,6 +702,8 @@ export const eventsV1 = sqliteView("events_v1", {
   COALESCE(i."sandbox", 0) AS "sandbox",
   e."actor_kind" AS "actor_kind",
   e."actor_id" AS "actor_id",
+  json_extract(e."meta", '$.actor_name') AS "actor_name",
+  COALESCE(json_extract(e."meta", '$.channel'), i."channel") AS "channel",
   e."event" AS "event",
   'item_event' AS "source"
 FROM "item_events" e JOIN "items" i ON i."id" = e."item_id"
@@ -680,6 +720,8 @@ SELECT
   COALESCE(i."sandbox", 0),
   t."actor_kind",
   t."actor_id",
+  NULL,
+  t."channel",
   'message',
   'thread_entry'
 FROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"
@@ -697,6 +739,8 @@ SELECT
   COALESCE(i."sandbox", 0),
   'system',
   NULL,
+  NULL,
+  'system',
   'receipt_issued',
   'receipt'
 FROM "receipts" r JOIN "items" i ON i."id" = r."item_id"
@@ -712,6 +756,8 @@ SELECT
   i."party_id",
   COALESCE(i."sandbox", 0),
   'customer_agent',
+  NULL,
+  NULL,
   NULL,
   'receipt_acknowledged',
   'receipt_ack'

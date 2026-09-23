@@ -37,6 +37,30 @@ describe("the General settings save", () => {
     expect(after.notifications).toEqual({ appUrl: "https://inbox.example.com" });
   });
 
+  it("keeps the inbound secret a read left out, and removes it only when asked", () => {
+    // A current server never returns the secret; it names it in `redacted`.
+    const loaded = parseStoredSettings({ email: { fromName: "Shop" } }).settings;
+    const form = toSettingsForm(loaded, ["email.inboundSecret"]);
+    expect(form.inboundSecretSet).toBe(true);
+    expect(form.inboundSecret).toBe("");
+    const kept = toSettingsDoc(form).email as Record<string, unknown>;
+    expect(kept).not.toHaveProperty("inboundSecret");
+    const stored = { email: { inboundSecret: "old-secret-0123456789" } };
+    expect(parseStoredSettings(mergeSettings(stored, toSettingsDoc(form))).settings.email.inboundSecret).toBe(
+      "old-secret-0123456789",
+    );
+    // A current server masks it in place and names it in `redacted`: the form treats that the same.
+    const masked = toSettingsForm({ ...loaded, email: { ...loaded.email, inboundSecret: "(redacted)" } }, [
+      "email.inboundSecret",
+    ]);
+    expect(masked).toMatchObject({ inboundSecret: "", inboundSecretSet: true });
+    expect(toSettingsDoc(masked).email).not.toHaveProperty("inboundSecret");
+    const replaced = toSettingsDoc({ ...form, inboundSecret: " new-secret-0123456789 " }).email;
+    expect(replaced).toMatchObject({ inboundSecret: "new-secret-0123456789" });
+    const removed = toSettingsDoc({ ...form, removeInboundSecret: true }).email;
+    expect(removed).toMatchObject({ inboundSecret: null });
+  });
+
   it("sends a number field that holds no number as typed, so the API names it", () => {
     const doc = toSettingsDoc({ ...toSettingsForm(DEFAULT_SETTINGS), autoExpireHours: "", approvalLimit: "12,50" });
     expect(doc.booking).toMatchObject({ autoExpireHours: "", cancellationWindowMin: 1440 });
