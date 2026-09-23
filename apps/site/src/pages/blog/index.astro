@@ -1,7 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import Art from "../../components/Art.astro";
-import CoverReceipts from "../../components/CoverReceipts.astro";
+import { coverAnims } from "../../components/covers";
 import Layout from "../../layouts/Layout.astro";
 
 const posts = (await getCollection("blog")).sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
@@ -16,13 +16,15 @@ const when = (d: Date) =>
     <p class="lede">What we've shipped, and what we're building next.</p>
     <ul class="posts" data-reveal="stagger">
       {
-        posts.map((post) => (
+        posts.map((post) => {
+          const Anim = post.data.coverAnim ? coverAnims[post.data.coverAnim] : undefined;
+          return (
           <li class="glass lift post">
             {/* A post with an animated cover shows THAT cover here, not a still of something
                 else: the index was showing pixel art beside the post's own moving artwork. */}
-            {post.data.coverAnim === "receipts" ? (
+            {Anim ? (
               <a class="cover is-anim" href={`/blog/${post.id}/`} tabindex="-1" aria-hidden="true">
-                <CoverReceipts />
+                <Anim />
               </a>
             ) : post.data.cover ? (
               <a class="cover" href={`/blog/${post.id}/`} tabindex="-1" aria-hidden="true">
@@ -41,7 +43,8 @@ const when = (d: Date) =>
               <p class="desc">{post.data.description}</p>
             </div>
           </li>
-        ))
+          );
+        })
       }
     </ul>
   </section>

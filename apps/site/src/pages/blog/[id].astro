@@ -1,7 +1,7 @@
 ---
 import { type CollectionEntry, getCollection, render } from "astro:content";
 import Art from "../../components/Art.astro";
-import CoverReceipts from "../../components/CoverReceipts.astro";
+import { coverAnims } from "../../components/covers";
 import Layout from "../../layouts/Layout.astro";
 
 export async function getStaticPaths() {
@@ -15,6 +15,7 @@ interface Props {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
+const Anim = post.data.coverAnim ? coverAnims[post.data.coverAnim] : undefined;
 const date = post.data.date.toLocaleDateString("en-GB", {
   day: "numeric",
   month: "long",
@@ -26,7 +27,7 @@ const date = post.data.date.toLocaleDateString("en-GB", {
 <Layout
   title={`${post.data.title} · Surfing Dog`}
   description={post.data.description}
-  image={post.data.cover ?? "/art/og-flow.png"}
+  image={post.data.og ?? post.data.cover ?? "/art/og-flow.png"}
   type="article"
 >
   <article class="wrap post">
@@ -39,11 +40,11 @@ const date = post.data.date.toLocaleDateString("en-GB", {
       </p>
     </header>
     {
-      /* An animated cover takes the place of the still one on the page. `image` above still
-         points at post.data.cover, because a social card cannot run a script. */
-      post.data.coverAnim === "receipts" ? (
+      /* The animated cover takes the place of the still one on the page. The social card is
+         post.data.og, because a social card cannot run a script. */
+      Anim ? (
         <div class="cover">
-          <CoverReceipts />
+          <Anim />
         </div>
       ) : post.data.cover ? (
         <div class="cover">

@@ -21,11 +21,15 @@ export const collections = {
       cover: z.string().optional(),
       coverAlt: z.string().optional(),
       /**
-       * An animated cover, drawn in a component instead of the still image. It replaces `cover`
-       * on the post page only: `cover` stays the post's real picture for the social card and for
-       * the index tile, because an og:image cannot be a script.
+       * The post's animated cover (src/components/covers.ts): it explains the post, and replaces the
+       * still `cover` on the post page and on the blog index. Every post has one.
        */
-      coverAnim: z.enum(["receipts"]).optional(),
+      coverAnim: z.enum(["receipts", "flood", "networks", "open"]).optional(),
+      /**
+       * Public path of the post's social card (1200×630), made for the post by
+       * scripts/og-post.mjs: its art and its one idea in words. Falls back to `cover`.
+       */
+      og: z.string().optional(),
     }),
   }),
 };

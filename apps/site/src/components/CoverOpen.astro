@@ -1,0 +1,561 @@
+---
+/**
+ * The cover for "Surfing Dog Inbox is open", drawing the post in four beats.
+ *
+ *  1. Two kinds of sender, one door. A person on the left sends an email; an AI agent below them
+ *     sends a request. Their two lines meet at a single port on the inbox, because the post's
+ *     first claim is that there is one inbox for both.
+ *  2. Whatever arrives becomes a typed item with a state. Each thing that comes through the door
+ *     lands as a row — Message, Booking, Quote, Order, the four types the post names, each in its
+ *     own colour — and every row carries its own state from the moment it lands. The booking
+ *     confirms itself (a rule, the bike shop's small booking with a free slot); the quote waits
+ *     for a person — "Needs you", the homepage hero's word for it — with the amber dot that
+ *     breathes, as the plumber's rule sends it. This is the point of the post, so it owns the
+ *     longest beat: 6 s of a 13.9 s loop.
+ *  3. The owner answers the rest, or their own AI does. "You" answers the message; "Your AI"
+ *     confirms the order. Each reply travels in through the right-hand port and the row's state
+ *     turns over. The quote is left waiting on purpose: at a glance you can see what still needs
+ *     an answer, which is the sentence the post spends on states.
+ *  4. The code is open. The footer of the inbox draws itself: a code mark, "Open source" and "Run
+ *     it yourself", and the card's edge takes the palm tint. The post says the business can run it
+ *     itself today and that hosting for others is not offered yet, so hosting is not drawn.
+ *
+ * Nothing here claims a shipped feature the post does not: no status chip, no count, no logo, no
+ * interface chrome. The words are the post's own — the four types, a handful of states, "Open
+ * source", "Run it yourself" — and it is an explanation, drawn.
+ *
+ * Built the way CoverReceipts.astro and HeroFlow.astro are built. The scene ships as inline SVG,
+ * so the box is never empty and a throw leaves a finished picture; that markup is the composed
+ * frame at t = 11.7 s and the live clock starts there, so there is no mount flicker, and a visitor
+ * gets the whole picture for 1.5 s before the loop clears it. Reduced motion is the same machine
+ * stepped to that frame, carrying all four beats at once. It stops when nobody is looking, and
+ * has no max-width of its own — aspect-ratio holds the box open.
+ *
+ * Two day inks are a step darker than the tokens: the Message and Order labels use #0b6a75 and
+ * #9c4409 in light, as HeroFlow does, because the token values miss 4.5:1 on the glass at this
+ * size. Night uses the host's own ink tokens.
+ */
+---
+
+<figure
+  class="sdo"
+  role="img"
+  aria-label="A person's email and an AI agent's request arrive through the same door of one inbox. Each becomes a typed item — a message, a booking, a quote, an order — with its own state: the booking confirms itself, the quote waits for a person, and the owner or the owner's own AI answers the rest. The inbox's code is open source, so a business can run it itself."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="sdo-sun" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="var(--sdo-tangerine)"/>
+<stop offset="58%" stop-color="var(--sdo-flam)"/>
+<stop offset="100%" stop-color="var(--sdo-violet)"/>
+</linearGradient>
+<clipPath id="sdo-sunclip"><path d="M212,67 A11,11 0 0 1 234,67 Z"/></clipPath>
+</defs>
+
+<path d="M103,110 C150,110 149,178 196,178" class="sdo-line sdo-in"/>
+<path d="M103,246 C150,246 149,178 196,178" class="sdo-line sdo-in"/>
+<path d="M444,178 C491,178 490,110 537,110" class="sdo-line"/>
+<path d="M444,178 C491,178 490,246 537,246" class="sdo-line"/>
+<path d="M537,110 C490,110 491,178 444,178" class="sdo-guide"/>
+<path d="M537,246 C490,246 491,178 444,178" class="sdo-guide"/>
+
+<rect x="196" y="38" width="248" height="280" rx="14" class="sdo-card"/>
+<path d="M320,318 H210 A14,14 0 0 1 196,304 V52 A14,14 0 0 1 210,38 H320" class="sdo-glow" style="opacity:.4"/>
+<path d="M320,318 H430 A14,14 0 0 0 444,304 V52 A14,14 0 0 0 430,38 H320" class="sdo-glow" style="opacity:.4"/>
+<g class="sdo-head">
+<path d="M212,67 A11,11 0 0 1 234,67 Z" fill="url(#sdo-sun)"/>
+<g clip-path="url(#sdo-sunclip)">
+<rect x="211" y="58.4" width="24" height=".9" class="sdo-knock"/>
+<rect x="211" y="60.7" width="24" height=".9" class="sdo-knock"/>
+<rect x="211" y="62.8" width="24" height=".9" class="sdo-knock"/>
+</g>
+<text x="242" y="67" class="sdo-title">Your inbox</text>
+</g>
+<line x1="212" y1="81" x2="428" y2="81" class="sdo-hair"/>
+
+<g class="sdo-row t-message">
+<rect x="212" y="96" width="216" height="34" rx="8" class="bg"/>
+<rect x="212" y="101" width="2.5" height="24" rx="1.25" class="bar"/>
+<text x="226" y="113" dy=".35em" class="sdo-lb">Message</text>
+<g class="sdo-was" style="opacity:0"><text x="400" y="113" dy=".35em" text-anchor="end" class="sdo-st">New</text><g class="sdo-ico"><circle cx="414" cy="113" r="5.2" class="sdo-new"/></g></g>
+<g class="sdo-now is-done"><text x="400" y="113" dy=".35em" text-anchor="end" class="sdo-st">Answered</text><g class="sdo-ico"><circle cx="414" cy="113" r="7.4" class="disc"/><path d="M410.4,113.4 l2.7,2.9 l5.1,-6.2" class="tick"/></g></g>
+<g class="sdo-ico"><circle cx="414" cy="113" r="7.4" class="sdo-pop"/></g>
+</g>
+<g class="sdo-row t-booking">
+<rect x="212" y="138" width="216" height="34" rx="8" class="bg"/>
+<rect x="212" y="143" width="2.5" height="24" rx="1.25" class="bar"/>
+<text x="226" y="155" dy=".35em" class="sdo-lb">Booking</text>
+<g class="sdo-was" style="opacity:0"><text x="400" y="155" dy=".35em" text-anchor="end" class="sdo-st">New</text><g class="sdo-ico"><circle cx="414" cy="155" r="5.2" class="sdo-new"/></g></g>
+<g class="sdo-now is-done"><text x="400" y="155" dy=".35em" text-anchor="end" class="sdo-st">Confirmed</text><g class="sdo-ico"><circle cx="414" cy="155" r="7.4" class="disc"/><path d="M410.4,155.4 l2.7,2.9 l5.1,-6.2" class="tick"/></g></g>
+<g class="sdo-ico"><circle cx="414" cy="155" r="7.4" class="sdo-pop"/></g>
+</g>
+<g class="sdo-row t-quote">
+<rect x="212" y="180" width="216" height="34" rx="8" class="bg"/>
+<rect x="212" y="185" width="2.5" height="24" rx="1.25" class="bar"/>
+<text x="226" y="197" dy=".35em" class="sdo-lb">Quote</text>
+<g class="sdo-was" style="opacity:0"><text x="400" y="197" dy=".35em" text-anchor="end" class="sdo-st">New</text><g class="sdo-ico"><circle cx="414" cy="197" r="5.2" class="sdo-new"/></g></g>
+<g class="sdo-now is-wait"><text x="400" y="197" dy=".35em" text-anchor="end" class="sdo-st">Needs you</text><g class="sdo-ico"><circle cx="414" cy="197" r="6.8" class="ring"/><circle cx="414" cy="197" r="3.7" class="dot"/></g></g>
+<g class="sdo-ico"><circle cx="414" cy="197" r="7.4" class="sdo-pop"/></g>
+</g>
+<g class="sdo-row t-order">
+<rect x="212" y="222" width="216" height="34" rx="8" class="bg"/>
+<rect x="212" y="227" width="2.5" height="24" rx="1.25" class="bar"/>
+<text x="226" y="239" dy=".35em" class="sdo-lb">Order</text>
+<g class="sdo-was" style="opacity:0"><text x="400" y="239" dy=".35em" text-anchor="end" class="sdo-st">New</text><g class="sdo-ico"><circle cx="414" cy="239" r="5.2" class="sdo-new"/></g></g>
+<g class="sdo-now is-done"><text x="400" y="239" dy=".35em" text-anchor="end" class="sdo-st">Confirmed</text><g class="sdo-ico"><circle cx="414" cy="239" r="7.4" class="disc"/><path d="M410.4,239.4 l2.7,2.9 l5.1,-6.2" class="tick"/></g></g>
+<g class="sdo-ico"><circle cx="414" cy="239" r="7.4" class="sdo-pop"/></g>
+</g>
+
+<g class="sdo-foot">
+<line x1="212" y1="271" x2="428" y2="271" class="sdo-hair sdo-fline"/>
+<path d="M217,289.5 L212.5,294.5 L217,299.5 M227,289.5 L231.5,294.5 L227,299.5 M224,288 L220,301" class="sdo-code"/>
+<text x="240" y="294.5" dy=".35em" class="sdo-open">Open source</text>
+<text x="428" y="294.5" dy=".35em" text-anchor="end" class="sdo-run">Run it yourself</text>
+</g>
+
+<circle cx="196" cy="178" r="2.6" class="sdo-port"/>
+<circle cx="444" cy="178" r="2.6" class="sdo-port"/>
+<circle cx="196" cy="178" r="6" class="sdo-pulse"/>
+<circle cx="444" cy="178" r="6" class="sdo-pulse"/>
+
+<g class="sdo-av">
+<rect x="69" y="93" width="34" height="34" rx="10" class="tint"/>
+<rect x="69" y="93" width="34" height="34" rx="10" class="frame"/>
+<rect x="65" y="89" width="42" height="42" rx="13" class="halo"/>
+<circle cx="86" cy="106" r="5" class="face"/>
+<path d="M76,122.5 C77,114.8 95,114.8 96,122.5" class="face"/>
+</g>
+<g class="sdo-av a-agent">
+<rect x="69" y="229" width="34" height="34" rx="10" class="tint"/>
+<rect x="69" y="229" width="34" height="34" rx="10" class="frame"/>
+<rect x="65" y="225" width="42" height="42" rx="13" class="halo"/>
+<circle cx="79.8" cy="245.5" r="2.4" class="eye"/>
+<circle cx="92.2" cy="245.5" r="2.4" class="eye"/>
+<line x1="86" y1="229" x2="86" y2="221" class="frame"/>
+<circle cx="86" cy="218" r="3" class="ant"/>
+</g>
+<g class="sdo-av a-you">
+<rect x="537" y="93" width="34" height="34" rx="10" class="tint"/>
+<rect x="537" y="93" width="34" height="34" rx="10" class="frame"/>
+<rect x="533" y="89" width="42" height="42" rx="13" class="halo"/>
+<circle cx="554" cy="106" r="5" class="face"/>
+<path d="M544,122.5 C545,114.8 563,114.8 564,122.5" class="face"/>
+</g>
+<g class="sdo-av a-ai">
+<rect x="537" y="229" width="34" height="34" rx="10" class="tint"/>
+<rect x="537" y="229" width="34" height="34" rx="10" class="frame"/>
+<rect x="533" y="225" width="42" height="42" rx="13" class="halo"/>
+<circle cx="547.8" cy="245.5" r="2.4" class="eye"/>
+<circle cx="560.2" cy="245.5" r="2.4" class="eye"/>
+<line x1="554" y1="229" x2="554" y2="221" class="frame"/>
+<circle cx="554" cy="218" r="3" class="ant"/>
+</g>
+<text x="86" y="75" text-anchor="middle" class="sdo-cap">PEOPLE</text>
+<text x="86" y="282.4" dy=".72em" text-anchor="middle" class="sdo-cap">AI AGENTS</text>
+<text x="554" y="75" text-anchor="middle" class="sdo-cap">YOU</text>
+<text x="554" y="282.4" dy=".72em" text-anchor="middle" class="sdo-cap">YOUR AI</text>
+
+<g class="sdo-obj t-message" style="opacity:0">
+<rect x="-9.5" y="-7" width="19" height="14" rx="2.6" class="paper"/>
+<path d="M-7.6,-4.6 L0,1.2 L7.6,-4.6" class="ink"/>
+<circle cx="9" cy="-7" r="3.6" class="tag"/>
+</g>
+<g class="sdo-obj t-booking" style="opacity:0">
+<rect x="-9" y="-7" width="18" height="14" rx="4" class="paper"/>
+<path d="M-4.6,-1.7 H4.6 M-4.6,2.3 H1.4" class="ink"/>
+<circle cx="9" cy="-7" r="3.6" class="tag"/>
+</g>
+<g class="sdo-obj t-quote" style="opacity:0">
+<rect x="-9.5" y="-7" width="19" height="14" rx="2.6" class="paper"/>
+<path d="M-7.6,-4.6 L0,1.2 L7.6,-4.6" class="ink"/>
+<circle cx="9" cy="-7" r="3.6" class="tag"/>
+</g>
+<g class="sdo-obj t-order" style="opacity:0">
+<rect x="-9" y="-7" width="18" height="14" rx="4" class="paper"/>
+<path d="M-4.6,-1.7 H4.6 M-4.6,2.3 H1.4" class="ink"/>
+<circle cx="9" cy="-7" r="3.6" class="tag"/>
+</g>
+<g class="sdo-reply" style="opacity:0">
+<circle r="7.6" class="disc"/>
+<path d="M-3.1,.2 L-.9,2.5 L3.3,-2.7" class="mark"/>
+</g>
+<g class="sdo-reply" style="opacity:0">
+<circle r="7.6" class="disc"/>
+<path d="M-3.1,.2 L-.9,2.5 L3.3,-2.7" class="mark"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sdo and every keyframe is sdo-*, so nothing leaks.
+   .sdo is also the query container the width steps match. Colours are properties:
+   host token first, brand literal only as the fallback, one theme block through
+   light-dark() as CoverReceipts does, because the tokens package sets color-scheme
+   in all three theme cases. */
+.sdo{
+  --sdo-ground:var(--ground,light-dark(#f6f5ff,#0d0e26));
+  --sdo-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sdo-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sdo-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sdo-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sdo-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --sdo-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --sdo-flam:var(--flamingo,#ff6fa8);
+  --sdo-violet:var(--violet,#8a6bff);
+  --sdo-lagoon:var(--lagoon,#25cfe0);
+  --sdo-tangerine:var(--tangerine,#ff9650);
+  --sdo-palm:var(--palm,#2fd3a5);
+  --sdo-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --sdo-sun:var(--sun,#ffcf5c);
+  --sdo-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --sdo-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+/* One pair of properties carries a row's type: the bar and the word. */
+.sdo .t-message{--tc:var(--sdo-lagoon);--ti:light-dark(#0b6a75,var(--lagoon-ink,#63e2ee))}
+.sdo .t-booking{--tc:var(--sdo-flam);--ti:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc))}
+.sdo .t-quote{--tc:var(--sdo-violet);--ti:var(--violet-ink,light-dark(#5a3fd0,#ab95ff))}
+.sdo .t-order{--tc:var(--sdo-tangerine);--ti:light-dark(#9c4409,var(--tangerine-ink,#ffb27c))}
+
+.sdo svg{display:block;width:100%;height:auto;--sdo-k:1}   /* --sdo-k: how much bigger a traveller draws at this reading size (read by fit()) */
+.sdo text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdo-ink2)}
+.sdo .sdo-title{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.sdo .sdo-cap{font-size:10.5px;letter-spacing:.11em}
+.sdo .sdo-hair{stroke:var(--sdo-hair);stroke-width:1}
+.sdo .sdo-knock{fill:var(--sdo-ground)}
+
+/* the two routes in and the two routes back */
+.sdo .sdo-line{fill:none;stroke:var(--sdo-ink3);stroke-opacity:.34;stroke-width:1.1}
+.sdo .sdo-guide{fill:none;stroke:none}   /* geometry the replies travel, never ink */
+.sdo .sdo-port{fill:var(--sdo-ink3);fill-opacity:.55;transform-box:fill-box;transform-origin:50% 50%}
+.sdo .sdo-pulse{fill:none;stroke:var(--sdo-ink3);stroke-width:1.1;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdo .sdo-pulse.on{animation:sdo-pulse .6s var(--sdo-ease)}
+@keyframes sdo-pulse{0%{opacity:.55;transform:scale(.7)}100%{opacity:0;transform:scale(1.9)}}
+
+/* glass: a wash and a hairline, never a shadow that reads as a sticker */
+.sdo .sdo-card{fill:var(--sdo-glass);stroke:var(--sdo-glassb);stroke-width:1}
+.sdo .sdo-glow{fill:none;stroke:var(--sdo-palm);stroke-width:1.3}
+
+/* People and agents are drawn in ink, one face each, the same frame for both. */
+.sdo .sdo-av .frame{fill:none;stroke:var(--sdo-ink2);stroke-opacity:.55;stroke-width:1.3}
+.sdo .sdo-av .tint{fill:var(--ac,var(--sdo-ink3));fill-opacity:.07}
+.sdo .sdo-av .face{fill:none;stroke:var(--sdo-ink2);stroke-opacity:.62;stroke-width:1.5;stroke-linecap:round}
+.sdo .sdo-av .eye{fill:var(--sdo-ink2);fill-opacity:.55}
+.sdo .sdo-av .ant{fill:var(--ac,var(--sdo-violet))}
+.sdo .sdo-av.a-agent{--ac:var(--sdo-violet)}
+.sdo .sdo-av.a-ai{--ac:var(--sdo-palm)}
+.sdo .sdo-av .halo{fill:none;stroke:var(--ac,var(--sdo-ink3));stroke-opacity:0;stroke-width:1.3;transform-box:fill-box;transform-origin:50% 50%}
+.sdo .sdo-av.a-you{--ac:var(--sdo-palm)}
+.sdo .sdo-av.wake .halo{animation:sdo-halo .66s var(--sdo-ease)}
+@keyframes sdo-halo{0%{stroke-opacity:.5;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.26)}}
+
+/* what travels: an email, an agent's request, and a reply */
+.sdo .sdo-obj .paper{fill:var(--sdo-ground);stroke:var(--sdo-ink2);stroke-opacity:.6;stroke-width:1.1}
+.sdo .sdo-obj .ink{fill:none;stroke:var(--sdo-ink2);stroke-opacity:.6;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.sdo .sdo-obj .tag{fill:var(--tc);stroke:var(--sdo-ground);stroke-width:1.2;transform-box:fill-box;transform-origin:50% 50%}
+.sdo .sdo-reply .disc{fill:var(--sdo-ground);stroke:var(--sdo-palm);stroke-opacity:.7;stroke-width:1.1}
+.sdo .sdo-reply .mark{fill:none;stroke:var(--sdo-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* the rows: a type, and a state of its own */
+.sdo .sdo-row .bg{fill:var(--sdo-row);stroke:var(--sdo-hair);stroke-width:1}
+.sdo .sdo-row .bar{fill:var(--tc);transform-box:fill-box;transform-origin:0 50%}   /* on the row's edge, as the heroes draw it */
+.sdo .sdo-lb{font-size:12.5px;font-weight:600;fill:var(--ti)}
+.sdo .sdo-st{font-size:11px;fill:var(--sdo-ink3)}
+.sdo .is-done .sdo-st{fill:var(--sdo-palm-i)}
+.sdo .is-wait .sdo-st{fill:var(--sdo-sun-i)}
+.sdo .sdo-new{fill:none;stroke:var(--sdo-ink3);stroke-opacity:.6;stroke-width:1.2}
+.sdo .is-done .disc{fill:var(--sdo-palm);fill-opacity:.14;stroke:var(--sdo-palm);stroke-opacity:.6;stroke-width:1.1}
+.sdo .is-done .tick{fill:none;stroke:var(--sdo-palm-i);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sdo .is-wait .dot{fill:var(--sdo-sun)}
+.sdo .is-wait .ring{fill:none;stroke:var(--sdo-sun);stroke-width:1.2;opacity:.4;animation:sdo-breathe 2.8s var(--sdo-ease) infinite}
+@keyframes sdo-breathe{0%,100%{opacity:.18}50%{opacity:.55}}
+.sdo .sdo-ico{transform-box:fill-box;transform-origin:50% 50%}
+.sdo .sdo-pop{fill:none;stroke:var(--sdo-palm);stroke-width:1.3;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdo .t-quote .sdo-pop{stroke:var(--sdo-sun)}
+.sdo .sdo-pop.on{animation:sdo-pop .74s var(--sdo-ease)}
+@keyframes sdo-pop{0%{opacity:.65;transform:scale(.8)}100%{opacity:0;transform:scale(1.6)}}
+
+/* the footer: the code is open */
+.sdo .sdo-code{fill:none;stroke:var(--sdo-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sdo .sdo-open{font-size:12.5px;font-weight:600;fill:var(--sdo-ink2)}
+.sdo .sdo-run{font-size:11.5px;fill:var(--sdo-ink3)}
+.sdo .sdo-run.cramped{display:none}
+
+/* The viewBox is fixed, so reading size falls with the drawn width. The steps
+   are the ones CoverReceipts measured — 750 CSS px for a post at 1440, about 320
+   on a phone, 224 in the blog index — and each keeps its words at a size that
+   reads. Below 600 the state words and "Run it yourself" step out: the tick,
+   the ring and the amber dot say the state without them, so they grow into the
+   room the words leave. Every word in a row is placed on the row's centre line
+   with a dy in em, and the lower captions hang from their cap line the same
+   way, so a step that changes a size never moves a word off its line. What
+   travels grows with the same steps (--sdo-k, applied by the script, which
+   owns the travellers' transforms) and its strokes thicken to the lines', so
+   an email or a reply never shrinks to a speck beside the icons it becomes.
+   The type stripe sits on the row's edge and only thickens: set in front of
+   the word, it read as a letter on a phone ("I Quote", "I Order"). */
+@container (max-width:600px){
+  .sdo svg{--sdo-k:1.2}
+  .sdo .sdo-cap{font-size:14px}
+  .sdo .sdo-title{font-size:17px}
+  .sdo .sdo-lb{font-size:16px}
+  .sdo .sdo-open{font-size:15.5px}
+  .sdo .sdo-st,.sdo .sdo-run{display:none}
+  .sdo .sdo-ico{transform:translateX(-4px) scale(1.3)}
+  .sdo .sdo-line{stroke-width:1.4}
+  .sdo .sdo-row .bar{transform:scaleX(1.4)}
+}
+@container (max-width:400px){
+  .sdo svg{--sdo-k:1.4}
+  .sdo .sdo-obj .paper,.sdo .sdo-obj .ink,.sdo .sdo-reply .disc{stroke-width:1.45}
+  .sdo .sdo-reply .mark{stroke-width:1.9}
+  .sdo .sdo-port{transform:scale(1.35)}
+  .sdo .sdo-pulse{stroke-width:1.9}
+  .sdo .sdo-cap{font-size:22px;letter-spacing:.05em}
+  .sdo .sdo-title{font-size:26px}
+  .sdo .sdo-lb{font-size:23px}
+  .sdo .sdo-open{font-size:21px}
+  .sdo .sdo-line{stroke-width:2}
+  .sdo .sdo-av .frame,.sdo .sdo-av .face{stroke-width:2}
+  .sdo .sdo-code{stroke-width:2.2}
+  .sdo .sdo-ico{transform:translateX(-9px) scale(1.6)}
+  .sdo .sdo-head{transform:translateY(3px)}
+  .sdo .sdo-row .bar{transform:scaleX(1.8)}
+}
+
+/* Off screen or on a hidden tab the clock stops and sdo-paused stops the CSS
+   keyframes with it. !important because the rules that start them use the
+   animation shorthand, which resets play-state and is more specific. */
+.sdo.sdo-still,.sdo.sdo-still *{animation:none!important;transition:none!important}
+.sdo.sdo-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdo *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+// Typing it would mean rewriting it, and the composition and the timings are the deliverable.
+(function(){
+"use strict";
+
+/* Newton solve for a CSS cubic-bezier, so the JS eases match the keyframes beside them. */
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    eSine=function(t){return -(Math.cos(Math.PI*t)-1)/2;},   /* calm travel */
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* The timeline, in seconds. Beat two, the arrivals, runs 0.35 to 6.4 — 6 s of
+   a 13.9 s loop — because it is the point. Do not retune these by accident.
+   IN: what arrives. from 0 is the person's line, 1 the agent's; row is the slot
+   it lands in. OUT: the owner's replies; who 0 is You, 1 is Your AI, and row is
+   the row it answers. Every traveller rides its line to the port, pauses there
+   for the pulse, then hops along the card's inner gutter to its own row (HOP). */
+var IN=[{at:.35,tr:1.05,from:0,row:0},
+        {at:1.60,tr:.95,from:1,row:1},
+        {at:3.30,tr:1.05,from:0,row:2},
+        {at:4.60,tr:.95,from:1,row:3}],
+    OUT=[{at:6.55,tr:.90,who:0,row:0},
+         {at:7.95,tr:.90,who:1,row:3}],
+    RULE={1:3.45,2:5.15},   /* the booking confirms itself; the quote is sent to a person */
+    HOP=.42,
+    YC=[113,155,197,239],   /* row centres */
+    S0=13,                  /* travellers set off this far along the line, clear of the avatar */
+    OPEN=9.85,
+    EXIT=13.20,
+    LOOP=13.90,
+    STILL=11.70;            /* the frame the markup ships and the clock starts from: 1.5 s before EXIT */
+
+/* the hop inside the card: a short S from a port to one row's end, as a cubic */
+function hopIn(r){return [196,178,206.5,178,205.5,YC[r],213,YC[r]];}
+function hopOut(r){return [444,178,436,178,436,178+(YC[r]-178)*.35,436,YC[r]];}
+function cub(h,u){
+  var v=1-u,a=v*v*v,b=3*v*v*u,c=3*v*u*u,d=u*u*u;
+  return {x:a*h[0]+b*h[2]+c*h[4]+d*h[6],y:a*h[1]+b*h[3]+c*h[5]+d*h[7]};
+}
+
+function mount(fig){
+  if(fig.getAttribute("data-sdo")==="on")return;   /* one scene per figure, however often this runs */
+
+  /* Every lookup happens before the first mutation, so a missing node throws
+     with the shipped picture still as the server drew it. */
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverOpen "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverOpen "+s);return [].slice.call(l);}
+
+  var tags=qa(".sdo-obj .tag"),
+      lines=qa(".sdo-in"),guides=qa(".sdo-guide"),rows=qa(".sdo-row"),
+      was=qa(".sdo-was"),now=qa(".sdo-now"),pops=qa(".sdo-pop"),
+      objs=qa(".sdo-obj"),replies=qa(".sdo-reply"),avs=qa(".sdo-av"),pulses=qa(".sdo-pulse"),
+      fline=q(".sdo-fline"),code=q(".sdo-code"),openTx=q(".sdo-open"),runTx=q(".sdo-run"),
+      glows=qa(".sdo-glow"),svg=q("svg");
+
+  fig.setAttribute("data-sdo","on");
+
+  var LL=lines.map(function(l){return l.getTotalLength();}),
+      GL=guides.map(function(g){return g.getTotalLength();}),
+      WL=glows.map(function(g){return g.getTotalLength();}),
+      CL=code.getTotalLength(),
+      FL=216,
+      FLIP=[99,99,99,99];
+  IN.forEach(function(e){if(RULE[e.row]!=null)FLIP[e.row]=RULE[e.row];});
+  OUT.forEach(function(e){FLIP[e.row]=e.at+e.tr+HOP;});
+  code.style.strokeDasharray=CL;
+  fline.style.strokeDasharray=FL;
+  glows.forEach(function(w,i){WL[i]+=2;w.style.strokeDasharray=WL[i]+" "+WL[i];});   /* +2: no seam where the halves meet */
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y,s){e.style.transform="translate("+x+"px,"+y+"px)"+(s?" scale("+s+")":"");}
+  /* A traveller fades in as it sets off, rides its line to the port, then hops
+     to its row, shrinking to fit the gutter, and fades as it gets there. K is
+     its size at this reading size (the stylesheet's --sdo-k); it sets off that
+     much further out so it clears the avatar, and always lands at .66. */
+  var K=1;
+  function fly(el,path,len,a,d,h,t,g){
+    var b=a+d,c=b+HOP,s0=S0*K,p,u;
+    if(t<a||t>c+.12){op(el,0);return;}
+    if(t<=b){p=path.getPointAtLength(s0+eSine(seg(t,a,b))*(len-s0));mv(el,p.x,p.y,K);}
+    else{u=eSine(seg(t,b+.04,c));p=cub(h,u);mv(el,p.x,p.y,K-(K-.66)*u);}
+    op(el,g*Math.min(ramp(t,a,a+.18),1-ramp(t,c-.16,c+.04)));
+  }
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),u,k;
+
+    /* 1 and 2. an email and an agent's request come in through the same door */
+    IN.forEach(function(e,i){
+      fly(objs[i],lines[e.from],LL[e.from],e.at,e.tr,hopIn(e.row),t,g);
+      /* at the door it is given its type: a tag in the colour its row will be */
+      var b=e.at+e.tr,v=ramp(t,b-.12,b+.2);
+      tags[i].style.transform="scale("+v+")";op(tags[i],v);
+    });
+
+    /* 2. each lands as a typed row, and every row has a state from the start */
+    IN.forEach(function(e){
+      var r=e.row,land=e.at+e.tr+HOP;
+      u=ramp(t,land-.06,land+.45);
+      op(rows[r],g*u);mv(rows[r],-12*(1-u),0);
+      /* one state word at a time: the old one leaves before the new one arrives */
+      op(was[r],1-ramp(t,FLIP[r],FLIP[r]+.16));op(now[r],ramp(t,FLIP[r]+.14,FLIP[r]+.42));
+    });
+
+    /* 3. the owner answers, or the owner's own AI does */
+    OUT.forEach(function(e,j){fly(replies[j],guides[e.who],GL[e.who],e.at,e.tr,hopOut(e.row),t,g);});
+
+    /* 4. the code is open, and the whole card is lit from its footer up */
+    fline.style.strokeDashoffset=FL*(1-ramp(t,OPEN-.1,OPEN+.7));
+    op(fline,g);
+    code.style.strokeDashoffset=CL*(1-ramp(t,OPEN+.15,OPEN+.95));
+    op(code,g*ramp(t,OPEN+.15,OPEN+.3));
+    u=ramp(t,OPEN+.55,OPEN+1.05);op(openTx,g*u);mv(openTx,-6*(1-u),0);
+    u=ramp(t,OPEN+.95,OPEN+1.45);op(runTx,g*u);mv(runTx,6*(1-u),0);
+    u=ramp(t,OPEN+.55,OPEN+1.35);
+    k=g*(t<OPEN+.55?0:.9-.5*ramp(t,OPEN+1.3,OPEN+1.8));
+    glows.forEach(function(w,i){w.style.strokeDashoffset=WL[i]*(1-u);op(w,k);});
+  }
+
+  var timers=[],fired={};
+  function flash(el,c,ms){el.classList.add(c);timers.push(setTimeout(function(){el.classList.remove(c);},ms));}
+  function cue(t,live){
+    function at(key,when,el,c){if(t<when||fired[key])return;fired[key]=true;if(live)flash(el,c,760);}
+    IN.forEach(function(e,i){
+      at("s"+i,e.at,avs[e.from],"wake");
+      at("d"+i,e.at+e.tr,pulses[0],"on");
+    });
+    OUT.forEach(function(e,j){
+      at("o"+j,e.at,avs[2+e.who],"wake");
+      at("r"+j,e.at+e.tr,pulses[1],"on");
+    });
+    FLIP.forEach(function(f,r){if(f<LOOP)at("p"+r,f,pops[r],"on");});
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    avs.concat(pulses,pops).forEach(function(e){e.classList.remove("wake","on");});
+  }
+
+  /* Two words share the footer. They are measured, never guessed: if a wider
+     fallback font would bring them within 12 units, the second one steps out. */
+  function fit(){
+    var a,b,k;
+    try{k=parseFloat(getComputedStyle(svg).getPropertyValue("--sdo-k"));}catch(err){}
+    K=k>0&&k<3?k:1;
+    runTx.classList.remove("cramped");
+    try{a=openTx.getBBox();b=runTx.getBBox();}catch(err){return;}
+    if(a&&b&&a.width&&b.width&&a.x+a.width+12>b.x)runTx.classList.add("cramped");
+  }
+
+  /* The markup already is render(STILL): the clock starts there so the live
+     piece continues from what is painted, never snapping to an empty stage. */
+  render(STILL);
+  cue(STILL,false);
+  fit();
+  if("ResizeObserver" in window)new ResizeObserver(fit).observe(fig);
+  try{
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then)
+      document.fonts.ready.then(fit,function(){});
+  }catch(err){}
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,wasP=STILL,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    /* Clamped both ways. A long stall slows the piece rather than teleporting it,
+       and the first rAF stamp can predate the performance.now() that sync() took:
+       a step back would read as a new pass, re-arm the one-shots and flash every
+       halo, pulse and pop at once on mount. */
+    clock+=cl((now-last)/1000/.05)*.05;
+    last=now;
+    var ph=clock%LOOP;
+    if(ph<wasP)fired={};                    /* a new pass re-arms the one-shots */
+    wasP=ph;
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sdo-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sdo-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sdo-paused");}
+  }
+
+  /* One frame, all four beats. */
+  function still(){
+    fig.classList.add("sdo-still");
+    run=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  /* The preference can be turned on after load; both paths end in the same frame. */
+  function onMq(){if(mq.matches&&!fig.classList.contains("sdo-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sdo").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover open",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);   /* harmless today; correct the day a router lands */
+})();
+</script>

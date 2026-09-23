@@ -1,0 +1,645 @@
+---
+/**
+ * The cover for "Run your own network", drawing the argument of the post in four beats.
+ *
+ *  1. Anyone can run one. Our network draws itself first, then a town council's and a plumbers'
+ *     trade body's. Each gets its own name and its own rule, written in words — online first,
+ *     in town only, members only — and each already lists a few businesses in its own order.
+ *  2. One inbox, several networks. A bakery's inbox arrives and reports to two of them at once:
+ *     the same ping travels both lines, and the bakery's row slots in at the bottom of both lists.
+ *     It does not join the plumbers, because nobody has to join everything.
+ *  3. Your rules, your order. An assistant asks the two networks. Each lights its own rule and
+ *     answers its own way: ours puts the online inbox first, so the bakery lifts and passes over the
+ *     two offline rows to the top; the council drops a business that is outside its borders, so the
+ *     bakery lands second. Two answers come back, and while they sit side by side the same bakery
+ *     pulses in both lists, first in one and second in the other.
+ *  4. The customer never sees any of it. The assistant sends the order straight to the bakery,
+ *     over the networks rather than through them, and it lands in the bakery's inbox.
+ *
+ * Beat three owns 4.8 s of the 13.9 s loop because it is the point of the post. Nothing here claims
+ * a shipped feature the post does not: no scores, no counts, no status chip. The rules drawn are the
+ * post's own examples, and ranking by a record of kept promises is left out because the post says
+ * that part is still being built.
+ *
+ * Built the way CoverReceipts.astro is built. The scene ships as inline SVG, composed, so the box is
+ * never empty and a throw leaves a finished picture. That markup is the frame at t = 12.1 s — every
+ * network drawn, the bakery on two of them, both lists sorted by their rules, the order delivered —
+ * and the live clock starts there, so there is no mount flicker. On the first pass it holds that frame
+ * for 1.9 s before it moves, so someone who has just arrived reads the whole idea before it rebuilds;
+ * reduced motion is the same machine stepped to that frame. It stops when nobody is looking and has
+ * no max-width of its own: aspect-ratio holds the box open, so nothing below the cover jumps.
+ *
+ * The geometry lives once, in GEO below. The drawing is generated from it, and the script reads the
+ * same object from the figure, so the picture and the machine cannot disagree about a slot.
+ */
+
+/** The world, in the 640x360 viewBox. */
+const GEO = {
+  card: { x: 112, w: 336, h: 84, r: 13 },
+  /** the list inside each card: first row's offset, row size, and the pitch between slots */
+  list: { dx: 190, w: 132, h: 18, top: 10, pitch: 23 },
+  /** each rule pill's width (pw) is what fit() measures in Manrope at the post width, so a page
+   *  with no JavaScript gets pills with even padding too; fit() still measures the real one */
+  nets: [
+    { name: "Town council", rule: "In town only", y: 50, pw: 96, tone: "sdnet-town" },
+    { name: "Surfing Dog", rule: "Online first", y: 146, pw: 92, tone: "sdnet-ours" },
+    { name: "Plumbers", rule: "Members only", y: 242, pw: 106, tone: "sdnet-trade" },
+  ],
+  /** Every listed business, by the slot it holds in the composed frame. The bakery's rows are
+   *  "bk"; "gone" is the one the council's rule leaves out. */
+  rows: [
+    { id: "a", net: 0, slot: 0, on: true, bar: 72 },
+    { id: "b", net: 0, slot: 1, on: true, bar: 54, gone: true },
+    { id: "bk0", net: 0, slot: 1, on: true, bk: true },
+    { id: "c", net: 1, slot: 1, on: false, bar: 66 },
+    { id: "d", net: 1, slot: 2, on: false, bar: 50 },
+    { id: "bk1", net: 1, slot: 0, on: true, bk: true },
+    { id: "e", net: 2, slot: 0, on: true, bar: 60 },
+    { id: "f", net: 2, slot: 1, on: true, bar: 76 },
+    { id: "g", net: 2, slot: 2, on: false, bar: 46 },
+  ],
+  bot: { x: 36, y: 174, s: 28 },
+  bakery: { x: 498, y: 154, w: 118, h: 68 },
+  /** the assistant's questions, to the council (top) and to us (middle) */
+  ask: ["M64,188 C90,188 86,92 112,92", "M64,188 L112,188"],
+  /** the bakery's reports, to the same two */
+  report: ["M498,188 C472,188 474,92 448,92", "M498,188 L448,188"],
+  /** The order, over the networks rather than through them. Its last stretch runs down inside
+   *  the inbox, under the card, which is opaque: the chip rides it in and is posted into the
+   *  inbox, so it never has to fade out in mid-air. */
+  hop: "M50,160 C50,92 62,26 128,26 L490,26 C546,26 557,92 557,152 L557,180",
+};
+
+const { card, list, nets, rows, bot, bakery } = GEO;
+const edge = (x: number, y: number, w: number, h: number, r: number) =>
+  `M${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h - r} A${r},${r} 0 0 1 ${x + w - r},${y + h} H${x + r} A${r},${r} 0 0 1 ${x},${y + h - r} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} Z`;
+const slotY = (net: number, j: number) => (nets[net]?.y ?? 0) + list.top + list.pitch * j;
+/* the inbox's mark: the striped half sun, as on the home page's business card */
+const sunY = bakery.y + 22;
+const sun = `M${bakery.x + 12},${sunY} A7,7 0 0 1 ${bakery.x + 26},${sunY} Z`;
+---
+
+<figure
+  class="sdnet"
+  role="img"
+  aria-label="Three networks, each run by someone different, each with its own rule for who it lists and in what order. A bakery's inbox joins two of them. An assistant asks both, and each answers in its own order, with the bakery first in one and second in the other. The assistant then sends the order straight to the bakery."
+  data-sdnet={JSON.stringify(GEO)}
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="sdnet-g" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="var(--sdnet-tang)"/>
+<stop offset="58%" stop-color="var(--sdnet-flam)"/>
+<stop offset="100%" stop-color="var(--sdnet-violet)"/>
+</linearGradient>
+<clipPath id="sdnet-c"><path d={sun}/></clipPath>
+<mask id="sdnet-m" maskUnits="userSpaceOnUse" x="0" y="0" width="640" height="360"><path d={GEO.hop} class="sdnet-reveal"/></mask>
+</defs>
+
+<path d={GEO.hop} class="sdnet-hop" mask="url(#sdnet-m)"/>
+{GEO.ask.map((d) => <path d={d} class="sdnet-line sdnet-ask"/>)}
+{GEO.report.map((d) => <path d={d} class="sdnet-line sdnet-rep"/>)}
+
+{
+  nets.map((n, i) => (
+    <g class={`sdnet-net ${n.tone}`}>
+      <rect x={card.x} y={n.y} width={card.w} height={card.h} rx={card.r} class="sdnet-fill"/>
+      <path d={edge(card.x, n.y, card.w, card.h, card.r)} class="sdnet-edge"/>
+      <rect x={card.x} y={n.y} width={card.w} height={card.h} rx={card.r} class="sdnet-ring"/>
+      <g class="sdnet-head">
+        <g class="sdnet-glyph">
+          <path d={`M${card.x + 16.5},${n.y + 29} L${card.x + 23.5},${n.y + 18} L${card.x + 30.5},${n.y + 29} Z`}/>
+          <circle cx={card.x + 16.5} cy={n.y + 29} r="2.3"/>
+          <circle cx={card.x + 23.5} cy={n.y + 18} r="2.3"/>
+          <circle cx={card.x + 30.5} cy={n.y + 29} r="2.3"/>
+        </g>
+        <text x={card.x + 40} y={n.y + 29} class="sdnet-name">{n.name}</text>
+      </g>
+      <g class={`sdnet-rule${i < 2 ? " sdnet-lit" : ""}`}>
+        <rect x={card.x + 14} y={n.y + 47} width={n.pw} height="22" rx="11" class="sdnet-pill"/>
+        <path d={`M${card.x + 24},${n.y + 53.5} h9 M${card.x + 24},${n.y + 58} h6.5 M${card.x + 24},${n.y + 62.5} h4`} class="sdnet-sort"/>
+        <text x={card.x + 39} y={n.y + 58} dominant-baseline="central" class="sdnet-rtx">{n.rule}</text>
+      </g>
+    </g>
+  ))
+}
+
+{
+  rows.map((r) => {
+    const y = slotY(r.net, r.slot);
+    const x = card.x + list.dx;
+    return (
+      <g
+        class={`sdnet-row${r.bk ? " sdnet-bk sdnet-hit" : ""}`}
+        data-r={r.id}
+        transform={`translate(${x},${y})`}
+        opacity={r.gone ? "0" : undefined}
+      >
+        {r.bk && <rect y="3" width={list.w} height={list.h} rx="6" class="sdnet-lift" opacity="0"/>}
+        <rect width={list.w} height={list.h} rx="6" class="sdnet-bg"/>
+        <rect width={list.w} height={list.h} rx="6" class="sdnet-ring"/>
+        <circle cx="10" cy={list.h / 2} r="3" class={r.on ? "sdnet-dot sdnet-on" : "sdnet-dot"}/>
+        {r.bk ? (
+          <text x="20" y={list.h / 2} dominant-baseline="central" class="sdnet-lb">Bakery</text>
+        ) : (
+          <rect x="20" y={list.h / 2 - 2.5} width={r.bar} height="5" rx="2.5" class="sdnet-bar"/>
+        )}
+      </g>
+    );
+  })
+}
+
+<circle cx="64" cy="188" r="2.6" class="sdnet-port sdnet-pa"/>
+<circle cx={card.x} cy="92" r="2.6" class="sdnet-port sdnet-pa"/>
+<circle cx={card.x} cy="188" r="2.6" class="sdnet-port sdnet-pa"/>
+<circle cx={card.x + card.w} cy="92" r="2.6" class="sdnet-port sdnet-pr"/>
+<circle cx={card.x + card.w} cy="188" r="2.6" class="sdnet-port sdnet-pr"/>
+<circle cx={bakery.x} cy="188" r="2.6" class="sdnet-port sdnet-pr"/>
+
+<!-- the pieces that travel sit under the assistant and the bakery, so they leave from behind them -->
+<g class="sdnet-q" opacity="0"><circle r="7" class="sdnet-disc"/><circle cx="-1" cy="-1" r="2.7" class="sdnet-mag"/><path d="M1,1 L3.4,3.4" class="sdnet-mag"/></g>
+<g class="sdnet-q" opacity="0"><circle r="7" class="sdnet-disc"/><circle cx="-1" cy="-1" r="2.7" class="sdnet-mag"/><path d="M1,1 L3.4,3.4" class="sdnet-mag"/></g>
+<g class="sdnet-a" opacity="0"><circle r="7" class="sdnet-disc"/><path d="M-3,0.2 l2.1,2.2 l4,-4.8" class="sdnet-mark"/></g>
+<g class="sdnet-a" opacity="0"><circle r="7" class="sdnet-disc"/><path d="M-3,0.2 l2.1,2.2 l4,-4.8" class="sdnet-mark"/></g>
+<circle r="3.4" class="sdnet-ping" opacity="0"/>
+<circle r="3.4" class="sdnet-ping" opacity="0"/>
+<g class="sdnet-chip" opacity="0">
+<rect x="-29" y="-10" width="58" height="20" rx="10" class="sdnet-bg"/>
+<circle cx="-19" cy="0" r="3" class="sdnet-dot"/>
+<text x="-11" y="0" dominant-baseline="central" class="sdnet-clb">Order</text>
+</g>
+<g class="sdnet-bot">
+<rect x={bot.x - 4} y={bot.y - 4} width={bot.s + 8} height={bot.s + 8} rx="11" class="sdnet-halo"/>
+<rect x={bot.x} y={bot.y} width={bot.s} height={bot.s} rx="8" class="sdnet-tint"/>
+<rect x={bot.x} y={bot.y} width={bot.s} height={bot.s} rx="8"/>
+<circle cx={bot.x + 9} cy={bot.y + 13} r="1.8" class="sdnet-eye"/>
+<circle cx={bot.x + 19} cy={bot.y + 13} r="1.8" class="sdnet-eye"/>
+<line x1={bot.x + 14} y1={bot.y} x2={bot.x + 14} y2={bot.y - 8}/>
+<circle cx={bot.x + 14} cy={bot.y - 10.6} r="2.6" class="sdnet-ant"/>
+<text x={bot.x + 14} y={bot.y + 48} text-anchor="middle" class="sdnet-cap">Assistant</text>
+</g>
+
+<g class="sdnet-bakery">
+<rect x={bakery.x} y={bakery.y} width={bakery.w} height={bakery.h} rx="12" class="sdnet-fill"/>
+<rect x={bakery.x} y={bakery.y} width={bakery.w} height={bakery.h} rx="12" class="sdnet-ring"/>
+<path d={sun} fill="url(#sdnet-g)"/>
+<g clip-path="url(#sdnet-c)">
+{[5.5, 4, 2.7].map((d) => <rect x={bakery.x + 11} y={sunY - d} width="16" height=".6" class="sdnet-stripe"/>)}
+</g>
+<text x={bakery.x + 32} y={sunY} class="sdnet-bname">Bakery</text>
+<line x1={bakery.x + 12} y1={bakery.y + 32} x2={bakery.x + bakery.w - 12} y2={bakery.y + 32} class="sdnet-hair"/>
+<g class="sdnet-order">
+<rect x={bakery.x + 10} y={bakery.y + 40} width={bakery.w - 20} height="18" rx="6" class="sdnet-bg"/>
+<rect x={bakery.x + 15} y={bakery.y + 44} width="2.5" height="10" rx="1.25" class="sdnet-bar"/>
+<text x={bakery.x + 23} y={bakery.y + 49} dominant-baseline="central" class="sdnet-olb">Order</text>
+<path d={`M${bakery.x + 86},${bakery.y + 49.5} l3,3.2 l5.8,-7.2`} class="sdnet-tick"/>
+</g>
+</g>
+
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sdnet and every keyframe is sdnet-*, so nothing leaks. .sdnet is also
+   the query container the width steps match. Colours are properties: host token first, brand
+   literal only as the fallback, light-dark() carrying night for a host with no tokens at all. */
+.sdnet{
+  --sdnet-ground:var(--ground,light-dark(#f6f5ff,#0d0e26));
+  --sdnet-ink:var(--ink,light-dark(#14163c,#f2f1ff));
+  --sdnet-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sdnet-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sdnet-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sdnet-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sdnet-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --sdnet-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --sdnet-palm:var(--palm,#2fd3a5);
+  --sdnet-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --sdnet-violet:var(--violet,#8a6bff);
+  --sdnet-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --sdnet-lagoon:var(--lagoon,#25cfe0);
+  --sdnet-lagoon-i:var(--lagoon-ink,light-dark(#0f7f8c,#63e2ee));
+  --sdnet-flam:var(--flamingo,#ff6fa8);
+  --sdnet-flam-i:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc));
+  --sdnet-tang:var(--tangerine,#ff9650);
+  --sdnet-tang-i:var(--tangerine-ink,light-dark(#b4520f,#ffb27c));
+  --sdnet-sun:var(--sun,#ffcf5c);
+  --sdnet-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --sdnet-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  /* What the bakery's flamingo is mixed into. By day that is the ground. At night the ground is
+     darker than the glass the cards and rows sit on, so a tint mixed into it read as a hole, the
+     darkest thing in the picture; night lifts it to the rows' own tone. */
+  --sdnet-base:var(--sdnet-ground);
+  --sdnet-bkfill:color-mix(in srgb,var(--sdnet-flam) 8%,var(--sdnet-base));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .sdnet{--sdnet-base:color-mix(in srgb,var(--sdnet-ink) 16%,var(--sdnet-ground))}
+}
+:root[data-theme="dark"] .sdnet,[data-theme="dark"] .sdnet{--sdnet-base:color-mix(in srgb,var(--sdnet-ink) 16%,var(--sdnet-ground))}
+/* One pair of properties carries a network's colour through its mark, its rule and its flash.
+   Small words are drawn in their ink pulled 18% toward --ink, as NetworkFlow does: by day the
+   council's rule measured 4.45:1 and the order chip 4.22:1 at the plain inks, under the 4.5:1
+   floor; the mix lifts every label past 5:1 and keeps its hue. */
+.sdnet .sdnet-town{--nc:var(--sdnet-lagoon);--ni:var(--sdnet-lagoon-i)}
+.sdnet .sdnet-ours{--nc:var(--sdnet-violet);--ni:var(--sdnet-violet-i)}
+.sdnet .sdnet-trade{--nc:var(--sdnet-sun);--ni:var(--sdnet-sun-i)}
+
+.sdnet svg{display:block;width:100%;height:auto}
+.sdnet text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdnet-ink2)}
+.sdnet .sdnet-name,.sdnet .sdnet-bname{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-weight:600;letter-spacing:-.01em}
+.sdnet .sdnet-name{font-size:13px}
+.sdnet .sdnet-bname{font-size:12px}
+.sdnet .sdnet-cap{font-size:10.5px;letter-spacing:.02em}
+.sdnet .sdnet-hair{stroke:var(--sdnet-hair);stroke-width:1}
+
+/* the lines: thin ink, drawn in the first time they are used */
+.sdnet .sdnet-line{fill:none;stroke:var(--sdnet-ink3);stroke-opacity:.34;stroke-width:1.1}
+.sdnet .sdnet-port{fill:var(--sdnet-ink3);fill-opacity:.55}
+/* The order's route is dotted and exists only behind the order: a mask draws it in as the chip
+   travels, so no always-on line claims a channel through the networks. */
+.sdnet .sdnet-hop{fill:none;stroke:var(--sdnet-tang);stroke-width:1.3;stroke-dasharray:1.5 6;stroke-linecap:round;opacity:.7}
+.sdnet .sdnet-reveal{fill:none;stroke:#fff;stroke-width:10}
+
+/* a network: glass, a drawn edge, its mark and name, its rule */
+.sdnet .sdnet-net .sdnet-fill{fill:var(--sdnet-glass);stroke:none}
+.sdnet .sdnet-net .sdnet-edge{fill:none;stroke:var(--sdnet-ink3);stroke-opacity:.26;stroke-width:1.1}
+.sdnet .sdnet-net .sdnet-ring,.sdnet .sdnet-bakery .sdnet-ring{fill:none;stroke:var(--nc,var(--sdnet-palm));stroke-width:1.3;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+/* Each flash grows by the same 4 units on every side. The council's and ours flash together
+   across a 12-unit gap, and at 6 units each their rings met in it as one doubled line. */
+.sdnet .sdnet-net.sdnet-flash .sdnet-ring{animation:sdnet-ring .8s var(--sdnet-ease)}
+.sdnet .sdnet-bakery.sdnet-flash .sdnet-ring{animation:sdnet-ringb .8s var(--sdnet-ease)}
+@keyframes sdnet-ring{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(1.024,1.095)}}
+@keyframes sdnet-ringb{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(1.068,1.118)}}
+.sdnet .sdnet-glyph path{fill:none;stroke:var(--nc);stroke-opacity:.6;stroke-width:1.1;stroke-linejoin:round}
+.sdnet .sdnet-glyph circle{fill:var(--nc)}
+
+.sdnet .sdnet-rule .sdnet-pill{fill:none;stroke:var(--sdnet-ink3);stroke-opacity:.28;stroke-width:1;transition:stroke .4s var(--sdnet-ease),stroke-opacity .4s var(--sdnet-ease)}
+.sdnet .sdnet-rule .sdnet-sort{fill:none;stroke:var(--ni);stroke-width:1.5;stroke-linecap:round;transform-box:fill-box;transform-origin:0 50%}
+.sdnet .sdnet-rtx{font-size:10.5px;font-weight:600;fill:color-mix(in srgb,var(--ni) 82%,var(--sdnet-ink))}
+.sdnet .sdnet-rule.sdnet-lit .sdnet-pill{stroke:var(--nc);stroke-opacity:.75}
+.sdnet .sdnet-rule.sdnet-beat .sdnet-sort{animation:sdnet-sort .7s var(--sdnet-ease)}
+@keyframes sdnet-sort{0%{transform:scaleX(1)}40%{transform:scaleX(1.25)}100%{transform:scaleX(1)}}
+
+/* a listing: a status dot (palm is an inbox that is online) and a bar, or the bakery by name */
+.sdnet .sdnet-row .sdnet-bg{fill:var(--sdnet-row);stroke:var(--sdnet-hair);stroke-width:1}
+.sdnet .sdnet-row .sdnet-bar{fill:var(--sdnet-ink3);fill-opacity:.2}
+.sdnet .sdnet-row .sdnet-dot{fill:none;stroke:var(--sdnet-ink3);stroke-opacity:.5;stroke-width:1.2}
+.sdnet .sdnet-row .sdnet-dot.sdnet-on{fill:var(--sdnet-palm);stroke:none}
+.sdnet .sdnet-row.sdnet-bk .sdnet-bg{fill:color-mix(in srgb,var(--sdnet-flam) 13%,var(--sdnet-base));stroke:var(--sdnet-flam);stroke-opacity:.35;transition:stroke-opacity .4s var(--sdnet-ease)}
+.sdnet .sdnet-row.sdnet-bk.sdnet-hit .sdnet-bg{stroke-opacity:.8}
+.sdnet .sdnet-row .sdnet-lift{fill:var(--sdnet-flam);fill-opacity:.22;stroke:none}
+.sdnet .sdnet-lb{font-size:10px;font-weight:600;fill:color-mix(in srgb,var(--sdnet-flam-i) 82%,var(--sdnet-ink))}
+.sdnet .sdnet-row .sdnet-ring{fill:none;stroke:var(--sdnet-flam);stroke-width:1.3;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdnet .sdnet-row.sdnet-found .sdnet-ring{animation:sdnet-found .8s var(--sdnet-ease)}
+/* 3 units on every side: the rows sit 5 apart, and the old 4.5 all but touched the next one */
+@keyframes sdnet-found{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(1.045,1.33)}}
+
+/* the assistant: drawn in ink, as the home page draws its agents */
+.sdnet .sdnet-bot rect,.sdnet .sdnet-bot line{fill:none;stroke:var(--sdnet-ink2);stroke-opacity:.55;stroke-width:1.2}
+.sdnet .sdnet-bot .sdnet-tint{fill:var(--sdnet-ink3);fill-opacity:.07;stroke:none}
+.sdnet .sdnet-bot .sdnet-eye{fill:var(--sdnet-ink2);fill-opacity:.55}
+.sdnet .sdnet-bot .sdnet-ant{fill:var(--sdnet-tang)}
+.sdnet .sdnet-bot .sdnet-halo{stroke:var(--sdnet-tang);stroke-opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sdnet .sdnet-bot.sdnet-wake .sdnet-halo{animation:sdnet-halo .66s var(--sdnet-ease)}
+@keyframes sdnet-halo{0%{stroke-opacity:.55;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.28)}}
+
+/* The bakery's inbox wears the same flamingo as its rows in the lists, so the link holds even in
+   the index tile, where the words inside the rows step out. */
+.sdnet .sdnet-bakery .sdnet-fill{fill:var(--sdnet-bkfill);stroke:var(--sdnet-flam);stroke-opacity:.42;stroke-width:1.1}
+.sdnet .sdnet-bakery .sdnet-ring{--nc:var(--sdnet-palm)}
+/* the sun's stripes are cut in the card's own colour, so they read as gaps, never as bars */
+.sdnet .sdnet-bakery .sdnet-stripe{fill:var(--sdnet-bkfill)}
+.sdnet .sdnet-order .sdnet-bg{fill:var(--sdnet-row);stroke:var(--sdnet-hair);stroke-width:1}
+.sdnet .sdnet-order .sdnet-bar{fill:var(--sdnet-tang)}
+.sdnet .sdnet-olb{font-size:10px;font-weight:600;fill:color-mix(in srgb,var(--sdnet-tang-i) 82%,var(--sdnet-ink))}
+.sdnet .sdnet-tick{fill:none;stroke:var(--sdnet-palm-i);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* the pieces that travel */
+.sdnet .sdnet-q .sdnet-disc{fill:var(--sdnet-ground);stroke:var(--sdnet-ink3);stroke-opacity:.6;stroke-width:1.1}
+.sdnet .sdnet-q .sdnet-mag{fill:none;stroke:var(--sdnet-ink2);stroke-width:1.3;stroke-linecap:round}
+.sdnet .sdnet-a .sdnet-disc{fill:var(--sdnet-ground);stroke:var(--sdnet-palm);stroke-opacity:.7;stroke-width:1.1}
+.sdnet .sdnet-a .sdnet-mark{fill:none;stroke:var(--sdnet-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sdnet .sdnet-ping{fill:var(--sdnet-flam)}
+.sdnet .sdnet-chip .sdnet-bg{fill:color-mix(in srgb,var(--sdnet-tang) 15%,var(--sdnet-ground));stroke:color-mix(in srgb,var(--sdnet-tang) 44%,transparent);stroke-width:1}
+.sdnet .sdnet-chip .sdnet-dot{fill:var(--sdnet-tang)}
+.sdnet .sdnet-chip .sdnet-clb{font-size:10px;font-weight:600;fill:color-mix(in srgb,var(--sdnet-tang-i) 82%,var(--sdnet-ink))}
+
+/* The viewBox is fixed, so reading size falls with the drawn width. The steps were set in CSS
+   pixels at the widths a post gets — 750 at 1440, about 300 on a phone, 224 in the blog index —
+   and fit() below re-measures every pill, so a bigger word simply gets a bigger pill. At the
+   narrow step the words inside the rows step out: the flamingo row is the bakery (its inbox wears
+   the same flamingo) and the tangerine one is its order, and the names, the rules and the inbox
+   title grow instead. The rule's sort mark grows with its words and steps left to keep its gap. */
+@container (max-width:600px){
+  .sdnet .sdnet-name{font-size:16px}
+  .sdnet .sdnet-bname{font-size:15px}
+  .sdnet .sdnet-rtx{font-size:13px}
+  .sdnet .sdnet-lb,.sdnet .sdnet-olb,.sdnet .sdnet-chip .sdnet-clb{font-size:12.5px}
+  .sdnet .sdnet-cap{font-size:13px}
+  .sdnet .sdnet-sort{scale:1.15;translate:-1px 0}
+}
+@container (max-width:400px){
+  .sdnet .sdnet-name{font-size:21px}
+  .sdnet .sdnet-bname{font-size:20px}
+  .sdnet .sdnet-rtx{font-size:19px}
+  .sdnet .sdnet-chip .sdnet-clb{font-size:19px}
+  .sdnet .sdnet-lb,.sdnet .sdnet-olb,.sdnet .sdnet-cap{display:none}
+  .sdnet .sdnet-sort{scale:1.3;translate:-2px 0}
+}
+
+/* Off screen or on a hidden tab the clock stops and sdnet-paused stops the CSS keyframes with it.
+   !important because the rules that start them use the animation shorthand, which resets
+   play-state and is more specific. */
+.sdnet.sdnet-still,.sdnet.sdnet-still *{animation:none!important;transition:none!important}
+.sdnet.sdnet-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdnet *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+// Typing it would mean rewriting it, and the composition and the timings are the deliverable.
+(function(){
+"use strict";
+
+/* Newton solve for a CSS cubic-bezier, so the JS eases match the transitions beside them. */
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),eInOut=bez(.45,0,.25,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));},     /* arrivals */
+    glide=function(t,a,b){return eInOut(seg(t,a,b));};  /* things that travel or change places */
+
+/* The timeline, in seconds. Beat three runs 5.30 to 10.10 — 4.8 s of a 13.9 s loop — because it
+   is the point. Do not retune these by accident. */
+var CARD=[.45,0,.90],      /* town, ours, plumbers: ours draws first, the others join it. Ours
+                              starts on the loop's first frame, so the reset is a breath, not a gap */
+    T={bakery:2.90,rline:3.35,ping:3.95,join:4.55,
+       bot:5.30,aline:5.60,ask:6.00,rule:6.55,sort:6.80,found:7.75,ans:8.05,home:8.65,
+       fly:10.10,land:11.50,exit:13.20},
+    ASK=[0,.20],   /* when each question leaves after T.ask: council, then ours; both arrive at T.rule */
+    ANS=[.60,.36], /* how long each answer takes home from T.ans: ours lands first, the council's after */
+    INSET=11,      /* a disc on an assistant line stops this far short of the port, clear of the robot */
+    LAUNCH=18,     /* the order chip leaves from this far up its route, clear of the antenna even
+                      at the phone step, where the chip is 32 tall */
+    LOOP=13.90,
+    STILL=12.10,   /* the frame the markup ships and the clock starts from */
+    HOLD=1.90;     /* on the first pass only, the finished picture is held this long before the
+                      clock moves, so a reader who has just arrived sees it for 3 s, not 1 */
+
+function mount(fig){
+  if(fig.getAttribute("data-sdnet-on")==="1")return;   /* one scene per figure, however often this runs */
+
+  /* Every lookup happens before the first mutation, so a missing node throws with the shipped
+     picture still as the server drew it. */
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverNetworks "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverNetworks "+s);return [].slice.call(l);}
+
+  var G=JSON.parse(fig.getAttribute("data-sdnet")),
+      nets=qa(".sdnet-net"),edges=qa(".sdnet-net .sdnet-edge"),fills=qa(".sdnet-net .sdnet-fill"),
+      heads=qa(".sdnet-head"),rules=qa(".sdnet-rule"),pills=qa(".sdnet-rule .sdnet-pill"),rtx=qa(".sdnet-rtx"),
+      asks=qa(".sdnet-ask"),reps=qa(".sdnet-rep"),hop=q(".sdnet-hop"),reveal=q(".sdnet-reveal"),
+      pAsk=qa(".sdnet-pa"),pRep=qa(".sdnet-pr"),
+      bot=q(".sdnet-bot"),bk=q(".sdnet-bakery"),order=q(".sdnet-order"),tick=q(".sdnet-tick"),
+      qs=qa(".sdnet-q"),as=qa(".sdnet-a"),pings=qa(".sdnet-ping"),
+      chip=q(".sdnet-chip"),chipBg=q(".sdnet-chip .sdnet-bg"),chipDot=q(".sdnet-chip .sdnet-dot"),chipLb=q(".sdnet-chip .sdnet-clb"),
+      R={};
+  G.rows.forEach(function(r){R[r.id]=q('.sdnet-row[data-r="'+r.id+'"]');});
+
+  fig.setAttribute("data-sdnet-on","1");
+
+  var RX=G.card.x+G.list.dx,
+      EL=edges.map(function(e){return e.getTotalLength();}),
+      AL=asks.map(function(p){return p.getTotalLength();}),
+      PL=reps.map(function(p){return p.getTotalLength();}),
+      HL=hop.getTotalLength(),TL=tick.getTotalLength();
+  edges.forEach(function(e,k){e.style.strokeDasharray=EL[k];});
+  asks.forEach(function(p,k){p.style.strokeDasharray=AL[k];});
+  reps.forEach(function(p,k){p.style.strokeDasharray=PL[k];});
+  reveal.style.strokeDasharray=HL;
+  tick.style.strokeDasharray=TL;
+
+  function slot(net,j){return G.nets[net].y+G.list.top+G.list.pitch*j;}
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  var LIFT=R.bk1.querySelector(".sdnet-lift"),HW=G.list.w/2,HH=G.list.h/2;
+  /* a row lifted by u (0 to 1): it grows about its centre and its flamingo shadow shows */
+  function lift(el,x,y,u){
+    var s=1+.045*u;
+    el.style.transform="translate("+x+"px,"+y+"px) translate("+HW+"px,"+HH+"px) scale("+s+") translate("+(-HW)+"px,"+(-HH)+"px)";
+    if(LIFT)op(LIFT,u);
+  }
+  function alongAt(el,path,s){var p=path.getPointAtLength(s);mv(el,p.x,p.y);}
+  function along(el,path,len,u){alongAt(el,path,len*u);}
+  /* a travelling piece fades in over the start of its run and out over the end */
+  function carry(u,live){return live?cl(u/.12)*cl((1-u)/.14):0;}
+
+  function render(t){
+    /* the scene leaves with an in-out ease, so it holds, then goes, and our card starts drawing
+       as the last of it clears: the box is never empty for more than a breath */
+    var g=1-glide(t,T.exit,LOOP),u,v,k,c;
+
+    /* a listing that the network already had: it slides in with its card */
+    function enter(id,net,j){
+      var a=CARD[net]+.8+.12*j;
+      v=ramp(t,a,a+.4);op(R[id],g*v);return (1-v)*8;
+    }
+    /* a listing changing places: it glides from one slot to another */
+    function move(net,from,to,a,b){
+      var w=glide(t,a,b);return slot(net,from)+(slot(net,to)-slot(net,from))*w;
+    }
+
+    /* 1. three networks, ours first; each is written with its own name and its own rule */
+    for(k=0;k<3;k++){
+      c=CARD[k];
+      edges[k].style.strokeDashoffset=EL[k]*(1-ramp(t,c,c+.95));
+      op(edges[k],g*ramp(t,c,c+.15));
+      op(fills[k],g*ramp(t,c+.25,c+.85));
+      u=ramp(t,c+.45,c+.9);op(heads[k],g*u);mv(heads[k],0,(1-u)*4);
+      u=ramp(t,c+.7,c+1.1);op(rules[k],g*u);mv(rules[k],0,(1-u)*4);
+      rules[k].classList.toggle("sdnet-lit",k<2&&t>=T.rule&&t<T.exit);
+    }
+    /* the council: one listing is outside its borders, and its rule leaves it out when asked */
+    mv(R.a,RX+enter("a",0,0),slot(0,0));
+    u=ramp(t,T.sort-.05,T.sort+.35);
+    mv(R.b,RX+enter("b",0,1)+u*10,slot(0,1));op(R.b,g*v*(1-u));
+    /* ours: two inboxes that are offline, so the online bakery will go above both */
+    mv(R.c,RX+enter("c",1,0),move(1,0,1,T.sort,T.sort+.8));
+    mv(R.d,RX+enter("d",1,1),move(1,1,2,T.sort,T.sort+.8));
+    /* the plumbers keep their own list and are never asked */
+    mv(R.e,RX+enter("e",2,0),slot(2,0));
+    mv(R.f,RX+enter("f",2,1),slot(2,1));
+    mv(R.g,RX+enter("g",2,2),slot(2,2));
+
+    /* 2. the bakery reports to two networks at once, and is listed on both */
+    u=ramp(t,T.bakery,T.bakery+.5);op(bk,g*u);mv(bk,(1-u)*12,0);
+    reps.forEach(function(p,j){
+      p.style.strokeDashoffset=PL[j]*(1-ramp(t,T.rline,T.rline+.6));
+      op(p,g*ramp(t,T.rline,T.rline+.1));
+      var w=glide(t,T.ping,T.join);
+      along(pings[j],p,PL[j],w);op(pings[j],g*carry(w,t>=T.ping&&t<T.join));
+    });
+    pRep.forEach(function(p){op(p,g*ramp(t,T.rline,T.rline+.3));});
+    v=ramp(t,T.join,T.join+.4);
+    op(R.bk0,g*v);op(R.bk1,g*v);
+    mv(R.bk0,RX+(1-v)*10,move(0,2,1,T.sort+.3,T.sort+.9));
+    /* Going to the top of ours it has to pass the other two, so it lifts and passes over them:
+       it bows out, grows a little and casts a soft shadow, and settles back as it lands. */
+    u=Math.sin(Math.PI*glide(t,T.sort,T.sort+.8));
+    lift(R.bk1,RX+(1-v)*10-u*12,move(1,2,0,T.sort,T.sort+.8),u);
+    R.bk0.classList.toggle("sdnet-hit",t>=T.found&&t<T.exit);
+    R.bk1.classList.toggle("sdnet-hit",t>=T.found&&t<T.exit);
+
+    /* 3. the assistant asks both; each answers in its own order */
+    op(bot,g*ramp(t,T.bot,T.bot+.4));
+    asks.forEach(function(p,j){
+      p.style.strokeDashoffset=AL[j]*(1-ramp(t,T.aline,T.aline+.5));
+      op(p,g*ramp(t,T.aline,T.aline+.1));
+      /* Both lines leave the same port, so the discs keep clear of the assistant (INSET) and of
+         each other: the short line's question leaves later and its answer comes home sooner. */
+      var span=AL[j]-INSET,a=T.ask+ASK[j],b=T.ans+ANS[j],
+          w=glide(t,a,T.rule);
+      alongAt(qs[j],p,INSET+span*w);op(qs[j],g*carry(w,t>=a&&t<T.rule));
+      w=glide(t,T.ans,b);
+      alongAt(as[j],p,INSET+span*(1-w));op(as[j],g*carry(w,t>=T.ans&&t<b));
+    });
+    pAsk.forEach(function(p){op(p,g*ramp(t,T.aline,T.aline+.3));});
+
+    /* 4. the order goes straight to the bakery, over the networks, drawing its route behind it.
+       The assistant wakes and the chip pops up off its antenna; the route ends under the chip's
+       centre, never ahead of it. The chip stays solid the whole way and rides the route's last
+       stretch down under the inbox card, so it is posted into the inbox, and the order row drops
+       into place as it goes. Faded out above the card, it hung there as a ghost. */
+    u=glide(t,T.fly,T.land);
+    v=ramp(t,T.fly,T.fly+.3);
+    var s=t<T.fly?0:LAUNCH*ramp(t,T.fly,T.fly+.2)+(HL-LAUNCH)*u,p=hop.getPointAtLength(s);
+    chip.style.transform="translate("+p.x+"px,"+p.y+"px) scale("+(.86+.14*v)+")";
+    op(chip,t>=T.fly&&t<T.land?g*v:0);
+    reveal.style.strokeDashoffset=HL-s;
+    op(hop,g);
+    u=ramp(t,T.land-.15,T.land+.35);op(order,g*u);mv(order,0,-(1-u)*6);
+    tick.style.strokeDashoffset=TL*(1-ramp(t,T.land+.3,T.land+.6));
+  }
+
+  var timers=[],fired={};
+  function flash(el,c,ms){el.classList.add(c);timers.push(setTimeout(function(){el.classList.remove(c);},ms));}
+  function cue(t,live){
+    function at(key,when,el,c){if(t<when||fired[key])return;fired[key]=true;if(live)flash(el,c,820);}
+    at("j0",T.join,nets[0],"sdnet-flash");
+    at("j1",T.join,nets[1],"sdnet-flash");
+    at("b0",T.bot+.15,bot,"sdnet-wake");
+    at("r0",T.rule,rules[0],"sdnet-beat");
+    at("r1",T.rule,rules[1],"sdnet-beat");
+    at("f0",T.found,R.bk0,"sdnet-found");
+    at("f1",T.found,R.bk1,"sdnet-found");
+    at("b1",T.home,bot,"sdnet-wake");
+    /* while the answers sit side by side, the same bakery pulses in both lists before the order goes */
+    at("f2",T.home+.45,R.bk0,"sdnet-found");
+    at("f3",T.home+.45,R.bk1,"sdnet-found");
+    at("b2",T.fly,bot,"sdnet-wake");          /* the assistant sends the order */
+    at("l",T.land-.05,bk,"sdnet-flash");
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    [bot,bk,R.bk0,R.bk1].concat(nets,rules).forEach(function(e){e.classList.remove("sdnet-wake","sdnet-flash","sdnet-beat","sdnet-found");});
+  }
+
+  /* The pills are measured, never guessed, so a wider fallback font or the phone type scale can
+     never push a word out of its pill. The drawn sizes are the floor. */
+  function fit(){
+    try{
+      /* Height follows the type size and the pill is centred on the text's own y, the em box's
+         middle; the ink box sits higher than the letters, so centring on it floated the pill. */
+      rtx.forEach(function(tx,k){
+        var b=tx.getBBox(),p=pills[k],x=+p.getAttribute("x"),
+            h=Math.max(22,Math.round(parseFloat(getComputedStyle(tx).fontSize)*1.62));
+        if(!b.width)return;
+        p.setAttribute("width",Math.max(60,Math.ceil(b.x+b.width-x+11)));
+        p.setAttribute("height",h);p.setAttribute("rx",h/2);
+        p.setAttribute("y",+tx.getAttribute("y")-h/2);
+      });
+      var b=chipLb.getBBox(),w,h;
+      if(b.width){
+        w=Math.max(58,Math.ceil(b.width+30));h=Math.max(20,Math.ceil(b.height+6));
+        chipBg.setAttribute("x",-w/2);chipBg.setAttribute("width",w);
+        chipBg.setAttribute("y",-h/2);chipBg.setAttribute("height",h);chipBg.setAttribute("rx",h/2);
+        chipDot.setAttribute("cx",-w/2+10);chipLb.setAttribute("x",-w/2+18);
+      }
+    }catch(err){}
+  }
+
+  /* The markup already is render(STILL): the clock starts there so the live piece continues from
+     what is painted, never snapping to an empty stage. */
+  render(STILL);
+  cue(STILL,false);
+  fit();
+  if("ResizeObserver" in window)new ResizeObserver(fit).observe(fig);
+  try{
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then)
+      document.fonts.ready.then(fit,function(){});
+  }catch(err){}
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,lap=0,hold=HOLD,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    /* Clamped both ways: a long stall slows the piece rather than teleporting it, and the first
+       frame's timestamp can precede the performance.now() taken when the clock started. That
+       small negative step used to read as a new pass and fire every flash at once on load. */
+    var dt=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    if(hold>0){hold-=dt;dt=0;}              /* the first look at the finished picture */
+    clock+=dt;
+    var ph=clock%LOOP,l=Math.floor(clock/LOOP);
+    if(l!==lap){lap=l;fired={};}            /* a new pass re-arms the one-shots */
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sdnet-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sdnet-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sdnet-paused");}
+  }
+
+  /* One frame, all four beats. */
+  function still(){
+    fig.classList.add("sdnet-still");
+    run=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  /* The preference can be turned on after load; both paths end in the same frame. */
+  function onMq(){if(mq.matches&&!fig.classList.contains("sdnet-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sdnet").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover networks",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);   /* harmless today; correct the day a router lands */
+})();
+</script>

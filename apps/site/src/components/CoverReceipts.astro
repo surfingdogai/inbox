@@ -396,7 +396,7 @@ function mount(fig){
 
   function frame(now){
     if(!run)return;
-    clock+=Math.min((now-last)/1000,.05);   /* clamped: a long stall slows the piece rather than teleporting it */
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));   /* clamped both ways: a long stall slows the piece rather than teleporting it, and a first frame stamped before the clock started cannot step it back and replay one-off effects */
     last=now;
     var ph=clock%LOOP;
     if(ph<wasP)fired={};                    /* a new pass re-arms the one-shots */
