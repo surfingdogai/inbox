@@ -6,6 +6,8 @@ import Layout from "../layouts/Layout.astro";
 
 const PROMPT =
   "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
+const CONNECT_PROMPT =
+  "Connect my Surfing Dog Inbox to the software I already use. Follow https://surfingdog.ai/connect.md exactly, ask me which tools I use, ask before changing a setting in another system or sending an email for me, and test every connection before telling me it works.";
 const REPO = "https://github.com/surfingdogai/inbox";
 ---
 
@@ -58,6 +60,29 @@ const REPO = "https://github.com/surfingdogai/inbox";
         The instructions it follows are at <a class="link" href="/install.md">/install.md</a>. They are written for a
         machine: every secret is generated rather than guessed, every step has a command that proves it worked, and it
         is told to stop and tell you rather than carry on when a check fails. Read them yourself if you like.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="connect-h" id="connect" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Already running other software?</p>
+          <h2 class="h-section" id="connect-h">Connect what you already use</h2>
+        </div>
+      </div>
+      <p class="lede">
+        Your shop, your calendar, your CRM: you do not need a plug-in for each. Give your AI the line below. It connects
+        the inbox to them where that works today, and tells you plainly where it does not.
+      </p>
+      <pre class="glass panel prompt"><code>{CONNECT_PROMPT}</code></pre>
+      <p class="hint">
+        Each system that calls your inbox gets its own key, which you can revoke in Settings → Keys. The steps it
+        follows are at
+        <a class="link" href="/connect.md">/connect.md</a>. Built-in connectors for Shopify, WooCommerce, Google
+        Calendar, Stripe and Mollie are coming, and you can vote for yours on
+        <a class="link" href="/requests/">the requests board</a>.
       </p>
     </div>
   </section>
