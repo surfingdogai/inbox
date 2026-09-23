@@ -1,6 +1,7 @@
 # ADR-017 — Reputation and ranking: network rules 0.1
 
-**Status:** accepted, 22 September 2026; revised the same day for R28–R32 (§15). The decisions are
+**Status:** accepted, 22 September 2026; revised the same day for R28–R32 (§15); amended on 23
+September 2026 by Amendment 1, in force as rules version 4 (§15). The decisions are
 Tiago's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
@@ -17,19 +18,23 @@ Numbers marked \* are defaults, changed only with 15 days' notice (§11).
    order was fulfilled. Broken: the business cancelled or did not deliver, or the customer did not
    turn up. The inbox records outcomes itself; a verified customer's agent may report a broken one.
    A promise with no outcome 9 days after it was due counts as broken. Both sides (R15): a kept
-   promise counts for business and customer, a broken one against whoever broke it.
+   promise counts for business and customer, a broken one against whoever broke it, and against a
+   customer only once their email is proven: someone using your email can't hurt you.
 2. **The score (R5).** The share kept, estimated cautiously (Wilson lower bound, z = 1.2816\*): the
    less evidence, the more cautious. 20 of 20 beats 900 of 1000; 2 of 2 does not.
-3. **Each piece weighs** outcome × time × source × repeat. Time (R14, R29): ≤ 30 days 1, ≤ 6
-   months 0.75, ≤ a year 0.5, older 0.25\*, on the share and the confidence, never zero: 20 of 20
-   from two years ago scores 0.75. Source (R3, R13): 1 to 2 by the other side's own record, 2.5\*
-   when a verified agent signed it. Repeat (R7): a customer counts 1, each return +0.25\*, at most 3.
+3. **Each piece weighs** outcome × time × source × repeat. Time (R14, R29): ≤ 30 days 1, ≤ 6 months
+   0.75, ≤ a year 0.5, older 0.25\*, on the share and the confidence, never zero: 20 of 20 from two
+   years ago scores 0.75. Source (R3, R13): 1 to 2 by the other side's own record, 2.5\* when a
+   verified agent signed it: a counter-signature of that very receipt, or a report. Repeat (R7): a
+   customer counts 1, each return +0.25\*, at most 3; one mailbox is one customer (`ana+1@gmail.com`
+   is `ana@gmail.com`).
 4. **The business's own word** (what no verified agent signed) gives at most 50\* outcomes' worth of
    confidence, ageing like the rest. A new business counts nothing for 30 days, then at most 30\*
    units more a month until day 90 (R31).
 5. **The order (R10–R12, R32).** Answering businesses first; among them those at 0.40 or more
    (`building`) by score, then everyone else, newcomers included, in a daily shuffle. Silent 24 h\*:
-   keeps its score, sorts after, "not answering since …". Near me: within `radius_km` (10).
+   keeps its score, sorts after, "not answering since …"; once an inbox signs its pings, only its
+   signed pings count. Near me: within `radius_km` (10).
 6. **Tiers (R25):** `new`, `building` (≥ 0.40), `trusted` (≥ 0.75\*, with breadth). Nothing below.
 7. **People (R16, R19–R22, R28).** One key per person per network, issued at a first booking and
    sent by email. Agents carry a pass or sign with our SDK. A business sees a person's record only
@@ -42,15 +47,15 @@ Numbers marked \* are defaults, changed only with 15 days' notice (§11).
 | # | Decision | In Tiago's words, where given |
 |---|---|---|
 | R2 | A promise counts when **completed**, not when confirmed or paid. New receipt kinds. | |
-| R3 | A counter-signature adds weight only from a **verified** agent; otherwise it is the business's word. | |
+| R3 | A counter-signature adds weight only from a **verified** agent; otherwise it is the business's word. Only a token counter-signing that very receipt verifies (A1.1). | "Only a real counter-signature verifies a promise." |
 | R5 | Score = **reliability with confidence**. 20/20 outranks 900/1000; 2/2 does not. | |
 | R6 | Broken promises recorded **by the inbox automatically**, and reported by verified customers' agents. | |
-| R7 | A distinct customer counts fully once; returning adds a little; cap 3 per customer. | |
+| R7 | A distinct customer counts fully once; returning adds a little; cap 3 per customer. One mailbox is one customer (A1.4). | "One mailbox is one customer (ana+1@gmail.com counts as ana@gmail.com)." |
 | R8, R9 | No cutoff; nothing ever drops to zero. Keep every receipt forever. | "ranks are permanent" |
-| R10–R12 | No-record businesses after ranked ones, shuffled daily, ties too. Near me = best within the agent's radius (default 10 km). A silent inbox keeps its rank, sorts after answering ones, "not answering since …". | |
-| R13 | Two-sided weights: evidence weighted by the reputation of whoever it came from. | "the more a customer ranks in confidence, payment etc the more weight their rank has, the same in reverse" |
+| R10–R12 | No-record businesses after ranked ones, shuffled daily, ties too. Near me = best within the agent's radius (default 10 km). A silent inbox keeps its rank, sorts after answering ones, "not answering since …". A business that signs its pings answers only by signed pings (A1.2). | "Once an inbox signs its pings, only signed pings count." |
+| R13 | Two-sided weights: evidence weighted by the reputation of whoever it came from. Businesses are related only by what they proved, never by a profile's contact email (A1.3). | "the more a customer ranks in confidence, payment etc the more weight their rank has, the same in reverse"; "Stop linking businesses by contact email." |
 | R14 | Recency weights, never zero. | "the last 6 months ranks or last 1 month has different weight than older ranks, let's have a weight system" |
-| R15 | Customers have their own reputation; businesses reward good ones; newcomers get neutral treatment. | "customers are the most important" |
+| R15 | Customers have their own reputation; businesses reward good ones; newcomers get neutral treatment. A customer's broken promises count only once their email is proven (A1.7). | "customers are the most important"; "Someone using your email can't hurt you." |
 | R16 | Identity is **a key per person**, across agents and businesses, on the network that issued it (R28). Legal paperwork is a task list (§12). | "Me Tiago can have an unique key that I can use with multiple agents … It's attributed once and I keep it."; "don't care, this is how we go" |
 | R17 | Publish everything: human rules, machine rules with changelog, Terms, notice before changes. | "the rank is core … publish them"; "I want human, short explanations" |
 | R18 | Unsigned or unknown agents, and instances without the new receipts, keep working. | |
@@ -95,7 +100,12 @@ secret, "<pid>|https://<business domain>"))[:22]`, never the `pid`.
 whitespace; split at the last `@`; in the local part lowercase ASCII `A`–`Z` only (no NFC, dot or
 plus folding; quoted local parts refused); lowercase each domain label and encode non-ASCII labels
 with RFC 3492 punycode (hand-rolled in TypeScript, never `new URL()`), no UTS 46 mapping, no
-trailing dot. `email_mac = HMAC-SHA-256(network email secret, normalised email)`.
+trailing dot. A local part holding a space or any of `( ) < > [ ] \ , ; : @ "`, or a domain label
+that is not `[a-z0-9-]{1,63}` after punycode, is refused by the network and the inbox alike, so
+`me@evil.example,x@gmail.com` can neither pass as a gmail.com customer nor send a recovery code to
+`me@evil.example`; such a customer still books, and no key is issued (§2.1, R25).
+`email_mac = HMAC-SHA-256(network email secret, normalised email)`. Identity never folds an
+address; counting customers does (§4's customer key).
 
 ### 2.1 First contact: the inbox gets the key from the network (R19)
 
@@ -170,7 +180,8 @@ origin. Failures: `401` `unknown_instance`, `bad_signature` or `expired`.
 An unsigned or failed-signature request resolves as today; with no pass the customer is `new`, and
 a pass without a signature works (that is how everyday assistants carry a person). Existing
 instances keep working: v1 receipts are stored, never scored; **unsigned pings get `204` as today
-and keep them answering** (§6). The new inbox sends v2 receipts only to networks whose
+and keep answering a business that has never signed a ping** (§6); once it has, only its signed
+pings do. The new inbox sends v2 receipts only to networks whose
 `/v1/ranking` `version` ≥ 3 (checked daily), v1 promises to others. Without `INBOX_SECRET_KEY` it
 cannot sign, so it neither issues nor checks passes.
 
@@ -195,6 +206,14 @@ Every outcome **closes** its promise and writes a standing row only on the sides
 
 A **presumed** kept outcome, auto-completed or whose promise was published late (§3.3), counts
 `o × 0.5` unless a verified acknowledgement backs it.
+
+A **customer's broken outcome** (a no-show, a late cancellation, a failed payment, a charge-back)
+counts against the item's person only when their email was **proven** by the outcome's date
+(A1.7): network-proven (§2.3), for every business; or proven to the business that recorded it, for
+its own outcomes only, when its inbox issued or linked the person with that address saying how it
+proved it (`email_proof`, §7.1, §7.2) or the person's key was presented there. Otherwise it is
+stored (R9) and never scored, even once the email is proven later: someone booking with another
+person's email cannot hurt their record. Kept outcomes always count.
 
 ### 3.1 New states and transitions in the inbox
 
@@ -243,7 +262,8 @@ outcome posts its promise first. With `share.receipts` off, outcomes of publishe
 
 - **Intake** takes receipts from any listed business (§6). `iat` over 300 s ahead: `422 not_yet`;
   no maximum age. Unknown `ref`: `422 unknown_ref`, retried; a v1 `ref` is fine. The daily cap
-  (10,000 per business) counts promises only, keyed by business. **Arrival** is when the network
+  (10,000 per business) counts promises only, keyed by business; an item takes at most 32
+  outcomes, then `429 too_many_receipts`. **Arrival** is when the network
   first saw a receipt, even in an attempt it refused with `429`/`5xx`. A `per` entry that names no
   presentation to the same business made by `iat + 60` s is ignored: the receipt counts without a
   person. **Late:** a promise arriving over 24 h after its `iat`, or after `due`, makes its kept
@@ -257,21 +277,29 @@ outcome posts its promise first. With `share.receipts` off, outcomes of publishe
 - **Unclosed (R30).** A v2 promise with no outcome of any kind 9 days after it was due (`end` if
   present, else `due`) gets `promise.unclosed` (`o` 1.0) on the business side, and it is final: an
   outcome first seen later is stored, never scored. It is not recorded while the business is not
-  answering (§6); the 9 days restart when it answers. Only an item's earliest promise, never v1.
+  answering (§6: a business that signs its pings answers only by signed ones, so nobody else's
+  pings can end this pause); the 9 days restart when it answers. Only an item's earliest promise,
+  never v1.
 
 ### 3.4 Acknowledgements, reports and contests (R3, R6)
 
-An **acknowledgement** is the ADR-016 counter-signature JWS, whose payload may add `pas` (a pass
-reference), or, for agents that cannot make one, an `acknowledge_receipt {item_id, receipt_id}`
-request signed under §2.4 that the inbox forwards as `agent_key` with `purpose: "ack"` and the
-receipt's `sha` (§7.2). It is verified when its key passes §4, and counts from the next nightly run.
+An **acknowledgement** is a token: the ADR-016 counter-signature JWS, whose payload carries the
+receipt's `sha` and may add `pas` (a pass reference). It is verified when its key passes §4 (for an
+SDK agent, the key it delegated; `signAck` makes the token), and counts from the next nightly run.
+An agent that cannot make one may still send an `acknowledge_receipt {item_id, receipt_id}` request
+signed under §2.4, which the inbox forwards as `agent_key` with `purpose: "ack"` and the receipt's
+`sha` (§7.2): it is accepted and stored (R9) but verifies nothing, since the network never sees the
+body behind a forwarded signature; the outcome stays the business's word (R18). A platform's key
+signs only its agents' requests, so until a platform makes tokens, only SDK agents verify an
+acknowledgement.
 
 A **report** goes straight to the network, signed `sdi-agent/1` or Web Bot Auth (else `403
 report_requires_signature`): `POST /v1/reports {receipt, out, why, pass_ref}`, `out`
 `booking.no_show_business` or `order.not_received`, `why` `closed | no_one_there | not_delivered |
 other`. Only by the item's own person, verified by §4 (`403 not_your_receipt`), between `due` + 1 h
 and `due` + 90 days (`422 report_window`), once (`409 already_reported`), never after acknowledging
-the kept outcome (`409 you_acknowledged_it`). The business sees it in its signed ping and may
+the kept outcome with a token (`409 you_acknowledged_it`; nothing a business holds can block a
+report). The business sees it in its signed ping and may
 dispute within 14 days; else it stands and replaces the kept row **at that row's weight**, as
 verified evidence. A disputed report and its kept outcome each count `d` = 0.5; a report is disputed
 automatically if the business recorded a customer outcome for the item; only documented fraud
@@ -283,8 +311,9 @@ sandbox items; promise and v1 receipts; amounts; the business's own items or ema
 
 ## 4. Verified evidence (R3)
 
-Only a **signed** acknowledgement or report can be verified (every business that served a person
-holds their pass): when the item's person has a network-proven email and the key passes a route:
+Only an acknowledgement **token** or a **signed** report can be verified (every business that served
+a person holds their pass, and the network never sees the body behind a forwarded signature, §3.4):
+when the item's person has a network-proven email and the key passes a route:
 
 1. **Vouched.** The key is in the Web Bot Auth directory of a platform on `recognised_platforms`
    **and** made the item's own presentation (`per`); a platform key is shared by all its users, so
@@ -295,13 +324,26 @@ holds their pass): when the item's person has a network-proven email and the key
    person, who is **established**: `trusted` (§5.3) with kept outcomes at ≥ 3 mutually unrelated
    businesses, each `trusted` when it issued them, spanning ≥ 60 days.
 
-**Related businesses** share a registrable domain (by an embedded, dated Public Suffix List;
-tenants under a hosting suffix in `private_suffixes`, ours first, compare by owner account), a
-receipt `kid`, a profile `contact_email`, an address in one IPv4 /24 or IPv6 /48 within 30 days
-(ignoring published serverless egress ranges), a hosted owner account, ≥ 50% customer overlap, or an
-operator record with a reason; "mutually unrelated" means different **connected components**.
-Customers sharing a non-free-mail domain count as one. Levels are fixed at intake and only lowered,
-by a logged operator record of a relation or fraud, with the subjects rescored.
+**Related businesses** share a registrable domain (by an embedded, dated Public Suffix List; tenants
+under a hosting suffix in `private_suffixes`, ours first, compare by owner account), a receipt `kid`
+each of them signed with, an address from their signed pings in one IPv4 /24 or IPv6 /48 within 30
+days (ignoring published serverless egress ranges), a hosted owner account, ≥ 50% customer overlap,
+or an operator record with a reason; "mutually unrelated" means different **connected components**.
+Each relation rests on proof; a profile's `contact_email` is whatever its manifest says, so it
+relates nobody (§3.4's own-domain rule still reads its domain, which can only cost the business
+itself), and the overlap groups a customer by customer key or company domain only once their email
+is network-proven, and counts anyone else as their own person, since any business can register any
+address for a customer (A1.4). Levels are fixed at intake and only lowered, by a logged operator
+record of a relation or fraud, with the subjects rescored.
+
+**Customers count by customer key**, wherever the rules count them: distinct customers (§5.3), `U`
+(§5), the overlap relation (for network-proven customers, above), and the customer in `r`'s pair
+for evidence about a business (R7). The key folds the normalised email (§2): it drops everything
+from the first `+` to the `@`, and for `gmail.com` and `googlemail.com` it also drops the dots and
+uses `gmail.com`, so `A.Silva+x@googlemail.com` and `asilva@gmail.com` are one customer. Customers
+sharing a non-free-mail domain count as one. Identity keeps §2's exact address, so each address is still its
+own person with its own key; a wrong fold can only count fewer customers, and never refuses a person
+or touches their key.
 
 **Effect.** Verified evidence about a business has `q` = 2.5 (*default*) and sits outside the word
 cap. Evidence about a customer is never verified (the business is its only witness): it weighs by
@@ -316,8 +358,8 @@ Each piece of evidence weighs `x = o × t × q × r × d`:
 |---|---|
 | `o` outcome | §3, halved when presumed. |
 | `t` time (R14, R29) | Age at scoring time from the evidence date (§3.3): ≤ 30 days 1.0; ≤ 182 days 0.75; ≤ 365 days 0.5; older 0.25. Never 0 (R8). |
-| `q` source (R3, R13) | 2.5 when verified; else `c = 1 + s × min(1, U/5)` (1.0–2.0): `s` the counterparty's score in the previous night's snapshot (0 without record or identity), `U` its unrelated businesses outside this business's component (a person) or its other distinct customers (a business). |
-| `r` repeat (R7) | Per business–customer pair, side and ledger (kept apart from broken, so visits never dilute a broken one): `min(cap, 1 + 0.25·(m − 1)) / m` for `m` pieces; `cap` 3, or 1 for a customer's broken pieces from one business. The customer is the `pid`, else the receipt `sub`. |
+| `q` source (R3, R13) | 2.5 when verified; else `c = 1 + s × min(1, U/5)` (1.0–2.0): `s` the counterparty's score in the previous night's snapshot (0 without record or identity), `U` its unrelated businesses outside this business's component (a person) or its other distinct customers, by customer key (a business, §4). |
+| `r` repeat (R7) | Per business–customer pair, side and ledger (kept apart from broken, so visits never dilute a broken one): `min(cap, 1 + 0.25·(m − 1)) / m` for `m` pieces; `cap` 3, or 1 for a customer's broken pieces from one business. The customer is the person's customer key (§4) for evidence about a business, the `pid` for evidence about a customer, else the receipt `sub`. |
 | `d` dispute | 0.5 for a disputed report, the kept outcome it disputes, or a contested outcome. |
 
 **Why `c = 1 + s`.** R13's proposed 0.5 + 0.5 × s has the same ratio; this scales it so a newcomer
@@ -386,22 +428,28 @@ result is a pure function of evidence, previous snapshot and `scoring_time`, rep
 | `building` | ≥ 0.40 | ≥ 0.40 (ranked, R32) |
 | `new` | everything else, including no record | everything else, including no record |
 
-A **distinct customer** has a network-proven email or was presented at another, unrelated business.
+A **distinct customer** is one customer key (§4), counted once a person under it has a network-proven
+email or was presented at another, unrelated business: one mailbox is one customer, whatever `+` or
+dots it adds. A customer's kept outcomes always count, and their broken ones only once their email
+is proven (§3, A1.7).
 Customers: 1 kept → 0.3784 `new`; 2 kept → 0.5491 `building`; 1 kept at a business at 0.80 (`c` 1.8)
 → 0.5229; 4 visits at each of 3 unrelated businesses → 0.7617 `trusted`, 0.7056 a month after the
-last visit, 0.4442 after a year (R29). A trusted person (3 kept at `c` 1.9, 0.7763) whom one
-business (`c` 2.0) records as 3 no-shows has one outcome's worth broken (`r` cap 1, so 2.0 at `c`
-2.0) → 0.5094; contested, 0.6092. A presentation gives `{tier, score, kept, broken, businesses,
-email_proven, since, unusual_use, rules}`.
+last visit, 0.4442 after a year (R29). A trusted person with a proven email (3 kept at `c` 1.9,
+0.7763) whom one business (`c` 2.0) records as 3 no-shows has one outcome's worth broken (`r` cap
+1, so 2.0 at `c` 2.0) → 0.5094; contested, 0.6092; with the email unproven, the no-shows count
+nothing (0.7763). A presentation gives `{tier, score, kept, broken, businesses, email_proven, since,
+unusual_use, rules}`.
 
 ## 6. Ordering
 
 **Listed** means `status IN ('verified','unreachable') AND verified_at IS NOT NULL` (R8, R12).
-**Answering** means a ping, signed or unsigned, within 24 hours and no failed manifest sweep since,
-so unsigned pings keep existing instances answering (R18); `not_answering_since` is the later of
-the last ping and the last good manifest fetch. Every hour at `:00` UTC the network freezes, per
-listed business, `rank_answering`, `rank_score_int` (`floor(score × 10⁴ + 0.5)`), `rank_ranked`
-(`rank_score_int ≥ 4000`, R32), `rank_shuffle` and
+**Answering** means a ping that counts within 24 hours and no failed manifest sweep since. Anyone
+may ping for any domain, so once a business has sent one signed ping, only its signed pings count.
+For a business that has never signed, unsigned pings count too, so existing instances keep answering
+(R18); one that goes back to an inbox that cannot sign shows as not answering until it signs again.
+`not_answering_since` is the later of the last ping that counts and the last good manifest fetch.
+Every hour at `:00` UTC the network freezes, per listed business, `rank_answering`, `rank_score_int`
+(`floor(score × 10⁴ + 0.5)`), `rank_ranked` (`rank_score_int ≥ 4000`, R32), `rank_shuffle` and
 
 ```
 rank_pos = ROW_NUMBER() OVER (ORDER BY rank_answering DESC, rank_ranked DESC,
@@ -433,55 +481,64 @@ its own numbers (§14) and publishes them at `/v1/ranking`.
 | `GET /v1/businesses` | none | `near?, radius_km?, category?, item_type?, q?, limit ≤ 100, cursor?` → `{businesses: [listing], next_cursor}` |
 | `GET /v1/businesses/{domain}` | none | listing + `outcomes: {"<code>": <count>}` for every §3 code |
 | `GET /v1/ranking` | none | `version?` → §7.3 |
-| `POST /v1/persons` | `sdi-instance/1` | `{request_id, email, agent: {label?, jkt?, directory?}}` → `201 {key, pass, presentation, ppid, person}` · `409 person_exists` · `429 rate_limited` |
+| `POST /v1/persons` | `sdi-instance/1` | `{request_id, email, agent: {label?, jkt?, directory?}, email_proof?}` → `201 {key, pass, presentation, ppid, person}` · `409 person_exists` · `429 rate_limited` |
 | `POST /v1/presentations` | `sdi-instance/1` | §7.2 → `{presentation, ppid, person, pass?, email_match?}` · `404 unknown_pass` · `410 revoked` · `403 pass_requires_signature` |
 | `POST /v1/passes`, `/v1/passes/revoke` | the key; the pass or a session | `{key, label}` → `{pass}` (≤ 10 a day per key); `{pass}` or `{pass_id}` → `{revoked: true}` |
 | `POST /v1/delegations` | session **and** `sdi-agent/1` by the key delegated | `{pass}` → `{pass_ref, jkt, bound: true}` |
 | `GET /v1/person`, `POST /v1/person/contests` | session | standing, evidence, passes, delegations, presentations; `{evidence}` → `{id}` |
 | `POST /v1/recovery/start`, `/finish` | none | §2.3 |
-| `POST /v1/reports` | signed (§3.4) | → `202 {id, status: "open", respond_by}` |
+| `POST /v1/reports` | signed (§3.4) | → `202 {id, status: "open"\|"disputed", respond_by}`; `disputed` when the business already recorded a customer outcome for the item (§3.4) |
 | `POST /v1/reports/{id}/response`, `/v1/contests/{id}/response` | `sdi-instance/1` | `{answer: "dispute"}`, `{answer: "withdraw"}` → `{id, status, answer}` |
 
 ### 7.2 Listings, presentations and forwarded signatures
 
 A **listing** has `domain`, `name`, `description?`, `city?`, `country?` (ISO 3166 alpha-2),
 `categories`, `languages`, `item_types` (string arrays), `protocols` (name → URL), `geo? {lat,
-lng}`, `distance_km?` (near only), `url?`, `manifest_url`, `verified_at`, `last_ping_at?`,
-`software? {version, runtime}`, `receipts {issued, acknowledged, last_at?}` (promises only),
-`answering`, `online` (its alias), `not_answering_since`, `rank_pos` and `reputation {ranked, score,
-tier, kept, broken, customers, verified_share, rules}` (times ISO 8601; `verified_share` is the
-share of weight from verified evidence). Nothing about any customer is ever returned.
+lng}`, `distance_km?` (near only), `url?`, `manifest_url`, `verified_at`, `last_ping_at?` (the last
+ping that counts, §6), `software? {version, runtime}`, `receipts {issued, acknowledged, last_at?}`
+(promises only), `answering`, `online` (its alias), `not_answering_since`, `rank_pos` and
+`reputation {ranked, score, tier, kept, broken, customers, verified_share, rules}` (times ISO 8601;
+`verified_share` is the share of weight from verified evidence). Nothing about any customer is ever
+returned.
 
 `POST /v1/presentations` takes one of `pass`, `key` or `agent_key`, `purpose: "request"|"ack"`,
-`sha?` and `email?`; `person` is §5.3's object. A key is exchanged for a pass, reusing one minted for
-the same key and agent within 24 h. `email_match: "proven"|"unproven"|"no"` lets an inbox recognise
-a known customer without a code (§8.2). Limits (*default*): 600 calls a minute per instance; 20 per
-person per business per day, then the last result is returned.
+`sha?`, `email?` and `email_proof?`; `person` is §5.3's object. A key is exchanged for a pass,
+reusing one minted for the same key and agent within 24 h. `email_match: "proven"|"unproven"|"no"`
+lets an inbox recognise a known customer without a code (§8.2). `email_proof` (`"otp"`: a code the
+inbox emailed to the address was entered; `"dkim"`: DKIM-authenticated mail from it; anything else
+`400`) says how the inbox proved `email`, which it needs; on `POST /v1/persons` it is recorded for
+the person a `201` creates, never on a `409`, and here only when `email_match` is not `"no"`
+(A1.7). Limits (*default*): 600 calls a minute per instance; 20 per person per business per day,
+then the last result is returned.
 
 `agent_key = {jkt, pass_ref, label, signature_input, signature, signature_base}`: the label's inner
 list with parameters exactly as received, the raw base64 between the colons, and the UTF-8 signature
 base the inbox verified (RFC 9421 §2.5, ending with the `"@signature-params"` line). The network
-checks that line equals `"@signature-params": ` + `signature_input`, verifies with the delegated or
-directory key, requires `@authority` to be the presenting instance and `created` within 300 s, and
-stores SHA-256 of `signature` so each is used once. Delegation needs a session because businesses
-hold passes and keys too, and could otherwise delegate their own key to a customer's pass and sign
-"verified" acknowledgements; for an SDK agent it is one emailed code at setup.
+reads signature fields up to 8 KB, checks that line equals `"@signature-params": ` +
+`signature_input`, verifies with the delegated or directory key, requires `@authority` to be the
+presenting instance, `created` within 300 s and `expires` at most 60 s past, as the inbox does
+(§2.4), and stores SHA-256 of `signature` so each is used once. With `purpose: "ack"` it is stored
+and verifies nothing (§3.4). Delegation needs a session because businesses hold passes and keys too,
+and could otherwise delegate their own key to a customer's pass and sign "verified"
+acknowledgements; for an SDK agent it is one emailed code at setup.
 
 ### 7.3 The ping and the published rules
 
 Ping body `{version, runtime, counts: {bookings, orders, quotes, messages}}` (last 24 h; `counts`
-optional), as today. **Unsigned:** `204`, no body, as today, and it counts as answering. **Signed:**
+optional), as today. **Unsigned:** `204`, no body, as today; it counts as answering only for a
+business that has never sent a signed ping (§6), and is kept as telemetry (§9). **Signed:**
 `200 {ok, rules: {version, effective_at}, next_rules: {version, effective_at, url} | null, reports:
 [{id, receipt_sha, out, why, created_at, respond_by}], contests: [{id, evidence_id, out,
 created_at}], standing: {score, tier, ranked}}`; anyone can ping for any domain, so only a signed
 ping sees these. The new inbox treats `200` and `204` as success.
 
-`GET /v1/ranking` (version 3; `?version=N` for any past one, forever) returns `{version, rules:
-"0.1", status, effective_at, summary, order, score, weights, timing, verified, tiers, never_used,
-changelog, next}`: §6's order and every §14 value (with `recognised_platforms` and the PSL snapshot
-date) under the `packages/spec` schema's names; `never_used` lists advertising, payment, amounts,
-anything a business's profile says about it except its location, and who is searching. The changelog
-starts at version 2 (2026-09-22, the neutral order during the redesign).
+`GET /v1/ranking` (version 4; `?version=N` for any past one, forever) returns `{version, rules:
+"0.1.1", status, effective_at, summary, order, score, weights, timing, verified, tiers, never_used,
+changelog, next}` (version 3's `rules` is `"0.1"`; 0.1.1 is 0.1 with Amendment 1): §6's order and
+every §14 value (with `recognised_platforms` and the PSL snapshot date) under the `packages/spec`
+schema's names; `never_used` lists advertising, payment, amounts, anything a business's profile
+says about it except its location, and who is searching. The changelog starts at version 2
+(2026-09-22, the neutral order during the redesign).
 
 ### 7.4 Errors, schemas and vectors
 
@@ -498,7 +555,8 @@ RFC 9457 problems with a `code` (a `400` may have none); a failed acknowledgemen
 Schemas are zod in `packages/spec` (MIT), JSON Schema generated by `z.toJSONSchema` into
 `packages/spec/schemas/`. Vectors in `packages/spec/vectors/`: `receipts-v2.json` (every claim and
 every transition path's outcome); `passes.json` (formats, `ppid`, 12+ email cases: IDN, `ß`,
-full-width, trailing dot, plus-address, refused quoted local part); `signatures.json` (both
+full-width, trailing dot, plus-address, refused quoted local part, the refused characters and
+domain labels of §2); `signatures.json` (both
 profiles, both tags, `agent_key`); `scoring.json` (every §5.2 row with its `scoring_time`, the R5
 grid, the ageing cap, hold and release, R32); `ordering.json` (shuffles above 2^53, cursors).
 
@@ -566,7 +624,9 @@ A weak match never sees the known party's items: impersonation is refused withou
 person. **A merge** is one batch (items, thread entries, links, `merged_into`); a code verifies every
 contact row with that value and merges every party holding it, perhaps pulling in items someone else
 made with that address (R27's accepted cost). **Linking:** a known customer's first pass attaches
-its `ppid` on a strong match; a weak one waits for a code or `email_match: "proven"`.
+its `ppid` on a strong match; a weak one waits for a code or `email_match: "proven"`. When a
+one-time code or authenticated email proved the address, the issuance or presentation that links
+it carries `email_proof` (§7.2), so the customer's broken outcomes here can count (A1.7).
 
 **One-time code:** REST `POST /v1/customers/verify`, MCP `verify_customer`, limiter class `verify`
 (30 per IP an hour). `{item_id, access_token}` emails 6 digits to the known party → `202 {sent_to:
@@ -621,29 +681,33 @@ linked from every manifest; in plain steps, for any customer's agent:
 3. **Identify the human, not yourself:** `contact.name`, `email`, `phone`, `locale` are the person's.
 4. **Same customer next time:** present the pass; if the answer is `weak`, ask for the emailed code
    and call `verify_customer`.
-5. **Acknowledge receipts,** and report a broken promise only when it happened; both count signed.
+5. **Acknowledge receipts** with a token (the SDK's `signAck`), and report a broken promise, signed,
+   only when it happened; an acknowledgement without a token is kept but verifies nothing.
 6. **Never put a key in message text.**
 7. **If you can sign,** use the SDK: one emailed code delegates your key; nothing copyable travels.
 
 ## 9. What a network stores
 
 Every receipt, acknowledgement, report, contest, presentation and piece of evidence, forever (R9),
-even when a business is deleted; business snapshots too. Secrets only as SHA-256 (except an issuance
-answer, sealed for its 7-day replay); emails only as `email_mac`. Pings, with their address, are
-telemetry kept 90 days. Listings and presentations are served from the snapshot.
+even when a business is deleted; business snapshots too. Secrets only as SHA-256, except an issuance
+answer, sealed for its 7-day replay, and a pass minted by exchanging a key, sealed 24 h so the same
+key and agent get it back (§7.2). Emails only as keyed hashes: `email_mac`; the email's registrable
+domain (none for free mail), for §3.4's own-domain rule and §4's one-domain-one-customer rule; and
+the customer key (§4). Pings, with their address, are telemetry kept 90 days. Listings and
+presentations are served from the snapshot.
 
 ## 10. Anti-gaming
 
 | Attack | Defence in 0.1 | Still open |
 |---|---|---|
-| **Invented customers** | Word ≤ 50 fresh units (0.9682), ageing; 30-day hold, ≤ 30 units a month to day 90; distinct customers need a proven email or a presentation elsewhere; issuance ≤ 50 a day; outcomes need a held promise; `verified_share` public. | A fabricated word record reaches an honest 50/50's ceiling, above an honest 990/1000 (0.9508). |
-| **Self-acknowledgement, shared platform keys** | A pass never verifies; a key only when vouched and making the item's own presentation, or delegated to an established person. | Paying real orders at honest shops. |
+| **Invented customers** | Word ≤ 50 fresh units (0.9682), ageing; 30-day hold, ≤ 30 units a month to day 90; distinct customers need a proven email or a presentation elsewhere, and one mailbox is one customer (`+` and Gmail dots folded); issuance ≤ 50 a day; outcomes need a held promise; `verified_share` public. | A fabricated word record reaches an honest 50/50's ceiling, above an honest 990/1000 (0.9508). Alias services such as Apple's Hide My Email give one person many addresses no fold can join; counting each such domain as one customer is Tiago's call. |
+| **Self-acknowledgement, shared platform keys** | A pass never verifies, nor a forwarded signature, whose body the network never sees; only an acknowledgement token of that receipt, by a key vouched and making the item's own presentation, or delegated to an established person. Nothing a business holds can block a report. | Paying real orders at honest shops. |
 | **Borrowed passes and keys** | Only standing is borrowed (R20); acting as the person needs an emailed session; `unusual_use`; presentations listed; recovery rotates all. | Accepted (R20). |
-| **Collusion rings** | Relations as components; `c` scaled by `min(1, U/5)`; the word cap. | Genuinely distinct businesses and customers. |
+| **Collusion rings** | Relations as components, each resting on proof (a copied contact email joins nobody, and the overlap groups by mailbox or company domain only customers with a network-proven email); `c` scaled by `min(1, U/5)`; the word cap. | Genuinely distinct businesses and customers. |
 | **Hiding broken promises** | `due`; late promises make kept outcomes presumed; `promise.unclosed`, final; broken outcomes dated by arrival; notice decided by the network. | — |
 | **Rivals' false reports** | Signed, verified, the item's own person, once; never above the kept row; 0.5 against 0.5 when disputed; automatic dispute. | A per-business cap (§13). |
 | **A hostile business; tier as credit** | A customer's broken outcomes from one business ≤ one outcome's worth, halved by a contest; order payment never waived; instant bookings ≤ 2 open, ≤ 20000; shop ≤ 2× paid. | — |
-| **Floods, clocks, probing, impersonation** | Tokens before signatures; per-platform, per-instance, issuance and per-address limits; future `iat` refused, backdating lowers `t`; `201` against `409` counted and audited; a weak match gets a provisional party and codes go to the known address. | Knowing whether an email is known (accepted); phone-only customers until SMS. |
+| **Floods, clocks, probing, impersonation** | Tokens before signatures; per-platform, per-instance, issuance and per-address limits; future `iat` refused, backdating lowers `t`; `201` against `409` counted and audited; a weak match gets a provisional party and codes go to the known address; a customer's broken outcomes count only once their email is proven; a business that signs its pings answers only by signed ones. | Knowing whether an email is known (accepted); phone-only customers until SMS. |
 
 ## 11. Publication and change (R17)
 
@@ -682,16 +746,17 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
 | Networks per inbox | up to 8 | Tiago (R23) "multiple"; limit default | Bounds background work per inbox; raise when needed |
 | Time | 1.0 ≤ 30 d; 0.75 ≤ 182 d; 0.5 ≤ 365 d; 0.25 older; weight and confidence | Tiago (R14, R29); values default | Quiet records slide, never to zero |
 | Outcomes | kept 1; business cancel 0.5 with ≥ 24 h notice, else 1; no-show 1; late customer cancel 0.5; payment failed 0.5; charge-back 1; presumed kept × 0.5 | default | Share moved by each outcome |
+| A customer's broken outcomes | count only when their email was proven by the outcome's date: network-proven, for every business; or at the business that recorded them (`email_proof`, or their key presented there), for its own; kept ones always count | Tiago (A1.7) | Someone using your email can't hurt you |
 | Word cap; verified; disputed | 50 fresh units, ageing (0.9682); 2.5; × 0.5 | default | The word alone; R3; both sides stand |
 | Counterparty; `z` | 1 + score × min(1, unrelated / 5); 1.2816 | R13's proposed ratio, scaled; default | The other side's record; caution |
 | Established; platforms | trusted, 3 unrelated trusted businesses, 60 days, proven email; seeded at launch (https directory, named operator) | default | When a key verifies |
-| Related | same /24 or /48 within 30 d; overlap ≥ 50%; one non-free-mail domain = one customer | default | "Unrelated" |
+| Related | same /24 or /48 within 30 d, from signed pings; overlap ≥ 50%, grouping by mailbox or domain only customers with a network-proven email; no contact-email relation; one non-free-mail domain = one customer; one mailbox = one customer (`+` and Gmail dots folded) | Tiago (A1.3, A1.4) contact email, mailbox; rest default | "Unrelated"; distinct customers |
 | Tiers | trusted ≥ 0.75 (+ 3 businesses or 10 customers); building ≥ 0.40; `person.tier` best across networks | default; building R32 | Rules and presets |
 | Order; timing | answering 24 h; hourly snapshot; daily shuffle; notice 24 h; late customer 48 h; late promise 24 h; auto-complete 48 h after the end; rules change notice 15 d | default | R10, R12, R17, §3 |
 | Orders; reports | lapse 14 d after a payment request; due 30 d; reports `due` + 1 h to + 90 d, disputed within 14 d | default | §3 |
 | Presets | known: ≥ 2 completed, no no-shows; trusted ≤ 2 open, ≤ 20000; shop ≤ 2× paid; `person.limit_minor` 40000 when trusted | default | Rewards, never credit |
 | Calls and codes | signatures ≤ 300 s, 60 s skew; network 3 s, cache 3600 s, breaker 3 → 60 s, `409` cached 24 h; codes 6 digits, 10 min, 5 tries, 3/h per address; session 24 h | default | Never block a booking; recovery |
-| Limits | issuance 50/day/business; passes 10/day/key; 600 calls/min/instance; 20 presentations/person/business/day; ≤ 8 pass strings (≤ 200 chars) and `per` entries; networks unlimited (R23); unusual use > 10 businesses in 24 h or two signing keys | default | Floods, misuse signs (R20) |
+| Limits | issuance 50/day/business; passes 10/day/key; 600 calls/min/instance; 20 presentations/person/business/day; ≤ 8 pass strings (≤ 200 chars) and `per` entries; 32 outcomes per item; signature fields ≤ 8 KB; networks unlimited (R23); unusual use > 10 businesses in 24 h or two signing keys | default | Floods, misuse signs (R20) |
 
 ## 15. Changes
 
@@ -703,4 +768,220 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   forwarded signature base, durable publication, identity in the create batch, strict settings,
   customer backfill, email notice; the network's private schema replaced by what it must store.
 - **In force, 23 Sep 2026:** version 3 took effect the day it was published, at Tiago's decision. No
-  other business was listed, so nobody was owed the notice §11 describes. Every later change keeps it.
+  other business was listed, so nobody was owed the notice §11 describes. Later changes keep it once
+  another business is listed.
+- **Version 4, 23 Sep 2026 (Amendment 1):** only an acknowledgement token verifies, and only it
+  stops a report (A1.1); a business that signs its pings answers only by signed ones (A1.2); a
+  profile's contact email no longer relates businesses (A1.3); one mailbox is one customer, `+` and
+  Gmail dots folded (A1.4), and the overlap relation groups by mailbox or company domain only
+  persons with a network-proven email; a customer's broken outcomes count only once their email is
+  proven (A1.7); the network's records of A1.5 written into the body. Its rules are named 0.1.1.
+  It took effect the day it was published, at Tiago's decision: ours was still the only listed
+  business, so, as for version 3, nobody was owed §11's notice.
+
+## Amendment 1 (23 Sep 2026)
+
+**Status: accepted (Tiago, 23 Sep 2026)** for A1.1–A1.4 and A1.7, in force as rules version 4 the
+day it was published (ours was the only listed business, so no notice was owed); A1.6 stays
+proposed. Tiago approved the first four items in these words, and A1.7 quotes the choice he made:
+
+> Only a real counter-signature verifies a promise.
+> Once an inbox signs its pings, only signed pings count.
+> Stop linking businesses by contact email.
+> One mailbox is one customer (ana+1@gmail.com counts as ana@gmail.com).
+
+A security review of the network found the gaps below. The body of this ADR now states the accepted
+rules, and this section records why. A1.5, and the lines in A1.1 and A1.3 that say "already", record
+what the network already does, so the text matches it. Each item says how Tiago's decisions stay
+whole.
+
+### A1.1 Only a signed token verifies an acknowledgement
+
+**Risk.** The network never sees the body behind a forwarded signature (`agent_key`, §7.2), so a
+business can pass off any signed request from an established customer's agent, even the booking
+request itself, as a verified acknowledgement of its own kept outcome.
+
+**Rule.** Only an acknowledgement token can make evidence verified: the ADR-016 counter-signature
+JWS, whose payload carries the receipt's `sha`, signed by a key that passes §4. For an SDK agent
+that is the key it delegated, and `signAck` makes the token. A forwarded `acknowledge_receipt`
+(`agent_key` with `purpose: "ack"`) is still accepted and stored (R9), and verifies nothing. The
+same token is already the only acknowledgement that stops a report with `409 you_acknowledged_it`
+(§3.4), so a business cannot block a report with anything it holds. Forwarding the signed body, so
+the network could check its digest, would also close the gap; the token is simpler and already in
+the SDK.
+
+**Tiago's decisions.** R3 holds exactly: weight still comes only from a verified agent, now one that
+signed this very receipt. R6 gets stronger, since a business cannot silence a customer's report.
+R18: an agent that cannot make a token keeps working; its acknowledgement is stored, and the outcome
+stays the business's word. The cost: a platform's key signs only its agents' requests, so until a
+platform makes tokens, only SDK agents verify an acknowledgement.
+
+**Text changed:** the rules in one screen (3), §1 (R3), §3.4, §4 (first sentence), §7.2
+(`purpose: "ack"`), §8.4 (guide step 5), §10 (self-acknowledgement).
+
+### A1.2 A business that signs is answering only by signed pings
+
+**Risk.** Anyone may send an unsigned ping for any domain (§7.3), so a rival can keep a business
+whose inbox is down "answering", and R30 then records its promises as unclosed during the outage
+its pause was meant to cover.
+
+**Rule.** Once a business has sent one signed ping, only its signed pings make it answering, for §6
+(the order and `not_answering_since`) and for R30's pause. Unsigned pings for it still get `204` and
+are kept as telemetry (§9). A business that has never signed keeps version 3's rule. R30 cannot
+hurt it: only new inboxes send v2 promises, and they sign their ping with the key that signs their
+receipts. A rival can still make it look answering, which only flatters it. One case changes: a
+business that goes back to an inbox that cannot sign shows as not answering until it signs again.
+
+**Tiago's decisions.** R30 holds as written, and its pause now protects the business it was meant
+for. R12's "not answering since …" can no longer be faked for a business that signs. R18: instances
+that have never signed are unchanged, and unsigned pings still get `204`.
+
+**Text changed:** the rules in one screen (5), §1 (R10–R12), §2.5, §3.3 (unclosed), §6 (answering),
+§7.2 (`last_ping_at`), §7.3 (unsigned ping), §10 (floods).
+
+### A1.3 Contact email no longer relates businesses
+
+**Risk.** A profile's `contact_email` is whatever its manifest says, so one person with many
+subdomains of one domain can copy a different victim's contact email into each and pull all the
+victims into one component with them (§4).
+
+**Rule.** Drop the `contact_email` relation. Under version 3 a joined business lost weight it
+earned: evidence from its customers weighed less (their `U` fell, so `c` fell, §5), and visits to
+joined businesses counted as one toward a customer's `trusted` (§5.3). The relation adds little,
+since the network proves no business's email and a ring can simply use different ones. It may return in a
+later rules version for an email each business has proved it controls. The other relations stay,
+each resting on what a business proved, as the network already applies them: a receipt key counts
+only when each business signed with it, and an IP address only from its signed pings. An operator
+can still record a relation with a reason (§4).
+
+**Tiago's decisions.** R13 is protected: nobody can lower the weight of another business's customers
+by declaring a link. "Mutually unrelated" (§4) keeps its meaning through the relations that rest on
+proof.
+
+**Text changed:** §1 (R13), §4 (related businesses), §10 (collusion rings), §14 (related).
+
+### A1.4 Plus-addresses count as one customer
+
+**Risk.** `a+1@gmail.com`, `a+2@gmail.com` and so on reach one mailbox, so one person can prove any
+number of addresses, and a business can make them its 10 distinct customers for `trusted` or spread
+one customer's visits past R7's cap.
+
+**Rule.** To count customers, the network folds each address into a **customer key**: it drops
+everything from the first `+` to the `@`, and for `gmail.com` and `googlemail.com` it also drops the
+dots and uses `gmail.com`. So `A.Silva+x@googlemail.com` and `asilva@gmail.com` are one customer.
+The key is used wherever the rules count customers: distinct customers (§5.3), `U` (§5), the overlap
+relation (§4) and the customer in `r`'s pair for evidence about a business (R7). Identity keeps §2's
+exact address: issuance, `email_mac`, recovery and codes are unchanged, so each address is still its
+own person with its own key. A custom domain needs no folding, since customers sharing a
+non-free-mail domain already count as one (§4). A wrong fold can only make the network count fewer
+customers; it never refuses a person or touches their key.
+
+**Still open.** Alias services such as Apple's Hide My Email or DuckDuckGo's addresses give one
+person many addresses that no fold can join. Counting each such domain as one customer, like a
+company domain, would close this, and would also count all their honest users as one. That is
+Tiago's call.
+
+**Tiago's decisions.** R7 holds again for the free way to multiply addresses: one mailbox counts as
+one customer, whatever `+` or dots it adds. R16 and R19 are untouched: one key per person, issued by
+email at a first booking. §2's "no dot or plus folding" stays true for identity.
+
+**Text changed:** the rules in one screen (3), §1 (R7), §2 (last sentence), §4 (grouping), §5
+(`r`, `U`), §5.3 (distinct customer), §9, §10 (invented customers), §14 (related).
+
+**Note: the overlap groups only proven customers.** The overlap relation (§4) groups a person by
+customer key, or by company domain, only once their email is network-proven; anyone else counts
+there as their own person, as under version 3, so businesses sharing invented customers still
+relate. The fold still applies wherever customers are counted, as approved. Registering an address
+needs no proof, so otherwise a business could register `ana+x@gmail.com` for a rival's customer
+`ana@gmail.com`, or any address at a customer's company domain, and, grouped with that customer,
+relate itself to the rival. **Text changed:** §4 (related businesses), §10 (collusion rings), §14
+(related), §15.
+
+### A1.5 Records
+
+- **Stored (§9).** Beside the issuance answer, a pass minted by exchanging a key is sealed for 24 h,
+  so the same key and agent get it back (§7.2). Beside `email_mac`, the network keeps a keyed hash
+  of the email's registrable domain (none for free mail), for §3.4's own-domain rule and §4's
+  one-domain-one-customer rule. With A1.4 it also keeps a keyed hash of the customer key.
+- **Reports (§7.1).** `POST /v1/reports` answers `202 {id, status, respond_by}`, where `status` is
+  `"open"`, or `"disputed"` when the business already recorded a customer outcome for the item
+  (§3.4's automatic dispute). The spec schema allows both.
+- **Email addresses (§2).** The network also refuses a local part holding a space or any of
+  `( ) < > [ ] \ , ; : @ "`, and a domain label that is not `[a-z0-9-]{1,63}` after punycode.
+  Otherwise `me@evil.example,x@gmail.com` could pass as a gmail.com customer while a recovery code
+  also went to `me@evil.example`. The inbox must refuse the same, and `passes.json` must carry these
+  cases.
+- **Limits (§7.2, §14).** At most 32 outcomes per item, then `429 too_many_receipts`. Signature
+  fields are read up to 8 KB. A forwarded signature more than 60 s past its own `expires` is
+  refused, as the inbox refuses it (§2.4).
+
+None of these moves a decision of Tiago's. The email rule refuses only malformed addresses; such a
+customer still books, and no key is issued (§2.1, R25).
+
+**Text changed:** §2, §3.3 (intake), §7.1, §7.2, §7.4, §9, §14 (limits).
+
+### A1.6 Smaller items (proposed)
+
+**Status: proposed.** Not approved yet, so none of this is in force or in the body above.
+
+| Risk | Proposed |
+|---|---|
+| The overlap relation (≥ 50% of the smaller business's customers) relates two tiny businesses through one shared customer, and a stranger with one real booking at each victim can join them as in A1.3. | Overlap also needs at least 5 shared customers (*default*). |
+| An IPv4 /24 or IPv6 /48 at a cloud host holds many unrelated customers. Honest businesses there become related, and an attacker can rent a server in each victim's block and join them as in A1.3. | Relate by one IPv4 address or one IPv6 /64 (*default*). A ring can use different blocks anyway. |
+| Anyone can ask for a code to an address, which replaces the owner's code, or use up its 3 sends an hour or its 5 tries, and keep the owner out of recovery. | `start` always returns an id, and `finish` needs it with the code. Each id has its own code and its own 5 tries, so a stranger's calls never touch the owner's code. The 3 sends an hour stay, and one IP may ask once an hour per address (*default*). Someone with 3 IPs can still hold recovery off while they keep at it. |
+| Past the 20-a-day presentation limit, `email_match` is still worked out afresh, so a business holding a pass can test guessed emails without end. | Past the limit the stored answer comes back whole, `email_match` included. |
+| `since` to the second and `score` to six decimals are close to unique, so two businesses can link one person's presentations despite separate `ppid`s. | `since` is the first day of its month (UTC), and a presentation's `score` has two decimals. |
+
+These narrow what an attacker can do. R21 (recovery by email) and R22 (a person's record is seen
+only when presented) get stronger. The overlap minimum and the single address remove only relations
+that rest on little: a few shared customers, or a block shared with strangers. If accepted, §14
+gains the new numbers.
+
+### A1.7 A customer's broken promises count once their email is proven
+
+**Status: accepted (Tiago, 23 Sep 2026)**, part of rules version 4. Tiago was asked: "Someone could
+book using another person's email, then not turn up, to hurt that person's record. How should a
+customer's broken promises count?" He chose:
+
+> Only once their email is proven: Kept promises always count. A no-show or late cancellation
+> counts against a person only once their email is proven: they used the code we emailed them,
+> verified by code, or wrote from their real mailbox. Someone using your email can't hurt you.
+
+**Risk.** A first booking needs only an email address, and nothing proves it is the booker's
+(§2.1). Anyone can book with someone else's address: the network issues a person for it, the
+booker's agent gets the pass, and every no-show or late cancellation lands on the record of the
+address's owner, who inherits it with the key that reaches their mailbox.
+
+**Rule.** Kept outcomes always count. A broken outcome about a customer (§3: a no-show, a late
+cancellation, a failed payment, a charge-back) counts against the item's person only when their
+email was proven by the outcome's date, in one of the ways Tiago named:
+
+- **Network-proven** (§2.3): they used a code the network emailed them. This counts for every
+  business's outcomes.
+- **Proven to the business** that recorded the outcome, for its own outcomes only. Either they
+  entered its one-time code or wrote from the address by authenticated mail (§8.2), and its inbox
+  said so with `email_proof` (`"otp"` or `"dkim"`) when it issued or linked them with that address
+  (§7.1, §7.2); or they presented there the key issued for the address, which rides on the first
+  email to it (§2.1). The network records a proof only for an address that is the person's: never
+  on a `409`, and on a presentation only when `email_match` is not `"no"`.
+
+Otherwise the outcome is stored (R9) and never scored, even after the email is proven: a stranger's
+no-shows from before the owner proved the address never reach the owner's record. Failed payments
+and charge-backs follow the same rule, since an order can be placed with someone else's address too.
+
+**Tiago's decisions.** R15 holds: customers keep their own reputation, built from their first kept
+promise. R25 gets stronger: nobody's record falls for what someone else did with their address.
+R16 and R19 are untouched: a first booking still needs only an email, and the key still comes by
+email. A business's own history of a customer (§8.2) is unchanged: a weak match never joins the
+known customer. The cost: a customer who never proves their email carries no broken outcomes; a
+presentation's `email_proven` shows whether the network holds proof. A business could claim a
+proof it never saw; that is its word, like the no-show itself, so it counts for that business's
+outcomes only, still at most one outcome's worth per business and open to contest (§3.4).
+
+**Still open.** A proof covers outcomes dated after it, whenever the booking was made. A stranger
+who booked with the address before its owner signed in, and missed the booking after, still counts
+against the owner, who can contest it (§3.4); recovery also revokes the stranger's pass (§2.3),
+while a sign-in does not.
+
+**Text changed:** the rules in one screen (1), §1 (R15), §3, §5.3 (customers), §7.1 and §7.2
+(`email_proof`), §8.2 (linking), §10 (impersonation), §14 (a customer's broken outcomes), §15.
