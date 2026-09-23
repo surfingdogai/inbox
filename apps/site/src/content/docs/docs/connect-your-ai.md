@@ -59,6 +59,7 @@ Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work t
 | `transition_item` | Fire one of the events the item lists (`confirm`, `propose`, `decline`, `quote`, …); pass `expected_version` to avoid racing a colleague. |
 | `reply` | Send a reply to the customer, or an internal note with `internal: true`. |
 | `get_settings` | The settings document and its version. |
-| `update_settings` | Change settings: send only the sections that change, with `expected_version`; the rest keeps its values. |
+| `update_settings` | Change settings: send only the sections that change, with `expected_version`; the rest keeps its values, and `null` removes a key. Networks are keyed by origin, so adding or switching off one leaves the others alone. |
+| `get_networks` | The networks this inbox reports to and how each is doing: last ping, last error, receipts published. |
 
 The server's instructions to the model are short: never invent facts about availability or prices; read them first. Every refusal names the fields to fix.

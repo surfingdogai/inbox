@@ -24,20 +24,44 @@ export interface RunReport {
   readonly done: number;
   readonly failed: number;
   readonly dead: number;
+  /** Claimed by a lane that ran out of time, and handed back for the next run. */
+  readonly released: number;
 }
 
 export const LEASE_MS = 60_000;
+
+/**
+ * How long a lane may keep starting jobs in one run. A lane is someone else's server, and a run
+ * ends only when its slowest lane does; past this, the lane's remaining jobs are handed back
+ * untouched for the next run, so a slow network costs the rest of the outbox seconds, not minutes.
+ */
+export const LANE_BUDGET_MS = 10_000;
 
 export function backoffMs(attempts: number): number {
   return Math.min(2 ** attempts * 30_000, 6 * 3_600_000);
 }
 
+/**
+ * A lane: jobs that name the same lane run one after another, and each lane runs beside the others
+ * and beside every job without one. A job that calls someone else's server (a network, ADR-017
+ * §8.1) takes a lane per server, so a slow or unreachable one only ever delays its own jobs.
+ */
+export type LaneOf = (payload: unknown) => string | undefined;
+
 export class JobRunner {
   private readonly handlers = new Map<string, JobHandler>();
+  private readonly lanes = new Map<string, LaneOf>();
   private running: Promise<RunReport> | null = null;
+  private readonly laneBudgetMs: number;
 
-  register(kind: string, handler: JobHandler): this {
+  constructor(opts: { laneBudgetMs?: number } = {}) {
+    this.laneBudgetMs = opts.laneBudgetMs ?? LANE_BUDGET_MS;
+  }
+
+  register(kind: string, handler: JobHandler, opts: { lane?: LaneOf } = {}): this {
     this.handlers.set(kind, handler);
+    if (opts.lane) this.lanes.set(kind, opts.lane);
+    else this.lanes.delete(kind);
     return this;
   }
 
@@ -61,7 +85,10 @@ export class JobRunner {
       params: [now + LEASE_MS, workerId, now, now, limit],
       method: "all",
     });
-    const report = { claimed: rows.length, done: 0, failed: 0, dead: 0 };
+    const report = { claimed: rows.length, done: 0, failed: 0, dead: 0, released: 0 };
+    // Jobs without a lane keep the order they were claimed in, in one sequence; each lane is a
+    // sequence of its own, and the sequences run side by side.
+    const sequences = new Map<string, JobRow[]>([["", []]]);
     for (const r of rows) {
       const job: JobRow = {
         id: String(r[0]),
@@ -70,36 +97,81 @@ export class JobRunner {
         attempts: Number(r[3]),
         maxAttempts: Number(r[4]),
       };
-      const handler = this.handlers.get(job.kind);
-      try {
-        if (!handler) throw new Error(`no handler for job kind "${job.kind}"`);
-        const result = await handler(job, { db, now });
+      const lane = this.lanes.get(job.kind)?.(job.payload) ?? "";
+      const sequence = sequences.get(lane) ?? [];
+      sequence.push(job);
+      sequences.set(lane, sequence);
+    }
+    const started = Date.now();
+    await Promise.all(
+      [...sequences.entries()].map(async ([lane, sequence]) => {
+        for (const [i, job] of sequence.entries()) {
+          if (lane !== "" && Date.now() - started > this.laneBudgetMs) {
+            await this.release(db, sequence.slice(i), now);
+            report.released += sequence.length - i;
+            return;
+          }
+          await this.runOne(db, job, now, report);
+        }
+      }),
+    );
+    return report;
+  }
+
+  /**
+   * Claimed and never started: back to the queue, the claim's attempt undone, and behind every job
+   * that was already due when this run began. Keeping their old `run_at` would put them first in
+   * the next claim again, so a lane with a backlog would take every slot, run by run, and starve
+   * the other lanes and the rest of the outbox until it drained.
+   */
+  private async release(db: Db, jobs: readonly JobRow[], now: number): Promise<void> {
+    // In slices: D1 binds at most 100 values in a statement, and a cron run claims up to 100 jobs.
+    for (let i = 0; i < jobs.length; i += 90) {
+      const slice = jobs.slice(i, i + 90);
+      await db.client.query({
+        sql: `UPDATE jobs SET status = 'queued', lease_until = NULL, leased_by = NULL, attempts = attempts - 1,
+                    run_at = MAX(run_at, ?)
+               WHERE id IN (${slice.map(() => "?").join(", ")}) AND status = 'running'`,
+        params: [now, ...slice.map((j) => j.id)],
+        method: "run",
+      });
+    }
+  }
+
+  private async runOne(
+    db: Db,
+    job: JobRow,
+    now: number,
+    report: { done: number; failed: number; dead: number },
+  ): Promise<void> {
+    const handler = this.handlers.get(job.kind);
+    try {
+      if (!handler) throw new Error(`no handler for job kind "${job.kind}"`);
+      const result = await handler(job, { db, now });
+      await db.client.query({
+        sql: "UPDATE jobs SET status = 'done', done_at = ?, lease_until = NULL, last_error = ? WHERE id = ?",
+        params: [now, result?.note ?? null, job.id],
+        method: "run",
+      });
+      report.done++;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (job.attempts >= job.maxAttempts) {
         await db.client.query({
-          sql: "UPDATE jobs SET status = 'done', done_at = ?, lease_until = NULL, last_error = ? WHERE id = ?",
-          params: [now, result?.note ?? null, job.id],
+          sql: "UPDATE jobs SET status = 'dead', lease_until = NULL, last_error = ? WHERE id = ?",
+          params: [message, job.id],
           method: "run",
         });
-        report.done++;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (job.attempts >= job.maxAttempts) {
-          await db.client.query({
-            sql: "UPDATE jobs SET status = 'dead', lease_until = NULL, last_error = ? WHERE id = ?",
-            params: [message, job.id],
-            method: "run",
-          });
-          report.dead++;
-        } else {
-          await db.client.query({
-            sql: "UPDATE jobs SET status = 'queued', lease_until = NULL, run_at = ?, last_error = ? WHERE id = ?",
-            params: [now + backoffMs(job.attempts), message, job.id],
-            method: "run",
-          });
-          report.failed++;
-        }
+        report.dead++;
+      } else {
+        await db.client.query({
+          sql: "UPDATE jobs SET status = 'queued', lease_until = NULL, run_at = ?, last_error = ? WHERE id = ?",
+          params: [now + backoffMs(job.attempts), message, job.id],
+          method: "run",
+        });
+        report.failed++;
       }
     }
-    return report;
   }
 }
 

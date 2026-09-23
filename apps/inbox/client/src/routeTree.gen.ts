@@ -17,6 +17,7 @@ import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
+import { Route as SettingsNetworksRouteImport } from "./routes/settings.networks";
 import { Route as SettingsRulesRouteImport } from "./routes/settings.rules";
 import { Route as SettingsServicesRouteImport } from "./routes/settings.services";
 import { Route as InboxItemsIdRouteImport } from "./routes/_inbox.items.$id";
@@ -60,6 +61,11 @@ const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
   path: "/integrations",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsNetworksRoute = SettingsNetworksRouteImport.update({
+  id: "/networks",
+  path: "/networks",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsRulesRoute = SettingsRulesRouteImport.update({
   id: "/rules",
   path: "/rules",
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
+  "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
+  "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/": typeof InboxIndexRoute;
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
+  "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/_inbox/": typeof InboxIndexRoute;
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
+    | "/settings/networks"
     | "/settings/rules"
     | "/settings/services"
     | "/settings/"
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
+    | "/settings/networks"
     | "/settings/rules"
     | "/settings/services"
     | "/"
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | "/setup"
     | "/settings/availability"
     | "/settings/integrations"
+    | "/settings/networks"
     | "/settings/rules"
     | "/settings/services"
     | "/_inbox/"
@@ -217,6 +229,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsIntegrationsRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/networks": {
+      id: "/settings/networks";
+      path: "/networks";
+      fullPath: "/settings/networks";
+      preLoaderRoute: typeof SettingsNetworksRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/rules": {
       id: "/settings/rules";
       path: "/rules";
@@ -256,6 +275,7 @@ const InboxRouteWithChildren = InboxRoute._addFileChildren(InboxRouteChildren);
 interface SettingsRouteChildren {
   SettingsAvailabilityRoute: typeof SettingsAvailabilityRoute;
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
+  SettingsNetworksRoute: typeof SettingsNetworksRoute;
   SettingsRulesRoute: typeof SettingsRulesRoute;
   SettingsServicesRoute: typeof SettingsServicesRoute;
   SettingsIndexRoute: typeof SettingsIndexRoute;
@@ -264,6 +284,7 @@ interface SettingsRouteChildren {
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAvailabilityRoute: SettingsAvailabilityRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
+  SettingsNetworksRoute: SettingsNetworksRoute,
   SettingsRulesRoute: SettingsRulesRoute,
   SettingsServicesRoute: SettingsServicesRoute,
   SettingsIndexRoute: SettingsIndexRoute,

@@ -295,13 +295,25 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => c.json(await caps.getReceiptStatus(c.get("caller"))),
   );
 
+  app.get(
+    "/networks",
+    describeRoute({
+      tags: ["owner"],
+      summary: "The networks this inbox reports to, and how each one is doing",
+      description:
+        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin.",
+      responses: json("Networks"),
+    }),
+    async (c) => c.json(await caps.getNetworks(c.get("caller"))),
+  );
+
   app.put(
     "/settings",
     describeRoute({
       tags: ["owner"],
       summary: "Change settings",
       description:
-        "The document you send is merged over the current one: sections and keys left out keep their values.",
+        "The document you send is merged over the current one: sections and keys left out keep their values, and null removes a key so its default applies again. Networks are a map keyed by https origin; adding one leaves the others as they are.",
       responses: json("Settings"),
     }),
     validator("json", updateSettingsInput, hook),

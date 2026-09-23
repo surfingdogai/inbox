@@ -46,7 +46,7 @@ Run it with `node server.mjs` and these variables:
 
 CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo bike shop
 to an empty instance, `seed-showcase` the same shop with a week of items, `network-ping` reports to
-the network now. `pnpm --filter @surfingdog/inbox shots` captures the owner app for the website.
+every network that is on now. `pnpm --filter @surfingdog/inbox shots` captures the owner app for the website.
 
 Sign in at `/login` with an address from `INBOX_OWNER_EMAIL` (a link is emailed; in development the
 mail is printed to the console, so set `INBOX_OWNER_EMAIL=you@example.com pnpm dev` and copy the link) or
@@ -61,13 +61,17 @@ webhook or a forwarder at it. On Cloudflare, Email Routing delivers straight to 
 address (`inbox+<item id>@…`) or by a `[SDI-<item id>]` subject token, and deduplicated on
 `Message-ID`.
 
-## Join a network
+## Join networks
 
-Settings → Network. `network.url` is the directory this instance reports to (default
-`https://network.surfingdog.ai`; any directory that implements `POST /v1/instances` and
-`POST /v1/instances/{domain}/ping` works) and `network.join` is the switch, off by default. When on,
-the instance registers its domain once (the network verifies it by fetching
-`/.well-known/agent-inbox.json` and checking that `instance` is your https origin) and then sends,
-every hour, its software version, runtime and the number of bookings, orders, quotes and messages
-created in the last 24 hours. It also publishes every receipt it issues, which names the customer
-only by a pseudonym; no name, address or message content leaves the instance.
+Settings → Networks. An inbox can report to several networks, and each one lists it in its own
+directory. The setting is `networks`, a map keyed by each network's https origin, at most eight;
+settings are merged, so adding one leaves the others as they are, and switching one off is
+`"enabled": false`. A fresh instance lists `https://network.surfingdog.ai`, switched off; any
+directory that implements `POST /v1/instances`, `POST /v1/instances/{domain}/ping` and
+`POST /v1/receipts` works. For each network that is on, the instance registers its domain (the
+network verifies it by fetching `/.well-known/agent-inbox.json` and checking that `instance` is
+your https origin) and then sends, every hour, its software version, runtime and the number of
+bookings, orders, quotes and messages created in the last 24 hours. It also publishes every receipt
+it issues, which names the customer only by a pseudonym; no name, address or message content leaves
+the instance. Each network is called on its own, so one that is down never holds up another, and
+what it missed is sent when it answers again.

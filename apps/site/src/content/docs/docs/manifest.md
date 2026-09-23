@@ -38,12 +38,12 @@ An instance publishes one small document at `/.well-known/agent-inbox.json`. It 
 | --- | --- |
 | `spec` | The format version. Always `surfingdog-inbox/0` today. |
 | `instance` | The instance's origin. |
-| `profile` | Public profile data the directory may index: name, description, up to ten categories and languages, a postal address, coordinates, a website, a contact email. What else a joined instance sends a network is on [Security and privacy](/docs/security-and-privacy/). Optional. |
+| `profile` | Public profile data the directory may index: name, description, up to ten categories and languages, a postal address, coordinates, a website, a contact email. What else an instance sends each network it reports to is on [Security and privacy](/docs/security-and-privacy/). Optional. |
 | `item_types` | Which of `message`, `quote_request`, `booking`, `order`, `refund` this instance accepts. |
 | `protocols` | Protocol name to entry URL. Today: `openapi`, `rest`, `mcp`, `mcp_owner`. Adapters add their own keys as they ship (`a2a`, `ucp`, `arp`, `email`, `form`). |
 | `agent_policy.tiers` | The trust tiers the instance serves, from `anonymous`, `signed_agent`, `verified_principal`, `reputed_principal`. |
 | `receipt_keys` | A JWKS with the instance's Ed25519 receipt-signing keys, the same keys `/.well-known/jwks.json` serves. Empty on an instance that has never issued one, or that has no `INBOX_SECRET_KEY` to seal a key with. |
-| `review_services` | The networks this instance publishes [receipts](/docs/receipts/) (and, later, reviews) to. Empty means none. The network chosen in Settings appears here once the owner joins; `https://network.surfingdog.ai` is only the default. |
+| `review_services` | The networks this instance publishes [receipts](/docs/receipts/) (and, later, reviews) to, by origin: every network switched on in Settings → Networks that takes receipts. Empty means none. `https://network.surfingdog.ai` is only the default. |
 
 The schema is a Zod object in [`packages/spec/src/index.ts`](https://github.com/surfingdogai/inbox/blob/main/packages/spec/src/index.ts). The instance builds the document from its business profile and serves it with a five-minute cache header.
 

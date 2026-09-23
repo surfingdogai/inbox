@@ -25,6 +25,7 @@ import type {
 export const qk = {
   business: ["business"] as const,
   settings: ["settings"] as const,
+  networks: ["networks"] as const,
   items: (params: ListParams) => ["items", params] as const,
   item: (id: string) => ["item", id] as const,
   counts: (sandbox: boolean) => ["counts", sandbox] as const,
@@ -45,6 +46,11 @@ export function useBusiness() {
 
 export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.getSettings, staleTime: 60_000 });
+}
+
+/** Each network and how it is doing; refreshed while the page is open, since a ping lands on its own. */
+export function useNetworks() {
+  return useQuery({ queryKey: qk.networks, queryFn: api.networks, staleTime: 10_000, refetchInterval: 30_000 });
 }
 
 export function useReceiptStatus() {
@@ -106,6 +112,9 @@ export function useSaveSettings() {
       qc.setQueryData(qk.settings, data);
       void qc.invalidateQueries({ queryKey: ["items"] });
       void qc.invalidateQueries({ queryKey: ["counts"] });
+      // A network switched on is pinged within seconds; look again once it has had the chance.
+      void qc.invalidateQueries({ queryKey: qk.networks });
+      setTimeout(() => void qc.invalidateQueries({ queryKey: qk.networks }), 3_000);
     },
   });
 }

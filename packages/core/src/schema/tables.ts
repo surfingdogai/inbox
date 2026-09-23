@@ -283,6 +283,46 @@ export const receipts = sqliteTable(
   (t) => [unique("receipts_item_kind").on(t.itemId, t.kind)],
 );
 
+/**
+ * Whether each network has each receipt yet (ADR-017 §3.3, §8.1): one row per receipt, network
+ * (its origin) and stage, `queued` until the network accepts it (`published`) or refuses it for
+ * good (`refused`). The hourly publisher per network posts what is still queued, so this table,
+ * not a job, is what says a receipt is owed; a job that dies loses nothing.
+ */
+export const networkPublications = sqliteTable(
+  "network_publications",
+  {
+    receiptId: text("receipt_id").notNull(),
+    network: text("network").notNull(),
+    stage: text("stage").notNull(),
+    state: text("state").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.receiptId, t.network, t.stage] }),
+    index("network_publications_queue").on(t.network, t.state, t.receiptId),
+  ],
+);
+
+/**
+ * What the owner sees per network: registration, the last ping it took, and the last error in a
+ * few words. `failures` counts calls that failed in a row, for the circuit breaker; any success
+ * resets it and clears `failing_since`.
+ */
+export const networkStatus = sqliteTable("network_status", {
+  network: text("network").primaryKey(),
+  registration: text("registration").notNull().default("unregistered"),
+  registeredAt: integer("registered_at"),
+  lastPingAt: integer("last_ping_at"),
+  lastError: text("last_error"),
+  lastErrorAt: integer("last_error_at"),
+  failingSince: integer("failing_since"),
+  failures: integer("failures").notNull().default(0),
+  updatedAt: updatedAt(),
+});
+
 export const signingKeys = sqliteTable("signing_keys", {
   kid: text("kid").primaryKey(),
   publicJwk: text("public_jwk", { mode: "json" }).notNull(),
@@ -292,6 +332,7 @@ export const signingKeys = sqliteTable("signing_keys", {
   retiredAt: integer("retired_at"),
 });
 
+/** Unused since 0000. Publications live in `network_publications`, whose key names the network. */
 export const reviewsOutbox = sqliteTable("reviews_outbox", {
   id: id(),
   itemId: text("item_id").notNull(),

@@ -5,6 +5,7 @@ import { ulid } from "../ids";
 import { webhookDeliveries, webhooks as webhooksTable } from "../schema/tables";
 import { requireSecretBox, type SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
+import { isPublicHost } from "../util/hosts";
 import { USER_AGENT } from "../version";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { deliverJobPrefix, jobStatement, WEBHOOK_DELIVERY_KIND, WEBHOOK_FANOUT_KIND } from "../write/common";
@@ -270,31 +271,12 @@ export function checkWebhookUrl(url: string, allowPrivate: boolean): WriteError 
   return null;
 }
 
-const BLOCKED_HOSTS = new Set(["localhost", "localhost.localdomain", "metadata", "metadata.google.internal"]);
-const BLOCKED_SUFFIXES = [
-  ".localhost",
-  ".local",
-  ".internal",
-  ".localdomain",
-  ".home.arpa",
-  ".onion",
-  ".test",
-  ".invalid",
-  ".example",
-];
-
 /**
- * No IP literals, no local, internal or reserved names. This is the one definition of the rule:
- * `safeFetch` in `@surfingdog/adapters` re-exports it rather than keeping a second copy, because
- * two host allow-lists that drift apart is how one door ends up laxer than the other.
+ * No IP literals, no local, internal or reserved names. The rule lives in `util/hosts.ts`, beside
+ * the network-origin check that uses it too; it is re-exported here because this is where
+ * `@surfingdog/adapters` has always imported it from.
  */
-export function isPublicHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/\.$/, "");
-  if (!h || BLOCKED_HOSTS.has(h)) return false;
-  if (!h.includes(".")) return false;
-  if (/^[\d.]+$/.test(h) || h.startsWith("[") || h.includes(":")) return false;
-  return !BLOCKED_SUFFIXES.some((s) => h.endsWith(s));
-}
+export { isPublicHost };
 
 // ---- the capability ------------------------------------------------------------------
 

@@ -6,6 +6,7 @@ import {
   createItem,
   createRunner,
   type Db,
+  DEFAULT_NETWORK,
   type JobRunner,
   PRESETS,
   type ReceiptCapabilities,
@@ -123,7 +124,7 @@ export async function seedDemo(db: Db, now = Date.now(), _deps: SeedDeps = {}): 
     doc: {
       business: { name: "Oficina Maré", timezone: "Europe/Lisbon", currency: "EUR", languages: ["pt", "en"] },
       booking: { cancellationWindowMin: 120 },
-      network: { join: true },
+      networks: { [DEFAULT_NETWORK]: { enabled: true } },
     },
   });
   return { seeded: true };
@@ -336,7 +337,7 @@ export async function seedShowcase(
       orders: { maxValueWithoutApprovalMinor: 20_000 },
       notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://inbox.oficinamare.pt" },
       email: { fromAddress: "inbox@oficinamare.pt", fromName: "Oficina Maré", replyTo: "hello@oficinamare.pt" },
-      network: { join: true },
+      networks: { [DEFAULT_NETWORK]: { enabled: true } },
     },
   });
 
@@ -914,7 +915,7 @@ export async function seedSurfingDog(db: Db, now = Date.now(), _deps: SeedDeps =
     doc: {
       business: { name: "Surfing Dog", timezone: "Europe/Lisbon", currency: "EUR", languages: ["en", "pt"] },
       booking: { cancellationWindowMin: 60 },
-      network: { join: true },
+      networks: { [DEFAULT_NETWORK]: { enabled: true } },
     },
   });
   return { seeded: true };

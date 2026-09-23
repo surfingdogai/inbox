@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
 
-/** Settings: who the business is, what it offers, when it is open, what runs on its own. */
+/** Settings: who the business is, what it offers, when it is open, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ location }) => {
     if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
@@ -37,6 +37,9 @@ function SettingsLayout() {
         </Link>
         <Link to="/settings/integrations" className="tab">
           Integrations
+        </Link>
+        <Link to="/settings/networks" className="tab">
+          Networks
         </Link>
       </nav>
       <Outlet />

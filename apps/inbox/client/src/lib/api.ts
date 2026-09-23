@@ -10,6 +10,7 @@ import type {
   ItemDetail,
   ItemView,
   ListParams,
+  NetworkView,
   Page,
   PatchWebhookBody,
   Preset,
@@ -171,6 +172,7 @@ export const api = {
   getSettings: () => call<SettingsDoc>("GET", "/v1/owner/settings"),
   receiptStatus: () => call<ReceiptStatus>("GET", "/v1/owner/receipts"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
+  networks: () => call<{ networks: NetworkView[] }>("GET", "/v1/owner/networks"),
 
   // ---- setup: who the business is, what it offers, when it is open, what runs on its own ----
   profile: () => call<Profile>("GET", "/v1/owner/profile"),

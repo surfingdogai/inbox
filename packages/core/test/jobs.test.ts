@@ -32,7 +32,7 @@ describe("JobRunner", () => {
       throw new Error("boom");
     });
     const first = await runner.runDue(db, { now: T0 });
-    expect(first).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1 });
+    expect(first).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1, released: 0 });
     expect(calls).toBe(1);
     const rows = await db.orm
       .select({ kind: jobs.kind, status: jobs.status, runAt: jobs.runAt, lastError: jobs.lastError })
@@ -43,10 +43,130 @@ describe("JobRunner", () => {
     expect(rows.find((r) => r.kind === "unknown_kind")?.status).toBe("dead");
     expect(rows.find((r) => r.kind === "later")?.status).toBe("queued");
     // Too early for the retry.
-    expect(await runner.runDue(db, { now: T0 + 1_000 })).toEqual({ claimed: 0, done: 0, failed: 0, dead: 0 });
+    expect(await runner.runDue(db, { now: T0 + 1_000 })).toEqual({
+      claimed: 0,
+      done: 0,
+      failed: 0,
+      dead: 0,
+      released: 0,
+    });
     const second = await runner.runDue(db, { now: T0 + backoffMs(1) + 1 });
-    expect(second).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1 }); // flaky dies at attempt 2; "later" (no handler, 8 attempts) requeues
+    expect(second).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1, released: 0 }); // flaky dies at attempt 2; "later" (no handler, 8 attempts) requeues
     expect(calls).toBe(2);
+  });
+
+  it("runs each lane beside the others, and hands back what a lane had no time to start", async () => {
+    const db = await setup();
+    const row = (kind: string, lane: string, n: number) => ({
+      id: ulid(),
+      kind,
+      payload: { network: lane, n },
+      runAt: T0,
+      createdAt: T0,
+    });
+    await db.orm
+      .insert(jobs)
+      .values([
+        row("slow", "a", 1),
+        row("slow", "a", 2),
+        row("slow", "a", 3),
+        row("fast", "b", 1),
+        row("plain", "", 1),
+      ]);
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const lane = (p: unknown) =>
+      (p as { network: string }).network ? `lane:${(p as { network: string }).network}` : undefined;
+    const runner = new JobRunner({ laneBudgetMs: 30 })
+      // The slow lane waits for the fast lane to have run, then takes longer than its budget.
+      .register(
+        "slow",
+        async (job) => {
+          await gate;
+          await new Promise((r) => setTimeout(r, 40));
+          order.push(`slow ${(job.payload as { n: number }).n}`);
+          return undefined;
+        },
+        { lane },
+      )
+      .register(
+        "fast",
+        async () => {
+          order.push("fast");
+          release();
+          return undefined;
+        },
+        { lane },
+      )
+      .register("plain", async () => {
+        order.push("plain");
+        return undefined;
+      });
+    const report = await runner.runDue(db, { now: T0 });
+    expect(order).toContain("fast");
+    expect(order).toContain("plain");
+    expect(order.filter((o) => o.startsWith("slow"))).toHaveLength(1);
+    expect(report).toEqual({ claimed: 5, done: 3, failed: 0, dead: 0, released: 2 });
+    const left = await db.orm.select({ status: jobs.status, attempts: jobs.attempts, kind: jobs.kind }).from(jobs);
+    expect(left.filter((j) => j.status === "queued")).toEqual([
+      { status: "queued", attempts: 0, kind: "slow" },
+      { status: "queued", attempts: 0, kind: "slow" },
+    ]);
+  });
+
+  it("puts what a lane handed back behind the jobs already waiting, so a backlog cannot take every slot", async () => {
+    const db = await setup();
+    const lane = (p: unknown) => {
+      const network = (p as { network?: string }).network;
+      return network ? `lane:${network}` : undefined;
+    };
+    // A slow lane with a backlog bigger than one claim, queued before anything else. (One row per
+    // insert: D1 takes at most 100 bound values in a statement.)
+    for (const row of [
+      ...Array.from({ length: 12 }, (_, n) => ({
+        id: ulid(),
+        kind: "slow",
+        payload: { network: "a", n },
+        runAt: T0 - 60_000 + n,
+        createdAt: T0,
+      })),
+      { id: ulid(), kind: "plain", payload: {}, runAt: T0 - 1_000, createdAt: T0 },
+      { id: ulid(), kind: "other", payload: { network: "b" }, runAt: T0 - 500, createdAt: T0 },
+    ]) {
+      await db.orm.insert(jobs).values(row);
+    }
+    const ran = new Map<string, number>();
+    let run = 0;
+    const runner = new JobRunner({ laneBudgetMs: 20 })
+      .register(
+        "slow",
+        async () => {
+          await new Promise((r) => setTimeout(r, 25));
+          return undefined;
+        },
+        { lane },
+      )
+      .register(
+        "other",
+        async () => {
+          ran.set("other", ran.get("other") ?? run);
+          return undefined;
+        },
+        { lane },
+      )
+      .register("plain", async () => {
+        ran.set("plain", ran.get("plain") ?? run);
+        return undefined;
+      });
+    for (run = 0; run < 12 && ran.size < 2; run++) {
+      await runner.runDue(db, { now: T0 + run * 1_000, limit: 5 });
+    }
+    // One run of the backlog, then the two that were waiting: not the whole backlog first.
+    expect(ran.get("plain")).toBeLessThanOrEqual(3);
+    expect(ran.get("other")).toBeLessThanOrEqual(3);
   });
 
   it("notifies the owner and the customer by email after a booking is created and confirmed", async () => {
