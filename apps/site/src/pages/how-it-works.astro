@@ -1,8 +1,14 @@
 ---
 // apps/site/src/pages/how-it-works.astro
 // The page for a business owner who is not technical: what arrives, what the rules do with it,
-// who answers, why it is safer, why it is worth doing now, and what to do next.
+// who answers, why it is safer, why it is worth doing now, and what to do next. The top is a
+// two-column hero like the network page's: the words on the left, HowFlow on the right in the
+// shared .art-box, stacked on a phone with the drawing after the words. Each of the four steps
+// then puts its words beside a small drawing (StepArt), alternating sides on a desktop so the
+// page reads as a zigzag from the hero down, with the step's print of the app underneath.
+import HowFlow from "../components/HowFlow.astro";
 import Shot from "../components/Shot.astro";
+import StepArt from "../components/StepArt.astro";
 import Layout from "../layouts/Layout.astro";
 
 const contents = [
@@ -119,41 +125,49 @@ const steps = [
   title="How it works · Surfing Dog"
   description="What happens, step by step, when a customer or their AI agent asks your business for something."
 >
-  <section class="wrap wrap-read section is-head" aria-labelledby="page-h">
-    <p class="eyebrow">How it works</p>
-    <h1 class="h-page" id="page-h">What happens to a request</h1>
-    <p class="lede">
-      Customers ask your business for things, and more and more often their AI agents do the
-      asking. Here is what happens to each request.
-    </p>
-    <nav class="contents" aria-label="On this page">
-      {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
-    </nav>
+  <section class="wrap section is-head top" aria-labelledby="page-h">
+    <div class="copy">
+      <p class="eyebrow">How it works</p>
+      <h1 class="h-page" id="page-h">What happens to a request</h1>
+      <p class="lede">
+        Customers ask your business for things, and more and more often their AI agents do the
+        asking. Here is what happens to each request.
+      </p>
+      <nav class="contents" aria-label="On this page">
+        {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
+      </nav>
+    </div>
+    <div class="art-box">
+      <HowFlow />
+    </div>
   </section>
 
   <section class="section" id="arrives" aria-labelledby="arrives-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
+    <div class="wrap">
+      <div class="step flip">
+        <div class="step-copy">
           <p class="eyebrow">Step one</p>
           <h2 class="h-section" id="arrives-h">What arrives</h2>
           <p class="lede">
             Every request becomes an item with a type and a state, before anyone has read it.
           </p>
-        </div>
-      </div>
 
-      <div class="says">
-        <p>
-          Say someone wants their bike serviced on Saturday. Their agent can book it with you
-          directly. Claude and ChatGPT use MCP, and other software uses the REST
-          API. Email works too, for messages and replies. A web form is on the way.
-          <span class="pill">Being built</span>
-        </p>
-        <p>
-          Each request lands as one of four types, with its own set of states, so the inbox always
-          knows where it stands. Refunds are a fifth type, handled inside the app.
-        </p>
+          <div class="says">
+            <p>
+              Say someone wants their bike serviced on Saturday. Their agent can book it with you
+              directly. Claude and ChatGPT use MCP, and other software uses the REST
+              API. Email works too, for messages and replies. A web form is on the way.
+              <span class="pill">Being built</span>
+            </p>
+            <p>
+              Each request lands as one of four types, with its own set of states, so the inbox always
+              knows where it stands. Refunds are a fifth type, handled inside the app.
+            </p>
+          </div>
+        </div>
+        <div class="step-art">
+          <StepArt kind="arrives" />
+        </div>
       </div>
 
       <div class="cols">
@@ -181,29 +195,32 @@ const steps = [
   </section>
 
   <section class="section" id="rules" aria-labelledby="rules-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
+    <div class="wrap">
+      <div class="step">
+        <div class="step-copy">
           <p class="eyebrow">Step two</p>
           <h2 class="h-section" id="rules-h">Your rules run first</h2>
           <p class="lede">
             Write down how your business works once. Simple rules then handle the routine without
             you.
           </p>
-        </div>
-      </div>
 
-      <div class="says">
-        <p>
-          Start with your hours, services and prices, and the order size above which you want to
-          decide yourself. Then switch on a few rules. Six come ready-made for appointments, trades
-          and shops.
-        </p>
-        <p>
-          Rules don't use AI, so the same request always gets the same answer. The reason goes in
-          the item's history. You can try a rule on a request you already have before you switch
-          it on.
-        </p>
+          <div class="says">
+            <p>
+              Start with your hours, services and prices, and the order size above which you want to
+              decide yourself. Then switch on a few rules. Six come ready-made for appointments, trades
+              and shops.
+            </p>
+            <p>
+              Rules don't use AI, so the same request always gets the same answer. The reason goes in
+              the item's history. You can try a rule on a request you already have before you switch
+              it on.
+            </p>
+          </div>
+        </div>
+        <div class="step-art">
+          <StepArt kind="rules" />
+        </div>
       </div>
 
       <div class="cols">
@@ -228,15 +245,18 @@ const steps = [
   </section>
 
   <section class="section" id="your-ai" aria-labelledby="your-ai-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
+    <div class="wrap">
+      <div class="step flip">
+        <div class="step-copy">
           <p class="eyebrow">Step three</p>
           <h2 class="h-section" id="your-ai-h">Your own AI answers</h2>
           <p class="lede">
             Connect the AI you already use. It works like a member of staff, with the same
             limits.
           </p>
+        </div>
+        <div class="step-art">
+          <StepArt kind="ai" />
         </div>
       </div>
 
@@ -286,14 +306,17 @@ const steps = [
   </section>
 
   <section class="section" id="safer" aria-labelledby="safer-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
+    <div class="wrap">
+      <div class="step">
+        <div class="step-copy">
           <p class="eyebrow">Safety</p>
           <h2 class="h-section" id="safer-h">Safer than a shared mailbox</h2>
           <p class="lede">
             These protections are built into the inbox, so they hold even when an agent misbehaves.
           </p>
+        </div>
+        <div class="step-art">
+          <StepArt kind="safety" />
         </div>
       </div>
       <div class="glass panel points wide">
@@ -397,8 +420,20 @@ const steps = [
 </Layout>
 
 <style>
-  /* Page header: the h1 and the lede come from .h-page and .lede; the head section
-     stops at --header-pb so the next section's top padding does the work. */
+  /* The same two columns as the home page's and the network page's heroes, on
+     the same tokens: the words take 1.15 parts and the drawing 1, both starting
+     at the top. Below 900px it is one column and the drawing follows the words. */
+  .top {
+    display: grid;
+    gap: var(--sp-7);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .top {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: var(--sp-8);
+    }
+  }
   .contents {
     display: flex;
     flex-wrap: wrap;
@@ -406,11 +441,49 @@ const steps = [
     margin-top: var(--sp-6);
   }
 
+  /* A step: its words beside its drawing. On a desktop the drawing alternates
+     sides, starting on the left under the hero's drawing on the right; on a
+     phone it is one column, the drawing after the words. */
+  .step {
+    display: grid;
+    gap: var(--sp-7);
+    align-items: center;
+  }
+  .step-copy {
+    min-width: 0;
+    max-width: 560px;
+  }
+  .step-art {
+    width: 100%;
+    max-width: 480px;
+    justify-self: center;
+  }
+  /* On a desktop the drawing sits against the page's outer edge, where the
+     print and the notes below it end, rather than floating mid-column. Each
+     drawing keeps a margin of 20 of its 400 units, 5% of its own width, so it
+     is nudged out by that much: its glass edge then lines up with the edge of
+     the print below it. The nudge stays inside the page gutter. */
+  @media (min-width: 900px) {
+    .step {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--sp-9);
+    }
+    .step .step-art {
+      justify-self: end;
+      translate: 5% 0;
+    }
+    .step.flip .step-art {
+      order: -1;
+      justify-self: start;
+      translate: -5% 0;
+    }
+  }
+
   /* Reading paragraphs: one measure, one size, spaced by gap like everything else. */
   .says {
     display: grid;
     gap: var(--sp-4);
-    margin-bottom: var(--sp-6);
+    margin-top: var(--sp-5);
   }
   .says p {
     max-width: var(--measure);
@@ -423,10 +496,12 @@ const steps = [
     margin-left: var(--sp-1);
   }
 
+  /* The step's print of the app and its notes, under the words and the drawing. */
   .cols {
     display: grid;
     gap: var(--gap-grid);
     align-items: start;
+    margin-top: var(--sp-8);
   }
   @media (min-width: 900px) {
     .cols {
@@ -453,8 +528,12 @@ const steps = [
   .point .quote {
     color: var(--ink);
   }
-  /* The safety list runs the page width, so it reads in two columns when there is room. */
-  @media (min-width: 900px) {
+  /* The safety list runs the page width: two columns when there is room, three
+     on a wide screen, so six protections read as two even rows. */
+  .wide {
+    margin-top: var(--sp-8);
+  }
+  @media (min-width: 760px) {
     .wide {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -465,9 +544,18 @@ const steps = [
       border-top: 0;
     }
   }
+  @media (min-width: 1100px) {
+    .wide {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .wide .point:nth-child(3) {
+      border-top: 0;
+    }
+  }
 
-  .sub-h {
-    margin: var(--sp-7) 0 0;
+  /* .h-sub zeroes its margin, so this needs both classes to win. */
+  .h-sub.sub-h {
+    margin: var(--sp-8) 0 0;
   }
   .cards {
     margin: var(--sp-4) 0 0;

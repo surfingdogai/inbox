@@ -1,0 +1,1365 @@
+---
+/**
+ * The small drawings beside each step on the how-it-works page. Four of them, one per step, each
+ * showing only what the product does today:
+ *  - "arrives": a booking, an order, a quote request and a message settle into the inbox as typed
+ *    items, each in its first state (requested, received, received, open).
+ *  - "rules": a rule is switched on; two bookings pass and confirm themselves, a third (late in the
+ *    evening, outside the hours in the rule) stops at "Needs you".
+ *  - "ai": the owner's own AI, connected over MCP, answers a booking with another time; the booking
+ *    moves to "proposed", marked as inside the owner's rules.
+ *  - "safety": two agents reach for the last place in a slot at once; one gets it, the other is
+ *    told "Slot taken" (the title of the inbox's own 409 reply, which offers no other time), and a
+ *    retry with the same key gets the same answer back.
+ * No stars, no scores, no numbers that could be read as live data.
+ *
+ * How it moves. The picture as drawn IS the resting frame: every item in place, every outcome
+ * shown. That is what a visitor sees with JavaScript off, before the piece scrolls into view, and
+ * with reduced motion (turned on at any time). The script only adds classes. When a drawing is
+ * first on screen it adds .go together with every step class k0..kn, which changes nothing, then
+ * runs a clock: .out fades the items at the end of a pass, the wrap takes the step classes off
+ * under .nt (no transitions, so everything drops back to its starting place unseen), and each k
+ * class comes back at its moment. CSS transitions do all the travelling. The few flourishes (a
+ * halo, a beat) are f classes added only when the clock crosses their moment, so arming a drawing
+ * never fires them. Off-screen or in a hidden tab the clock stops.
+ *
+ * Styles are global so one sheet serves every instance: every selector begins with .sst, every
+ * keyframe is named sst-*, and the sa- class names exist only inside .sst. None overlap the
+ * hero pieces' .sdf / .snf / .shf. Colours are the site's tokens with literal fallbacks, night
+ * redefined under both prefers-color-scheme and [data-theme="dark"]. Type and state words are
+ * pulled toward --ink (18% by day, 32% by night) to clear 4.5:1 on their tinted pills. Pills are
+ * measured at run time (data-fit), so a wider font or the phone type scale never clips a word.
+ */
+interface Props {
+  kind: "arrives" | "rules" | "ai" | "safety";
+}
+const { kind } = Astro.props;
+
+/** A rough width for the resting picture; the script measures the real one. */
+const est = (s: string, fs: number) => Math.round(s.length * fs * 0.54);
+
+/* ---- arrives ---------------------------------------------------------- */
+const arrivals = [
+  { ty: "booking", lb: "Booking", ttl: "Bike service · Sat", st: "requested", dy: -10 },
+  { ty: "order", lb: "Order", ttl: "Two inner tubes", st: "received", dy: 8 },
+  { ty: "quote", lb: "Quote", ttl: "Wheel build", st: "received", dy: -6 },
+  { ty: "message", lb: "Message", ttl: "Open on Sunday?", st: "open", dy: 10 },
+];
+const ROW_A = [62, 108, 154, 200];
+
+/* ---- rules ------------------------------------------------------------ */
+const passes = [
+  { time: "Sat 10:00", ok: true },
+  { time: "Sat 11:30", ok: true },
+  { time: "Sat 21:00", ok: false },
+];
+const ROW_B = [102, 148, 194];
+
+const meta = {
+  arrives: {
+    label: "Requests landing as typed items",
+    desc: "A booking, an order, a quote request and a message arrive, and each settles into the inbox as its own type with its first state: requested, received, received and open.",
+    loop: 8.5,
+    out: 7.6,
+    start: 4.8,
+    steps: [0.25, 0.67, 1.0, 1.45, 1.73, 2.15, 2.67, 3.09],
+  },
+  rules: {
+    label: "A rule deciding bookings",
+    desc: "A rule is switched on: when the slot is free and inside opening hours, confirm the booking. Two bookings pass and are confirmed. A third, late in the evening, stops and waits for a person.",
+    loop: 8.9,
+    out: 7.6,
+    start: 4.8,
+    /* the last step turns the switch off again, after the bookings have gone,
+       so switching a rule off never looks like it clears the inbox */
+    steps: [0.25, 0.8, 1.42, 2.1, 2.75, 3.6, 4.35, 8.25],
+  },
+  ai: {
+    label: "Your own AI answering a booking",
+    desc: "Your own AI, connected over MCP, answers a booking for Saturday at 10:00: that time is taken, would 11:00 suit? The booking moves to proposed, within your rules.",
+    loop: 8.8,
+    out: 7.6,
+    start: 4.8,
+    steps: [0.3, 0.7, 2.1, 2.8, 3.45],
+  },
+  safety: {
+    label: "Two agents asking for the last place",
+    desc: "Two agents ask for the last place at 10:00 on Saturday at the same moment. One gets it and is confirmed. The other is told the slot is taken. When the first agent retries with the same key, it gets the same answer back.",
+    loop: 11.2,
+    out: 9.4,
+    start: 6.6,
+    steps: [0.3, 0.5, 1.3, 1.65, 1.75, 2.1, 2.65, 3.0, 4.5, 5.5, 5.62, 6.52],
+  },
+}[kind];
+
+/** The robot the other pieces draw for an agent, at (x, y) top-left, 24 square. */
+const bot = (x: number, y: number) => ({
+  body: { x, y, width: 24, height: 24, rx: 7 },
+  halo: { x: x - 4, y: y - 4, width: 32, height: 32, rx: 10 },
+  eyes: [
+    [x + 7.6, y + 11],
+    [x + 16.4, y + 11],
+  ],
+  stem: { x1: x + 12, y1: y, x2: x + 12, y2: y - 7 },
+  ant: [x + 12, y - 9.6],
+});
+const aiBot = bot(32, 126);
+const botA = bot(28, 62);
+const botB = bot(28, 172);
+---
+
+<figure
+  class:list={["sst", `sa-${kind}`]}
+  aria-label={meta.label}
+  data-loop={meta.loop}
+  data-out={meta.out}
+  data-start={meta.start}
+  data-steps={meta.steps.join(",")}
+>
+  <svg viewBox="0 0 400 260" aria-hidden="true" focusable="false">
+    {
+      kind === "arrives" && (
+        <>
+          <rect x="20" y="14" width="360" height="232" rx="16" class="sa-glass" />
+          <text x="34" y="40" font-size="11.5" class="sa-head fs-h">
+            Your inbox
+          </text>
+          <line x1="34" y1="52" x2="366" y2="52" class="sa-hair" />
+          {arrivals.map((a, i) => (
+            <g transform={`translate(32,${ROW_A[i]})`}>
+              <g class:list={["sa-row", `t-${a.ty}`, `r${i}`]} style={`--dy:${a.dy}px`}>
+                <g class="sa-body sa-fx">
+                  <rect width="336" height="38" rx="10" class="bg" />
+                  <rect y="8" width="2.5" height="22" rx="1.25" class="bar" />
+                  <text x="100" y="23" font-size="9.8" class="sa-sub fs-s">
+                    {a.ttl}
+                  </text>
+                </g>
+                <g class="sa-state sa-fx sa-pop" data-fit="r" data-r="324">
+                  <rect x={316 - est(a.st, 9) - 8} y="9" width={est(a.st, 9) + 16} height="20" rx="10" />
+                  <text x="316" y="22.4" font-size="9" text-anchor="end" class="fs-p">
+                    {a.st}
+                  </text>
+                </g>
+                <g class="sa-chip sa-fx" data-fit="l" data-x="12" data-icr="3" data-cy="19">
+                  <rect x="12" y="8" width={est(a.lb, 10) + 26} height="22" rx="11" />
+                  <g class="ic" transform="translate(23,19)">
+                    <circle r="3" class="dot" />
+                  </g>
+                  <text x="33" y="22.6" font-size="10" class="lb fs-l">
+                    {a.lb}
+                  </text>
+                </g>
+              </g>
+            </g>
+          ))}
+        </>
+      )
+    }
+
+    {
+      kind === "rules" && (
+        <>
+          <rect x="20" y="14" width="360" height="64" rx="14" class="sa-glass" />
+          <g class="sa-switch">
+            <rect x="36" y="37" width="30" height="17" rx="8.5" class="track" />
+            <circle cx="57.5" cy="45.5" r="6" class="knob" />
+          </g>
+          <text x="80" y="38" font-size="8.5" class="sa-cap fs-c">
+            YOUR RULE
+          </text>
+          <text x="80" y="57" font-size="11.2" class="sa-rule fs-l">
+            Slot free, inside hours → confirm
+          </text>
+          <circle cx="360" cy="45.5" r="4.2" class="sa-beatring" />
+          <circle cx="360" cy="45.5" r="4.2" class="sa-beat" />
+
+          <rect x="20" y="90" width="360" height="156" rx="14" class="sa-glass" />
+          {passes.map((p, i) => (
+            <g transform={`translate(32,${ROW_B[i]})`}>
+              <g class:list={["sa-row", "sa-in", "t-booking", `r${i}`]}>
+                <g class="sa-fx">
+                  <rect width="336" height="38" rx="10" class="bg" />
+                  <rect y="8" width="2.5" height="22" rx="1.25" class="bar" />
+                  <text x="12" y="23.4" font-size="10.2" class="lb fs-l">
+                    Booking
+                  </text>
+                  <text x="74" y="23.4" font-size="10.2" class="sa-sub fs-l">
+                    {p.time}
+                  </text>
+                </g>
+                <g class="sa-state sa-req" data-fit="r" data-r="324">
+                  <rect x={316 - est("requested", 9) - 8} y="9" width={est("requested", 9) + 16} height="20" rx="10" />
+                  <text x="316" y="22.4" font-size="9" text-anchor="end" class="fs-p">
+                    requested
+                  </text>
+                </g>
+                <g
+                  class:list={[p.ok ? "sa-ok" : "sa-wait", "sa-res", "sa-fx", "sa-pop"]}
+                  data-fit="r"
+                  data-r="324"
+                  data-icr="4"
+                  data-cy="19"
+                >
+                  <rect x={250} y="9" width="74" height="20" rx="10" />
+                  <g class="ic" transform="translate(262,19)">
+                    {p.ok ? <path d="M-3.2,.1 L-1,2.4 L3.2,-2.4" class="tick" /> : <circle r="3.4" class="dot" />}
+                  </g>
+                  <text x="316" y="22.4" font-size="9" text-anchor="end" class="fs-p">
+                    {p.ok ? "confirmed" : "Needs you"}
+                  </text>
+                </g>
+              </g>
+            </g>
+          ))}
+        </>
+      )
+    }
+
+    {
+      kind === "ai" && (
+        <>
+          <path d="M60,138 L128,138" class="sa-link" />
+          <text x="94" y="130" font-size="8.5" text-anchor="middle" class="sa-cap fs-c">
+            MCP
+          </text>
+          <g class="sa-agent sa-me" style="--ag:var(--sa-violet)">
+            <rect {...aiBot.body} class="bodyfill" />
+            <rect {...aiBot.body} />
+            <rect {...aiBot.halo} class="halo" />
+            {aiBot.eyes.map(([cx, cy]) => (
+              <circle cx={cx} cy={cy} r="1.7" class="eye" />
+            ))}
+            <line {...aiBot.stem} />
+            <circle cx={aiBot.ant[0]} cy={aiBot.ant[1]} r="2.6" class="ant" />
+          </g>
+          <text x="44" y="172" font-size="9.8" text-anchor="middle" class="sa-who fs-s">
+            Your AI
+          </text>
+
+          <rect x="112" y="20" width="268" height="220" rx="16" class="sa-glass" />
+          <g class="t-booking">
+            <rect x="128" y="36" width="2.5" height="40" rx="1.25" class="sa-bar" />
+            <text x="138" y="47" font-size="10.4" class="sa-lb fs-l">
+              Booking
+            </text>
+            <text x="138" y="70" font-size="12.2" class="sa-ttl fs-t">
+              Bike service · Sat 10:00
+            </text>
+          </g>
+          <g class="sa-state sa-req" data-fit="r" data-r="364">
+            <rect x={356 - est("requested", 9) - 8} y="33" width={est("requested", 9) + 16} height="20" rx="10" />
+            <text x="356" y="46.4" font-size="9" text-anchor="end" class="fs-p">
+              requested
+            </text>
+          </g>
+          <g class="sa-state sa-res sa-fx sa-pop" data-fit="r" data-r="364">
+            <rect x={356 - est("proposed", 9) - 8} y="33" width={est("proposed", 9) + 16} height="20" rx="10" />
+            <text x="356" y="46.4" font-size="9" text-anchor="end" class="fs-p">
+              proposed
+            </text>
+          </g>
+          <line x1="128" y1="88" x2="364" y2="88" class="sa-hair" />
+
+          <g class="sa-bubble sa-fx">
+            <rect x="128" y="100" width="236" height="76" rx="12" class="bg" />
+            <text x="142" y="118" font-size="8.5" class="sa-cap fs-c">
+              YOUR AI REPLIES
+            </text>
+            <g class="sa-typing">
+              <circle cx="146" cy="147" r="2.6" />
+              <circle cx="156" cy="147" r="2.6" />
+              <circle cx="166" cy="147" r="2.6" />
+            </g>
+            <g class="sa-said">
+              <text x="142" y="142" font-size="10.4" class="sa-line fs-l">
+                10:00 is taken.
+              </text>
+              <text x="142" y="160" font-size="10.4" class="sa-line fs-l">
+                Would 11:00 suit you?
+              </text>
+            </g>
+          </g>
+
+          <g class="sa-ok sa-mark sa-fx sa-pop" data-fit="l" data-x="128" data-icr="5" data-cy="203" data-pad="9">
+            <rect x="128" y="191" width="136" height="24" rx="12" />
+            <g class="ic" transform="translate(142,203)">
+              <path d="M0,-5.4 L4.6,-3.6 L4.6,.4 C4.6,3 2.6,4.8 0,5.8 C-2.6,4.8 -4.6,3 -4.6,.4 L-4.6,-3.6 Z" class="shield" />
+              <path d="M-2,.2 L-.5,1.7 L2.2,-1.4" class="tick" />
+            </g>
+            <text x="151" y="206.6" font-size="9.8" class="fs-s">
+              Within your rules
+            </text>
+          </g>
+        </>
+      )
+    }
+
+    {
+      kind === "safety" && (
+        <>
+          <path d="M56,74 L224,116" class="sa-wire" />
+          <path d="M56,184 L224,144" class="sa-wire" />
+
+          <rect x="224" y="60" width="156" height="100" rx="14" class="sa-glass" />
+          <circle cx="224" cy="116" r="2.4" class="sa-port" />
+          <circle cx="224" cy="144" r="2.4" class="sa-port" />
+          <text x="240" y="86" font-size="9.6" class="sa-sub fs-s">
+            Saturday
+          </text>
+          <text x="240" y="113" font-size="20" class="sa-big fs-x">
+            10:00
+          </text>
+          <text x="240" y="140" font-size="9.6" class="sa-sub sa-left fs-s">
+            Last place
+          </text>
+          <text x="240" y="140" font-size="9.6" class="sa-sub sa-full fs-s">
+            Full
+          </text>
+          <g class="sa-seat">
+            <rect x="336" y="76" width="28" height="28" rx="8" class="empty" />
+            <g class="taken">
+              <rect x="336" y="76" width="28" height="28" rx="8" />
+              <path d="M344.6,90.4 L348.6,94.4 L355.6,86.4" />
+            </g>
+          </g>
+
+          <g class="sa-agent sa-a" style="--ag:var(--sa-violet)">
+            <rect {...botA.body} class="bodyfill" />
+            <rect {...botA.body} />
+            <rect {...botA.halo} class="halo" />
+            {botA.eyes.map(([cx, cy]) => (
+              <circle cx={cx} cy={cy} r="1.7" class="eye" />
+            ))}
+            <line {...botA.stem} />
+            <circle cx={botA.ant[0]} cy={botA.ant[1]} r="2.6" class="ant" />
+          </g>
+          <g class="sa-agent sa-b" style="--ag:var(--sa-lagoon)">
+            <rect {...botB.body} class="bodyfill" />
+            <rect {...botB.body} />
+            <rect {...botB.halo} class="halo" />
+            {botB.eyes.map(([cx, cy]) => (
+              <circle cx={cx} cy={cy} r="1.7" class="eye" />
+            ))}
+            <line {...botB.stem} />
+            <circle cx={botB.ant[0]} cy={botB.ant[1]} r="2.6" class="ant" />
+          </g>
+
+          {/* Right-aligned under the spot where the retry lands, between the two wires,
+               so it can grow on a phone without reaching the chip or the slot card. */}
+          <text x="216" y="132" font-size="8.5" text-anchor="end" class="sa-cap sa-rt fs-c">
+            RETRY · SAME KEY
+          </text>
+          <g class="sa-ok sa-got sa-fx sa-pop" data-fit="l" data-x="64" data-icr="4" data-cy="35">
+            <rect x="64" y="24" width="84" height="22" rx="11" />
+            <g class="ic" transform="translate(76,35)">
+              <path d="M-3.2,.1 L-1,2.4 L3.2,-2.4" class="tick" />
+            </g>
+            <text x="85" y="38.4" font-size="9.4" class="fs-p">
+              Confirmed
+            </text>
+          </g>
+          <g class="sa-ok sa-same sa-fx sa-pop" data-fit="l" data-after="sa-got" data-x="154" data-icr="4" data-cy="35">
+            <rect x="154" y="24" width="96" height="22" rx="11" />
+            <g class="ic" transform="translate(166,35)">
+              <path d="M2.6,-1.6 A3.2,3.2 0 1 0 3,1.2 M2.8,-3.6 L2.8,-1.4 L.6,-1.4" class="loop" />
+            </g>
+            <text x="175" y="38.4" font-size="9.4" class="fs-p">
+              Same answer
+            </text>
+          </g>
+          <g class="sa-state sa-told sa-fx sa-pop" data-fit="l" data-x="64" data-icr="4" data-cy="215">
+            <rect x="64" y="204" width="78" height="22" rx="11" />
+            <g class="ic" transform="translate(76,215)">
+              <circle r="3.6" class="clock" />
+              <path d="M0,-2 L0,0 L1.6,1" class="clock" />
+            </g>
+            <text x="85" y="218.4" font-size="9.4" class="fs-p">
+              Slot taken
+            </text>
+          </g>
+
+          <g transform="translate(196,109)">
+            <g class="sa-fly sa-ca t-booking">
+              <g class="sa-chip" data-fit="c" data-icr="3">
+                <rect x="-33" y="-10" width="66" height="20" rx="10" />
+                <g class="ic" transform="translate(-22,0)">
+                  <circle r="3" class="dot" />
+                </g>
+                <text x="-12" y="3.4" font-size="9.4" class="lb fs-p">
+                  Sat 10:00
+                </text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(196,150.7)">
+            <g class="sa-fly sa-cb t-booking">
+              <g class="sa-chip" data-fit="c" data-icr="3">
+                <rect x="-33" y="-10" width="66" height="20" rx="10" />
+                <g class="ic" transform="translate(-22,0)">
+                  <circle r="3" class="dot" />
+                </g>
+                <text x="-12" y="3.4" font-size="9.4" class="lb fs-p">
+                  Sat 10:00
+                </text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(196,109)">
+            <g class="sa-fly sa-cr t-booking">
+              <g class="sa-chip sa-retry" data-fit="c" data-icr="3.5">
+                <rect x="-35" y="-10" width="70" height="20" rx="10" />
+                <g class="ic" transform="translate(-23.5,0)">
+                  <path d="M2.6,-1.6 A3.2,3.2 0 1 0 3,1.2 M2.8,-3.6 L2.8,-1.4 L.6,-1.4" class="again" />
+                </g>
+                <text x="-13" y="3.4" font-size="9.4" class="lb fs-p">
+                  Sat 10:00
+                </text>
+              </g>
+            </g>
+          </g>
+          <g transform="translate(70,77.5)">
+            <g class="sa-fly sa-da">
+              <circle r="7.2" class="disc ok" />
+              <path d="M-3,.2 L-.9,2.4 L3.1,-2.6" class="tick" />
+            </g>
+          </g>
+          <g transform="translate(70,77.5)">
+            <g class="sa-fly sa-dr">
+              <circle r="7.2" class="disc ok" />
+              <path d="M-3,.2 L-.9,2.4 L3.1,-2.6" class="tick" />
+            </g>
+          </g>
+          <g transform="translate(70,180.7)">
+            <g class="sa-fly sa-db">
+              <circle r="7.2" class="disc" />
+              <circle r="3.2" class="clock" />
+              <path d="M0,-1.8 L0,0 L1.4,.9" class="clock" />
+            </g>
+          </g>
+        </>
+      )
+    }
+  </svg>
+  <figcaption class="sa-sr">{meta.desc}</figcaption>
+</figure>
+
+<style is:global>
+  /* Every selector below begins with .sst and every keyframe is named sst-*. */
+  .sst {
+    --sa-ground: var(--ground, #f6f5ff);
+    --sa-ink: var(--ink, #14163c);
+    --sa-ink2: var(--ink-2, #3f4472);
+    --sa-ink3: var(--ink-3, #565a86);
+    --sa-hair: var(--hairline, rgba(20, 22, 60, 0.08));
+    --sa-glass: var(--glass-bg, rgba(255, 255, 255, 0.32));
+    --sa-glassb: var(--glass-border, rgba(255, 255, 255, 0.55));
+    --sa-row: var(--row-bg, rgba(255, 255, 255, 0.24));
+    --sa-booking: var(--c-booking, #ff6fa8);
+    --sa-booking-i: var(--c-booking-ink, #b02a6b);
+    --sa-order: var(--c-order, #ff9650);
+    --sa-order-i: var(--c-order-ink, #9c4409);
+    --sa-quote: var(--c-quote, #8a6bff);
+    --sa-quote-i: var(--c-quote-ink, #5a3fd0);
+    --sa-message: var(--c-message, #25cfe0);
+    --sa-message-i: var(--c-message-ink, #0b6a75);
+    --sa-palm: var(--c-success, #2fd3a5);
+    --sa-palm-i: var(--c-success-ink, #147a5c);
+    --sa-sun: var(--c-warning, #ffcf5c);
+    --sa-sun-i: var(--c-warning-ink, #866000);
+    --sa-violet: var(--violet, #8a6bff);
+    --sa-lagoon: var(--lagoon, #25cfe0);
+    --sa-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    --sa-tmix: 82%;
+    --sa-ok-i: color-mix(in srgb, var(--sa-palm-i) var(--sa-tmix), var(--sa-ink));
+    --sa-wait-i: color-mix(in srgb, var(--sa-sun-i) var(--sa-tmix), var(--sa-ink));
+    position: relative;
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 400 / 260;
+    container-type: inline-size;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .sst {
+      --sa-ground: var(--ground, #0d0e26);
+      --sa-ink: var(--ink, #f2f1ff);
+      --sa-ink2: var(--ink-2, #b9bce0);
+      --sa-ink3: var(--ink-3, #9a9dc4);
+      --sa-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+      --sa-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+      --sa-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+      --sa-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+      --sa-booking-i: var(--c-booking-ink, #ff8fbc);
+      --sa-order-i: var(--c-order-ink, #ffb27c);
+      --sa-quote-i: var(--c-quote-ink, #ab95ff);
+      --sa-message-i: var(--c-message-ink, #63e2ee);
+      --sa-palm-i: var(--c-success-ink, #72e6c3);
+      --sa-sun-i: var(--c-warning-ink, #ffda80);
+      --sa-tmix: 68%;
+    }
+  }
+  [data-theme="dark"] .sst {
+    --sa-ground: var(--ground, #0d0e26);
+    --sa-ink: var(--ink, #f2f1ff);
+    --sa-ink2: var(--ink-2, #b9bce0);
+    --sa-ink3: var(--ink-3, #9a9dc4);
+    --sa-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+    --sa-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+    --sa-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+    --sa-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+    --sa-booking-i: var(--c-booking-ink, #ff8fbc);
+    --sa-order-i: var(--c-order-ink, #ffb27c);
+    --sa-quote-i: var(--c-quote-ink, #ab95ff);
+    --sa-message-i: var(--c-message-ink, #63e2ee);
+    --sa-palm-i: var(--c-success-ink, #72e6c3);
+    --sa-sun-i: var(--c-warning-ink, #ffda80);
+    --sa-tmix: 68%;
+  }
+  .sst .t-booking {
+    --tc: var(--sa-booking);
+    --ti: color-mix(in srgb, var(--sa-booking-i) var(--sa-tmix), var(--sa-ink));
+  }
+  .sst .t-order {
+    --tc: var(--sa-order);
+    --ti: color-mix(in srgb, var(--sa-order-i) var(--sa-tmix), var(--sa-ink));
+  }
+  .sst .t-quote {
+    --tc: var(--sa-quote);
+    --ti: color-mix(in srgb, var(--sa-quote-i) var(--sa-tmix), var(--sa-ink));
+  }
+  .sst .t-message {
+    --tc: var(--sa-message);
+    --ti: color-mix(in srgb, var(--sa-message-i) var(--sa-tmix), var(--sa-ink));
+  }
+
+  .sst svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .sst text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--sa-ink2);
+  }
+  .sst .sa-head,
+  .sst .sa-big,
+  .sst .sa-ttl {
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .sst .sa-head {
+    fill: var(--sa-ink2);
+  }
+  .sst .sa-big,
+  .sst .sa-ttl,
+  .sst .sa-rule,
+  .sst .sa-line {
+    fill: var(--sa-ink);
+  }
+  .sst .sa-rule,
+  .sst .sa-line {
+    font-weight: 500;
+  }
+  .sst .sa-cap {
+    letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+  .sst .sa-who {
+    font-weight: 600;
+  }
+  .sst .sa-glass {
+    fill: var(--sa-glass);
+    stroke: var(--sa-glassb);
+    stroke-width: 1;
+  }
+  .sst .sa-hair {
+    stroke: var(--sa-hair);
+    stroke-width: 1;
+  }
+
+  /* rows, chips and pills */
+  .sst .sa-row .bg {
+    fill: var(--sa-row);
+    stroke: var(--sa-glassb);
+    stroke-width: 1;
+  }
+  .sst .sa-row .bar,
+  .sst .sa-bar {
+    fill: var(--tc);
+  }
+  .sst .lb,
+  .sst .sa-lb {
+    fill: var(--ti);
+    font-weight: 600;
+  }
+  .sst .sa-chip rect {
+    fill: color-mix(in srgb, var(--tc) 15%, var(--sa-ground));
+    stroke: color-mix(in srgb, var(--tc) 44%, transparent);
+    stroke-width: 1;
+  }
+  .sst .sa-chip .dot {
+    fill: var(--tc);
+  }
+  .sst .sa-retry rect {
+    stroke-dasharray: 3 2.4;
+    stroke: color-mix(in srgb, var(--tc) 70%, transparent);
+  }
+  .sst .sa-retry .again {
+    fill: none;
+    stroke: var(--ti);
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  /* the retry's label is there only while the retry is */
+  .sst .sa-rt {
+    opacity: 0;
+    transition: opacity 0.36s var(--sa-ease);
+  }
+  .sst.go.k8:not(.k11) .sa-rt {
+    opacity: 1;
+  }
+  .sst .sa-state rect {
+    fill: color-mix(in srgb, var(--sa-ground) 55%, transparent);
+    stroke: var(--sa-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+  }
+  .sst .sa-state text {
+    fill: var(--sa-ink2);
+  }
+  .sst .sa-ok rect {
+    fill: color-mix(in srgb, var(--sa-palm) 16%, var(--sa-ground));
+    stroke: color-mix(in srgb, var(--sa-palm) 55%, transparent);
+    stroke-width: 1;
+  }
+  .sst .sa-ok text {
+    fill: var(--sa-ok-i);
+    font-weight: 600;
+  }
+  .sst .sa-wait rect {
+    fill: color-mix(in srgb, var(--sa-sun) 18%, var(--sa-ground));
+    stroke: color-mix(in srgb, var(--sa-sun) 70%, transparent);
+    stroke-width: 1;
+  }
+  .sst .sa-wait text {
+    fill: var(--sa-wait-i);
+    font-weight: 600;
+  }
+  .sst .sa-wait .dot {
+    fill: var(--sa-sun);
+  }
+  .sst .tick,
+  .sst .loop {
+    fill: none;
+    stroke: var(--sa-ok-i);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .sst .clock {
+    fill: none;
+    stroke: var(--sa-ink2);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+  }
+  .sst .shield {
+    fill: color-mix(in srgb, var(--sa-palm) 30%, transparent);
+    stroke: var(--sa-palm);
+    stroke-width: 1;
+  }
+
+  /* agents: ink, with their identity in one tinted dot */
+  .sst .sa-agent rect,
+  .sst .sa-agent line {
+    fill: none;
+    stroke: var(--sa-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.2;
+  }
+  .sst .sa-agent .bodyfill {
+    fill: var(--ag);
+    fill-opacity: 0.07;
+    stroke: none;
+  }
+  .sst .sa-agent .eye {
+    fill: var(--sa-ink2);
+    fill-opacity: 0.5;
+  }
+  .sst .sa-agent .ant {
+    fill: var(--ag);
+  }
+  .sst .sa-agent .halo {
+    stroke: var(--ag);
+    stroke-opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+
+  /* the rule's switch and beat */
+  .sst .sa-switch .track {
+    fill: color-mix(in srgb, var(--sa-palm) 30%, transparent);
+    stroke: color-mix(in srgb, var(--sa-palm) 70%, transparent);
+    stroke-width: 1;
+    transition:
+      fill 0.3s var(--sa-ease),
+      stroke 0.3s var(--sa-ease);
+  }
+  .sst .sa-switch .knob {
+    fill: var(--sa-palm-i);
+    transition:
+      transform 0.36s var(--sa-ease),
+      fill 0.3s var(--sa-ease);
+  }
+  .sst .sa-beat {
+    fill: var(--sa-sun);
+    transition: fill 0.3s var(--sa-ease);
+  }
+  .sst .sa-beatring {
+    fill: none;
+    stroke: var(--sa-sun);
+    stroke-width: 1.2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+
+  /* the AI's line in, its reply bubble */
+  .sst .sa-link {
+    fill: none;
+    stroke: var(--sa-ink3);
+    stroke-opacity: 0.5;
+    stroke-width: 1.2;
+    stroke-dasharray: 1.5 4;
+    stroke-linecap: round;
+  }
+  .sst .sa-bubble .bg {
+    fill: var(--sa-row);
+    stroke: var(--sa-glassb);
+    stroke-width: 1;
+  }
+  .sst .sa-typing circle {
+    fill: var(--sa-ink3);
+    opacity: 0;
+  }
+
+  /* the slot */
+  .sst .sa-wire {
+    fill: none;
+    stroke: var(--sa-ink3);
+    stroke-opacity: 0.34;
+    stroke-width: 1.1;
+  }
+  .sst .sa-port {
+    fill: var(--sa-ink3);
+    fill-opacity: 0.55;
+  }
+  .sst .sa-seat .empty {
+    fill: none;
+    stroke: var(--sa-ink3);
+    stroke-opacity: 0.5;
+    stroke-width: 1.2;
+    stroke-dasharray: 3 2.6;
+  }
+  .sst .sa-seat .taken rect {
+    fill: color-mix(in srgb, var(--sa-palm) 22%, var(--sa-ground));
+    stroke: var(--sa-palm);
+    stroke-width: 1.2;
+  }
+  .sst .sa-seat .taken path {
+    fill: none;
+    stroke: var(--sa-ok-i);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .sst .sa-seat .taken {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    transition:
+      transform 0.45s var(--sa-ease),
+      opacity 0.3s var(--sa-ease);
+  }
+  .sst .sa-left {
+    opacity: 0;
+  }
+  .sst .sa-full {
+    fill: var(--sa-ink);
+    font-weight: 600;
+  }
+  .sst .sa-left,
+  .sst .sa-full {
+    transition: opacity 0.3s var(--sa-ease);
+  }
+  .sst .disc {
+    fill: var(--sa-ground);
+    stroke: var(--sa-ink3);
+    stroke-opacity: 0.6;
+    stroke-width: 1.1;
+  }
+  .sst .disc.ok {
+    stroke: var(--sa-palm);
+    stroke-opacity: 0.7;
+  }
+  /* the pieces in flight rest where they land, unseen */
+  .sst .sa-fly {
+    opacity: 0;
+  }
+
+  /* ---- motion: the resting picture above, and how each piece gets there ---- */
+  .sst .sa-fx,
+  .sst .sa-req,
+  .sst .sa-fly {
+    transition: opacity 0.42s var(--sa-ease);
+  }
+  .sst .sa-pop {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    transition:
+      opacity 0.3s var(--sa-ease),
+      transform 0.45s var(--sa-ease);
+  }
+  /* The happy bit: an outcome lands with a small pop, fired only when the
+     clock crosses its moment (an f class), never when a drawing is armed. */
+  .sst.sa-rules.f2 .r0 .sa-res,
+  .sst.sa-rules.f4 .r1 .sa-res,
+  .sst.sa-rules.f6 .r2 .sa-res,
+  .sst.sa-ai.f3 .sa-res,
+  .sst.sa-ai.f4 .sa-mark,
+  .sst.sa-safety.f2 .sa-seat .taken,
+  .sst.sa-safety.f6 .sa-got,
+  .sst.sa-safety.f7 .sa-told,
+  .sst.sa-safety.f11 .sa-same {
+    animation: sst-pop 0.6s var(--sa-ease);
+  }
+  @keyframes sst-pop {
+    0% {
+      transform: scale(0.8);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .sst .sa-chip {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .sst .sa-req {
+    opacity: 0;
+  }
+  /* At the end of a pass the items fade where they are. */
+  .sst.out .sa-fx,
+  .sst.out .sa-req {
+    opacity: 0;
+    transition: opacity 0.5s var(--sa-ease);
+  }
+  /* At the wrap everything drops back to its start unseen. */
+  .sst.nt,
+  .sst.nt * {
+    transition: none !important;
+    animation: none !important;
+  }
+  .sst.paused * {
+    animation-play-state: paused !important;
+  }
+
+  /* arrives: each chip slides in and settles, then its row and state appear */
+  .sst.sa-arrives .sa-chip {
+    transition:
+      transform 0.85s var(--sa-ease),
+      opacity 0.36s var(--sa-ease);
+  }
+  .sst.sa-arrives.out .sa-chip {
+    transition: opacity 0.5s var(--sa-ease);
+  }
+  .sst.go:not(.k0) .r0 .sa-chip,
+  .sst.go:not(.k2) .r1 .sa-chip,
+  .sst.go:not(.k4) .r2 .sa-chip,
+  .sst.go:not(.k6) .r3 .sa-chip {
+    opacity: 0;
+    transform: translate(-46px, var(--dy)) rotate(-5deg);
+  }
+  .sst.go:not(.k1) .r0 :is(.sa-body, .sa-state),
+  .sst.go:not(.k3) .r1 :is(.sa-body, .sa-state),
+  .sst.go:not(.k5) .r2 :is(.sa-body, .sa-state),
+  .sst.go:not(.k7) .r3 :is(.sa-body, .sa-state) {
+    opacity: 0;
+  }
+  .sst.go:not(.k1) .r0 .sa-state,
+  .sst.go:not(.k3) .r1 .sa-state,
+  .sst.go:not(.k5) .r2 .sa-state,
+  .sst.go:not(.k7) .r3 .sa-state {
+    transform: scale(0.6);
+  }
+  .sst.sa-arrives .sa-state {
+    transition-delay: 0.14s;
+  }
+
+  /* rules: the switch goes on, then each booking comes in and is decided */
+  .sst.go:not(.k0) .sa-switch .knob,
+  .sst.go.k7 .sa-switch .knob {
+    transform: translateX(-13px);
+    fill: var(--sa-ink3);
+  }
+  .sst.go:not(.k0) .sa-switch .track,
+  .sst.go.k7 .sa-switch .track {
+    fill: var(--sa-row);
+    stroke: color-mix(in srgb, var(--sa-ink3) 50%, transparent);
+  }
+  .sst.sa-rules .sa-in {
+    transition:
+      transform 0.6s var(--sa-ease),
+      opacity 0.42s var(--sa-ease);
+  }
+  .sst.go:not(.k1) .r0.sa-in,
+  .sst.go:not(.k3) .r1.sa-in,
+  .sst.go:not(.k5) .r2.sa-in {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  .sst.go:not(.k2) .r0 .sa-req,
+  .sst.go:not(.k4) .r1 .sa-req,
+  .sst.go:not(.k6) .r2 .sa-req {
+    opacity: 1;
+  }
+  .sst.go:not(.k2) .r0 .sa-res,
+  .sst.go:not(.k4) .r1 .sa-res,
+  .sst.go:not(.k6) .r2 .sa-res {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  .sst.go:not(.k6) .sa-beat {
+    fill: var(--sa-palm);
+  }
+  .sst.go:not(.k2) .sa-beat,
+  .sst.go.k7 .sa-beat {
+    fill: color-mix(in srgb, var(--sa-ink3) 45%, transparent);
+  }
+  .sst.f2 .sa-beatring,
+  .sst.f4 .sa-beatring {
+    stroke: var(--sa-palm);
+    animation: sst-ring 0.8s var(--sa-ease);
+  }
+  .sst.f6 .sa-beatring {
+    animation: sst-ring 0.8s var(--sa-ease);
+  }
+  @keyframes sst-ring {
+    0% {
+      opacity: 0.7;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(2.6);
+    }
+  }
+
+  /* ai: the AI wakes, types, answers; the booking moves to proposed */
+  .sst.f0 .sa-me .halo,
+  .sst.f0 .sa-a .halo,
+  .sst.f8 .sa-a .halo {
+    animation: sst-halo 0.66s var(--sa-ease);
+  }
+  .sst.f1 .sa-b .halo {
+    animation: sst-halo 0.66s var(--sa-ease);
+  }
+  .sst.f6 .sa-a .halo,
+  .sst.f11 .sa-a .halo {
+    stroke: var(--sa-palm);
+    animation: sst-halo 0.8s var(--sa-ease);
+  }
+  @keyframes sst-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.82);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.3);
+    }
+  }
+  .sst.go.k0:not(.k2) .sa-link {
+    stroke-opacity: 0.9;
+    animation: sst-flow 0.9s linear infinite;
+  }
+  @keyframes sst-flow {
+    to {
+      stroke-dashoffset: -11;
+    }
+  }
+  .sst.go:not(.k1) .sa-bubble {
+    opacity: 0;
+  }
+  .sst.sa-ai .sa-bubble {
+    transition:
+      opacity 0.42s var(--sa-ease),
+      transform 0.5s var(--sa-ease);
+  }
+  .sst.go:not(.k1) .sa-bubble {
+    transform: translateY(6px);
+  }
+  .sst.go.k1:not(.k2) .sa-typing circle {
+    animation: sst-type 1.05s var(--sa-ease) infinite;
+  }
+  .sst.go.k1:not(.k2) .sa-typing circle:nth-child(2) {
+    animation-delay: 0.16s;
+  }
+  .sst.go.k1:not(.k2) .sa-typing circle:nth-child(3) {
+    animation-delay: 0.32s;
+  }
+  @keyframes sst-type {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 0.9;
+      transform: translateY(-2.5px);
+    }
+  }
+  .sst .sa-said {
+    transition: opacity 0.4s var(--sa-ease);
+  }
+  .sst.go:not(.k2) .sa-said {
+    opacity: 0;
+  }
+  .sst.sa-ai.go:not(.k3) .sa-req {
+    opacity: 1;
+  }
+  .sst.sa-ai.go:not(.k3) .sa-res {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  /* at the end of a pass the booking goes back to requested, so it always shows a state */
+  .sst.sa-ai.out .sa-req {
+    opacity: 1;
+  }
+  .sst.sa-ai.out .sa-res {
+    opacity: 0;
+  }
+  .sst.go:not(.k4) .sa-mark {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  /* safety: two requests, one place */
+  .sst.sa-safety .sa-fly {
+    transition:
+      transform 1s var(--sa-ease),
+      opacity 0.24s var(--sa-ease);
+  }
+  .sst.sa-safety .sa-cb {
+    transition-duration: 1.15s, 0.24s;
+  }
+  .sst.sa-safety .sa-da,
+  .sst.sa-safety .sa-db,
+  .sst.sa-safety .sa-dr {
+    transition-duration: 0.9s, 0.24s;
+  }
+  .sst.go:not(.k0) .sa-ca,
+  .sst.go:not(.k8) .sa-cr {
+    transform: translate(-96px, -24px);
+  }
+  .sst.go:not(.k1) .sa-cb {
+    transform: translate(-96px, 22.8px);
+  }
+  .sst.go.k0:not(.k2) .sa-ca,
+  .sst.go.k1:not(.k3) .sa-cb,
+  .sst.go.k8:not(.k9) .sa-cr,
+  .sst.go.k4:not(.k6) .sa-da,
+  .sst.go.k5:not(.k7) .sa-db,
+  .sst.go.k10:not(.k11) .sa-dr {
+    opacity: 1;
+  }
+  .sst.go:not(.k4) .sa-da,
+  .sst.go:not(.k10) .sa-dr {
+    transform: translate(140px, 35px);
+  }
+  .sst.go:not(.k5) .sa-db {
+    transform: translate(140px, -33.3px);
+  }
+  .sst.go:not(.k2) .sa-seat .taken {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .sst.out .sa-seat .taken {
+    opacity: 0;
+    transition: opacity 0.5s var(--sa-ease);
+  }
+  .sst.go:not(.k2) .sa-left,
+  .sst.out .sa-left {
+    opacity: 1;
+  }
+  .sst.go:not(.k2) .sa-full,
+  .sst.out .sa-full {
+    opacity: 0;
+  }
+  .sst.go:not(.k6) .sa-got,
+  .sst.go:not(.k7) .sa-told,
+  .sst.go:not(.k11) .sa-same {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  .sst.sa-safety.f9 .sa-seat .taken {
+    animation: sst-nod 0.6s var(--sa-ease);
+  }
+  @keyframes sst-nod {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    45% {
+      transform: scale(1.12);
+    }
+  }
+
+  /* Read by a screen reader, not drawn. */
+  .sst .sa-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* On a phone the viewBox shrinks the type past reading size, so every word
+     grows in user units; the pills are measured after the switch. */
+  @container (max-width: 420px) {
+    .sst .fs-l {
+      font-size: 13px;
+    }
+    .sst .fs-t {
+      font-size: 14.4px;
+    }
+    .sst .fs-h {
+      font-size: 13.6px;
+    }
+    .sst .fs-s {
+      font-size: 12.2px;
+    }
+    .sst .fs-p {
+      font-size: 11.8px;
+    }
+    .sst .fs-c {
+      font-size: 10.4px;
+    }
+    .sst .fs-x {
+      font-size: 23px;
+    }
+  }
+
+  /* Reduced motion: the resting picture, still. */
+  @media (prefers-reduced-motion: reduce) {
+    .sst * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  /* A small clock per drawing. It never draws anything: it only says which
+     step of the pass the drawing is at, and CSS does the rest. */
+  const pad = (v: string | undefined, d: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && v !== undefined && v !== "" ? n : d;
+  };
+
+  function bbox(t: SVGGraphicsElement): DOMRect | null {
+    try {
+      const b = t.getBBox();
+      return b?.width ? b : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /* A pill holds its word: [pad][mark][word][pad], anchored left (l), right (r)
+     or on a centre (c), or just after another pill (data-after). */
+  function fitPill(g: SVGGElement, svg: SVGSVGElement) {
+    const rect = g.querySelector<SVGRectElement>(":scope > rect");
+    const text = g.querySelector<SVGTextElement>(":scope > text");
+    const ic = g.querySelector<SVGGElement>(":scope > .ic");
+    if (!rect || !text || getComputedStyle(text).display === "none") return;
+    const b = bbox(text);
+    if (!b) return;
+    const P = pad(g.dataset.pad, 8);
+    const icr = ic ? pad(g.dataset.icr, 3.5) : 0;
+    const icw = ic ? icr * 2 + 4 : 0;
+    const W = Math.ceil(P + icw + b.width + P);
+    const mode = g.dataset.fit;
+    let x0: number;
+    if (mode === "r") {
+      x0 = pad(g.dataset.r, 0) - W;
+      text.setAttribute("x", String(pad(g.dataset.r, 0) - P));
+    } else {
+      if (mode === "c") x0 = pad(g.dataset.cx, 0) - W / 2;
+      else {
+        x0 = pad(g.dataset.x, 0);
+        const after = g.dataset.after ? svg.querySelector<SVGGElement>(`.${g.dataset.after} > rect`) : null;
+        if (after) x0 = pad(after.getAttribute("x") ?? "", 0) + pad(after.getAttribute("width") ?? "", 0) + 6;
+      }
+      text.setAttribute("x", String(x0 + P + icw));
+    }
+    rect.setAttribute("x", String(x0));
+    rect.setAttribute("width", String(W));
+    if (ic) ic.setAttribute("transform", `translate(${(x0 + P + icr).toFixed(1)},${pad(g.dataset.cy, 0)})`);
+  }
+
+  function mount(fig: HTMLElement) {
+    if (fig.dataset.saOn === "on") return;
+    fig.dataset.saOn = "on";
+    const svg = fig.querySelector("svg");
+    if (!svg) return;
+    const steps = (fig.dataset.steps ?? "").split(",").map(Number).filter(Number.isFinite);
+    const LOOP = pad(fig.dataset.loop, 10);
+    const OUT = pad(fig.dataset.out, LOOP - 1.5);
+    const START = pad(fig.dataset.start, OUT - 1.5);
+
+    /* ---- words are measured, never guessed ------------------------------ */
+    const pills = Array.from(svg.querySelectorAll<SVGGElement>("[data-fit]"));
+    const fit = () => {
+      for (const g of pills) fitPill(g, svg);
+    };
+    let narrow: boolean | null = null;
+    let measured = false;
+    const gauge = () => {
+      const w = fig.clientWidth;
+      const nw = w > 0 && w <= 420;
+      if (nw === narrow && measured) return;
+      narrow = nw;
+      if (w > 0) {
+        fit();
+        measured = true;
+      }
+    };
+    gauge();
+    if ("ResizeObserver" in window) new ResizeObserver(gauge).observe(fig);
+    document.fonts?.ready.then(fit, () => {});
+
+    const mq = matchMedia("(prefers-reduced-motion: reduce)");
+    const K = steps.map((_, i) => `k${i}`);
+    const F = steps.map((_, i) => `f${i}`);
+    const timers: number[] = [];
+    let clock = START;
+    let prev = -1;
+    let last = 0;
+    let raf = 0;
+    let run = false;
+    let seen = false;
+    let armed = false;
+    /* A drawing that is already on the first screen waits, at rest, for the
+       visitor's first scroll: on arrival the hero is the one thing moving. */
+    let moved = window.scrollY > 0;
+
+    function flash(cls: string) {
+      fig.classList.remove(cls);
+      void fig.getBoundingClientRect();
+      fig.classList.add(cls);
+      timers.push(window.setTimeout(() => fig.classList.remove(cls), 900));
+    }
+    function apply(ph: number, live: boolean) {
+      if (prev >= 0 && ph < prev) {
+        /* the wrap: back to the start, unseen */
+        fig.classList.add("nt");
+        fig.classList.remove("out", ...K);
+        void fig.getBoundingClientRect();
+        fig.classList.remove("nt");
+      }
+      steps.forEach((t, i) => {
+        const on = ph >= t;
+        const k = K[i] ?? "";
+        if (on && live && !fig.classList.contains(k) && prev >= 0) flash(F[i] ?? "");
+        fig.classList.toggle(k, on);
+      });
+      fig.classList.toggle("out", ph >= OUT);
+      prev = ph;
+    }
+    function frame(now: number) {
+      if (!run) return;
+      clock += Math.min((now - last) / 1000, 0.05);
+      last = now;
+      apply(clock % LOOP, true);
+      raf = requestAnimationFrame(frame);
+    }
+    function clear() {
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+      fig.classList.remove(...F);
+    }
+    function sync() {
+      if (mq.matches) return;
+      const go = seen && !document.hidden && moved;
+      if (go && !armed) {
+        /* armed at the resting frame: every step is already on, so nothing moves */
+        armed = true;
+        apply(START, false);
+        fig.classList.add("go");
+      }
+      if (go === run) return;
+      run = go;
+      if (run) {
+        fig.classList.remove("paused");
+        clear();
+        prev = -1;
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else {
+        cancelAnimationFrame(raf);
+        fig.classList.add("paused");
+      }
+    }
+    /* Reduced motion, now or later: the resting picture, which is the drawing itself. */
+    function rest() {
+      run = false;
+      cancelAnimationFrame(raf);
+      clear();
+      fig.classList.remove("go", "out", "nt", "paused", ...K);
+      armed = false;
+    }
+    if (mq.matches) return;
+    if (!moved) {
+      const wake = () => {
+        moved = true;
+        sync();
+      };
+      window.addEventListener("scroll", wake, { once: true, passive: true });
+    }
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(
+        (es) => {
+          seen = es[0]?.isIntersecting ?? false;
+          sync();
+        },
+        { threshold: 0.2 },
+      ).observe(fig);
+    }
+    document.addEventListener("visibilitychange", sync);
+    mq.addEventListener("change", () => {
+      if (mq.matches) rest();
+      else sync();
+    });
+  }
+
+  function mountAll() {
+    for (const f of document.querySelectorAll<HTMLElement>(".sst")) {
+      try {
+        mount(f);
+      } catch (err) {
+        console.warn("step art", err);
+      }
+    }
+  }
+  mountAll();
+  document.addEventListener("astro:page-load", mountAll);
+</script>
