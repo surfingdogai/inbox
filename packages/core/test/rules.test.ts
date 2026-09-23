@@ -131,7 +131,7 @@ describe("rules engine", () => {
     expect(events.map((e) => e.depth)).toEqual([0, 1, 1]);
   });
 
-  it("accepts small orders and asks a person for large ones", async () => {
+  it("accepts small orders and asks a new customer to pay, and asks a person for large ones", async () => {
     const { db, caps, runner } = await setup("shop");
     const line = { name: "Chain, 9-speed", quantity: 1, price: { value: 1850, currency: "EUR" } };
     const small = await caps.createOrder(customer, {
@@ -142,7 +142,8 @@ describe("rules engine", () => {
     });
     await drain(db, runner);
     const rows = await db.orm.select({ id: items.id, state: items.state, flags: items.flags }).from(items);
-    expect(rows.find((r) => r.id === small.view.item.id)?.state).toBe("accepted");
+    // A new customer pays as the shop's flow says (ADR-017 §8.3): accepted, then asked for payment.
+    expect(rows.find((r) => r.id === small.view.item.id)?.state).toBe("awaiting_payment");
     const large = rows.find((r) => r.id === big.view.item.id);
     expect(large?.state).toBe("received");
     expect(large?.flags).toMatchObject({ needsHuman: true, priority: 2 });

@@ -117,14 +117,20 @@ describe("a confirmed booking", () => {
     const { keys } = await caps.receipts.jwks();
     expect(keys).toHaveLength(1);
     const claims = await verifyReceipt(rcp.jws, keys);
+    // A customer's booking carries claims v2 (ADR-017 §3.2): dated by the confirmation itself,
+    // due at the start and ending at the end.
     expect(claims).toMatchObject({
       iss: ISS,
       itm: v.item.id,
       typ: "booking",
       knd: "confirmed",
-      iat: Math.floor((T0 + 61_000) / 1000),
+      iat: Math.floor((T0 + 60_000) / 1000),
       amt: { value: 4500, currency: "EUR" },
+      ver: 2,
+      due: Math.floor((T0 + 24 * 3_600_000) / 1000),
+      end: Math.floor((T0 + 24 * 3_600_000 + 90 * 60_000) / 1000),
     });
+    expect(rcp.outcome).toBeNull();
     expect(claims.sub).not.toContain("rita");
     expect(claims.pay).toBeUndefined();
     // The manifest field and the JWKS are the same keys.
@@ -194,11 +200,15 @@ describe("a paid order", () => {
     });
     const run = await runner.runDue(db, { now: T0 + 3 });
     expect(run.failed + run.dead).toBe(0);
-    const [rcp] = await caps.receipts.forItem(id);
+    // Accepting it was the promise (ADR-017 §3.1); the payment is a second one, due when the first is.
+    const [accepted, rcp] = await caps.receipts.forItem(id);
+    expect(accepted?.kind).toBe("accepted");
     expect(rcp?.kind).toBe("paid");
     const { keys } = await caps.receipts.jwks();
     const claims = await verifyReceipt(rcp?.jws ?? "", keys);
     expect(claims).toMatchObject({ typ: "order", knd: "paid", amt: { value: 2990, currency: "EUR" }, pay: "card" });
+    expect(claims).toMatchObject({ ver: 2, due: Math.floor((T0 + 1) / 1000) + 30 * 86_400 });
+    expect(accepted?.payload).toMatchObject({ ver: 2, knd: "accepted", amt: { value: 3000, currency: "EUR" } });
   });
 });
 

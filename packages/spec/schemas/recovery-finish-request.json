@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/recovery/finish",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "maxLength": 320
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[0-9]{6}$"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": ["recover", "sign_in"]
+    }
+  },
+  "required": ["email", "code", "purpose"]
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A report or contest answered",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "description": "disputed, for a report; withdrawn, for a contest."
+    },
+    "answer": {
+      "type": "string",
+      "enum": ["dispute", "withdraw"]
+    }
+  },
+  "required": ["id", "status", "answer"]
+}

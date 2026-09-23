@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /v1/person",
+  "type": "object",
+  "properties": {
+    "standing": {
+      "type": "object",
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["new", "building", "trusted"]
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Stored to 6 decimals; compared as floor(score × 10⁴ + 0.5)."
+        },
+        "kept": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "broken": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "businesses": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Mutually unrelated businesses with kept outcomes of this person's."
+        },
+        "email_proven": {
+          "type": "boolean",
+          "description": "The person proved the address with an emailed code."
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "unusual_use": {
+          "type": "boolean",
+          "description": "The pass was seen at over 10 businesses in 24 h, or has two signing keys."
+        },
+        "rules": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The rules version in force, as GET /v1/ranking publishes it."
+        }
+      },
+      "required": ["tier", "score", "kept", "broken", "businesses", "email_proven", "since", "unusual_use", "rules"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "business": {
+            "type": "string",
+            "description": "The business's domain."
+          },
+          "out": {
+            "type": "string",
+            "enum": [
+              "booking.completed",
+              "order.fulfilled",
+              "booking.cancelled_by_business",
+              "order.not_fulfilled",
+              "booking.no_show_business",
+              "order.not_received",
+              "promise.unclosed",
+              "booking.no_show_customer",
+              "booking.cancelled_late_by_customer",
+              "order.payment_failed",
+              "order.charged_back",
+              "booking.cancelled_by_customer",
+              "order.cancelled_by_customer",
+              "order.lapsed"
+            ]
+          },
+          "ledger": {
+            "type": "string",
+            "enum": ["kept", "broken"]
+          },
+          "state": {
+            "type": "string"
+          },
+          "dated_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "contest_id": {
+            "type": ["string", "null"]
+          },
+          "contest_status": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "business", "out", "ledger", "state", "dated_at", "contest_id"]
+      }
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "pattern": "^[a-z2-7]{16}$"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["key_id", "created_at", "revoked_at"]
+      }
+    },
+    "passes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pass_id": {
+            "type": "string",
+            "pattern": "^[a-z2-7]{16}$"
+          },
+          "pass_ref": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+            "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+          },
+          "label": {
+            "type": "string"
+          },
+          "issued_via": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bound": {
+            "type": "boolean"
+          },
+          "unusual_use": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass_id",
+          "pass_ref",
+          "label",
+          "issued_via",
+          "created_at",
+          "last_seen_at",
+          "revoked_at",
+          "bound",
+          "unusual_use"
+        ]
+      }
+    },
+    "delegations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pass_ref": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+            "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+          },
+          "jkt": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["pass_ref", "jkt", "label", "created_at", "revoked_at"]
+      }
+    },
+    "presentations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$"
+          },
+          "business": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["request", "ack"]
+          },
+          "via": {
+            "type": "string"
+          },
+          "pass_ref": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+            "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": ["id", "business", "purpose", "via", "pass_ref", "created_at"]
+      }
+    }
+  },
+  "required": ["standing", "evidence", "keys", "passes", "delegations", "presentations"]
+}

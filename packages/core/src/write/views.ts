@@ -3,6 +3,7 @@ import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
 import type { ReceiptView } from "../receipts/capabilities";
 import type { items } from "../schema/tables";
+import { CUSTOMER_KINDS } from "./caller";
 
 export type ItemRow = typeof items.$inferSelect;
 
@@ -54,10 +55,15 @@ const ACTION_RANK = [
   "decline",
   "reject",
   "no_show",
+  "payment_failed",
+  "charge_back",
+  "record_charge_back",
   "cancel",
+  "cancel_late",
   "cancel_by_business",
   "mark_spam",
   "expire",
+  "lapse",
 ];
 const rankOf = (event: string) => {
   const i = ACTION_RANK.indexOf(event);
@@ -88,13 +94,20 @@ export function rowToItem(row: ItemRow): Item {
   } as Item;
 }
 
-export function viewFor(item: Item, actor: ActorKind, party?: PartyView): ItemView {
+/**
+ * `hidden`: events the machine would list that can no longer happen for this item — its dead
+ * one-time corrections (`corrections.ts`), which only a reader of its history knows.
+ */
+export function viewFor(item: Item, actor: ActorKind, party?: PartyView, hidden?: ReadonlySet<string>): ItemView {
   const machine = machines[item.type];
   const transitions = availableTransitions(machine, item.state, actor)
+    .filter((t) => !hidden?.has(t.event))
     .map((t, i) => ({ event: t.event, label: t.label, i }))
     .sort((a, b) => rankOf(a.event) - rankOf(b.event) || a.i - b.i)
     .map(({ event, label }) => ({ event, label }));
-  return { item, transitions, human: describe(item), ...(party ? { party } : {}) };
+  // A customer reads the business's own words; the business reads about its item.
+  const human = CUSTOMER_KINDS.has(actor) ? describeToCustomer(item) : describe(item);
+  return { item, transitions, human, ...(party ? { party } : {}) };
 }
 
 const TYPE_WORD: Record<ItemType, string> = {
@@ -114,6 +127,8 @@ const STATE_WORD: Record<string, string> = {
   quoted: "quoted; accept or decline the quote",
   accepted: "accepted",
   awaiting_payment: "accepted, waiting for payment",
+  payment_failed: "accepted; the payment failed",
+  charged_back: "charged back: the payment was reversed",
   paid: "paid",
   fulfilling: "being prepared",
   fulfilled: "fulfilled",
@@ -132,6 +147,48 @@ const STATE_WORD: Record<string, string> = {
   rejected: "rejected",
   refunded: "refunded",
 };
+
+/**
+ * What the business says to its customer about their item, in its own voice: the customer wrote to
+ * the business, and whatever carries this sentence to them — their assistant, most often — passes
+ * on the business's words, and names nobody else.
+ */
+const CUSTOMER_STATE_WORD: Record<string, string> = {
+  requested: "is with us; we will confirm it or suggest another time",
+  received: "is with us; we will get back to you",
+  needs_info: "needs a detail from you",
+  proposed: "has another time from us; accept or decline it",
+  confirmed: "is confirmed",
+  quoted: "has our quote; accept or decline it",
+  accepted: "is accepted",
+  awaiting_payment: "is accepted and waiting for your payment",
+  payment_failed: "is accepted; your payment did not go through",
+  charged_back: "was charged back: the payment was reversed",
+  paid: "is paid",
+  fulfilling: "is being prepared",
+  fulfilled: "is fulfilled",
+  completed: "is completed",
+  declined: "was declined: we cannot take it",
+  expired: "has expired",
+  cancelled: "is cancelled",
+  cancelled_by_customer: "is cancelled, as you asked",
+  cancelled_by_business: "was cancelled by us",
+  no_show: "is recorded as missed",
+  open: "is with us; we will reply soon",
+  answered: "has our answer",
+  closed: "is closed",
+  spam: "is closed",
+  approved: "is approved",
+  rejected: "was not approved",
+  refunded: "is refunded",
+};
+
+export function describeToCustomer(item: Item): string {
+  const noun = TYPE_WORD[item.type].toLowerCase();
+  const what = item.subject ? `Your ${noun} "${item.subject}"` : `Your ${noun}`;
+  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
+  return `${what}${when} ${CUSTOMER_STATE_WORD[item.state] ?? `is ${item.state.replaceAll("_", " ")}`}. Reference ${item.id}.`;
+}
 
 export function describe(item: Item): string {
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];

@@ -1,7 +1,14 @@
 import { DEFAULT_SETTINGS, mergeSettings, type NetworkView, parseStoredSettings } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { agoWords, networkStatus, parseNetworkOrigin, receiptWords } from "../client/src/lib/networks";
-import { toSettingsDoc, toSettingsForm } from "../client/src/lib/settings";
+import {
+  agoWords,
+  networkStatus,
+  parseNetworkOrigin,
+  receiptWords,
+  rulesWords,
+  standingWords,
+} from "../client/src/lib/networks";
+import { hostsOf, toSettingsDoc, toSettingsForm } from "../client/src/lib/settings";
 
 // What the owner app sends when it saves, and the words Settings → Networks shows.
 describe("the General settings save", () => {
@@ -13,7 +20,15 @@ describe("the General settings save", () => {
     };
     const loaded = parseStoredSettings(stored).settings;
     const doc = toSettingsDoc({ ...toSettingsForm(loaded), testMode: true });
-    expect(Object.keys(doc).sort()).toEqual(["booking", "email", "notifications", "orders", "testMode"]);
+    expect(Object.keys(doc).sort()).toEqual([
+      "booking",
+      "customers",
+      "email",
+      "identity",
+      "notifications",
+      "orders",
+      "testMode",
+    ]);
     const after = parseStoredSettings(mergeSettings(stored, doc)).settings;
     expect(after.networks["https://network.surfingdog.ai"]?.enabled).toBe(true);
     expect(after.integrations.webhooks.timeoutMs).toBe(5_000);
@@ -61,10 +76,54 @@ describe("the General settings save", () => {
     expect(removed).toMatchObject({ inboundSecret: null });
   });
 
+  it("shows and sends the one-time code limits and the other hosts, each with its own path", () => {
+    const loaded = parseStoredSettings({
+      customers: { otp: { ttlMinutes: 15 } },
+      identity: { extraAuthorities: ["old.example.com"] },
+    }).settings;
+    const form = toSettingsForm(loaded);
+    expect(form).toMatchObject({
+      codeMinutes: "15",
+      codeAttempts: "5",
+      codesPerHour: "3",
+      codesPerDay: "5",
+      triesPerDay: "10",
+      emailKey: true,
+      extraHosts: "old.example.com",
+    });
+    const doc = toSettingsDoc({
+      ...form,
+      codeAttempts: "7",
+      triesPerDay: "12",
+      emailKey: false,
+      extraHosts: " https://Old.Example.com/,  shop.example.pt:8443 ",
+    });
+    expect(doc.customers).toEqual({
+      otp: { ttlMinutes: 15, attempts: 7, sendsPerHour: 3, sendsPerDay: 5, guessesPerDay: 12 },
+      emailKey: false,
+    });
+    expect(doc.identity).toEqual({ extraAuthorities: ["old.example.com", "shop.example.pt:8443"] });
+    const after = parseStoredSettings(
+      mergeSettings({ identity: { extraAuthorities: ["a.example.com"] } }, doc),
+    ).settings;
+    expect(after.identity.extraAuthorities).toEqual(["old.example.com", "shop.example.pt:8443"]);
+    expect(after.customers).toEqual({
+      otp: { ttlMinutes: 15, attempts: 7, sendsPerHour: 3, sendsPerDay: 5, guessesPerDay: 12 },
+      emailKey: false,
+    });
+    // Emptied, the list is emptied: an array is replaced whole.
+    expect(toSettingsDoc({ ...form, extraHosts: " " }).identity).toEqual({ extraAuthorities: [] });
+    expect(hostsOf("a.example.com b.example.com,c.example.com")).toEqual([
+      "a.example.com",
+      "b.example.com",
+      "c.example.com",
+    ]);
+  });
+
   it("sends a number field that holds no number as typed, so the API names it", () => {
     const doc = toSettingsDoc({ ...toSettingsForm(DEFAULT_SETTINGS), autoExpireHours: "", approvalLimit: "12,50" });
     expect(doc.booking).toMatchObject({ autoExpireHours: "", cancellationWindowMin: 1440 });
-    expect(doc.orders).toEqual({ maxValueWithoutApprovalMinor: 1250 });
+    expect(doc.orders).toEqual({ maxValueWithoutApprovalMinor: 1250, payDays: 14, dueDays: 30 });
   });
 });
 
@@ -80,7 +139,10 @@ describe("Settings → Networks", () => {
     last_error: null,
     last_error_at: null,
     failing_since: null,
-    receipts: { published: 0, queued: 0, refused: 0 },
+    rules: { version: null, next: null, next_at: null, v2: false, checked_at: null },
+    standing: null,
+    ping_signature: null,
+    receipts: { published: 0, queued: 0, refused: 0, held: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
 
@@ -128,12 +190,71 @@ describe("Settings → Networks", () => {
     expect(networkStatus(base, now).line).toBe("Starting: the first report goes out in a moment");
   });
 
+  it("says which rules a network applies and what that means it gets", () => {
+    const rules = (version: number | null, next: number | null, v2: boolean) => ({
+      version,
+      next,
+      next_at: next ? "2026-10-09T00:00:00.000Z" : null,
+      v2,
+      checked_at: null,
+    });
+    expect(rulesWords(rules(null, null, false))).toBeNull();
+    expect(rulesWords(rules(2, null, false))).toBe(
+      "Rules version 2: it gets confirmations and payments, not yet how they ended.",
+    );
+    expect(rulesWords(rules(2, 3, true), "en-GB")).toBe(
+      "Rules version 2, version 3 from 9 Oct: it already gets how each booking and order ended.",
+    );
+    expect(rulesWords(rules(3, null, true))).toBe("Rules version 3: it gets how each booking and order ended.");
+  });
+
+  it("says your own standing at a network, and why it is not shown when it is not", () => {
+    const at = "2026-09-23T14:27:00Z";
+    const v2 = { version: 2, next: 3, next_at: "2026-10-09T00:00:00.000Z", v2: true, checked_at: null };
+    expect(standingWords({ ...base, enabled: false, ping_signature: "verified" }, now)).toBeNull();
+    expect(standingWords(base, now)).toBeNull();
+    expect(
+      standingWords({ ...base, rules: v2, standing: { tier: "new", score: 0, ranked: false, at } }, now, "en-GB"),
+    ).toEqual({
+      line: "New: no score yet. Scores start with rules version 3, on 9 Oct. Said 3 min ago.",
+      tone: "neutral",
+    });
+    expect(
+      standingWords(
+        { ...base, rules: { ...v2, version: 3, next: null }, standing: { tier: "new", score: 0, ranked: false, at } },
+        now,
+      )?.line,
+    ).toBe("New: no score yet. Kept bookings and orders build it. Said 3 min ago.");
+    expect(standingWords({ ...base, standing: { tier: "trusted", score: 0.8234, ranked: true, at } }, now)).toEqual({
+      line: "Trusted: score 0.82, sorted before the newcomers. Said 3 min ago.",
+      tone: "success",
+    });
+    expect(standingWords({ ...base, standing: { tier: "new", score: 0.31, ranked: false, at } }, now)?.line).toBe(
+      "New: score 0.31, shuffled with the newcomers until it reaches 0.40. Said 3 min ago.",
+    );
+    expect(standingWords({ ...base, ping_signature: "unsigned" }, now)?.line).toBe(
+      "Your standing shows here once your inbox can sign its ping: it needs INBOX_SECRET_KEY.",
+    );
+    expect(standingWords({ ...base, ping_signature: "ignored" }, now)?.line).toBe(
+      "This network does not tell an inbox its standing.",
+    );
+    expect(standingWords({ ...base, ping_signature: "invalid: unknown_instance" }, now)).toEqual({
+      line: "The network could not check your inbox's signature (unknown instance); it took the ping unsigned.",
+      tone: "warning",
+    });
+  });
+
   it("counts receipts in plain words", () => {
-    expect(receiptWords({ published: 1, queued: 0, refused: 0 })).toEqual(["1 receipt published"]);
-    expect(receiptWords({ published: 12, queued: 3, refused: 1 })).toEqual([
+    expect(receiptWords({ published: 1, queued: 0, refused: 0, held: 0 })).toEqual(["1 receipt published"]);
+    expect(receiptWords({ published: 12, queued: 3, refused: 1, held: 0 })).toEqual([
       "12 receipts published",
       "3 waiting",
       "1 refused",
+    ]);
+    expect(receiptWords({ published: 12, queued: 5, refused: 0, held: 2 })).toEqual([
+      "12 receipts published",
+      "3 waiting",
+      "2 outcomes held until the network reads them",
     ]);
     expect(agoWords("2026-09-23T14:29:30Z", now)).toBe("just now");
     expect(agoWords("2026-09-23T11:30:00Z", now)).toBe("3 h ago");

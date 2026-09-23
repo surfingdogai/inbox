@@ -1,4 +1,5 @@
-import type { ReceiptAckPayload, ReceiptHeader, ReceiptPayload } from "@surfingdog/spec";
+import type { ReceiptAckPayloadV2, ReceiptHeader, ReceiptPayload, ReceiptPayloadV2 } from "@surfingdog/spec";
+import { passRefSchema } from "@surfingdog/spec";
 
 /**
  * Receipts: Ed25519 compact JWS, hand-rolled on WebCrypto (ADR-016).
@@ -101,7 +102,7 @@ async function importPublic(jwk: PublicJwk): Promise<CryptoKey> {
 /* --- signing ------------------------------------------------------------- */
 
 /** A receipt, signed. The header's `typ` is ours, so a receipt cannot be mistaken for a token. */
-export async function signReceipt(payload: ReceiptPayload, key: KeyPair): Promise<string> {
+export async function signReceipt(payload: ReceiptPayload | ReceiptPayloadV2, key: KeyPair): Promise<string> {
   const header: ReceiptHeader = { alg: ALG, typ: RECEIPT_TYP, kid: key.kid };
   return compactSign(header, payload, key.privateJwk);
 }
@@ -177,7 +178,10 @@ async function keyFor(keys: readonly PublicJwk[], kid: string): Promise<PublicJw
  * The algorithm comes from OUR list, never from the token: `alg` is read only to refuse anything
  * that is not EdDSA, which is the oldest mistake in JOSE and still the commonest.
  */
-export async function verifyReceipt(jws: string, keys: readonly PublicJwk[]): Promise<ReceiptPayload> {
+export async function verifyReceipt(
+  jws: string,
+  keys: readonly PublicJwk[],
+): Promise<ReceiptPayload | ReceiptPayloadV2> {
   const { header, payload, signingInput, signature } = parse(jws);
   if (header.alg !== ALG) throw new ReceiptError("bad_alg", `a receipt is signed ${ALG}, not ${String(header.alg)}`);
   if (header.typ !== RECEIPT_TYP) throw new ReceiptError("bad_typ", `this is not a ${RECEIPT_TYP}`);
@@ -191,7 +195,7 @@ export async function verifyReceipt(jws: string, keys: readonly PublicJwk[]): Pr
     encoder.encode(signingInput) as BufferSource,
   );
   if (!ok) throw new ReceiptError("bad_signature", "the signature does not match that key");
-  return payload as unknown as ReceiptPayload;
+  return payload as unknown as ReceiptPayload | ReceiptPayloadV2;
 }
 
 /* --- the acknowledgement ------------------------------------------------- */
@@ -215,7 +219,7 @@ export async function receiptSha(receiptJws: string): Promise<string> {
 export async function verifyAck(
   jws: string,
   expect: { receiptId: string; receiptJws: string; now: number; maxAgeSec?: number },
-): Promise<{ payload: ReceiptAckPayload; agentJwk: PublicJwk; agentKid: string }> {
+): Promise<{ payload: ReceiptAckPayloadV2; agentJwk: PublicJwk; agentKid: string }> {
   const { header, payload, signingInput, signature } = parse(jws);
   if (header.alg !== ALG) throw new ReceiptError("bad_alg", `an acknowledgement is signed ${ALG}`);
   if (header.typ !== undefined && header.typ !== ACK_TYP) {
@@ -233,12 +237,17 @@ export async function verifyAck(
   );
   if (!ok) throw new ReceiptError("bad_signature", "the signature does not match the key in the header");
 
-  const body = payload as unknown as ReceiptAckPayload;
+  const body = payload as unknown as ReceiptAckPayloadV2;
   if (body.rcp !== expect.receiptId) {
     throw new ReceiptError("bad_payload", "this acknowledges a different receipt");
   }
   if (typeof body.sha !== "string" || body.sha !== (await receiptSha(expect.receiptJws))) {
     throw new ReceiptError("bad_payload", "sha does not match the receipt being acknowledged");
+  }
+  // `pas` names the acknowledging person's pass, by reference only (ADR-017 §3.4): a network
+  // refuses a malformed one along with the receipt it came with, so it is refused here first.
+  if (body.pas !== undefined && !passRefSchema.safeParse(body.pas).success) {
+    throw new ReceiptError("bad_payload", "pas must be a pass reference, sdpass1_<network host>_<id>, never a pass");
   }
   const iat = Number(body.iat);
   if (!Number.isFinite(iat)) throw new ReceiptError("bad_payload", "iat is missing");

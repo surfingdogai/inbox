@@ -1,4 +1,4 @@
-import type { Money } from "./types";
+import type { Item, Money } from "./types";
 
 /**
  * How the valid transitions of an item become buttons, and what each event asks for. Mirrors the
@@ -6,7 +6,15 @@ import type { Money } from "./types";
  */
 export type ButtonTone = "primary" | "secondary" | "danger";
 
-const DANGER_EVENTS = new Set(["decline", "reject", "mark_spam", "no_show"]);
+const DANGER_EVENTS = new Set([
+  "decline",
+  "reject",
+  "mark_spam",
+  "no_show",
+  "payment_failed",
+  "charge_back",
+  "record_charge_back",
+]);
 
 export function isDanger(event: string): boolean {
   return DANGER_EVENTS.has(event) || event.startsWith("cancel");
@@ -48,6 +56,7 @@ export function inputKindFor(event: string): InputKind {
     case "cancel":
     case "cancel_by_business":
     case "reject":
+    case "payment_failed":
       return "note";
     default:
       return "none";
@@ -92,4 +101,38 @@ export interface QuoteLine {
 
 export function sumLines(lines: readonly QuoteLine[], currency: string): Money {
   return { value: lines.reduce((total, l) => total + l.quantity * l.price.value, 0), currency };
+}
+
+/**
+ * What the networks make of an outcome the owner is about to record (ADR-017 §3), in one sentence
+ * for the confirmation, or null when there is nothing to say. Nothing here decides anything: the
+ * network works out notice from the dates; this only tells the owner beforehand.
+ */
+export function networkNote(event: string, item: Item, now: number = Date.now()): string | null {
+  if (item.type === "booking" && item.state === "confirmed") {
+    if (event === "cancel_by_business") {
+      const notice = Date.parse(item.payload.startTime) - now;
+      return notice >= 24 * 3_600_000
+        ? "With a day's notice or more, networks count this cancellation at half against you."
+        : "Under 24 hours before the start, networks count this cancellation fully against you.";
+    }
+    if (event === "no_show") {
+      return "Networks record a no-show against the customer. You can correct it once, until the booking would have completed on its own.";
+    }
+  }
+  if (item.type === "booking" && (item.state === "no_show" || item.state === "completed")) {
+    if (event === "complete" || event === "no_show")
+      return "A correction can be made once; the later record is the one that counts.";
+  }
+  if (item.type === "order") {
+    if (event === "cancel" && ["accepted", "awaiting_payment", "payment_failed"].includes(item.state)) {
+      return "You accepted this order: networks count cancelling it now as an order not fulfilled.";
+    }
+    if (event === "payment_failed")
+      return "Networks count a failed payment at half against the customer; they can still pay.";
+    if (event === "charge_back" || event === "record_charge_back") {
+      return "Networks count a charge-back against the customer. Record one only when the bank reversed the payment.";
+    }
+  }
+  return null;
 }

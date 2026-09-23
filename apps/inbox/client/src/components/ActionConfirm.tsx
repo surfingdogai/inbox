@@ -7,6 +7,7 @@ import {
   isoToLocal,
   localToIso,
   moneyMajor,
+  networkNote,
   parseMoney,
   sumLines,
 } from "../lib/actions";
@@ -141,10 +142,12 @@ export function ActionConfirm({
     currency,
   );
   const problem = local ?? error?.detail ?? null;
+  const consequence = networkNote(transition.event, item);
 
   return (
     <form className="confirm row-glass" onSubmit={submit}>
       {showTitle && <h3>{transition.label}</h3>}
+      {consequence && <p className="hint">{consequence}</p>}
 
       {kind === "note" && (
         <div>

@@ -29,7 +29,9 @@ export type SecretPurpose =
   | "webhook-headers"
   | "receipt-key"
   /** A stored idempotent answer that carries a secret shown once (a signing secret, a key). */
-  | "idempotent-response";
+  | "idempotent-response"
+  /** A person's key and first pass from a network, held until they reach the customer (ADR-017 §2.1). */
+  | "person-secret";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few

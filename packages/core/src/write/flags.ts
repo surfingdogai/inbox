@@ -4,8 +4,10 @@ import type { Db } from "../db";
 import { type ItemFlags, itemFlagsSchema } from "../domain/types";
 import { ulid } from "../ids";
 import { items } from "../schema/tables";
+import { readSettings } from "../settings/schema";
 import { actorMeta, type Caller, nowOf, permissionKind } from "./caller";
 import { diagnoseFailure, eventStatement, hasActiveWebhook, webhookFanoutStatement } from "./common";
+import { hiddenTransitions } from "./corrections";
 import { WriteError } from "./errors";
 import { type ItemView, rowToItem, viewFor } from "./views";
 
@@ -57,8 +59,11 @@ export async function setFlags(
   } catch (error) {
     await diagnoseFailure(db, error, { itemId: item.id, expectedVersion: item.version });
   }
+  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], await readSettings(db), now);
   return viewFor(
     { ...item, flags, version: seq, updatedAt: new Date(now).toISOString() } as typeof item,
     permissionKind(caller),
+    undefined,
+    hidden.get(item.id),
   );
 }

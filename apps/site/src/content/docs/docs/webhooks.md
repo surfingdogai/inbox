@@ -30,12 +30,13 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `booking.accept` | The customer accepted the time you proposed. |
 | `booking.confirm` | You confirmed the booking; the slot is claimed. |
 | `booking.decline` | You declined the request. |
-| `booking.cancel` | The customer cancelled, within your cancellation window. |
+| `booking.cancel` | The customer cancelled: before it was confirmed, or within your cancellation window. |
+| `booking.cancel_late` | The customer cancelled a confirmed booking after your cancellation window, and you record late cancellations (`booking.lateCancellation`). |
 | `booking.cancel_by_business` | You cancelled the booking. |
 | `booking.expire` | A rule expired a booking nobody answered. |
-| `booking.complete` | The booking happened. |
-| `booking.no_show` | The customer did not turn up. |
-| `booking.receipt_issued` | The instance signed a receipt for the confirmed booking ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
+| `booking.complete` | The booking happened: you marked it, or the system did `booking.autoCompleteHours` after the end (`data.actor.kind` is `system`); also your correction of a no-show. |
+| `booking.no_show` | The customer did not turn up; also your correction of a completion. |
+| `booking.receipt_issued` | The instance signed a receipt: the confirmation, or how the booking ended ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
 | `booking.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `order.create` | An order arrived. |
 | `order.request_info` | You asked the customer for more details. |
@@ -43,12 +44,16 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `order.accept` | You accepted the order. |
 | `order.request_payment` | You asked for payment, optionally with a payment URL. |
 | `order.record_payment` | A payment was recorded against the order. |
+| `order.payment_failed` | The payment failed. The order can still be paid, or cancelled. |
+| `order.lapse` | Payment was requested `orders.payDays` ago and never came: the system closed the promise for the networks; the order itself stays as it was, so a late payment is still taken. |
 | `order.start_fulfilment` | You started putting the order together. |
 | `order.fulfil` | The order went out. |
 | `order.complete` | The order is closed and done. |
 | `order.decline` | You declined the order. |
 | `order.cancel` | The order was cancelled. |
-| `order.receipt_issued` | The instance signed a receipt for the paid order. In the full style, `data.receipt` carries it. |
+| `order.charge_back` | The payment was reversed by the bank, and the order ended there. |
+| `order.record_charge_back` | A charge-back was recorded on an order that was already completed. |
+| `order.receipt_issued` | The instance signed a receipt: the acceptance, the payment, or how the order ended. In the full style, `data.receipt` carries it. |
 | `order.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `quote_request.create` | Someone asked for a price. |
 | `quote_request.request_info` | You asked what exactly they need. |

@@ -28,7 +28,13 @@ An instance publishes one small document at `/.well-known/agent-inbox.json`. It 
     "mcp": "https://inbox.example/mcp",
     "mcp_owner": "https://inbox.example/mcp/owner"
   },
-  "agent_policy": { "tiers": ["anonymous", "verified_principal"] },
+  "agent_policy": {
+    "tiers": ["anonymous", "signed_agent", "verified_principal", "reputed_principal"],
+    "signatures": ["sdi-agent/1"],
+    "passes": true,
+    "networks": ["https://network.surfingdog.ai"],
+    "guide": "https://surfingdog.ai/for-agents.md"
+  },
   "receipt_keys": { "keys": [{ "kty": "OKP", "crv": "Ed25519", "x": "…", "kid": "…" }] },
   "review_services": []
 }
@@ -42,6 +48,10 @@ An instance publishes one small document at `/.well-known/agent-inbox.json`. It 
 | `item_types` | Which of `message`, `quote_request`, `booking`, `order`, `refund` this instance accepts. |
 | `protocols` | Protocol name to entry URL. Today: `openapi`, `rest`, `mcp`, `mcp_owner`. Adapters add their own keys as they ship (`a2a`, `ucp`, `arp`, `email`, `form`). |
 | `agent_policy.tiers` | The trust tiers the instance serves, from `anonymous`, `signed_agent`, `verified_principal`, `reputed_principal`. |
+| `agent_policy.signatures` | Request signatures it verifies: `sdi-agent/1` (HTTP Message Signatures, Web Bot Auth compatible). |
+| `agent_policy.passes` | Whether it presents a person's passes and keys to their networks (it needs `INBOX_SECRET_KEY` and a public address). |
+| `agent_policy.networks` | The networks switched on in Settings → Networks: whose people it recognises, and which may issue a first-time customer a key through it. |
+| `agent_policy.guide` | How an agent identifies itself and its person here, step by step. |
 | `receipt_keys` | A JWKS with the instance's Ed25519 receipt-signing keys, the same keys `/.well-known/jwks.json` serves. Empty on an instance that has never issued one, or that has no `INBOX_SECRET_KEY` to seal a key with. |
 | `review_services` | The networks this instance publishes [receipts](/docs/receipts/) (and, later, reviews) to, by origin: every network switched on in Settings → Networks that takes receipts. Empty means none. `https://network.surfingdog.ai` is only the default. |
 

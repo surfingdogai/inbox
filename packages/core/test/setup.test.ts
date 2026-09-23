@@ -171,7 +171,10 @@ describe("setup: rules", () => {
       "When a new item arrives and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
     );
     const applied = await caps.setup.applyPreset(owner, { preset: "appointments", replace: false });
-    expect(applied.map((r) => r.name)).toEqual((PRESETS.appointments ?? []).map((r) => r.name));
+    // Listed as they run: highest priority first.
+    expect(applied.map((r) => r.name)).toEqual(
+      [...(PRESETS.appointments ?? [])].sort((a, b) => b.priority - a.priority).map((r) => r.name),
+    );
 
     const custom = await caps.setup.createRule(owner, {
       name: "Flag big quotes",
@@ -194,7 +197,9 @@ describe("setup: rules", () => {
       caps.setup.updateRule(owner, { rule_id: custom.id, name: "x", expected_version: 1 }),
     ).rejects.toMatchObject({ code: "version_conflict" });
     expect((await caps.setup.listRules(owner)).map((r) => r.name)).toEqual([
+      "Confirm a customer you know, or a trusted one, at once",
       "Auto-confirm small bookings when the slot is free",
+      "Offer a code to a possible known customer asking about earlier items",
       "Flag big quotes",
       "Ask a person about anything else",
     ]);

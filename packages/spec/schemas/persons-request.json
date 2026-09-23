@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/persons",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+      "description": "The item id: the network replays the same answer for the same request_id for 7 days."
+    },
+    "email": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 320,
+      "description": "The customer's address; normalised by the network (§2)."
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "jkt": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "directory": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https:\\/\\/"
+        }
+      }
+    },
+    "email_proof": {
+      "description": "How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7).",
+      "type": "string",
+      "enum": ["otp", "dkim"]
+    }
+  },
+  "required": ["request_id", "email"]
+}

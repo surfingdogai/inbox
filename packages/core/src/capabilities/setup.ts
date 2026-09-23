@@ -1,10 +1,11 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { describeAction, summarizeRule } from "../rules/describe";
-import { buildRuleContext } from "../rules/engine";
+import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
 import { PRESETS } from "../rules/presets";
+import { isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
 import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   availabilityRules,
@@ -18,6 +19,7 @@ import {
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
+import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
 import { DEFAULT_WEEKLY, type Weekly } from "./availability";
 import { type Closure, readClosures } from "./closures";
@@ -313,6 +315,7 @@ export class SetupCapabilities {
 
   async createRule(caller: Caller, input: S.RuleInput): Promise<RuleView> {
     requireOwner(caller);
+    requirePositive(input.definition);
     const now = nowOf(caller);
     const id = ulid();
     await this.db.orm.insert(rulesTable).values({
@@ -331,6 +334,7 @@ export class SetupCapabilities {
   async updateRule(caller: Caller, input: S.UpdateRuleInput): Promise<RuleView> {
     requireOwner(caller);
     const { rule_id, expected_version, ...patch } = input;
+    if (patch.definition) requirePositive(patch.definition);
     const now = nowOf(caller);
     const sets: string[] = ["version = version + 1", "updated_at = ?"];
     const params: (string | number | null)[] = [now];
@@ -415,28 +419,43 @@ export class SetupCapabilities {
     would: string[];
     item: { id: string; type: string; state: string };
     facts: Record<string, unknown>;
+    who: Record<string, unknown>;
+    positive_only?: string;
+    /** The actions a run would hold back on this item (ADR-017 §8.3), in plain words. */
+    skipped?: string[];
   }> {
     requireOwner(caller);
     const parsed = ruleDefinitionSchema.safeParse(input.definition);
     if (!parsed.success) throw fromZod(parsed.error, "definition");
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw unknown("item_id", "unknown item");
+    // The item's last event a rule could run on: a note that a rule was held back is not one.
     const [eventRow] = await this.db.orm
       .select()
       .from(itemEvents)
-      .where(eq(itemEvents.itemId, row.id))
+      .where(and(eq(itemEvents.itemId, row.id), ne(itemEvents.event, RULE_SKIPPED_EVENT)))
       .orderBy(desc(itemEvents.seq))
       .limit(1);
     if (!eventRow) throw unknown("item_id", "item has no events");
     const item = rowToItem(row);
     const ctx = await buildRuleContext(this.db, item, eventRow, nowOf(caller));
     const matched = evaluate(parsed.data.if, ctx);
+    const positive = positiveOnlyProblem(parsed.data);
+    // What a run would hold back here, as the engine decides it, and so what it would really do.
+    const held = matched ? await heldBack(this.db, item.id, eventRow, parsed.data.if) : null;
+    const skippedActions = held ? parsed.data.actions.filter(isNegative) : [];
     return {
       matched,
       summary: summarizeRule(parsed.data),
-      would: matched ? parsed.data.actions.map(describeAction) : [],
+      would: matched ? parsed.data.actions.filter((a) => !skippedActions.includes(a)).map(describeAction) : [],
+      ...(skippedActions.length && held
+        ? { skipped: skippedActions.map((a) => skippedSentence(input.name, a, held)) }
+        : {}),
       item: { id: item.id, type: item.type, state: item.state },
       facts: ctx.facts as unknown as Record<string, unknown>,
+      // What the reputation conditions read (ADR-017 §8.3), from local rows only.
+      who: { person: ctx.person, customer: ctx.customer, agent: ctx.agent, tier: ctx.party.tier },
+      ...(positive ? { positive_only: positive } : {}),
     };
   }
 
@@ -486,6 +505,16 @@ function ruleView(row: typeof rulesTable.$inferSelect): RuleView {
     created_at: new Date(row.createdAt).toISOString(),
     updated_at: new Date(row.updatedAt).toISOString(),
   };
+}
+
+/** ADR-017 §8.3: a rule that reads a customer's standing may only speed things up or ask a person. */
+function requirePositive(definition: RuleDefinition): void {
+  const problem = positiveOnlyProblem(definition);
+  if (problem) {
+    throw new WriteError("positive_only", problem, {
+      fields: [{ path: "definition.actions", problem: "invalid", message: problem }],
+    });
+  }
 }
 
 function requireOwner(caller: Caller): void {

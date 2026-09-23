@@ -304,7 +304,7 @@ describe("upgrading the live instance to several networks", () => {
         origin: NET,
         enabled: true,
         registration: "registered",
-        receipts: { published: 3, queued: 0, refused: 0 },
+        receipts: { published: 3, queued: 0, refused: 0, held: 0 },
       }),
     ]);
     // The manifest still names the network, spelled as before.
@@ -409,7 +409,14 @@ describe("upgrading the live instance to several networks", () => {
     expect((await s.put({ booking: { cancellationWindowMin: 30 } })).status).toBe(200);
     expect((await s.put({ network: { join: true } })).status).toBe(200);
     expect(await on()).toEqual([B, NET].sort());
-    expect((await readSettings(s.db)).booking).toEqual({ ...LIVE_DOC.booking, cancellationWindowMin: 30 });
+    // The document was stored after migrating here, so the booking settings added since read as
+    // their defaults; what the migration itself writes is in upgrade-outcomes.test.ts.
+    expect((await readSettings(s.db)).booking).toEqual({
+      ...LIVE_DOC.booking,
+      cancellationWindowMin: 30,
+      lateCancellation: "record",
+      autoCompleteHours: 48,
+    });
 
     // The tab from before the deploy cannot overwrite any of it: its version is long gone.
     const stale = await s.put(oldTab, LIVE_VERSION);

@@ -13,8 +13,9 @@ import worker from "../src/worker";
  */
 describe("the worker's cron after a deploy", () => {
   it("brings a database the previous version left up to date before it runs a job", async () => {
-    const previous = MIGRATIONS.filter((m) => m.name !== "0006_networks");
-    expect(previous).toHaveLength(MIGRATIONS.length - 1);
+    // Everything before the networks' tables: the later migrations build on them.
+    const previous = MIGRATIONS.filter((m) => m.name < "0006_networks");
+    expect(previous.at(-1)?.name).toBe("0005_receipt_events");
     await runMigrations(d1Client(env.DB as Parameters<typeof d1Client>[0]), previous);
 
     await worker.scheduled(createScheduledController({ cron: "*/5 * * * *" }), env);
@@ -23,8 +24,13 @@ describe("the worker's cron after a deploy", () => {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('network_publications', 'network_status') ORDER BY name",
     ).all<{ name: string }>();
     expect(results.map((r) => r.name)).toEqual(["network_publications", "network_status"]);
-    // And the hourly tick ran.
+    // And the hourly tick ran, and the quarter-hourly lifecycle sweep (ADR-017 §3.1), which has
+    // queued its successor.
     const tick = await env.DB.prepare("SELECT status FROM jobs WHERE kind = 'network_ping' AND status = 'done'").all();
     expect(tick.results.length).toBeGreaterThan(0);
+    const sweep = await env.DB.prepare("SELECT status FROM jobs WHERE kind = 'lifecycle_sweep' ORDER BY run_at").all<{
+      status: string;
+    }>();
+    expect(sweep.results.map((r) => r.status)).toEqual(["done", "queued"]);
   });
 });

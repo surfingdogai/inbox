@@ -25,6 +25,11 @@ const EVENT_WORDS: Record<string, string> = {
   request_payment: "sent a payment request",
   complete: "completed",
   no_show: "marked as a no-show",
+  cancel_late: "cancelled late",
+  payment_failed: "marked as a failed payment",
+  charge_back: "charged back",
+  record_charge_back: "charged back",
+  lapse: "lapsed unpaid",
   ship: "shipped",
   refund: "refunded",
   mark_spam: "marked as spam",
@@ -64,6 +69,17 @@ export function describeCondition(c: Condition, top = false): string {
         return "it is inside opening hours";
       case "party_verified":
         return "the sender is verified";
+      case "person_trusted":
+        return "the customer is trusted on a network";
+      case "person_tier_on": {
+        const network = typeof c.args?.network === "string" ? c.args.network.replace(/^https:\/\//, "") : "a network";
+        const min = typeof c.args?.min === "string" ? c.args.min : "building";
+        return `the customer is at least ${min} on ${network}`;
+      }
+      case "customer_known":
+        return "it is a customer you know, with a completed visit or order";
+      case "within_customer_limit":
+        return "the total is within the customer's limit";
       case "is_sandbox":
         return "it is a test";
       case "text_has_keywords": {
@@ -127,12 +143,28 @@ const PATH_WORDS: Record<string, string> = {
   "item.payload.startTime": "the start time",
   "party.kind": "the sender",
   "party.tier": "the sender's trust level",
+  "event.tier": "the sender's trust level",
+  "person.tier": "the customer's best tier on a network",
+  "person.score": "the customer's best score on a network",
+  "person.present": "a network presented the customer",
+  "customer.match": "how sure it is this is a customer you know",
+  "customer.completed": "the customer's completed visits and orders",
+  "customer.no_shows": "the customer's no-shows",
+  "customer.late_cancellations": "the customer's late cancellations",
+  "customer.payment_failed": "the customer's failed payments",
+  "customer.charged_back": "the customer's charge-backs",
+  "customer.paid": "the customer's paid orders",
+  "customer.largest_paid": "the customer's largest paid order",
+  "customer.open_bookings": "the customer's open bookings",
+  "agent.level": "how the agent signed",
+  "agent.platform": "the agent's platform",
   "event.actorKind": "who acted",
   text: "the text",
 };
 
 function show(value: unknown, path?: string): string {
-  if (path?.endsWith(".value") && typeof value === "number") return (value / 100).toFixed(2);
+  if ((path?.endsWith(".value") || path?.endsWith("_paid")) && typeof value === "number")
+    return (value / 100).toFixed(2);
   if (typeof value === "string") return `"${value}"`;
   if (value === undefined) return "nothing";
   return JSON.stringify(value);

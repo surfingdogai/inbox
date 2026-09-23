@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/reports",
+  "type": "object",
+  "properties": {
+    "receipt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "Any receipt of the item: its compact JWS, or its sha."
+    },
+    "out": {
+      "type": "string",
+      "enum": ["booking.no_show_business", "order.not_received"]
+    },
+    "why": {
+      "type": "string",
+      "enum": ["closed", "no_one_there", "not_delivered", "other"]
+    },
+    "pass_ref": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}$",
+      "description": "A pass reference: sdpass1_<network host>_<id>. Only valid with a signature by a delegated key."
+    }
+  },
+  "required": ["receipt", "out", "why", "pass_ref"]
+}

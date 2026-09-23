@@ -1,4 +1,5 @@
 export * from "./caller";
+export { type CorrectionFacts, correctionFacts, deadCorrections, hiddenTransitions } from "./corrections";
 export { type CreateInput, type CreateResult, createItem } from "./create";
 export * from "./errors";
 export { setFlags } from "./flags";

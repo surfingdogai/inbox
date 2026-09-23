@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receipt claims, v1 (ADR-016)",
+  "type": "object",
+  "properties": {
+    "iss": {
+      "type": "string",
+      "format": "uri"
+    },
+    "sub": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 64
+    },
+    "itm": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "typ": {
+      "type": "string",
+      "enum": ["message", "quote_request", "booking", "order", "refund"]
+    },
+    "knd": {
+      "type": "string",
+      "enum": ["confirmed", "paid"]
+    },
+    "iat": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Issued at, Unix seconds."
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "amt": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "Minor units: 4500 is €45.00."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "required": ["value", "currency"]
+    },
+    "pay": {
+      "description": "How it was paid, when the instance knows.",
+      "type": "string",
+      "maxLength": 40
+    }
+  },
+  "required": ["iss", "sub", "itm", "typ", "knd", "iat", "nonce"]
+}

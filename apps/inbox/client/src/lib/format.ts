@@ -1,4 +1,4 @@
-import type { Item, ItemType, ItemView, Money, Party } from "./types";
+import type { Customer, Item, ItemType, ItemView, Money, Party, Receipt } from "./types";
 
 /**
  * Words and numbers for humans. Pure functions, no DOM, so they run in tests on both runtimes.
@@ -33,6 +33,8 @@ export type Tone = "neutral" | "success" | "warning" | "danger";
 const STATE_WORDS: Record<string, string> = {
   needs_info: "Needs info",
   awaiting_payment: "Awaiting payment",
+  payment_failed: "Payment failed",
+  charged_back: "Charged back",
   no_show: "No-show",
   cancelled_by_customer: "Cancelled by customer",
   cancelled_by_business: "Cancelled by you",
@@ -47,9 +49,10 @@ const SUCCESS_STATES = new Set([
   "approved",
   "refunded",
 ]);
-const WARNING_STATES = new Set(["needs_info", "awaiting_payment", "proposed"]);
+const WARNING_STATES = new Set(["needs_info", "awaiting_payment", "payment_failed", "proposed"]);
 const DANGER_STATES = new Set([
   "declined",
+  "charged_back",
   "cancelled",
   "cancelled_by_customer",
   "cancelled_by_business",
@@ -84,11 +87,16 @@ const EVENT_WORDS: Record<string, string> = {
   decline: "Declined",
   expire: "Expired",
   cancel: "Cancelled",
+  cancel_late: "Cancelled late",
   cancel_by_business: "Cancelled",
   complete: "Completed",
   no_show: "Marked as no-show",
   request_payment: "Payment requested",
   record_payment: "Payment recorded",
+  payment_failed: "Payment failed",
+  lapse: "Lapsed: no payment came",
+  charge_back: "Charged back",
+  record_charge_back: "Charge-back recorded",
   start_fulfilment: "Fulfilment started",
   fulfil: "Fulfilled",
   quote: "Quote sent",
@@ -101,6 +109,7 @@ const EVENT_WORDS: Record<string, string> = {
   reject: "Rejected",
   refund: "Refunded",
   flags: "Flag changed",
+  rule_skipped: "Rule held back",
 };
 
 export function eventWord(event: string): string {
@@ -326,4 +335,124 @@ export function localDateKey(at: string | number, tz?: string): string {
   if (!d) return "";
   const opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "2-digit", day: "2-digit" };
   return dateFormatter("en-CA", opts, tz).format(d);
+}
+
+const OUTCOME_WORDS: Record<string, string> = {
+  "booking.completed": "Completed",
+  "order.fulfilled": "Fulfilled",
+  "booking.cancelled_by_business": "Cancelled by you",
+  "order.not_fulfilled": "Not fulfilled",
+  "booking.no_show_customer": "No-show",
+  "booking.cancelled_late_by_customer": "Cancelled late by the customer",
+  "order.payment_failed": "Payment failed",
+  "order.charged_back": "Charged back",
+  "booking.cancelled_by_customer": "Cancelled by the customer",
+  "order.cancelled_by_customer": "Cancelled by the customer",
+  "order.lapsed": "Lapsed unpaid",
+};
+
+const RECEIPT_KIND_WORDS: Record<string, string> = { confirmed: "Confirmed", paid: "Paid", accepted: "Accepted" };
+
+/**
+ * What a receipt attests, in a word or three: "Confirmed", "Paid", "Accepted" for a promise, and
+ * for an outcome how it ended — "Completed", "No-show" — marked "automatically" when the system
+ * recorded it (ADR-017 §3).
+ */
+export function receiptWord(r: Pick<Receipt, "kind" | "outcome" | "payload">): string {
+  if (r.kind !== "outcome") return RECEIPT_KIND_WORDS[r.kind] ?? capitalise(r.kind);
+  const word = (r.outcome && OUTCOME_WORDS[r.outcome]) ?? "Outcome";
+  return (r.payload as { aut?: unknown }).aut === 1 ? `${word} automatically` : word;
+}
+
+/**
+ * Who is asking, beyond a name (ADR-017 §8.2, §8.3), in the few words the owner needs: whether it
+ * may be a customer they know (unconfirmed), is one ("a customer you know", with the history that
+ * says so), and how the agent signed. How each network knows the person is `personStandings`.
+ * Empty for an item that says nothing more than its party.
+ */
+export interface CustomerNote {
+  readonly tone: Tone;
+  readonly text: string;
+}
+
+export function customerNotes(c: Customer | undefined, currency: string, locale?: string): CustomerNote[] {
+  if (!c) return [];
+  const out: CustomerNote[] = [];
+  if (c.match === "weak" && c.possible) {
+    out.push({ tone: "warning", text: `May be ${c.possible.name ?? "a customer you know"}, unconfirmed` });
+  }
+  if (c.known) {
+    const h = c.history;
+    const parts = [
+      `${h.completed} completed`,
+      ...(h.no_shows ? [`${h.no_shows} no-show${h.no_shows === 1 ? "" : "s"}`] : []),
+      ...(h.late_cancellations
+        ? [`${h.late_cancellations} late cancellation${h.late_cancellations === 1 ? "" : "s"}`]
+        : []),
+      ...(h.payment_failed ? [`${h.payment_failed} failed payment${h.payment_failed === 1 ? "" : "s"}`] : []),
+      ...(h.charged_back ? [`${h.charged_back} charge-back${h.charged_back === 1 ? "" : "s"}`] : []),
+      ...(h.largest_paid ? [`largest paid ${formatMoney({ value: h.largest_paid, currency }, locale)}`] : []),
+    ];
+    out.push({ tone: "success", text: `A customer you know: ${parts.join(", ")}` });
+  }
+  if (c.agent.level === "vouched") {
+    out.push({ tone: "neutral", text: `Signed agent of ${(c.agent.platform ?? "").replace(/^https:\/\//, "")}` });
+  } else if (c.agent.level === "self" && c.agent.platform) {
+    // A platform's key that no network the business uses recognises: signed, and nothing more.
+    out.push({
+      tone: "neutral",
+      text: `Signed agent (key from ${c.agent.platform.replace(/^https:\/\//, "")}, a platform your networks do not recognise)`,
+    });
+  } else if (c.agent.level === "self") {
+    out.push({ tone: "neutral", text: "Signed agent" });
+  }
+  return out;
+}
+
+const TIER_WORDS: Record<string, string> = { new: "New", building: "Building a record", trusted: "Trusted" };
+
+/**
+ * How each network knows the person (ADR-017 §2.2, §5.3), one row per network, in plain words:
+ * the tier, what their record is made of, since when the network has known them, and whether it
+ * said so with this request or earlier. A business sees a person's standing only when their
+ * assistant presents it, so there is no row for a network that never did.
+ *
+ *   { network: "network.surfingdog.ai", tier: "Trusted",
+ *     text: "14 kept, 1 broken, at 5 businesses. Known there since March 2026; address proven." }
+ */
+export interface PersonStanding {
+  readonly network: string;
+  readonly tier: string;
+  readonly tone: Tone;
+  readonly text: string;
+  /** "With this request", or when a network last said it. */
+  readonly when: string;
+  /** Said only when the network flagged the pass; it still works (R25). */
+  readonly caution: string | null;
+}
+
+export function personStandings(c: Customer | undefined, locale?: string, tz?: string): PersonStanding[] {
+  if (!c) return [];
+  return c.persons.map((p) => {
+    const host = p.network.replace(/^https:\/\//, "");
+    const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    const record =
+      p.kept === 0 && p.broken === 0
+        ? "No record there yet"
+        : `${p.kept} kept, ${p.broken} broken${p.businesses > 0 ? `, at ${plural(p.businesses, "business", "businesses")}` : ""}`;
+    const since = p.since
+      ? `Known there since ${dateFormatter(locale, { month: "long", year: "numeric" }, tz).format(new Date(p.since))}`
+      : null;
+    const facts = [since, p.email_proven ? "address proven" : null].filter((f): f is string => f !== null);
+    return {
+      network: host,
+      tier: TIER_WORDS[p.tier] ?? capitalise(p.tier),
+      tone: p.tier === "trusted" ? "success" : "neutral",
+      text: `${record}.${facts.length ? ` ${capitalise(facts.join("; "))}.` : ""}`,
+      when: p.seen === "this_item" ? "With this request" : `As last presented, ${formatDateTime(p.as_of, tz, locale)}`,
+      caution: p.unusual_use
+        ? "Their pass was used at many businesses in a day, or by two assistants' keys. It still works; the person can replace it."
+        : null,
+    };
+  });
 }

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/recovery/finish: recover",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdkey1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}_[a-z2-7]{32}$",
+      "description": "A person's key: sdkey1_<network host>_<id>_<secret>. Issued once; exchanged for passes."
+    },
+    "pass": {
+      "type": "string",
+      "maxLength": 200,
+      "pattern": "^sdpass1_(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])_[a-z2-7]{16}_[a-z2-7]{32}$",
+      "description": "A pass: sdpass1_<network host>_<id>_<secret>. What an agent presents for its person."
+    }
+  },
+  "required": ["key", "pass"]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/instances: 202",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "status_url": {
+      "type": "string"
+    },
+    "manifest_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": ["domain", "status", "status_url", "manifest_url", "message"]
+}

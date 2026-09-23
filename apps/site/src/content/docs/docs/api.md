@@ -21,11 +21,26 @@ No authentication. Anonymous callers receive an `accessToken` when they create a
 | `create_booking` | `POST /v1/bookings` | Request a service at a time. Check availability first. Creates a `booking`. |
 | `create_order` | `POST /v1/orders` | Order products. Creates an `order`. |
 | `get_item_status` | `GET /v1/items/{id}` | The current state of an item you created, and what you may do next. |
-| `cancel_item` | `POST /v1/items/{id}/cancel` | Cancel an item you created, within the business's cancellation window. |
+| `cancel_item` | `POST /v1/items/{id}/cancel` | Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations, and refused where it does not. |
 | `send_message` | `POST /v1/messages` | Start a conversation, or reply on an item you own with `item_id`. |
-| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt on your item with your agent's own Ed25519 key, so both sides hold it. See [Receipts](/docs/receipts/). |
+| `acknowledge_receipt` | `POST /v1/items/{id}/receipt-ack` | Counter-sign a receipt on your item with your agent's own Ed25519 key, so both sides hold it; or, in a request you sign, name it by `receipt_id`. See [Receipts](/docs/receipts/). |
+| `verify_customer` | `POST /v1/customers/verify` | Prove you are a customer the business already knows: six digits go to the address it has for you (`202 {sent_to}`), and sending them back as `code` recognises you (`200 {recognised: "strong"}`). |
 
 Create calls take `payload` (the typed fields, schema.org names in camelCase), an optional `contact` (`name`, `email`, `phone`, `locale`), an optional free-text `message`, and `idempotency_key`.
+
+**Who you carry.** Every public call takes `pass` (a person's passes, space-separated, at most 8) and `key` (a person's key, exchanged once for a pass), or the passes in an `Sdi-Pass` header; a `GET` reads only the header. Never put either in a URL. The inbox presents each to the network that issued it, when that network is switched on, and stores none of them: only a hash of a pass, to recognise it again. Create and status answers carry `identity`:
+
+| Field | |
+|---|---|
+| `recognised` | `strong` (a customer the business knows, proven), `weak` (the email or phone of one, not proven) or `none`. |
+| `passes` | Passes to keep, `[{network, pass}]`: a first booking's pass, or the one a key became. Shown in the answer that made them. |
+| `verify` | `available` when a one-time code can prove a weak match; `sent_to`, the masked address, once one went out. |
+| `networks` | What happened at each network: `issued`, `presented`, `person_exists`, `pending`, `unknown_pass`, `revoked`, `pass_requires_signature`, `carries_secret`, `unreachable`, `rate_limited`, `not_enabled`, `cannot_sign`. |
+| `guide` | `https://surfingdog.ai/for-agents.md` |
+
+A first booking or order with an email and nothing carried asks each network that issues for a key, which is emailed to the customer; nothing about the booking waits for it. A network that is slow or down leaves the customer `new` there, never refused. How an agent should use all this is [the agent guide](https://surfingdog.ai/for-agents.md).
+
+**Signed agents.** An agent may sign any request with HTTP Message Signatures (`sdi-agent/1`, Web Bot Auth compatible: its own key in `Sdi-Agent-Key`, or a platform's key named by `Signature-Agent`). An unsigned request is served the same; a signature that does not verify counts as unsigned, and the answer says why in `Sdi-Signature: invalid; reason="…"`. A signed request that changes something is kept once: the same signature again is a retry when it comes from the same client with the same idempotency key (answered as the first time), and `401 replayed_signature` otherwise. A pass reference (`sdpass1_<network>_<id>`) works only in a request signed by a key delegated to it: the inbox forwards that signature to the network, which checks it again, so a signed request must not carry a secret in its URL or its `Sdi-Pass`, nor cover any header but `Content-Digest`, `Content-Type`, `Sdi-Pass` and its key's (`Sdi-Agent-Key` or `Signature-Agent`) (the answer says `carries_secret` and nothing is forwarded). Send an access token in `X-Access-Token` on a signed request. `@surfingdog/sdk` signs requests for you.
 
 ## Owner operations
 
@@ -34,12 +49,12 @@ Authenticate with a Bearer token: an owner key, an integration key (see [Keys an
 | Operation | REST | Does |
 | --- | --- | --- |
 | `list_items` | `GET /v1/owner/items` | Items newest first. Filters: `type`, `state`, `needs_human`, `open_only` (default true), `sandbox`, full-text `q`. Paged. |
-| `get_item` | `GET /v1/owner/items/{id}` | One item with its typed fields, events, conversation and the valid next transitions. Each event says who caused it (`by`: `kind`, `id`, and the key's or AI app's `name`) and through which door (`channel`). |
+| `get_item` | `GET /v1/owner/items/{id}` | One item with its typed fields, events, conversation, receipts and the valid next transitions. Each event says who caused it (`by`: `kind`, `id`, and the key's or AI app's `name`) and through which door (`channel`). `customer` says who is asking: `match` (`strong`, `weak`, `none`), `possible` (the customer a weak match may be), `known` and `history` (your own record with them), `persons` (per network that presented them: `tier`, `score`, `kept`, `broken`, `businesses`, `since`, `email_proven`, `unusual_use`, and whether it was with this request or `earlier`) and `agent` (how the assistant signed). |
 | `transition_item` | `POST /v1/owner/items/{id}/transitions` | Fire one of the item's events with its `input`, a `reason` and `expected_version`. |
 | `reply` | `POST /v1/owner/items/{id}/replies` | Reply to the customer, or leave an internal note with `internal: true`. |
 | `get_settings` | `GET /v1/owner/settings` | The settings document and its version. Secrets are never returned: a secret that is set reads `(redacted)`, and `redacted` names its path, such as `email.inboundSecret`. Writing the document back as read, or without it, keeps it. |
 | `update_settings` | `PUT /v1/owner/settings` | Change settings: the document you send is merged over the current one, so send only what changes, with `expected_version`. `null` removes a key, so its default applies again. Networks are keyed by origin: `{"networks": {"https://network.example.com": {"enabled": true}}}` adds or switches on one and leaves the others as they are. |
-| `get_networks` | `GET /v1/owner/networks` | Each network in settings: on or off, what it gets, whether it has verified this instance, the last ping it took, the last error in a few words, and its receipts published, waiting and refused. |
+| `get_networks` | `GET /v1/owner/networks` | Each network in settings: on or off, whether it gives first-time customers a key (`issue`), what it gets, whether it has verified this instance, the last ping it took, the last error in a few words, the rules it applies, your own `standing` there (`tier`, `score`, `ranked`, and when it said so) from the last signed ping, what became of that ping's signature (`ping_signature`), and its receipts published, waiting, held and refused. |
 | `list_api_keys` | `GET /v1/owner/api-keys` | The owner and integration keys: name, scopes, last use, and every call each made outside its scopes. Never a key itself. |
 | `create_api_key` | `POST /v1/owner/api-keys` | A named, scoped, revocable integration key. The key is in this answer and in no other. |
 | `revoke_api_key` | `DELETE /v1/owner/api-keys/{id}` | Revoke a key at once and for good. |
@@ -77,11 +92,11 @@ The scopes are `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `a
 
 **Who did it.** Every event, in the history, the [event stream and webhooks](/docs/webhooks/), carries `actor` (`kind`: `owner`, `owner_ai`, `integration`, `connector`, `rule`, `system`, `customer_agent` or `customer_human`; `id`; and `name` for a key or an AI app), the `channel` it came through and `sandbox`. A customer's id is never given out. A two-way sync skips the events whose actor is its own key.
 
-**Access tokens.** A create call from a caller without an account returns `accessToken`. Send it back as `access_token` (query or body) or as the `x-access-token` header to read or cancel the item. It is a capability, not an identity: whoever holds it may act on that one item.
+**Access tokens.** A create call from a caller without an account returns `accessToken`. Send it back as `access_token` (query or body) or as the `x-access-token` header to read or cancel the item; on a signed request, only the header or the body. It is a capability, not an identity: whoever holds it may act on that one item. A person's pass does the same for their own items once the business knows them by it (their first booking with it, or a proven match): with the pass in `Sdi-Pass`, the status, cancel and acknowledge doors need no token.
 
 **Versions.** Item views carry `version`. Send `expected_version` on a transition to be refused with `409 version_conflict` if a colleague, a rule or an agent moved the item first.
 
-**Errors** are RFC 9457 problem documents, `application/problem+json`, with `type` (`https://surfingdog.ai/problems/<code>`), `title`, `status`, `detail`, `code` and, for input problems, `fields` listing `path`, `problem` (`missing` or `invalid`) and `message`. Codes and statuses: `invalid_input` 422, `not_found` 404, `not_allowed` 403, `wrong_state` 409, `unknown_event` 400, `guard_failed` 409, `slot_taken` 409, `version_conflict` 409, `idempotency_mismatch` 422, `unauthorized` 401. In MCP the same document comes back in `structuredContent.error` with `isError: true`, and the text names the fields to fix.
+**Errors** are RFC 9457 problem documents, `application/problem+json`, with `type` (`https://surfingdog.ai/problems/<code>`), `title`, `status`, `detail`, `code` and, for input problems, `fields` listing `path`, `problem` (`missing` or `invalid`) and `message`. Codes and statuses: `invalid_input` 422, `not_found` 404, `not_allowed` 403, `wrong_state` 409, `unknown_event` 400, `guard_failed` 409, `slot_taken` 409, `version_conflict` 409, `idempotency_mismatch` 422, `unauthorized` 401; for one-time codes `nothing_to_verify` 409, `already_verified` 409, `bad_code` 422, `code_expired` 422, `too_many_attempts` 429; `replayed_signature` 401; and `positive_only` 422 for a rule that reads a customer's standing and would refuse, cancel or expire. In MCP the same document comes back in `structuredContent.error` with `isError: true`, and the text names the fields to fix.
 
 **Paging.** List endpoints take `cursor` and `limit` (1 to 100, default 50) and return `items` and `next_cursor`. Pass `next_cursor` back as `cursor` for the next page; it is `null` on the last one.
 
@@ -107,4 +122,4 @@ Both servers are stateless per request, so a client connects with a plain `POST`
 
 ## SDK
 
-`@surfingdog/sdk` (MIT) is on npm. Today it carries the [webhook verifier](/docs/webhooks/) and the event types; the typed REST client, generated from the OpenAPI document with `openapi-typescript` and `openapi-fetch`, lands beside them. Until then, any OpenAPI client works.
+`@surfingdog/sdk` (MIT, no dependencies) is on npm. For a business's systems it carries the [webhook verifier](/docs/webhooks/) and the event types. For a customer's agent it carries the person's strings (`parseCredential`, `keepPasses`, `sdiPassHeader`, `passFromKey`), request signing (`generateAgentKey`, `signRequest`, and `requestSignInCode`, `signIn` and `delegate` for the one-time setup at a network) and receipts (`verifyReceipt`, `signAck`). Every one is checked against the published vectors. The typed REST client, generated from the OpenAPI document, lands beside them; until then, any OpenAPI client works.

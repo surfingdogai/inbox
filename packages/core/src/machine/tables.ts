@@ -115,24 +115,57 @@ export const bookingMachine: Machine<BookingState> = {
       by: ["rule", "system"],
       effects: ["release_slot", "close"],
     },
+    // ADR-017 §3.1: an event that differs by from-state or actor is several entries of the same
+    // name. Only the entries that leave a promise (`confirmed`) close it with an outcome.
     {
       event: "cancel",
       label: "Cancel booking",
-      from: ["requested", "needs_info", "proposed", "confirmed"],
+      from: ["requested", "needs_info", "proposed"],
       to: "cancelled_by_customer",
       by: customers,
-      guards: ["customer_owns_item", "within_cancellation_window"],
+      guards: ["customer_owns_item"],
       input: noteInput,
       effects: ["release_slot", "notify_owner", "close"],
     },
     {
+      event: "cancel",
+      label: "Cancel booking",
+      from: ["confirmed"],
+      to: "cancelled_by_customer",
+      by: customers,
+      guards: ["customer_owns_item", "within_cancellation_window"],
+      input: noteInput,
+      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "close"],
+    },
+    {
+      // Fired by `cancel_item` once the window has closed, when the owner records late cancellations.
+      event: "cancel_late",
+      label: "Cancel booking late",
+      from: ["confirmed"],
+      to: "cancelled_by_customer",
+      by: customers,
+      guards: ["customer_owns_item", "outside_cancellation_window"],
+      input: noteInput,
+      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "close"],
+      unlisted: true,
+    },
+    {
       event: "cancel_by_business",
       label: "Cancel booking",
-      from: ["requested", "needs_info", "proposed", "confirmed"],
+      from: ["requested", "needs_info", "proposed"],
       to: "cancelled_by_business",
       by: owners,
       input: noteInput,
       effects: ["release_slot", "notify_customer", "close"],
+    },
+    {
+      event: "cancel_by_business",
+      label: "Cancel booking",
+      from: ["confirmed"],
+      to: "cancelled_by_business",
+      by: owners,
+      input: noteInput,
+      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
     },
     {
       event: "complete",
@@ -140,7 +173,7 @@ export const bookingMachine: Machine<BookingState> = {
       from: ["confirmed"],
       to: "completed",
       by: ownersAndSystem,
-      effects: ["review_fact", "close"],
+      effects: ["issue_receipt:outcome", "review_fact", "close"],
     },
     {
       event: "no_show",
@@ -148,7 +181,30 @@ export const bookingMachine: Machine<BookingState> = {
       from: ["confirmed"],
       to: "no_show",
       by: ["owner", "staff"],
-      effects: ["review_fact", "close"],
+      effects: ["issue_receipt:outcome", "review_fact", "close"],
+    },
+    // Corrections: a no-show recorded by mistake, or a completion that was one. Once each item,
+    // until `booking.autoCompleteHours` after the end; the later outcome is the one that stands on
+    // the customer's side (§3.3), and the business's side is unchanged by either.
+    {
+      event: "complete",
+      label: "Correct: it happened",
+      from: ["no_show"],
+      to: "completed",
+      by: ["owner", "staff"],
+      guards: ["within_correction_window"],
+      effects: ["issue_receipt:outcome", "close"],
+      amends: true,
+    },
+    {
+      event: "no_show",
+      label: "Correct: no-show",
+      from: ["completed"],
+      to: "no_show",
+      by: ["owner", "staff"],
+      guards: ["within_correction_window"],
+      effects: ["issue_receipt:outcome", "close"],
+      amends: true,
     },
   ],
 };
@@ -158,12 +214,17 @@ export type OrderState =
   | "needs_info"
   | "accepted"
   | "awaiting_payment"
+  | "payment_failed"
   | "paid"
   | "fulfilling"
   | "fulfilled"
   | "completed"
   | "declined"
-  | "cancelled";
+  | "cancelled"
+  | "charged_back";
+
+/** Who records payments and their reversals: the payment connector, the owner, staff. */
+const payers = ["connector", "owner", "staff"] as const;
 
 export const orderMachine: Machine<OrderState> = {
   type: "order",
@@ -173,14 +234,16 @@ export const orderMachine: Machine<OrderState> = {
     "needs_info",
     "accepted",
     "awaiting_payment",
+    "payment_failed",
     "paid",
     "fulfilling",
     "fulfilled",
     "completed",
     "declined",
     "cancelled",
+    "charged_back",
   ],
-  terminal: ["completed", "declined", "cancelled"],
+  terminal: ["completed", "declined", "cancelled", "charged_back"],
   transitions: [
     {
       event: "request_info",
@@ -205,7 +268,7 @@ export const orderMachine: Machine<OrderState> = {
       from: ["received", "needs_info"],
       to: "accepted",
       by: owners,
-      effects: ["notify_customer"],
+      effects: ["issue_receipt:accepted", "notify_customer"],
     },
     {
       event: "request_payment",
@@ -219,11 +282,20 @@ export const orderMachine: Machine<OrderState> = {
     {
       event: "record_payment",
       label: "Record payment",
-      from: ["accepted", "awaiting_payment"],
+      from: ["accepted", "awaiting_payment", "payment_failed"],
       to: "paid",
-      by: ["connector", "owner", "staff", "system"],
+      by: [...payers, "system"],
       input: paymentInput,
       effects: ["issue_receipt:paid", "notify_customer"],
+    },
+    {
+      event: "payment_failed",
+      label: "Payment failed",
+      from: ["awaiting_payment"],
+      to: "payment_failed",
+      by: [...payers, "system"],
+      input: noteInput,
+      effects: ["issue_receipt:outcome", "notify_customer"],
     },
     {
       event: "start_fulfilment",
@@ -239,7 +311,7 @@ export const orderMachine: Machine<OrderState> = {
       from: ["accepted", "paid", "fulfilling"],
       to: "fulfilled",
       by: [...owners, "connector"],
-      effects: ["notify_customer"],
+      effects: ["issue_receipt:outcome", "notify_customer"],
     },
     {
       event: "complete",
@@ -258,15 +330,77 @@ export const orderMachine: Machine<OrderState> = {
       input: noteInput,
       effects: ["notify_customer", "close"],
     },
+    // ADR-017 §3.1: before the order is accepted a cancel promises nothing and closes nothing;
+    // after it, the owners' cancel is a promise not kept and the customer's is a neutral close.
     {
       event: "cancel",
       label: "Cancel order",
-      from: ["received", "needs_info", "accepted", "awaiting_payment"],
+      from: ["received", "needs_info"],
       to: "cancelled",
       by: [...customers, ...owners],
       guards: ["customer_owns_item"],
       input: noteInput,
       effects: ["notify_owner", "notify_customer", "close"],
+    },
+    {
+      event: "cancel",
+      label: "Cancel order",
+      from: ["accepted", "awaiting_payment", "payment_failed"],
+      to: "cancelled",
+      by: customers,
+      guards: ["customer_owns_item"],
+      input: noteInput,
+      // Both sides are told, as they were before the split.
+      effects: ["issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+    },
+    {
+      event: "cancel",
+      label: "Cancel order",
+      from: ["accepted", "awaiting_payment", "payment_failed"],
+      to: "cancelled",
+      by: owners,
+      input: noteInput,
+      effects: ["issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+    },
+    {
+      event: "charge_back",
+      label: "Record a charge-back",
+      from: ["paid", "fulfilling", "fulfilled"],
+      to: "charged_back",
+      by: payers,
+      input: noteInput,
+      effects: ["issue_receipt:outcome", "close"],
+    },
+    {
+      event: "record_charge_back",
+      label: "Record a charge-back",
+      from: ["completed"],
+      to: "completed",
+      by: payers,
+      guards: ["not_charged_back"],
+      input: noteInput,
+      effects: ["issue_receipt:outcome"],
+      amends: true,
+    },
+    // The system's neutral close of a payment nobody made (`orders.payDays` after it was
+    // requested). The order stays as it is, so a late payment is still taken.
+    {
+      event: "lapse",
+      label: "Lapse",
+      from: ["awaiting_payment"],
+      to: "awaiting_payment",
+      by: ["system"],
+      guards: ["payment_overdue"],
+      effects: ["issue_receipt:outcome"],
+    },
+    {
+      event: "lapse",
+      label: "Lapse",
+      from: ["payment_failed"],
+      to: "payment_failed",
+      by: ["system"],
+      guards: ["payment_overdue"],
+      effects: ["issue_receipt:outcome"],
     },
   ],
 };

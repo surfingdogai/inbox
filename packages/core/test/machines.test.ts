@@ -18,10 +18,25 @@ describe("state machines as data", () => {
         }
       });
 
-      it("has no way out of a terminal state", () => {
+      it("has no way out of a terminal state, only records that leave it closed", () => {
         for (const s of m.terminal) {
-          expect(m.transitions.filter((t) => t.from.includes(s))).toEqual([]);
+          // A correction or a charge-back on a closed item (ADR-017 §3.1) amends it and leaves it
+          // closed; nothing else leaves a terminal state.
+          for (const t of m.transitions.filter((x) => x.from.includes(s))) {
+            expect(t.amends, `${t.event} from ${s}`).toBe(true);
+            expect(m.terminal).toContain(t.to);
+            expect(t.effects ?? []).not.toContain("claim_slot");
+          }
           expect(isTerminal(m, s)).toBe(true);
+        }
+      });
+
+      it("offers an actor each event at most once from a state", () => {
+        for (const s of m.states) {
+          for (const a of actorKindSchema.options) {
+            const events = m.transitions.filter((t) => t.from.includes(s) && t.by.includes(a)).map((t) => t.event);
+            expect(new Set(events).size, `${type} ${s} ${a}`).toBe(events.length);
+          }
         }
       });
 

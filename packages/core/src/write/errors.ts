@@ -10,6 +10,16 @@ export type WriteErrorCode =
   | "slot_taken"
   | "version_conflict"
   | "idempotency_mismatch"
+  /** ADR-017 §8.2: a one-time code for a customer the business knows. */
+  | "nothing_to_verify"
+  | "already_verified"
+  | "bad_code"
+  | "code_expired"
+  | "too_many_attempts"
+  /** ADR-017 §8.3: a rule that reads a reputation may only speed things up or ask a person. */
+  | "positive_only"
+  /** ADR-017 §2.4: the same signed request, again, without the idempotency key that would replay it. */
+  | "replayed_signature"
   | "internal";
 
 export interface FieldProblem {
@@ -28,6 +38,13 @@ const STATUS: Record<WriteErrorCode, number> = {
   slot_taken: 409,
   version_conflict: 409,
   idempotency_mismatch: 422,
+  nothing_to_verify: 409,
+  already_verified: 409,
+  bad_code: 422,
+  code_expired: 422,
+  too_many_attempts: 429,
+  positive_only: 422,
+  replayed_signature: 401,
   internal: 500,
 };
 

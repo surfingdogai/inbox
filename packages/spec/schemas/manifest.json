@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Discovery manifest (/.well-known/agent-inbox.json)",
+  "type": "object",
+  "properties": {
+    "spec": {
+      "type": "string",
+      "const": "surfingdog-inbox/0"
+    },
+    "instance": {
+      "type": "string",
+      "format": "uri"
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "categories": {
+          "default": [],
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 60
+          }
+        },
+        "languages": {
+          "default": [],
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 12
+          }
+        },
+        "address": {
+          "type": "object",
+          "properties": {
+            "streetAddress": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "addressLocality": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "postalCode": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "addressCountry": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2
+            }
+          }
+        },
+        "geo": {
+          "type": "object",
+          "properties": {
+            "latitude": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "longitude": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "required": ["latitude", "longitude"]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "contact_email": {
+          "type": "string",
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+        }
+      },
+      "required": ["name"]
+    },
+    "item_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["message", "quote_request", "booking", "order", "refund"]
+      }
+    },
+    "protocols": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "agent_policy": {
+      "type": "object",
+      "properties": {
+        "tiers": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["anonymous", "signed_agent", "verified_principal", "reputed_principal"]
+          }
+        },
+        "signatures": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 40
+          }
+        },
+        "passes": {
+          "type": "boolean"
+        },
+        "networks": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "guide": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["tiers"]
+    },
+    "receipt_keys": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": ["keys"]
+    },
+    "review_services": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    }
+  },
+  "required": ["spec", "instance", "item_types", "protocols", "agent_policy", "receipt_keys", "review_services"]
+}

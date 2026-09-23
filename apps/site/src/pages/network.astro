@@ -62,11 +62,19 @@ const shared = [
   },
   {
     k: "Every receipt",
-    v: "Which promise it was (a booking confirmed or an order paid), when, and your reference for it. The customer is a code the network can't turn back into a person. When known: the amount, how an order was paid, and the customer's agent's signature.",
+    v: "Which promise it was (a booking confirmed, an order accepted or paid) and how it ended, when, and your reference for it. The customer is a code the network can't turn back into a person; when their assistant presented a pass, it also names that presentation, so the outcome counts for them. When known: the amount, how an order was paid, and the customer's agent's signature.",
+  },
+  {
+    k: "A new customer's email",
+    v: "With their first booking or order, so the network can give them a key; your inbox emails it to them. The network keeps a coded form of the address, never the address. You can switch this off.",
+  },
+  {
+    k: "A pass an agent carries",
+    v: "Only to the network that issued it, with the customer's email, so the network can tell you how that customer keeps their bookings.",
   },
   {
     k: "Never",
-    v: "Messages, names, email addresses, phone numbers, postal addresses, what was ordered, payment references.",
+    v: "Messages, names, phone numbers, postal addresses, what was ordered, payment references.",
   },
 ];
 ---
@@ -182,8 +190,8 @@ const shared = [
           <p class="eyebrow">Privacy</p>
           <h2 class="h-section" id="shared-h">What leaves your inbox</h2>
           <p class="lede">
-            Two things, and only once you switch the network on. Your customers' messages and personal details stay
-            with you.
+            Only once you switch the network on. Your customers' messages and personal details stay with you; an
+            email address goes only to give a new customer a key.
           </p>
         </div>
       </div>
@@ -200,7 +208,7 @@ const shared = [
       </dl>
 
       <p class="fine">
-        The network keeps the counts for 90 days, each receipt for 540 days, and each business's totals for good.
+        The network keeps the hourly counts for 90 days, and every receipt for good, so a record is never lost.
         Switch it off and nothing more is sent.
       </p>
       <p class="more">

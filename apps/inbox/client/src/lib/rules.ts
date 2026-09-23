@@ -44,6 +44,9 @@ export const FNS = [
   "party_verified",
   "text_has_keywords",
   "is_sandbox",
+  "person_trusted",
+  "customer_known",
+  "within_customer_limit",
 ] as const;
 export type Fn = (typeof FNS)[number];
 
@@ -53,6 +56,9 @@ export const FN_WORDS: Record<Fn, string> = {
   party_verified: "the sender is verified",
   text_has_keywords: "the text mentions…",
   is_sandbox: "it is a test",
+  person_trusted: "the customer is trusted on a network",
+  customer_known: "it is a customer you know",
+  within_customer_limit: "the total is within the customer's limit",
 };
 
 /** Paths an owner is likely to want, with words; anything else can be typed. */
@@ -68,6 +74,13 @@ export const PATHS: readonly { readonly path: string; readonly label: string; re
   { path: "item.flags.sandbox", label: "the test flag" },
   { path: "party.kind", label: "the sender (customer_human, customer_agent)" },
   { path: "party.tier", label: "the sender's trust level" },
+  { path: "person.tier", label: "the customer's best tier on a network (new, building, trusted)" },
+  { path: "customer.match", label: "a customer you know (strong, weak, none)" },
+  { path: "customer.completed", label: "the customer's completed visits and orders" },
+  { path: "customer.no_shows", label: "the customer's no-shows" },
+  { path: "customer.open_bookings", label: "the customer's open bookings" },
+  { path: "customer.largest_paid", label: "the customer's largest paid order", money: true },
+  { path: "agent.level", label: "how the agent signed (vouched, self, none)" },
   { path: "event.actorKind", label: "who acted" },
   { path: "event.event", label: "the event" },
   { path: "text", label: "the text" },
@@ -81,14 +94,19 @@ export const TRIGGER_EVENTS = [
   "accept",
   "decline",
   "cancel",
+  "cancel_late",
   "cancel_by_business",
   "complete",
   "no_show",
   "quote",
   "request_payment",
   "record_payment",
+  "payment_failed",
+  "lapse",
   "start_fulfilment",
   "fulfil",
+  "charge_back",
+  "record_charge_back",
   "answer",
   "reopen",
   "close",
@@ -264,6 +282,8 @@ function leafToRow(c: Condition): ConditionRow | null {
   }
   if ("all" in leaf || "any" in leaf || "not" in leaf) return null;
   if ("fn" in leaf) {
+    // A fact with arguments other than keywords is edited as JSON.
+    if (leaf.fn === "person_tier_on") return null;
     const words = (leaf.args?.keywords as unknown[] | undefined) ?? [];
     return { ...EMPTY_CONDITION, kind: "fact", not, fn: leaf.fn, keywords: words.map(String).join(", ") };
   }

@@ -178,7 +178,10 @@ describe("the manifest", () => {
           last_error: null,
           last_error_at: null,
           failing_since: null,
-          receipts: { published: 0, queued: 0, refused: 0 },
+          rules: { version: null, next: null, next_at: null, v2: false, checked_at: null },
+          standing: null,
+          ping_signature: null,
+          receipts: { published: 0, queued: 0, refused: 0, held: 0 },
         },
       ],
     });

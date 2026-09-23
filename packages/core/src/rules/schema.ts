@@ -26,15 +26,32 @@ export const opSchema = z.enum([
   "between",
 ]);
 
+/**
+ * The functions a condition may call. The last four read a customer's standing (ADR-017 §8.3):
+ * `person_trusted` (the best tier across the networks is `trusted`), `person_tier_on {network, min}`
+ * (at least `min` on one network), `customer_known` (a strong match with a completed item here),
+ * `within_customer_limit` (the total is within twice the largest paid order, or 40000 for a
+ * trusted person). A rule that reads them, or `party_verified`, is positive only (reputation.ts).
+ */
+export const FN_NAMES = [
+  "slot_is_free",
+  "within_business_hours",
+  "party_verified",
+  "text_has_keywords",
+  "is_sandbox",
+  "person_trusted",
+  "person_tier_on",
+  "customer_known",
+  "within_customer_limit",
+] as const;
+export type FnName = (typeof FN_NAMES)[number];
+
 export type Condition =
   | { all: Condition[] }
   | { any: Condition[] }
   | { not: Condition }
   | { path: string; op: z.infer<typeof opSchema>; value?: unknown }
-  | {
-      fn: "slot_is_free" | "within_business_hours" | "party_verified" | "text_has_keywords" | "is_sandbox";
-      args?: Record<string, unknown>;
-    };
+  | { fn: FnName; args?: Record<string, unknown> };
 
 const conditionUnion = () =>
   z.union([
@@ -42,10 +59,7 @@ const conditionUnion = () =>
     z.object({ any: z.array(conditionSchema).max(20) }),
     z.object({ not: conditionSchema }),
     z.object({ path: z.string().min(1).max(120), op: opSchema, value: z.unknown().optional() }),
-    z.object({
-      fn: z.enum(["slot_is_free", "within_business_hours", "party_verified", "text_has_keywords", "is_sandbox"]),
-      args: z.record(z.string(), z.unknown()).optional(),
-    }),
+    z.object({ fn: z.enum(FN_NAMES), args: z.record(z.string(), z.unknown()).optional() }),
   ]);
 // The recursive union infers the same shape as Condition; the cast only bridges exactOptionalPropertyTypes.
 export const conditionSchema = z.lazy(conditionUnion) as unknown as z.ZodType<Condition>;

@@ -1,0 +1,193 @@
+{
+  "description": "ADR-017 §6 ordering vectors: rank_shuffle = the first 16 hex digits of SHA-256(\"<YYYY-MM-DD>:<business uuid, lowercase>\") for the snapshot's UTC date, compared as a string (decimal shows the 64-bit value, above 2^53); rank_pos = ROW_NUMBER() OVER (ORDER BY rank_answering DESC, rank_ranked DESC, CASE WHEN rank_ranked THEN rank_score_int ELSE 0 END DESC, rank_shuffle ASC, id ASC), rank_ranked = rank_score_int >= 4000; cursors are base64url JSON {m, p}.",
+  "version": 3,
+  "shuffles": [
+    {
+      "date": "2026-12-01",
+      "id": "019968e0-8c41-7b3a-9f2e-3c4d5e6f7a8b",
+      "rank_shuffle": "532f0505dae34a0e",
+      "decimal": "5994015151758723598"
+    },
+    {
+      "date": "2026-12-01",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      "rank_shuffle": "c3e10e3bfa28a3e7",
+      "decimal": "14114578357918671847"
+    },
+    {
+      "date": "2026-12-01",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+      "rank_shuffle": "28b2b133cc45da7b",
+      "decimal": "2932601143400192635"
+    },
+    {
+      "date": "2026-12-02",
+      "id": "019968e0-8c41-7b3a-9f2e-3c4d5e6f7a8b",
+      "rank_shuffle": "2c8ec7eb713449f5",
+      "decimal": "3210723398392236533"
+    },
+    {
+      "date": "2026-12-02",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      "rank_shuffle": "444c98480197d748",
+      "decimal": "4921475927840905032"
+    },
+    {
+      "date": "2026-12-02",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+      "rank_shuffle": "f7e5abef8adedef2",
+      "decimal": "17862872542350335730"
+    }
+  ],
+  "snapshot_at": "2026-12-01T13:00:00Z",
+  "businesses": [
+    {
+      "name": "trusted, answering",
+      "id": "019968e0-8c41-7b3a-9f2e-3c4d5e6f7a8b",
+      "rank_answering": true,
+      "rank_score_int": 9241
+    },
+    {
+      "name": "building, answering",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+      "rank_answering": true,
+      "rank_score_int": 5491
+    },
+    {
+      "name": "building, answering, the same score",
+      "id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+      "rank_answering": true,
+      "rank_score_int": 5491
+    },
+    {
+      "name": "exactly 0.40, answering",
+      "id": "0199b000-0000-7000-8000-000000000001",
+      "rank_answering": true,
+      "rank_score_int": 4000
+    },
+    {
+      "name": "0.3999, answering: shuffled",
+      "id": "0199b000-0000-7000-8000-000000000002",
+      "rank_answering": true,
+      "rank_score_int": 3999
+    },
+    {
+      "name": "1 kept 50 broken, answering: shuffled",
+      "id": "0199b000-0000-7000-8000-000000000003",
+      "rank_answering": true,
+      "rank_score_int": 58
+    },
+    {
+      "name": "no record, answering: shuffled",
+      "id": "0199b000-0000-7000-8000-000000000004",
+      "rank_answering": true,
+      "rank_score_int": 0
+    },
+    {
+      "name": "trusted, not answering",
+      "id": "0199b000-0000-7000-8000-000000000005",
+      "rank_answering": false,
+      "rank_score_int": 9682
+    },
+    {
+      "name": "no record, not answering",
+      "id": "0199b000-0000-7000-8000-000000000006",
+      "rank_answering": false,
+      "rank_score_int": 0
+    }
+  ],
+  "order": [
+    {
+      "name": "trusted, answering",
+      "rank_ranked": true,
+      "rank_shuffle": "532f0505dae34a0e",
+      "rank_pos": 1
+    },
+    {
+      "name": "building, answering, the same score",
+      "rank_ranked": true,
+      "rank_shuffle": "28b2b133cc45da7b",
+      "rank_pos": 2
+    },
+    {
+      "name": "building, answering",
+      "rank_ranked": true,
+      "rank_shuffle": "c3e10e3bfa28a3e7",
+      "rank_pos": 3
+    },
+    {
+      "name": "exactly 0.40, answering",
+      "rank_ranked": true,
+      "rank_shuffle": "fd16c0a898a33a07",
+      "rank_pos": 4
+    },
+    {
+      "name": "no record, answering: shuffled",
+      "rank_ranked": false,
+      "rank_shuffle": "36632174192913d3",
+      "rank_pos": 5
+    },
+    {
+      "name": "1 kept 50 broken, answering: shuffled",
+      "rank_ranked": false,
+      "rank_shuffle": "49262383a74fc3ed",
+      "rank_pos": 6
+    },
+    {
+      "name": "0.3999, answering: shuffled",
+      "rank_ranked": false,
+      "rank_shuffle": "a0dc0712caf718e3",
+      "rank_pos": 7
+    },
+    {
+      "name": "trusted, not answering",
+      "rank_ranked": true,
+      "rank_shuffle": "fe220efaf0d7a232",
+      "rank_pos": 8
+    },
+    {
+      "name": "no record, not answering",
+      "rank_ranked": false,
+      "rank_shuffle": "440f2465483e128c",
+      "rank_pos": 9
+    }
+  ],
+  "cursors": [
+    {
+      "cursor": "eyJtIjoicmFuayIsInAiOjIwfQ",
+      "decoded": "{\"m\":\"rank\",\"p\":20}",
+      "mode": "rank",
+      "result": "continue after rank_pos 20"
+    },
+    {
+      "cursor": "eyJtIjoibmVhciIsInAiOjN9",
+      "decoded": "{\"m\":\"near\",\"p\":3}",
+      "mode": "near",
+      "result": "continue after rank_pos 3"
+    },
+    {
+      "cursor": "eyJtIjoibmVhciIsInAiOjN9",
+      "decoded": "{\"m\":\"near\",\"p\":3}",
+      "mode": "rank",
+      "result": "410 cursor_expired"
+    },
+    {
+      "cursor": "eyJtIjoicmFuayIsInAiOjB9",
+      "decoded": "{\"m\":\"rank\",\"p\":0}",
+      "mode": "rank",
+      "result": "410 cursor_expired"
+    },
+    {
+      "cursor": "eyJtIjoicmVjZW50IiwidCI6IjIwMjYtMDktMjJUMTc6MDA6MDBaIiwiZCI6MCwiaWQiOiIwMTk5NjhlMC04YzQxLTdiM2EtOWYyZS0zYzRkNWU2ZjdhOGIifQ",
+      "decoded": "{\"m\":\"recent\",\"t\":\"2026-09-22T17:00:00Z\",\"d\":0,\"id\":\"019968e0-8c41-7b3a-9f2e-3c4d5e6f7a8b\"}",
+      "mode": "rank",
+      "result": "410 cursor_expired"
+    },
+    {
+      "cursor": "eyJtIjoibmVhciIsInQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImQiOjEyMzQuNSwiaWQiOiIwMTk5NjhlMC04YzQxLTdiM2EtOWYyZS0zYzRkNWU2ZjdhOGIifQ",
+      "decoded": "{\"m\":\"near\",\"t\":\"0001-01-01T00:00:00Z\",\"d\":1234.5,\"id\":\"019968e0-8c41-7b3a-9f2e-3c4d5e6f7a8b\"}",
+      "mode": "near",
+      "result": "410 cursor_expired"
+    }
+  ]
+}

@@ -33,7 +33,9 @@ export const networkEntrySchema = z.object({
   issue: z
     .boolean()
     .default(true)
-    .describe("Whether this network may issue a key to a first-time customer through this inbox. Not used yet."),
+    .describe(
+      "Let this network issue a key to a first-time customer through this inbox (ADR-017 §2.1): on a booking or order with an email and no pass, the inbox asks it for one and emails the key to the customer.",
+    ),
   share: z
     .object({
       listing: z
@@ -81,9 +83,52 @@ const sections = {
       holdOnPropose: z.boolean().default(false),
       /** Requests nobody answered expire after this many hours. */
       autoExpireHours: z.number().int().min(1).default(72),
+      /**
+       * A customer who cancels a confirmed booking after the window has closed (ADR-017 §3.1):
+       * `record` takes the cancellation and records it as late (the network weighs it only when it
+       * comes under 48 hours before the start); `refuse` keeps today's answer, "ask the business".
+       * Instances that existed before this setting keep `refuse` until the owner changes it.
+       */
+      lateCancellation: z
+        .enum(["record", "refuse"])
+        .default("record")
+        .describe("After the cancellation window: record a late cancellation, or refuse and send the customer to you."),
+      /**
+       * Hours after a confirmed booking's end at which the system marks it completed, unless it was
+       * marked a no-show; also how long either can be corrected once (ADR-017 §3, §14).
+       */
+      autoCompleteHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(168)
+        .default(48)
+        .describe("Hours after the end at which a confirmed booking counts as completed unless marked a no-show."),
     })
     .prefault({}),
-  orders: z.object({ maxValueWithoutApprovalMinor: z.number().int().min(0).default(0) }).prefault({}),
+  orders: z
+    .object({
+      maxValueWithoutApprovalMinor: z.number().int().min(0).default(0),
+      /** Days after payment was requested at which an unpaid order lapses: a neutral close (ADR-017 §3.1). */
+      payDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(90)
+        .default(14)
+        .describe(
+          "Days after a payment request at which an unpaid order lapses: closed for the network, open for you.",
+        ),
+      /** When an accepted order is due, if it names no delivery time: this many days after the promise. */
+      dueDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(365)
+        .default(30)
+        .describe("Days after acceptance by which an order with no delivery time is due."),
+    })
+    .prefault({}),
   notifications: z
     .object({
       /** Where the owner is told about new items; empty = no owner emails. */
@@ -158,6 +203,71 @@ const sections = {
         .default(false)
         .describe(
           "Refuse a call outside the scopes of the key or AI app that makes it. Off, such a call goes through and is recorded under Settings → Keys; a later release turns this on for everyone.",
+        ),
+    })
+    .prefault({}),
+  /**
+   * Signed agents (ADR-017 §2.4): a signature names the host it was made for, which is this
+   * inbox's public host (`INBOX_PUBLIC_URL`, else the Inbox address). A host this inbox also
+   * answers on — an old name, a second domain — goes here, or signatures made for it do not verify.
+   */
+  identity: z
+    .object({
+      extraAuthorities: z
+        .array(
+          z
+            .string()
+            .max(253)
+            .regex(/^[a-z0-9.-]+(:[0-9]{1,5})?$/, "a lowercase host, with a port only when it is not 443"),
+        )
+        .max(8)
+        .default([])
+        .describe("Other hosts this inbox answers on, which an agent's signature may name."),
+    })
+    .prefault({}),
+  /**
+   * Customers the business already knows (ADR-017 §8.2). A customer who gives the same email as
+   * one it knows, and nothing that proves it, is asked for a one-time code sent to that address.
+   */
+  customers: z
+    .object({
+      otp: z
+        .object({
+          ttlMinutes: z.number().int().min(1).max(60).default(10).describe("How long a code works."),
+          attempts: z.number().int().min(1).max(10).default(5).describe("Wrong tries before a code stops working."),
+          sendsPerHour: z
+            .number()
+            .int()
+            .min(1)
+            .max(10)
+            .default(3)
+            .describe("Codes sent to one address in an hour, at most."),
+          sendsPerDay: z
+            .number()
+            .int()
+            .min(1)
+            .max(50)
+            .default(5)
+            .describe("Codes sent to one address in a day, at most."),
+          guessesPerDay: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .default(10)
+            .describe("Tries at the codes sent to one address in a day, right or wrong, at most."),
+        })
+        .prefault({}),
+      /**
+       * A first-time customer's code for their assistant (ADR-017 §2.1), the one line at the end of
+       * the business's first email to them. Off, no email carries it; the assistant still gets what
+       * it needs in the answer to its request.
+       */
+      emailKey: z
+        .boolean()
+        .default(true)
+        .describe(
+          "End the first email to a new customer with one line: a code their assistant can show next time so you recognise them.",
         ),
     })
     .prefault({}),

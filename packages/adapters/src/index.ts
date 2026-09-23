@@ -1,14 +1,23 @@
-import { type Capabilities, type Db, WriteError } from "@surfingdog/core";
+import { type Caller, type Capabilities, type Db, WriteError } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
-import { callerFromRequest } from "./auth";
+import { callerFromRequest, scopeFor } from "./auth";
 import { ingestEmail } from "./email";
-import { clientAddress, consume, isCreateRoute, type LimitClass, mcpCreates } from "./limits";
+import { agentFromRequest } from "./identity";
+import {
+  clientAddress,
+  consume,
+  isCreateRoute,
+  isVerifyRoute,
+  type LimitClass,
+  mcpCreates,
+  mcpVerifies,
+} from "./limits";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin } from "./origin";
-import { forbidden, problemResponse, tooManyRequests, unauthorized } from "./problem";
+import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
@@ -17,6 +26,7 @@ export * from "./access";
 export * from "./auth";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./identity";
 export * from "./limits";
 export * from "./mcp";
 export * from "./network";
@@ -47,6 +57,8 @@ export interface DoorDeps {
   readonly baseUrl?: string | undefined;
   /** Addresses that may create the first account by magic link. */
   readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
+  /** Outbound fetch for agents' key directories (tests inject a fake). */
+  readonly fetchImpl?: typeof fetch | undefined;
 }
 
 /** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
@@ -60,6 +72,49 @@ function sameOrigin(request: Request, baseUrl: string | undefined): boolean {
 
 /** The longest idempotency key a door accepts, header or field. */
 const MAX_IDEMPOTENCY_KEY = 200;
+
+/**
+ * Whether a request carries an idempotency key, in the header or anywhere in its JSON body (a REST
+ * field, or an MCP tool's argument): a repeated signature on such a request is a retry, answered
+ * from what was stored; without one it is a replay (ADR-017 §2.4).
+ */
+async function carriesIdempotencyKey(request: Request): Promise<boolean> {
+  if (request.headers.get("idempotency-key")) return true;
+  try {
+    const text = await request.clone().text();
+    return /"idempotency_key"\s*:\s*"[^"]/.test(text);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Who a retry must come from (ADR-017 §2.4): the caller's idempotency scope and the
+ * `Idempotency-Key` header, kept with a signature the first time it is seen. A key in the body needs
+ * no keeping: the body is covered by the signature's digest, so a copy carries the same one.
+ */
+function retryIdentity(caller: Caller, request: Request): string {
+  return `${scopeFor(caller)}\n${request.headers.get("idempotency-key") ?? ""}`;
+}
+
+/**
+ * A signature seen before: answered from the idempotency layer only when it is the first request's
+ * retry — the same sender, the same idempotency key — and a copy (`401 replayed_signature`) otherwise.
+ */
+async function isCopy(seen: Awaited<ReturnType<typeof agentFromRequest>>, request: Request): Promise<boolean> {
+  return seen.replayed && !(seen.retry === true && (await carriesIdempotencyKey(request)));
+}
+
+/** A caller as a signed agent's request makes it (ADR-017 §2.4): what the door verified, and `Sdi-Pass`. */
+function withAgent<C extends Caller>(caller: C, seen: Awaited<ReturnType<typeof agentFromRequest>>): C {
+  const signed = seen.agent.level !== "none";
+  return {
+    ...caller,
+    agent: seen.agent,
+    carried: seen.carried,
+    ...(signed && caller.tier === "anonymous" ? { tier: "signed_agent" as const } : {}),
+  };
+}
 
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
 export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
@@ -116,19 +171,43 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }
     // Writes from anyone but the verified owner are limited. The inbound mail webhook is not: it is
     // authenticated by its own secret, and every message arrives from the one gateway address.
+    const signed = c.req.header("signature-input") !== undefined;
     if (
       caller.auth?.kind !== "owner" &&
-      !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
+      (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) || signed) &&
       c.req.path !== "/v1/email/inbound"
     ) {
+      // Tokens come before any signature work (ADR-017 §2.4), so a signed GET takes one too.
       const refused = await limited(
         c,
-        isCreateRoute(c.req.method, c.req.path) ? ["public", "create"] : ["public"],
+        isCreateRoute(c.req.method, c.req.path)
+          ? ["public", "create"]
+          : isVerifyRoute(c.req.method, c.req.path)
+            ? ["public", "verify"]
+            : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
     }
-    c.set("caller", caller);
+    if (caller.auth?.kind === "owner" || c.req.path === "/v1/email/inbound") {
+      c.set("caller", caller);
+      await next();
+      return;
+    }
+    const seen = await agentFromRequest(deps.db, c.req.raw, {
+      baseUrl: deps.baseUrl,
+      fetchImpl: deps.fetchImpl,
+      now: clock(),
+      retryAs: retryIdentity(caller, c.req.raw),
+    });
+    if (seen.header) c.header("Sdi-Signature", seen.header);
+    if (await isCopy(seen, c.req.raw)) return replayedSignature(c);
+    // A platform's key has a bucket of its own, recognised by a network or not; a self-held key never.
+    if (seen.agent.platform) {
+      const refused = await limited(c, ["platform"], `platform:${seen.agent.platform}`);
+      if (refused) return refused;
+    }
+    c.set("caller", withAgent(caller, seen));
     await next();
   });
   // Sign-in links go to the owner's mailbox; nobody gets to fill it.
@@ -252,15 +331,38 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;
     }
-    // Every tool call is a POST; the ones that create an item also take a create token.
-    if (caller.auth?.kind !== "owner" && c.req.method === "POST") {
+    // Every tool call is a POST; the ones that create an item also take a create token. A signed
+    // request of any method takes one before any signature work (ADR-017 §2.4), as on REST.
+    if (caller.auth?.kind !== "owner" && (c.req.method === "POST" || c.req.header("signature-input") !== undefined)) {
       const refused = await limited(
         c,
-        (await mcpCreates(c.req.raw)) ? ["public", "create"] : ["public"],
+        (await mcpCreates(c.req.raw))
+          ? ["public", "create"]
+          : (await mcpVerifies(c.req.raw))
+            ? ["public", "verify"]
+            : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
     }
-    return mcpPublic.fetch(c.req.raw, { authInfo: authInfo(caller) });
+    if (caller.auth?.kind === "owner") return mcpPublic.fetch(c.req.raw, { authInfo: authInfo(caller) });
+    // An agent may sign its MCP calls too (ADR-017 §2.4): the POST's body is covered by its digest.
+    const seen = await agentFromRequest(deps.db, c.req.raw, {
+      baseUrl: deps.baseUrl,
+      fetchImpl: deps.fetchImpl,
+      now: clock(),
+      retryAs: retryIdentity(caller, c.req.raw),
+    });
+    if (await isCopy(seen, c.req.raw)) return replayedSignature(c);
+    // A platform's key has a bucket of its own, recognised by a network or not; a self-held key never.
+    if (seen.agent.platform) {
+      const refused = await limited(c, ["platform"], `platform:${seen.agent.platform}`);
+      if (refused) return refused;
+    }
+    const res = await mcpPublic.fetch(c.req.raw, { authInfo: authInfo(withAgent(caller, seen)) });
+    if (!seen.header) return res;
+    const out = new Response(res.body, res);
+    out.headers.set("Sdi-Signature", seen.header);
+    return out;
   });
 }

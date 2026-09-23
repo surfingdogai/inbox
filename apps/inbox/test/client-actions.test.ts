@@ -3,13 +3,14 @@ import {
   inputKindFor,
   isoToLocal,
   localToIso,
+  networkNote,
   orderActions,
   parseMoney,
   sumLines,
   tonesFor,
 } from "../client/src/lib/actions";
 import { countsFrom, paramsFor, parseFilter, visibleIn, withQuery } from "../client/src/lib/filters";
-import type { ItemView } from "../client/src/lib/types";
+import type { Item, ItemView } from "../client/src/lib/types";
 
 // How transitions become buttons and forms, and how the rail filters map to the API.
 describe("client actions", () => {
@@ -35,6 +36,41 @@ describe("client actions", () => {
     expect(inputKindFor("request_payment")).toBe("payment_request");
     expect(inputKindFor("decline")).toBe("note");
     expect(inputKindFor("confirm")).toBe("none");
+  });
+
+  it("treats the outcomes an owner records about a customer as destructive, and asks for a word only where it is sent", () => {
+    expect(tonesFor([{ event: "record_payment" }, { event: "payment_failed" }, { event: "cancel" }])).toEqual([
+      "primary",
+      "danger",
+      "danger",
+    ]);
+    expect(tonesFor([{ event: "complete" }, { event: "no_show" }])).toEqual(["primary", "danger"]);
+    expect(tonesFor([{ event: "record_charge_back" }])).toEqual(["danger"]);
+    expect(inputKindFor("payment_failed")).toBe("note");
+    // A charge-back tells the customer nothing, so it asks for nothing.
+    expect(inputKindFor("charge_back")).toBe("none");
+  });
+
+  it("says beforehand how the networks read what the owner records", () => {
+    const now = Date.parse("2026-09-23T09:00:00Z");
+    const booking = (state: string, startTime: string) =>
+      ({
+        type: "booking",
+        state,
+        payload: { reservationFor: { serviceId: "s", name: "x" }, startTime, endTime: startTime },
+      }) as unknown as Item;
+    expect(networkNote("cancel_by_business", booking("confirmed", "2026-09-24T10:00:00Z"), now)).toMatch(/at half/);
+    expect(networkNote("cancel_by_business", booking("confirmed", "2026-09-23T20:00:00Z"), now)).toMatch(/fully/);
+    // Before it is confirmed nothing was promised, and there is nothing to say.
+    expect(networkNote("cancel_by_business", booking("requested", "2026-09-23T20:00:00Z"), now)).toBeNull();
+    expect(networkNote("no_show", booking("confirmed", "2026-09-23T08:00:00Z"), now)).toMatch(/correct it once/);
+    expect(networkNote("complete", booking("no_show", "2026-09-23T08:00:00Z"), now)).toMatch(/once/);
+    const order = (state: string) => ({ type: "order", state, payload: {} }) as unknown as Item;
+    expect(networkNote("cancel", order("accepted"), now)).toMatch(/not fulfilled/);
+    expect(networkNote("cancel", order("received"), now)).toBeNull();
+    expect(networkNote("payment_failed", order("awaiting_payment"), now)).toMatch(/at half against the customer/);
+    expect(networkNote("record_charge_back", order("completed"), now)).toMatch(/charge-back/);
+    expect(networkNote("confirm", booking("requested", "2026-09-24T10:00:00Z"), now)).toBeNull();
   });
 
   it("parses money in major units and sums lines", () => {

@@ -111,8 +111,131 @@ export const parties = sqliteTable("parties", {
   contact: text("contact", { mode: "json" }),
   notes: text("notes"),
   erasedAt: integer("erased_at"),
+  /** The party this one was merged into once a one-time code proved they are the same customer (0009). */
+  mergedInto: text("merged_into"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/**
+ * Every email and phone a party gave, normalised (ADR-017 §8.2): the email as the network
+ * normalises it, a phone as its digits (six or more). Unlike `party_identities` a value may belong
+ * to many parties; the customer the business already knows for a value is the oldest party with a
+ * network link or a verified row for it, else the oldest party with it. `verified_at` is set by
+ * authenticated email and by a one-time code, and is what the "verified" badge reads.
+ */
+export const partyContacts = sqliteTable(
+  "party_contacts",
+  {
+    id: id(),
+    partyId: text("party_id").notNull(),
+    kind: text("kind").notNull(),
+    value: text("value").notNull(),
+    verifiedAt: integer("verified_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("party_contacts_party_value").on(t.partyId, t.kind, t.value),
+    index("party_contacts_value").on(t.kind, t.value, t.createdAt),
+  ],
+);
+
+/**
+ * A party's person at a network (ADR-017 §8.2): the pairwise id the network gave this business,
+ * the SHA-256 of the pass that last presented it (which stands in only while the network cannot
+ * be reached), and the standing it last returned. One per party and network, one party per ppid.
+ */
+export const personLinks = sqliteTable(
+  "person_links",
+  {
+    partyId: text("party_id").notNull(),
+    network: text("network").notNull(),
+    ppid: text("ppid").notNull(),
+    passHash: text("pass_hash"),
+    person: text("person", { mode: "json" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.partyId, t.network] }),
+    unique("person_links_ppid").on(t.network, t.ppid),
+    index("person_links_pass").on(t.passHash),
+  ],
+);
+
+/**
+ * What a network answered, kept for a while (ADR-017 §8.1): a pass's presentation (an hour, or a
+ * shorter `max-age`), a revoked pass, a `person_exists` for an email (a day). Keyed by hashes only:
+ * no pass, key or address is ever stored here.
+ */
+export const networkCache = sqliteTable(
+  "network_cache",
+  {
+    network: text("network").notNull(),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    value: text("value", { mode: "json" }).notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.network, t.kind, t.key] }), index("network_cache_expires").on(t.expiresAt)],
+);
+
+/**
+ * A first contact's issuance at one network (ADR-017 §2.1): asked, issued, known already, limited
+ * or given up. On issue the key and the first pass are kept here sealed by the secret box — the key
+ * until it rides on an email to the customer, the pass so the status door can hand it back — and
+ * the row goes after seven days.
+ */
+export const pendingIdentity = sqliteTable(
+  "pending_identity",
+  {
+    itemId: text("item_id").notNull(),
+    network: text("network").notNull(),
+    state: text("state").notNull(),
+    keyEnc: text("key_enc"),
+    passEnc: text("pass_enc"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    deliveredAt: integer("delivered_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.network] }), index("pending_identity_key").on(t.deliveredAt, t.createdAt)],
+);
+
+/**
+ * One-time codes that prove a customer is the one the business knows (ADR-017 §8.2): hashed,
+ * ten minutes, five tries, three sends an hour per destination (by its hash), email only in 0.1.
+ */
+export const customerCodes = sqliteTable(
+  "customer_codes",
+  {
+    id: id(),
+    destinationHash: text("destination_hash").notNull(),
+    itemId: text("item_id").notNull(),
+    partyId: text("party_id").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("customer_codes_destination").on(t.destinationHash, t.createdAt),
+    index("customer_codes_item").on(t.itemId, t.createdAt),
+  ],
+);
+
+/** The signed agents that carried customers here (ADR-017 §8.1): recorded, never trusted for anything. */
+export const carryingAgents = sqliteTable("carrying_agents", {
+  thumbprint: text("thumbprint").primaryKey(),
+  level: text("level").notNull(),
+  platform: text("platform"),
+  label: text("label"),
+  items: integer("items").notNull().default(0),
+  firstSeenAt: integer("first_seen_at").notNull(),
+  lastSeenAt: integer("last_seen_at").notNull(),
 });
 
 export const partyIdentities = sqliteTable(
@@ -176,6 +299,23 @@ export const items = sqliteTable(
     amountMinor: integer("amount_minor").generatedAlwaysAs(sql`json_extract("payload", '$.totalPrice.value')`, {
       mode: "virtual",
     }),
+    /** A booking's end in Unix seconds (0008), for the sweep that completes it afterwards. */
+    endAt: integer("end_at").generatedAlwaysAs(sql`unixepoch(json_extract("payload", '$.endTime'))`, {
+      mode: "virtual",
+    }),
+    /** The signed agent that created it (0009, ADR-017 §8): its key's thumbprint, `vouched`/`self`/`none`, its platform. */
+    agentThumbprint: text("agent_thumbprint"),
+    agentLevel: text("agent_level"),
+    agentDirectory: text("agent_directory"),
+    /** How sure the inbox is that the customer is one it knows (§8.2): `strong`, `weak` or `none`. */
+    customerMatch: text("customer_match"),
+    /** On a weak match, the known party the customer may be; the item stays on its own party. */
+    possiblePartyId: text("possible_party_id"),
+    /**
+     * 1 for a booking or an order promised before outcomes were recorded (0008): never completed or
+     * lapsed by the sweep, never an outcome receipt, no one-time corrections. Closed by hand.
+     */
+    legacyPromise: integer("legacy_promise").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     closedAt: integer("closed_at"),
@@ -188,6 +328,8 @@ export const items = sqliteTable(
     index("items_sandbox").on(t.sandbox, t.updatedAt),
     index("items_location").on(t.locationId, t.type, t.state),
     index("items_access_token").on(t.accessTokenHash),
+    index("items_end").on(t.type, t.state, t.endAt),
+    index("items_possible_party").on(t.possiblePartyId),
   ],
 );
 
@@ -272,6 +414,8 @@ export const receipts = sqliteTable(
       .notNull()
       .references(() => items.id),
     kind: text("kind").notNull(),
+    /** The outcome code of an `outcome` receipt (ADR-017 §3); '' for a promise. */
+    outcome: text("outcome").notNull().default(""),
     jws: text("jws").notNull(),
     payload: text("payload", { mode: "json" }).notNull(),
     kid: text("kid").notNull(),
@@ -279,8 +423,28 @@ export const receipts = sqliteTable(
     issuedAt: integer("issued_at").notNull(),
     ackJws: text("ack_jws"),
     ackAt: integer("ack_at"),
+    /** base64url(SHA-256(jws)): how a network names the receipt. Null only until the sweep fills it. */
+    sha: text("sha"),
   },
-  (t) => [unique("receipts_item_kind").on(t.itemId, t.kind)],
+  (t) => [unique("receipts_item_kind_outcome").on(t.itemId, t.kind, t.outcome), index("receipts_sha").on(t.sha)],
+);
+
+/**
+ * The presentation each network made for an item's customer (ADR-017 §7.2), which the item's v2
+ * receipts name as `per` so a network can tie the evidence to the person it presented.
+ */
+export const itemPresentations = sqliteTable(
+  "item_presentations",
+  {
+    itemId: text("item_id").notNull(),
+    /** The network's origin, as in `settings.networks`. */
+    network: text("network").notNull(),
+    presentationId: text("presentation_id").notNull(),
+    ppid: text("ppid"),
+    person: text("person", { mode: "json" }),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.network] })],
 );
 
 /**
@@ -320,6 +484,24 @@ export const networkStatus = sqliteTable("network_status", {
   lastErrorAt: integer("last_error_at"),
   failingSince: integer("failing_since"),
   failures: integer("failures").notNull().default(0),
+  /** The rules version the network applies, and the next it has announced (`GET /v1/ranking`). */
+  rulesVersion: integer("rules_version"),
+  rulesNextVersion: integer("rules_next_version"),
+  rulesNextAt: integer("rules_next_at"),
+  /** When `/v1/ranking` was last asked, answered or not; asked again a day later. */
+  rulesCheckedAt: integer("rules_checked_at"),
+  /** The business's own standing there, as its answer to a signed ping last said (JSON), and when. */
+  standing: text("standing"),
+  standingAt: integer("standing_at"),
+  /** `verified`, `unsigned`, or `invalid: <reason>`: what became of the last ping's signature. */
+  pingSignature: text("ping_signature"),
+  /**
+   * The hosts of the platforms the network recognises (`verified.recognised_platforms` in
+   * `/v1/ranking`, JSON), and when that was last asked: a platform's key vouches for an agent only
+   * when a network this inbox reports to recognises it (ADR-017 §4).
+   */
+  recognisedPlatforms: text("recognised_platforms"),
+  platformsCheckedAt: integer("platforms_checked_at"),
   updatedAt: updatedAt(),
 });
 

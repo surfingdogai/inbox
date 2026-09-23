@@ -122,8 +122,12 @@ has `contact.email` and no pass or key:
 3. On `201` it gets a **key**, a first **pass** labelled with the carrying agent and a presentation
    (a second batch seals them in `pending_identity`). The pass goes back in the response
    (`identity.passes` and MCP text, §8.4; the status door re-attaches it). The key rides on the first
-   email to the customer, or within 24 h one line: *"Next time, give your assistant this key so
-   businesses recognise you: sdkey1_…"*. Then it is deleted.
+   email to the customer, or within 24 h one line of its own, in the business's voice: *"If you use
+   an assistant, it can show this code next time so we recognise you: sdkey1_…"*. Then it is
+   deleted. The customer most often does not know any network exists, only that they contacted a
+   business, so nothing a customer or their email sees names the network, a pass, a key or a
+   receipt, and the sender is the business; the business can switch the line off
+   (`customers.emailKey`, default on), and the pass still reaches the agent.
 4. A person already known for that `email_mac` gets `409 person_exists`, and nothing is handed out;
    the inbox caches this 24 h and asks the agent for the person's pass or key, recoverable by email
    (§2.3). Meanwhile the customer is `new` on that network: neutral, never refused.
@@ -169,7 +173,7 @@ Web Bot Auth (`draft-ietf-webbotauth-httpsig-protocol-00`, 1 September 2026, whi
 | Parameters | `created`, `expires`, `keyid`, `alg`, `tag`; `nonce` ignored. `0 < expires − created ≤ 300` s; `created ≤ now + 60`, `expires ≥ now − 60`. `@authority` is the host of `INBOX_PUBLIC_URL`, else `notifications.appUrl`, or one in `identity.extraAuthorities`. |
 | Keys | Platform: `Signature-Agent: <label>="https://platform.example"`, whose `/.well-known/http-message-signatures-directory` (public hosts, 5 s, 64 KB, ≤ 2 redirects, cached 300 s–24 h, failures 300 s, one new origin per IP a minute) must list `keyid`. Self-held: `Sdi-Agent-Key: <label>=:<base64 of the JSON JWK>:`, exactly `kty:"OKP"`, `crv:"Ed25519"`, `x`. |
 | Person | `pass` field or MCP argument (≤ 8 space-separated strings) or `Sdi-Pass` (SF List of ≤ 8 strings); each ≤ 200 characters; GET: header only; first per network wins. |
-| Result | `vouched`, `self` or `none`. Per-IP tokens come before any signature work (platform keys also get a bucket, self-held keys never). A failure counts as unsigned, with `Sdi-Signature: invalid; reason="<code>"`. Only a replay is refused: SHA-256 of `Signature` is kept to `expires + 60` s on non-GETs, and a repeat gets the stored reply if it carries a matching idempotency key, else `401 replayed_signature`. |
+| Result | `vouched`, `self` or `none`. `vouched` needs the platform's host in the `recognised_platforms` of at least one enabled network (its `/v1/ranking`, read daily beside the rules and cached in `network_status`); a platform no enabled network recognises is `self` at most, so `party_verified` and `reputed_principal` widen only through a recognised platform (R18). Per-IP tokens come before any signature work (platform keys also get a bucket, recognised or not; self-held keys never). A failure counts as unsigned, with `Sdi-Signature: invalid; reason="<code>"`. Only a replay is refused: SHA-256 of `Signature` is kept to `expires + 60` s on non-GETs, and a repeat gets the stored reply if it carries a matching idempotency key, else `401 replayed_signature`. |
 
 **`sdi-instance/1`** (an inbox calling a network): the same with tag `sdi-instance`, `keyid` a `kid`
 from the manifest's `receipt_keys`, and a covered `"sdi-instance"` header holding the instance
@@ -237,6 +241,13 @@ one pure function `(type, event, from, actor) → (code, aut)`, tested over ever
   re-enqueued when full: automatic completion, `lapse`, the one-line key email. A receipt's `iat` is
   its causing event's `created_at`. Quotes turned into bookings or orders copy the identity columns
   and `item_presentations`. Owner-, staff- or rule-created items issue no v2 receipts.
+- **Promises made before the upgrade (R18).** The outcomes migration marks every booking and order
+  already promised (`items.legacy_promise`: bookings `confirmed`, `completed`, `no_show`; orders
+  from `accepted` to `completed`). The sweep never completes or lapses one, no outcome receipt is
+  issued for one, and its one-time corrections are refused; its owner closes it by hand, as before.
+- **Corrections.** A one-time correction (no-show ↔ completed, a charge-back on a completed order)
+  is listed only while it can be made — not after its window, once made, or on a legacy promise —
+  in the owner app, the owner MCP's `Next:` and a full webhook's `transitions`.
 
 ### 3.2 Receipt claims v2 and publishing
 
@@ -596,6 +607,8 @@ networks: { "https://network.surfingdog.ai": { enabled: true, issue: true,
 booking:  { …existing, lateCancellation: "record", autoCompleteHours: 48 }
 orders:   { …existing, payDays: 14, dueDays: 30 }
 identity: { extraAuthorities: [] }
+customers: { otp: { ttlMinutes: 10, attempts: 5, sendsPerHour: 3, sendsPerDay: 5, guessesPerDay: 10 },
+             emailKey: true }
 ```
 
 Networks are a map keyed by https origin (port 443, no path), since the merge replaces arrays whole;
@@ -632,7 +645,10 @@ it carries `email_proof` (§7.2), so the customer's broken outcomes here can cou
 (30 per IP an hour). `{item_id, access_token}` emails 6 digits to the known party → `202 {sent_to:
 "a•••@e•••.pt"}` (`409 nothing_to_verify`, `409 already_verified`); adding `code` → `200
 {recognised: "strong"}`, `422 bad_code`, `422 code_expired`, `429 too_many_attempts`. Hashed, 10
-minutes, 5 attempts, 3 sends an hour per destination address; email only in 0.1. **The business's
+minutes, 5 attempts, 3 sends an hour and 5 a day per destination address, and 10 tries a day at its
+codes (right or wrong), each limit counted in the statement that spends it; email only in 0.1. The
+email is the business's: *"Your code for <business>"*, *"Your code for <business> is 482913. It works
+for 10 minutes."* **The business's
 own history** is a first-class signal beside network reputation ("a customer you know"), over every
 party linked to the same `ppid` or verified contact: completed, no-shows, late cancellations,
 failed payments, charge-backs, largest paid, first and last seen.
@@ -648,8 +664,11 @@ is 40000 when trusted, else 0; `customer.limit_minor` is 2 × `largest_paid`. Ne
 (strong, ≥ 1 completed), `within_customer_limit`; `party_verified` also accepts a vouched
 `signed_agent`. **Positive only, enforced:** a rule reading any of these cannot fire `decline`,
 `cancel`, `cancel_by_business`, `expire` or `enqueue`; it is refused (`positive_only`) when saved,
-and an older rule's action is skipped and logged (flag chains best-effort). A record speeds things
-up or asks a human (R25).
+and an older rule's action is skipped and logged (flag chains best-effort): in the rule's run, in
+the item's history as a `rule_skipped` event the owner app's timeline shows (left out of the
+developer stream), and in `test_rule`'s `skipped`, in plain words: *"Rule '<name>' wanted to decline
+this, but rules that read a customer's record can only help them"*. A record speeds things up or
+asks a human (R25).
 
 **Presets** (*defaults*); a tier speeds acceptance and can waive a booking deposit (R15), never
 order payment. **Appointments:** confirm at once, when the slot is free and in hours, a

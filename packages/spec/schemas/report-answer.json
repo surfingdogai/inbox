@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/reports/{id}/response",
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string",
+      "const": "dispute"
+    }
+  },
+  "required": ["answer"]
+}
