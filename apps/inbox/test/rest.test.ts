@@ -164,6 +164,81 @@ describe("REST door", () => {
     ]);
   });
 
+  it("prices a fixed-price service and a catalogue product as the business does, whatever the request says", async () => {
+    const { db, app, ownerKey } = await setup();
+    const owner = { authorization: `Bearer ${ownerKey}` };
+    const svc = ulid();
+    const product = ulid();
+    await db.orm.insert(schema.services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 60,
+      price: { model: "fixed", value: 10_000, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await db.orm.insert(schema.products).values({
+      id: product,
+      sku: "SD-1",
+      name: "Saddle",
+      price: { value: 15_000, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const booked = await app.request(
+      jsonPost("/v1/bookings", {
+        payload: {
+          reservationFor: { serviceId: svc, name: "Full service" },
+          startTime: "2026-09-22T08:00:00Z",
+          endTime: "2026-09-22T09:00:00Z",
+          totalPrice: { value: 100, currency: "EUR" },
+        },
+      }),
+    );
+    expect(booked.status).toBe(201);
+    const b = (await booked.json()) as { view: { item: { id: string; payload: object }; human: string } };
+    expect(b.view.item.payload).toMatchObject({
+      totalPrice: { value: 10_000, currency: "EUR" },
+      customerStatedPrice: { value: 100, currency: "EUR" },
+    });
+    expect(b.view.human).toContain("Our price is €100.00.");
+
+    const ordered = await app.request(
+      jsonPost("/v1/orders", {
+        payload: {
+          orderedItem: [
+            {
+              sku: "SD-1",
+              name: "Saddle",
+              quantity: 1,
+              price: { value: 100, currency: "EUR" },
+              customerStatedPrice: { value: 15_000, currency: "EUR" },
+            },
+          ],
+          totalPrice: { value: 100, currency: "EUR" },
+          customerStatedPrice: { value: 15_000, currency: "EUR" },
+        },
+      }),
+    );
+    expect(ordered.status).toBe(201);
+    const o = (await ordered.json()) as { view: { item: { id: string; payload: object } } };
+    // What the request sent as a stated price is not the customer's to set: the inbox writes it.
+    expect(o.view.item.payload).toMatchObject({
+      orderedItem: [
+        { price: { value: 15_000, currency: "EUR" }, customerStatedPrice: { value: 100, currency: "EUR" } },
+      ],
+      totalPrice: { value: 15_000, currency: "EUR" },
+      customerStatedPrice: { value: 100, currency: "EUR" },
+    });
+
+    // The owner reads both, and the sentence says which is which.
+    const detail = (await (
+      await app.request(`https://inbox.test/v1/owner/items/${b.view.item.id}`, { headers: owner })
+    ).json()) as { item: { payload: object }; human: string };
+    expect(detail.item.payload).toMatchObject({ customerStatedPrice: { value: 100, currency: "EUR" } });
+    expect(detail.human).toContain("The customer's assistant suggested €1.00; your price is €100.00.");
+  });
+
   it("serves profile, services, availability and the OpenAPI document", async () => {
     const { app, svc } = await setup();
     expect(((await (await app.request("https://inbox.test/v1/business")).json()) as { name: string }).name).toBe(

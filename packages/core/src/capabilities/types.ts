@@ -5,6 +5,7 @@ import {
   isoDateTime,
   itemTypeSchema,
   messagePayloadSchema,
+  orderLineSchema,
   orderPayloadSchema,
   quoteRequestPayloadSchema,
 } from "../domain/types";
@@ -67,8 +68,12 @@ export const requestQuoteInput = z.object({
   ...carried,
 });
 
+/**
+ * The customer's side of a booking or an order: the business's own fields (a proposal, a payment
+ * reference, the price a request stated, ADR-018 §3.2) are not the customer's to send.
+ */
 export const createBookingInput = z.object({
-  payload: bookingPayloadSchema.omit({ proposed: true }),
+  payload: bookingPayloadSchema.omit({ proposed: true, customerStatedPrice: true }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
@@ -76,7 +81,12 @@ export const createBookingInput = z.object({
 });
 
 export const createOrderInput = z.object({
-  payload: orderPayloadSchema.omit({ paymentRef: true, paymentUrl: true }),
+  payload: orderPayloadSchema.omit({ paymentRef: true, paymentUrl: true, customerStatedPrice: true }).extend({
+    orderedItem: z
+      .array(orderLineSchema.omit({ customerStatedPrice: true }))
+      .min(1)
+      .max(200),
+  }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,

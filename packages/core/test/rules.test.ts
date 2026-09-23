@@ -7,7 +7,16 @@ import { ulid } from "../src/ids";
 import { createRunner } from "../src/jobs/index";
 import { PRESETS } from "../src/rules/presets";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
-import { availabilityRules, itemEvents, items, jobs, rules, services, threadEntries } from "../src/schema/tables";
+import {
+  availabilityRules,
+  itemEvents,
+  items,
+  jobs,
+  products,
+  rules,
+  services,
+  threadEntries,
+} from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
 import { makeClient, resetTables } from "./harness";
 
@@ -30,6 +39,8 @@ async function setup(vertical: keyof typeof PRESETS) {
     durationMin: 90,
     capacity: 1,
     granularityMin: 30,
+    // A rule reads the business's price (ADR-018 §3.2): the €45 this suite books at is the catalogue's.
+    price: { model: "fixed", value: 4500, currency: "EUR" },
     createdAt: T0,
     updatedAt: T0,
   });
@@ -133,7 +144,15 @@ describe("rules engine", () => {
 
   it("accepts small orders and asks a new customer to pay, and asks a person for large ones", async () => {
     const { db, caps, runner } = await setup("shop");
-    const line = { name: "Chain, 9-speed", quantity: 1, price: { value: 1850, currency: "EUR" } };
+    const chain = ulid();
+    await db.orm.insert(products).values({
+      id: chain,
+      name: "Chain, 9-speed",
+      price: { value: 1850, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const line = { productId: chain, name: "Chain, 9-speed", quantity: 1, price: { value: 1850, currency: "EUR" } };
     const small = await caps.createOrder(customer, {
       payload: { orderedItem: [line], totalPrice: { value: 1850, currency: "EUR" } },
     });

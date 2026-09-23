@@ -14,7 +14,7 @@ import { PRESETS } from "../src/rules/presets";
 import { positiveOnlyProblem } from "../src/rules/reputation";
 import type { RuleDefinition } from "../src/rules/schema";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
-import { availabilityRules, items, jobs, parties, rules, services } from "../src/schema/tables";
+import { availabilityRules, items, jobs, parties, products, rules, services } from "../src/schema/tables";
 import { readSettings } from "../src/settings/schema";
 import { WriteError } from "../src/write/errors";
 import type { Caller } from "../src/write/index";
@@ -94,7 +94,29 @@ async function setup(vertical?: keyof typeof PRESETS) {
   const drain = async (t = T0) => {
     for (let i = 0; i < 10; i++) if ((await runner.runDue(db, { now: t, limit: 100 })).claimed === 0) return;
   };
-  return { db, caps, mail, runner, svc, book, drain };
+  // The business sets its prices (ADR-018 §3.2): a price a rule reads is one the catalogue gives.
+  const priced = async (value: number) => {
+    const id = ulid();
+    await db.orm.insert(services).values({
+      id,
+      name: "Massage",
+      durationMin: 60,
+      capacity: 3,
+      granularityMin: 30,
+      price: { model: "fixed", value, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    return { reservationFor: { serviceId: id, name: "Massage" } };
+  };
+  const product = async (value: number) => {
+    const id = ulid();
+    await db.orm
+      .insert(products)
+      .values({ id, name: "Chain", price: { value, currency: "EUR" }, createdAt: T0, updatedAt: T0 });
+    return id;
+  };
+  return { db, caps, mail, runner, svc, book, drain, priced, product };
 }
 
 const col = async (db: Db, itemId: string) => {
@@ -775,14 +797,10 @@ describe("rules that read a standing (§8.3)", () => {
   });
 
   it("appointments: a customer you know is confirmed at once; a stranger over the small limit waits for a person", async () => {
-    const { db, caps, book, drain } = await setup("appointments");
+    const { db, caps, book, drain, priced } = await setup("appointments");
     // Two completed visits and no no-show, all as one customer (a verified address).
     for (let i = 0; i < 2; i++) {
-      const v = await book(
-        customer(T0 + i * MIN),
-        { email: "rui@example.pt" },
-        { totalPrice: { value: 9_000, currency: "EUR" } },
-      );
+      const v = await book(customer(T0 + i * MIN), { email: "rui@example.pt" }, await priced(9_000));
       await drain(T0 + i * MIN);
       await caps
         .transitionItem(owner(T0 + i * MIN + 1_000), { item_id: v.view.item.id, event: "confirm" })
@@ -809,13 +827,9 @@ describe("rules that read a standing (§8.3)", () => {
         tier: "verified_principal",
       },
       { email: "rui@example.pt" },
-      { totalPrice: { value: 12_000, currency: "EUR" } },
+      await priced(12_000),
     );
-    const stranger = await book(
-      customer(T0 + 11 * MIN),
-      { email: "someone@example.pt" },
-      { totalPrice: { value: 12_000, currency: "EUR" } },
-    );
+    const stranger = await book(customer(T0 + 11 * MIN), { email: "someone@example.pt" }, await priced(12_000));
     await drain(T0 + 12 * MIN);
     expect((await col(db, known.view.item.id))?.state).toBe("confirmed");
     const s = await col(db, stranger.view.item.id);
@@ -824,7 +838,7 @@ describe("rules that read a standing (§8.3)", () => {
   });
 
   it("appointments: a trusted person with few open bookings is confirmed at once, up to 20000", async () => {
-    const { db, book, drain } = await setup("appointments");
+    const { db, book, drain, priced } = await setup("appointments");
     const present = async (itemId: string) =>
       db.client.query({
         sql: "INSERT INTO item_presentations (item_id, network, presentation_id, ppid, person, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -849,8 +863,8 @@ describe("rules that read a standing (§8.3)", () => {
       params: [T0],
       method: "run",
     });
-    const small = await book(customer(), { email: "t@example.pt" }, { totalPrice: { value: 15_000, currency: "EUR" } });
-    const big = await book(customer(), { email: "u@example.pt" }, { totalPrice: { value: 25_000, currency: "EUR" } });
+    const small = await book(customer(), { email: "t@example.pt" }, await priced(15_000));
+    const big = await book(customer(), { email: "u@example.pt" }, await priced(25_000));
     await present(small.view.item.id);
     await present(big.view.item.id);
     await drain();
@@ -859,12 +873,15 @@ describe("rules that read a standing (§8.3)", () => {
   });
 
   it("shop: accepts a known customer's order within twice their largest paid, asks a new one to pay", async () => {
-    const { db, caps, drain } = await setup("shop");
-    const line = (value: number) => ({
-      orderedItem: [{ name: "Chain", quantity: 1, price: { value, currency: "EUR" } }],
+    const { db, caps, drain, product } = await setup("shop");
+    const line = async (value: number) => ({
+      orderedItem: [{ productId: await product(value), name: "Chain", quantity: 1, price: { value, currency: "EUR" } }],
       totalPrice: { value, currency: "EUR" },
     });
-    const first = await caps.createOrder(customer(), { payload: line(5_000), contact: { email: "rita@example.pt" } });
+    const first = await caps.createOrder(customer(), {
+      payload: await line(5_000),
+      contact: { email: "rita@example.pt" },
+    });
     await drain();
     expect((await col(db, first.view.item.id))?.state).toBe("awaiting_payment");
     await caps.transitionItem(owner(T0 + MIN), {
@@ -879,11 +896,11 @@ describe("rules that read a standing (§8.3)", () => {
       tier: "verified_principal",
     });
     const within = await caps.createOrder(keyed(T0 + 2 * MIN), {
-      payload: line(9_000),
+      payload: await line(9_000),
       contact: { email: "rita@example.pt" },
     });
     const over = await caps.createOrder(keyed(T0 + 3 * MIN), {
-      payload: line(25_000),
+      payload: await line(25_000),
       contact: { email: "rita@example.pt" },
     });
     await drain(T0 + 4 * MIN);

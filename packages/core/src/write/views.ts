@@ -1,8 +1,9 @@
-import { type ActorKind, type Item, type ItemType, itemFlagsSchema, payloadSchemas } from "../domain/types";
+import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
 import type { ReceiptView } from "../receipts/capabilities";
 import type { items } from "../schema/tables";
+import { moneyText } from "../util/money";
 import { CUSTOMER_KINDS } from "./caller";
 
 export type ItemRow = typeof items.$inferSelect;
@@ -187,13 +188,26 @@ export function describeToCustomer(item: Item): string {
   const noun = TYPE_WORD[item.type].toLowerCase();
   const what = item.subject ? `Your ${noun} "${item.subject}"` : `Your ${noun}`;
   const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
-  return `${what}${when} ${CUSTOMER_STATE_WORD[item.state] ?? `is ${item.state.replaceAll("_", " ")}`}. Reference ${item.id}.`;
+  // A request that named another price hears ours, in our words (ADR-018 §3.2).
+  const prices = statedPrices(item);
+  const price = prices ? ` Our price is ${moneyText(prices.ours)}.` : "";
+  return `${what}${when} ${CUSTOMER_STATE_WORD[item.state] ?? `is ${item.state.replaceAll("_", " ")}`}.${price} Reference ${item.id}.`;
 }
 
 export function describe(item: Item): string {
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];
   const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
-  return `${what}${when} is ${STATE_WORD[item.state] ?? item.state}. Reference ${item.id}.`;
+  const prices = statedPrices(item);
+  const who = item.channel === "email" || item.channel === "form" ? "The customer" : "The customer's assistant";
+  const price = prices ? ` ${who} suggested ${moneyText(prices.stated)}; your price is ${moneyText(prices.ours)}.` : "";
+  return `${what}${when} is ${STATE_WORD[item.state] ?? item.state}.${price} Reference ${item.id}.`;
+}
+
+/** The price a customer's request stated beside the business's own, when they differ (ADR-018 §3.2). */
+function statedPrices(item: Item): { stated: Money; ours: Money } | null {
+  if (item.type !== "booking" && item.type !== "order") return null;
+  const { customerStatedPrice: stated, totalPrice: ours } = item.payload;
+  return stated && ours ? { stated, ours } : null;
 }
 
 function formatWhen(isoTime: string): string {

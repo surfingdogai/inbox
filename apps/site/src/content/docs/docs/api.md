@@ -18,8 +18,8 @@ No authentication. Anonymous callers receive an `accessToken` when they create a
 | `list_products` | `GET /v1/products` | Orderable products with prices in minor units. Paged, searchable with `q`. |
 | `check_availability` | `GET /v1/availability` | Free start times for a service between `from` and `to` (at most 14 days), optionally for a `party_size`. |
 | `request_quote` | `POST /v1/quotes` | Ask for a price on something custom. Creates a `quote_request`. |
-| `create_booking` | `POST /v1/bookings` | Request a service at a time. Check availability first. Creates a `booking`. |
-| `create_order` | `POST /v1/orders` | Order products. Creates an `order`. |
+| `create_booking` | `POST /v1/bookings` | Request a service at a time. Check availability first. Creates a `booking`, at the business's price for a fixed-price service. |
+| `create_order` | `POST /v1/orders` | Order products. Creates an `order`, at the business's price for every line that names a product. |
 | `get_item_status` | `GET /v1/items/{id}` | The current state of an item you created, and what you may do next. |
 | `cancel_item` | `POST /v1/items/{id}/cancel` | Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations, and refused where it does not. |
 | `send_message` | `POST /v1/messages` | Start a conversation, or reply on an item you own with `item_id`. |
@@ -27,6 +27,8 @@ No authentication. Anonymous callers receive an `accessToken` when they create a
 | `verify_customer` | `POST /v1/customers/verify` | Prove you are a customer the business already knows: six digits go to the address it has for you (`202 {sent_to}`), and sending them back as `code` recognises you (`200 {recognised: "strong"}`). |
 
 Create calls take `payload` (the typed fields, schema.org names in camelCase), an optional `contact` (`name`, `email`, `phone`, `locale`), an optional free-text `message`, and `idempotency_key`.
+
+**The business sets its prices.** A booking of a service priced `fixed`, and every order line that names a product (`productId`, or else `sku`), costs what the business's catalogue says; an order's `totalPrice` is then its lines' prices times their quantities. A different price in the request does not change that: it is kept on the item as `customerStatedPrice` (on the order, and on each line it differs for), for the owner to see, and rules never read it. What the catalogue prices it also names: the service's name, and the line's product's `productId`, `sku` and `name`, replace the request's. A line whose `productId` and `sku` name two different products, and an order whose total is too large to write down exactly, are refused with `422`. A line naming no product the business has, and a service priced `from`, by `quote` or not at all, keep the price written. Those, and a fixed-price service booked for longer than it lasts, wait for the business to price them: nothing confirms or accepts them automatically. A custom job is a `request_quote`.
 
 **Who you carry.** Every public call takes `pass` (a person's passes, space-separated, at most 8) and `key` (a person's key, exchanged once for a pass), or the passes in an `Sdi-Pass` header; a `GET` reads only the header. Never put either in a URL. The inbox presents each to the network that issued it, when that network is switched on, and stores none of them: only a hash of a pass, to recognise it again. Create and status answers carry `identity`:
 

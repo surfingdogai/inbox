@@ -118,12 +118,22 @@ export const quoteRequestPayloadSchema = z.object({
     .optional(),
 });
 
+/**
+ * A price the customer's request stated where the business has its own (ADR-018 §3.2): kept for the
+ * owner to read, never the price, never read by a rule. Only the inbox writes it.
+ */
+export const customerStatedPriceSchema = moneySchema.describe(
+  "The price the customer's request stated, where it differed from the business's own. Never the price: the business sets it.",
+);
+
 export const bookingPayloadSchema = z.object({
   reservationFor: z.object({ serviceId: z.string().min(1), name: z.string().min(1).max(200) }),
   startTime: isoDateTime,
   endTime: isoDateTime,
   partySize: z.number().int().min(1).max(1_000).optional(),
+  /** A fixed-price service's price is the business's, from its catalogue (ADR-018 §3.1). */
   totalPrice: moneySchema.optional(),
+  customerStatedPrice: customerStatedPriceSchema.optional(),
   resourceId: z.string().optional(),
   notes: z.string().max(5_000).optional(),
   /** An alternative offered by the business; accepting it moves it into startTime/endTime. */
@@ -135,12 +145,17 @@ export const orderLineSchema = z.object({
   sku: z.string().max(100).optional(),
   name: z.string().min(1).max(200),
   quantity: z.number().int().min(1),
+  /** The unit price: the business's, for a line naming a catalogue product by productId or sku (ADR-018 §3.2). */
   price: moneySchema,
+  /** The unit price the customer's request stated for this line, where it differed from the business's. */
+  customerStatedPrice: customerStatedPriceSchema.optional(),
 });
 
 export const orderPayloadSchema = z.object({
   orderedItem: z.array(orderLineSchema).min(1).max(200),
+  /** The lines' prices times their quantities, once any line is the business's to price (ADR-018 §3.2). */
   totalPrice: moneySchema,
+  customerStatedPrice: customerStatedPriceSchema.optional(),
   billingAddress: postalAddressSchema.optional(),
   shippingAddress: postalAddressSchema.optional(),
   delivery: z.object({ method: z.enum(["pickup", "delivery", "digital"]), when: isoDateTime.optional() }).optional(),

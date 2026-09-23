@@ -22,6 +22,7 @@ import {
 } from "./common";
 import { CHARGED_BACK_SQL, CORRECTED_SQL, correctionFacts, correctionUntil, deadCorrections } from "./corrections";
 import { fromZod, WriteError } from "./errors";
+import { assertBusinessPriced } from "./pricing";
 import { bucketsFor, claimStatements, planClaims, readClaims, releaseStatement, type SlotSpec } from "./slots";
 import { defaultSubject, type ItemView, rowToItem, viewFor } from "./views";
 
@@ -105,6 +106,8 @@ async function attempt_(
     }
   }
   const t = resolved.transition;
+  // A rule never makes the promise on a price the business did not set (ADR-018 §3.2).
+  if (caller.actor.kind === "rule") await assertBusinessPriced(db, item, t.event);
   // Every transition takes an optional note; some take more.
   const parsedInput = (t.input ?? noteInput).safeParse(input.input ?? {});
   if (!parsedInput.success) throw fromZod(parsedInput.error, "input");

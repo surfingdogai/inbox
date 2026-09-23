@@ -6,6 +6,7 @@ import { keyLine, keysDeliveredStatement, keysFor } from "../identity/pending";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { moneyText } from "../util/money";
 import { CUSTOMER_KINDS } from "../write/caller";
 import { describe, rowToItem } from "../write/views";
 import type { JobHandler } from "./runner";
@@ -260,7 +261,7 @@ export function customerMail(input: CustomerMailInput): { subject: string; lines
           const quote = (
             item.payload as { quote?: { totalPrice?: { value: number; currency: string }; notes?: string } }
           ).quote;
-          const total = quote?.totalPrice ? moneyOf(quote.totalPrice.value, quote.totalPrice.currency) : null;
+          const total = quote?.totalPrice ? moneyText(quote.totalPrice) : null;
           return out(
             `Our quote for ${s}`,
             total ? `Here is our quote for ${q}: ${total}.` : `Here is our quote for ${q}.`,
@@ -311,13 +312,5 @@ export function whenIn(iso: string, timezone: string): string {
     }).format(d);
   } catch {
     return utc;
-  }
-}
-
-function moneyOf(minor: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(minor / 100);
-  } catch {
-    return `${(minor / 100).toFixed(2)} ${currency}`;
   }
 }
