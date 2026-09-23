@@ -5,6 +5,8 @@ date: 2026-09-23
 author: Tiago Pita
 cover: /art/cover-flood.png
 coverAlt: A pixel-art beach shack with a bell over the counter, where a dog sorts letters into a tray while three small robots surf in on a wave full of envelopes and calendar pages
+coverAnim: flood
+og: /art/og-flood-v1.png
 ---
 
 People have started handing small jobs to their assistants. Book the bike in for Saturday. Find a plumber who can come tomorrow and ask what it costs.

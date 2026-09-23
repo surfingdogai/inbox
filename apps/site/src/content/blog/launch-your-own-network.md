@@ -5,6 +5,8 @@ date: 2026-09-23
 author: Tiago Pita
 cover: /art/cover-networks.png
 coverAlt: A pixel-art dog on a surfboard holding up one envelope, with dotted lines running to four small island lighthouses, each shining a different colour
+coverAnim: networks
+og: /art/og-networks-v1.png
 ---
 
 When someone asks an assistant to book a haircut or order a birthday cake, the assistant needs somewhere to look. Our network is one of those places. It's a directory of Surfing Dog inboxes that agents can search. I don't want it to be the only one.

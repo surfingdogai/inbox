@@ -5,6 +5,8 @@ date: 2026-09-21
 author: Tiago Pita
 cover: /art/blog-hello.png
 coverAlt: A pixel-art dog lying on a surfboard on a calm sea, a striped sun setting behind it
+coverAnim: open
+og: /art/og-open-v1.png
 ---
 
 Every small business has an inbox. Bookings land there, and orders, and someone who wants a price for a job you have never priced. It works because a person reads every message.

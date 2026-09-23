@@ -1,0 +1,791 @@
+---
+/**
+ * The cover for "Ready for the flood of agent enquiries?", drawing the post in four beats.
+ *
+ *  1. Night. The owner is asleep behind the counter and five assistants, from five different apps,
+ *     wake one after another: people have handed them small jobs, at whatever hour they asked.
+ *  2. There is no door for them, so the requests go where they can. Grey, untyped bubbles go to the
+ *     owner's phone, which buzzes and keeps a missed-call dot, and to a contact form, which fills
+ *     with paragraphs. Both stand in the middle, where the inbox will stand, because they are the
+ *     way in today. When the form is full the last one drifts off and is gone. Nothing is alarming
+ *     here — it is slow and grey, just clumsy.
+ *  3. One door. The phone and the form go; an inbox draws itself in their place, its outline starting
+ *     and ending at a gap in its left wall, which is the door. A proper line runs from every
+ *     assistant to it. Requests now travel as typed chips — booking, order, message, quote — are
+ *     handed over at the doorstep and appear inside as rows. The owner's rules decide the simple
+ *     ones and each gets its tick as it lands; once the last is in, the clear yeses go home
+ *     together, each along the line it came in on, to the assistant that asked, where it stays
+ *     as a badge.
+ *  4. Morning. The one request the rules would not close — the quote — carries on out of the inbox to
+ *     the owner, the moon gives way to the sun, and the owner wakes to one thing.
+ *
+ * Beat three owns 6.3 s of the 13.9 s loop (4.15 to 10.45) because it is the point of the post: a
+ * door, typed items, and rules that answer. Beat two takes 3.85 s and beat four 1 s, then the
+ * finished morning holds for 1.7 s. Nothing here claims more than the post says the inbox does —
+ * no status chip, no counts, no interface. It is the post's argument, drawn.
+ *
+ * Built the way CoverReceipts.astro and HeroFlow.astro are built. The scene ships as inline SVG,
+ * so the box is never empty and a throw leaves a finished picture. That markup is the composed
+ * frame at t = 11.55 s — morning, the inbox full, three yeses home, the quote with the owner — and
+ * the live clock starts there, so there is no mount flicker, and 1.6 s of the hold is still to run
+ * before the night comes back. Reduced motion is the same machine stepped to that frame. It stops
+ * when nobody is looking, and has no max-width of its own: aspect-ratio holds the box open so
+ * nothing below the cover jumps. The viewBox starts at y = -12 so the drawing, which runs from
+ * the captions at the top to the inbox's floor at y = 306, sits in the middle of its box instead
+ * of leaving an empty band under it on the post and in the index tile.
+ *
+ * render(t) is stateless: every piece's position and opacity is a function of the loop time, so
+ * the still frame, a resumed clock and a wrapped loop can never disagree. Only the short halos and
+ * pops are one-shot CSS keyframes, cued once per pass.
+ */
+---
+
+<figure
+  class="sfl"
+  role="img"
+  aria-label="At night, AI assistants from several apps send a small business requests. With no door for them, they ring the owner's phone and pile into a contact form, and one is lost. With an open inbox, each arrives as a typed booking, order, message or quote; the owner's rules answer the simple ones straight back to the assistants, and only the quote waits for the owner in the morning."
+>
+<svg viewBox="0 -12 640 360" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="sfl-g" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" style="stop-color:var(--sfl-tang)"/>
+<stop offset="58%" style="stop-color:var(--sfl-flam)"/>
+<stop offset="100%" style="stop-color:var(--sfl-violet)"/>
+</linearGradient>
+<clipPath id="sfl-c"><path d="M240,90 A11,11 0 0 1 262,90 Z"/></clipPath>
+</defs>
+<text x="32" y="40" class="sfl-cap">AI ASSISTANTS</text>
+<text x="566" y="40" class="sfl-cap" text-anchor="middle">YOU</text>
+<g class="sfl-old">
+<path d="M58,86 C133,86 190,132 261,132" class="sfl-guide"/>
+<path d="M58,230 C133,230 200,232 275,232" class="sfl-guide"/>
+<path d="M58,134 C133,134 190,132 261,132" class="sfl-guide"/>
+<path d="M58,278 C133,278 200,232 275,232" class="sfl-guide"/>
+<path d="M58,182 C133,182 190,132 261,132" class="sfl-guide"/>
+<path d="M58,230 C133,230 200,232 275,232" class="sfl-guide"/>
+<path d="M58,278 C133,278 200,232 275,232" class="sfl-guide"/>
+<path d="M58,182 C133,182 200,232 275,232" class="sfl-guide"/>
+<path d="M275,232 C262,248 256,274 266,302" class="sfl-guide sfl-lost"/>
+<g class="sfl-devs">
+<g class="sfl-phone">
+<rect x="305" y="107" width="30" height="50" rx="6" class="sfl-dev"/>
+<line x1="315" y1="113.5" x2="325" y2="113.5" class="sfl-dev-l"/>
+<circle cx="320" cy="150.5" r="1.9" class="sfl-dev-d"/>
+<circle cx="335" cy="107" r="4.2" class="sfl-miss"/>
+</g>
+<g class="sfl-rings">
+<path d="M298,124 Q292,132 298,140"/>
+<path d="M291,119 Q283,132 291,145"/>
+<path d="M342,124 Q348,132 342,140"/>
+<path d="M349,119 Q357,132 349,145"/>
+</g>
+</g>
+<g class="sfl-devs">
+<g class="sfl-form">
+<path d="M297,207 A5,5 0 0 1 302,202 H331 L343,214 V257 A5,5 0 0 1 338,262 H302 A5,5 0 0 1 297,257 Z" class="sfl-dev"/>
+<path d="M331,202 V214 H343" class="sfl-dev-l"/>
+<path d="M305,224 q3,-2.2 6,0 t6,0 t6,0 t6,0 t6,0" class="sfl-scrawl"/>
+<path d="M305,233 q3,-2.2 6,0 t6,0 t6,0 t6,0 t6,0" class="sfl-scrawl"/>
+<path d="M305,242 q3,-2.2 6,0 t6,0 t6,0 t6,0 t6,0" class="sfl-scrawl"/>
+<path d="M305,251 q3,-2.2 6,0 t6,0 t6,0" class="sfl-scrawl"/>
+</g>
+</g>
+</g>
+<g class="sfl-lines">
+<path d="M58,86 C124,86 160,182 226,182" class="sfl-line"/>
+<path d="M58,134 C124,134 160,182 226,182" class="sfl-line"/>
+<path d="M58,182 L226,182" class="sfl-line"/>
+<path d="M58,230 C124,230 160,182 226,182" class="sfl-line"/>
+<path d="M58,278 C124,278 160,182 226,182" class="sfl-line"/>
+<path d="M58,182 L226,182" class="sfl-glint"/>
+<path d="M58,86 C124,86 160,182 226,182" class="sfl-glint"/>
+<path d="M58,278 C124,278 160,182 226,182" class="sfl-glint"/>
+</g>
+<path d="M414,275 H566" class="sfl-link"/>
+<rect x="226" y="58" width="188" height="248" rx="14" class="sfl-card-fill"/>
+<path d="M226,194 V292 A14,14 0 0 0 240,306 H400 A14,14 0 0 0 414,292 V72 A14,14 0 0 0 400,58 H240 A14,14 0 0 0 226,72 V170" class="sfl-card-edge"/>
+<g class="sfl-door">
+<path d="M217,170 H226 M217,194 H226" class="jamb"/>
+<rect x="219" y="163" width="14" height="38" rx="7" class="halo"/>
+</g>
+<circle cx="414" cy="275" r="2.6" class="sfl-port"/>
+<g class="sfl-head">
+<path d="M240,90 A11,11 0 0 1 262,90 Z" fill="url(#sfl-g)"/>
+<g clip-path="url(#sfl-c)">
+<rect x="239" y="81.4" width="24" height=".9" class="sfl-cut"/>
+<rect x="239" y="83.7" width="24" height=".9" class="sfl-cut"/>
+<rect x="239" y="85.8" width="24" height=".9" class="sfl-cut"/>
+</g>
+<text x="270" y="90" class="sfl-title">Your inbox</text>
+<line x1="240" y1="104" x2="400" y2="104" class="sfl-hair"/>
+</g>
+<g class="sfl-rule lit warn">
+<rect x="240" y="114" width="104" height="22" rx="11"/>
+<text x="252" y="128.6">Your rules</text>
+<circle cx="358" cy="125" r="3.4" class="sfl-beat"/>
+</g>
+<g class="sfl-row t-booking" transform="translate(240,146)">
+<rect width="160" height="30" rx="8" class="bg"/>
+<rect x="0" y="6" width="2.5" height="18" rx="1.25" class="bar"/>
+<text x="11" y="19.3" class="lb">Booking</text>
+<path d="M140,15.2 l3,3.2 l5.8,-7" class="sfl-tick sfl-res"/>
+</g>
+<g class="sfl-row t-order" transform="translate(240,184)">
+<rect width="160" height="30" rx="8" class="bg"/>
+<rect x="0" y="6" width="2.5" height="18" rx="1.25" class="bar"/>
+<text x="11" y="19.3" class="lb">Order</text>
+<path d="M140,15.2 l3,3.2 l5.8,-7" class="sfl-tick sfl-res"/>
+</g>
+<g class="sfl-row t-message" transform="translate(240,222)">
+<rect width="160" height="30" rx="8" class="bg"/>
+<rect x="0" y="6" width="2.5" height="18" rx="1.25" class="bar"/>
+<text x="11" y="19.3" class="lb">Message</text>
+<path d="M140,15.2 l3,3.2 l5.8,-7" class="sfl-tick sfl-res"/>
+</g>
+<g class="sfl-row t-quote" transform="translate(240,260)">
+<rect width="160" height="30" rx="8" class="bg"/>
+<rect x="0" y="6" width="2.5" height="18" rx="1.25" class="bar"/>
+<text x="11" y="19.3" class="lb">Quote</text>
+<g class="sfl-res">
+<text x="134" y="18.9" text-anchor="end" class="st">Needs you</text>
+<circle cx="146" cy="15" r="6.6" class="sfl-waitring"/>
+<circle cx="146" cy="15" r="3.6" class="sfl-wait"/>
+</g>
+</g>
+<g class="sfl-agent" style="--ag:var(--sfl-violet)">
+<rect x="32" y="73" width="26" height="26" rx="7.5" class="tint"/>
+<rect x="32" y="73" width="26" height="26" rx="7.5"/>
+<rect x="28" y="69" width="34" height="34" rx="10" class="halo"/>
+<circle cx="40.6" cy="85" r="1.8" class="eye"/>
+<circle cx="49.4" cy="85" r="1.8" class="eye"/>
+<line x1="45" y1="73" x2="45" y2="66"/>
+<circle cx="45" cy="63.4" r="2.7" class="ant"/>
+</g>
+<g class="sfl-agent" style="--ag:var(--sfl-lagoon)">
+<rect x="32" y="121" width="26" height="26" rx="7.5" class="tint"/>
+<rect x="32" y="121" width="26" height="26" rx="7.5"/>
+<rect x="28" y="117" width="34" height="34" rx="10" class="halo"/>
+<circle cx="40.6" cy="133" r="1.8" class="eye"/>
+<circle cx="49.4" cy="133" r="1.8" class="eye"/>
+<line x1="45" y1="121" x2="45" y2="114"/>
+<circle cx="45" cy="111.4" r="2.7" class="ant"/>
+</g>
+<g class="sfl-agent" style="--ag:var(--sfl-flam)">
+<rect x="32" y="169" width="26" height="26" rx="7.5" class="tint"/>
+<rect x="32" y="169" width="26" height="26" rx="7.5"/>
+<rect x="28" y="165" width="34" height="34" rx="10" class="halo"/>
+<circle cx="40.6" cy="181" r="1.8" class="eye"/>
+<circle cx="49.4" cy="181" r="1.8" class="eye"/>
+<line x1="45" y1="169" x2="45" y2="162"/>
+<circle cx="45" cy="159.4" r="2.7" class="ant"/>
+</g>
+<g class="sfl-agent" style="--ag:var(--sfl-tang)">
+<rect x="32" y="217" width="26" height="26" rx="7.5" class="tint"/>
+<rect x="32" y="217" width="26" height="26" rx="7.5"/>
+<rect x="28" y="213" width="34" height="34" rx="10" class="halo"/>
+<circle cx="40.6" cy="229" r="1.8" class="eye"/>
+<circle cx="49.4" cy="229" r="1.8" class="eye"/>
+<line x1="45" y1="217" x2="45" y2="210"/>
+<circle cx="45" cy="207.4" r="2.7" class="ant"/>
+</g>
+<g class="sfl-agent" style="--ag:var(--sfl-palm)">
+<rect x="32" y="265" width="26" height="26" rx="7.5" class="tint"/>
+<rect x="32" y="265" width="26" height="26" rx="7.5"/>
+<rect x="28" y="261" width="34" height="34" rx="10" class="halo"/>
+<circle cx="40.6" cy="277" r="1.8" class="eye"/>
+<circle cx="49.4" cy="277" r="1.8" class="eye"/>
+<line x1="45" y1="265" x2="45" y2="258"/>
+<circle cx="45" cy="255.4" r="2.7" class="ant"/>
+</g>
+<g class="sfl-yes" transform="translate(62,182)"><g class="sd"><circle r="7" class="disc"/><path d="M-3,.2 L-.9,2.4 L3.2,-2.6" class="mark"/></g></g>
+<g class="sfl-yes" transform="translate(62,86)"><g class="sd"><circle r="7" class="disc"/><path d="M-3,.2 L-.9,2.4 L3.2,-2.6" class="mark"/></g></g>
+<g class="sfl-yes" transform="translate(62,278)"><g class="sd"><circle r="7" class="disc"/><path d="M-3,.2 L-.9,2.4 L3.2,-2.6" class="mark"/></g></g>
+<g class="sfl-sky">
+<path d="M575.74,126.27 A10,10 0 1 1 563.73,114.26 A8.5,8.5 0 0 0 575.74,126.27 Z" class="sfl-moon"/>
+<g class="sfl-sun">
+<circle cx="566" cy="124" r="6.5" class="core"/>
+<g class="rays">
+<path d="M566,113.5 V110.5 M566,134.5 V137.5 M555.5,124 H552.5 M576.5,124 H579.5 M558.6,116.6 L556.5,114.5 M573.4,131.4 L575.5,133.5 M573.4,116.6 L575.5,114.5 M558.6,131.4 L556.5,133.5"/>
+</g>
+</g>
+</g>
+<g class="sfl-owner">
+<circle cx="566" cy="194" r="17" class="halo"/>
+<circle cx="566" cy="194" r="11" class="face"/>
+<path d="M542,236 C542,220 553,212 566,212 C579,212 590,220 590,236" class="face"/>
+<line x1="530" y1="236.5" x2="602" y2="236.5" class="counter"/>
+<g class="sfl-awake"><circle cx="561.6" cy="193.4" r="1.5"/><circle cx="570.4" cy="193.4" r="1.5"/></g>
+<g class="sfl-asleep"><path d="M559.4,193 q2.2,2.2 4.4,0"/><path d="M568.2,193 q2.2,2.2 4.4,0"/></g>
+</g>
+<g class="sfl-zz"><text x="583" y="182">z</text><text x="591" y="172" class="s">z</text></g>
+<g class="sfl-chip sfl-given t-quote" transform="translate(566,275)"><g class="sc">
+<rect x="-29" y="-10" width="58" height="20" rx="10" class="pop"/>
+<rect x="-29" y="-10" width="58" height="20" rx="10" class="bg"/>
+<circle cx="-19" cy="0" r="3" class="dot"/>
+<text x="-11" y="3.5" class="lb">Quote</text>
+</g></g>
+<g class="sfl-fly">
+<g class="sfl-chip t-booking"><g class="sc"><rect x="-33.5" y="-10" width="67" height="20" rx="10" class="bg"/><circle cx="-23.5" cy="0" r="3" class="dot"/><text x="-15.5" y="3.5" class="lb">Booking</text></g></g>
+<g class="sfl-chip t-order"><g class="sc"><rect x="-28" y="-10" width="56" height="20" rx="10" class="bg"/><circle cx="-18" cy="0" r="3" class="dot"/><text x="-10" y="3.5" class="lb">Order</text></g></g>
+<g class="sfl-chip t-message"><g class="sc"><rect x="-36" y="-10" width="72" height="20" rx="10" class="bg"/><circle cx="-26" cy="0" r="3" class="dot"/><text x="-18" y="3.5" class="lb">Message</text></g></g>
+<g class="sfl-chip t-quote"><g class="sc"><rect x="-29" y="-10" width="58" height="20" rx="10" class="bg"/><circle cx="-19" cy="0" r="3" class="dot"/><text x="-11" y="3.5" class="lb">Quote</text></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+<g class="sfl-bub"><g class="sd"><rect x="-13" y="-8" width="26" height="16" rx="8"/><circle cx="-6" cy="0" r="1.5"/><circle cx="0" cy="0" r="1.5"/><circle cx="6" cy="0" r="1.5"/></g></g>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sfl and every keyframe is sfl-*, so nothing leaks.
+   .sfl is also the query container the width steps match. Colours are
+   properties: host token first, brand literal only as the fallback, carried
+   through light-dark() because the tokens package sets color-scheme in all
+   three theme cases — the same single block CoverReceipts uses. */
+.sfl{
+  --sfl-ground:var(--ground,light-dark(#f6f5ff,#0d0e26));
+  --sfl-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sfl-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sfl-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sfl-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sfl-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --sfl-booking:var(--c-booking,#ff6fa8);  --sfl-booking-i:var(--c-booking-ink,light-dark(#b02a6b,#ff8fbc));
+  --sfl-order:var(--c-order,#ff9650);      --sfl-order-i:var(--c-order-ink,light-dark(#9c4409,#ffb27c));
+  --sfl-quote:var(--c-quote,#8a6bff);      --sfl-quote-i:var(--c-quote-ink,light-dark(#5a3fd0,#ab95ff));
+  --sfl-message:var(--c-message,#25cfe0);  --sfl-message-i:var(--c-message-ink,light-dark(#0b6a75,#63e2ee));
+  --sfl-palm:var(--c-success,#2fd3a5);     --sfl-palm-i:var(--c-success-ink,light-dark(#147a5c,#72e6c3));
+  --sfl-sun:var(--c-warning,#ffcf5c);      --sfl-sun-i:var(--c-warning-ink,light-dark(#866000,#ffda80));
+  --sfl-flam:var(--flamingo,#ff6fa8);
+  --sfl-violet:var(--violet,#8a6bff);
+  --sfl-lagoon:var(--lagoon,#25cfe0);
+  --sfl-tang:var(--tangerine,#ff9650);
+  --sfl-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+/* One pair of properties carries an item's type wherever it goes: on the line,
+   in its row, and in the hand of the owner. */
+.sfl .t-booking{--tc:var(--sfl-booking);--ti:var(--sfl-booking-i)}
+.sfl .t-order  {--tc:var(--sfl-order);  --ti:var(--sfl-order-i)}
+.sfl .t-quote  {--tc:var(--sfl-quote);  --ti:var(--sfl-quote-i)}
+.sfl .t-message{--tc:var(--sfl-message);--ti:var(--sfl-message-i)}
+
+.sfl svg{display:block;width:100%;height:auto;overflow:hidden;--sfl-cs:1;--sfl-ds:1}
+/* Travelling pieces scale as one unit at the narrow steps — pill and word
+   together — so a word can never outgrow its pill. Each is drawn centred on
+   its own origin, so the fill-box centre is the point that travels. */
+.sfl .sc,.sfl .sd{transform-box:fill-box;transform-origin:50% 50%}
+.sfl .sc{transform:scale(var(--sfl-cs))}
+.sfl .sd{transform:scale(var(--sfl-ds))}
+.sfl text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sfl-ink2)}
+.sfl .sfl-cap{font-size:11px;letter-spacing:.11em}
+.sfl .sfl-title{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.sfl .sfl-hair{stroke:var(--sfl-hair);stroke-width:1}
+.sfl .sfl-cut{fill:var(--sfl-ground)}
+.sfl .sfl-guide{fill:none;stroke:none}   /* geometry the bubbles travel, never ink */
+
+/* the assistants: drawn in ink, identity in one tinted antenna, as in the hero */
+.sfl .sfl-agent rect,.sfl .sfl-agent line{fill:none;stroke:var(--sfl-ink2);stroke-opacity:.55;stroke-width:1.2}
+.sfl .sfl-agent .tint{fill:var(--ag);fill-opacity:.08;stroke:none}
+.sfl .sfl-agent .eye{fill:var(--sfl-ink2);fill-opacity:.5}
+.sfl .sfl-agent .ant{fill:var(--ag)}
+.sfl .sfl-agent .halo,.sfl .sfl-door .halo,.sfl .sfl-owner .halo{fill:none;stroke-opacity:0;stroke-width:1.2;transform-box:fill-box;transform-origin:50% 50%}
+.sfl .sfl-agent .halo{stroke:var(--ag)}
+.sfl .sfl-agent.wake .halo{animation:sfl-halo .64s var(--sfl-ease)}
+@keyframes sfl-halo{0%{stroke-opacity:.5;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.28)}}
+
+/* the old ways in: a phone and a contact form, quiet ink, nothing alarming */
+.sfl .sfl-old{opacity:0}
+.sfl .sfl-dev{fill:var(--sfl-glass);stroke:var(--sfl-ink3);stroke-opacity:.5;stroke-width:1.2}
+.sfl .sfl-dev-l{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.5;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+.sfl .sfl-dev-d{fill:var(--sfl-ink3);fill-opacity:.35}
+.sfl .sfl-phone,.sfl .sfl-devs{transform-box:fill-box;transform-origin:50% 50%}
+.sfl .sfl-miss{fill:var(--sfl-sun)}
+.sfl .sfl-rings path{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.55;stroke-width:1.2;stroke-linecap:round}
+.sfl .sfl-scrawl{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.5;stroke-width:1.2;stroke-linecap:round}
+.sfl .sfl-bub rect{fill:var(--sfl-ground);fill-opacity:.7;stroke:var(--sfl-ink3);stroke-opacity:.42;stroke-width:1.1}
+.sfl .sfl-bub circle{fill:var(--sfl-ink3);fill-opacity:.55}
+
+/* the door, and the proper lines to it */
+.sfl .sfl-line{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.34;stroke-width:1.1}
+/* A yes goes home as light along the line it came in on — inked only while it
+   travels, and drawn under everything that flies, so at no width can it sit
+   on top of a chip that is still on its way in. */
+.sfl .sfl-glint{fill:none;stroke:var(--sfl-palm);stroke-width:2.2;stroke-linecap:round;opacity:0}
+.sfl .sfl-card-fill{fill:var(--sfl-glass)}
+.sfl .sfl-card-edge{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.32;stroke-width:1.2;stroke-linecap:round}
+.sfl .sfl-door .jamb{fill:none;stroke:var(--sfl-palm);stroke-width:2;stroke-linecap:round}
+.sfl .sfl-door .halo{stroke:var(--sfl-palm)}
+.sfl .sfl-door.open .halo{animation:sfl-halo .8s var(--sfl-ease)}
+.sfl .sfl-port{fill:var(--sfl-ink3);fill-opacity:.55}
+
+/* the owner's rules: a beat that says a rule ran, green when it answered, sun
+   when it left the item for a person */
+.sfl .sfl-rule rect{fill:none;stroke:var(--sfl-ink3);stroke-opacity:.30;stroke-width:1;transition:stroke-opacity .3s var(--sfl-ease)}
+.sfl .sfl-rule text{font-size:9.8px}
+.sfl .sfl-rule.lit rect{stroke-opacity:.6}
+.sfl .sfl-beat{fill:var(--sfl-ink3);fill-opacity:.4;transform-box:fill-box;transform-origin:50% 50%;transition:fill .28s var(--sfl-ease),fill-opacity .28s var(--sfl-ease)}
+.sfl .sfl-rule.lit .sfl-beat{fill:var(--sfl-palm);fill-opacity:1}
+.sfl .sfl-rule.lit.warn .sfl-beat{fill:var(--sfl-sun)}
+/* the pulse is cued like the halos, so the lit strip the markup ships does not
+   pulse on its own when the page opens */
+.sfl .sfl-rule.pulse .sfl-beat{animation:sfl-beat .7s var(--sfl-ease)}
+@keyframes sfl-beat{0%{transform:scale(1)}36%{transform:scale(1.5)}100%{transform:scale(1)}}
+
+/* rows */
+.sfl .sfl-row .bg{fill:var(--sfl-row)}
+.sfl .sfl-row .bar{fill:var(--tc)}
+.sfl .sfl-row .lb{font-size:10.4px;font-weight:600;fill:var(--ti)}
+.sfl .sfl-row .st{font-size:9px;fill:var(--sfl-sun-i)}
+.sfl .sfl-tick{fill:none;stroke:var(--sfl-palm-i);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sfl .sfl-wait{fill:var(--sfl-sun)}
+.sfl .sfl-waitring{fill:none;stroke:var(--sfl-sun);stroke-width:1.2;opacity:.3;animation:sfl-breathe 2.8s var(--sfl-ease) infinite}
+@keyframes sfl-breathe{0%,100%{opacity:.16}50%{opacity:.46}}
+
+/* things that travel */
+.sfl .sfl-fly>g{opacity:0}
+.sfl .sfl-chip .bg{fill:color-mix(in srgb,var(--tc) 15%,var(--sfl-ground));stroke:color-mix(in srgb,var(--tc) 44%,transparent);stroke-width:1}
+.sfl .sfl-chip .dot{fill:var(--tc)}
+.sfl .sfl-chip .lb{font-size:10px;font-weight:600;fill:var(--ti)}
+.sfl .sfl-given .pop{fill:none;stroke:var(--sfl-sun);stroke-width:1.3;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
+.sfl .sfl-given.land .pop{animation:sfl-pop .8s var(--sfl-ease)}
+@keyframes sfl-pop{0%{opacity:.7;transform:scale(.92)}100%{opacity:0;transform:scale(1.3)}}
+.sfl .sfl-yes .disc{fill:var(--sfl-ground);stroke:var(--sfl-palm);stroke-opacity:.7;stroke-width:1.2}
+.sfl .sfl-yes .mark{fill:none;stroke:var(--sfl-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sfl .sfl-link{fill:none;stroke:var(--sfl-sun);stroke-width:1.4;stroke-dasharray:1.5 5;stroke-linecap:round}
+
+/* night and morning, and the owner in it */
+.sfl .sfl-moon{fill:var(--sfl-ink3);fill-opacity:.1;stroke:var(--sfl-ink3);stroke-opacity:.5;stroke-width:1.1;opacity:0}
+.sfl .sfl-sun .core{fill:var(--sfl-sun)}
+.sfl .sfl-sun .rays{fill:none;stroke:var(--sfl-sun);stroke-width:1.5;stroke-linecap:round;transform-box:fill-box;transform-origin:50% 50%}
+.sfl .sfl-owner .face{fill:none;stroke:var(--sfl-ink2);stroke-opacity:.6;stroke-width:1.3;stroke-linecap:round}
+.sfl .sfl-owner .counter{stroke:var(--sfl-ink3);stroke-opacity:.4;stroke-width:1.2;stroke-linecap:round}
+.sfl .sfl-owner .halo{stroke:var(--sfl-sun)}
+.sfl .sfl-owner.wake .halo{animation:sfl-halo .8s var(--sfl-ease)}
+.sfl .sfl-awake circle{fill:var(--sfl-ink2);fill-opacity:.75}
+.sfl .sfl-asleep{opacity:0}
+.sfl .sfl-asleep path{fill:none;stroke:var(--sfl-ink2);stroke-opacity:.7;stroke-width:1.2;stroke-linecap:round}
+.sfl .sfl-zz{opacity:0}
+.sfl .sfl-zz text{font-size:10px;font-weight:600;fill:var(--sfl-ink3)}
+.sfl .sfl-zz .s{font-size:8px}
+
+/* The viewBox is fixed, so reading size falls with the drawn width. The steps
+   were measured in CSS pixels at the widths this cover gets — 750 on a post at
+   1440, 300 on a post at 390, 316 as a blog tile on a phone and 224 as a blog
+   tile on a desktop. Below 400 every word in the finished picture is at 7.3 px
+   or more at the smallest tile and near 10 px on a phone. Only the chips still
+   in flight carry a smaller word (5.6 px there), for a moment, before it lands
+   as a row at 7.7 px. The quote's status and the sleeper's z step out rather
+   than print at 4 px, and the tick and the sun dot say the same thing without
+   them. Strokes thicken with the step so the
+   lines do not dissolve into the glass. */
+@container (max-width:600px){
+  .sfl svg{--sfl-cs:1.3;--sfl-ds:1.2}
+  .sfl .sfl-cap{font-size:14.5px}
+  .sfl .sfl-title{font-size:17.5px}
+  .sfl .sfl-rule text{font-size:13px}
+  .sfl .sfl-row .lb{font-size:15px}
+  .sfl .sfl-row .st{font-size:12.5px}
+  .sfl .sfl-line,.sfl .sfl-card-edge{stroke-width:1.5}
+  .sfl .sfl-glint{stroke-width:2.8}
+  .sfl .sfl-agent rect,.sfl .sfl-agent line,.sfl .sfl-owner .face,.sfl .sfl-owner .counter,
+  .sfl .sfl-dev,.sfl .sfl-dev-l,.sfl .sfl-scrawl,.sfl .sfl-rings path,.sfl .sfl-moon{stroke-width:1.6}
+  .sfl .sfl-tick{stroke-width:2.1}
+  .sfl .sfl-link{stroke-width:1.9;stroke-dasharray:2 6}
+}
+@container (max-width:400px){
+  .sfl svg{--sfl-cs:1.6;--sfl-ds:1.35}
+  .sfl .sfl-cap{font-size:21px}
+  .sfl .sfl-title{font-size:23px}
+  .sfl .sfl-row .lb{font-size:22px;transform:translateY(2.4px)}
+  .sfl .sfl-row .st,.sfl .sfl-zz{display:none}
+  /* at this size the strip's pill would pinch its words, so the words stand
+     alone on the rows' left edge and the beat keeps its place after them */
+  .sfl .sfl-rule rect{display:none}
+  .sfl .sfl-rule text{font-size:21px;transform:translateX(-12px)}
+  .sfl .sfl-rule .sfl-beat{cx:348px}   /* just after the words, with room for a wider fallback font */
+  /* The quote in the owner's hand is part of the finished picture, so its word
+     reads at the rows' size; fit() widens its pill to match. The chips still
+     in flight keep the smaller word, because a wider pill would leave them no
+     room to travel, and the row each one becomes lands at full size. */
+  .sfl .sfl-given .lb{font-size:13px;transform:translateY(1.2px)}
+  /* Until mount() has measured it (and for good without JavaScript) the pill
+     is drawn at the width fit() gives it at this size, so the larger word
+     never runs into the pill's end. */
+  .sfl:not([data-sfl="on"]) .sfl-given rect{x:-33px;width:66px}
+  .sfl:not([data-sfl="on"]) .sfl-given .dot{cx:-23px}
+  .sfl:not([data-sfl="on"]) .sfl-given .lb{transform:translate(-4px,1.2px)}
+  .sfl .sfl-line,.sfl .sfl-card-edge{stroke-width:2}
+  .sfl .sfl-glint{stroke-width:3.6}
+  .sfl .sfl-agent rect,.sfl .sfl-agent line,.sfl .sfl-owner .face,.sfl .sfl-owner .counter,
+  .sfl .sfl-dev,.sfl .sfl-dev-l,.sfl .sfl-scrawl,.sfl .sfl-rings path,.sfl .sfl-moon,
+  .sfl .sfl-asleep path{stroke-width:2.1}
+  .sfl .sfl-sun .rays{stroke-width:2.2}
+  .sfl .sfl-tick{stroke-width:2.8}
+  .sfl .sfl-door .jamb{stroke-width:3}
+  .sfl .sfl-link{stroke-width:2.6;stroke-dasharray:2.5 7.5}
+}
+
+/* Off screen or on a hidden tab the clock stops and sfl-paused stops the CSS
+   keyframes with it. !important because the rules that start them use the
+   animation shorthand, which resets play-state and is more specific. */
+.sfl.sfl-still,.sfl.sfl-still *{animation:none!important;transition:none!important}
+.sfl.sfl-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sfl *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+// Typing it would mean rewriting it, and the composition and the timings are the deliverable.
+(function(){
+"use strict";
+
+/* Newton solve for a CSS cubic-bezier, so the JS eases match the transitions
+   beside them instead of approximating them. */
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    eSine=function(t){return -(Math.cos(Math.PI*t)-1)/2;},   /* calm travel */
+    cl=function(v){return v<0?0:v>1?1:v;},
+    ramp=function(t,a,b){return eSoft(cl((t-a)/(b-a)));};
+
+/* The timeline, in seconds. Beat three runs 4.15 to 10.45 — 6.3 s of a 13.9 s
+   loop — because it is the point. The finished morning then holds for 1.7 s,
+   and the page opens 1.6 s before the end of that hold, so a visitor has time
+   to read the whole picture before it gives way to the night. Do not retune
+   these by accident. */
+var T={oldOut:3.85,card:4.15,yes:9.45,link:10.50,give:10.60,day:10.65,wake:11.40,exit:13.15},
+    LOOP=13.90,
+    ZB=8*Math.PI/LOOP,   /* the sleeper's z's bob a whole number of times per loop */
+    STILL=11.55,     /* the frame the markup ships and the clock starts from */
+    TRAV2=1.25,      /* a bubble's crossing, night: unhurried */
+    DRIFT=.75,       /* the lost one sinking away, gone before the inbox starts to draw */
+    TRAVEL=1.00,     /* a typed chip from its assistant to the door */
+    SNAP=.30,        /* the hand-over at the door: the chip steps in and its row appears */
+    RES=.70,         /* the rule's answer, after arrival */
+    BACK=1.00,       /* the yeses' trip home along their lines, from T.yes */
+    GLINT=40,        /* the length of the light that carries it, in user units */
+    GIVE=.80,        /* the quote's walk to the owner */
+    /* Beat two. Eight requests, alternating phone and form so no two ever
+       reach the same target together; the eighth finds the form full. The top
+       three assistants ring the phone and the bottom ones fill the form, so no
+       two bubbles' paths ever cross. a is the assistant that sends it. */
+    B=[{t:.25,p:0,a:0},{t:.45,f:0,a:3},{t:.75,p:1,a:1},{t:1.00,f:1,a:4},{t:1.30,p:2,a:2},
+       {t:1.50,f:2,a:3},{t:1.85,f:3,a:4},{t:2.20,lost:1,a:2}],
+    /* Beat three. Arrivals 1 s apart: each chip has been handed over and is
+       gone from the doorstep (arrival + SNAP) long before the next one's front
+       edge reaches it, at every width step. Each simple one gets its tick as it
+       lands; the yeses wait until the last chip is in (T.yes is the quote's
+       hand-over plus a breath) and then go home together, fanning out from the
+       door, so a light never runs under a chip that is still travelling.
+       Senders matter at the narrow steps, where a chip on the doorstep covers
+       much of the lines: the next chip must start on the other side of the
+       middle, and only the first may use the straight middle line itself. */
+    IT=[{a:2,L:5.10,auto:1},{a:0,L:6.10,auto:1},{a:4,L:7.10,auto:1},{a:1,L:8.10,auto:0}],
+    SLOT=[146,184,222,260],RX=240,
+    /* A chip's walk is measured in x, not along its line: a curved line covers
+       more length than ground, so a stop measured along it put the Message
+       pill's nose on the lower jamb, and a start measured along it left a
+       narrow-step chip wedged between two assistants. AGX is the assistants'
+       right edge and JAMB the jambs' outer tip, round cap included; a chip
+       leaves AGX and stops short of JAMB by clr(), which grows with the chips. */
+    AGX=58,JAMB=216,
+    CS=1,            /* the chips' scale at the current width step, read by fit() */
+    DS=1;            /* the bubbles' and badges' scale at the current width step, read by fit() */
+function clr(cs){return 4+3*cs;}
+
+function mount(fig){
+  if(fig.getAttribute("data-sfl")==="on")return;   /* one scene per figure, however often this runs */
+
+  /* Every lookup happens before the first mutation, so a missing node throws
+     with the shipped picture still as the server drew it. */
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverFlood "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverFlood "+s);return [].slice.call(l);}
+
+  var svg=q("svg"),old=q(".sfl-old"),phone=q(".sfl-phone"),rings=q(".sfl-rings"),miss=q(".sfl-miss"),
+      scrawls=qa(".sfl-scrawl"),guides=qa(".sfl-old .sfl-guide:not(.sfl-lost)"),lostP=q(".sfl-lost"),
+      bubs=qa(".sfl-bub"),lines=qa(".sfl-line"),cfill=q(".sfl-card-fill"),edge=q(".sfl-card-edge"),
+      door=q(".sfl-door"),port=q(".sfl-port"),head=q(".sfl-head"),rule=q(".sfl-rule"),
+      rows=qa(".sfl-row"),res=qa(".sfl-row .sfl-res"),agents=qa(".sfl-agent"),yeses=qa(".sfl-yes"),
+      chips=qa(".sfl-fly .sfl-chip"),glints=qa(".sfl-glint"),link=q(".sfl-link"),given=q(".sfl-given"),
+      moon=q(".sfl-moon"),sun=q(".sfl-sun"),rays=q(".sfl-sun .rays"),owner=q(".sfl-owner"),
+      awake=q(".sfl-awake"),asleep=q(".sfl-asleep"),zz=q(".sfl-zz"),
+      labels=chips.map(function(c){return c.querySelector(".lb");}).concat([given.querySelector(".lb")]),
+      ruleBg=rule.querySelector("rect"),ruleTx=rule.querySelector("text"),beat=q(".sfl-beat");
+
+  fig.setAttribute("data-sfl","on");
+
+  var PH=[],FM=[],i;
+  B.forEach(function(b){var at=b.t+TRAV2;if(b.p!=null)PH[b.p]=at;if(b.f!=null)FM[b.f]=at;});
+  var BL=guides.map(function(g){return g.getTotalLength();}),LL=lostP.getTotalLength(),
+      SL=scrawls.map(function(s){return s.getTotalLength();}),
+      NL=lines.map(function(l){return l.getTotalLength();}),
+      EL=edge.getTotalLength(),KL=link.getTotalLength(),
+      W=[67,56,72,58,58];   /* chip widths: the drawn floors, as the site's font measures them;
+                               fit() raises them for a wider fallback font */
+  scrawls.forEach(function(s,k){s.style.strokeDasharray=SL[k];});
+  var GLL=glints.map(function(p){return p.getTotalLength();});
+  glints.forEach(function(p,k){p.style.strokeDasharray=GLINT+" "+(GLL[k]+GLINT);});
+  lines.forEach(function(l,k){l.style.strokeDasharray=NL[k];});
+  edge.style.strokeDasharray=EL;
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+
+  function render(t){
+    var g=1-ramp(t,T.exit,T.exit+.7),u,v,p,e,k,ring=0,rot=0,lit=false,warn=false,day,up;
+
+    /* 1 and 2. night, and no door: the phone rings, the form fills, one is lost */
+    u=ramp(t,T.oldOut,T.oldOut+.5);
+    op(old,ramp(t,.05,.45)*(1-u));mv(old,0,8*u);
+    PH.forEach(function(a){
+      var w=t-a,env;
+      if(w<0||w>=.9)return;
+      env=1-w/.9;env*=env;
+      if(env>ring)ring=env;
+      rot+=7*env*Math.sin(w*Math.PI*12);
+    });
+    phone.style.transform="rotate("+rot.toFixed(2)+"deg)";
+    op(rings,ring);
+    op(miss,ramp(t,PH[0],PH[0]+.25));
+    scrawls.forEach(function(s,j){v=ramp(t,FM[j],FM[j]+.45);s.style.strokeDashoffset=SL[j]*(1-v);op(s,v>0?1:0);});
+    bubs.forEach(function(b,k){
+      var w=(t-B[k].t)/TRAV2,d,o;
+      if(w>=0&&w<=1){
+        /* a bubble leaves 5 units clear of its assistant at every step: its
+           half-width is 13, scaled with the step */
+        d=5+13*DS;
+        p=guides[k].getPointAtLength(d+eSine(w)*(BL[k]-d));
+        o=cl(w/.12)*(B[k].lost?1:cl((1-w)/.2));
+      }else if(B[k].lost&&w>1&&(d=(t-B[k].t-TRAV2)/DRIFT)<=1){
+        p=lostP.getPointAtLength(eSine(d)*LL);
+        o=cl((1-d)/.6);   /* visible while it sinks away from the full form, then gone */
+      }else{op(b,0);return;}
+      b.style.transform="translate("+p.x+"px,"+p.y+"px)"+(B[k].lost&&w>1?" rotate("+(18*eSine(Math.min(1,(t-B[k].t-TRAV2)/DRIFT)))+"deg)":"");
+      op(b,o);
+    });
+
+    /* 3. one door: the inbox draws from its doorway round, lines run to it */
+    edge.style.strokeDashoffset=EL*(1-ramp(t,T.card,T.card+.9));
+    op(edge,g*ramp(t,T.card,T.card+.12));
+    op(cfill,g*ramp(t,T.card+.4,T.card+.9));
+    op(head,g*ramp(t,T.card+.55,T.card+.95));
+    op(rule,g*ramp(t,T.card+.7,T.card+1.1));
+    op(door,g*ramp(t,T.card+.9,T.card+1.2));
+    lines.forEach(function(l,k){
+      l.style.strokeDashoffset=NL[k]*(1-ramp(t,T.card+.6+k*.06,T.card+1.3+k*.06));
+      op(l,g);
+    });
+
+    IT.forEach(function(it,n){
+      var a=it.L+TRAVEL,ch=chips[n],hw=W[n]*CS/2,w,r,gl,yes,s0;
+      if(t>=it.L&&t<a){
+        /* It travels from clear of the assistants to the doorstep, clear of
+           the jambs (S0 and S1, set by stops()), at every width step. */
+        w=(t-it.L)/TRAVEL;
+        p=lines[it.a].getPointAtLength(S0[n]+eSine(w)*(S1[n]-S0[n]));
+        mv(ch,p.x,p.y);op(ch,cl(w/.15));
+      }else if(t>=a&&t<a+SNAP){
+        /* Then it is handed over: it dissolves where it stands, drawing in a
+           little towards the door as it goes, while its row slides in from
+           the door side. Its front edge never moves forward, so it never
+           crosses the jambs or lies over a row that has already landed. */
+        w=eSoft((t-a)/SNAP);
+        p=lines[it.a].getPointAtLength(S1[n]);
+        ch.style.transform="translate("+(p.x+hw*.3*w)+"px,"+p.y+"px) scale("+(1-.3*w)+")";
+        op(ch,1-w);
+      }else op(ch,0);
+      v=ramp(t,a+.06,a+.42);
+      op(rows[n],g*v);mv(rows[n],RX-10*(1-v),SLOT[n]);
+      op(res[n],ramp(t,a+RES,a+RES+.25));
+      if(t>=a+.4&&t<a+1.2&&it.auto)lit=true;
+      if(!it.auto&&t>=a+.4&&t<T.exit)warn=true;
+      if(it.auto){
+        /* the light runs from the door, where the dash covers the line's last
+           GLINT units, to just past the assistant, where it has left the line */
+        r=T.yes;gl=glints[n];yes=yeses[n];w=(t-r)/BACK;
+        if(w>=0&&w<1){
+          s0=(GLL[n]-GLINT)-eSine(w)*GLL[n];
+          gl.style.strokeDashoffset=-s0;op(gl,cl(w/.1)*cl((1-w)/.12));
+        }else op(gl,0);
+        op(yes,t>=r+BACK-.04?g:0);
+      }
+    });
+    rule.classList.toggle("lit",lit||warn);
+    rule.classList.toggle("warn",warn&&!lit);
+
+    /* 4. morning: only the quote goes on, to the owner, who wakes to it */
+    u=g*ramp(t,T.link,T.link+.3);
+    op(link,u);op(port,u);
+    k=(t-T.give)/GIVE;
+    if(k<0)op(given,0);
+    else{
+      e=W[4]*CS/2+8;   /* it leaves with its back edge clear of the inbox wall and the port */
+      p=link.getPointAtLength(e+eSine(Math.min(k,1))*(KL-e));mv(given,p.x,p.y);op(given,g*cl(k/.15));
+    }
+    /* The moon sets before the sun rises, and on the way back to night the
+       sun sets before the moon returns, so the two are never drawn on top of
+       each other. */
+    day=ramp(t,T.day,T.day+.4);v=ramp(t,T.exit+.35,T.exit+.7);
+    op(moon,cl(1-day+v));mv(moon,0,5*day*(1-v));
+    day=ramp(t,T.day+.35,T.day+.8);v=ramp(t,T.exit,T.exit+.35);
+    op(sun,day*(1-v));mv(sun,0,5*(1-day)+5*v);
+    /* measured from STILL, so the rays the markup draws are the rays the
+       first live frame draws */
+    rays.style.transform="rotate("+((t-STILL)*9).toFixed(1)+"deg)";
+    up=t>=T.wake&&t<T.exit+.3;
+    op(awake,up?1:0);op(asleep,up?0:1);
+    op(zz,cl((1-ramp(t,T.wake-.35,T.wake+.05))+ramp(t,T.exit+.3,T.exit+.7)));
+    /* four whole bobs a loop, so the z's are where they started when the loop wraps */
+    mv(zz,0,-2.4*Math.sin(t*ZB));
+  }
+
+  var timers=[],fired={};
+  function flash(el,c,ms){el.classList.add(c);timers.push(setTimeout(function(){el.classList.remove(c);},ms));}
+  function cue(t,live){
+    function at(key,when,el,c){if(t<when||fired[key])return;fired[key]=true;if(live)flash(el,c,820);}
+    B.forEach(function(b,k){at("b"+k,b.t,agents[b.a],"wake");});
+    at("door",T.card+.9,door,"open");
+    IT.forEach(function(it,n){
+      at("c"+n,it.L,agents[it.a],"wake");
+      at("r"+n,it.L+TRAVEL+.4,rule,"pulse");
+      if(it.auto)at("h"+n,T.yes+BACK,agents[it.a],"wake");
+    });
+    at("give",T.give+GIVE,given,"land");
+    at("wake",T.wake,owner,"wake");
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    agents.forEach(function(a){a.classList.remove("wake");});
+    door.classList.remove("open");given.classList.remove("land");owner.classList.remove("wake");
+    rule.classList.remove("pulse");
+  }
+
+  /* Chips and the rule strip are measured, never guessed, so a wider fallback
+     font cannot push a word out of its pill. The drawn widths are floors and
+     fit() only raises, so measuring again cannot ratchet anything wider. */
+  var FLOOR=W.slice(),S0=[],S1=[];
+  /* The length along a line at which it reaches x. Every line runs left to
+     right, so x only grows along it and halving the interval finds it. */
+  function atX(ln,len,x){
+    var lo=0,hi=len,m,j;
+    for(j=0;j<22;j++){m=(lo+hi)/2;if(ln.getPointAtLength(m).x<x)lo=m;else hi=m;}
+    return (lo+hi)/2;
+  }
+  /* Each chip's walk: its back edge clr() clear of the assistants, its front
+     edge clr() short of the jambs. Rerun whenever a pill or the step changes. */
+  function stops(){
+    var c=clr(CS);
+    IT.forEach(function(it,n){
+      var ln=lines[it.a],len=NL[it.a],hw=W[n]*CS/2;
+      S1[n]=atX(ln,len,JAMB-c-hw);
+      S0[n]=Math.min(atX(ln,len,AGX+c+hw),S1[n]);
+    });
+  }
+  stops();
+  function fit(){
+    var cs=parseFloat(getComputedStyle(svg).getPropertyValue("--sfl-cs"));
+    if(cs>0)CS=cs;
+    var ds=parseFloat(getComputedStyle(svg).getPropertyValue("--sfl-ds"));
+    if(ds>0)DS=ds;
+    labels.forEach(function(lb,k){
+      var b,c=lb.parentNode,w,h;
+      try{b=lb.getBBox();}catch(err){return;}
+      if(!b||!b.width)return;
+      w=Math.max(FLOOR[k],Math.ceil(b.width+28));h=w/2;W[k]=w;
+      c.querySelectorAll("rect").forEach(function(r){r.setAttribute("x",-h);r.setAttribute("width",w);});
+      c.querySelector(".dot").setAttribute("cx",-h+10);
+      lb.setAttribute("x",-h+18);
+    });
+    var rb;
+    try{rb=ruleTx.getBBox();}catch(err){rb=null;}
+    if(rb&&rb.width){
+      var rw=Math.max(104,Math.ceil(rb.width+24));
+      ruleBg.setAttribute("width",rw);
+      /* With no pill (the narrow step) the stylesheet seats the beat just after
+         the words instead, so the markup and the first live frame agree. */
+      beat.setAttribute("cx",RX+rw+14);
+    }
+    stops();
+  }
+
+  /* The markup already is render(STILL): the clock starts there so the live
+     piece continues from what is painted, never snapping to an empty stage. */
+  render(STILL);
+  cue(STILL,false);
+  fit();
+  if("ResizeObserver" in window)new ResizeObserver(fit).observe(fig);
+  try{
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then)
+      document.fonts.ready.then(fit,function(){});
+  }catch(err){}
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,wasP=STILL,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    /* Clamped both ways. A long stall slows the piece rather than teleporting
+       it; and the first rAF timestamp can fall before the performance.now()
+       that sync() took, which would step the clock back past wasP, read as a
+       wrap, re-arm every cue and flash all the halos at mount. */
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    var ph=clock%LOOP;
+    if(ph<wasP)fired={};                    /* a new pass re-arms the one-shots */
+    wasP=ph;
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sfl-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sfl-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sfl-paused");}
+  }
+
+  /* One frame, all four beats' outcome: the door, the typed rows, the yeses
+     home, the quote with the owner in the morning. */
+  function still(){
+    fig.classList.add("sfl-still");
+    run=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  /* The preference can be turned on after load; both paths end in the same frame. */
+  function onMq(){if(mq.matches&&!fig.classList.contains("sfl-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sfl").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover flood",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);   /* harmless today; correct the day a router lands */
+})();
+</script>

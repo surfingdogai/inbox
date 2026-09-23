@@ -6,6 +6,7 @@ author: Tiago Pita
 cover: /art/tile-receipts.png
 coverAlt: A pixel-art paper receipt with two seals and a signature
 coverAnim: receipts
+og: /art/og-receipts-v1.png
 ---
 
 Ask anyone who runs a bike shop what they think of online reviews and you'll get a sigh. The five stars came from a cousin. The one star came from someone who never walked in.
