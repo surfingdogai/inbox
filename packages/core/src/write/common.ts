@@ -111,10 +111,12 @@ export function threadEntryStatement(t: {
   subject?: string | null;
   body: string;
   messageId?: string | null;
+  /** `person` or `automation` when the request said so (`effectiveWrittenBy`); null: judged by the actor. */
+  writtenBy?: string | null;
   now: number;
 }): Statement {
   return {
-    sql: "INSERT INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'text', ?, ?)",
+    sql: "INSERT INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at, written_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'text', ?, ?, ?)",
     params: [
       t.id,
       t.itemId,
@@ -127,6 +129,7 @@ export function threadEntryStatement(t: {
       t.body,
       t.messageId ?? null,
       t.now,
+      t.writtenBy ?? null,
     ],
     method: "run",
   };

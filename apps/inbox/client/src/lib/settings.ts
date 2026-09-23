@@ -1,3 +1,4 @@
+import { parseMajor } from "./actions";
 import type { Settings } from "./types";
 
 /**
@@ -16,6 +17,8 @@ import type { Settings } from "./types";
  */
 export interface SettingsForm {
   readonly cancellationWindowMin: string;
+  /** Minutes before a start time after which customers can no longer book it online. */
+  readonly minNoticeMin: string;
   readonly holdOnPropose: boolean;
   readonly autoExpireHours: string;
   /** After the window: record the cancellation as late, or refuse it (ADR-017 §3.1). */
@@ -51,6 +54,7 @@ export interface SettingsForm {
 export function toSettingsForm(doc: Settings, redacted: readonly string[] = []): SettingsForm {
   return {
     cancellationWindowMin: String(doc.booking.cancellationWindowMin),
+    minNoticeMin: String(doc.booking.minNoticeMin),
     holdOnPropose: doc.booking.holdOnPropose,
     autoExpireHours: String(doc.booking.autoExpireHours),
     lateCancellation: doc.booking.lateCancellation,
@@ -106,17 +110,18 @@ export function toSettingsDoc(f: SettingsForm): Record<string, unknown> {
     return t !== "" && Number.isFinite(Number(t)) ? Number(t) : t;
   };
   const opt = (s: string): string | null => (s.trim() ? s.trim() : null);
-  const limit = f.approvalLimit.trim() ? Math.round(Number(f.approvalLimit.replace(",", ".")) * 100) : 0;
+  const limit = f.approvalLimit.trim() ? parseMajor(f.approvalLimit) : 0;
   return {
     booking: {
       cancellationWindowMin: num(f.cancellationWindowMin),
+      minNoticeMin: num(f.minNoticeMin),
       holdOnPropose: f.holdOnPropose,
       autoExpireHours: num(f.autoExpireHours),
       lateCancellation: f.lateCancellation,
       autoCompleteHours: num(f.autoCompleteHours),
     },
     orders: {
-      maxValueWithoutApprovalMinor: Number.isFinite(limit) ? limit : f.approvalLimit.trim(),
+      maxValueWithoutApprovalMinor: limit ?? f.approvalLimit.trim(),
       payDays: num(f.payDays),
       dueDays: num(f.dueDays),
     },

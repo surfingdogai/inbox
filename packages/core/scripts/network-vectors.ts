@@ -1223,7 +1223,30 @@ const OUTCOME_PATHS: {
     by: "customer",
     out: "booking.cancelled_late_by_customer",
   },
+  // The business records the customer's own cancellation (by phone, email, in person): it is the
+  // customer's, judged as late or not at the moment they asked.
+  {
+    typ: "booking",
+    event: "record_cancel",
+    from: ["confirmed"],
+    by: "business",
+    out: "booking.cancelled_by_customer",
+  },
+  {
+    typ: "booking",
+    event: "record_cancel_late",
+    from: ["confirmed"],
+    by: "business",
+    out: "booking.cancelled_late_by_customer",
+  },
   { typ: "order", event: "fulfil", from: ["accepted", "paid", "fulfilling"], by: "business", out: "order.fulfilled" },
+  {
+    typ: "order",
+    event: "record_cancel",
+    from: ["accepted", "awaiting_payment", "payment_failed"],
+    by: "business",
+    out: "order.cancelled_by_customer",
+  },
   {
     typ: "order",
     event: "cancel",

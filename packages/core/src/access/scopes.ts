@@ -21,6 +21,7 @@ export const SCOPES = {
   "setup:run": "add, change and apply rules",
   "integrations:write": "add, change and test webhooks and product feeds",
   "keys:write": "create and revoke integration keys",
+  "customers:erase": "erase one customer's personal data (it cannot be undone)",
   offline_access: "stay connected without asking again",
 } as const;
 
@@ -36,8 +37,17 @@ export const KEY_SCOPES = SCOPE_NAMES.filter((s) => s !== "keys:write" && s !== 
   ...Scope[],
 ];
 
-/** Scopes a key minted by the owner's AI may not carry: only the owner hands out a settings key. */
-export const OWNER_ONLY_KEY_SCOPES: readonly Scope[] = ["settings:write"];
+/**
+ * Scopes a key minted by the owner's AI may not carry: only the owner hands out a settings key, or
+ * one that can erase a customer.
+ */
+export const OWNER_ONLY_KEY_SCOPES: readonly Scope[] = ["settings:write", "customers:erase"];
+
+/**
+ * Scopes an AI app cannot be granted by OAuth: erasing a customer is never the owner's AI's to do
+ * (Tiago, 23 September 2026), so it is not offered to one.
+ */
+export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase"];
 
 /**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes

@@ -5,7 +5,9 @@ import type {
   Closure,
   Condition,
   CreatedKey,
+  CustomerSummary,
   DeliveryView,
+  EraseResult,
   FeedConnector,
   Item,
   ItemDetail,
@@ -41,7 +43,9 @@ export type {
   Closure,
   Condition,
   CreatedKey,
+  CustomerSummary,
   DeliveryView,
+  EraseResult,
   FeedConnector,
   Item,
   ItemDetail,
@@ -66,11 +70,20 @@ export type {
   Weekly,
 };
 
+/** Whether this inbox sends email (`GET /v1/owner/mail`). */
+export interface MailStatus {
+  readonly service: boolean;
+  readonly sender: boolean;
+  readonly links: boolean;
+}
+
 /** One receipt as the API returns it on an item. */
 export type Receipt = ReceiptView;
 
 export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
 export type ThreadEntry = ItemDetail["thread"][number];
+/** An email about an item, and what became of it. */
+export type Mail = ItemDetail["mail"][number];
 /** Who is asking, as the owner sees it (ADR-017 §8.2). */
 export type Customer = NonNullable<ItemDetail["customer"]>;
 export type ItemEvent = ItemDetail["events"][number];
@@ -105,6 +118,8 @@ export interface ListParams {
   readonly type?: ItemType | undefined;
   readonly state?: string | undefined;
   readonly needs_human?: boolean | undefined;
+  /** Only items with an email that could not be sent. */
+  readonly mail_failed?: boolean | undefined;
   readonly open_only?: boolean | undefined;
   readonly sandbox?: boolean | undefined;
   readonly q?: string | undefined;
@@ -144,6 +159,8 @@ export interface ServicePrice {
   readonly model: PriceModel;
   readonly value?: number | undefined;
   readonly currency?: string | undefined;
+  /** A fixed price is for the whole booking unless it is per person. */
+  readonly per?: "booking" | "person" | undefined;
 }
 
 /** A services row as the API returns it (camelCase, active as 0/1, times in ms). */

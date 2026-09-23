@@ -3,13 +3,16 @@ import { createApiKey, hashKey, ROUTE_SCOPES } from "@surfingdog/adapters";
 import { type Db, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox, type Inbox } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 /**
  * Connecting other software through the doors (keys and scopes, idempotency, attribution, webhook
  * conveniences, and the fixes integrators hit first), end to end over REST and the owner MCP.
  */
 const T0 = Date.parse("2026-09-21T10:00:00Z");
+
+/** A weekday to come: the inbox books nothing in the past. */
+const DAY = futureDay();
 const SECRET_KEY = "2f8c1d0a6b4e37925c8f01ad6e3b47f0";
 const RECEIVER = "https://receiver.example.com/hooks/inbox";
 
@@ -53,8 +56,8 @@ async function book(app: App, serviceId: string, headers: Record<string, string>
       {
         payload: {
           reservationFor: { serviceId, name: "Full service" },
-          startTime: `2026-09-22T${String(hour).padStart(2, "0")}:00:00Z`,
-          endTime: `2026-09-22T${String(hour + 1).padStart(2, "0")}:30:00Z`,
+          startTime: `${DAY}T${String(hour).padStart(2, "0")}:00:00Z`,
+          endTime: `${DAY}T${String(hour + 1).padStart(2, "0")}:30:00Z`,
         },
         contact: { name: "Rita", email: "rita@example.com" },
       },
@@ -639,21 +642,34 @@ describe("the doors integrators hit first", () => {
     expect(mail.status).not.toBe(401);
   });
 
-  it("gives the owner's AI the product feed tools", async () => {
+  it("gives the owner's AI the product feed tools, except connecting and disconnecting: a feed sets prices", async () => {
     const { app, ownerKey } = await setup();
     const mcp = await connectOwner(app, ownerKey);
     expect(text(await mcp.callTool({ name: "list_feeds", arguments: {} }))).toContain("No feeds yet");
-    const added = await mcp.callTool({
+    // Money is the owner's (Tiago, 23 September 2026): the AI is told to suggest it instead.
+    const refused = await mcp.callTool({
       name: "add_feed",
       arguments: { url: "https://shop.example.com/feed.xml", name: "Shop", idempotency_key: "feed-1" },
     });
-    expect(added.isError, text(added)).toBeFalsy();
-    const feed = added.structuredContent as { id: string };
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toContain("prices are the owner's");
+    expect(refused.structuredContent).toMatchObject({ error: { details: { draft_for_owner: true } } });
+    // The owner connects it; the AI reads it and imports it again.
+    const auth = { authorization: `Bearer ${ownerKey}`, "content-type": "application/json" };
+    const added = await app.request("https://inbox.test/v1/owner/feeds", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ url: "https://shop.example.com/feed.xml", name: "Shop" }),
+    });
+    expect(added.status).toBe(201);
+    const feed = (await added.json()) as { id: string };
     const listed = await mcp.callTool({ name: "list_feeds", arguments: {} });
     expect((listed.structuredContent as { items: { id: string }[] }).items.map((f) => f.id)).toEqual([feed.id]);
     expect((await mcp.callTool({ name: "import_feed_now", arguments: { feed_id: feed.id } })).isError).toBeFalsy();
     const removed = await mcp.callTool({ name: "remove_feed", arguments: { feed_id: feed.id } });
-    expect(removed.isError, text(removed)).toBeFalsy();
-    expect(removed.structuredContent).toMatchObject({ removed: true });
+    expect(removed.isError).toBe(true);
+    const gone = await app.request(`https://inbox.test/v1/owner/feeds/${feed.id}`, { method: "DELETE", headers: auth });
+    expect(gone.status).toBe(200);
+    expect(await gone.json()).toMatchObject({ removed: true });
   });
 });

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { ShieldCheck, TriangleAlert } from "lucide-react";
-import { customerNotes, personStandings } from "../lib/format";
+import { customerNotes, networksOffWords, personStandings } from "../lib/format";
 import type { Customer } from "../lib/types";
 
 /**
@@ -20,9 +20,36 @@ export function CustomerBlock({
 }) {
   const notes = customerNotes(customer, currency);
   const standings = personStandings(customer, undefined, tz);
-  if (notes.length === 0 && standings.length === 0) return null;
+  const off = networksOffWords(customer, tz);
+  if (notes.length === 0 && standings.length === 0 && !off) return null;
   return (
     <div className="stack customer">
+      {off && (
+        <div className="stack">
+          <div className="eyebrow">Booking networks</div>
+          <p className="s">{off.headline}</p>
+          {off.networks.length > 0 && (
+            <ul className="standing-list">
+              {off.networks.map((n) => (
+                <li className="standing" key={n.network}>
+                  <ShieldCheck className="icon" aria-hidden="true" />
+                  <div className="standing-main">
+                    <div>
+                      <b className="mono">{n.network}</b>
+                    </div>
+                    <div className="s">{n.text}</div>
+                    {n.caution && (
+                      <div className="hint caution">
+                        <TriangleAlert className="icon-xs" aria-hidden="true" /> {n.caution}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {notes.length > 0 && (
         <div className="who-line">
           {notes.map((n) => (

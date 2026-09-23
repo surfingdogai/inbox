@@ -17,7 +17,8 @@
       "/oauth/*",
       "/openapi.json",
       "/.well-known/*",
-      "/healthz"
+      "/healthz",
+      "/c/*"
     ]
   },
   // One business = one database. The Deploy button provisions these from the names below.

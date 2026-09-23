@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Bot, Send, StickyNote, User } from "lucide-react";
 import { type FormEvent, type RefObject, useState } from "react";
 import type { ApiProblem } from "../lib/api";
-import { actorWord, channelWord, formatDateTime, initials, partyName } from "../lib/format";
+import { actorWord, channelWord, deliveryWord, formatDateTime, initials, partyName } from "../lib/format";
 import type { Party, ThreadEntry } from "../lib/types";
 
 /** Thread entries in, out and internal notes, then a reply box that also takes a private note. */
@@ -126,7 +126,21 @@ function Entry({
       <div>
         <div className="who">{who}</div>
         <div className="b row-glass">{entry.body}</div>
+        {entry.direction === "out" && <Delivery entry={entry} tz={tz} />}
       </div>
+    </div>
+  );
+}
+
+/** Under a reply: what became of its email. "Sending…" until the mail service took it, never "sent" before. */
+function Delivery({ entry, tz }: { entry: ThreadEntry; tz: string | undefined }) {
+  const d = entry.delivery;
+  // No email yet: a reply just written is on its way; an old one (from before emails were kept) says nothing.
+  if (!d) return Date.now() - Date.parse(entry.at) < 15 * 60_000 ? <div className="hint">Sending…</div> : null;
+  const bad = d.status === "failed" || d.status === "skipped" || d.status === "retrying";
+  return (
+    <div className={clsx("hint", bad && "error")} role={bad ? "status" : undefined}>
+      {deliveryWord(d, tz)}
     </div>
   );
 }

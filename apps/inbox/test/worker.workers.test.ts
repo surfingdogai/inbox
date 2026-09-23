@@ -10,6 +10,25 @@ describe("worker", () => {
     expect(res.headers.get("content-type")).toContain("application/json");
   });
 
+  it("answers the page a link in the business's email opens, never the owner app", async () => {
+    const res = await SELF.fetch("https://example.com/c/not-a-real-token", { headers: { "accept-language": "pt-PT" } });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    const html = await res.text();
+    expect(html).toContain('<html lang="pt">');
+    expect(html).toContain("Esta ligação não é válida.");
+  });
+
+  it("answers the page about the booking network too, never the owner app", async () => {
+    const res = await SELF.fetch("https://example.com/c/privacy?l=en");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    const html = await res.text();
+    expect(html).toContain("How we recognise returning customers");
+    expect(html).not.toContain("<script");
+  });
+
   it("has its platform bindings", async () => {
     expect(env.DB).toBeDefined();
     expect(env.BLOBS).toBeDefined();

@@ -5,6 +5,7 @@ import { asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Db } from "../db";
 import { CUSTOMER_ACTORS, type Money } from "../domain/types";
 import { identityPending } from "../identity/pending";
+import { itemStopped } from "../identity/stops";
 import { ulid } from "../ids";
 import { networkReceiptStatements, type ReceiptRef } from "../network/index";
 import { items, parties, receipts, signingKeys } from "../schema/tables";
@@ -282,6 +283,8 @@ export class ReceiptCapabilities {
     // Nothing about the customer travels: the receipt names them by pseudonym only. The rows name
     // the receipt by (item, kind, outcome), so a writer that loses the race queues the winner's.
     const ref: ReceiptRef = { itemId: item.id, kind, outcome: outcome ?? "" };
+    // A customer who asked the business not to use booking networks: the receipt is theirs to hold,
+    // and no network is sent it (Tiago, 23 September 2026).
     for (const network of await this.networksFor(settings, item.id, kind)) {
       statements.push(...networkReceiptStatements(network, "issued", now, ref));
     }
@@ -488,6 +491,7 @@ export class ReceiptCapabilities {
    * is owed the outcome that closes it (ADR-017 §3.2).
    */
   private async networksFor(settings: Settings, itemId: string, kind: ReceiptKind): Promise<string[]> {
+    if (await itemStopped(this.db, itemId)) return [];
     const networks = new Set(enabledNetworks(settings, "receipts"));
     if (kind === "outcome") {
       const { rows } = await this.db.client.query({

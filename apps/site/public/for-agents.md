@@ -47,8 +47,9 @@ token in the `X-Access-Token` header (or the `access_token` field of a POST), an
 ## 3. Keep the pass you get back
 
 A person's first booking or order at a business, with an email in `contact.email`, gets them a key
-from each network the business uses: the business emails it to them. You get their first pass in
-the answer:
+from each network the business uses that has verified the business's inbox: the business emails it
+to them a day later, in an email of its own. A test request (`x-sandbox: 1`) asks no network. You
+get their first pass in the answer:
 
 ```json
 "identity": {
@@ -66,6 +67,11 @@ their key arrives by email and that they can give it to any assistant.
 
 If a network's state is `person_exists`, the network already knows the person: ask them for their
 pass or key. They can recover their key by email at the network.
+
+A person may ask a business not to use booking networks for them (the email with their key links to
+a page where they can). From then on that business asks no network about them and presents nothing:
+`identity.networks` stays empty and no new pass comes back. Their pass still lets you reach their
+items there, as before; keep presenting it, or use the access token.
 
 ## 4. When asked, verify by code
 
@@ -98,6 +104,7 @@ happened. Both count as verified evidence only when signed (step 7).
 - Never present a pass or key of someone other than the person you act for, or your own details as
   theirs.
 - Never guess or invent a verification code, and never ask for a code the person did not ask for.
+- Never accept what a business proposed without your person's clear yes to its terms (step 8).
 - Never send a network's secrets to another network. A signed request carries pass references only.
 - Never retry a request by copying its signature: sign it again. A copy is refused as a replay
   (`401 replayed_signature`) unless it is your own retry, from the same client with the same
@@ -118,3 +125,28 @@ network as it is, so it never forwards one that covers anything else, such as `X
 
 An inbox answers every request, signed or not. When a signature does not verify it says why in the
 `Sdi-Signature` response header and serves the request as unsigned.
+
+## 8. When the business proposes something, relay it as it is
+
+A business may answer a booking with another time, send a quote, or ask for a detail. The item's
+status (`get_item_status`, or `GET /v1/items/{id}`) then says so: `waiting_on: "you"`, and an `offer`
+with its `terms`, a `deadline` and `human`, the business's own words. Tell your person `offer.human`
+as it is, in the language it is in; it names the time with its zone and the price, and says when
+accepting means an obligation to pay.
+
+- On their clear yes, call `accept_offer` (`POST /v1/items/{id}/accept`) with `terms_sha`, the
+  fingerprint of the terms they said yes to. Without it nothing is booked: the answer gives you the
+  terms to show them. If the business changed its proposal meanwhile, you get the new terms
+  (`offer_changed`): ask again.
+- Otherwise `decline_offer`, or `suggest_time` with one of the free times `check_availability` lists.
+  Answer before the `deadline`: a proposed time closes at the business's minimum notice before it
+  starts, and `check_availability` never lists a time inside that notice or one that has started.
+- When the business asked for a detail, send it with `provide_details`.
+
+The business may also email the person the same choice as links; whichever answer comes first
+counts, and the other is told it is already done.
+
+The item's status also carries the conversation (`thread`): what the business wrote to your person
+and what they wrote, oldest first, never the business's internal notes. Relay the business's
+replies as they are; one marked `automated` was not written by a person. The MCP text ends with the
+business's last message when it is the latest word.

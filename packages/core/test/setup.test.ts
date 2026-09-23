@@ -114,11 +114,14 @@ describe("setup: availability", () => {
     const a = await caps.setup.setWeekly(owner, { weekly: { mon: [["09:00", "12:00"]], tue: [["09:00", "12:00"]] } });
     expect(a.weekly).toEqual({ mon: [["09:00", "12:00"]], tue: [["09:00", "12:00"]] });
     // Monday 5 Oct and Tuesday 6 Oct 2026: three one-hour slots each before the closure.
-    const before = await caps.checkAvailability({
-      service_id: svc.id,
-      from: "2026-10-05T00:00:00Z",
-      to: "2026-10-07T00:00:00Z",
-    });
+    const before = await caps.checkAvailability(
+      {
+        service_id: svc.id,
+        from: "2026-10-05T00:00:00Z",
+        to: "2026-10-07T00:00:00Z",
+      },
+      { now: T0 },
+    );
     expect(before.slots.map((s) => s.startTime)).toEqual([
       "2026-10-05T08:00:00.000Z",
       "2026-10-05T09:00:00.000Z",
@@ -131,11 +134,14 @@ describe("setup: availability", () => {
       closures: [{ from: "2026-10-05", to: "2026-10-05", reason: "Republic Day" }],
     });
     expect(closed.closures).toEqual([{ from: "2026-10-05", to: "2026-10-05", reason: "Republic Day" }]);
-    const after = await caps.checkAvailability({
-      service_id: svc.id,
-      from: "2026-10-05T00:00:00Z",
-      to: "2026-10-07T00:00:00Z",
-    });
+    const after = await caps.checkAvailability(
+      {
+        service_id: svc.id,
+        from: "2026-10-05T00:00:00Z",
+        to: "2026-10-07T00:00:00Z",
+      },
+      { now: T0 },
+    );
     expect(after.slots.map((s) => s.startTime)).toEqual([
       "2026-10-06T08:00:00.000Z",
       "2026-10-06T09:00:00.000Z",
@@ -168,13 +174,25 @@ describe("setup: rules", () => {
     const presets = caps.setup.listPresets(owner);
     expect(presets.map((p) => p.key)).toEqual(["appointments", "trades", "shop"]);
     expect(presets[0]?.rules[0]?.summary).toBe(
-      "When a new item arrives and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
+      "When a new item arrives, an item is given the details asked for or an item is given another time by the customer, and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
     );
     const applied = await caps.setup.applyPreset(owner, { preset: "appointments", replace: false });
     // Listed as they run: highest priority first.
     expect(applied.map((r) => r.name)).toEqual(
       [...(PRESETS.appointments ?? [])].sort((a, b) => b.priority - a.priority).map((r) => r.name),
     );
+
+    // The code offer's reply is saved in the business's first language: its customers read it.
+    const reply = (rules: typeof applied) =>
+      rules
+        .flatMap((r) => r.definition.actions)
+        .find((a): a is Extract<typeof a, { action: "reply" }> => a.action === "reply")?.template;
+    expect(reply(applied)).toMatch(/^We may know you already\./);
+    await caps.setup.updateProfile(owner, { languages: ["pt", "en"] });
+    const pt = await caps.setup.applyPreset(owner, { preset: "appointments", replace: true });
+    expect(reply(pt)).toMatch(/^Talvez já o conheçamos\./);
+    await caps.setup.updateProfile(owner, { languages: ["en"] });
+    await caps.setup.applyPreset(owner, { preset: "appointments", replace: true });
 
     const custom = await caps.setup.createRule(owner, {
       name: "Flag big quotes",

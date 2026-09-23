@@ -119,6 +119,10 @@ has `contact.email` and no pass or key:
 2. It calls `POST /v1/persons` on every enabled network with `issue` on, in parallel, 3 s each,
    `request_id` = the item id; the network replays the same answer for 7 days (sealed, then
    deleted), so a retry never loses a key. No answer: the item is unaffected and a job retries.
+   *Amended 23 Sep 2026 (Tiago):* a network other than the default one is asked, and is sent a
+   customer's email beside a pass it issued (§8.1), only once it has verified this inbox (its
+   `network_status` is `registered`); a retry asks again only while that holds. A test item asks
+   no network anything.
 3. On `201` it gets a **key**, a first **pass** labelled with the carrying agent and a presentation
    (a second batch seals them in `pending_identity`). The pass goes back in the response
    (`identity.passes` and MCP text, §8.4; the status door re-attaches it). The key rides on the first
@@ -128,6 +132,11 @@ has `contact.email` and no pass or key:
    business, so nothing a customer or their email sees names the network, a pass, a key or a
    receipt, and the sender is the business; the business can switch the line off
    (`customers.emailKey`, default on), and the pass still reaches the agent.
+   *Amended 23 Sep 2026 (Tiago):* the key never rides on another email. It goes alone, a day after
+   the first contact, with one line in the business's words — "We use a booking network to recognise
+   returning customers. How it works: <link>" (and its Portuguese) — linking a page the inbox serves
+   (`/c/privacy`) that may name the network, says what it keeps and how to stop. With no public URL
+   for that page, no key email is sent.
 4. A person already known for that `email_mac` gets `409 person_exists`, and nothing is handed out;
    the inbox caches this 24 h and asks the agent for the person's pass or key, recoverable by email
    (§2.3). Meanwhile the customer is `new` on that network: neutral, never refused.
@@ -744,6 +753,15 @@ Tasks, not blockers (R16): legitimate-interest assessment and DPIA; the Art. 14 
 from the key email and `/v1/person`; joint-controller terms; the P2B ranking description and notice;
 DSA contact points and statements of reasons; a processor agreement for the network's email; erasure
 against R9 (unlink the `pid`, keep pseudonymous evidence); a records-of-processing entry.
+
+*Amended 23 Sep 2026 (Tiago):* the inbox side is built. A customer can stop the networks for
+themselves from the page the key email links to (or the owner for them): from then on the inbox sends
+no network anything more about them — no first contact, presentation, receipt or acknowledgement —
+reads no standing for them, and withholds what was still queued. The owner can export one customer's
+data and erase it (personal data rewritten, structure and receipts kept), which also stops the
+networks. The network side is still a task: there is no call to unlink a person from one business's
+items or erase them, so what a network already holds stays, and a promise it holds for a stopped
+customer is closed by nothing and becomes `promise.unclosed` (R30) for the business.
 
 ## 13. Not in 0.1
 

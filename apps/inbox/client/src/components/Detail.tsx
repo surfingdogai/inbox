@@ -2,16 +2,27 @@ import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, BadgeCheck, Bot, Check, Copy, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { orderActions, tonesFor } from "../lib/actions";
+import { orderActions, tonesFor, waitingLine } from "../lib/actions";
 import { problemOf } from "../lib/api";
-import { channelWord, currencyOf, partyName, stateWord, TYPE_CLASS, TYPE_WORD, titleFor } from "../lib/format";
+import {
+  channelWord,
+  currencyOf,
+  formatDateTime,
+  partyName,
+  stateWord,
+  TYPE_CLASS,
+  TYPE_WORD,
+  titleFor,
+} from "../lib/format";
 import { usePhone } from "../lib/media";
-import { useItem, useReply, useTransition } from "../lib/queries";
+import { useItem, useReply, useSettings, useTransition } from "../lib/queries";
 import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
 import { Conversation } from "./Conversation";
 import { CustomerBlock } from "./Customer";
+import { CustomerData } from "./CustomerData";
+import { Emails } from "./Emails";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
@@ -37,6 +48,8 @@ export function ItemDetailView({
   currency: string | undefined;
 }) {
   const query = useItem(id);
+  const settings = useSettings();
+  const minNoticeMin = settings.data?.doc.booking.minNoticeMin ?? 0;
   const transition = useTransition(id);
   const reply = useReply(id);
   const phone = usePhone();
@@ -65,6 +78,7 @@ export function ItemDetailView({
   const transitions = orderActions(query.data.transitions);
   const tones = tonesFor(transitions);
   const money = currencyOf(item) ?? currency ?? "EUR";
+  const waiting = waitingLine(item, (iso) => formatDateTime(iso, tz), minNoticeMin);
 
   const pick = (t: Transition) => {
     setNotice(null);
@@ -138,6 +152,14 @@ export function ItemDetailView({
         <CustomerBlock customer={query.data.customer} currency={money} tz={tz} />
         <Fields item={item} tz={tz} />
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
+        <Emails mail={query.data.mail ?? []} tz={tz} />
+        <CustomerData
+          partyId={party?.id}
+          itemId={item.id}
+          customer={query.data.customer}
+          onDone={(text) => setNotice({ tone: "success", text })}
+        />
+        {waiting && <p className="hint">{waiting}</p>}
         {transitions.length > 0 ? (
           <div className="actions">
             {transitions.map((t, i) => (

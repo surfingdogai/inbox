@@ -19,12 +19,27 @@ export type GuardId =
   | "not_charged_back"
   | "has_quote"
   | "customer_owns_item"
-  | "proposal_present";
+  | "proposal_present"
+  /**
+   * The time the transition books or proposes has not started, and (for anyone but a person at the
+   * business) is at least the minimum notice away. For a quote, the time the booking it creates is for.
+   */
+  | "not_too_soon"
+  /** The quote being accepted is still valid (`validThrough`); else `offer_expired`. */
+  | "quote_valid"
+  /** A quote adds up (its lines to its total, in one currency) and, when it creates a booking, names a service and a time. */
+  | "quote_complete"
+  /** The owner records a customer's cancellation: when they asked, the window was open (or late ones are refused). */
+  | "asked_within_window"
+  /** …when they asked, the window had closed, and the owner records late cancellations. */
+  | "asked_outside_window";
 
 export type EffectId =
   | "claim_slot"
   | "release_slot"
   | "apply_proposal"
+  /** The customer's other time becomes the requested one (`counter`); what we proposed is gone. */
+  | "apply_counter"
   | "issue_receipt:confirmed"
   | "issue_receipt:paid"
   | "issue_receipt:accepted"
@@ -57,6 +72,17 @@ export interface Transition<S extends string = string> {
    * fires `cancel_late` once the cancellation window has closed).
    */
   readonly unlisted?: true;
+  /**
+   * Only a person at the business may do it — the owner or staff, not their AI, not a rule and not a
+   * key handed to another system — because it records something the customer said to a person
+   * (that they agreed to the time we proposed).
+   */
+  readonly byPerson?: true;
+  /**
+   * The note written with it is for the business, never sent to the customer: what the customer
+   * said when they cancelled, how they agreed.
+   */
+  readonly internalNote?: true;
 }
 
 export interface Machine<S extends string = string> {

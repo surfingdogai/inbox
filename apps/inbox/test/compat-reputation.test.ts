@@ -1,5 +1,5 @@
 import { createApiKey } from "@surfingdog/adapters";
-import { type Caller, type Db, type PublicJwk, schema, ulid } from "@surfingdog/core";
+import { type Caller, type Db, networkSuccessStatement, type PublicJwk, schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
@@ -113,6 +113,10 @@ async function setup(mode: NetworkMode, opts: { webhooks?: boolean } = {}) {
     secret = ((await created.json()) as { secret: string }).secret;
   }
   await db.client.query({ sql: "DELETE FROM jobs", params: [], method: "run" });
+  // The network has verified this inbox, so a customer's address may go to it (Tiago, 23 Sep 2026).
+  if (mode !== "none") {
+    await db.client.query(networkSuccessStatement(NET, Date.now(), { registration: "registered", pinged: true }));
+  }
   pending.length = 0;
   outbound.length = 0;
   /** The pass Workers runs after the response, and nothing more. */
@@ -173,12 +177,18 @@ describe("an existing integration after ADR-017", () => {
     const id = body.view.item.id;
     const status = await s.app.request(`${ORIGIN}/v1/items/${id}?access_token=${body.accessToken}`);
     expect(status.status).toBe(200);
+    // ADR-018 §6 added what the business waits for, the reference and the conversation; nothing that was there went.
     expect(Object.keys((await status.json()) as object).sort()).toEqual([
       "human",
       "identity",
       "item",
+      "next",
+      "offer",
       "receipts",
+      "reference",
+      "thread",
       "transitions",
+      "waiting_on",
     ]);
     await s.afterResponse();
     expect(await stateOf(s.db, id)).toBe("confirmed");

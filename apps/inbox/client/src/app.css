@@ -290,6 +290,14 @@ a {
   margin: 0;
   font-size: 16px;
 }
+.test-banner {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--c-warning) 40%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-warning) 12%, transparent);
+  font-size: 13px;
+}
 .search {
   position: relative;
 }
@@ -1062,6 +1070,26 @@ textarea.json-editor {
 }
 .receipt .btn-icon {
   margin-left: auto;
+}
+/* An email's name opens what it said. */
+.linkish {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkish:focus-visible {
+  outline: 2px solid var(--c-focus, currentColor);
+  outline-offset: 2px;
+}
+.mail-body {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
 .details {

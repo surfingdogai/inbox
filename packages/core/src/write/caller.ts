@@ -82,6 +82,30 @@ export function isOwnerInPerson(caller: Caller): boolean {
 }
 
 /**
+ * A person at the business: the owner or staff, signed in or with a full owner key — not the owner's
+ * AI, not a rule, not a key handed to another system. Only a person may record a yes the customer
+ * gave a person (`byPerson` transitions), and only a person may book inside the minimum notice.
+ * Whatever comes through the owner's MCP is an assistant's, even with a full owner key: the same
+ * test the `security` settings use.
+ */
+export function isPerson(caller: Caller): boolean {
+  if (caller.actor.kind !== "owner" && caller.actor.kind !== "staff") return false;
+  if (caller.actor.channel === "mcp_owner") return false;
+  return caller.principal?.keyKind !== "integration";
+}
+
+/**
+ * The owner's AI: an AI app the owner connected (`owner_ai`), or anything that comes through the
+ * owner's MCP, even with a full owner key — the test `isPerson` and the `security` settings use.
+ * It may do what the owner does with time, never with money (Tiago, 23 September 2026): no promise
+ * on a price the customer set, no catalogue price, no quote, no feed. It drafts for the owner instead.
+ */
+export function isOwnerAssistant(caller: Caller): boolean {
+  if (caller.actor.kind === "owner_ai") return true;
+  return !isCustomer(caller) && caller.actor.channel === "mcp_owner";
+}
+
+/**
  * What goes into an event's `meta` about who made it, beyond the actor kind and id: the name the
  * owner knows a key or an AI app by, the person behind it, and the kind it acted as (`acts_as`,
  * which the rules judge it by, as the state machines do). Never a scope list, never a secret,

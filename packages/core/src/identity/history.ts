@@ -79,7 +79,7 @@ export async function customerHistory(db: Db, partyId: string, currentItemId?: s
   const events = await db.client.query({
     sql: `SELECT e.event, COUNT(DISTINCT e.item_id) FROM item_events e JOIN items i ON i.id = e.item_id
            WHERE i.party_id IN (${marks}) AND i.id <> ? AND COALESCE(i.sandbox, 0) = 0
-             AND e.event IN ('record_payment', 'cancel_late', 'payment_failed', 'charge_back', 'record_charge_back')
+             AND e.event IN ('record_payment', 'cancel_late', 'record_cancel_late', 'payment_failed', 'charge_back', 'record_charge_back')
            GROUP BY e.event`,
     params: [...parties, except],
     method: "all",
@@ -103,7 +103,8 @@ export async function customerHistory(db: Db, partyId: string, currentItemId?: s
     first_seen: t(r[4]),
     last_seen: t(r[5]),
     paid: byEvent.get("record_payment") ?? 0,
-    late_cancellations: byEvent.get("cancel_late") ?? 0,
+    // Late however it reached us: by their own door, or recorded by the business when they rang.
+    late_cancellations: (byEvent.get("cancel_late") ?? 0) + (byEvent.get("record_cancel_late") ?? 0),
     payment_failed: byEvent.get("payment_failed") ?? 0,
     charged_back: (byEvent.get("charge_back") ?? 0) + (byEvent.get("record_charge_back") ?? 0),
     largest_paid: n(paid.rows[0]?.[0]),

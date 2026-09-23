@@ -1,11 +1,12 @@
 import { logMailOut, runMigrations } from "@surfingdog/platform";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
 import { backoffMs, createRunner, JobRunner } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
-import { jobs, services } from "../src/schema/tables";
+import { jobs, outboundMail, services, users } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
 import { makeClient, resetTables } from "./harness";
 
@@ -219,11 +220,79 @@ describe("JobRunner", () => {
 
     await caps.transitionItem(owner, { item_id: created.view.item.id, event: "confirm" });
     await runner.runDue(db, { now: T0 + 1 });
+    // The acknowledgement falls due after the confirmation went out, and is not sent: one email, not two.
+    await runner.runDue(db, { now: T0 + 2 * 60_000 });
     const toCustomer = mail.sent.find((m) => m.to[0] === "rita@example.com");
     expect(toCustomer?.subject).toBe("Confirmed: Full service");
     expect(toCustomer?.replyTo).toBe("hello@oficinamare.pt");
     expect(toCustomer?.from).toEqual({ address: "inbox@oficinamare.pt", name: "Oficina Maré" });
+    expect(mail.sent.filter((m) => m.to[0] === "rita@example.com")).toHaveLength(1);
     const left = await db.orm.select({ status: jobs.status }).from(jobs);
     expect(left.every((j) => j.status === "done")).toBe(true);
+  });
+
+  it("tells the owner at the address they sign in with when they gave none, and says so when there is none", async () => {
+    const db = await setup();
+    const svc = ulid();
+    await db.orm.insert(services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const caps = new Capabilities(db);
+    const owner: Caller = {
+      actor: { kind: "owner", id: "u1", channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => T0,
+    };
+    await caps.updateSettings(owner, {
+      doc: { business: { name: "Oficina Maré" }, email: { fromAddress: "inbox@oficinamare.pt" } },
+    });
+    const mail = logMailOut();
+    const runner = createRunner({ mailOut: mail });
+    const customer: Caller = {
+      actor: { kind: "customer_human", id: "form", channel: "form" },
+      tier: "anonymous",
+      sandbox: false,
+      now: () => T0,
+    };
+    const book = (hour: number) =>
+      caps.createBooking(customer, {
+        payload: {
+          reservationFor: { serviceId: svc, name: "Full service" },
+          startTime: `2026-09-22T${hour}:00:00Z`,
+          endTime: `2026-09-22T${hour}:30:00Z`,
+        },
+        contact: { name: "Rita Amaral", email: "rita@example.com" },
+      });
+    // Nobody has signed in, and no address was given: the email is not sent, and the row says why.
+    const first = await book(10);
+    await runner.runDue(db, { now: T0 });
+    expect(mail.sent).toEqual([]);
+    const [skipped] = await db.orm
+      .select({ status: outboundMail.status, reason: outboundMail.skipReason })
+      .from(outboundMail)
+      .where(and(eq(outboundMail.itemId, first.view.item.id), eq(outboundMail.recipient, "owner")));
+    expect(skipped).toEqual({ status: "skipped", reason: "no_address" });
+    // The owner signs in: their address is where they hear of the next request.
+    await db.orm.insert(users).values([
+      { id: "u1", email: "ana@oficinamare.pt", role: "owner", createdAt: T0 },
+      { id: "u2", email: "rui@oficinamare.pt", role: "owner", createdAt: T0 + 1 },
+    ]);
+    await book(12);
+    await runner.runDue(db, { now: T0 + 1 });
+    expect(mail.sent.map((m) => [m.to[0], m.subject])).toEqual([
+      ["ana@oficinamare.pt", "New booking from Rita Amaral: Full service"],
+    ]);
+    // An address the owner gave wins.
+    await caps.updateSettings(owner, { doc: { notifications: { ownerEmail: "hello@oficinamare.pt" } } });
+    await book(14);
+    await runner.runDue(db, { now: T0 + 2 });
+    expect(mail.sent.at(-1)?.to).toEqual(["hello@oficinamare.pt"]);
   });
 });

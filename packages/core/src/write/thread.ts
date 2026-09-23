@@ -5,7 +5,11 @@ import { ulid } from "../ids";
 import { type Caller, nowOf } from "./caller";
 import { hasActiveWebhook, jobStatement, threadEntryStatement, webhookFanoutStatement } from "./common";
 
-/** Adds a conversation entry without changing state; customer-facing ones queue a notification. */
+/**
+ * Adds a conversation entry without changing state; customer-facing ones queue a notification.
+ * `quiet`: kept, but nobody is told — what a customer writes on a message the business put aside as
+ * spam.
+ */
 export async function appendThreadEntry(
   db: Db,
   caller: Caller,
@@ -13,6 +17,7 @@ export async function appendThreadEntry(
   body: string,
   direction: "in" | "out" | "note",
   messageId?: string | undefined,
+  opts: { readonly quiet?: boolean; readonly writtenBy?: "person" | "automation" | null } = {},
 ): Promise<void> {
   const now = nowOf(caller);
   // The entry's own id, minted here because it is also the id this message has in the developer
@@ -29,11 +34,12 @@ export async function appendThreadEntry(
       partyId: direction === "in" ? item.partyId : null,
       body,
       messageId: messageId ?? null,
+      writtenBy: opts.writtenBy ?? null,
       now,
     }),
     { sql: "UPDATE items SET updated_at = ? WHERE id = ?", params: [now, item.id], method: "run" },
   ];
-  if (direction !== "note") {
+  if (direction !== "note" && !opts.quiet) {
     const to = direction === "in" ? "owner" : "customer";
     statements.push(jobStatement("notify", { to, itemId: item.id, event: "message", entry: entryId }, now));
   }

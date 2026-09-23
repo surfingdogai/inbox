@@ -470,3 +470,88 @@ describe("the business sets its prices", () => {
     expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
   });
 });
+
+describe("a price per person (Tiago, 23 September 2026)", () => {
+  const lesson = async (db: Awaited<ReturnType<typeof setup>>["db"], per?: "booking" | "person") => {
+    const id = ulid();
+    await db.orm.insert(services).values({
+      id,
+      name: "Surf lesson",
+      durationMin: 60,
+      capacity: 10,
+      granularityMin: 30,
+      price: { model: "fixed", value: 2_000, currency: "EUR", ...(per ? { per } : {}) },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    return id;
+  };
+
+  it("multiplies a per-person price by the party, and keeps a stated price beside it", async () => {
+    const { db, caps } = await setup();
+    const each = await lesson(db, "person");
+    const four = await caps.createBooking(agent, {
+      payload: { reservationFor: { serviceId: each, name: "Surf lesson" }, ...tuesday(9), partySize: 4 },
+    });
+    expect(four.view.item.payload).toMatchObject({ partySize: 4, totalPrice: EUR(8_000) });
+    // No party given is one person.
+    const one = await caps.createBooking(agent, {
+      payload: { reservationFor: { serviceId: each, name: "Surf lesson" }, ...tuesday(11) },
+    });
+    expect(one.view.item.payload).toMatchObject({ totalPrice: EUR(2_000) });
+    // What the assistant said is kept beside the business's total, never as it.
+    const stated = await caps.createBooking(agent, {
+      payload: {
+        reservationFor: { serviceId: each, name: "Surf lesson" },
+        ...tuesday(13),
+        partySize: 3,
+        totalPrice: EUR(2_000),
+      },
+    });
+    expect(stated.view.item.payload).toMatchObject({ totalPrice: EUR(6_000), customerStatedPrice: EUR(2_000) });
+  });
+
+  it("leaves a price per booking as it was, whatever the party", async () => {
+    const { db, caps } = await setup();
+    for (const per of [undefined, "booking"] as const) {
+      const whole = await lesson(db, per);
+      const r = await caps.createBooking(agent, {
+        payload: {
+          reservationFor: { serviceId: whole, name: "Surf lesson" },
+          ...tuesday(per ? 14 : 9),
+          partySize: 4,
+        },
+      });
+      expect(r.view.item.payload).toMatchObject({ partySize: 4, totalPrice: EUR(2_000) });
+    }
+  });
+
+  it("is set on the service, per booking unless it says per person", async () => {
+    const { caps } = await setup();
+    const input = {
+      name: "Group class",
+      duration_min: 60,
+      buffer_before_min: 0,
+      buffer_after_min: 0,
+      capacity: 12,
+      granularity_min: 30,
+      active: true,
+      sort: 0,
+    };
+    const each = await caps.setup.createService(owner, {
+      ...input,
+      price: { model: "fixed", value: 1_500, currency: "EUR", per: "person" },
+    });
+    expect(each.price).toEqual({ model: "fixed", value: 1_500, currency: "EUR", per: "person" });
+    const r = await caps.createBooking(agent, {
+      payload: { reservationFor: { serviceId: each.id, name: "Group class" }, ...tuesday(10), partySize: 8 },
+    });
+    expect(r.view.item.payload).toMatchObject({ totalPrice: EUR(12_000) });
+    const whole = await caps.setup.createService(owner, {
+      ...input,
+      name: "Private class",
+      price: { model: "fixed", value: 6_000, currency: "EUR" },
+    });
+    expect(whole.price).not.toHaveProperty("per");
+  });
+});

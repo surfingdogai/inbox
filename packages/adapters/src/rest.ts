@@ -1,4 +1,5 @@
 import {
+  acceptOfferInput,
   acknowledgeReceiptInput,
   addFeedInput,
   applyPresetInput,
@@ -10,8 +11,11 @@ import {
   createBookingInput,
   createOrderInput,
   createWebhookInput,
+  declineOfferInput,
   deliveryIdInput,
+  eraseCustomerInput,
   eventPatternSchema,
+  fromZod,
   getItemInput,
   listDeliveriesInput,
   listEventsInput,
@@ -22,6 +26,7 @@ import {
   presetKeySchema,
   productInput,
   profileInput,
+  provideDetailsInput,
   replayMissingInput,
   replyInput,
   requestQuoteInput,
@@ -30,6 +35,7 @@ import {
   serviceInput,
   setClosuresInput,
   setWeeklyInput,
+  suggestTimeInput,
   testRuleInput,
   transitionItemInput,
   updateProductInput,
@@ -134,6 +140,7 @@ export const listServicesQuery = listServicesInput.extend({ limit: limitQuery })
 export const listProductsQuery = listProductsInput.extend({ limit: limitQuery });
 export const listItemsQuery = listItemsInput.extend({
   needs_human: boolQuery.optional(),
+  mail_failed: boolQuery.optional().describe("Only items with an email that could not be sent."),
   open_only: boolQuery.default(true).describe("Hide closed items."),
   sandbox: boolQuery.default(false),
   limit: limitQuery,
@@ -201,13 +208,24 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
 
   app.get(
     "/availability",
-    describeRoute({ tags: ["public"], summary: "Free slots for a service", responses: json("Slots", R.slotsSchema) }),
+    describeRoute({
+      tags: ["public"],
+      summary: "Free slots for a service",
+      description:
+        "Free start times between from and to (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered.",
+      responses: json("Slots", R.slotsSchema),
+    }),
     validator(
       "query",
       z.object(checkAvailabilityInput.shape).extend({ party_size: z.coerce.number().int().min(1).optional() }),
       hook,
     ),
-    async (c) => c.json(await caps.checkAvailability(c.req.valid("query"))),
+    async (c) => {
+      const caller = c.get("caller");
+      return c.json(
+        await caps.checkAvailability(c.req.valid("query"), { now: caller.now ? caller.now() : Date.now() }),
+      );
+    },
   );
 
   app.post(
@@ -245,7 +263,13 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
 
   app.get(
     "/items/:id",
-    describeRoute({ tags: ["public"], summary: "Status of your item", responses: json("Item", R.itemViewSchema) }),
+    describeRoute({
+      tags: ["public"],
+      summary: "Status of your item",
+      description:
+        "For the customer (an access token, or a pass the item recognises): the item in the business's words and language, with offer (what the business proposed and waits for you to answer, and its terms_sha), waiting_on, next, a six-character reference, and thread: the business's replies and the customer's messages, never its internal notes.",
+      responses: json("Item", R.customerItemViewSchema),
+    }),
     async (c) => {
       const access_token = c.req.query("access_token") ?? c.req.header("x-access-token");
       return c.json(
@@ -274,6 +298,84 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
           withIdem(c, { ...body, item_id: c.req.param("id"), ...(access_token ? { access_token } : {}) }) as never,
         ),
       );
+    },
+  );
+
+  /** A customer's answer to what the business proposed: the access token from the body, the query or X-Access-Token. */
+  const answer = <S extends z.ZodObject>(schema: S) => validator("json", schema.omit({ item_id: true }), hook);
+  const withItem = (c: Context<CallerEnv>, body: Record<string, unknown>) => {
+    const access_token =
+      (body.access_token as string | undefined) ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+    return withIdem(c, { ...body, item_id: c.req.param("id"), ...(access_token ? { access_token } : {}) });
+  };
+  const ANSWER_ERRORS = {
+    403: { description: "The item is someone else's: send its access token, or a pass it recognises." },
+    409: {
+      description:
+        "confirm_terms (nothing was written: show your person details.summary and accept again with details.terms_sha), offer_changed (details.offer is the current proposal), no_offer, slot_taken, or guard_failed not_too_soon.",
+    },
+    410: { description: "offer_expired: the quote is no longer valid." },
+  };
+
+  app.post(
+    "/items/:id/accept",
+    describeRoute({
+      tags: ["public"],
+      summary: "Accept what the business proposed: another time, or a quote",
+      description:
+        "Binds your customer, so it takes the confirm step (ADR-018 §5): send terms_sha, the offer.terms_sha from GET /items/{id} that your person said yes to. Without it nothing is written and the answer is 409 confirm_terms with the terms to show them. An accepted time confirms the booking; an accepted quote creates the booking (confirmed) or the order (accepted) it was for, in linked.",
+      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
+    }),
+    answer(acceptOfferInput),
+    async (c) => c.json(await caps.customer.acceptOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
+
+  app.post(
+    "/items/:id/decline",
+    describeRoute({
+      tags: ["public"],
+      summary: "Decline what the business proposed",
+      description:
+        "A time the business proposed: the booking request is closed, as your customer chose. A quote: the request is closed. Send reason for anything they want the business to know.",
+      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
+    }),
+    answer(declineOfferInput),
+    async (c) => c.json(await caps.customer.declineOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
+
+  app.post(
+    "/items/:id/counter",
+    describeRoute({
+      tags: ["public"],
+      summary: "Ask for another time than the one the business proposed",
+      description:
+        "start_time must be one of the free times GET /availability lists; the end follows the service's length. The booking goes back to the business to confirm, with nothing held. 409 slot_taken when that time is not free.",
+      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
+    }),
+    answer(suggestTimeInput),
+    async (c) => c.json(await caps.customer.suggestTime(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
+
+  app.post(
+    "/items/:id/details",
+    describeRoute({
+      tags: ["public"],
+      summary: "Send the details the business asked for",
+      description:
+        "An item waiting on your details moves on (200). On any other item they are kept as your message for the business (202 with waiting_on: us). Never refused for the state the item is in.",
+      responses: {
+        ...json("Item", R.customerResultSchema),
+        202: {
+          description: "Kept as your message",
+          content: { "application/json": { schema: resolver(R.customerResultSchema) } },
+        },
+        403: ANSWER_ERRORS[403],
+      },
+    }),
+    answer(provideDetailsInput),
+    async (c) => {
+      const r = await caps.customer.provideDetails(c.get("caller"), withItem(c, c.req.valid("json")) as never);
+      return c.json(r, "appended" in r ? 202 : 200);
     },
   );
 
@@ -388,7 +490,8 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     "/items/:id",
     owner({
       tags: ["owner"],
-      summary: "One item with its events (who caused each, and through which door) and conversation",
+      summary:
+        "One item with its events (who caused each, and through which door), conversation, and every email about it with what became of it",
       responses: json("Item detail", R.itemDetailSchema),
     }),
     async (c) => c.json(await caps.getItem(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
@@ -427,6 +530,98 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       ),
   );
 
+  // ---- one customer: what the inbox holds about them, networks off, erasure ---------
+
+  app.get(
+    "/customers/:id",
+    owner({
+      tags: ["owner"],
+      summary: "One customer: their parties, items, emails, and whether booking networks are off for them",
+      description:
+        "The customer is party.id on any of their items, and every party that is them: merged, or with the same email address (the same phone number only when they gave no email, and only records that gave none either). networks_off says since when booking networks are off for them and what each network already had.",
+      responses: json("Customer", R.customerSummarySchema),
+    }),
+    async (c) => c.json(await caps.customers.summary(c.get("caller"), { party_id: String(c.req.param("id")) })),
+  );
+
+  app.get(
+    "/customers/:id/export",
+    owner({
+      tags: ["owner"],
+      summary: "Everything the inbox holds about one customer, as one JSON document",
+      description:
+        "Their parties, contacts, identities, network ids, agents, and every item with its events, conversation, emails and receipts. The owner's AI may export too. Never a pass, a key, an access token or a link.",
+      responses: json("Customer export", R.looseSchema),
+    }),
+    async (c) => {
+      const data = await caps.customers.export(c.get("caller"), { party_id: String(c.req.param("id")) });
+      return c.json(data, 200, {
+        "Content-Disposition": `attachment; filename="customer-${String(c.req.param("id")).slice(-6)}.json"`,
+        "Cache-Control": "no-store",
+      });
+    },
+  );
+
+  app.post(
+    "/customers/:id/networks-off",
+    owner({
+      tags: ["owner"],
+      summary: "Stop using booking networks for one customer",
+      description:
+        "From now on no network is sent anything about them (no first contact, presentation, receipt or acknowledgement) and nothing a network said about them is read; their bookings, orders and emails are unchanged. The same as the customer's own link in their code email. A network cannot yet be asked to erase what it already has: networks_off lists it.",
+      responses: json("Customer", R.customerSummarySchema),
+      write: true,
+    }),
+    async (c) => {
+      const body = z
+        .object({ item_id: z.string().max(64).optional() })
+        .catch({})
+        .parse(await c.req.json().catch(() => ({})));
+      return c.json(
+        await caps.customers.stopNetworks(c.get("caller"), {
+          party_id: String(c.req.param("id")),
+          ...(body.item_id ? { item_id: body.item_id } : {}),
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/customers/:id/erase",
+    owner({
+      tags: ["owner"],
+      summary: "Erase one customer's personal data (cannot be undone)",
+      description:
+        "Rewrites their names, email addresses, phone numbers, postal addresses, message text and the emails about them to a placeholder, and keeps the structure: item types, states, times, amounts, the event sequence and the receipts. Booking networks are switched off for them for good. Only the owner, signed in or with their own key, or a key given customers:erase; never the owner's AI. Without confirm, or with one that no longer matches, nothing is erased: 409 confirm_erase says what would be, and details.confirm is the value to send.",
+      responses: json("Erased", R.eraseResultSchema),
+      write: true,
+    }),
+    async (c) => {
+      // A first call may carry no body at all: it is the one that asks what would be erased.
+      const parsed = eraseCustomerInput.omit({ party_id: true }).safeParse(await c.req.json().catch(() => ({})));
+      if (!parsed.success) throw fromZod(parsed.error);
+      const body = parsed.data;
+      return c.json(
+        await caps.customers.erase(c.get("caller"), {
+          party_id: String(c.req.param("id")),
+          ...(body.confirm ? { confirm: body.confirm } : {}),
+        }),
+      );
+    },
+  );
+
+  app.get(
+    "/mail",
+    owner({
+      tags: ["owner"],
+      summary: "Whether this inbox can send email",
+      description:
+        "service: a mail service is set up that delivers (without one, every email is written to the log and shows as not sent); sender: there is an address to send from; links: emails can carry answer links (INBOX_SECRET_KEY and a public address are set).",
+      responses: json("Mail", R.mailServiceSchema),
+    }),
+    async (c) => c.json(await caps.getMailStatus(c.get("caller"))),
+  );
+
   app.get(
     "/settings",
     owner({
@@ -453,7 +648,7 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       tags: ["owner"],
       summary: "The networks this inbox reports to, and how each one is doing",
       description:
-        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin.",
+        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin; the owner's AI and integration keys may add or switch one off, not switch one on.",
       responses: json("Networks", R.looseSchema),
     }),
     async (c) => c.json(await caps.getNetworks(c.get("caller"))),
@@ -512,6 +707,8 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     owner({
       tags: ["setup"],
       summary: "Add a bookable service",
+      description:
+        "A fixed price is per booking unless price.per is person. Prices are the owner's: a service the owner's AI adds with a price is saved unpublished (active false) for the owner to check and publish.",
       responses: json("Service", R.serviceSchema, 201),
       write: true,
     }),
@@ -523,7 +720,14 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
   );
   app.patch(
     "/services/:id",
-    owner({ tags: ["setup"], summary: "Change a service", responses: json("Service", R.serviceSchema), write: true }),
+    owner({
+      tags: ["setup"],
+      summary: "Change a service",
+      description:
+        "Only the fields you send change. Prices are the owner's: the owner's AI cannot change a price or publish a priced service (403, not_allowed).",
+      responses: json("Service", R.serviceSchema),
+      write: true,
+    }),
     validator("json", updateServiceInput.omit({ service_id: true }), hook),
     async (c) => {
       const input = { ...c.req.valid("json"), service_id: String(c.req.param("id")) };
@@ -550,7 +754,14 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
   );
   app.post(
     "/products",
-    owner({ tags: ["setup"], summary: "Add a product", responses: json("Product", R.productSchema, 201), write: true }),
+    owner({
+      tags: ["setup"],
+      summary: "Add a product",
+      description:
+        "Prices are the owner's: a product the owner's AI adds is saved unpublished (active false) for the owner to check and publish.",
+      responses: json("Product", R.productSchema, 201),
+      write: true,
+    }),
     validator("json", productInput, hook),
     async (c) => {
       const input = c.req.valid("json");
@@ -559,7 +770,14 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
   );
   app.patch(
     "/products/:id",
-    owner({ tags: ["setup"], summary: "Change a product", responses: json("Product", R.productSchema), write: true }),
+    owner({
+      tags: ["setup"],
+      summary: "Change a product",
+      description:
+        "Only the fields you send change. Prices are the owner's: the owner's AI cannot change a price or publish a product (403, not_allowed).",
+      responses: json("Product", R.productSchema),
+      write: true,
+    }),
     validator("json", updateProductInput.omit({ product_id: true }), hook),
     async (c) => {
       const input = { ...c.req.valid("json"), product_id: String(c.req.param("id")) };
@@ -777,6 +995,7 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     owner({
       tags: ["integrations"],
       summary: "Connect a product feed by URL. No credentials. The first import starts immediately.",
+      description: "A feed sets prices, so the owner's AI cannot connect one (403, not_allowed).",
       responses: json("Feed", R.feedSchema, 201),
       write: true,
     }),
@@ -809,6 +1028,7 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     owner({
       tags: ["integrations"],
       summary: "Disconnect a feed. Its products are deactivated, never deleted.",
+      description: "A feed sets prices, so the owner's AI cannot disconnect one (403, not_allowed).",
       responses: json("Removed", R.looseSchema),
       write: true,
     }),

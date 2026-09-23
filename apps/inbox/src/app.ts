@@ -102,7 +102,7 @@ export function createInbox(deps: AppDeps): Inbox {
   const identity = { db: deps.db, caps, ...network };
   const port = createIdentityPort(identity);
   caps.people.attachPort(port);
-  caps.people.attachMail(mailOut);
+  caps.attachMail(mailOut);
   const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts, secrets: caps.secrets })
     // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
     // call to a network runs in that network's own lane, so a slow one never delays another.
@@ -134,24 +134,38 @@ export function createInbox(deps: AppDeps): Inbox {
   // loads, and Cross-Origin-Opener-Policy, which can break the OAuth window Claude and ChatGPT open
   // to connect to the owner MCP. The CSP carries only frame-ancestors, so it forbids framing — the
   // clickjacking defence for the owner app — and cannot break a single script or style.
-  app.use(
-    "*",
-    secureHeaders({
-      strictTransportSecurity: "max-age=15552000",
-      xFrameOptions: "DENY",
-      contentSecurityPolicy: { frameAncestors: ["'none'"] },
-      xContentTypeOptions: "nosniff",
-      referrerPolicy: "strict-origin-when-cross-origin",
-      crossOriginResourcePolicy: false,
-      crossOriginOpenerPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      originAgentCluster: false,
-      xDnsPrefetchControl: false,
-      xDownloadOptions: false,
-      xPermittedCrossDomainPolicies: false,
-      xXssProtection: "0",
-    }),
-  );
+  const common = {
+    strictTransportSecurity: "max-age=15552000",
+    xFrameOptions: "DENY",
+    xContentTypeOptions: "nosniff",
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    originAgentCluster: false,
+    xDnsPrefetchControl: false,
+    xDownloadOptions: false,
+    xPermittedCrossDomainPolicies: false,
+    xXssProtection: "0",
+  } as const;
+  const appHeaders = secureHeaders({
+    ...common,
+    contentSecurityPolicy: { frameAncestors: ["'none'"] },
+    referrerPolicy: "strict-origin-when-cross-origin",
+  });
+  // The page a link in the business's email opens (`/c/…`) is stricter: nothing but its own inline
+  // style, forms only to itself, and no Referer, so the link's token never reaches another site.
+  const pageHeaders = secureHeaders({
+    ...common,
+    contentSecurityPolicy: {
+      defaultSrc: ["'none'"],
+      styleSrc: ["'unsafe-inline'"],
+      formAction: ["'self'"],
+      baseUri: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+    referrerPolicy: "no-referrer",
+  });
+  app.use("*", (c, next) => (c.req.path.startsWith("/c/") ? pageHeaders(c, next) : appHeaders(c, next)));
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {

@@ -11,7 +11,13 @@ import {
   MIGRATIONS,
   parseSecretKeys,
 } from "@surfingdog/core";
-import { cloudflareEmailRestMailOut, ensureMigrated, type MailOut, resendMailOut } from "@surfingdog/platform";
+import {
+  cloudflareEmailRestMailOut,
+  ensureMigrated,
+  LOCAL_SENDER,
+  type MailOut,
+  resendMailOut,
+} from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
@@ -102,7 +108,7 @@ const { app, runner } = createInbox({
 });
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
-const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known"];
+const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known", "/c"];
 const isDoor = (p: string) => DOOR_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
 
 const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");
@@ -125,14 +131,21 @@ loop.unref();
  */
 function consoleMailOut(): MailOut {
   return {
+    // Nothing leaves this machine, so a message with no sender of its own can still be shown, and
+    // the mail log never records it as sent.
+    sender: LOCAL_SENDER,
+    delivers: false,
     async send(mail) {
       const body = mail.text
         .replace(/\b(sd(?:key|pass)1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}\b/g, "$1…")
         .split("\n")
         .map((line) => `    ${line}`)
         .join("\n");
-      console.log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${body}`);
-      return { messageId: `console-${Date.now()}` };
+      const headers = Object.entries(mail.headers ?? {})
+        .map(([k, v]) => `    ${k}: ${v}\n`)
+        .join("");
+      console.log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${headers}${body}`);
+      return { messageId: `console-${crypto.randomUUID()}` };
     },
   };
 }

@@ -1,17 +1,20 @@
-import { type Caller, type Capabilities, type Db, WriteError } from "@surfingdog/core";
+import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
+import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
 import { ingestEmail } from "./email";
 import { agentFromRequest } from "./identity";
 import {
   clientAddress,
   consume,
   isCreateRoute,
+  isNegotiateRoute,
   isVerifyRoute,
   type LimitClass,
   mcpCreates,
+  mcpNegotiates,
   mcpVerifies,
 } from "./limits";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
@@ -24,6 +27,7 @@ import { authRoutes } from "./session";
 
 export * from "./access";
 export * from "./auth";
+export * from "./customer-page";
 export * from "./email";
 export * from "./feeds/index";
 export * from "./identity";
@@ -116,6 +120,22 @@ function withAgent<C extends Caller>(caller: C, seen: Awaited<ReturnType<typeof 
   };
 }
 
+/** The link page's own "too many attempts", in the customer's language, never a JSON problem. */
+async function tooManyPage(c: Context, deps: DoorDeps): Promise<Response> {
+  const lang = await pageLang(deps.caps, c.req.header("accept-language") ?? null);
+  const business = await deps.businessName();
+  const res = renderCustomerPage(c, {
+    status: 429,
+    lang,
+    business,
+    heading: copyFor(lang).page.tooMany,
+    footer: business,
+    help: "",
+  });
+  res.headers.set("Retry-After", "600");
+  return res;
+}
+
 /** Mounts every door on the app: REST at /v1, the OpenAPI document, and MCP at /mcp and /mcp/owner. */
 export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   const sandbox = deps.sandbox ?? (async () => false);
@@ -184,7 +204,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
           ? ["public", "create"]
           : isVerifyRoute(c.req.method, c.req.path)
             ? ["public", "verify"]
-            : ["public"],
+            : isNegotiateRoute(c.req.method, c.req.path)
+              ? ["public", "negotiate"]
+              : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
@@ -276,6 +298,14 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   });
   app.route("/v1/owner", ownerRest(deps.caps));
   app.route("/v1", publicRest(deps.caps));
+  // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
+  // holding the link can open it, so every request takes a token, and a POST one from its own class.
+  app.use("/c/*", async (c, next) => {
+    const refused = await limited(c, c.req.method === "POST" ? ["public", "link"] : ["public"]);
+    if (refused) return tooManyPage(c, deps);
+    await next();
+  });
+  app.route("/c", customerPage({ caps: deps.caps, now: deps.now }));
 
   app.get(
     "/openapi.json",
@@ -340,7 +370,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
           ? ["public", "create"]
           : (await mcpVerifies(c.req.raw))
             ? ["public", "verify"]
-            : ["public"],
+            : (await mcpNegotiates(c.req.raw))
+              ? ["public", "negotiate"]
+              : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;

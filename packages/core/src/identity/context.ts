@@ -9,6 +9,7 @@ import {
 } from "../rules/evaluate";
 import type { Settings } from "../settings/schema";
 import { customerHistory } from "./history";
+import { itemStopped } from "./stops";
 
 /**
  * What the rules may read about who is asking (ADR-017 §8.3), from local rows only: the item's
@@ -22,7 +23,7 @@ export async function identityContext(
   item: { readonly id: string; readonly partyId: string },
   settings: Settings,
 ): Promise<{ person: PersonContext; customer: CustomerContext; agent: AgentContext }> {
-  const [cols, presented, history] = await Promise.all([
+  const [cols, presented, history, stopped] = await Promise.all([
     db.client.query({
       sql: "SELECT customer_match, agent_level, agent_directory FROM items WHERE id = ?",
       params: [item.id],
@@ -34,10 +35,13 @@ export async function identityContext(
       method: "all",
     }),
     customerHistory(db, item.partyId, item.id),
+    itemStopped(db, item.id),
   ]);
   const row = cols.rows[0] ?? [];
   const networks: PersonContext["networks"][number][] = [];
-  for (const r of presented.rows) {
+  // A customer who asked us not to use booking networks has no standing here: what a network said of
+  // them is not read, so a rule treats them as it treats anyone no network knows — never worse.
+  for (const r of stopped ? [] : presented.rows) {
     const network = String(r[0]);
     if (!settings.networks[network]?.enabled) continue;
     const person = parseJson(r[1]) as {

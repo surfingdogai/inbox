@@ -1554,6 +1554,42 @@
     {
       "typ": "booking",
       "event": "confirm",
+      "from": "needs_info",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "confirm",
+      "from": "needs_info",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "confirm",
+      "from": "needs_info",
+      "to": "confirmed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "confirm",
+      "from": "needs_info",
+      "to": "confirmed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "confirm",
       "from": "proposed",
       "to": "confirmed",
       "actor": "owner",
@@ -1584,6 +1620,24 @@
       "from": "proposed",
       "to": "confirmed",
       "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "counter",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "counter",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "customer_human",
       "out": null,
       "aut": 0
     },
@@ -1982,6 +2036,141 @@
       "actor": "rule",
       "out": "booking.cancelled_by_business",
       "aut": 1
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "requested",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "requested",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "requested",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "proposed",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "proposed",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "proposed",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel_late",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": "booking.cancelled_late_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel_late",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": "booking.cancelled_late_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_cancel_late",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": "booking.cancelled_late_by_customer",
+      "aut": 0
     },
     {
       "typ": "booking",
@@ -3008,6 +3197,141 @@
       "actor": "rule",
       "out": "order.not_fulfilled",
       "aut": 1
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "received",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "received",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "received",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "needs_info",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
     },
     {
       "typ": "order",

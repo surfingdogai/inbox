@@ -4,6 +4,7 @@ import {
   type Caller,
   generateKeyPair,
   MANIFEST_PATH,
+  networkSuccessStatement,
   type PublicJwk,
   schema,
   signRequest,
@@ -68,6 +69,8 @@ async function setup() {
     },
   });
   await db.client.query({ sql: "DELETE FROM jobs", params: [], method: "run" });
+  // The network has verified this inbox, so a customer's address may go to it (Tiago, 23 Sep 2026).
+  await db.client.query(networkSuccessStatement(NET, Date.now(), { registration: "registered", pinged: true }));
   const owner = await createApiKey(db, { kind: "owner", name: "test" });
   return { db, svc, inbox, app: inbox.app, mail, net, ownerKey: owner.key };
 }

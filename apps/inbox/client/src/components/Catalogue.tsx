@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from "react";
+import { parseMajor } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
 import { formatMoney } from "../lib/format";
 import type { PriceModel, ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
@@ -20,7 +21,8 @@ export function describePrice(s: ServiceRow): string {
   if (!p) return "no price";
   if (p.model === "quote") return "priced by quote";
   const money = p.value !== undefined ? formatMoney({ value: p.value, currency: p.currency ?? "EUR" }) : "";
-  return p.model === "from" ? `from ${money}` : money;
+  const each = p.per === "person" ? `${money} per person` : money;
+  return p.model === "from" ? `from ${each}` : each;
 }
 
 interface ServiceDraft {
@@ -33,6 +35,8 @@ interface ServiceDraft {
   readonly granularity: string;
   readonly model: PriceModel;
   readonly price: string;
+  /** Whom a fixed price is for: the booking, or each person in it. */
+  readonly per: "booking" | "person";
   readonly sort: string;
   readonly active: boolean;
 }
@@ -48,6 +52,7 @@ function serviceDraft(s: ServiceRow | undefined): ServiceDraft {
     granularity: String(s?.granularityMin ?? 15),
     model: s?.price?.model ?? "fixed",
     price: s?.price?.value !== undefined ? (s.price.value / 100).toFixed(2) : "",
+    per: s?.price?.per === "person" ? "person" : "booking",
     sort: String(s?.sort ?? 0),
     active: s ? s.active === 1 : true,
   };
@@ -77,9 +82,9 @@ export function ServiceEditor({
     e.preventDefault();
     if (pending) return;
     if (!f.name.trim()) return setLocal("Give the service a name.");
-    const value = f.price.trim() ? Math.round(Number(f.price.replace(",", ".")) * 100) : undefined;
-    if (f.model !== "quote" && (value === undefined || !Number.isFinite(value) || value < 0)) {
-      return setLocal("Give a price, like 45 or 45.90, or choose priced by quote.");
+    const value = parseMajor(f.price);
+    if (f.model !== "quote" && value === undefined) {
+      return setLocal("Give a price, like 45,50 or 45.50, or choose priced by quote.");
     }
     setLocal(null);
     onSubmit({
@@ -90,7 +95,10 @@ export function ServiceEditor({
       buffer_after_min: int(f.after),
       capacity: int(f.capacity),
       granularity_min: int(f.granularity),
-      price: f.model === "quote" ? { model: "quote" } : { model: f.model, value: value ?? 0, currency },
+      price:
+        f.model === "quote"
+          ? { model: "quote" }
+          : { model: f.model, value: value ?? 0, currency, ...(f.per === "person" ? { per: "person" as const } : {}) },
       sort: int(f.sort),
       active: f.active,
     });
@@ -204,6 +212,24 @@ export function ServiceEditor({
             />
           </Field>
         )}
+        {f.model !== "quote" && (
+          <Field
+            id="sv-per"
+            label="Price is"
+            error={err("price.per")}
+            hint="Per person: a booking for four costs four times the amount."
+          >
+            <select
+              id="sv-per"
+              className="input"
+              value={f.per}
+              onChange={(e) => set("per", e.target.value === "person" ? "person" : "booking")}
+            >
+              <option value="booking">For the booking</option>
+              <option value="person">Per person</option>
+            </select>
+          </Field>
+        )}
         <div className="wide">
           <Switch checked={f.active} onChange={(v) => set("active", v)}>
             Bookable
@@ -266,8 +292,8 @@ export function ProductEditor({
     e.preventDefault();
     if (pending) return;
     if (!f.name.trim()) return setLocal("Give the product a name.");
-    const value = Math.round(Number(f.price.replace(",", ".")) * 100);
-    if (!f.price.trim() || !Number.isFinite(value) || value < 0) return setLocal("Give a price, like 39.20.");
+    const value = parseMajor(f.price);
+    if (value === undefined) return setLocal("Give a price, like 39,20 or 39.20.");
     const stock = f.stock.trim() === "" ? null : Number(f.stock);
     if (stock !== null && (!Number.isInteger(stock) || stock < 0))
       return setLocal("Stock is a whole number, or empty when not tracked.");

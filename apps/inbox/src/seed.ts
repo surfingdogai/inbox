@@ -449,7 +449,7 @@ export async function seedShowcase(
     count++;
   }
 
-  // 4. A quote the customer accepted, which became an order waiting for you.
+  // 4. A quote the customer accepted, which became an order, accepted with it.
   {
     const t = now - 5 * DAY;
     const r = await createItem(db, person(t), {

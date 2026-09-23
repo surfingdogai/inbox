@@ -43,14 +43,8 @@ async function priceBooking(db: Db, payload: PayloadOf<"booking">): Promise<Pric
     .where(eq(services.id, asked.reservationFor.serviceId));
   if (!service) return { payload: asked, unpriced: asked.totalPrice !== undefined };
   const named = { ...asked, reservationFor: { ...asked.reservationFor, name: clip(service.name, 200) } };
-  const price = service.price;
-  if (price?.model !== "fixed" || typeof price.value !== "number") {
-    return { payload: named, unpriced: named.totalPrice !== undefined };
-  }
-  const ours: Money = {
-    value: price.value,
-    currency: (price.currency ?? (await businessCurrency(db))).toUpperCase(),
-  };
+  const ours = await serviceTotal(db, service.price, asked.partySize);
+  if (!ours) return { payload: named, unpriced: named.totalPrice !== undefined };
   const stated = asked.totalPrice;
   // The list price is for the service as long as the business sells it: longer is a person's to price.
   const longer = Date.parse(asked.endTime) - Date.parse(asked.startTime) > service.durationMin * 60_000;
@@ -62,6 +56,40 @@ async function priceBooking(db: Db, payload: PayloadOf<"booking">): Promise<Pric
     },
     unpriced: longer,
   };
+}
+
+/** A service's price as the catalogue holds it: fixed, from, or by quote; per booking unless it says per person. */
+type ServicePrice = (typeof services.$inferSelect)["price"];
+
+/**
+ * What the catalogue charges for one booking of a service: its fixed price, times the party for a
+ * service priced per person (Tiago, 23 September 2026). Null when the catalogue does not price it:
+ * a service priced `from` or by quote, or with no price.
+ */
+async function serviceTotal(db: Db, price: ServicePrice, partySize: number | undefined): Promise<Money | null> {
+  if (price?.model !== "fixed" || typeof price.value !== "number") return null;
+  const places = price.per === "person" ? (partySize ?? 1) : 1;
+  const value = price.value * places;
+  // A total no one can write down exactly is no price: it would be stored and never read again.
+  if (!Number.isSafeInteger(value)) {
+    throw new WriteError("invalid_input", "The booking's total is too large: book for fewer people.", {
+      fields: [{ path: "payload.partySize", problem: "invalid", message: "too large" }],
+    });
+  }
+  return { value, currency: (price.currency ?? (await businessCurrency(db))).toUpperCase() };
+}
+
+/**
+ * The price the catalogue gives a booking of `serviceId` for `partySize` people, or null when the
+ * catalogue does not price that service. What the owner's AI may put on a time it proposes.
+ */
+export async function cataloguePriceOf(
+  db: Db,
+  serviceId: string,
+  partySize: number | undefined,
+): Promise<Money | null> {
+  const [service] = await db.orm.select({ price: services.price }).from(services).where(eq(services.id, serviceId));
+  return service ? serviceTotal(db, service.price, partySize) : null;
 }
 
 async function priceOrder(db: Db, payload: PayloadOf<"order">): Promise<Priced> {
@@ -144,8 +172,9 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">): Promise<Priced> 
 
 /**
  * No rule confirms a booking or accepts an order whose create held a price the business did not set
- * (ADR-018 §3.2): a person prices it first, or the €1 order is back under another name. Only a
- * rule is held here; the owner and their tools are the business, and answer to ADR-018 §4.
+ * (ADR-018 §3.2): a person prices it first, or the €1 order is back under another name. A rule is
+ * held here; the owner's AI is held the same way in `transition.ts` (time yes, money no); the owner
+ * in person and their other tools are the business, and answer to ADR-018 §4.
  */
 export async function assertBusinessPriced(db: Db, item: Item, event: string): Promise<void> {
   if (!(await heldForPrice(db, item, event))) return;
@@ -182,7 +211,8 @@ export function withoutStatedPrices(item: Item): Item {
   return item;
 }
 
-const sameMoney = (a: Money, b: Money) => a.value === b.value && a.currency.toUpperCase() === b.currency.toUpperCase();
+export const sameMoney = (a: Money, b: Money) =>
+  a.value === b.value && a.currency.toUpperCase() === b.currency.toUpperCase();
 
 /** A catalogue name as an item holds it: the payload schemas cap a name's length, a feed does not. */
 const clip = (text: string, max: number) => (text.length > max ? text.slice(0, max) : text);

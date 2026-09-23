@@ -5,7 +5,7 @@ import { type FeedParseResult, type FeedProduct, type FeedSkip, parseFeed } from
 import { ulid } from "../ids";
 import { connectors, products } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { type Caller, isCustomer, nowOf } from "../write/caller";
+import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import type * as S from "./setup-types";
@@ -84,6 +84,7 @@ export class FeedCapabilities {
 
   async add(caller: Caller, input: S.AddFeedInput): Promise<FeedConnector> {
     requireOwner(caller);
+    requireNotAssistant(caller, "connect");
     const now = nowOf(caller);
     const url = normaliseFeedUrl(input.url);
     const settings = await readSettings(this.db);
@@ -138,6 +139,7 @@ export class FeedCapabilities {
    */
   async remove(caller: Caller, connectorId: string): Promise<{ removed: true; deactivated: number }> {
     requireOwner(caller);
+    requireNotAssistant(caller, "disconnect");
     const row = await this.row(connectorId);
     const now = nowOf(caller);
     const url = urlOf(row);
@@ -488,4 +490,18 @@ function requireOwner(caller: Caller): void {
   if (isCustomer(caller)) {
     throw new WriteError("not_allowed", "this needs the owner");
   }
+}
+
+/**
+ * A feed sets the prices of everything it lists, so connecting or disconnecting one is money, and
+ * money is the owner's (Tiago, 23 September 2026): the owner's AI can read feeds and import a feed
+ * the owner connected again, not add or remove one.
+ */
+function requireNotAssistant(caller: Caller, verb: string): void {
+  if (!isOwnerAssistant(caller)) return;
+  throw new WriteError(
+    "not_allowed",
+    `A feed sets prices, and prices are the owner's: you cannot ${verb} one. Tell the owner in a note what you suggest; the owner does it in Settings.`,
+    { details: { reason: "owner_money", draft_for_owner: true } },
+  );
 }

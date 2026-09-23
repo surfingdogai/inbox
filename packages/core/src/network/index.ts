@@ -1,7 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
 import { ulid } from "../ids";
-import { enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
+import { DEFAULT_NETWORK, enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
 import { jobStatement } from "../write/common";
 
 /**
@@ -285,6 +285,30 @@ export async function readNetworkStatus(db: Db, network: string): Promise<Networ
   return r ? statusOf(r) : undefined;
 }
 
+// ---- which networks get a customer's email address -----------------------------------------
+
+/**
+ * The networks that have verified this inbox: they fetched its manifest and took its ping, so the
+ * status row says `registered`. A network that has only been asked to, or that answered "not yet",
+ * has not.
+ */
+export async function verifiedNetworks(db: Db): Promise<Set<string>> {
+  const { rows } = await db.client.query({
+    sql: "SELECT network FROM network_status WHERE registration = 'registered'",
+    method: "all",
+  });
+  return new Set(rows.map((r) => String(r[0])));
+}
+
+/**
+ * Whether a network may be sent customers' email addresses — a first contact's, to issue a key, or
+ * one beside a pass a customer's assistant carried (Tiago, 23 September 2026): only once it has
+ * verified this inbox. The default network is the one exception, and behaves as it always has.
+ */
+export function mayReceiveEmails(origin: string, verified: ReadonlySet<string>): boolean {
+  return origin === DEFAULT_NETWORK || verified.has(origin);
+}
+
 // ---- which receipts a network takes ------------------------------------------------------
 
 /** The first rules version that scores receipt claims v2 (ADR-017 §2.5, §7.3). */
@@ -476,6 +500,12 @@ export interface NetworkView {
   readonly issue: boolean;
   readonly share: NetworkEntry["share"];
   readonly registration: Registration;
+  /**
+   * Whether customers' email addresses go to it (a first-time customer's, to give them a key; one
+   * beside a pass their assistant carried): only once it has verified this inbox, except the
+   * default network, which always could.
+   */
+  readonly receives_emails: boolean;
   /** When this instance last registered with the network. */
   readonly registered_at: string | null;
   /** The last ping the network accepted. */
@@ -512,6 +542,8 @@ export interface NetworkView {
     readonly queued: number;
     readonly refused: number;
     readonly held: number;
+    /** Never to be sent: their customers asked the business not to use booking networks for them. */
+    readonly withheld: number;
   };
 }
 
@@ -534,13 +566,16 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
     }),
   ]);
   const byNetwork = new Map(status.rows.map((r) => [String(r[0]), statusOf(r.slice(1))]));
-  const tally = new Map<string, { published: number; queued: number; refused: number; held: number }>();
+  const tally = new Map<
+    string,
+    { published: number; queued: number; refused: number; held: number; withheld: number }
+  >();
   for (const r of counts.rows) {
     const network = String(r[0]);
-    const t = tally.get(network) ?? { published: 0, queued: 0, refused: 0, held: 0 };
+    const t = tally.get(network) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 };
     const state = String(r[1]);
     const n = Number(r[3]);
-    if (state === "published" || state === "queued" || state === "refused") t[state] += n;
+    if (state === "published" || state === "queued" || state === "refused" || state === "withheld") t[state] += n;
     if (state === "queued" && Number(r[2]) === 1 && !takesV2(byNetwork.get(network))) t.held += n;
     tally.set(network, t);
   }
@@ -554,6 +589,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
       issue: entry.issue,
       share: entry.share,
       registration: s?.registration ?? "unregistered",
+      receives_emails: origin === DEFAULT_NETWORK || s?.registration === "registered",
       registered_at: iso(s?.registeredAt ?? null),
       last_ping_at: iso(s?.lastPingAt ?? null),
       last_error: s?.lastError ?? null,
@@ -569,7 +605,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
       standing:
         s?.standing && s.standingAt !== null ? { ...s.standing, at: new Date(s.standingAt).toISOString() } : null,
       ping_signature: s?.pingSignature ?? null,
-      receipts: tally.get(origin) ?? { published: 0, queued: 0, refused: 0, held: 0 },
+      receipts: tally.get(origin) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
     };
   });
 }

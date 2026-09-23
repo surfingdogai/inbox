@@ -3,10 +3,12 @@ import {
   Capabilities,
   createRunner,
   createSecretBox,
+  DEFAULT_NETWORK,
+  DISCLOSURE,
   generateKeyPair,
   IDENTITY_ISSUE_KIND,
-  KEY_LINE,
   networkRulesStatement,
+  networkSuccessStatement,
   type PublicJwk,
   schema,
   signRequest,
@@ -57,16 +59,29 @@ const agent = (t: number, extra: Partial<Caller> = {}): Caller => ({
   ...extra,
 });
 
-async function setup(opts: { intercept?: Parameters<typeof fakeNetwork>[0]["intercept"] } = {}) {
+async function setup(
+  opts: {
+    intercept?: Parameters<typeof fakeNetwork>[0]["intercept"];
+    /** Whether the network has verified this inbox (its ping went through): by default it has. */
+    verified?: boolean;
+    host?: string;
+  } = {},
+) {
+  const host = opts.host ?? HOST;
+  const net = `https://${host}`;
   const { db } = await freshDb();
   const caps = new Capabilities(db, createSecretBox([KEY]), ISS, 0);
   // Switched on for people, sharing nothing else, so no ping or publishing job is part of this.
   await caps.updateSettings(owner(T0), {
     doc: {
-      networks: { [NET]: { enabled: true, share: { listing: false, counts: false, receipts: false } } },
+      networks: { [net]: { enabled: true, share: { listing: false, counts: false, receipts: false } } },
       business: { name: "Oficina Maré" },
     },
   });
+  // A customer's address goes only to a network that has verified this inbox (Tiago, 23 Sep 2026).
+  if (opts.verified !== false) {
+    await db.client.query(networkSuccessStatement(net, T0, { registration: "registered", pinged: true }));
+  }
   await db.client.query({ sql: "DELETE FROM jobs", params: [], method: "run" });
   const svc = ulid();
   await db.orm.insert(schema.services).values({
@@ -78,13 +93,13 @@ async function setup(opts: { intercept?: Parameters<typeof fakeNetwork>[0]["inte
     createdAt: T0,
     updatedAt: T0,
   });
-  const net = fakeNetwork({
-    host: HOST,
+  const fake = fakeNetwork({
+    host,
     keys: async () => (await caps.receipts.jwks()).keys as PublicJwk[],
     instanceDomain: "inbox.example.com",
     ...(opts.intercept ? { intercept: opts.intercept } : {}),
   });
-  const deps = { db, caps, baseUrl: ISS, version: "0.0.0", fetchImpl: net.fetchImpl, timeoutMs: 1_000 };
+  const deps = { db, caps, baseUrl: ISS, version: "0.0.0", fetchImpl: fake.fetchImpl, timeoutMs: 1_000 };
   const port = createIdentityPort(deps);
   const mail = logMailOut();
   caps.people.attachPort(port);
@@ -109,7 +124,7 @@ async function setup(opts: { intercept?: Parameters<typeof fakeNetwork>[0]["inte
       contact: { name: "Rita", email },
       ...extra,
     });
-  return { db, caps, net, port, mail, runner, drain, book };
+  return { db, caps, net: fake, port, mail, runner, drain, book };
 }
 
 /** What a customer's email never says: they wrote to a business, and it is the business that writes back. */
@@ -158,28 +173,19 @@ describe("a first contact (§2.1)", () => {
     expect(status.identity.passes).toEqual(r.identity?.passes);
   });
 
-  it("sends the key with the first email to the customer, once", async () => {
+  it("never puts the key on another email: the confirmation goes without it", async () => {
     const s = await setup();
     const r = await s.book(agent(T0));
     await s.caps.transitionItem(owner(T0 + MIN), { item_id: r.view.item.id, event: "confirm" });
     await s.drain(T0 + 2 * MIN);
     const toRita = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
-    expect(toRita).toHaveLength(1);
-    const key = /sdkey1_net\.example\.com_[a-z2-7]{16}_[a-z2-7]{32}/.exec(toRita[0]?.text ?? "")?.[0];
-    expect(key).toBeDefined();
-    expect(toRita[0]?.text).toContain(`${KEY_LINE} ${key}`);
-    // The business speaking: its name on it, its own words, one quiet line at the end, nobody else.
-    expect(toRita[0]?.from).toEqual({ address: "inbox@localhost", name: "Oficina Maré" });
-    expect(toRita[0]?.text.trim().split("\n").at(-1)).toBe(`${KEY_LINE} ${key}`);
-    expect(`${toRita[0]?.subject}\n${toRita[0]?.text.replace(key ?? "", "")}`).not.toMatch(PLATFORM_WORDS);
-    const pending = await rows(s.db, "SELECT key_enc, delivered_at, pass_enc IS NOT NULL FROM pending_identity");
-    expect(pending).toEqual([[null, T0 + 2 * MIN, 1]]);
-    // A second email to the customer carries no key.
-    await s.caps.transitionItem(owner(T0 + 3 * MIN), { item_id: r.view.item.id, event: "cancel_by_business" });
-    await s.drain(T0 + 4 * MIN);
-    const later = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
-    expect(later).toHaveLength(2);
-    expect(later[1]?.text).not.toContain("sdkey1_");
+    expect(toRita.map((m) => m.subject)).toEqual(["Confirmed: Surf lesson"]);
+    expect(toRita[0]?.text).not.toContain("sdkey1_");
+    expect(toRita[0]?.text).not.toContain(DISCLOSURE.en.keyLine);
+    expect(`${toRita[0]?.subject}\n${toRita[0]?.text}`).not.toMatch(PLATFORM_WORDS);
+    // The key waits, sealed, for its own email.
+    const pending = await rows(s.db, "SELECT key_enc IS NOT NULL, delivered_at FROM pending_identity");
+    expect(pending).toEqual([[1, null]]);
   });
 
   it("carries no key in any email when the business switched the line off", async () => {
@@ -202,25 +208,75 @@ describe("a first contact (§2.1)", () => {
     expect(toRita[0]?.text).not.toContain("assistant");
   });
 
-  it("sends a key no email carried within a day in one line of its own, and keeps nothing after seven days", async () => {
+  it("sends the key alone a day after the booking, with the line about the network and its page, and keeps nothing after seven days", async () => {
     const s = await setup();
-    await s.book(agent(T0));
+    const r = await s.book(agent(T0));
     await s.db.client.query({
       sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, 'lifecycle_sweep', '{}', ?, 'queued', 0, 8, ?, ?)",
       params: [ulid(), T0 + DAY + MIN, "sweep-test-1", T0],
       method: "run",
     });
     await s.drain(T0 + HOUR);
-    expect(s.mail.sent.filter((m) => m.to.includes("rita@example.com"))).toHaveLength(0);
+    const early = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
+    // Only the acknowledgement, without the key.
+    expect(early.map((m) => m.subject)).toEqual(["We have your booking request: Surf lesson"]);
+    expect(early[0]?.text).not.toContain("sdkey1_");
     await s.drain(T0 + DAY + MIN);
-    const alone = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
+    const alone = s.mail.sent.filter((m) => m.to.includes("rita@example.com")).slice(1);
     expect(alone).toHaveLength(1);
-    // From the business, about what Rita booked with it, in one line: nothing about anyone else.
+    // From the business, about what Rita booked with it: the code, and one line about the network.
     expect(alone[0]?.from).toEqual({ address: "inbox@localhost", name: "Oficina Maré" });
-    expect(alone[0]?.subject).toBe("For next time: Surf lesson");
-    expect(alone[0]?.text).toMatch(new RegExp(`^${KEY_LINE} sdkey1_net\\.example\\.com_[a-z2-7]{16}_[a-z2-7]{32}$`));
-    expect(KEY_LINE).toBe("If you use an assistant, it can show this code next time so we recognise you:");
-    expect(`${alone[0]?.subject} ${alone[0]?.text.replace(/sdkey1_\S+/, "")}`).not.toMatch(PLATFORM_WORDS);
+    expect(alone[0]?.subject).toBe("For next time");
+    const key = /sdkey1_net\.example\.com_[a-z2-7]{16}_[a-z2-7]{32}/.exec(alone[0]?.text ?? "")?.[0] as string;
+    // The link is hers: the page about the network, where she can switch it off for herself.
+    const page = /https:\/\/inbox\.example\.com\/c\/[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}/.exec(
+      alone[0]?.text ?? "",
+    )?.[0];
+    expect(page).toBeDefined();
+    expect(alone[0]?.text.split("\n")).toEqual([
+      "Hello Rita,",
+      "",
+      'Thank you for your booking "Surf lesson".',
+      DISCLOSURE.en.keyLine,
+      key,
+      "",
+      `We use a booking network to recognise returning customers. How it works: ${page}`,
+      "",
+      "Oficina Maré",
+    ]);
+    // Nobody's mailbox should answer it by itself, and none did write it.
+    expect(alone[0]?.headers).toMatchObject({
+      "X-Auto-Response-Suppress": "OOF, AutoReply",
+      "Auto-Submitted": "auto-generated",
+    });
+    // Nothing else of the software's: the booking network is named in its one line, and only there.
+    const others = (alone[0]?.text ?? "")
+      .split("\n")
+      .filter((l) => l !== key && !l.startsWith("We use a booking network"));
+    expect(`${alone[0]?.subject}\n${others.join("\n")}`).not.toMatch(PLATFORM_WORDS);
+    // It threads with the item's other emails: the same anchor first, then the email before it.
+    const anchor = s.mail.sent.find((m) => m.to.includes("rita@example.com"))?.headers?.References as string;
+    expect(anchor).toMatch(/^<a\.[0-9a-z]{22}@localhost>$/);
+    expect(alone[0]?.headers?.References).toMatch(new RegExp(`^${anchor} <m\\.[0-9a-z]{22}@localhost>$`));
+    // The mail log keeps the email, never the code; the code is gone once sent.
+    const logged = await rows(s.db, "SELECT template, status, body_text FROM outbound_mail WHERE job_key = ?", [
+      `key:${r.view.item.id}`,
+    ]);
+    expect(logged[0]?.slice(0, 2)).toEqual(["key", "sent"]);
+    expect(String(logged[0]?.[2])).not.toContain(key);
+    // Nor its link whole: the log opens no page for anyone.
+    expect(String(logged[0]?.[2])).not.toContain(String(page));
+    expect(String(logged[0]?.[2])).toMatch(/\/c\/[A-Za-z0-9_-]{22}\.…/);
+    expect(JSON.stringify(await rows(s.db, "SELECT * FROM outbound_mail"))).not.toMatch(/sdkey1_[^…"]*_[a-z2-7]{32}/);
+    expect(await rows(s.db, "SELECT key_enc, delivered_at IS NOT NULL FROM pending_identity")).toEqual([[null, 1]]);
+    // Another sweep sends nothing more.
+    await s.db.client.query({
+      sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, 'lifecycle_sweep', '{}', ?, 'queued', 0, 8, ?, ?)",
+      params: [ulid(), T0 + DAY + HOUR, "sweep-test-again", T0],
+      method: "run",
+    });
+    await s.drain(T0 + DAY + HOUR);
+    expect(s.mail.sent.filter((m) => m.to.includes("rita@example.com"))).toHaveLength(2);
     await s.db.client.query({
       sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, 'lifecycle_sweep', '{}', ?, 'queued', 0, 8, ?, ?)",
       params: [ulid(), T0 + 8 * DAY, "sweep-test-2", T0],
@@ -720,3 +776,79 @@ async function signedAgentRequest(opts: {
     headers: { "content-type": "application/json", ...signed.headers },
   });
 }
+
+describe("a network gets customers' addresses only once it has verified this inbox (Tiago, 23 Sep 2026)", () => {
+  it("asks a network that has not verified us for no key, and sends it no address beside a pass", async () => {
+    const s = await setup({ verified: false });
+    const r = await s.book(agent(T0));
+    expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(0);
+    expect(r.identity?.networks).toEqual([]);
+    expect(await rows(s.db, "SELECT * FROM pending_identity")).toEqual([]);
+    // A pass the customer's assistant carries is still presented: the network learns nothing new.
+    const known = s.net.addPerson("ana@example.pt");
+    const carried = await s.book(agent(T0 + MIN), { pass: known.pass }, "ana@example.pt");
+    expect(carried.identity?.networks).toEqual([{ network: NET, state: "presented" }]);
+    const presented = s.net.calls.filter((c) => c.path === "/v1/presentations");
+    expect(presented).toHaveLength(1);
+    expect(presented[0]?.body).not.toHaveProperty("email");
+    expect(JSON.stringify(s.net.calls)).not.toContain("rita@example.com");
+    expect(JSON.stringify(s.net.calls)).not.toContain("ana@example.pt");
+  });
+
+  it("asks it once it has verified us, and a retry asks only while that still holds", async () => {
+    let down = true;
+    const s = await setup({
+      verified: false,
+      intercept: (path) => (path === "/v1/persons" && down ? new Response("down", { status: 503 }) : undefined),
+    });
+    await s.db.client.query(networkSuccessStatement(NET, T0, { registration: "registered", pinged: true }));
+    const r = await s.book(agent(T0));
+    expect(r.identity?.networks).toEqual([{ network: NET, state: "pending" }]);
+    expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(1);
+    // The network stops recognising this inbox before the retry: it is not asked again.
+    await s.db.client.query(networkSuccessStatement(NET, T0 + MIN, { registration: "pending" }));
+    down = false;
+    await s.drain(T0 + 2 * MIN);
+    expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(1);
+    expect(await rows(s.db, "SELECT state FROM pending_identity")).toEqual([["gave_up"]]);
+  });
+
+  it("tells the owner which networks get addresses, and the default network gets them as it always has", async () => {
+    const other = await setup({ verified: false });
+    const [view] = (await other.caps.getNetworks(owner(T0))).networks.filter((n) => n.origin === NET);
+    expect(view).toMatchObject({ registration: "unregistered", receives_emails: false });
+    await other.db.client.query(networkSuccessStatement(NET, T0, { registration: "registered", pinged: true }));
+    const [after] = (await other.caps.getNetworks(owner(T0))).networks.filter((n) => n.origin === NET);
+    expect(after?.receives_emails).toBe(true);
+
+    const s = await setup({ verified: false, host: new URL(DEFAULT_NETWORK).host });
+    const r = await s.book(agent(T0));
+    expect(r.identity?.networks).toEqual([{ network: DEFAULT_NETWORK, state: "issued" }]);
+    expect(s.net.calls.filter((c) => c.path === "/v1/persons")[0]?.body).toMatchObject({ email: "rita@example.com" });
+  });
+});
+
+describe("a test item contacts no network (Tiago, 23 Sep 2026)", () => {
+  const test = (t: number, extra: Partial<Caller> = {}) => agent(t, { sandbox: true, ...extra });
+
+  it("asks no network for a key and presents nothing, whatever the agent carries", async () => {
+    const s = await setup();
+    const known = s.net.addPerson("ana@example.pt");
+    const first = await s.book(test(T0));
+    const carried = await s.book(test(T0 + MIN), { pass: known.pass }, "ana@example.pt");
+    expect(s.net.calls).toHaveLength(0);
+    expect(first.identity?.networks).toEqual([]);
+    expect(carried.identity?.networks).toEqual([]);
+    expect(await rows(s.db, "SELECT COUNT(*) FROM pending_identity")).toEqual([[0]]);
+    // Nor when someone asks about it later without the test header, carrying a pass.
+    await s.caps.getItemStatus(agent(T0 + 2 * MIN, { carried: [known.pass] }), {
+      item_id: carried.view.item.id,
+      access_token: carried.accessToken,
+    });
+    expect(s.net.calls).toHaveLength(0);
+    // Nothing queued to ask later, and no email for a key.
+    await s.drain(T0 + 2 * DAY);
+    expect(s.net.calls).toHaveLength(0);
+    expect(s.mail.sent).toEqual([]);
+  });
+});

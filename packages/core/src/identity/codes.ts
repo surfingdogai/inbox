@@ -4,6 +4,7 @@ import { ulid } from "../ids";
 import type { Settings } from "../settings/schema";
 import { WriteError } from "../write/errors";
 import { emailOf, maskEmail, rootParty, valueHash } from "./contacts";
+import { networksStopped, stopStatements, stopViaOf } from "./stops";
 
 /**
  * One-time codes (ADR-017 §8.2): the way a weak match — the same email as a customer the business
@@ -187,6 +188,12 @@ export async function checkCode(
       method: "run",
     },
   );
+  // The stop follows the merge (Tiago, 23 September 2026): a customer who asked not to use booking
+  // networks under either party stays stopped under both, every address of theirs fingerprinted.
+  const merged = [known, target.partyId];
+  if (await networksStopped(db, { partyIds: merged })) {
+    statements.push(...(await stopStatements(db, merged, await stopViaOf(db, merged), now)));
+  }
   await db.batch(statements);
   return { partyId: known };
 }
@@ -265,6 +272,13 @@ export function mergePartyStatements(into: string, from: string, now: number): S
     {
       sql: "UPDATE items SET possible_party_id = NULL, customer_match = 'strong' WHERE party_id = ? AND possible_party_id = ?",
       params: [into, into],
+      method: "run",
+    },
+    // A customer who asked not to use networks stays stopped, whichever of the two they asked as.
+    {
+      sql: `UPDATE parties SET networks_off_at = COALESCE(networks_off_at, (SELECT networks_off_at FROM parties WHERE id = ?))
+             WHERE id = ?`,
+      params: [from, into],
       method: "run",
     },
     {

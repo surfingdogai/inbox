@@ -3,9 +3,11 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
+/** The request goes through the door on the real clock: a day to come (nobody books a time that has started). */
+const DAY = futureDay();
 
 // A mutating request leaves jobs in the outbox; the runner drains them after the response.
 describe("jobs after requests", () => {
@@ -39,8 +41,8 @@ describe("jobs after requests", () => {
       body: JSON.stringify({
         payload: {
           reservationFor: { serviceId: svc, name: "Full service" },
-          startTime: "2026-09-22T08:00:00Z",
-          endTime: "2026-09-22T09:30:00Z",
+          startTime: `${DAY}T08:00:00Z`,
+          endTime: `${DAY}T09:30:00Z`,
         },
         contact: { name: "Rita", email: "rita@example.com" },
       }),

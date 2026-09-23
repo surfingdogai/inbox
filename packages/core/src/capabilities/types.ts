@@ -157,6 +157,53 @@ export const verifyCustomerInput = z.object({
     .describe("The six digits the customer received. Omit to have them sent."),
 });
 
+/**
+ * ADR-018 §5–6: the customer answers what the business put to them — another time for a booking, or
+ * a quote. Accepting binds the customer, so it takes the confirm step: the `terms_sha` of the terms
+ * they said yes to, from `offer.terms_sha` in the item's status. Without it nothing is written and
+ * the answer carries the terms to show them.
+ */
+export const acceptOfferInput = z.object({
+  item_id: z.string().min(1),
+  terms_sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional()
+    .describe(
+      "The fingerprint of the terms your person said yes to: offer.terms_sha from get_item_status. Leave it out to be told the terms first; nothing is booked without it.",
+    ),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
+export const declineOfferInput = z.object({
+  item_id: z.string().min(1),
+  reason: z.string().max(2_000).optional().describe("Anything your person wants the business to know."),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
+export const suggestTimeInput = z.object({
+  item_id: z.string().min(1),
+  start_time: isoDateTime.describe(
+    "The start your person would like instead: one of the free times check_availability lists. The end follows the service's length.",
+  ),
+  note: z.string().max(2_000).optional(),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
+export const provideDetailsInput = z.object({
+  item_id: z.string().min(1),
+  details: z.string().trim().min(1).max(5_000).describe("The answer to what the business asked."),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
 // ---- owner -----------------------------------------------------------------
 
 export const listItemsInput = z.object({
@@ -165,11 +212,34 @@ export const listItemsInput = z.object({
   needs_human: z.boolean().optional(),
   open_only: z.boolean().default(true).describe("Hide closed items."),
   sandbox: z.boolean().default(false),
-  q: z.string().max(200).optional().describe("Full-text search over the conversation."),
+  q: z
+    .string()
+    .max(200)
+    .optional()
+    .describe("Full-text search over the conversation, or the six-character reference the customer quotes."),
+  mail_failed: z
+    .boolean()
+    .optional()
+    .describe(
+      "Only items with an email that was not sent: one that failed, or one to the customer never sent (no address, nothing to send from, no mail service, the day's acknowledgements used). A test item's are left out.",
+    ),
   ...paging,
 });
 
 export const getItemInput = z.object({ item_id: z.string().min(1) });
+
+/**
+ * Who wrote what goes to the customer (Tiago, 23 September 2026): anything a person did not type
+ * carries one line saying it was sent automatically. `automation` from anyone adds the line;
+ * `person` is honoured only from an integration key (a CRM or a helpdesk whose user typed it) — the
+ * owner in the app is a person already, and the owner's AI never is.
+ */
+export const writtenBy = z
+  .enum(["person", "automation"])
+  .optional()
+  .describe(
+    "Who wrote the words the customer gets. person: someone typed them (honoured from an integration key; the owner's AI is always automatic); automation: nobody did. An email nobody typed says it was sent automatically.",
+  );
 
 export const transitionItemInput = z.object({
   item_id: z.string().min(1),
@@ -177,6 +247,7 @@ export const transitionItemInput = z.object({
   input: z.record(z.string(), z.unknown()).optional(),
   reason: z.string().max(2_000).optional(),
   expected_version: z.number().int().min(1).optional(),
+  written_by: writtenBy,
   idempotency_key: idempotencyKey,
 });
 
@@ -184,7 +255,23 @@ export const replyInput = z.object({
   item_id: z.string().min(1),
   body: z.string().min(1).max(20_000),
   internal: z.boolean().default(false).describe("A private note for the team instead of a reply to the customer."),
+  written_by: writtenBy,
   idempotency_key: idempotencyKey,
+});
+
+/** One customer, as the owner names them: the party an item names (`party.id` on the item). */
+export const customerInput = z.object({
+  party_id: z.string().min(1).max(64).describe("The customer: party.id on any of their items."),
+});
+
+export const eraseCustomerInput = customerInput.extend({
+  confirm: z
+    .string()
+    .max(100)
+    .optional()
+    .describe(
+      "The confirm value the answer without it gave (409 confirm_erase, details.confirm), after the owner saw what it erases. Erasing cannot be undone.",
+    ),
 });
 
 export const updateSettingsInput = z.object({
@@ -212,10 +299,16 @@ export type AcknowledgeReceiptInput = z.infer<typeof acknowledgeReceiptInput>;
 export type CancelItemInput = z.infer<typeof cancelItemInput>;
 export type SendMessageInput = z.infer<typeof sendMessageInput>;
 export type VerifyCustomerInput = z.infer<typeof verifyCustomerInput>;
+export type AcceptOfferInput = z.infer<typeof acceptOfferInput>;
+export type DeclineOfferInput = z.infer<typeof declineOfferInput>;
+export type SuggestTimeInput = z.infer<typeof suggestTimeInput>;
+export type ProvideDetailsInput = z.infer<typeof provideDetailsInput>;
 export type ListItemsInput = z.infer<typeof listItemsInput>;
 export type GetItemInput = z.infer<typeof getItemInput>;
 export type TransitionItemInput = z.infer<typeof transitionItemInput>;
 export type ReplyInput = z.infer<typeof replyInput>;
+export type CustomerInput = z.infer<typeof customerInput>;
+export type EraseCustomerInput = z.infer<typeof eraseCustomerInput>;
 export type UpdateSettingsInput = z.infer<typeof updateSettingsInput>;
 
 export { messagePayloadSchema };

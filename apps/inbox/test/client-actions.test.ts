@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  actionNote,
   inputKindFor,
   isoToLocal,
   localToIso,
   networkNote,
   orderActions,
+  parseMajor,
   parseMoney,
   sumLines,
   tonesFor,
+  waitingLine,
 } from "../client/src/lib/actions";
 import { countsFrom, paramsFor, parseFilter, visibleIn, withQuery } from "../client/src/lib/filters";
 import type { Item, ItemView } from "../client/src/lib/types";
@@ -36,6 +39,52 @@ describe("client actions", () => {
     expect(inputKindFor("request_payment")).toBe("payment_request");
     expect(inputKindFor("decline")).toBe("note");
     expect(inputKindFor("confirm")).toBe("none");
+  });
+
+  it("asks what the customer said when their cancellation is recorded, and how they agreed to a proposed time", () => {
+    expect(inputKindFor("record_cancel")).toBe("customer_cancel");
+    expect(inputKindFor("record_cancel_late")).toBe("customer_cancel");
+    expect(inputKindFor("confirm", "proposed")).toBe("agreed");
+    expect(inputKindFor("confirm", "requested")).toBe("none");
+    const proposed = {
+      type: "booking",
+      state: "proposed",
+      payload: {
+        reservationFor: { serviceId: "s", name: "x" },
+        startTime: "2026-09-24T09:00:00Z",
+        endTime: "2026-09-24T10:30:00Z",
+        proposed: { startTime: "2026-09-24T13:00:00Z", endTime: "2026-09-24T14:30:00Z" },
+      },
+    } as unknown as Item;
+    expect(actionNote("confirm", proposed, (iso) => `[${iso}]`)).toBe(
+      "This books [2026-09-24T13:00:00Z], the time you proposed. Use it when the customer said yes by phone, email or in person.",
+    );
+    expect(actionNote("record_cancel", proposed, String)).toMatch(
+      /^It counts as the customer's cancellation, not yours/,
+    );
+    expect(actionNote("confirm", { ...proposed, state: "requested" } as Item, String)).toBeNull();
+    // Inside the minimum notice the owner is told customers could not book it, and that they can.
+    const soon = { minNoticeMin: 60, now: Date.parse("2026-09-24T12:30:00Z") };
+    expect(actionNote("confirm", proposed, String, soon)).toContain("within your minimum notice of 60 minutes");
+    const requested = {
+      ...proposed,
+      state: "requested",
+      payload: { ...proposed.payload, proposed: undefined },
+    } as Item;
+    expect(actionNote("confirm", requested, String, { ...soon, now: Date.parse("2026-09-23T10:00:00Z") })).toBeNull();
+    expect(waitingLine(proposed, (iso) => iso)).toBe(
+      "Waiting for the customer's answer until 2026-09-24T13:00:00.000Z.",
+    );
+    // They answer by the start less the minimum notice, as their email says.
+    expect(waitingLine(proposed, (iso) => iso, 60)).toBe(
+      "Waiting for the customer's answer until 2026-09-24T12:00:00.000Z.",
+    );
+    expect(waitingLine({ ...proposed, state: "needs_info" } as Item, String)).toBe(
+      "Waiting for the customer's details.",
+    );
+    expect(waitingLine({ ...proposed, state: "requested" } as Item, String)).toBeNull();
+    // Recording a customer's cancellation is still a cancellation: it sits with the destructive ones.
+    expect(tonesFor([{ event: "complete" }, { event: "record_cancel" }])).toEqual(["primary", "danger"]);
   });
 
   it("treats the outcomes an owner records about a customer as destructive, and asks for a word only where it is sent", () => {
@@ -71,6 +120,29 @@ describe("client actions", () => {
     expect(networkNote("payment_failed", order("awaiting_payment"), now)).toMatch(/at half against the customer/);
     expect(networkNote("record_charge_back", order("completed"), now)).toMatch(/charge-back/);
     expect(networkNote("confirm", booking("requested", "2026-09-24T10:00:00Z"), now)).toBeNull();
+  });
+
+  it("reads a price the way it was typed: a comma is a decimal mark, never a reason to save it as free", () => {
+    const table: [string, number | undefined][] = [
+      ["45", 4500],
+      ["45,5", 4550],
+      ["45,50", 4550],
+      ["45.50", 4550],
+      ["1 234,50", 123450],
+      ["1.234,50", 123450],
+      ["1,234.50", 123450],
+      ["0,99", 99],
+      [" 12 ", 1200],
+      ["abc", undefined],
+      ["-1", undefined],
+      ["", undefined],
+      ["45,", undefined],
+      ["4,567", 456700],
+      ["1.2345", undefined],
+      ["1.23,45", undefined],
+      ["€45", undefined],
+    ];
+    for (const [typed, minor] of table) expect(parseMajor(typed), JSON.stringify(typed)).toBe(minor);
   });
 
   it("parses money in major units and sums lines", () => {
@@ -128,6 +200,9 @@ describe("client filters", () => {
     expect(paramsFor("needs", undefined, false)).toMatchObject({ needs_human: true, open_only: true, sandbox: false });
     expect(paramsFor("booking", "rita", true)).toMatchObject({ type: "booking", q: "rita", sandbox: true });
     expect(paramsFor("done", undefined, false)).toMatchObject({ open_only: false });
+    // The items with an email that could not be sent, open or closed.
+    expect(parseFilter("unsent")).toBe("unsent");
+    expect(paramsFor("unsent", undefined, false)).toMatchObject({ mail_failed: true, open_only: false });
     expect(visibleIn("done", view({}))).toBe(false);
     expect(visibleIn("done", view({ closedAt: "2026-09-21T11:00:00Z" }))).toBe(true);
     expect(visibleIn("all", view({}))).toBe(true);

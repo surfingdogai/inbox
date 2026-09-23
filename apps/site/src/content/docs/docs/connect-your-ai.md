@@ -56,24 +56,32 @@ Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work t
 
 ## What the owner tools do
 
-There are 42 owner tools:
+There are 44 owner tools:
 
 | Tool | Does |
 | --- | --- |
 | `list_items` | Items newest first, filtered by type, state or `needs_human`, or searched with `q`. |
 | `get_item` | One item with its typed fields, event history, conversation and the valid next transitions. |
-| `transition_item` | Fire one of the events the item lists (`confirm`, `propose`, `decline`, `quote`, …); pass `expected_version` to avoid racing a colleague. |
-| `reply` | Send a reply to the customer, or an internal note with `internal: true`. |
-| `get_profile`, `update_profile` | The business's name, domain, time zone, currency and languages. |
-| `list_services`, `upsert_service`, `archive_service` | Bookable services. |
-| `list_products`, `upsert_product`, `archive_product` | Products. |
+| `transition_item` | Fire one of the events the item lists (`confirm`, `propose`, `decline`, `quote`, …); pass `expected_version` to avoid racing a colleague. A cancellation the customer asked for by email or phone is `record_cancel`, with their words as the note: it counts as theirs, not yours. A time you proposed is booked when the customer accepts it; your AI cannot record a yes they gave by phone, only a person can (`confirm` in the owner app). |
+| `reply` | Send a reply to the customer, or an internal note with `internal: true`. A reply your AI sends reaches the customer with one line in your words: "This reply was sent automatically. Reply to reach a person." `get_item` shows whether each email went out. |
+| `export_customer` | Everything the inbox holds about one customer, as one document, for a customer who asks what you have about them. Erasing a customer is yours alone, in the app: your AI cannot. |
+| `stop_customer_networks` | For a customer who asks not to be known to booking networks: from then on nothing about them goes to any network. |
+| `get_profile`, `update_profile` | The business's name, domain, time zone, currency and languages. The currency is yours to change. |
+| `list_services`, `upsert_service`, `archive_service` | Bookable services. A price is per booking unless it is per person. A service your AI adds with a price is saved unpublished for you to check; it cannot change a price or publish a priced service. |
+| `list_products`, `upsert_product`, `archive_product` | Products. A product your AI adds is saved unpublished for you to check; it cannot change a price or publish a product. |
 | `get_availability`, `set_opening_hours`, `clear_service_hours`, `set_closures` | Opening hours and closed days. |
 | `list_rules`, `list_rule_presets`, `apply_rule_preset`, `upsert_rule`, `delete_rule`, `test_rule` | What happens on its own. |
 | `list_webhooks`, `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `delete_webhook`, `send_test_event`, `list_webhook_deliveries`, `replay_webhook_delivery`, `replay_missing_webhook_deliveries`, `list_events` | Where events go, and the event stream. See [Webhooks](/docs/webhooks/). |
-| `list_feeds`, `add_feed`, `import_feed_now`, `remove_feed` | Product feeds. See [Feeds](/docs/feeds/). |
+| `list_feeds`, `add_feed`, `import_feed_now`, `remove_feed` | Product feeds. A feed sets prices, so only you connect or remove one: your AI reads them and imports one again. See [Feeds](/docs/feeds/). |
 | `list_api_keys`, `create_api_key`, `revoke_api_key` | Integration keys. The AI may create and revoke them only once you switch on **Let my AI create keys** in Settings → Keys. |
 | `get_settings` | The settings document and its version, without its secrets. |
-| `update_settings` | Change settings: send only the sections that change, with `expected_version`; the rest keeps its values, and `null` removes a key. Networks are keyed by origin, so adding or switching off one leaves the others alone. |
+| `update_settings` | Change settings: send only the sections that change, with `expected_version`; the rest keeps its values, and `null` removes a key. Networks are keyed by origin, so adding or switching off one leaves the others alone. Switching a network on is yours to do in Settings → Networks: it is sent your customers' email addresses. |
 | `get_networks` | The networks this inbox reports to and how each is doing: last ping, last error, receipts published. |
 
-The server's instructions to the model are short: never invent facts about availability or prices; read them first; give each system its own key; send an `idempotency_key` with every write, so a retry never does it twice. Every refusal names the fields to fix.
+The server's instructions to the model are short: never invent facts about availability or prices; read them first; give each system its own key; send an `idempotency_key` with every write, so a retry never does it twice; record a customer's own cancellation with `record_cancel`, never `cancel_by_business`; a customer who asks for their data gets `export_customer`, one who asks not to be known to booking networks `stop_customer_networks`, and erasing one is yours; money is yours. Every refusal names the fields to fix.
+
+## Time yes, money no
+
+Your AI confirms bookings, proposes other times and answers customers. It does not touch money: it cannot confirm a booking or accept an order whose request held a price your catalogue does not give, send a quote, propose a time at another price than your catalogue's or longer than the service, change a price or your currency, publish something with a price, connect or remove a feed, or write a rule that sends a quote or names an amount. Each of those is refused with a message that tells it to leave you a note (`reply` with `internal: true`) with what it suggests, so you find the draft on the item. This holds for anything that comes through the owner's MCP, even with a full owner key.
+
+The public server a customer's assistant connects to at `/mcp` carries your business's name, and speaks in your words and your customer's language. When you propose another time or send a quote, the assistant reads it with `get_item_status` and answers with `accept_offer` (only on its person's clear yes to the terms), `decline_offer` or `suggest_time`; when you ask for details, it sends them with `provide_details`.

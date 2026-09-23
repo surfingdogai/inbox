@@ -1,10 +1,12 @@
 import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { businessFacts } from "../customer/audience";
+import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { describeAction, summarizeRule } from "../rules/describe";
 import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
-import { PRESETS } from "../rules/presets";
+import { PRESETS, presetFor } from "../rules/presets";
 import { isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
 import { type Action, type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
@@ -17,7 +19,7 @@ import {
   services,
 } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { type Caller, isCustomer, nowOf } from "../write/caller";
+import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { heldForPrice } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
@@ -86,6 +88,14 @@ export class SetupCapabilities {
     }
     const now = nowOf(caller);
     const current = await this.profile();
+    // Every price without a currency of its own is in this one: changing it is changing money.
+    if (
+      isOwnerAssistant(caller) &&
+      input.currency !== undefined &&
+      input.currency.toUpperCase() !== current.currency.toUpperCase()
+    ) {
+      throw ownerMoney("currency", "The currency is money, and money is the owner's: leave it as it is.");
+    }
     const next = {
       name: input.name ?? current.name,
       domain: input.domain === undefined ? current.domain : input.domain,
@@ -121,10 +131,15 @@ export class SetupCapabilities {
     return this.db.orm.select().from(services).orderBy(desc(services.active), asc(services.sort), asc(services.name));
   }
 
+  /**
+   * A new service. One the owner's AI adds with an amount is saved unpublished, whatever it asked:
+   * the owner checks the price and publishes it (Tiago, 23 September 2026, "time yes, money no").
+   */
   async createService(caller: Caller, input: S.ServiceInput): Promise<ServiceRow> {
     requireOwner(caller);
     const now = nowOf(caller);
     const id = ulid();
+    const held = isOwnerAssistant(caller) && hasAmount(input.price);
     await this.db.orm.insert(services).values({
       id,
       name: input.name,
@@ -135,7 +150,7 @@ export class SetupCapabilities {
       capacity: input.capacity,
       granularityMin: input.granularity_min,
       price: (input.price ?? null) as ServiceRow["price"],
-      active: input.active ? 1 : 0,
+      active: input.active && !held ? 1 : 0,
       sort: input.sort,
       createdAt: now,
       updatedAt: now,
@@ -146,6 +161,19 @@ export class SetupCapabilities {
   async updateService(caller: Caller, input: S.UpdateServiceInput): Promise<ServiceRow> {
     requireOwner(caller);
     const { service_id, ...patch } = input;
+    if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
+      const stored = await this.service(service_id);
+      const currency = (await this.profile()).currency;
+      if (
+        patch.price !== undefined &&
+        servicePriceKey(patch.price, currency) !== servicePriceKey(stored.price, currency)
+      ) {
+        throw ownerMoney("price", "Prices are the owner's to set. Leave the price as it is.");
+      }
+      if (patch.active === true && stored.active === 0 && hasAmount(stored.price)) {
+        throw ownerMoney("active", "Publishing something with a price is the owner's to do, in the app.");
+      }
+    }
     await this.patchRow(
       "services",
       service_id,
@@ -184,10 +212,12 @@ export class SetupCapabilities {
     return this.db.orm.select().from(products).orderBy(desc(products.active), asc(products.name));
   }
 
+  /** A new product. One the owner's AI adds is saved unpublished: a product always has a price. */
   async createProduct(caller: Caller, input: S.ProductInput): Promise<ProductRow> {
     requireOwner(caller);
     const now = nowOf(caller);
     const id = ulid();
+    const held = isOwnerAssistant(caller);
     try {
       await this.db.orm.insert(products).values({
         id,
@@ -196,7 +226,7 @@ export class SetupCapabilities {
         description: input.description ?? null,
         price: input.price,
         stock: input.stock ?? null,
-        active: input.active ? 1 : 0,
+        active: input.active && !held ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       });
@@ -209,6 +239,17 @@ export class SetupCapabilities {
   async updateProduct(caller: Caller, input: S.UpdateProductInput): Promise<ProductRow> {
     requireOwner(caller);
     const { product_id, ...patch } = input;
+    if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
+      const stored = await this.product(product_id);
+      const same =
+        patch.price === undefined ||
+        (patch.price.value === stored.price.value &&
+          patch.price.currency.toUpperCase() === stored.price.currency.toUpperCase());
+      if (!same) throw ownerMoney("price", "Prices are the owner's to set. Leave the price as it is.");
+      if (patch.active === true && stored.active === 0) {
+        throw ownerMoney("active", "Publishing something with a price is the owner's to do, in the app.");
+      }
+    }
     try {
       await this.patchRow(
         "products",
@@ -317,6 +358,8 @@ export class SetupCapabilities {
   async createRule(caller: Caller, input: S.RuleInput): Promise<RuleView> {
     requireOwner(caller);
     requirePositive(input.definition);
+    // A rule acts on its own for as long as it is on: one that prices is the owner's to write.
+    if (isOwnerAssistant(caller) && pricesSomething(input.definition)) throw ruleMoney();
     const now = nowOf(caller);
     const id = ulid();
     await this.db.orm.insert(rulesTable).values({
@@ -336,6 +379,15 @@ export class SetupCapabilities {
     requireOwner(caller);
     const { rule_id, expected_version, ...patch } = input;
     if (patch.definition) requirePositive(patch.definition);
+    if (isOwnerAssistant(caller) && (patch.definition !== undefined || patch.enabled === true)) {
+      // The owner's pricing rule stays as the owner wrote it: the AI may rename it or switch it off,
+      // never rewrite it, switch it on, or turn a rule of its own into one.
+      const stored = await this.rule(rule_id);
+      const next = patch.definition ?? stored.definition;
+      const rewritten = patch.definition !== undefined && JSON.stringify(next) !== JSON.stringify(stored.definition);
+      const switchedOn = patch.enabled === true && !stored.enabled;
+      if (pricesSomething(next) && (rewritten || switchedOn)) throw ruleMoney();
+    }
     const now = nowOf(caller);
     const sets: string[] = ["version = version + 1", "updated_at = ?"];
     const params: (string | number | null)[] = [now];
@@ -398,7 +450,8 @@ export class SetupCapabilities {
   async applyPreset(caller: Caller, input: S.ApplyPresetInput): Promise<RuleView[]> {
     requireOwner(caller);
     const now = nowOf(caller);
-    const preset = PRESETS[input.preset] ?? [];
+    // Rules are saved with their words: a reply goes out in the business's first language.
+    const preset = presetFor(input.preset, customerLang(null, (await businessFacts(this.db)).languages));
     await this.db.batch([
       ...(input.replace ? [{ sql: "DELETE FROM rules", method: "run" as const }] : []),
       ...preset.map((r) => ({
@@ -560,6 +613,60 @@ function validTimezone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A service price that names an amount: what only the owner publishes. */
+function hasAmount(price: { value?: number | undefined } | null | undefined): boolean {
+  return typeof price?.value === "number";
+}
+
+/** A service price, compared as it prices: its model, amount, currency (the business's when unsaid) and basis. */
+function servicePriceKey(
+  price: { model: string; value?: number | undefined; currency?: string | undefined; per?: string | undefined } | null,
+  currency: string,
+): string {
+  if (!price) return "none";
+  return [price.model, price.value ?? "", (price.currency ?? currency).toUpperCase(), price.per ?? "booking"].join("|");
+}
+
+/**
+ * The owner's AI reached for money (Tiago, 23 September 2026): the refusal it reads, which tells it
+ * to leave the owner a note instead.
+ */
+function ownerMoney(path: string, what: string): WriteError {
+  return new WriteError(
+    "not_allowed",
+    `${what} Tell the owner in a note (reply with internal: true) what you suggest; the owner changes it in the app.`,
+    {
+      fields: [{ path, problem: "invalid", message: "only the owner changes this" }],
+      details: { reason: "owner_money", draft_for_owner: true },
+    },
+  );
+}
+
+/** Keys of a transition's input that carry an amount: a quote's total and lines, a time's price, a payment. */
+const MONEY_INPUT = new Set(["totalPrice", "lines", "amount", "price"]);
+
+/** Whether a rule's actions put a price on anything: a quote, or a transition naming an amount. */
+function pricesSomething(definition: RuleDefinition | null | undefined): boolean {
+  // A stored rule that no longer parses is read as it is: anything but a list of actions prices nothing.
+  const actions: unknown = definition?.actions;
+  if (!Array.isArray(actions)) return false;
+  return actions.some((a: { action?: unknown; event?: unknown; input?: unknown } | null) => {
+    if (a?.action !== "transition") return false;
+    const input = a.input;
+    return (
+      a.event === "quote" ||
+      (typeof input === "object" && input !== null && Object.keys(input).some((k) => MONEY_INPUT.has(k)))
+    );
+  });
+}
+
+function ruleMoney(): WriteError {
+  return ownerMoney(
+    "definition.actions",
+    "A rule that sends a quote or names an amount prices things on its own, and prices are the owner's.",
+  );
 }
 
 /** What a rule does instead of a promise on a price the business did not set (ADR-018 §3.2). */

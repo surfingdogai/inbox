@@ -49,10 +49,67 @@ export const itemViewSchema = z.looseObject({
   identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
 });
 
+/** What the business put to the customer and waits for them to answer (ADR-018 §5). */
+export const customerOfferSchema = z.looseObject({
+  kind: z.enum(["time", "quote"]).describe("time: another time for a booking; quote: a price for a request."),
+  terms: z
+    .looseObject({})
+    .describe(
+      "startTime, endTime, partySize, totalPrice, lines, notes, validThrough, creates: what accepting agrees to.",
+    ),
+  terms_sha: z.string().describe("Send it back with accept: the customer said yes to exactly these terms."),
+  deadline: iso.nullable().describe("Until when the customer can answer."),
+  obligation_to_pay: z.boolean().describe("Accepting binds the customer to pay."),
+  human: z.string().describe("The terms in the business's words: tell your person this, as it is."),
+});
+
+/** The item as its customer reads it: no flags of the business's, what it waits for, what they can do. */
+export const customerItemViewSchema = z.looseObject({
+  item: itemSchema.omit({ flags: true }),
+  transitions: z.array(transitionRefSchema),
+  human: z.string().describe("In the business's words and language: relay it as it is."),
+  reference: z.string().describe("Six characters the customer quotes back to the business."),
+  offer: customerOfferSchema.nullable(),
+  waiting_on: z.enum(["you", "us"]).nullable().describe("you: the business waits for the customer; us: the other way."),
+  next: z.array(z.object({ action: z.string(), label: z.string() })).describe("What the customer can do next."),
+  thread: z
+    .array(
+      z.object({
+        from: z.enum(["you", "us"]).describe("you: the customer wrote it; us: the business did."),
+        text: z.string(),
+        at: iso,
+        automated: z.literal(true).optional().describe("Sent automatically: not written by a person."),
+      }),
+    )
+    .optional()
+    .describe(
+      "On the status door: the conversation, oldest first, the last fifty — the business's replies and the customer's messages, never its internal notes.",
+    ),
+  receipts: z.array(receiptViewSchema).optional(),
+  identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
+});
+
+export const customerResultSchema = z.object({
+  view: customerItemViewSchema,
+  linked: customerItemViewSchema.optional().describe("What an accepted quote became: the booking or order, confirmed."),
+  replayed: z.boolean(),
+});
+
 export const eventActorSchema = z.object({
   kind: z.string().describe("owner, owner_ai, integration, connector, rule, system, customer_agent or customer_human"),
   id: nullableString.describe("The user, AI app or key id; null for a customer and for a receipt."),
   name: z.string().optional().describe("The key's or AI app's name."),
+});
+
+const mailStatusSchema = z
+  .enum(["queued", "sent", "retrying", "failed", "skipped"])
+  .describe("sent only once the mail service took it; retrying: it failed and is tried again; failed: for good.");
+
+const mailDeliverySchema = z.object({
+  status: mailStatusSchema,
+  sent_at: iso.nullable(),
+  last_error: nullableString,
+  skip_reason: nullableString,
 });
 
 export const itemDetailSchema = itemViewSchema.extend({
@@ -77,17 +134,32 @@ export const itemDetailSchema = itemViewSchema.extend({
       actor: z.string(),
       body: z.string(),
       at: iso,
+      delivery: mailDeliverySchema
+        .optional()
+        .describe("On a reply to the customer: what became of the email it went out in."),
     }),
   ),
+  mail: z
+    .array(
+      z.object({
+        id: z.string(),
+        recipient: z.enum(["customer", "owner"]),
+        template: z.string().describe("Which email it is: ack.booking, booking.proposed, reply, key, …"),
+        subject: z.string(),
+        body: z.string(),
+        status: mailStatusSchema,
+        skip_reason: nullableString.describe("Why it was not sent: no_address, no_sender, test_item."),
+        last_error: nullableString,
+        attempts: z.number().int(),
+        sent_at: iso.nullable(),
+        created_at: iso,
+        entry_id: nullableString.describe("The reply it carries, when it is one."),
+      }),
+    )
+    .describe("Every email about the item, to the customer and to the owner, and what became of each."),
 });
 
 export const itemPageSchema = z.object({ items: z.array(itemViewSchema), next_cursor: nullableString });
-
-export const transitionResultSchema = z.object({
-  view: itemViewSchema,
-  linked: itemViewSchema.optional(),
-  replayed: z.boolean(),
-});
 
 /** Who the inbox takes the customer for (ADR-017 §8.4), on every create and status answer. */
 export const identityAnswerSchema = z.looseObject({
@@ -105,8 +177,24 @@ export const identityAnswerSchema = z.looseObject({
   guide: z.string().describe("How an agent identifies itself and its person: https://surfingdog.ai/for-agents.md"),
 });
 
+/**
+ * An item as a create or a transition answers it: to the business, with its flags; to a customer,
+ * without them, as the status door shows it.
+ */
+const answeredViewSchema = itemViewSchema.extend({
+  item: itemSchema.extend({
+    flags: itemSchema.shape.flags.optional().describe("The business's own flags; never in a customer's answer."),
+  }),
+});
+
+export const transitionResultSchema = z.object({
+  view: answeredViewSchema,
+  linked: answeredViewSchema.optional(),
+  replayed: z.boolean(),
+});
+
 export const createResultSchema = z.object({
-  view: itemViewSchema,
+  view: answeredViewSchema,
   accessToken: z
     .string()
     .optional()
@@ -115,7 +203,13 @@ export const createResultSchema = z.object({
   identity: identityAnswerSchema.optional(),
 });
 
-export const codeSentSchema = z.object({ sent_to: z.string().describe("The masked address, like a•••@e•••.pt.") });
+export const codeSentSchema = z.object({
+  sent_to: z.string().describe("The masked address, like a•••@e•••.pt."),
+  test: z
+    .literal(true)
+    .optional()
+    .describe("A test item: nothing was sent; the code is on the item for the business to read."),
+});
 export const verifiedSchema = z.object({ recognised: z.literal("strong") });
 
 export const thinEventSchema = z.object({
@@ -161,7 +255,14 @@ export const serviceSchema = z.looseObject({
   bufferAfterMin: z.number().int(),
   capacity: z.number().int(),
   granularityMin: z.number().int(),
-  price: z.looseObject({ model: z.string(), value: z.number().optional(), currency: z.string().optional() }).nullable(),
+  price: z
+    .looseObject({
+      model: z.string(),
+      value: z.number().optional(),
+      currency: z.string().optional(),
+      per: z.enum(["booking", "person"]).optional().describe("A fixed price is per booking unless it says per person."),
+    })
+    .nullable(),
   active: z.number().int(),
   sort: z.number().int(),
 });
@@ -318,3 +419,49 @@ export const keyListSchema = z.object({
 
 export const deletedSchema = z.object({ deleted: z.literal(true) });
 export const looseSchema = z.looseObject({});
+
+/** What each network already had about a customer who switched networks off, and since when. */
+export const networksOffSchema = z
+  .object({
+    since: iso,
+    via: z.enum(["customer", "owner", "erased"]).nullable().describe("customer: by the link in their code email."),
+    networks: z.array(
+      z.object({
+        network: z.string(),
+        receipts: z.number().int().describe("Receipts about them this network took before the stop."),
+        open_promises: z
+          .number()
+          .int()
+          .describe(
+            "Their promises this network holds without an outcome: it records each as unclosed 9 days after it was due.",
+          ),
+        person: z.boolean().describe("This network knows their person."),
+      }),
+    ),
+  })
+  .nullable()
+  .describe("Booking networks are off for this customer: nothing more about them goes to any network. Null: on.");
+
+export const customerSummarySchema = z.object({
+  party_id: z.string(),
+  name: nullableString,
+  parties: z.array(z.string()).describe("Every party that is this customer."),
+  items: z.number().int(),
+  open_items: z.number().int(),
+  entries: z.number().int(),
+  emails: z.number().int(),
+  erased_at: iso.nullable(),
+  networks_off: networksOffSchema,
+});
+
+export const eraseResultSchema = z.object({
+  erased: z.boolean(),
+  already: z.boolean().describe("The customer had been erased already: nothing more was done."),
+  customer: customerSummarySchema,
+});
+
+export const mailServiceSchema = z.object({
+  service: z.boolean().describe("A mail service that delivers is set up."),
+  sender: z.boolean().describe("There is an address to send from."),
+  links: z.boolean().describe("Emails can carry answer links."),
+});

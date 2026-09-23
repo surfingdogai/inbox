@@ -1,4 +1,7 @@
 import type { MailOut, Statement } from "@surfingdog/platform";
+import { businessFacts, partyLocale } from "../customer/audience";
+import { copyFor, vars } from "../customer/copy";
+import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import { payloadSchemas } from "../domain/types";
 import { collectCarried } from "../identity/carried";
@@ -7,6 +10,7 @@ import { emailOf, maskEmail, rootParty } from "../identity/contacts";
 import { customerHistory } from "../identity/history";
 import { linkedParty } from "../identity/match";
 import { issuanceStatements, passesFor, pendingFor } from "../identity/pending";
+import { itemStopped, networksStopped, type StopView, stoppedPartyByPass, stopView } from "../identity/stops";
 import {
   AGENT_GUIDE_URL,
   type AgentSeen,
@@ -17,12 +21,14 @@ import {
   type Presentation,
   type PresentResult,
 } from "../identity/types";
-import { senderOf } from "../jobs/notify";
+import { ulid } from "../ids";
+import { autoHeaders, senderOf } from "../jobs/mail-log";
+import { mayReceiveEmails, verifiedNetworks } from "../network";
 import { secretHash } from "../protocol/credentials";
 import type { SecretBox } from "../secrets/box";
-import { readSettings } from "../settings/schema";
+import { readSettings, type Settings } from "../settings/schema";
 import { type Caller, isCustomer, nowOf, type TrustTier } from "../write/caller";
-import { findIdempotent } from "../write/common";
+import { findIdempotent, threadEntryStatement } from "../write/common";
 import { type CreateInput, type CreateResult, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
 
@@ -77,9 +83,21 @@ export class IdentityCapabilities {
       const replayed = await createItem(this.db, caller, input);
       return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, audienceOf(caller)) };
     }
-    // Nothing is asked of a network for a request the create would refuse anyway.
-    const valid = payloadSchemas[input.type]?.safeParse(input.payload).success === true;
-    const port = isCustomer(caller) && valid ? this.port : null;
+    // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
+    // all for a test item: it emails nobody and contacts no network (Tiago, 23 September 2026).
+    const valid = payloadSchemas[input.type]?.safeParse(input.payload).success === true && !hasStarted(input, now);
+    const test = caller.sandbox || input.flags?.sandbox === true;
+    // A customer who asked the business not to use booking networks (Tiago, 23 September 2026): no
+    // network is asked anything about them, and a pass they carry is recognised here, from its hash.
+    const stopped =
+      isCustomer(caller) &&
+      (await networksStopped(this.db, {
+        partyIds: [caller.actor.partyId],
+        contact: input.contact,
+        credentials,
+      }));
+    const localParty = stopped && !caller.actor.partyId ? await stoppedPartyByPass(this.db, credentials) : null;
+    const port = isCustomer(caller) && valid && !test && !stopped ? this.port : null;
     const email = input.contact?.email;
     const presented = port && credentials.length ? await this.present(port, credentials, agent, email, now) : EMPTY;
     // A first contact (§2.1): a customer's booking or order with an email and nothing carried —
@@ -92,7 +110,7 @@ export class IdentityCapabilities {
       (caller.actor.channel !== "email" || caller.tier === "verified_principal") &&
       this.secrets &&
       (await port.canSign())
-        ? issuingNetworks(await readSettings(this.db))
+        ? await issuingNetworks(this.db, await readSettings(this.db))
         : [];
     const tier = tierOf(caller, agent, presented.presentations);
     const result = await createItem(this.db, tier === caller.tier ? caller : { ...caller, tier }, {
@@ -103,13 +121,16 @@ export class IdentityCapabilities {
         authenticatedEmail: caller.actor.channel === "email" && caller.tier === "verified_principal",
         issueAt,
         rulesDelayMs: issueAt.length ? RULES_AFTER_ISSUANCE_MS : 0,
+        ...(localParty ? { localParty } : {}),
       },
     });
     if (result.replayed) {
       return { ...result, identity: await this.answer(result.view.item.id, {}, audienceOf(caller)) };
     }
     let issued: IssueResult[] = [];
-    if (port && email && issueAt.length && this.secrets) {
+    // The create may have found the customer stopped where the door could not (the party it joined):
+    // then no network is asked for them, whatever the door had planned.
+    if (port && email && issueAt.length && this.secrets && !(await itemStopped(this.db, result.view.item.id))) {
       const itemId = result.view.item.id;
       try {
         issued = await port.issue({ itemId, email, agent, networks: issueAt, now });
@@ -134,20 +155,37 @@ export class IdentityCapabilities {
    * On the status, cancel and acknowledge doors (§8.4): what the agent carried is presented, and a
    * person linked to a party here acts as that party — the same customer, recognised strongly.
    */
-  async recognise(caller: Caller, carried: CarriedInput): Promise<{ caller: Caller; presented: PresentResult }> {
-    if (!isCustomer(caller) || !this.port) return { caller, presented: EMPTY };
+  async recognise(
+    caller: Caller,
+    carried: CarriedInput & { readonly item_id?: string | undefined },
+  ): Promise<{ caller: Caller; presented: PresentResult }> {
+    if (!isCustomer(caller) || !this.port || caller.sandbox) return { caller, presented: EMPTY };
     const { credentials } = collectCarried(carried.pass, carried.key, caller.carried);
     if (!credentials.length) return { caller, presented: EMPTY };
+    // A test item contacts no network, whoever asks about it and however.
+    if (carried.item_id !== undefined && (await this.isTestItem(carried.item_id))) return { caller, presented: EMPTY };
+    // A customer who stopped networks is recognised by the pass they carry, from its hash, and no
+    // network hears of it; nor is one asked about an item of theirs, whatever is carried.
+    const local = await stoppedPartyByPass(this.db, credentials);
+    if (local) {
+      return caller.actor.partyId
+        ? { caller, presented: EMPTY }
+        : { caller: { ...caller, actor: { ...caller.actor, partyId: local } }, presented: EMPTY };
+    }
+    if (carried.item_id !== undefined && (await this.itemStopped(carried.item_id))) return { caller, presented: EMPTY };
     const now = nowOf(caller);
     const presented = await this.present(this.port, credentials, caller.agent ?? NO_AGENT, undefined, now);
     if (caller.actor.partyId) return { caller, presented };
     for (const p of presented.presentations) {
       const party = await linkedParty(this.db, p.network, p.ppid);
       if (!party) continue;
+      // A customer who stopped networks keeps being recognised by this pass, and what the network
+      // said of them is not kept.
+      const off = await networksStopped(this.db, { partyIds: [party] });
       await this.db.client.query({
         sql: `UPDATE person_links SET pass_hash = COALESCE(?, pass_hash), person = ?, updated_at = ?
                WHERE network = ? AND ppid = ?`,
-        params: [p.passHash ?? null, JSON.stringify(p.person), now, p.network, p.ppid],
+        params: [p.passHash ?? null, off ? null : JSON.stringify(p.person), now, p.network, p.ppid],
         method: "run",
       });
       return { caller: { ...caller, actor: { ...caller.actor, partyId: party } }, presented };
@@ -249,14 +287,46 @@ export class IdentityCapabilities {
     target: VerifyTarget,
     code: string | undefined,
     now: number,
-  ): Promise<{ sent_to: string } | { recognised: "strong" }> {
+    opts: { readonly test?: boolean } = {},
+  ): Promise<{ sent_to: string; test?: true } | { recognised: "strong" }> {
     const settings = await readSettings(this.db);
+    if (code === undefined && opts.test) {
+      // A test item emails nobody: the code is made as ever, and left on the item for the owner,
+      // who is the one testing, to read in the app and type in.
+      const req = await createCode(this.db, target, settings, now);
+      await this.db.batch([
+        threadEntryStatement({
+          id: ulid(now),
+          itemId: target.itemId,
+          direction: "note",
+          channel: "system",
+          actorKind: "system",
+          actorId: null,
+          partyId: null,
+          body: `Test item: nothing was emailed. The one-time code we would have sent to ${req.sentTo} is ${req.code}.`,
+          messageId: null,
+          now,
+        }),
+      ]);
+      return { sent_to: req.sentTo, test: true };
+    }
     if (code === undefined) {
       if (!this.mail) {
         throw new WriteError("nothing_to_verify", "We cannot send email right now, so we cannot send a code.");
       }
+      const facts = await businessFacts(this.db);
+      const sender = senderOf(settings, { transport: this.mail.sender, business: facts.name });
+      if (!sender) {
+        throw new WriteError("nothing_to_verify", "We cannot send email right now, so we cannot send a code.");
+      }
       const req = await createCode(this.db, target, settings, now);
-      await this.mail.send({ ...senderOf(settings), to: [req.email], ...codeMail(settings, req.code) });
+      const lang = customerLang(await partyLocale(this.db, target.partyId), facts.languages);
+      await this.mail.send({
+        ...sender,
+        to: [req.email],
+        ...codeMail({ business: facts.name, minutes: settings.customers.otp.ttlMinutes, code: req.code, lang }),
+        headers: autoHeaders({ automatic: true, template: "code" }),
+      });
       return { sent_to: req.sentTo };
     }
     await checkCode(this.db, target, code, settings, now);
@@ -287,6 +357,8 @@ export class IdentityCapabilities {
       possible = { party_id: id, name: p[0]?.[0] ? String(p[0][0]) : null };
     }
     const history = await customerHistory(this.db, item.partyId, item.id);
+    // A customer who stopped networks: what each network already had, and nothing a network said.
+    const networksOff = await stopView(this.db, item.partyId);
     // What each network said of the person: on this item when the agent presented them, else the
     // last standing a network gave for the customer this item belongs to (§2.2: per network, each
     // authoritative for its own people; a business sees only what an agent presented to it).
@@ -305,9 +377,31 @@ export class IdentityCapabilities {
       possible,
       known: match === "strong" && history.items > 0,
       history,
-      persons: pres.slice(0, 8).map((p) => personOf(String(p[0]), p[1], Number(p[2]), p[3] === "earlier")),
+      persons: networksOff
+        ? []
+        : pres.slice(0, 8).map((p) => personOf(String(p[0]), p[1], Number(p[2]), p[3] === "earlier")),
       agent: { level: r[2] ? String(r[2]) : "none", platform: r[3] ? String(r[3]) : null },
+      networks_off: networksOff,
     };
+  }
+
+  private async itemStopped(itemId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT party_id FROM items WHERE id = ?",
+      params: [itemId],
+      method: "all",
+    });
+    const party = rows[0]?.[0];
+    return typeof party === "string" && (await networksStopped(this.db, { partyIds: [party] }));
+  }
+
+  private async isTestItem(itemId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT COALESCE(sandbox, 0) FROM items WHERE id = ?",
+      params: [itemId],
+      method: "all",
+    });
+    return Number(rows[0]?.[0] ?? 0) === 1;
   }
 
   private async matchOf(itemId: string): Promise<string | null> {
@@ -340,19 +434,17 @@ export class IdentityCapabilities {
  * The one-time code email (ADR-017 §8.2), from the business in its own words: the customer asked
  * the business, or their assistant did, and nothing in it names anyone else.
  */
-export function codeMail(
-  settings: Awaited<ReturnType<typeof readSettings>>,
-  code: string,
-): { subject: string; text: string } {
-  const name = settings.business.name.trim();
-  const minutes = settings.customers.otp.ttlMinutes;
+export function codeMail(input: {
+  readonly business: string;
+  readonly minutes: number;
+  readonly code: string;
+  readonly lang: CustomerLang;
+}): { subject: string; text: string } {
+  const e = copyFor(input.lang).email.code;
+  const v = vars({ business: input.business.trim(), code: input.code, minutes: String(input.minutes) });
   return {
-    subject: name ? `Your code for ${name}` : "Your code",
-    text: [
-      `${name ? `Your code for ${name}` : "Your code"} is ${code}. It works for ${minutes} minute${minutes === 1 ? "" : "s"}.`,
-      "",
-      "If you did not ask for it, you can ignore this email.",
-    ].join("\n"),
+    subject: v.business ? e.subject(v) : e.subjectPlain,
+    text: [e.first(v), "", e.ignore].join("\n"),
   };
 }
 
@@ -364,6 +456,11 @@ export interface CustomerView {
   /** Per network that recognised the person, one entry (at most eight, §2.4). */
   readonly persons: readonly PersonView[];
   readonly agent: { readonly level: string; readonly platform: string | null };
+  /**
+   * The customer asked the business not to use booking networks for them: since when, who recorded
+   * it, and what each network already had (no network can yet be asked to erase it). Null otherwise.
+   */
+  readonly networks_off: StopView | null;
 }
 
 /**
@@ -398,6 +495,11 @@ export interface PersonView {
 export function customerSummary(c: CustomerView | undefined): string {
   if (!c) return "";
   const parts: string[] = [];
+  if (c.networks_off) {
+    parts.push(
+      `Asked us not to use booking networks for them (since ${c.networks_off.since.slice(0, 10)}): nothing about them goes to any network.`,
+    );
+  }
   if (c.match === "weak" && c.possible) {
     parts.push(
       `May be ${c.possible.name ?? "a customer you know"} (same email or phone, unconfirmed; a one-time code can prove it).`,
@@ -474,12 +576,24 @@ function audienceOf(caller: Caller): PassAudience {
   return isCustomer(caller) ? "creator" : "business";
 }
 
-/** The networks a first contact is asked of: switched on, and letting it issue. */
-export function issuingNetworks(settings: Awaited<ReturnType<typeof readSettings>>): string[] {
+/**
+ * The networks a first contact is asked of: switched on, letting it issue, and — for any network
+ * but the default one — having verified this inbox (Tiago, 23 September 2026). A customer's email
+ * address goes to no network that has not.
+ */
+export async function issuingNetworks(db: Db, settings: Settings): Promise<string[]> {
+  const verified = await verifiedNetworks(db);
   return Object.entries(settings.networks)
-    .filter(([, n]) => n.enabled && n.issue)
+    .filter(([origin, n]) => n.enabled && n.issue && mayReceiveEmails(origin, verified))
     .map(([origin]) => origin)
     .sort();
+}
+
+/** A booking whose start has come: refused at the create (`createItem`), so no network is asked. */
+function hasStarted(input: CreateInput, now: number): boolean {
+  if (input.type !== "booking") return false;
+  const start = Date.parse(String((input.payload as { startTime?: unknown } | null)?.startTime ?? ""));
+  return Number.isFinite(start) && start <= now;
 }
 
 /**

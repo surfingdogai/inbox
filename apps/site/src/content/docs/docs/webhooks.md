@@ -23,22 +23,25 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 
 | Type | Sent when |
 | --- | --- |
-| `booking.create` | Someone requested a booking. |
+| `booking.create` | Someone requested a booking; or a customer accepted a quote for one, and it arrives already `confirmed`. |
 | `booking.request_info` | You asked the customer for more details. |
 | `booking.provide_info` | The customer answered with the details. |
 | `booking.propose` | You proposed another time. |
 | `booking.accept` | The customer accepted the time you proposed. |
-| `booking.confirm` | You confirmed the booking; the slot is claimed. |
+| `booking.counter` | The customer asked for another time instead of the one you proposed; the booking is back with you, at that time. |
+| `booking.confirm` | You confirmed the booking; the slot is claimed. From `proposed`, at the time you proposed: the customer said yes to a person. |
 | `booking.decline` | You declined the request. |
-| `booking.cancel` | The customer cancelled: before it was confirmed, or within your cancellation window. |
+| `booking.cancel` | The customer cancelled: before it was confirmed (declining the time you proposed is one), or within your cancellation window. |
 | `booking.cancel_late` | The customer cancelled a confirmed booking after your cancellation window, and you record late cancellations (`booking.lateCancellation`). |
 | `booking.cancel_by_business` | You cancelled the booking. |
+| `booking.record_cancel` | You recorded a cancellation the customer asked for, by phone, email or in person: theirs, not yours. |
+| `booking.record_cancel_late` | The same, when they asked after your cancellation window and you record late cancellations. |
 | `booking.expire` | A rule expired a booking nobody answered. |
 | `booking.complete` | The booking happened: you marked it, or the system did `booking.autoCompleteHours` after the end (`data.actor.kind` is `system`); also your correction of a no-show. |
 | `booking.no_show` | The customer did not turn up; also your correction of a completion. |
 | `booking.receipt_issued` | The instance signed a receipt: the confirmation, or how the booking ended ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
 | `booking.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
-| `order.create` | An order arrived. |
+| `order.create` | An order arrived; or a customer accepted a quote for one, and it arrives already `accepted`. |
 | `order.request_info` | You asked the customer for more details. |
 | `order.provide_info` | The customer answered. |
 | `order.accept` | You accepted the order. |
@@ -51,6 +54,7 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `order.complete` | The order is closed and done. |
 | `order.decline` | You declined the order. |
 | `order.cancel` | The order was cancelled. |
+| `order.record_cancel` | You recorded a cancellation the customer asked for: theirs, not yours. |
 | `order.charge_back` | The payment was reversed by the bank, and the order ended there. |
 | `order.record_charge_back` | A charge-back was recorded on an order that was already completed. |
 | `order.receipt_issued` | The instance signed a receipt: the acceptance, the payment, or how the order ended. In the full style, `data.receipt` carries it. |
@@ -58,8 +62,8 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `quote_request.create` | Someone asked for a price. |
 | `quote_request.request_info` | You asked what exactly they need. |
 | `quote_request.provide_info` | They told you. |
-| `quote_request.quote` | You sent a quote, with a total and a validity date. |
-| `quote_request.accept` | The customer accepted the quote; a booking or an order follows. |
+| `quote_request.quote` | You sent a quote, with a total and a validity date (again: the new one replaces it). |
+| `quote_request.accept` | The customer accepted the quote; the booking it was for (confirmed) or the order (accepted) is created with it, and has its own `create` event. |
 | `quote_request.decline` | The quote was declined. |
 | `quote_request.expire` | The quote passed its validity date. |
 | `message.create` | A new conversation started. |

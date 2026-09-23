@@ -1,12 +1,13 @@
-import { runMigrations } from "@surfingdog/platform";
+import { logMailOut, runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import { serviceInput } from "../src/capabilities/setup-types";
 import { createDb, type Db } from "../src/db";
 import { ulid } from "../src/ids";
+import { createRunner } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
-import { availabilityRules, business, products, services, slotClaims } from "../src/schema/tables";
-import { type Caller, WriteError } from "../src/write/index";
+import { availabilityRules, business, products, rules, services, slotClaims } from "../src/schema/tables";
+import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { bucketRange, bucketsFor } from "../src/write/slots";
 import { makeClient, resetTables } from "./harness";
 
@@ -103,11 +104,14 @@ describe("public capabilities", () => {
     await db.orm
       .insert(availabilityRules)
       .values({ id: ulid(), serviceId: svc, kind: "open", weekly: { tue: [["09:00", "12:00"]] }, createdAt: T0 });
-    const res = await caps.checkAvailability({
-      service_id: svc,
-      from: "2026-09-22T00:00:00Z",
-      to: "2026-09-23T00:00:00Z",
-    });
+    const res = await caps.checkAvailability(
+      {
+        service_id: svc,
+        from: "2026-09-22T00:00:00Z",
+        to: "2026-09-23T00:00:00Z",
+      },
+      { now: T0 },
+    );
     expect(res.slots.map((s) => s.startTime)).toEqual([
       "2026-09-22T08:00:00.000Z",
       "2026-09-22T08:30:00.000Z",
@@ -119,14 +123,20 @@ describe("public capabilities", () => {
       { resourceKey: `service:${svc}`, bucketStart: Date.parse("2026-09-22T08:30:00Z"), ordinal: 0, itemId: "x" },
       { resourceKey: `service:${svc}`, bucketStart: Date.parse("2026-09-22T09:00:00Z"), ordinal: 0, itemId: "x" },
     ]);
-    const after = await caps.checkAvailability({
-      service_id: svc,
-      from: "2026-09-22T00:00:00Z",
-      to: "2026-09-23T00:00:00Z",
-    });
+    const after = await caps.checkAvailability(
+      {
+        service_id: svc,
+        from: "2026-09-22T00:00:00Z",
+        to: "2026-09-23T00:00:00Z",
+      },
+      { now: T0 },
+    );
     expect(after.slots.map((s) => s.startTime)).toEqual(["2026-09-22T09:30:00.000Z"]);
     const bad = await fail(
-      caps.checkAvailability({ service_id: "nope", from: "2026-09-22T00:00:00Z", to: "2026-09-23T00:00:00Z" }),
+      caps.checkAvailability(
+        { service_id: "nope", from: "2026-09-22T00:00:00Z", to: "2026-09-23T00:00:00Z" },
+        { now: T0 },
+      ),
     );
     expect(bad.fields?.[0]?.path).toBe("service_id");
   });
@@ -269,11 +279,14 @@ describe("availability over a real window", () => {
     const service = await lawyer(caps, { mon: [["09:00", "17:00"]] });
     // A Monday, midnight to midnight: 96 buckets of 15 minutes, and the search looks one
     // duration past the end. That was refused with "a booking may span at most 96 slots".
-    const { slots } = await caps.checkAvailability({
-      service_id: service.id,
-      from: "2026-09-28T00:00:00.000Z",
-      to: "2026-09-29T00:00:00.000Z",
-    });
+    const { slots } = await caps.checkAvailability(
+      {
+        service_id: service.id,
+        from: "2026-09-28T00:00:00.000Z",
+        to: "2026-09-29T00:00:00.000Z",
+      },
+      { now: T0 },
+    );
     expect(slots.length).toBeGreaterThan(0);
     expect(slots[0]?.startTime).toBe("2026-09-28T08:00:00.000Z");
   });
@@ -281,11 +294,14 @@ describe("availability over a real window", () => {
   it("answers the fourteen days the endpoint documents", async () => {
     const { caps } = await setup();
     const service = await lawyer(caps, { mon: [["09:00", "10:00"]], tue: [["09:00", "10:00"]] });
-    const { slots } = await caps.checkAvailability({
-      service_id: service.id,
-      from: "2026-09-28T00:00:00.000Z",
-      to: "2026-10-12T00:00:00.000Z",
-    });
+    const { slots } = await caps.checkAvailability(
+      {
+        service_id: service.id,
+        from: "2026-09-28T00:00:00.000Z",
+        to: "2026-10-12T00:00:00.000Z",
+      },
+      { now: T0 },
+    );
     // Two Mondays and two Tuesdays, one hour each.
     expect(slots).toHaveLength(4);
   });
@@ -298,5 +314,154 @@ describe("availability over a real window", () => {
     expect(bucketRange(spec, "2026-09-28T00:00:00.000Z", "2026-09-30T00:00:00.000Z")).toHaveLength(192);
     // And a real booking, inside the cap, still measures the same either way.
     expect(bucketsFor(spec, "2026-09-28T09:00:00.000Z", "2026-09-28T10:00:00.000Z")).toHaveLength(4);
+  });
+});
+
+describe("the minimum notice, and times that have passed (Tiago, 23 September 2026)", () => {
+  const rule: Caller = {
+    actor: { kind: "rule", id: "rule_1", channel: "system" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => T0,
+  };
+  const ai: Caller = {
+    actor: { kind: "owner_ai", id: "client_1", channel: "rest" },
+    actsAs: "owner",
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => T0,
+  };
+  const at = (ms: number, minutes = 90) => ({
+    startTime: new Date(ms).toISOString(),
+    endTime: new Date(ms + minutes * 60_000).toISOString(),
+  });
+  const open = async (db: Db, svc: string) =>
+    db.orm.insert(availabilityRules).values({
+      id: ulid(),
+      serviceId: svc,
+      kind: "open",
+      weekly: { mon: [["08:00", "20:00"]], tue: [["08:00", "20:00"]] },
+      createdAt: T0,
+    });
+
+  it("offers no time that has started or that falls inside the notice, an hour unless the owner says", async () => {
+    const { db, caps, svc } = await setup();
+    await open(db, svc);
+    const monday = { service_id: svc, from: "2026-09-21T00:00:00Z", to: "2026-09-22T00:00:00Z" };
+    // Ten o'clock UTC now: nothing before eleven.
+    const first = async () => (await caps.checkAvailability(monday, { now: T0 })).slots[0]?.startTime;
+    expect(await first()).toBe("2026-09-21T11:00:00.000Z");
+    await caps.updateSettings(owner, { doc: { booking: { minNoticeMin: 180 } } });
+    expect(await first()).toBe("2026-09-21T13:00:00.000Z");
+    await caps.updateSettings(owner, { doc: { booking: { minNoticeMin: 0 } } });
+    expect(await first()).toBe("2026-09-21T10:00:00.000Z");
+    // A window that has passed has nothing to offer, whatever the hours say.
+    const past = await caps.checkAvailability(
+      { service_id: svc, from: "2026-09-14T00:00:00Z", to: "2026-09-15T00:00:00Z" },
+      { now: T0 },
+    );
+    expect(past.slots).toEqual([]);
+  });
+
+  it("lets no rule, AI or key book inside the notice; a person at the business may", async () => {
+    const { db, caps, svc } = await setup();
+    await open(db, svc);
+    // A customer may ask for a time inside the notice: it is taken, and waits for a person.
+    const soon = await caps.createBooking(agent("soon"), {
+      payload: { reservationFor: { serviceId: svc, name: "Full service" }, ...at(T0 + 30 * 60_000) },
+      contact: { email: "rita@example.com" },
+    });
+    expect(soon.view.item.state).toBe("requested");
+    for (const caller of [rule, ai]) {
+      const e = await fail(transitionItem(db, caller, { itemId: soon.view.item.id, event: "confirm" }));
+      expect(e.code).toBe("guard_failed");
+      expect(e.details).toMatchObject({ guard: "not_too_soon" });
+    }
+    // Nor does the owner's AI propose a time inside it.
+    const later = await caps.createBooking(agent("later"), {
+      payload: { reservationFor: { serviceId: svc, name: "Full service" }, ...at(T0 + 26 * 3_600_000) },
+      contact: { email: "rita@example.com" },
+    });
+    const e = await fail(
+      transitionItem(db, ai, { itemId: later.view.item.id, event: "propose", input: at(T0 + 40 * 60_000) }),
+    );
+    expect(e.details).toMatchObject({ guard: "not_too_soon" });
+    // A time proposed is one the customer must still accept, which inside the notice they cannot:
+    // the owner does not propose one either.
+    const byOwner = await fail(
+      caps.transitionItem(owner, { item_id: later.view.item.id, event: "propose", input: at(T0 + 40 * 60_000) }),
+    );
+    expect(byOwner.details).toMatchObject({ guard: "not_too_soon", minNoticeMin: 60 });
+    expect(byOwner.message).toContain("the customer could not accept it");
+    // Nor quotes a booking for such a time.
+    const q = await caps.requestQuote(agent("quote"), {
+      payload: { itemOffered: { name: "Full service", serviceId: svc }, description: "Today, please" },
+      contact: { email: "rita@example.com" },
+    });
+    const quoted = await fail(
+      caps.transitionItem(owner, {
+        item_id: q.view.item.id,
+        event: "quote",
+        input: {
+          totalPrice: { value: 4500, currency: "EUR" },
+          validThrough: new Date(T0 + 3_600_000).toISOString(),
+          creates: "booking",
+          startTime: new Date(T0 + 30 * 60_000).toISOString(),
+        },
+      }),
+    );
+    expect(quoted.fields).toEqual([
+      expect.objectContaining({ path: "input.startTime", message: expect.stringContaining("minimum notice") }),
+    ]);
+    // The owner in the app books the customer standing at the counter.
+    await caps.transitionItem(owner, { item_id: soon.view.item.id, event: "confirm" });
+  });
+
+  it("has a rule that would confirm a time inside the notice ask a person instead", async () => {
+    const { db, caps, svc } = await setup();
+    await open(db, svc);
+    await db.orm.insert(rules).values({
+      id: ulid(),
+      name: "Confirm every booking",
+      priority: 100,
+      enabled: 1,
+      definition: {
+        on: ["item.created"],
+        if: { path: "item.type", op: "eq", value: "booking" },
+        actions: [{ action: "transition", event: "confirm" }],
+      },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const runner = createRunner({ mailOut: logMailOut() });
+    const book = (key: string, ms: number) =>
+      caps.createBooking(agent(key), {
+        payload: { reservationFor: { serviceId: svc, name: "Full service" }, ...at(ms) },
+        contact: { email: "rita@example.com" },
+      });
+    const soon = await book("rule-soon", T0 + 30 * 60_000);
+    const later = await book("rule-later", T0 + 26 * 3_600_000);
+    for (let i = 0; i < 5; i++) if ((await runner.runDue(db, { now: T0 })).claimed === 0) break;
+    const read = async (id: string) => (await caps.getItem(owner, { item_id: id })).item;
+    expect(await read(soon.view.item.id)).toMatchObject({ state: "requested", flags: { needsHuman: true } });
+    expect(await read(later.view.item.id)).toMatchObject({ state: "confirmed" });
+  });
+
+  it("books a time that has started for nobody: a customer is told in the business's words", async () => {
+    const { db, caps, svc } = await setup();
+    const past = { reservationFor: { serviceId: svc, name: "Full service" }, ...at(T0 - 3_600_000) };
+    const en = await fail(caps.createBooking(agent("past-en"), { payload: past, contact: { email: "a@example.com" } }));
+    expect(en.code).toBe("invalid_input");
+    expect(en.message).toBe("That time has passed.");
+    expect(en.fields).toEqual([{ path: "payload.startTime", problem: "invalid", message: "That time has passed." }]);
+    const pt = await fail(
+      caps.createBooking(agent("past-pt"), { payload: past, contact: { email: "a@example.com", locale: "pt-PT" } }),
+    );
+    expect(pt.message).toBe("Essa hora já passou.");
+    // One the business itself wrote down for a time gone by is still never confirmed.
+    const { createItem } = await import("../src/write/create");
+    const late = await createItem(db, owner, { type: "booking", payload: past });
+    const refused = await fail(caps.transitionItem(owner, { item_id: late.view.item.id, event: "confirm" }));
+    expect(refused.details).toMatchObject({ guard: "not_too_soon" });
   });
 });

@@ -3,7 +3,10 @@
 **Status:** accepted, 23 September 2026. Drafted, then revised the same day after an independent
 review; Tiago decided the six open questions the same day (**Q1**–**Q6**, in Decisions below and
 marked where they bite), and the body follows his answers. **Q5 shipped first, on its own, as a fix
-to the code of that day** (§3.2); the rest is not built yet. A number marked \* is a *default*
+to the code of that day** (§3.2). The customer's answers to a proposed time and a quote, by their
+assistant and by links in the business's email (§5, §6), shipped next, in a first build that
+[Amendment 1](#amendment-1-23-sep-2026-the-first-build-of-the-customers-answers) records; the rest
+is not built yet. A number marked \* is a *default*
 Tiago may change without a new ADR. The legal points are research, not advice, and need
 a lawyer before they become Terms or public copy.
 
@@ -681,6 +684,85 @@ before an agent's acceptance binds. Offers to several customers, AI-chosen subst
 `acceptable_items`), "was" prices (no 30-day history, PID art. 6a), and ever auto-accepting on
 silence. Rewards on lines the catalogue does not price (quotes, custom lines), and rewards that add
 up. B2B-only terms; legal strings beyond EN and PT.
+
+## Amendment 1 (23 Sep 2026): the first build of the customer's answers
+
+**Status: proposed.** Tiago decided on 23 Sep 2026 that customers accept or decline a proposed time
+or a quote, and send details asked for, through three doors — their assistant, links in the
+business's email, and a small page those links open — and that the owner's **Confirm** on a proposed
+booking books the proposed time. The first build does that on today's tables, so it differs from the
+body in the points below, which await his review:
+
+- **The open offer is what the item holds** (§1): another time is `payload.proposed` on a booking in
+  `proposed`, a quote is `payload.quote` on a request in `quoted`; there is no `item_offers` table
+  yet. `terms_sha` is `base64url(SHA-256(canonical JSON of {kind, …terms}))`, which for these terms
+  equals RFC 8785's. The doors are verbs on the item (§6): `POST /v1/items/{id}/accept`, `/decline`,
+  `/counter` and `/details`, and the MCP tools `accept_offer`, `decline_offer`, `suggest_time` and
+  `provide_details`; `/offers/{offer}/…` can be added beside them when offers get a table.
+- **`action_links`** gains `terms_sha` (instead of `offer_id`), `lang` and `mail_key` in migration
+  `0011_customer_links`; this ADR's `0011_negotiation` takes a later number.
+- **§3.1 `confirm` from `proposed` stays**, and books the proposed time (N13): it records a yes the
+  customer gave a person, so only a person may fire it — the owner or staff, never the owner's AI, a
+  rule, an integration key, or anything on the owner's MCP even with a full owner key (the test the
+  `security` settings use) — with an optional note of how they agreed. `record_acceptance` is not
+  added. `confirm` also leaves `needs_info` (N14), and a customer's details, by any door, fire
+  `provide_info`; an automatic reply from their mailbox (`Auto-Submitted`, `X-Autoreply`,
+  `Precedence: auto_reply`) is kept on the item and answers nothing.
+- **`propose`** (from `requested`, `needs_info`) takes a time a customer could say yes to: one that
+  ends after it starts, fits one booking, and is free when proposed (N7); nothing is held.
+  `request_info` from `proposed` withdraws the proposed time, which the event keeps. `propose` from
+  `proposed` is not built: the owner asks again or waits for the answer.
+- **`counter`** is proposed → requested for the customer's own other time, which must be a free time
+  the business would offer; nothing is held. **`record_cancel`** (and `record_cancel_late`, fired for
+  it) lets the owner, staff or the owner's AI record a cancellation the customer asked for: the
+  customer's, judged at the moment they asked, with the customer's outcomes
+  (`booking.cancelled_by_customer`, `booking.cancelled_late_by_customer`,
+  `order.cancelled_by_customer`); a rule cannot record one.
+- **§3.3 is built as written for acceptance**: the booking is created `confirmed` with its places
+  claimed, or the order `accepted`, in the accept's batch; a quote must add up, and one that creates a
+  booking names a time (no fall back to an order, N12). `counter` on a quote and `retract` are not built.
+- **No time that has started** is proposed, confirmed, accepted or asked for (`not_too_soon`). The
+  minimum notice before a time is the setting `booking.minNoticeMin` (default 60 minutes, Tiago
+  23 Sep 2026): `check_availability` offers nothing inside it, and no customer, rule, AI or
+  integration key books a time inside it; the owner or staff in person still may. Nobody proposes
+  or quotes one, a person included: the customer answers by the notice, so they could not accept
+  it. A customer's request inside it is taken and waits for a person; one for a time that has
+  started is refused at the create. A proposed time's deadline, and its links, end at the start
+  less the notice.
+- **Threading (§5, N10) without a `Message-ID` of ours.** Cloudflare Email Service writes that header
+  itself and refuses a message that sets it, so each item has a random anchor id sent first in the
+  `References` of every email about it, with `In-Reply-To` the customer's last own id, else the
+  anchor. `mail_refs` (migration `0012_customer_mail`) maps the anchor, each email's own ref and the
+  id the mail service returned to the item; the email door looks a reply up there. There is no
+  plus address and no subject token in what we send.
+- **The mail log** (`outbound_mail`, same migration): every email is rendered once, stored, and sent
+  from the row, so a retry sends the same words and links; its status is kept and a customer email
+  that failed for good marks the item as needing a person. The row keeps each action link without
+  its HMAC, which the send puts back from `action_links`: the owner's app, the owner's AI reading
+  `get_item` and a copy of the database see the email but cannot answer it as the customer. A
+  transport that only logs (no mail service set up) records `skipped: no_service`, never `sent`.
+  The acknowledgement goes to one address at most three times a day. Emails are in the customer's language
+  (English or Portuguese), and one a rule or the owner's AI caused ends with "This reply was sent
+  automatically. Reply to reach a person." (Tiago, 23 Sep 2026), in place of §5's AI Act sentence.
+- **Time yes, money no (Q2), for the owner's AI only, before §4's limits exist.** The owner's AI
+  (actor `owner_ai`, or anything on the owner's MCP) is held like a rule by `assertBusinessPriced`,
+  and further: it cannot send a quote, propose a time at a price other than the catalogue's (named,
+  or kept by leaving the price out of a request whose price the customer set) or longer than the
+  service, change a service's or product's price or the business's currency, publish a priced
+  product or service (what it adds with a price is saved unpublished), add or remove a feed, or
+  write, rewrite or switch on a rule that sends a quote or names an amount (a rule prices on its own
+  for as long as it is on). A booking or order it makes through the public doors is priced from the
+  catalogue like a customer's, so its own figure is never the price. §4's "the AI may raise a
+  price" is not built. Every refusal carries `draft_for_owner: true` and tells it to leave a note.
+- **A price per person.** A service's fixed price is per booking unless `price.per` is `person`; then
+  a booking costs it times `partySize`. A group still takes one place per booking.
+- **Test items reach nobody.** A sandbox item emails neither the customer nor the owner (the mail log
+  keeps each as `skipped: test_item`), asks no network for a key, presents no pass, and its one-time
+  code is left on the item as a note. ADR-017 §2.1 is amended the same day: a network other than the
+  default one gets customers' addresses only once it has verified this inbox. Since a network
+  verifies by answering the inbox's ping, which any host can do, only a person at the business
+  switches a network on or lets it issue codes; the owner's AI and integration keys may switch one
+  off, never on.
 
 ## Sources
 

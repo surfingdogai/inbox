@@ -169,14 +169,19 @@ export async function runRulesForEvent(
               ? error.message
               : String(error);
         report.errors.push(`${rule.name}: ${message}`);
-        // The promise waits for a person to price it (ADR-018 §3.2): the rule asks one instead.
-        if (error instanceof WriteError && error.details?.guard === "business_priced") {
+        // The promise waits for a person to price it (ADR-018 §3.2), or to book a time inside the
+        // minimum notice, which no rule does (Tiago, 23 September 2026): the rule asks one instead.
+        const guard = error instanceof WriteError ? error.details?.guard : undefined;
+        if (guard === "business_priced" || guard === "not_too_soon") {
           try {
             current = (
               await setFlags(db, ruleActor, {
                 itemId: current.id,
                 flags: { needsHuman: true },
-                reason: `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`,
+                reason:
+                  guard === "business_priced"
+                    ? `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`
+                    : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
                 causation,
               })
             ).item;

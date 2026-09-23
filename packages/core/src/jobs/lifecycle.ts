@@ -1,13 +1,19 @@
 import type { MailOut, SqlInput } from "@surfingdog/platform";
+import { businessFacts } from "../customer/audience";
+import { keyMail, privacyUrl } from "../customer/disclosure";
+import { customerLang } from "../customer/lang";
+import { cutLinks, networksLink } from "../customer/links";
 import type { Db } from "../db";
-import { keyLine, keysDeliveredStatement, keysDueAlone, keysFor, prunePending } from "../identity/pending";
+import type { ItemType } from "../domain/types";
+import { keysDeliveredStatement, keysDueAlone, keysFor, prunePending } from "../identity/pending";
+import { itemStopped } from "../identity/stops";
 import { receiptSha } from "../receipts/sign";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
 import { transitionItem } from "../write/transition";
-import { senderOf } from "./notify";
+import { autoHeaders, mailByJob, mailDomain, senderOf, sendLogged, storeMail, threadHeaders } from "./mail-log";
 import type { JobHandler } from "./runner";
 import { ensureJob } from "./schedule";
 
@@ -21,9 +27,9 @@ import { ensureJob } from "./schedule";
  * - an order whose payment was requested `orders.payDays` ago and never arrived lapses: a neutral
  *   close for the networks, while the order stays open for a late payment;
  * - receipts issued before receipts had a `sha` get one;
- * - a first contact's key that no email to the customer carried within a day goes in an email of
- *   its own, one line (ADR-017 §2.1), while the business keeps `customers.emailKey` on; seven days
- *   on nothing of a first contact is left.
+ * - a first contact's key goes to the customer a day after they first booked or ordered, in an
+ *   email of its own with a line about the booking network (ADR-017 §2.1), while the business keeps
+ *   `customers.emailKey` on; seven days on nothing of a first contact is left.
  *
  * A booking or an order promised before outcomes were recorded (`legacy_promise`, set by the
  * outcomes migration) is never completed or lapsed here: its customer made it under the rules of
@@ -51,7 +57,13 @@ interface SweepPayload {
 }
 
 export function lifecycleSweepHandler(
-  opts: { batch?: number; mailOut?: MailOut | undefined; secrets?: SecretBox | null | undefined } = {},
+  opts: {
+    batch?: number;
+    mailOut?: MailOut | undefined;
+    secrets?: SecretBox | null | undefined;
+    /** This instance's public address, for the link in the code email. */
+    baseUrl?: string | undefined;
+  } = {},
 ): JobHandler {
   const batch = opts.batch ?? SWEEP_BATCH;
   return async (job, { db, now }) => {
@@ -91,7 +103,7 @@ export function lifecycleSweepHandler(
 
     const keyed =
       opts.mailOut && settings.customers.emailKey
-        ? await sendKeysAlone(db, opts.mailOut, opts.secrets ?? null, settings, now, batch)
+        ? await sendKeysAlone(db, opts.mailOut, opts.secrets ?? null, settings, now, batch, opts.baseUrl)
         : 0;
     await prunePending(db, now);
 
@@ -140,10 +152,14 @@ async function fire(
 }
 
 /**
- * Keys no email carried within a day: one line to the address the customer gave, then gone
- * (ADR-017 §2.1). The email is the business's, about the booking or order the customer made with
- * it, and says only that. A key that cannot be opened or sent stays until the next run, and seven
- * days on the row is pruned whatever happened.
+ * A first contact's code for their assistant (ADR-017 §2.1, as decided on 23 September 2026): a day
+ * after the booking or order, in an email of its own and never on another, with one line in the
+ * business's words about the booking network and a link to the page that explains it. No public
+ * address for that page, no email: a code without its explanation is not sent. The email goes
+ * through the mail log (`key:<item>`) like every other, but the code itself is never stored there:
+ * the row keeps the email with the code cut, and each try opens the sealed code again. A code that
+ * cannot be opened or sent stays until the next run; seven days on, the row is pruned whatever
+ * happened.
  */
 async function sendKeysAlone(
   db: Db,
@@ -152,39 +168,125 @@ async function sendKeysAlone(
   settings: Settings,
   now: number,
   batch: number,
+  baseUrl: string | undefined,
 ): Promise<number> {
-  if (!secrets) return 0;
+  const publicUrl = baseUrl || settings.notifications.appUrl || "";
+  if (!secrets || !publicUrl) return 0;
+  const facts = await businessFacts(db, settings);
+  const sender = senderOf(settings, { transport: mailOut.sender, publicUrl, business: facts.name });
   let sent = 0;
   for (const itemId of await keysDueAlone(db, now, batch)) {
     const { rows } = await db.client.query({
-      sql: "SELECT json_extract(p.contact, '$.email'), i.subject, i.type FROM items i JOIN parties p ON p.id = i.party_id WHERE i.id = ?",
+      sql: `SELECT json_extract(p.contact, '$.email'), json_extract(p.contact, '$.name'), json_extract(p.contact, '$.locale'),
+                   i.subject, i.type, i.payload, COALESCE(i.sandbox, 0)
+              FROM items i JOIN parties p ON p.id = i.party_id WHERE i.id = ?`,
       params: [itemId],
       method: "all",
     });
-    const email = rows[0]?.[0];
-    const keys = await keysFor(db, secrets, itemId);
-    if (typeof email !== "string" || !email || keys.length === 0) continue;
-    const about = rows[0]?.[1] ? String(rows[0][1]) : rows[0]?.[2] === "order" ? "your order" : "your booking";
-    try {
-      await mailOut.send({
-        ...senderOf(settings),
-        to: [email],
-        subject: `For next time: ${about}`,
-        text: keyLine(keys.map((k) => k.key)),
-      });
-    } catch {
+    const r = rows[0];
+    const email = r?.[0];
+    // The customer asked us not to use booking networks since: their code is never sent, and goes.
+    if (await itemStopped(db, itemId)) {
+      await db.client.query({ sql: "DELETE FROM pending_identity WHERE item_id = ?", params: [itemId], method: "run" });
       continue;
     }
-    await db.client.query(
-      keysDeliveredStatement(
-        itemId,
-        keys.map((k) => k.network),
-        now,
-      ),
+    const keys = await keysFor(db, secrets, itemId);
+    // A test item emails nobody, its code included; seven days on the row is pruned like any other.
+    if (!r || typeof email !== "string" || !email || keys.length === 0 || Number(r[6]) === 1) continue;
+    const jobKey = `key:${itemId}`;
+    const delivered = keysDeliveredStatement(
+      itemId,
+      keys.map((k) => k.network),
+      now,
     );
-    sent++;
+    let row = await mailByJob(db, jobKey);
+    // Sent before the code was marked delivered (a crash between the two): mark it now, never send twice.
+    if (row?.status === "sent") {
+      await db.client.query(delivered);
+      continue;
+    }
+    if (row?.status === "failed") continue;
+    // Already written to a log that delivers nothing: once is enough; a mail service sends it later.
+    if (row?.status === "skipped" && row.skipReason === "no_service" && mailOut.delivers === false) continue;
+    const lang = customerLang(typeof r[2] === "string" ? r[2] : null, facts.languages);
+    // The page about the network, for this customer: where they can switch it off for themselves.
+    const pageUrl =
+      (await networksLink(db, secrets, { itemId, mailKey: jobKey, lang, base: publicUrl, now })) ??
+      privacyUrl(publicUrl, lang);
+    const render = (codes: readonly string[]) =>
+      keyMail({
+        lang,
+        name: typeof r[1] === "string" ? r[1] : null,
+        business: facts.name,
+        item: { type: String(r[4]) as ItemType, subject: r[3] === null ? null : String(r[3]), payload: parsed(r[5]) },
+        keys: codes,
+        privacyUrl: pageUrl,
+      });
+    if (!row) {
+      // Kept with the code cut and the link without its mac: the log answers nothing for them.
+      const cut = render(keys.map((k) => cutKey(k.key)));
+      const shown = { ...cut, text: cutLinks(cut.text) };
+      row = await storeMail(
+        db,
+        {
+          itemId,
+          jobKey,
+          recipient: "customer",
+          template: shown.template,
+          lang,
+          subject: shown.subject,
+          text: shown.text,
+          ...(sender ? {} : { skip: "no_sender" as const }),
+        },
+        mailDomain(sender?.from.address, publicUrl),
+        now,
+      );
+    }
+    // No address to send from: kept as not sent, and sent on a later run once there is one.
+    if (!sender) continue;
+    const mail = render(keys.map((k) => k.key));
+    try {
+      await sendLogged(
+        db,
+        mailOut,
+        row,
+        {
+          ...sender,
+          to: [email],
+          subject: mail.subject,
+          text: mail.text,
+          headers: {
+            ...(await threadHeaders(db, itemId, row.messageRef)),
+            ...autoHeaders({ automatic: true, template: "key" }),
+          },
+        },
+        { final: row.attempts + 1 >= KEY_MAIL_ATTEMPTS, now, onSent: [delivered], raise: false },
+      );
+      if (mailOut.delivers !== false) sent++;
+    } catch {
+      // Recorded on the row; the next run tries again until the row is pruned.
+    }
   }
   return sent;
+}
+
+/** A JSON column as a value, or nothing when it is not JSON. */
+function parsed(v: unknown): unknown {
+  if (typeof v !== "string") return v ?? undefined;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Tries at the code email before it counts as failed. */
+const KEY_MAIL_ATTEMPTS = 8;
+
+/** A code as the mail log keeps it: its network and the start, never the secret. */
+function cutKey(key: string): string {
+  const m = /^(sdkey1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}$/.exec(key);
+  return m ? `${m[1]}…` : "…";
 }
 
 /** Receipts written before `sha` existed (0008) get it, a slice per run. */

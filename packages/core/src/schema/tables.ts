@@ -54,6 +54,8 @@ export const services = sqliteTable(
       model: "fixed" | "from" | "quote";
       value?: number;
       currency?: string;
+      /** A fixed price is for the booking (absent, the default) or for each person in it. */
+      per?: "booking" | "person";
     }>(),
     active: integer("active").notNull().default(1),
     sort: integer("sort").notNull().default(0),
@@ -113,8 +115,25 @@ export const parties = sqliteTable("parties", {
   erasedAt: integer("erased_at"),
   /** The party this one was merged into once a one-time code proved they are the same customer (0009). */
   mergedInto: text("merged_into"),
+  /**
+   * Since when this customer asked the business not to use booking networks for them (0013): nothing
+   * more about their items goes to any network, and no network is asked about them.
+   */
+  networksOffAt: integer("networks_off_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/**
+ * Fingerprints of stopped customers (0013): SHA-256 of their email address and phone number as the
+ * inbox normalises them, and of their parties (`identity/stops.ts`). Their next request is stopped
+ * before any network is called, and the stop outlives an erasure of their data.
+ */
+export const networkStops = sqliteTable("network_stops", {
+  hash: text("hash").primaryKey(),
+  /** customer | owner | erased */
+  via: text("via").notNull(),
+  createdAt: createdAt(),
 });
 
 /**
@@ -377,6 +396,8 @@ export const threadEntries = sqliteTable(
     messageId: text("message_id").unique(),
     inReplyTo: text("in_reply_to"),
     createdAt: createdAt(),
+    /** `person` or `automation` when the request that wrote it said so (0013); null: judged by the actor. */
+    writtenBy: text("written_by"),
   },
   (t) => [index("thread_entries_item").on(t.itemId, t.createdAt)],
 );
@@ -838,14 +859,87 @@ export const sigNonces = sqliteTable(
   (t) => [primaryKey({ columns: [t.keyid, t.nonce] })],
 );
 
-export const actionLinks = sqliteTable("action_links", {
-  jti: text("jti").primaryKey(),
-  itemId: text("item_id").notNull(),
-  action: text("action").notNull(),
-  expiresAt: integer("expires_at").notNull(),
-  usedAt: integer("used_at"),
-  createdAt: createdAt(),
-});
+/**
+ * Links in the business's emails (ADR-018 §5, `customer/links.ts`): one per email and action, signed,
+ * expiring, used once. `terms_sha` is what the email proposed (a details link: the version it asked
+ * at), `lang` the language of the page it opens, `mail_key` the email its sibling links share.
+ */
+export const actionLinks = sqliteTable(
+  "action_links",
+  {
+    jti: text("jti").primaryKey(),
+    itemId: text("item_id").notNull(),
+    action: text("action").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+    createdAt: createdAt(),
+    termsSha: text("terms_sha").notNull().default(""),
+    lang: text("lang").notNull().default("en"),
+    mailKey: text("mail_key"),
+  },
+  (t) => [
+    index("action_links_item").on(t.itemId),
+    index("action_links_mail").on(t.mailKey),
+    index("action_links_expires").on(t.expiresAt),
+  ],
+);
+
+/**
+ * Every email the inbox sends (`jobs/mail-log.ts`), what it said and what became of it, so a send
+ * that failed shows on its item and is never shown as sent. One row per email: `job_key` is the
+ * notify job, or `key:<item>` for the code email; a retry sends the stored row again.
+ */
+export const outboundMail = sqliteTable(
+  "outbound_mail",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id"),
+    jobKey: text("job_key").notNull(),
+    /** `customer` | `owner` */
+    recipient: text("recipient").notNull(),
+    /** Which email it is: `booking.proposed`, `ack.booking`, `reply`, `key`, … */
+    template: text("template").notNull(),
+    lang: text("lang").notNull(),
+    /** The thread entry a reply is. */
+    entryId: text("entry_id"),
+    eventId: text("event_id"),
+    subject: text("subject").notNull(),
+    bodyText: text("body_text").notNull(),
+    /** This email's own msg-id, named in the References of the emails after it. */
+    messageRef: text("message_ref").notNull(),
+    providerId: text("provider_id"),
+    /** queued | sent | retrying | failed | skipped */
+    status: text("status").notNull().default("queued"),
+    /** no_address | no_sender | no_service | test_item */
+    skipReason: text("skip_reason"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at").notNull(),
+    sentAt: integer("sent_at"),
+  },
+  (t) => [
+    unique("outbound_mail_job").on(t.jobKey),
+    index("outbound_mail_item").on(t.itemId, t.createdAt),
+    index("outbound_mail_status").on(t.status, t.updatedAt),
+  ],
+);
+
+/**
+ * The ids a customer's reply names in In-Reply-To and References, and the item each belongs to:
+ * the item's `anchor`, each email's own ref (`sent`), and the id the mail service gave it (`provider`).
+ */
+export const mailRefs = sqliteTable(
+  "mail_refs",
+  {
+    ref: text("ref").primaryKey(),
+    itemId: text("item_id").notNull(),
+    /** anchor | sent | provider */
+    kind: text("kind").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("mail_refs_item").on(t.itemId, t.kind)],
+);
 
 /**
  * The developer event stream (ADR-015 §6): a view, not a second events table. Both arms have ULID

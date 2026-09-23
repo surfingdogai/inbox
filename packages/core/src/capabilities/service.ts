@@ -1,9 +1,13 @@
+import type { MailOut } from "@surfingdog/platform";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
+import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
+import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
+import { mailForItem, senderOf } from "../jobs/mail-log";
 import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
@@ -37,6 +41,7 @@ import {
   type EventActor,
   eventActor,
   isCustomer,
+  isOwnerAssistant,
   isOwnerInPerson,
   nowOf,
   permissionKind,
@@ -48,8 +53,10 @@ import { type FieldProblem, fromZod, WriteError } from "../write/errors";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
-import { type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
+import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { findSlots, type Slot } from "./availability";
+import { CustomerDoors, type CustomerItemView } from "./customer";
+import { CustomerData } from "./customers";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { SetupCapabilities } from "./setup";
@@ -74,9 +81,57 @@ export interface Page<T> {
   readonly next_cursor: string | null;
 }
 
-/** A customer's view of their item (the status door): the item, its receipts, and who the inbox takes them for. */
+/**
+ * A customer's view of their item (the status door): the item as they see it, what we proposed and
+ * who we wait on (`CustomerItemView`), its receipts, and who the inbox takes them for.
+ */
 export interface ItemStatus extends ItemView {
   readonly identity: IdentityAnswer;
+  readonly reference?: string;
+  readonly offer?: CustomerItemView["offer"];
+  readonly waiting_on?: CustomerItemView["waiting_on"];
+  readonly next?: CustomerItemView["next"];
+  /**
+   * The conversation as the customer has it: what they wrote and what the business wrote to them,
+   * oldest first, the last fifty — never the business's internal notes. `automated` marks what a
+   * rule or the business's assistant sent.
+   */
+  readonly thread?: readonly CustomerThreadEntry[];
+}
+
+export interface CustomerThreadEntry {
+  readonly from: "you" | "us";
+  readonly text: string;
+  readonly at: string;
+  readonly automated?: true;
+}
+
+/** An email the inbox sent, or tried to, about an item: what the owner's app lists under "Emails". */
+export interface MailView {
+  readonly id: string;
+  readonly recipient: "customer" | "owner";
+  readonly template: string;
+  readonly subject: string;
+  /** The text as sent, each answer link cut short (`cutLinks`): it opens nothing for whoever reads it here. */
+  readonly body: string;
+  /** queued | sent | retrying | failed | skipped: never `sent` before the mail service took it. */
+  readonly status: string;
+  /** Why it was not sent: no_address, no_sender, no_service, test_item. */
+  readonly skip_reason: string | null;
+  readonly last_error: string | null;
+  readonly attempts: number;
+  readonly sent_at: string | null;
+  readonly created_at: string;
+  /** The reply it carries, when it is one. */
+  readonly entry_id: string | null;
+}
+
+/** What became of the email a reply went out in. */
+export interface EntryDelivery {
+  readonly status: string;
+  readonly sent_at: string | null;
+  readonly last_error: string | null;
+  readonly skip_reason: string | null;
 }
 
 export interface ItemDetail extends ItemView {
@@ -103,7 +158,11 @@ export interface ItemDetail extends ItemView {
     actor: string;
     body: string;
     at: string;
+    /** For a reply to the customer: what became of its email. Absent where no email carried it. */
+    delivery?: EntryDelivery;
   }[];
+  /** Every email about the item, to the customer and to the owner, and what became of each. */
+  readonly mail: readonly MailView[];
 }
 
 /** The settings document as a read returns it: secrets masked, and named in `redacted`. */
@@ -144,6 +203,44 @@ export class Capabilities {
    */
   readonly secrets: SecretBox | null;
 
+  /**
+   * The customer's answers to what the business proposed (ADR-018 §5, §6): accept, decline, another
+   * time, the details asked for — by their assistant, or by the links in the business's email.
+   */
+  readonly customer: CustomerDoors;
+
+  /**
+   * One customer's data for the owner: what it holds about them (export), switching booking networks
+   * off for them, and erasing them — the owner's alone.
+   */
+  readonly customers: CustomerData;
+
+  private readonly baseUrl: string | undefined;
+  private mail: MailOut | null = null;
+
+  /** How email goes out: kept to say in Settings whether it does, and handed on for one-time codes. */
+  attachMail(mail: MailOut | null): void {
+    this.mail = mail;
+    this.people.attachMail(mail);
+  }
+
+  /**
+   * Whether this inbox can email at all (`service`: a mail service that delivers, not a log), has an
+   * address to send from (`sender`), and can put answer links in its emails (`links`: a secret to
+   * sign them and a public address for them to open). Settings shows a banner when one is missing.
+   */
+  async getMailStatus(caller: Caller): Promise<{ service: boolean; sender: boolean; links: boolean }> {
+    requireBusiness(caller);
+    const settings = await readSettings(this.db);
+    const facts = await this.getBusinessProfile();
+    const publicUrl = this.baseUrl ?? settings.notifications.appUrl ?? "";
+    return {
+      service: this.mail !== null && this.mail.delivers !== false,
+      sender: senderOf(settings, { transport: this.mail?.sender, publicUrl, business: facts.name }) !== null,
+      links: this.secrets !== null && publicUrl.length > 0,
+    };
+  }
+
   constructor(
     private readonly db: Db,
     secrets: SecretBox | null = null,
@@ -166,6 +263,14 @@ export class Capabilities {
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);
+    this.baseUrl = baseUrl;
+    this.customers = new CustomerData(db);
+    this.customer = new CustomerDoors(db, {
+      access: this.access,
+      people: this.people,
+      receipts: this.receipts,
+      secrets,
+    });
   }
 
   /**
@@ -249,15 +354,22 @@ export class Capabilities {
     return page(rows, input.limit, (r) => r.id);
   }
 
+  /**
+   * The free times in a window, as a customer may book them: none that has started, and none inside
+   * the minimum notice (`booking.minNoticeMin`). `now` is the caller's clock (tests pin it).
+   */
   async checkAvailability(
     input: T.CheckAvailabilityInput,
+    opts: { readonly now?: number } = {},
   ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
-    const profile = await this.getBusinessProfile();
+    const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
     return findSlots(this.db, {
       serviceId: input.service_id,
       from: input.from,
       to: input.to,
       timezone: profile.timezone,
+      now: opts.now ?? Date.now(),
+      minNoticeMin: settings.booking.minNoticeMin,
     });
   }
 
@@ -302,8 +414,15 @@ export class Capabilities {
       (input.access_token !== undefined &&
         row.accessTokenHash !== null &&
         (await hashText(input.access_token)) === row.accessTokenHash);
+    const item = rowToItem(row);
+    // A customer reads it in the business's words and language, with what we proposed and who we wait on.
+    const view = isCustomer(caller)
+      ? await this.customer.present(item, await this.customer.audienceOf(item, c))
+      : viewFor(item, permissionKind(caller));
     return {
-      ...viewFor(rowToItem(row), permissionKind(caller)),
+      ...view,
+      // The business's replies reach a customer who came through an assistant too, not only by email.
+      ...(isCustomer(caller) ? { thread: await customerThread(this.db, row.id) } : {}),
       receipts,
       // A key presented here was exchanged for a pass: this answer is the one that hands it back.
       identity: await this.people.answer(
@@ -322,13 +441,15 @@ export class Capabilities {
   async verifyCustomer(
     caller: Caller,
     input: T.VerifyCustomerInput,
-  ): Promise<{ sent_to: string } | { recognised: "strong" }> {
+  ): Promise<{ sent_to: string; test?: true } | { recognised: "strong" }> {
     await this.access.requireScope(caller, ["inbox:write"], "public:verify_customer");
     const row = await this.loadOwned(withToken(caller, input.access_token), input.item_id);
     return this.people.verify(
       { itemId: row.id, partyId: row.partyId, match: row.customerMatch, possiblePartyId: row.possiblePartyId },
       input.code,
       nowOf(caller),
+      // A test item emails nobody: its code is left on the item instead.
+      { test: rowToItem(row).flags.sandbox },
     );
   }
 
@@ -341,6 +462,13 @@ export class Capabilities {
     await this.access.requireScope(caller, ["inbox:write"], "public:cancel_item");
     const { caller: recognised } = await this.people.recognise(caller, input);
     const c = withToken(withIdempotencyKey(recognised, input.idempotency_key), input.access_token);
+    const r = await this.cancelOnce(c, input);
+    if (!isCustomer(c)) return r;
+    // The customer reads their cancelled item as they read it at the status door: none of our flags.
+    return { ...r, view: { ...r.view, item: customerItem(r.view.item) } };
+  }
+
+  private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
     try {
       return await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
@@ -358,8 +486,16 @@ export class Capabilities {
     }
   }
 
-  /** A new conversation, or a reply on an item the caller owns (which reopens an answered message). */
-  async sendMessage(caller: Caller, input: T.SendMessageInput): Promise<CreateResult | TransitionResult | ItemView> {
+  /**
+   * A new conversation, or a reply on an item the caller owns (which reopens an answered message).
+   * `automatic`: the email door found it is an automatic reply (an out-of-office): it is kept on the
+   * item and moves nothing, since nobody answered anything.
+   */
+  async sendMessage(
+    caller: Caller,
+    input: T.SendMessageInput,
+    opts: { readonly automatic?: boolean } = {},
+  ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
       return this.people.create(
@@ -377,11 +513,47 @@ export class Capabilities {
     await this.access.requireScope(caller, ["inbox:write"], "public:send_message");
     const row = await this.loadOwned(c, input.item_id);
     const item = rowToItem(row);
-    if (item.type === "message" && item.state !== "open") {
-      return transitionItem(this.db, c, { itemId: item.id, event: "reopen", input: { note: input.body } });
+    const customer = isCustomer(c);
+    // A message the business put aside as spam stays there: what its sender writes is kept, nobody
+    // is told, and they read it as closed — never "spam", never our flags.
+    if (customer && item.state === "spam") {
+      await appendThreadEntry(this.db, c, item, input.body, "in", input.message_id, { quiet: true });
+      return this.customer.present(item, await this.customer.audienceOf(item, c));
+    }
+    // Only the customer's own words: an automatic reply from their mailbox moves nothing (below).
+    const moves = !opts.automatic;
+    if (item.type === "message" && item.state !== "open" && moves) {
+      return this.asCustomerSees(
+        c,
+        await transitionItem(this.db, c, {
+          itemId: item.id,
+          event: "reopen",
+          input: { note: input.body },
+          ...(input.message_id ? { messageId: input.message_id } : {}),
+        }),
+      );
+    }
+    // The customer answers what we asked, however they send it (ADR-018 N14): the item moves on.
+    if (customer && item.state === "needs_info" && moves) {
+      return this.asCustomerSees(
+        c,
+        await transitionItem(this.db, c, {
+          itemId: item.id,
+          event: "provide_info",
+          input: { note: input.body },
+          ...(input.message_id ? { messageId: input.message_id } : {}),
+        }),
+      );
     }
     await this.appendEntry(c, item, input.body, "in", input.message_id);
-    return viewFor(item, permissionKind(caller));
+    if (!customer) return viewFor(item, permissionKind(caller));
+    return this.customer.present(item, await this.customer.audienceOf(item, c));
+  }
+
+  /** A transition's answer as its customer reads it: the business's words, none of its flags. */
+  private async asCustomerSees(c: Caller, r: TransitionResult): Promise<TransitionResult> {
+    if (!isCustomer(c)) return r;
+    return { ...r, view: await this.customer.present(r.view.item, await this.customer.audienceOf(r.view.item, c)) };
   }
 
   /**
@@ -411,6 +583,14 @@ export class Capabilities {
     // with the pass reference it carries, goes to the network as the acknowledgement.
     const receipt = (await this.receipts.forItem(row.id)).find((r) => r.id === input.receipt_id);
     if (!receipt) throw new WriteError("not_found", "no such receipt on this item");
+    // Forwarding is a network call about the customer: not for one who asked us not to make them.
+    if (await networksStopped(this.db, { partyIds: [row.partyId] })) {
+      throw new WriteError(
+        "not_allowed",
+        "You asked us not to use the booking network, so we do not pass acknowledgements on to it. The receipt stays yours; send counter_signature to acknowledge it here.",
+        { details: { reason: "networks_off" } },
+      );
+    }
     const sha = await this.receipts.shaOf(receipt.id);
     const forwarded = await this.people.forwardAck(recognised, input, sha);
     return { ...receipt, forwarded };
@@ -425,9 +605,24 @@ export class Capabilities {
     if (input.state) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
+    // "Email not sent": one that failed for good, or one to the customer that was never sent (no
+    // address, nothing to send from, no mail service, the day's acknowledgements used) — but a test
+    // item's, which is never sent by design.
+    if (input.mail_failed) {
+      conditions.push(
+        sql`${items.id} IN (SELECT item_id FROM outbound_mail WHERE item_id IS NOT NULL
+              AND (status = 'failed'
+                OR (status = 'skipped' AND recipient = 'customer' AND COALESCE(skip_reason, '') <> 'test_item')))`,
+      );
+    }
     if (input.q) {
       const match = ftsQuery(input.q);
-      conditions.push(sql`${items.id} IN (SELECT item_id FROM search_fts WHERE search_fts MATCH ${match})`);
+      const inText = sql`${items.id} IN (SELECT item_id FROM search_fts WHERE search_fts MATCH ${match})`;
+      // The six characters every email to the customer carries as its reference: the id's last six.
+      const ref = input.q.trim().toUpperCase();
+      conditions.push(
+        /^[0-9A-HJKMNP-TV-Z]{6}$/.test(ref) ? (or(inText, sql`${items.id} LIKE ${`%${ref}`}`) ?? inText) : inText,
+      );
     }
     if (input.cursor) {
       const c = decodeCursor(input.cursor);
@@ -465,7 +660,7 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
-    const [events, thread, partyViews, receipts, hidden] = await Promise.all([
+    const [events, thread, partyViews, receipts, hidden, mail] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
         .select()
@@ -478,7 +673,19 @@ export class Capabilities {
       readSettings(this.db).then((settings) =>
         hiddenTransitions(this.db, [{ item, legacyPromise: row.legacyPromise }], settings, nowOf(caller)),
       ),
+      mailForItem(this.db, item.id),
     ]);
+    const delivery = new Map<string, EntryDelivery>();
+    for (const m of mail) {
+      if (m.entryId && m.recipient === "customer") {
+        delivery.set(m.entryId, {
+          status: m.status,
+          sent_at: m.sentAt === null ? null : new Date(m.sentAt).toISOString(),
+          last_error: m.lastError,
+          skip_reason: m.skipReason,
+        });
+      }
+    }
     return {
       ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
       receipts,
@@ -501,19 +708,55 @@ export class Capabilities {
         actor: `${t.actorKind}:${t.actorId ?? ""}`,
         body: t.bodyText,
         at: new Date(t.createdAt).toISOString(),
+        ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
+      })),
+      mail: mail.map((m) => ({
+        id: m.id,
+        recipient: m.recipient,
+        template: m.template,
+        subject: m.subject,
+        body: m.bodyText,
+        status: m.status,
+        skip_reason: m.skipReason,
+        last_error: m.lastError,
+        attempts: m.attempts,
+        sent_at: m.sentAt === null ? null : new Date(m.sentAt).toISOString(),
+        created_at: new Date(m.createdAt).toISOString(),
+        entry_id: m.entryId,
       })),
     };
   }
 
-  transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
+  /**
+   * The owner moves an item. A customer's cancellation the owner records after the window had
+   * closed when the customer asked is recorded as late (`record_cancel_late`), where the owner
+   * records late cancellations — as the customer's own door would have (ADR-017 §3.1).
+   */
+  async transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
-    return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    const writtenBy = effectiveWrittenBy(caller, input.written_by);
+    const request = {
       itemId: input.item_id,
       event: input.event,
       ...(input.input ? { input: input.input } : {}),
       ...(input.reason ? { reason: input.reason } : {}),
       ...(input.expected_version !== undefined ? { expectedVersion: input.expected_version } : {}),
-    });
+      ...(writtenBy ? { writtenBy } : {}),
+    };
+    if (input.event !== "record_cancel") return transitionItem(this.db, c, request);
+    try {
+      return await transitionItem(this.db, c, request);
+    } catch (error) {
+      if (!(error instanceof WriteError)) throw error;
+      const late =
+        error.code === "guard_failed" &&
+        (error.details as { guard?: unknown } | undefined)?.guard === "asked_within_window";
+      // A retried request whose first try was the late one: its key is stored for `record_cancel_late`.
+      const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
+      if (!late && !retried) throw error;
+      return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
+    }
   }
 
   /** A reply to the customer (answers an open message) or an internal note. */
@@ -522,11 +765,14 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
+    // Who wrote it, as the request says: an email nobody typed says it was sent automatically.
+    const writtenBy = effectiveWrittenBy(caller, input.written_by);
     if (!input.internal && item.type === "message" && item.state === "open") {
       return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
         itemId: item.id,
         event: "answer",
         input: { note: input.body },
+        ...(writtenBy ? { writtenBy } : {}),
       });
     }
     // Not a transition, so not stored in a batch: the key is held around the append instead, and a
@@ -536,9 +782,11 @@ export class Capabilities {
       this.db,
       keyed,
       "items.reply",
-      { item_id: input.item_id, body: input.body, internal: input.internal },
+      { item_id: input.item_id, body: input.body, internal: input.internal, written_by: writtenBy },
       async () => {
-        await this.appendEntry(caller, item, input.body, input.internal ? "note" : "out");
+        await appendThreadEntry(this.db, caller, item, input.body, input.internal ? "note" : "out", undefined, {
+          writtenBy,
+        });
         const hidden = await hiddenTransitions(
           this.db,
           [{ item, legacyPromise: row.legacyPromise }],
@@ -631,6 +879,28 @@ export class Capabilities {
     }
     const before = parseStoredSettings(stored).settings;
     const after = parseStoredSettings(merged).settings;
+    // A network switched on is sent customers' email addresses once it answers this inbox's ping
+    // (Tiago, 23 September 2026): which networks may have them is for a person at the business to
+    // decide. The owner's AI, or a key handed to another system, may switch one off, never on.
+    if (isOwnerAssistant(caller) || caller.principal?.keyKind === "integration") {
+      const opened = Object.entries(after.networks).filter(([origin, entry]) => {
+        const was = before.networks[origin];
+        return entry.enabled && (!was?.enabled || (entry.issue && !was.issue));
+      });
+      if (opened.length) {
+        throw new WriteError(
+          "not_allowed",
+          "Only the owner can switch a network on, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses.",
+          {
+            fields: opened.map(([origin]) => ({
+              path: `doc.networks.${origin}.enabled`,
+              problem: "invalid" as const,
+              message: "only the owner in person can switch a network on",
+            })),
+          },
+        );
+      }
+    }
     let version: number;
     if (!row) {
       await this.db.client.query({
@@ -815,4 +1085,29 @@ function startsWith(path: readonly string[], prefix: readonly string[]): boolean
 
 function describeProblems(problems: readonly FieldProblem[]): string {
   return problems.map((p) => `${p.path} ${p.message}`).join("; ");
+}
+
+/**
+ * The conversation as the customer has it (the status door): what they wrote and what we wrote to
+ * them, oldest first, the last fifty. Never an internal note.
+ */
+async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEntry[]> {
+  const { rows } = await db.client.query({
+    sql: `SELECT direction, body_text, created_at, actor_kind, channel, written_by FROM (
+            SELECT direction, body_text, created_at, actor_kind, channel, written_by, id FROM thread_entries
+             WHERE item_id = ? AND direction IN ('in', 'out')
+             ORDER BY created_at DESC, id DESC LIMIT 50)
+          ORDER BY created_at, id`,
+    params: [itemId],
+    method: "all",
+  });
+  return rows.map((r) => ({
+    from: r[0] === "in" ? "you" : "us",
+    text: String(r[1] ?? ""),
+    at: new Date(Number(r[2])).toISOString(),
+    ...(r[0] === "out" &&
+    isAutomated(String(r[3]), r[4] === null ? null : String(r[4]), r[5] === null ? null : String(r[5]))
+      ? { automated: true as const }
+      : {}),
+  }));
 }

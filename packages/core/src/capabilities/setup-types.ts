@@ -40,6 +40,12 @@ export const priceSchema = z.object({
     .describe("fixed = this price; from = starting at; quote = priced per request"),
   value: z.number().int().min(0).optional().describe("Minor units (cents)."),
   currency: z.string().length(3).optional(),
+  per: z
+    .enum(["booking", "person"])
+    .optional()
+    .describe(
+      "Whom a fixed price is for: the whole booking (the default) or each person, so a booking for four costs four times the price.",
+    ),
 });
 
 export const serviceInput = z.object({

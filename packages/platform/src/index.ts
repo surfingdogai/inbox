@@ -38,7 +38,22 @@ export interface OutboundMail {
 }
 
 export interface MailOut {
+  /**
+   * Sends one message. `messageId` is the id the service gave it, or empty when it gave none; the
+   * service may use it as the local part of the Message-ID it writes, so a reply that names it can
+   * be matched.
+   */
   send(mail: OutboundMail): Promise<{ messageId: string }>;
+  /**
+   * The address this transport always sends from, whatever a message says, when it has one (the
+   * REST sender's configured address): a message with no sender of its own can still go out.
+   */
+  readonly sender?: { readonly address: string; readonly name?: string | undefined } | undefined;
+  /**
+   * False for a transport that delivers nothing — the log or the console an instance falls back to
+   * when no mail service is set up. What it takes is shown there, and never recorded as sent.
+   */
+  readonly delivers?: boolean | undefined;
 }
 
 /** Raw inbound MIME, however it arrived (Email Worker, provider webhook, forward). */

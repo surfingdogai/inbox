@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CheckCheck, CircleAlert, Inbox, LogOut, type LucideIcon, Settings } from "lucide-react";
+import { CheckCheck, CircleAlert, Inbox, LogOut, type LucideIcon, MailX, Settings } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { signOut } from "../lib/auth";
 import { type Counts, countFor, FILTERS, type Filter } from "../lib/filters";
@@ -8,7 +8,12 @@ import { TYPE_CLASS } from "../lib/format";
 import { ThemeSwitch } from "./ThemeSwitch";
 
 /** The filters without a type carry an icon, so the rail still reads when it collapses to icons. */
-const ICONS: Partial<Record<Filter, LucideIcon>> = { needs: CircleAlert, all: Inbox, done: CheckCheck };
+const ICONS: Partial<Record<Filter, LucideIcon>> = {
+  needs: CircleAlert,
+  all: Inbox,
+  done: CheckCheck,
+  unsent: MailX,
+};
 
 /** The filters rail: what needs you, everything, each type with its count, and what is done. */
 export function Rail({

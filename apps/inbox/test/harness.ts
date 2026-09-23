@@ -26,3 +26,19 @@ export async function freshDb(): Promise<Db> {
   ]);
   return db;
 }
+
+/**
+ * A weekday (Monday to Friday, UTC) at least `daysAhead` days from now, as YYYY-MM-DD. The inbox
+ * never books a time that has passed, so a test that books through a door with the real clock books
+ * in the future, on a day the default opening hours cover.
+ */
+export function futureDay(daysAhead = 7): string {
+  const d = new Date(Date.now() + daysAhead * 86_400_000);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The day after a YYYY-MM-DD, as YYYY-MM-DD. */
+export function nextDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}

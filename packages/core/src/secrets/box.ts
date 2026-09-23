@@ -38,7 +38,10 @@ export type SecretPurpose =
  * places where the same input has to give the same output every time, and each gets its own key
  * so one cannot be replayed as another.
  */
-export type MacPurpose = "receipt-subject";
+export type MacPurpose =
+  | "receipt-subject"
+  /** Links in the business's emails (ADR-018 §5): rotating the secret retires every link out there. */
+  | "action-link";
 
 export interface SecretBox {
   /**

@@ -3,9 +3,12 @@ import { createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
+
+/** A weekday to come: the inbox books nothing in the past. */
+const DAY = futureDay();
 
 async function connect(app: App, path: string, headers: Record<string, string> = {}) {
   const fetchLike = async (input: string | URL, init?: RequestInit): Promise<Response> => {
@@ -44,6 +47,10 @@ describe("MCP doors", () => {
       "create_booking",
       "create_order",
       "get_item_status",
+      "accept_offer",
+      "decline_offer",
+      "suggest_time",
+      "provide_details",
       "cancel_item",
       "send_message",
       "acknowledge_receipt",
@@ -54,8 +61,8 @@ describe("MCP doors", () => {
       arguments: {
         payload: {
           reservationFor: { serviceId: svc, name: "Full service" },
-          startTime: "2026-09-22T08:00:00Z",
-          endTime: "2026-09-22T09:30:00Z",
+          startTime: `${DAY}T08:00:00Z`,
+          endTime: `${DAY}T09:30:00Z`,
         },
         contact: { name: "Ana" },
         idempotency_key: "mcp-1",
@@ -79,6 +86,108 @@ describe("MCP doors", () => {
     expect(bad.isError).toBe(true);
     // The SDK validates arguments before the tool runs and names the offending fields itself.
     expect((bad.content as { text: string }[])[0]?.text).toMatch(/startTime/);
+  });
+
+  it("is the business's own server, and relays what it proposes with the terms to accept", async () => {
+    const db = await freshDb();
+    const svc = ulid();
+    await db.orm.insert(schema.services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      price: { model: "fixed", value: 4500, currency: "EUR" },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    await db.orm.insert(schema.business).values({
+      id: "self",
+      name: "Oficina Maré",
+      timezone: "Europe/Lisbon",
+      currency: "EUR",
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const app = createApp({ db });
+    const client = await connect(app, "/mcp");
+    expect(client.getServerVersion()?.name).toBe("Oficina Maré");
+    const booked = await client.callTool({
+      name: "create_booking",
+      arguments: {
+        payload: {
+          reservationFor: { serviceId: svc, name: "Full service" },
+          startTime: `${DAY}T08:00:00Z`,
+          endTime: `${DAY}T09:30:00Z`,
+        },
+        contact: { locale: "en" },
+      },
+    });
+    const created = booked.structuredContent as { view: { item: { id: string } }; accessToken: string };
+    const id = created.view.item.id;
+    const owner = await createApiKey(db, { kind: "owner", name: "t" });
+    const moved = await app.request(`https://inbox.test/v1/owner/items/${id}/transitions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${owner.key}` },
+      body: JSON.stringify({ event: "propose", input: { startTime: `${DAY}T13:00:00Z`, endTime: `${DAY}T14:30:00Z` } }),
+    });
+    expect(moved.status).toBe(200);
+    const status = await client.callTool({
+      name: "get_item_status",
+      arguments: { item_id: id, access_token: created.accessToken },
+    });
+    const text = (status.content as { text: string }[])[0]?.text ?? "";
+    const offer = (status.structuredContent as { offer: { terms_sha: string } }).offer;
+    // Many assistants read only the text: the terms, until when, the three answers, the fingerprint.
+    expect(text).toMatch(/^We suggest another time for your booking "Full service": /);
+    expect(text).toContain("Please answer by");
+    expect(text).toContain("accept it, decline it or pick another time");
+    expect(text).toContain(`accept_offer with terms_sha ${offer.terms_sha}`);
+    expect(text).toContain("suggest_time");
+
+    const unconfirmed = await client.callTool({
+      name: "accept_offer",
+      arguments: { item_id: id, access_token: created.accessToken },
+    });
+    expect(unconfirmed.isError).toBeFalsy();
+    expect((unconfirmed.content as { text: string }[])[0]?.text).toMatch(
+      /^Nothing is booked yet\. Before this binds your customer, show them: /,
+    );
+    const accepted = await client.callTool({
+      name: "accept_offer",
+      arguments: { item_id: id, access_token: created.accessToken, terms_sha: offer.terms_sha },
+    });
+    expect(accepted.isError, JSON.stringify(accepted.content)).toBeFalsy();
+    expect((accepted.structuredContent as { view: { item: { state: string } } }).view.item.state).toBe("confirmed");
+    expect((accepted.content as { text: string }[])[0]?.text).toMatch(/is confirmed\./);
+    const again = await client.callTool({
+      name: "decline_offer",
+      arguments: { item_id: id, access_token: created.accessToken },
+    });
+    expect(again.isError).toBe(true);
+    expect((again.content as { text: string }[])[0]?.text).toContain(
+      "There is nothing of ours to answer on this right now.",
+    );
+    // The business's reply reaches the assistant too: in the conversation, and in the text it reads.
+    await app.request(`https://inbox.test/v1/owner/items/${id}/replies`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${owner.key}` },
+      body: JSON.stringify({ body: "Bring your own wetsuit.", internal: false }),
+    });
+    await app.request(`https://inbox.test/v1/owner/items/${id}/replies`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${owner.key}` },
+      body: JSON.stringify({ body: "She is a regular.", internal: true }),
+    });
+    const later = await client.callTool({
+      name: "get_item_status",
+      arguments: { item_id: id, access_token: created.accessToken },
+    });
+    expect((later.content as { text: string }[])[0]?.text).toContain(
+      'Our last message to you: "Bring your own wetsuit."',
+    );
+    const thread = (later.structuredContent as { thread: { from: string; text: string }[] }).thread;
+    expect(thread.map((t) => [t.from, t.text])).toEqual([["us", "Bring your own wetsuit."]]);
   });
 
   it("orders at the business's price through the public tools, whatever price the assistant sends", async () => {
@@ -190,6 +299,8 @@ describe("MCP doors", () => {
       "delete_rule",
       "test_rule",
       "reply",
+      "export_customer",
+      "stop_customer_networks",
       "list_webhooks",
       "create_webhook",
       "update_webhook",
