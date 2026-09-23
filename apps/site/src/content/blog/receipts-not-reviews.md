@@ -32,6 +32,6 @@ We're building reputation on top of receipts now. A promise will count once it's
 
 Customers make promises as well, mostly the promise to turn up. A customer who does will build a record that goes with them whichever assistant they use. A business will only see it when the customer's agent shows it, and each business will reward it in its own way, such as no deposit or instant confirmation.
 
-Until then the order is neutral. The directory lists verified businesses newest first, or nearest first when an agent searches near a place. Every rule will be published before it counts. Nobody can buy a place, now or later.
+The rules are already published and in force. Until records build up, businesses whose inbox is online come first and the rest are shuffled once a day. Nobody can buy a place, now or later.
 
 The receipt format is open under MIT, and anyone can launch a network. A trade body could run one. So could a town. Once our ranking rules are out, they can use them or write their own.

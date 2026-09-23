@@ -702,3 +702,5 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   pass acks, scoped passes, pay-later and the report cap to §13; exact email normalisation,
   forwarded signature base, durable publication, identity in the create batch, strict settings,
   customer backfill, email notice; the network's private schema replaced by what it must store.
+- **In force, 23 Sep 2026:** version 3 took effect the day it was published, at Tiago's decision. No
+  other business was listed, so nobody was owed the notice §11 describes. Every later change keeps it.
