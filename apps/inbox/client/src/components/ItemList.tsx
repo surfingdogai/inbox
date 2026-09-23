@@ -50,6 +50,11 @@ export function ItemList({
         <h2>{label}</h2>
         {pages.isFetching && !pages.isPending && <output className="spinner" aria-label="Refreshing" />}
       </div>
+      {sandbox && (
+        <p className="test-banner" role="status">
+          Test mode is on: customers get no emails and nothing reaches a network.
+        </p>
+      )}
       <div className="search">
         <Search className="icon" aria-hidden="true" />
         <input

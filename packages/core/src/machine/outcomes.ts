@@ -51,6 +51,11 @@ function codeOf(type: ItemType, event: string, from: string, actor: ActorKind): 
         return from === "confirmed" && customer ? "booking.cancelled_by_customer" : null;
       case "cancel_late":
         return from === "confirmed" && customer ? "booking.cancelled_late_by_customer" : null;
+      // The business records the customer's own cancellation: it is the customer's, whoever typed it.
+      case "record_cancel":
+        return from === "confirmed" ? "booking.cancelled_by_customer" : null;
+      case "record_cancel_late":
+        return from === "confirmed" ? "booking.cancelled_late_by_customer" : null;
       default:
         return null;
     }
@@ -63,6 +68,8 @@ function codeOf(type: ItemType, event: string, from: string, actor: ActorKind): 
       case "cancel":
         if (!open) return null;
         return customer ? "order.cancelled_by_customer" : "order.not_fulfilled";
+      case "record_cancel":
+        return open ? "order.cancelled_by_customer" : null;
       case "payment_failed":
         return from === "awaiting_payment" ? "order.payment_failed" : null;
       case "charge_back":

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type CloudflareEmailBinding, cloudflareEmailMailOut, cloudflareEmailRestMailOut } from "../src/mail";
+import {
+  type CloudflareEmailBinding,
+  cloudflareEmailMailOut,
+  cloudflareEmailRestMailOut,
+  cloudflareHeaders,
+} from "../src/mail";
 
 /**
  * The two Cloudflare senders speak two different wire shapes, and each was once wrong in a way that
@@ -34,6 +39,37 @@ describe("the send_email binding", () => {
     expect(JSON.stringify(seen[0])).not.toContain('"address"');
     // The binding's reply field is camelCase.
     expect(seen[0]?.replyTo).toBe("hello@oficinamare.pt");
+  });
+
+  it("passes allowlisted headers only, and none when nothing is left", async () => {
+    const seen: Parameters<CloudflareEmailBinding["send"]>[0][] = [];
+    const binding: CloudflareEmailBinding = {
+      async send(m) {
+        seen.push(m);
+        return { messageId: "m-3" };
+      },
+    };
+    await cloudflareEmailMailOut(binding).send({
+      ...mail,
+      headers: { References: "<a.1@oficinamare.pt>", "Message-ID": "<x@y>" },
+    });
+    await cloudflareEmailMailOut(binding).send({ ...mail, headers: { "Message-ID": "<x@y>" } });
+    expect(seen[0]?.headers).toEqual({ References: "<a.1@oficinamare.pt>" });
+    expect(seen[1]).not.toHaveProperty("headers");
+    // A value over 2,048 bytes, or with a line break in it, never reaches the service as it was.
+    expect(cloudflareHeaders({ References: `<${"a".repeat(2100)}@x>` })).toBeUndefined();
+    expect(cloudflareHeaders({ "In-Reply-To": "<a@x>\r\nBcc: someone@example.com" })).toEqual({
+      "In-Reply-To": "<a@x> Bcc: someone@example.com",
+    });
+    // The headers that keep out-of-office replies away: the X- one goes; Auto-Submitted is not on
+    // Cloudflare's list, would get the whole message refused, and is left out.
+    expect(
+      cloudflareHeaders({
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+        "Auto-Submitted": "auto-replied",
+        References: "<a.1@oficinamare.pt>",
+      }),
+    ).toEqual({ "X-Auto-Response-Suppress": "OOF, AutoReply", References: "<a.1@oficinamare.pt>" });
   });
 
   it("sends a bare address when there is no name, because workerd's name is required", async () => {
@@ -90,6 +126,48 @@ describe("the REST API", () => {
     );
     await out.send({ ...mail, replyTo: "not an address" });
     expect(net.calls[0]?.body).not.toHaveProperty("reply_to");
+  });
+
+  it("passes the threading headers, and leaves out what Cloudflare would refuse the whole message for", async () => {
+    const net = capture();
+    const out = cloudflareEmailRestMailOut(
+      { accountId: "acc", token: "tok", from: { address: "hello@oficinamare.pt" } },
+      net.fetchImpl,
+    );
+    await out.send({
+      ...mail,
+      headers: {
+        "In-Reply-To": "<a.1@oficinamare.pt>",
+        References: "<a.1@oficinamare.pt> <m.2@oficinamare.pt>",
+        "Message-ID": "<ours@oficinamare.pt>",
+        Date: "Tue, 22 Sep 2026 10:00:00 +0000",
+        "X-Item-Ref": "7K3QXA",
+      },
+    });
+    expect(net.calls[0]?.body.headers).toEqual({
+      "In-Reply-To": "<a.1@oficinamare.pt>",
+      References: "<a.1@oficinamare.pt> <m.2@oficinamare.pt>",
+      "X-Item-Ref": "7K3QXA",
+    });
+    // Its own address is the sender a message without one goes out from.
+    expect(out.sender).toEqual({ address: "hello@oficinamare.pt" });
+  });
+
+  it("counts a recipient the service bounced as a failed send, never a sent one", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          errors: [],
+          result: { delivered: [], permanent_bounces: ["rita@example.com"], queued: [] },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+    const out = cloudflareEmailRestMailOut(
+      { accountId: "acc", token: "tok", from: { address: "hello@oficinamare.pt" } },
+      fetchImpl,
+    );
+    await expect(out.send(mail)).rejects.toThrow("cloudflare email: bounced");
   });
 
   it("throws the API's own message when it refuses", async () => {

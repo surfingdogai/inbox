@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   currencyOf,
   customerNotes,
+  deliveryWord,
+  emailLangOf,
   formatAddress,
   formatDateTime,
   formatMoney,
   formatWhen,
   localDateKey,
+  mailBannerLines,
+  mailWord,
+  networksOffWords,
+  otherLanguages,
   partyName,
   personStandings,
   receiptWord,
@@ -173,6 +179,7 @@ describe("who is asking (ADR-017 §8.2)", () => {
     },
     persons: [],
     agent: { level: "none", platform: null },
+    networks_off: null,
   };
 
   it("says nothing more than the party for an item from before, or a stranger", () => {
@@ -273,5 +280,101 @@ describe("who is asking (ADR-017 §8.2)", () => {
           "Their pass was used at many businesses in a day, or by two assistants' keys. It still works; the person can replace it.",
       },
     ]);
+  });
+});
+
+describe("what became of an email", () => {
+  it("never says sent before the mail service took it, and says why one was not", () => {
+    const d = (status: string, extra: Partial<Parameters<typeof deliveryWord>[0]> = {}) =>
+      deliveryWord({ status, sent_at: null, last_error: null, skip_reason: null, ...extra }, "UTC");
+    expect(d("queued")).toBe("Sending…");
+    expect(d("sent", { sent_at: "2026-09-21T10:02:00Z" })).toBe(
+      `Sent ${formatDateTime("2026-09-21T10:02:00Z", "UTC")}`,
+    );
+    expect(d("retrying", { last_error: "550 mailbox unavailable" })).toBe(
+      "Not sent yet: 550 mailbox unavailable. We keep trying.",
+    );
+    expect(d("failed", { last_error: "550 mailbox unavailable" })).toBe("Not sent: 550 mailbox unavailable");
+    expect(d("skipped", { skip_reason: "no_address" })).toBe("Not sent: no email address");
+    expect(d("skipped", { skip_reason: "test_item" })).toBe("Not sent: test item");
+    // An instance with no mail service wrote it to its log: nobody got it.
+    expect(d("skipped", { skip_reason: "no_service" })).toBe("Not sent: this inbox has no mail service set up");
+    // The day's acknowledgements to one address were used: held back, and shown so.
+    expect(d("skipped", { skip_reason: "ack_limit" })).toBe("Not sent: this address already had 3 of these today");
+    expect(mailWord({ template: "ack.booking", recipient: "customer" })).toBe("We have your request");
+    expect(mailWord({ template: "booking.proposed", recipient: "customer" })).toBe("Another time");
+    expect(mailWord({ template: "order.paid", recipient: "customer" })).toBe("About their order");
+    expect(mailWord({ template: "owner.create", recipient: "owner" })).toBe("To you");
+  });
+});
+
+describe("email that does not go out, and customers who stopped the networks", () => {
+  it("says in Settings what stops emails reaching customers, and nothing when all is well", () => {
+    expect(mailBannerLines(undefined)).toEqual([]);
+    expect(mailBannerLines({ service: true, sender: true, links: true })).toEqual([]);
+    const none = mailBannerLines({ service: false, sender: true, links: true });
+    expect(none).toHaveLength(1);
+    expect(none[0]).toMatch(/^Emails are not being sent: this inbox has no mail service set up/);
+    expect(mailBannerLines({ service: true, sender: false, links: false })).toEqual([
+      "Emails are not being sent: there is no address to send them from. Fill in Send from below.",
+      "Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the public address of this inbox. Customers can still answer by replying.",
+    ]);
+  });
+
+  it("says who stopped the networks, and what each one already had", () => {
+    const base = {
+      match: null,
+      possible: null,
+      known: false,
+      history: {
+        items: 0,
+        completed: 0,
+        paid: 0,
+        no_shows: 0,
+        late_cancellations: 0,
+        payment_failed: 0,
+        charged_back: 0,
+        largest_paid: 0,
+        open_bookings: 0,
+        first_seen: null,
+        last_seen: null,
+      },
+      persons: [],
+      agent: { level: "none", platform: null },
+      networks_off: null,
+    };
+    expect(networksOffWords(base, "UTC")).toBeNull();
+    const words = networksOffWords(
+      {
+        ...base,
+        networks_off: {
+          since: "2026-09-22T10:04:00Z",
+          via: "customer",
+          networks: [{ network: "https://net.example.com", receipts: 2, open_promises: 1, person: true }],
+        },
+      },
+      "UTC",
+    );
+    expect(words?.headline).toBe(
+      `The customer switched them off, from the link in their code email, ${formatDateTime("2026-09-22T10:04:00Z", "UTC")}. Nothing more about them goes to any network, and no network's standing is read.`,
+    );
+    expect(words?.networks).toEqual([
+      {
+        network: "net.example.com",
+        text: "Already had 2 receipts and knows their person. It cannot yet be asked to erase them.",
+        caution: "1 promise of theirs stays open there: it counts it as unclosed 9 days after it was due.",
+      },
+    ]);
+  });
+});
+
+describe("the business's languages", () => {
+  it("keeps every other language beside the one customers' emails are in, whichever that is", () => {
+    expect(emailLangOf(["es", "pt-PT", "en"])).toBe("pt");
+    expect(emailLangOf(["fr"])).toBe("en");
+    // Spanish and French are languages too, not English because emails can only be in English.
+    expect(otherLanguages(["en", "es", "fr"], "en")).toEqual(["es", "fr"]);
+    expect(otherLanguages(["pt", "pt-BR", "en", "es"], "pt")).toEqual(["en", "es"]);
+    expect(otherLanguages(["", " es ", "ES", "en-GB"], "en")).toEqual(["es"]);
   });
 });

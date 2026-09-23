@@ -7,13 +7,16 @@ import { describe, expect, it } from "vitest";
 // only that we agree with ourselves.
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { type App, createApp, createInbox, type Inbox } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 /**
  * The doors onto ADR-015 step two: /v1/owner/webhooks, /v1/owner/deliveries and the developer
  * cursor at /v1/owner/events, plus the same operations as owner MCP tools.
  */
 const T0 = Date.parse("2026-09-21T10:00:00Z");
+
+/** A weekday to come: the inbox books nothing in the past. */
+const DAY = futureDay();
 const SECRET_KEY = "2f8c1d0a6b4e37925c8f01ad6e3b47f0";
 const ITEM = "01JD0000000000000000ITEM01";
 /** The server on the other side of the internet. Public and https, as every endpoint must be. */
@@ -377,8 +380,8 @@ describe("end to end: from a booking to a signed request on someone else's serve
       post("/v1/bookings", {
         payload: {
           reservationFor: { serviceId, name: "Full service" },
-          startTime: "2026-09-22T08:00:00Z",
-          endTime: "2026-09-22T09:30:00Z",
+          startTime: `${DAY}T08:00:00Z`,
+          endTime: `${DAY}T09:30:00Z`,
         },
         contact: { name: "Rita", email: "rita@example.com" },
       }),

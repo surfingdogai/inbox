@@ -1,4 +1,4 @@
-import { type Db, randomToken, SCOPE_NAMES, SCOPES, schema, ulid } from "@surfingdog/core";
+import { type Db, NOT_FOR_AI_SCOPES, randomToken, SCOPE_NAMES, SCOPES, schema, ulid } from "@surfingdog/core";
 import { sha256Hex } from "@surfingdog/platform";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -13,8 +13,13 @@ import { userFromCookie } from "./session";
  * only, public clients, opaque hashed tokens, rotating refresh tokens, Client ID Metadata
  * Documents first with dynamic registration as the fallback.
  */
-/** Every owner scope (core's `SCOPES`); a client may ask for any of them, and the owner sees each on the consent page. */
-export const OWNER_SCOPES: readonly string[] = SCOPE_NAMES;
+/**
+ * Every owner scope (core's `SCOPES`) an AI app may be granted; a client may ask for any of them, and
+ * the owner sees each on the consent page. Erasing a customer is not among them: it is never the AI's.
+ */
+export const OWNER_SCOPES: readonly string[] = SCOPE_NAMES.filter(
+  (s) => !(NOT_FOR_AI_SCOPES as readonly string[]).includes(s),
+);
 export const ACCESS_TTL_MS = 3_600_000;
 export const REFRESH_TTL_MS = 30 * 86_400_000;
 export const CODE_TTL_MS = 10 * 60_000;

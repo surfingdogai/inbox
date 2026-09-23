@@ -10,6 +10,7 @@ import { JobRunner } from "./runner";
 import { ensureJob } from "./schedule";
 
 export * from "./lifecycle";
+export * from "./mail-log";
 export * from "./notify";
 export * from "./runner";
 export * from "./schedule";
@@ -70,7 +71,10 @@ export function createRunner(deps: {
         return { note: `${r.outcome} ${p.outcome ?? p.kind} receipt ${r.receipt.id}` };
       })
       .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
-      .register(LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null }))
+      .register(
+        LIFECYCLE_SWEEP_KIND,
+        lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+      )
       // The contacts backfill (0009): resumable, 200 parties a run, each run queueing the next.
       .register(PARTY_CONTACTS_BACKFILL_KIND, async (job, { db, now }) => {
         const after = String((job.payload as { after?: unknown } | null)?.after ?? "");

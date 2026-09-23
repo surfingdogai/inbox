@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type NetworkView, parseStoredSettings 
 import { describe, expect, it } from "vitest";
 import {
   agoWords,
+  emailWords,
   networkStatus,
   parseNetworkOrigin,
   receiptWords,
@@ -134,6 +135,7 @@ describe("Settings → Networks", () => {
     issue: true,
     share: { listing: true, counts: true, receipts: true },
     registration: "registered",
+    receives_emails: true,
     registered_at: null,
     last_ping_at: null,
     last_error: null,
@@ -142,7 +144,7 @@ describe("Settings → Networks", () => {
     rules: { version: null, next: null, next_at: null, v2: false, checked_at: null },
     standing: null,
     ping_signature: null,
-    receipts: { published: 0, queued: 0, refused: 0, held: 0 },
+    receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
 
@@ -245,13 +247,15 @@ describe("Settings → Networks", () => {
   });
 
   it("counts receipts in plain words", () => {
-    expect(receiptWords({ published: 1, queued: 0, refused: 0, held: 0 })).toEqual(["1 receipt published"]);
-    expect(receiptWords({ published: 12, queued: 3, refused: 1, held: 0 })).toEqual([
+    expect(receiptWords({ published: 1, queued: 0, refused: 0, held: 0, withheld: 0 })).toEqual([
+      "1 receipt published",
+    ]);
+    expect(receiptWords({ published: 12, queued: 3, refused: 1, held: 0, withheld: 0 })).toEqual([
       "12 receipts published",
       "3 waiting",
       "1 refused",
     ]);
-    expect(receiptWords({ published: 12, queued: 5, refused: 0, held: 2 })).toEqual([
+    expect(receiptWords({ published: 12, queued: 5, refused: 0, held: 2, withheld: 0 })).toEqual([
       "12 receipts published",
       "3 waiting",
       "2 outcomes held until the network reads them",
@@ -259,5 +263,22 @@ describe("Settings → Networks", () => {
     expect(agoWords("2026-09-23T14:29:30Z", now)).toBe("just now");
     expect(agoWords("2026-09-23T11:30:00Z", now)).toBe("3 h ago");
     expect(agoWords("2026-09-22T12:00:00Z", now)).toBe("yesterday");
+  });
+});
+
+describe("the minimum notice and a network's addresses in Settings", () => {
+  it("shows the minimum notice and sends it back as a number, with the rest of the booking settings", () => {
+    const form = toSettingsForm(DEFAULT_SETTINGS);
+    expect(form.minNoticeMin).toBe("60");
+    expect(toSettingsDoc({ ...form, minNoticeMin: "120" }).booking).toMatchObject({ minNoticeMin: 120 });
+  });
+
+  it("says a network gets customers' addresses only once it has verified the inbox", () => {
+    expect(emailWords({ receives_emails: false, registration: "pending" })).toBe(
+      "Customers' email addresses go to this network only once it has verified your inbox. Verified: not yet.",
+    );
+    expect(emailWords({ receives_emails: true, registration: "registered" })).toMatch(/Verified: yes\.$/);
+    // The default network always could, so there is nothing to say.
+    expect(emailWords({ receives_emails: true, registration: "unregistered" })).toBeNull();
   });
 });

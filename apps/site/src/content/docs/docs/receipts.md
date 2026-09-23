@@ -13,8 +13,10 @@ Promises:
 
 | Item | Event | Receipt `knd` |
 |---|---|---|
-| booking | `confirm` (by the business) or `accept` (customer takes a proposed time) | `confirmed` |
+| booking | `confirm` (by the business, including a proposed time the customer agreed to by phone) or `accept` (customer takes a proposed time) | `confirmed` |
+| booking | the customer's `accept` of a quote that creates a booking: the booking is created confirmed | `confirmed` |
 | order | `accept` | `accepted` |
+| order | the customer's `accept` of a quote that creates an order: the order is created accepted | `accepted` |
 | order | `record_payment` | `paid` |
 
 Outcomes, `knd: "outcome"` with the code in `out` ([ADR-017](https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md) §3):
@@ -24,11 +26,11 @@ Outcomes, `knd: "outcome"` with the code in `out` ([ADR-017](https://github.com/
 | booking | `complete`, by you, or by the system `booking.autoCompleteHours` (48) after the end unless it was marked a no-show | `booking.completed` |
 | booking | `no_show` | `booking.no_show_customer` |
 | booking | `cancel_by_business` once confirmed | `booking.cancelled_by_business` |
-| booking | the customer's `cancel` within the window | `booking.cancelled_by_customer` |
-| booking | the customer's cancellation after the window (`cancel_late`), when `booking.lateCancellation` is `record` | `booking.cancelled_late_by_customer` |
+| booking | the customer's `cancel` within the window, or their cancellation you record (`record_cancel`) when they asked within it | `booking.cancelled_by_customer` |
+| booking | the customer's cancellation after the window (`cancel_late`, or `record_cancel_late` when you record it and they asked after it), when `booking.lateCancellation` is `record` | `booking.cancelled_late_by_customer` |
 | order | `fulfil` | `order.fulfilled` |
 | order | your `cancel` once accepted | `order.not_fulfilled` |
-| order | the customer's `cancel` once accepted | `order.cancelled_by_customer` |
+| order | the customer's `cancel` once accepted, or their cancellation you record (`record_cancel`) | `order.cancelled_by_customer` |
 | order | `payment_failed` | `order.payment_failed` |
 | order | `charge_back`, or `record_charge_back` on a completed order | `order.charged_back` |
 | order | the system's `lapse`, `orders.payDays` (14) after payment was requested and none came | `order.lapsed` |

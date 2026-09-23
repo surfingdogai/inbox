@@ -88,6 +88,9 @@ const EVENT_WORDS: Record<string, string> = {
   expire: "Expired",
   cancel: "Cancelled",
   cancel_late: "Cancelled late",
+  counter: "Customer asked for another time",
+  record_cancel: "Customer cancelled",
+  record_cancel_late: "Customer cancelled late",
   cancel_by_business: "Cancelled",
   complete: "Completed",
   no_show: "Marked as no-show",
@@ -431,6 +434,39 @@ export interface PersonStanding {
   readonly caution: string | null;
 }
 
+/**
+ * A customer who asked not to be known to booking networks, in the owner's words: since when and who
+ * recorded it, and per network what it already had — which it cannot yet be asked to erase — and how
+ * many of their promises it will count as unclosed. Null while networks are on for them.
+ */
+export function networksOffWords(
+  c: Customer | undefined,
+  tz?: string,
+): {
+  headline: string;
+  networks: { network: string; text: string; caution: string | null }[];
+} | null {
+  const off = c?.networks_off;
+  if (!off) return null;
+  const who =
+    off.via === "customer"
+      ? "The customer switched them off, from the link in their code email"
+      : off.via === "erased"
+        ? "Switched off when the customer was erased"
+        : "Switched off for this customer";
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return {
+    headline: `${who}, ${formatDateTime(off.since, tz)}. Nothing more about them goes to any network, and no network's standing is read.`,
+    networks: off.networks.map((n) => ({
+      network: n.network.replace(/^https:\/\//, ""),
+      text: `Already had ${plural(n.receipts, "receipt", "receipts")}${n.person ? " and knows their person" : ""}. It cannot yet be asked to erase them.`,
+      caution: n.open_promises
+        ? `${plural(n.open_promises, "promise", "promises")} of theirs ${n.open_promises === 1 ? "stays" : "stay"} open there: it counts ${n.open_promises === 1 ? "it" : "each"} as unclosed 9 days after it was due.`
+        : null,
+    })),
+  };
+}
+
 export function personStandings(c: Customer | undefined, locale?: string, tz?: string): PersonStanding[] {
   if (!c) return [];
   return c.persons.map((p) => {
@@ -455,4 +491,111 @@ export function personStandings(c: Customer | undefined, locale?: string, tz?: s
         : null,
     };
   });
+}
+
+/** What became of an email, as the item shows it: never "sent" before the mail service took it. */
+export function deliveryWord(
+  d: {
+    readonly status: string;
+    readonly sent_at: string | null;
+    readonly last_error: string | null;
+    readonly skip_reason: string | null;
+  },
+  tz?: string,
+): string {
+  switch (d.status) {
+    case "sent":
+      return d.sent_at ? `Sent ${formatDateTime(d.sent_at, tz)}` : "Sent";
+    case "retrying":
+      return `Not sent yet${d.last_error ? `: ${d.last_error}` : ""}. We keep trying.`;
+    case "failed":
+      return `Not sent${d.last_error ? `: ${d.last_error}` : ""}`;
+    case "skipped":
+      return `Not sent: ${SKIP_WORDS[d.skip_reason ?? ""] ?? "not sent"}`;
+    default:
+      return "Sending…";
+  }
+}
+
+const SKIP_WORDS: Record<string, string> = {
+  ack_limit: "this address already had 3 of these today",
+  no_address: "no email address",
+  no_sender: "no address to send from (Settings, Send from)",
+  no_service: "this inbox has no mail service set up",
+  test_item: "test item",
+};
+
+/**
+ * The Settings banner about email, in the owner's words: one line per thing that stops customers
+ * getting what the inbox sends them. Empty when the answer is not in yet or all is well.
+ */
+export function mailBannerLines(m: { service: boolean; sender: boolean; links: boolean } | undefined): string[] {
+  if (!m) return [];
+  const out: string[] = [];
+  if (!m.service) {
+    out.push(
+      "Emails are not being sent: this inbox has no mail service set up, so every email to you and to your customers only goes to the log, and each item shows it as not sent.",
+    );
+  } else if (!m.sender) {
+    out.push("Emails are not being sent: there is no address to send them from. Fill in Send from below.");
+  }
+  if (!m.links) {
+    out.push(
+      "Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the public address of this inbox. Customers can still answer by replying.",
+    );
+  }
+  return out;
+}
+
+/** Which email it was, in the owner's words. */
+export function mailWord(m: { readonly template: string; readonly recipient: string }): string {
+  if (m.recipient === "owner") return "To you";
+  return MAIL_WORDS[m.template] ?? MAIL_WORDS[m.template.split(".")[0] ?? ""] ?? "Email to the customer";
+}
+
+const MAIL_WORDS: Record<string, string> = {
+  ack: "We have your request",
+  "booking.proposed": "Another time",
+  "booking.confirmed": "Confirmed",
+  "booking.accepted": "Confirmed: they accepted",
+  "booking.counter": "Their new time",
+  "booking.declined_time": "They declined the time",
+  "quote.quoted": "Our quote",
+  "quote.accepted": "Quote accepted",
+  "quote.declined": "They declined the quote",
+  needs_info: "A question",
+  declined: "We cannot take it",
+  "cancelled.by_us": "We had to cancel",
+  "cancelled.as_asked": "Cancelled, as they asked",
+  order: "About their order",
+  refund: "About their refund",
+  reply: "Our reply",
+  "message.answered": "Answered",
+  news: "News",
+  key: "Code for their assistant",
+};
+
+/** The first of the business's languages its customers' emails can be in (English or Portuguese). */
+export function emailLangOf(languages: readonly string[]): "en" | "pt" {
+  for (const l of languages) {
+    const tag = l.trim().toLowerCase();
+    if (tag === "pt" || tag.startsWith("pt-") || tag.startsWith("pt_")) return "pt";
+    if (tag === "en" || tag.startsWith("en-") || tag.startsWith("en_")) return "en";
+  }
+  return "en";
+}
+
+/**
+ * The business's other languages, beside the one its customers' emails are in: every one that is not
+ * that language, Spanish and French as much as English or Portuguese.
+ */
+export function otherLanguages(languages: readonly string[], emailLang: "en" | "pt"): string[] {
+  const out: string[] = [];
+  for (const l of languages) {
+    const tag = l.trim();
+    const primary = tag.toLowerCase().split(/[-_]/)[0];
+    if (!tag || primary === emailLang || out.some((o) => o.toLowerCase() === tag.toLowerCase())) continue;
+    out.push(tag);
+  }
+  return out;
 }

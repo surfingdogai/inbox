@@ -1,23 +1,25 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
 import { type ApiProblem, problemOf } from "../lib/api";
-import { ensureSignedIn } from "../lib/auth";
+import { ensureSignedIn, session } from "../lib/auth";
 import {
   useApplyPreset,
   useProducts,
   useProductWrite,
   useProfile,
   useSaveProfile,
+  useSaveSettings,
   useSaveWeekly,
   useServices,
   useServiceWrite,
 } from "../lib/queries";
-import type { PresetKey, ServiceBody, Weekly } from "../lib/types";
+import { offerBodies, ownerEmailDoc } from "../lib/setup";
+import type { PresetKey, Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
   beforeLoad: async ({ location }) => {
@@ -94,6 +96,15 @@ function guessTimezone(): string {
     return "UTC";
   }
 }
+/** The customers' email language the browser suggests: Portuguese for a Portuguese browser, else English. */
+function guessLang(): "en" | "pt" {
+  try {
+    return navigator.language.toLowerCase().startsWith("pt") ? "pt" : "en";
+  } catch {
+    return "en";
+  }
+}
+
 function guessCurrency(tz: string): string {
   if (tz.startsWith("Europe/London")) return "GBP";
   if (tz.startsWith("America/")) return "USD";
@@ -115,6 +126,7 @@ function SetupWizard() {
   const products = useProducts();
 
   const saveProfile = useSaveProfile();
+  const saveSettings = useSaveSettings();
   const serviceWrite = useServiceWrite();
   const productWrite = useProductWrite();
   const saveWeekly = useSaveWeekly();
@@ -125,6 +137,19 @@ function SetupWizard() {
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
   const [currency, setCurrency] = useState(() => guessCurrency(tz));
+  const [emailLang, setEmailLang] = useState<"en" | "pt">(guessLang);
+  // Where new requests are announced: the address they signed in with, unless they say otherwise.
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [local, setLocal] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void session().then((u) => {
+      if (live && u?.email) setOwnerEmail((typed) => typed || u.email);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const [trade, setTrade] = useState<Trade | null>(null);
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
   const [nextId, setNextId] = useState(2);
@@ -134,11 +159,12 @@ function SetupWizard() {
 
   // Whatever is in flight is the error worth showing; they never overlap.
   const problem: ApiProblem | null =
-    [saveProfile.error, serviceWrite.error, productWrite.error, saveWeekly.error, applyPreset.error]
+    [saveProfile.error, saveSettings.error, serviceWrite.error, productWrite.error, saveWeekly.error, applyPreset.error]
       .filter(Boolean)
       .map((e) => problemOf(e))[0] ?? null;
   const busy =
     saveProfile.isPending ||
+    saveSettings.isPending ||
     serviceWrite.isPending ||
     productWrite.isPending ||
     saveWeekly.isPending ||
@@ -154,32 +180,23 @@ function SetupWizard() {
 
   /* Each step writes as it is left, so nothing is lost if the tab closes half way. */
   const saveStep = async (): Promise<boolean> => {
+    setLocal(null);
     try {
       if (step === 0) {
-        await saveProfile.mutateAsync({ name: name.trim(), timezone, currency, languages: ["en"] });
+        await saveProfile.mutateAsync({ name: name.trim(), timezone, currency, languages: [emailLang] });
+        // A merge: only this one key is sent, everything else in the settings stays as it is.
+        await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
       }
       if (step === 2) {
-        const wanted = offers.filter((o) => o.name.trim());
-        for (const o of wanted) {
-          if (sells === "services") {
-            const body: ServiceBody = {
-              name: o.name.trim(),
-              duration_min: Math.max(5, Number(o.minutes) || 60),
-              active: true,
-              ...(o.price.trim()
-                ? { price: { model: "fixed" as const, value: Math.round(Number(o.price) * 100) || 0, currency } }
-                : {}),
-            };
-            await serviceWrite.mutateAsync({ body });
-          } else {
-            await productWrite.mutateAsync({
-              body: {
-                name: o.name.trim(),
-                price: { value: Math.round(Number(o.price) * 100) || 0, currency },
-                active: true,
-              },
-            });
-          }
+        const planned = offerBodies(offers, sells, currency);
+        if ("problem" in planned) {
+          setLocal(planned.problem);
+          return false;
+        }
+        if (planned.kind === "services") {
+          for (const body of planned.bodies) await serviceWrite.mutateAsync({ body });
+        } else {
+          for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
       }
       if (step === 3 && sells === "services") {
@@ -270,6 +287,33 @@ function SetupWizard() {
                 />
               </Field>
             </div>
+            <Field
+              id="su-owner"
+              label="Where should we tell you about new requests?"
+              hint="An email address. Empty, we write to the address you sign in with."
+              error={problem?.field("notifications.ownerEmail")}
+            >
+              <input
+                id="su-owner"
+                className="input"
+                type="email"
+                autoComplete="email"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </Field>
+            <Field id="su-lang" label="The language your customers get emails in">
+              <select
+                id="su-lang"
+                className="input"
+                value={emailLang}
+                onChange={(e) => setEmailLang(e.target.value === "pt" ? "pt" : "en")}
+              >
+                <option value="en">English</option>
+                <option value="pt">Português</option>
+              </select>
+            </Field>
           </>
         )}
 
@@ -338,13 +382,17 @@ function SetupWizard() {
                       />
                     </Field>
                   )}
-                  <Field id={`su-p-${o.id}`} label={i === 0 ? `Price (${currency})` : ""} optional={i === 0}>
+                  <Field
+                    id={`su-p-${o.id}`}
+                    label={i === 0 ? `Price (${currency})` : ""}
+                    optional={i === 0 && sells === "services"}
+                  >
                     <input
                       id={`su-p-${o.id}`}
                       className="input"
                       inputMode="decimal"
                       value={o.price}
-                      placeholder="0"
+                      placeholder="45,50"
                       onChange={(e) =>
                         setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: e.target.value } : x)))
                       }
@@ -426,9 +474,9 @@ function SetupWizard() {
           </>
         )}
 
-        {problem && (
+        {(local || problem) && (
           <p className="hint error" role="alert">
-            {problem.detail}
+            {local ?? problem?.detail}
           </p>
         )}
 

@@ -12,7 +12,9 @@ import {
   isPublicHost,
   issuanceStatements,
   issueJobKey,
+  itemStopped,
   type JobHandler,
+  mayReceiveEmails,
   normaliseEmail,
   PENDING_TTL_MS,
   type Presentation,
@@ -28,6 +30,7 @@ import {
   signInstanceRequest,
   thumbprint,
   valueHash,
+  verifiedNetworks,
   verifyAgentRequest,
 } from "@surfingdog/core";
 import { z } from "zod";
@@ -211,6 +214,7 @@ export function createIdentityPort(deps: IdentityDeps): IdentityPort {
     raw: string,
     input: Parameters<IdentityPort["present"]>[0],
     settings: Settings,
+    verified: ReadonlySet<string>,
   ): Promise<{ presentation?: Presentation; note?: { network: string; note: PresentNote } }> => {
     const c = parseCredential(raw);
     if (!c) return {};
@@ -236,7 +240,9 @@ export function createIdentityPort(deps: IdentityDeps): IdentityPort {
       credential = { pass: raw };
     }
     const passHash = c.kind === "pass" ? await secretHash(raw) : undefined;
-    const email = input.email ? normaliseEmail(input.email) : null;
+    // The customer's address goes beside the pass only to a network that has verified this inbox
+    // (or the default one); another still sees the pass, and learns nothing of the address.
+    const email = input.email && mayReceiveEmails(network, verified) ? normaliseEmail(input.email) : null;
     const cacheKey = passHash && input.purpose === "request" ? await secretHash(`${raw}|${email ?? ""}`) : undefined;
     if (cacheKey) {
       const hit = (await cacheGet(network, "presentation", cacheKey, input.now)) as
@@ -307,7 +313,8 @@ export function createIdentityPort(deps: IdentityDeps): IdentityPort {
             .map((c) => ({ network: `https://${c.host}`, note: "cannot_sign" as const })),
         };
       }
-      const results = await Promise.all(input.credentials.map((raw) => presentOne(raw, input, settings)));
+      const verified = input.email ? await verifiedNetworks(deps.db) : new Set<string>();
+      const results = await Promise.all(input.credentials.map((raw) => presentOne(raw, input, settings, verified)));
       return {
         presentations: results.flatMap((r) => (r.presentation ? [r.presentation] : [])),
         notes: results.flatMap((r) => (r.note ? [r.note] : [])),
@@ -729,7 +736,8 @@ export function identityIssueHandler(deps: IdentityDeps & { port: IdentityPort }
     const { itemId, network } = job.payload as { itemId: string; network: string };
     const { rows } = await db.client.query({
       sql: `SELECT p.state, p.attempts, p.created_at, i.party_id, json_extract(pa.contact, '$.email'),
-                   i.agent_thumbprint, i.agent_level, i.agent_directory, a.label, p.updated_at, i.customer_match
+                   i.agent_thumbprint, i.agent_level, i.agent_directory, a.label, p.updated_at, i.customer_match,
+                   COALESCE(i.sandbox, 0)
               FROM pending_identity p JOIN items i ON i.id = p.item_id JOIN parties pa ON pa.id = i.party_id
               LEFT JOIN carrying_agents a ON a.thumbprint = i.agent_thumbprint
              WHERE p.item_id = ? AND p.network = ?`,
@@ -762,6 +770,30 @@ export function identityIssueHandler(deps: IdentityDeps & { port: IdentityPort }
     const settings = await readSettings(db);
     const entry = settings.networks[network];
     if (!entry?.enabled || !entry.issue) return { note: `${network} no longer issues through this inbox` };
+    // Asked again, it is judged again: never for a test item, and the address goes only to a
+    // network that has verified this inbox. Either way nothing is asked of it for this item again.
+    const test = Number(r[11] ?? 0) === 1;
+    // The customer asked the business not to use booking networks since: nothing more is asked.
+    if (await itemStopped(db, itemId)) {
+      await db.client.query({
+        sql: "DELETE FROM pending_identity WHERE item_id = ?",
+        params: [itemId],
+        method: "run",
+      });
+      return { note: "the customer asked us not to use booking networks; no network is asked" };
+    }
+    if (test || !mayReceiveEmails(network, await verifiedNetworks(db))) {
+      await db.client.query({
+        sql: "UPDATE pending_identity SET state = 'gave_up', updated_at = ? WHERE item_id = ? AND network = ?",
+        params: [now, itemId, network],
+        method: "run",
+      });
+      return {
+        note: test
+          ? "a test item: no network is asked"
+          : `${new URL(network).host} has not verified this inbox; no email address goes to it`,
+      };
+    }
     const email = r[4];
     if (typeof email !== "string" || !email) return { note: "the customer has no email any more" };
     const agent: AgentSeen = {

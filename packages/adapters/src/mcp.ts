@@ -1,17 +1,22 @@
 import { type CallToolResult, createMcpHandler, type McpHttpHandler, McpServer } from "@modelcontextprotocol/server";
 import {
+  acceptOfferInput,
   acknowledgeReceiptInput,
   addFeedInput,
   applyPresetInput,
   type Caller,
   type Capabilities,
+  type CustomerItemView,
   cancelItemInput,
   checkAvailabilityInput,
+  copyFor,
   createApiKeyInput,
   createBookingInput,
   createOrderInput,
   createWebhookInput,
+  customerInput,
   customerSummary,
+  declineOfferInput,
   deliveryIdInput,
   getItemInput,
   getItemStatusInput,
@@ -25,6 +30,7 @@ import {
   productIdInput,
   productInput,
   profileInput,
+  provideDetailsInput,
   replayMissingInput,
   replyInput,
   requestQuoteInput,
@@ -34,13 +40,16 @@ import {
   sendMessageInput,
   serviceIdInput,
   serviceInput,
+  servicePriceText,
   setClosuresInput,
   setWeeklyInput,
+  suggestTimeInput,
   testRuleInput,
   transitionItemInput,
   updateSettingsInput,
   updateWebhookInput,
   verifyCustomerInput,
+  WriteError,
   webhookIdInput,
   withIdempotencyKey,
 } from "@surfingdog/core";
@@ -64,6 +73,8 @@ export const PUBLIC_INSTRUCTIONS = [
   "Keep the access_token in a create result: it is the only way to read (get_item_status) or cancel that item later.",
   "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
   "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
+  "When get_item_status shows an offer (another time, or a quote), tell your person offer.human as the business wrote it; call accept_offer with its terms_sha only on their clear yes to that summary, otherwise decline_offer or suggest_time. When it waits for details, send them with provide_details.",
+  "get_item_status also carries the conversation (thread): what the business wrote to your person, and what they wrote. Relay the business's replies as they are; a reply marked automated was not written by a person.",
 ].join(" ");
 
 export const OWNER_INSTRUCTIONS = [
@@ -72,12 +83,16 @@ export const OWNER_INSTRUCTIONS = [
   "Never invent facts about availability or prices: read them first.",
   "To connect another system to this inbox, create_webhook registers a URL that receives every event, signed; list_events is the same stream by polling, for anything that cannot receive one. Every event says who caused it (data.actor), so a sync can skip its own writes.",
   "A system that has to call this inbox gets its own key: create_api_key, named after the system and as narrow as it needs, once the owner has allowed it in Settings → Keys. Send an idempotency_key with every write, so a retry never does it twice.",
+  "When a customer asks you, by email or phone, to cancel, record it with transition_item record_cancel and their words as the note, never cancel_by_business. A time you proposed is booked when the customer accepts it; only a person records a yes they gave by phone.",
+  "A customer who asks what the business holds about them: export_customer. One who asks not to be known to booking networks: stop_customer_networks. One who asks to be erased: tell the owner, who erases them in the app; you cannot.",
+  "Money is the owner's: you can confirm and propose times, never set a price, send a quote, give a discount, change the currency, connect a feed or write a rule that quotes or names an amount, and you cannot confirm, accept or propose a time on a request that holds a price the customer set, or propose a time longer than the service. A product or priced service you add is saved unpublished for the owner to check. When money is involved, leave the owner a note (reply with internal=true) saying what you suggest.",
 ].join(" ");
 
 const ok = (text: string, structured: unknown): CallToolResult => ({
   content: [{ type: "text", text }],
   structuredContent: structured as Record<string, unknown>,
 });
+const toOk = (r: { text: string; structured: unknown }): [string, unknown] => [r.text, r.structured];
 
 const failed = (error: unknown): CallToolResult => {
   const p = problemFrom(error);
@@ -143,10 +158,46 @@ function callerOf(ctx: { authInfo?: { extra?: Record<string, unknown> } | undefi
 const readOnly = { readOnlyHint: true, idempotentHint: true } as const;
 const writes = { readOnlyHint: false, idempotentHint: true, destructiveHint: false } as const;
 
+/**
+ * What an assistant tells its person about their item: the business's sentence and, when the
+ * business waits for an answer, the terms and how to give it.
+ */
+export function customerText(v: Pick<CustomerItemView, "human" | "offer" | "waiting_on" | "next">): string {
+  if (v.offer) {
+    const choices = v.offer.kind === "time" ? "decline_offer, or suggest_time" : "or decline_offer";
+    return `${v.offer.human} To answer for your person: accept_offer with terms_sha ${v.offer.terms_sha} on their clear yes, ${choices}.`;
+  }
+  if (v.next.some((n) => n.action === "provide_details")) return `${v.human} Send them with provide_details.`;
+  return v.human;
+}
+
+/**
+ * The business's last message on the item, for an assistant that reads only the text: in the
+ * business's words, after the sentence, when the business wrote after the customer last did.
+ */
+export function lastFromUs(v: {
+  thread?: readonly { from: string; text: string }[] | undefined;
+  human: string;
+}): string {
+  const last = v.thread?.at(-1);
+  if (last?.from !== "us" || !last.text.trim()) return "";
+  const lang = /\bReferência\b/.test(v.human) ? "pt" : "en";
+  return ` ${copyFor(lang).lastMessage} "${last.text.trim()}"`;
+}
+
+/** A tool that answers what the business proposed: the business's sentence, and what an accepted quote became. */
+const answered = (r: { view: CustomerItemView; linked?: CustomerItemView | undefined; replayed: boolean }) => ({
+  text: `${customerText(r.view)}${r.linked ? ` ${r.linked.human}` : ""}${r.replayed ? " (Same request as before; nothing was done twice.)" : ""}`,
+  structured: r,
+});
+
 export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandler {
-  return createMcpHandler((ctx) => {
+  return createMcpHandler(async (ctx) => {
     const caller = callerOf(ctx);
-    const server = new McpServer({ name: "surfingdog-inbox", version }, { instructions: PUBLIC_INSTRUCTIONS });
+    // The customer's assistant is speaking to the business: the server is the business's (N20).
+    const profile = await caps.getBusinessProfile();
+    const name = profile.name.trim() || profile.domain || "Inbox";
+    const server = new McpServer({ name, version }, { instructions: PUBLIC_INSTRUCTIONS });
 
     server.registerTool(
       "get_business_profile",
@@ -169,16 +220,22 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "list_services",
       {
         title: "Services",
-        description: "Bookable services with duration and price model.",
+        description:
+          "Bookable services with duration and price. A price per person (price.per = person) is for each person in the booking: send partySize, and the total is the price times it.",
         inputSchema: listServicesInput,
         annotations: readOnly,
       },
       (args) =>
         run(async () => {
-          const page = await caps.listServices(args);
+          const [page, profile] = await Promise.all([caps.listServices(args), caps.getBusinessProfile()]);
           return {
             text:
-              page.items.map((s) => `${s.name} (${s.durationMin} min, id ${s.id})`).join("; ") || "No services yet.",
+              page.items
+                .map((s) => {
+                  const price = servicePriceText(s.price, profile.currency);
+                  return `${s.name} (${s.durationMin} min${price ? `, ${price}` : ""}, id ${s.id})`;
+                })
+                .join("; ") || "No services yet.",
             structured: page,
           };
         }),
@@ -206,13 +263,14 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "check_availability",
       {
         title: "Check availability",
-        description: "Free start times for a service between two instants (at most 14 days).",
+        description:
+          "Free start times for a service between two instants (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered.",
         inputSchema: checkAvailabilityInput,
         annotations: readOnly,
       },
       (args) =>
         run(async () => {
-          const r = await caps.checkAvailability(args);
+          const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now() });
           return {
             text: r.slots.length
               ? `${r.slots.length} free slots for ${r.service.name}; first ${r.slots[0]?.startTime}.`
@@ -269,15 +327,71 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "get_item_status",
       {
         title: "Item status",
-        description: "The current state of an item you created, and what you may do next.",
+        description:
+          "The current state of an item you created, in the business's words: what it proposed and waits for your person to answer (offer, with its terms_sha), who it waits on, what they can do next, and the conversation so far (thread: the business's replies and your person's messages).",
         inputSchema: getItemStatusInput,
         annotations: readOnly,
       },
       (args) =>
         run(async () => {
           const v = await caps.getItemStatus(caller, args);
-          return { text: `${v.human}${identityText(v.identity, undefined)}`, structured: v };
+          const text = v.offer !== undefined && v.next ? customerText(v as unknown as CustomerItemView) : v.human;
+          return { text: `${text}${lastFromUs(v)}${identityText(v.identity, undefined)}`, structured: v };
         }),
+    );
+    server.registerTool(
+      "accept_offer",
+      {
+        title: "Accept what the business proposed",
+        description:
+          "Accept another time the business proposed for a booking, or its quote. This binds your person, so send terms_sha — offer.terms_sha from get_item_status — only after they said yes to offer.human. Without terms_sha nothing is booked: you get the terms to show them. An accepted quote becomes a confirmed booking or order (linked).",
+        inputSchema: acceptOfferInput,
+        annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false },
+      },
+      async (args) => {
+        try {
+          return ok(...toOk(answered(await caps.customer.acceptOffer(caller, args))));
+        } catch (error) {
+          // The confirm step is not a failure: it is the question to put to the person.
+          if (error instanceof WriteError && error.code === "confirm_terms") {
+            return ok(`Nothing is booked yet. ${error.message}`, { confirm: error.details });
+          }
+          return failed(error);
+        }
+      },
+    );
+    server.registerTool(
+      "decline_offer",
+      {
+        title: "Decline what the business proposed",
+        description:
+          "Say no to another time the business proposed (the booking request is closed) or to its quote. Add reason for anything your person wants the business to know.",
+        inputSchema: declineOfferInput,
+        annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
+      },
+      (args) => run(async () => answered(await caps.customer.declineOffer(caller, args))),
+    );
+    server.registerTool(
+      "suggest_time",
+      {
+        title: "Ask for another time",
+        description:
+          "Instead of the time the business proposed, ask for another: start_time must be one of the free times check_availability lists (the end follows the service's length). The business confirms it or proposes again.",
+        inputSchema: suggestTimeInput,
+        annotations: writes,
+      },
+      (args) => run(async () => answered(await caps.customer.suggestTime(caller, args))),
+    );
+    server.registerTool(
+      "provide_details",
+      {
+        title: "Send the details",
+        description:
+          "Answer what the business asked about an item (get_item_status says it needs a detail). The item moves on; on any other item your details are kept as a message for the business.",
+        inputSchema: provideDetailsInput,
+        annotations: writes,
+      },
+      (args) => run(async () => answered(await caps.customer.provideDetails(caller, args))),
     );
     server.registerTool(
       "cancel_item",
@@ -370,6 +484,9 @@ const idempotencyKey = z
   );
 const keyed = <S extends z.ZodRawShape>(schema: z.ZodObject<S>) => schema.extend({ idempotency_key: idempotencyKey });
 
+/** What an owner's AI reads when what it added waits for the owner: a price is the owner's to publish. */
+const heldBack = (asked: boolean | undefined, active: number): string =>
+  asked !== false && active === 0 ? " Saved unpublished: the owner checks the price and publishes it in the app." : "";
 const again = (replayed: boolean) => (replayed ? " (Same request as before: nothing was done twice.)" : "");
 
 export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandler {
@@ -404,7 +521,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "List items",
         description:
-          "Items in the inbox, newest first. Filter by type, state, needs_human, or search the conversation with q.",
+          "Items in the inbox, newest first. Filter by type, state, needs_human, mail_failed (an email that failed, or one to the customer that was never sent), or search the conversation with q.",
         inputSchema: listItemsInput,
         annotations: readOnly,
       },
@@ -422,7 +539,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Get item",
         description:
-          "One item with its typed fields, event history (each event says who caused it — by — and through which door), conversation and the valid next transitions.",
+          "One item with its typed fields, event history (each event says who caused it — by — and through which door), conversation (a reply's delivery says whether its email went out), every email about it (mail: sent, retrying, failed or not sent and why) and the valid next transitions.",
         inputSchema: getItemInput,
         annotations: readOnly,
       },
@@ -431,8 +548,14 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const d = await caps.getItem(caller, args);
           // Who the customer is to the business and to each network that presented them (ADR-017 §8.2).
           const who = customerSummary(d.customer);
+          const unsent = d.mail.filter(
+            (m) =>
+              m.recipient === "customer" &&
+              (m.status === "failed" || (m.status === "skipped" && m.skip_reason !== "test_item")),
+          );
+          const why = unsent.at(-1);
           return {
-            text: `${d.human}${who ? ` Customer: ${who}` : ""} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`,
+            text: `${d.human}${who ? ` Customer: ${who}` : ""}${unsent.length ? ` ${unsent.length} email(s) to the customer were not sent (${why?.last_error ?? why?.skip_reason ?? "no reason given"}).` : ""} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`,
             structured: d,
           };
         }),
@@ -442,7 +565,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Transition item",
         description:
-          "Fire one of the events listed on the item (confirm, propose, decline, quote, …). Pass expected_version to avoid racing a colleague, and an idempotency_key so a retry does not fire it twice.",
+          "Fire one of the events listed on the item (confirm, propose, decline, quote, …). Pass expected_version to avoid racing a colleague, and an idempotency_key so a retry does not fire it twice. Money is the owner's: you cannot send a quote, propose a time at another price than the catalogue's or longer than the service, or confirm, accept or propose a time on a request that holds a price the customer set — you get a refusal that says to leave the owner a note.",
         inputSchema: transitionItemInput,
         annotations: writes,
       },
@@ -496,13 +619,13 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       },
       () =>
         guarded("list_services", async () => {
-          const items = await caps.setup.listServices(caller);
+          const [items, profile] = await Promise.all([caps.setup.listServices(caller), caps.setup.getProfile(caller)]);
           return {
             text:
               items
                 .map(
                   (s) =>
-                    `${s.id}: ${s.name}, ${s.durationMin} min, capacity ${s.capacity}${s.active ? "" : " (archived)"}`,
+                    `${s.id}: ${s.name}, ${s.durationMin} min, capacity ${s.capacity}${s.price ? `, ${servicePriceText(s.price, profile.currency)}` : ""}${s.active ? "" : " (archived)"}`,
                 )
                 .join("\n") || "No services yet.",
             structured: { items },
@@ -514,7 +637,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Add or change a service",
         description:
-          "Without service_id: creates a service (name required; duration 60 min, capacity 1, slots every 15 min by default). With service_id: changes only the fields you pass. Send an idempotency_key so a retry does not create it twice.",
+          "Without service_id: creates a service (name required; duration 60 min, capacity 1, slots every 15 min by default). With service_id: changes only the fields you pass. A fixed price is per booking unless price.per is person. Prices are the owner's: a service you add with a price is saved unpublished for the owner to check and publish, and a change to a price, or publishing a priced service, is refused. Send an idempotency_key so a retry does not create it twice.",
         inputSchema: serviceInput
           .partial()
           .extend({ service_id: z.string().optional(), idempotency_key: idempotencyKey }),
@@ -534,7 +657,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const input = serviceInput.parse(rest);
           const r = await once(idempotency_key, "services.create", input, (c) => caps.setup.createService(c, input));
           return {
-            text: `Created service ${r.result.name} (${r.result.id}).${again(r.replayed)}`,
+            text: `Created service ${r.result.name} (${r.result.id}).${heldBack(input.active, r.result.active)}${again(r.replayed)}`,
             structured: r.result,
           };
         }),
@@ -581,7 +704,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Add or change a product",
         description:
-          "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass. Send an idempotency_key so a retry does not create it twice.",
+          "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass. Prices are the owner's: a product you add is saved unpublished for the owner to check and publish, and a change to its price, or publishing it, is refused. Send an idempotency_key so a retry does not create it twice.",
         inputSchema: productInput
           .partial()
           .extend({ product_id: z.string().optional(), idempotency_key: idempotencyKey }),
@@ -601,7 +724,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const input = productInput.parse(rest);
           const r = await once(idempotency_key, "products.create", input, (c) => caps.setup.createProduct(c, input));
           return {
-            text: `Created product ${r.result.name} (${r.result.id}).${again(r.replayed)}`,
+            text: `Created product ${r.result.name} (${r.result.id}).${heldBack(input.active, r.result.active)}${again(r.replayed)}`,
             structured: r.result,
           };
         }),
@@ -750,7 +873,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Add or change a rule",
         description:
-          "A rule is JSON: on (triggers such as item.created, thread.inbound, item.transitioned:confirm), if (conditions: all/any/not, {path, op, value} over item.*, party.*, event.*, or fn slot_is_free / within_business_hours / party_verified / text_has_keywords), actions (transition, set_flags, reply, enqueue, stop). Without rule_id it creates; with rule_id it changes the fields you pass. Use test_rule first.",
+          "A rule is JSON: on (triggers such as item.created, thread.inbound, item.transitioned:confirm), if (conditions: all/any/not, {path, op, value} over item.*, party.*, event.*, or fn slot_is_free / within_business_hours / party_verified / text_has_keywords), actions (transition, set_flags, reply, enqueue, stop). Without rule_id it creates; with rule_id it changes the fields you pass. Use test_rule first. A rule that sends a quote or names an amount is the owner's to write: you may rename one or switch it off, not write, change or switch one on.",
         inputSchema: ruleInput.partial().extend({
           rule_id: z.string().optional(),
           expected_version: z.number().int().min(1).optional(),
@@ -816,7 +939,8 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       "reply",
       {
         title: "Reply",
-        description: "Send a reply to the customer, or an internal note with internal=true.",
+        description:
+          "Send a reply to the customer, or an internal note with internal=true. A reply you send goes to the customer by email with one line saying it was sent automatically and that replying reaches a person (written_by cannot change that for you); get_item shows whether it went out.",
         inputSchema: replyInput,
         annotations: writes,
       },
@@ -826,6 +950,53 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           return {
             text: "view" in r ? (r as { view: { human: string } }).view.human : (r as { human: string }).human,
             structured: r,
+          };
+        }),
+    );
+    // ---- one customer: what the inbox holds about them, and networks off for them ----
+    server.registerTool(
+      "export_customer",
+      {
+        title: "Export a customer's data",
+        description:
+          "Everything this inbox holds about one customer (party_id: party.id on any of their items), as one JSON document: their parties, contacts, network ids, and every item with its events, conversation, emails and receipts. For the owner to hand a customer who asks for their data. Erasing a customer is the owner's alone, in the app: you cannot do it, so tell the owner when a customer asks.",
+        inputSchema: customerInput,
+        annotations: readOnly,
+      },
+      (args) =>
+        guarded("export_customer", async () => {
+          const data = await caps.customers.export(caller, args);
+          const c = data.customer;
+          return {
+            text: `${c.name ?? "The customer"}: ${c.parties.length} record(s), ${c.items} item(s), ${c.entries} message(s) and note(s), ${c.emails} email(s)${c.erased_at ? `; erased on ${c.erased_at.slice(0, 10)}` : ""}${c.networks_off ? `; booking networks off since ${c.networks_off.since.slice(0, 10)}` : ""}. The whole document is in the structured result.`,
+            structured: data,
+          };
+        }),
+    );
+    server.registerTool(
+      "stop_customer_networks",
+      {
+        title: "Stop using booking networks for a customer",
+        description:
+          "For a customer who asked the business, by email or phone, not to be known to booking networks: from now on no network is sent anything about them and nothing a network said about them is read. Their bookings, orders and emails are unchanged. It cannot be switched back on here. A network cannot yet be asked to erase what it already has: the answer lists it, per network.",
+        inputSchema: customerInput.extend({
+          item_id: z
+            .string()
+            .max(64)
+            .optional()
+            .describe("The item the customer asked on, for the note in its history."),
+        }),
+        annotations: writes,
+      },
+      (args) =>
+        guarded("stop_customer_networks", async () => {
+          const c = await caps.customers.stopNetworks(caller, args);
+          const had = (c.networks_off?.networks ?? [])
+            .map((n) => `${new URL(n.network).host}: ${n.receipts} receipt(s), ${n.open_promises} promise(s) left open`)
+            .join("; ");
+          return {
+            text: `Booking networks are off for ${c.name ?? "this customer"} since ${c.networks_off?.since.slice(0, 10) ?? "now"}.${had ? ` Already with the networks, which cannot yet be asked to erase it: ${had}.` : ""}`,
+            structured: c,
           };
         }),
     );
@@ -1082,7 +1253,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Connect a product feed",
         description:
-          "Connects a product feed by its URL — no password, no app to install — and starts the first import now; after that it refreshes on its own. Products that leave the feed are taken off sale, never deleted, unless deactivate_missing is false.",
+          "Connects a product feed by its URL — no password, no app to install — and starts the first import now; after that it refreshes on its own. Products that leave the feed are taken off sale, never deleted, unless deactivate_missing is false. A feed sets prices, so only the owner connects one: from the owner's AI this is refused; suggest the feed to the owner in a note.",
         inputSchema: keyed(addFeedInput),
         annotations: writes,
       },
@@ -1113,7 +1284,8 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       "remove_feed",
       {
         title: "Disconnect a product feed",
-        description: "Disconnects a feed. Its products are taken off sale, never deleted.",
+        description:
+          "Disconnects a feed. Its products are taken off sale, never deleted. A feed sets prices, so only the owner disconnects one: from the owner's AI this is refused.",
         inputSchema: z.object({ feed_id: z.string().min(1), idempotency_key: idempotencyKey }),
         annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
       },
@@ -1146,7 +1318,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Networks and how they are doing",
         description:
-          "The networks this inbox reports to, each with whether it is on, what it shares, whether it gives first-time customers a key (issue), whether it has verified this inbox, the last ping it took, the last error, the rules it applies, the business's own standing there (from the last signed ping) and how many receipts it has published. To add, switch on or switch off a network, use update_settings with networks keyed by origin.",
+          "The networks this inbox reports to, each with whether it is on, what it shares, whether it gives first-time customers a key (issue), whether it has verified this inbox, the last ping it took, the last error, the rules it applies, the business's own standing there (from the last signed ping) and how many receipts it has published. To add or switch off a network, use update_settings with networks keyed by origin; switching one on, or letting it issue keys, is the owner's to do in Settings → Networks, because it is sent customers' email addresses.",
         inputSchema: z.object({}),
         annotations: readOnly,
       },

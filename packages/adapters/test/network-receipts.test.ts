@@ -226,7 +226,7 @@ describe("publishing receipts to the networks", () => {
       "issued:published",
     ]);
     const view = (await caps.getNetworks(owner())).networks.find((n) => n.origin === A);
-    expect(view?.receipts).toEqual({ published: 2, queued: 0, refused: 0, held: 0 });
+    expect(view?.receipts).toEqual({ published: 2, queued: 0, refused: 0, held: 0, withheld: 0 });
     // Nothing about Rita in either body.
     for (const c of net.calls) expect(JSON.stringify(c.body)).not.toMatch(/rita/i);
   });
@@ -414,6 +414,56 @@ describe("publishing receipts to the networks", () => {
     expect(net.calls).toHaveLength(6);
     expect((await publications(db)).every((p) => p.state === "published")).toBe(true);
     expect(new Set(net.calls.map((c) => c.body.receipt)).size).toBe(6);
+  });
+
+  it("never sends a receipt of a customer who asked us not to use networks: not queued, not backfilled, withheld", async () => {
+    const { db, caps, itemId, receipt } = await setup({});
+    // Another customer's receipt, issued while no network was on: it goes as ever.
+    const other = await caps.sendMessage(customer(T0 + 10), { body: "hello", contact: { email: "ana@example.com" } });
+    const otherId = "view" in other ? other.view.item.id : "item" in other ? other.item.id : "";
+    const otherReceipt = await caps.receipts.issue(otherId, "confirmed", T0 + 20);
+    if (otherReceipt.outcome !== "issued") throw new Error(otherReceipt.outcome);
+    // Rita stops the networks; then one is switched on, and backfills.
+    const [party] = (
+      await db.client.query({ sql: "SELECT party_id FROM items WHERE id = ?", params: [itemId], method: "all" })
+    ).rows;
+    await caps.customers.stopNetworks(owner(T0 + 30), { party_id: String(party?.[0]) });
+    const net = fakeNetworks({ [A]: accepted });
+    const on = T0 + HOUR;
+    await caps.updateSettings(owner(on), { doc: { networks: { [A]: { enabled: true } } } });
+    await drain(runnerWith(net.fetchImpl), db, on);
+    expect(net.calls.map((c) => c.body.receipt)).toEqual([otherReceipt.receipt.jws]);
+    expect(net.calls.map((c) => c.body.receipt)).not.toContain(receipt.jws);
+    // A job that still names hers (queued before the stop) withholds it instead of sending it.
+    await db.client.query({
+      sql: "INSERT INTO network_publications (receipt_id, network, stage, state, attempts, updated_at) VALUES (?, ?, 'issued', 'queued', 0, ?)",
+      params: [receipt.id, A, on],
+      method: "run",
+    });
+    await db.client.query({
+      sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, ?, ?, ?, 'queued', 0, 8, ?, ?)",
+      params: [
+        ulid(),
+        NETWORK_RECEIPT_KIND,
+        JSON.stringify({ receiptId: receipt.id, stage: "issued", network: A }),
+        on + 1,
+        `${NETWORK_RECEIPT_KIND}:${A}:${receipt.id}:issued:late`,
+        on + 1,
+      ],
+      method: "run",
+    });
+    await drain(runnerWith(net.fetchImpl), db, on + 1);
+    expect(net.calls).toHaveLength(1);
+    const [hers] = (
+      await db.client.query({
+        sql: "SELECT state FROM network_publications WHERE receipt_id = ?",
+        params: [receipt.id],
+        method: "all",
+      })
+    ).rows;
+    expect(hers?.[0]).toBe("withheld");
+    const view = (await caps.getNetworks(owner(on + 2))).networks.find((n) => n.origin === A);
+    expect(view?.receipts).toMatchObject({ published: 1, queued: 0, withheld: 1 });
   });
 
   it("hands a job queued before there were several networks to every network that takes receipts", async () => {

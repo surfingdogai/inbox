@@ -1,3 +1,4 @@
+import { parseMajor } from "./actions";
 import type { Action, Condition, RuleDefinition } from "./types";
 
 /**
@@ -89,6 +90,7 @@ export const PATHS: readonly { readonly path: string; readonly label: string; re
 export const TRIGGER_EVENTS = [
   "confirm",
   "propose",
+  "counter",
   "request_info",
   "provide_info",
   "accept",
@@ -96,6 +98,7 @@ export const TRIGGER_EVENTS = [
   "cancel",
   "cancel_late",
   "cancel_by_business",
+  "record_cancel",
   "complete",
   "no_show",
   "quote",
@@ -204,7 +207,9 @@ export function parseValue(text: string, op: Op, path: string): unknown {
     if (v === "true") return true;
     if (v === "false") return false;
     if (v === "null") return null;
-    if (isMoneyPath(path) && /^-?\d+(?:[.,]\d{1,2})?$/.test(v)) return Math.round(Number(v.replace(",", ".")) * 100);
+    const minor = isMoneyPath(path) ? parseMajor(v) : undefined;
+    if (minor !== undefined) return minor;
+    if (isMoneyPath(path) && /^-\d+(?:[.,]\d{1,2})?$/.test(v)) return -(parseMajor(v.slice(1)) ?? 0);
     if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
     if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) return v.slice(1, -1);
     return v;

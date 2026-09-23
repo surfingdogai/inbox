@@ -34,6 +34,11 @@ export interface IdentityInput {
   readonly issueAt?: readonly string[] | undefined;
   /** How long the `rules` job waits, so a first contact's answers land before the rules read them. */
   readonly rulesDelayMs?: number | undefined;
+  /**
+   * The party a pass the agent carried already names here, recognised without asking a network:
+   * a customer who stopped networks (`identity/stops.ts`) keeps being recognised by their pass.
+   */
+  readonly localParty?: string | undefined;
 }
 
 export interface MatchPlan {
@@ -66,6 +71,9 @@ export async function planMatch(
   if (input.callerPartyId) return { joinPartyId: input.callerPartyId, match: "strong", values };
   const presentations = input.identity?.presentations ?? [];
 
+  if (input.customer && input.identity?.localParty) {
+    return { joinPartyId: input.identity.localParty, match: "strong", values };
+  }
   if (input.customer) {
     // A person this business has met before, by the pairwise id their network gave it.
     for (const p of presentations) {

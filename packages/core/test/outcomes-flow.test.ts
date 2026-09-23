@@ -448,11 +448,45 @@ describe("a quote accepted as an order", () => {
       { itemId: qid, event: "accept" },
     );
     const orderId = accepted.linked?.item.id as string;
-    await fire(s, owner(T0 + 2 * HOUR), orderId, "accept");
+    // Accepting the quote made the promise: the order is accepted, and the business accepts nothing twice.
+    expect(accepted.linked?.item.state).toBe("accepted");
     await s.drain(T0 + 2 * HOUR);
     const [promise] = await s.caps.receipts.forItem(orderId);
     expect(promise?.kind).toBe("accepted");
     expect(claims(promise).per).toEqual([{ n: "network.example.com", p }]);
+  });
+});
+
+describe("a quote accepted as a booking", () => {
+  it("promises the booking at the quoted time when the customer accepts, and the owner confirms nothing", async () => {
+    const s = await setup();
+    const q = await s.caps.requestQuote(customer(T0), {
+      payload: { itemOffered: { name: "Private lesson", serviceId: s.svc }, description: "Two hours, two people" },
+      contact: { email: "rita@example.com" },
+    });
+    const qid = q.view.item.id;
+    const start = T0 + 2 * DAY;
+    await fire(s, owner(T0 + MIN), qid, "quote", {
+      totalPrice: { value: 12000, currency: "EUR" },
+      validThrough: new Date(T0 + DAY).toISOString(),
+      creates: "booking",
+      startTime: new Date(start).toISOString(),
+    });
+    const accepted = await transitionItem(
+      s.db,
+      { ...customer(T0 + HOUR), accessToken: q.accessToken as string },
+      { itemId: qid, event: "accept" },
+    );
+    const bookingId = accepted.linked?.item.id as string;
+    expect(accepted.linked?.item.state).toBe("confirmed");
+    await s.drain(T0 + HOUR);
+    const [promise] = await s.caps.receipts.forItem(bookingId);
+    expect(promise?.kind).toBe("confirmed");
+    expect(claims(promise)).toMatchObject({ typ: "booking", due: secs(start), iat: secs(T0 + HOUR) });
+    // Kept, like any booking: the sweep closes it after the end, against the same promise.
+    await s.sweep(start + 90 * MIN + 49 * HOUR);
+    const [kept] = await outcomes(s, bookingId);
+    expect(claims(kept)).toMatchObject({ out: "booking.completed", ref: claims(promise).nonce });
   });
 });
 

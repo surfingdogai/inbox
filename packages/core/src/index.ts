@@ -7,6 +7,7 @@ export type { Manifest } from "@surfingdog/spec";
 export { MANIFEST_PATH, manifestSchema } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
+export * from "./customer/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
 export * from "./feeds/parse";
@@ -33,5 +34,6 @@ export {
 export { mergeSettings } from "./settings/merge";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
+export { servicePriceText } from "./util/money";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

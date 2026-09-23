@@ -39,6 +39,9 @@ const OFFER_A_CODE: Preset = {
   },
 };
 
+/** A booking that is a request again: the customer sent the details asked for, or picked another time. */
+const BACK_TO_US = ["item.transitioned:provide_info", "item.transitioned:counter"];
+
 /**
  * Per-vertical starting points. Amounts are in minor units. A record only ever speeds things up
  * or asks a person (R25): the caps below are ADR-017 §14's, and nothing here refuses anybody.
@@ -49,7 +52,9 @@ export const PRESETS: Record<string, Preset[]> = {
       name: "Auto-confirm small bookings when the slot is free",
       priority: 100,
       definition: {
-        on: ["item.created"],
+        // A request back with us after the customer sent the details or picked another time is a
+        // request again (ADR-018 N14), and is judged as a new one would be.
+        on: ["item.created", ...BACK_TO_US],
         if: {
           all: [
             { path: "item.type", op: "eq", value: "booking" },
@@ -90,7 +95,7 @@ export const PRESETS: Record<string, Preset[]> = {
       name: "Confirm a customer you know, or a trusted one, at once",
       priority: 120,
       definition: {
-        on: ["item.created"],
+        on: ["item.created", ...BACK_TO_US],
         if: {
           all: [
             { path: "item.type", op: "eq", value: "booking" },
@@ -233,3 +238,56 @@ export const PRESETS: Record<string, Preset[]> = {
     OFFER_A_CODE,
   ],
 };
+
+/**
+ * The code offer's reply as the business's customers read it: in the business's first language
+ * (the rule is saved with its words, so it is chosen when the preset is applied), and listening for
+ * the words its customers would use.
+ */
+const OFFER_A_CODE_PT: Preset = {
+  ...OFFER_A_CODE,
+  definition: {
+    ...OFFER_A_CODE.definition,
+    if: {
+      all: [
+        { path: "customer.match", op: "eq", value: "weak" },
+        {
+          fn: "text_has_keywords",
+          args: {
+            keywords: [
+              "cancel",
+              "change",
+              "reschedule",
+              "move my",
+              "earlier",
+              "previous",
+              "past order",
+              "history",
+              "cancelar",
+              "alterar",
+              "mudar",
+              "remarcar",
+              "anterior",
+              "histórico",
+            ],
+          },
+        },
+      ],
+    },
+    actions: [
+      {
+        action: "reply",
+        template:
+          "Talvez já o conheçamos. Para ver, alterar ou cancelar uma marcação ou encomenda anterior, confirme que é você: peça o código de uso único que enviamos para o email que temos registado e envie-nos esse código.",
+        internal: false,
+      },
+      { action: "set_flags", needsHuman: true },
+    ],
+  },
+};
+
+/** A vertical's rules, their words in the business's first language (`en` or `pt`). */
+export function presetFor(key: string, lang: "en" | "pt"): Preset[] {
+  const rules = PRESETS[key] ?? [];
+  return lang === "pt" ? rules.map((r) => (r === OFFER_A_CODE ? OFFER_A_CODE_PT : r)) : rules;
+}

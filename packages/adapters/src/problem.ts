@@ -34,6 +34,11 @@ const TITLES: Record<string, string> = {
   too_many_attempts: "Too many attempts",
   positive_only: "A reputation may only speed things up",
   replayed_signature: "Signature already used",
+  confirm_terms: "Confirm the terms first",
+  offer_changed: "The proposal changed",
+  offer_expired: "No longer valid",
+  no_offer: "Nothing to answer",
+  confirm_erase: "Confirm the erasure first",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };

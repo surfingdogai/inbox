@@ -79,6 +79,19 @@ const sections = {
         .int()
         .min(0)
         .default(24 * 60),
+      /**
+       * Minutes before a start time after which customers can no longer book it online: no free
+       * time inside it is offered, and no customer, rule, AI or key books one; the owner or staff
+       * in person still may. Nobody proposes or quotes one: the customer could not accept it. A
+       * time that has started is never booked by anyone.
+       */
+      minNoticeMin: z
+        .number()
+        .int()
+        .min(0)
+        .max(10_080)
+        .default(60)
+        .describe("Minutes before a start time after which customers can no longer book it online."),
       /** Hold the slot while a proposal is pending. */
       holdOnPropose: z.boolean().default(false),
       /** Requests nobody answered expire after this many hours. */
@@ -131,7 +144,7 @@ const sections = {
     .prefault({}),
   notifications: z
     .object({
-      /** Where the owner is told about new items; empty = no owner emails. */
+      /** Where the owner is told about new items; empty = the first owner's sign-in address. */
       ownerEmail: z.email().optional(),
       /** Public base URL of the owner app, used in links. */
       appUrl: z.url().optional(),
@@ -259,15 +272,15 @@ const sections = {
         })
         .prefault({}),
       /**
-       * A first-time customer's code for their assistant (ADR-017 §2.1), the one line at the end of
-       * the business's first email to them. Off, no email carries it; the assistant still gets what
-       * it needs in the answer to its request.
+       * A first-time customer's code for their assistant (ADR-017 §2.1): a day after their first
+       * booking or order, an email of its own with the code and one line about the booking network.
+       * Off, no email carries it; the assistant still gets what it needs in the answer to its request.
        */
       emailKey: z
         .boolean()
         .default(true)
         .describe(
-          "End the first email to a new customer with one line: a code their assistant can show next time so you recognise them.",
+          "A day after a new customer's first booking or order, email them a code their assistant can show next time so you recognise them.",
         ),
     })
     .prefault({}),

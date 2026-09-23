@@ -1,3 +1,4 @@
+import { type Audience, customerLabel, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
@@ -39,6 +40,7 @@ const ACTION_RANK = [
   "confirm",
   "accept",
   "approve",
+  "counter",
   "quote",
   "answer",
   "record_payment",
@@ -62,6 +64,8 @@ const ACTION_RANK = [
   "cancel",
   "cancel_late",
   "cancel_by_business",
+  "record_cancel",
+  "record_cancel_late",
   "mark_spam",
   "expire",
   "lapse",
@@ -97,18 +101,41 @@ export function rowToItem(row: ItemRow): Item {
 
 /**
  * `hidden`: events the machine would list that can no longer happen for this item — its dead
- * one-time corrections (`corrections.ts`), which only a reader of its history knows.
+ * one-time corrections (`corrections.ts`), which only a reader of its history knows. `audience`:
+ * for a customer, the language, time zone and notice the business speaks to them in.
  */
-export function viewFor(item: Item, actor: ActorKind, party?: PartyView, hidden?: ReadonlySet<string>): ItemView {
+export function viewFor(
+  item: Item,
+  actor: ActorKind,
+  party?: PartyView,
+  hidden?: ReadonlySet<string>,
+  audience?: Audience,
+): ItemView {
   const machine = machines[item.type];
+  const customer = CUSTOMER_KINDS.has(actor);
+  const lang = (audience ?? DEFAULT_AUDIENCE).lang;
   const transitions = availableTransitions(machine, item.state, actor)
     .filter((t) => !hidden?.has(t.event))
-    .map((t, i) => ({ event: t.event, label: t.label, i }))
+    .map((t, i) => ({
+      event: t.event,
+      label: customer ? customerLabel(t.event, item.type, item.state, lang) : t.label,
+      i,
+    }))
     .sort((a, b) => rankOf(a.event) - rankOf(b.event) || a.i - b.i)
     .map(({ event, label }) => ({ event, label }));
-  // A customer reads the business's own words; the business reads about its item.
-  const human = CUSTOMER_KINDS.has(actor) ? describeToCustomer(item) : describe(item);
-  return { item, transitions, human, ...(party ? { party } : {}) };
+  // A customer reads the business's own words; the business reads about its item. Whatever door
+  // answers them — a create, a transition, the status — the business's flags never go with it.
+  const human = customer ? describeToCustomer(item, audience) : describe(item);
+  return { item: customer ? customerItem(item) : item, transitions, human, ...(party ? { party } : {}) };
+}
+
+/**
+ * The item as its customer sees it: none of the business's own flags (priority, a person needed,
+ * test mode), and a message the business put aside as spam is simply closed.
+ */
+export function customerItem(item: Item): Item {
+  const { flags: _flags, ...rest } = item;
+  return { ...rest, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
 }
 
 const TYPE_WORD: Record<ItemType, string> = {
@@ -150,48 +177,12 @@ const STATE_WORD: Record<string, string> = {
 };
 
 /**
- * What the business says to its customer about their item, in its own voice: the customer wrote to
- * the business, and whatever carries this sentence to them — their assistant, most often — passes
- * on the business's words, and names nobody else.
+ * What the business says to its customer about their item, in its own voice and language: the
+ * customer wrote to the business, and whatever carries this sentence to them — their assistant, most
+ * often — passes on the business's words, and names nobody else (`customer/copy.ts`).
  */
-const CUSTOMER_STATE_WORD: Record<string, string> = {
-  requested: "is with us; we will confirm it or suggest another time",
-  received: "is with us; we will get back to you",
-  needs_info: "needs a detail from you",
-  proposed: "has another time from us; accept or decline it",
-  confirmed: "is confirmed",
-  quoted: "has our quote; accept or decline it",
-  accepted: "is accepted",
-  awaiting_payment: "is accepted and waiting for your payment",
-  payment_failed: "is accepted; your payment did not go through",
-  charged_back: "was charged back: the payment was reversed",
-  paid: "is paid",
-  fulfilling: "is being prepared",
-  fulfilled: "is fulfilled",
-  completed: "is completed",
-  declined: "was declined: we cannot take it",
-  expired: "has expired",
-  cancelled: "is cancelled",
-  cancelled_by_customer: "is cancelled, as you asked",
-  cancelled_by_business: "was cancelled by us",
-  no_show: "is recorded as missed",
-  open: "is with us; we will reply soon",
-  answered: "has our answer",
-  closed: "is closed",
-  spam: "is closed",
-  approved: "is approved",
-  rejected: "was not approved",
-  refunded: "is refunded",
-};
-
-export function describeToCustomer(item: Item): string {
-  const noun = TYPE_WORD[item.type].toLowerCase();
-  const what = item.subject ? `Your ${noun} "${item.subject}"` : `Your ${noun}`;
-  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
-  // A request that named another price hears ours, in our words (ADR-018 §3.2).
-  const prices = statedPrices(item);
-  const price = prices ? ` Our price is ${moneyText(prices.ours)}.` : "";
-  return `${what}${when} ${CUSTOMER_STATE_WORD[item.state] ?? `is ${item.state.replaceAll("_", " ")}`}.${price} Reference ${item.id}.`;
+export function describeToCustomer(item: Item, audience: Audience = DEFAULT_AUDIENCE): string {
+  return statusSentence(item, audience);
 }
 
 export function describe(item: Item): string {

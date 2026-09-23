@@ -6,6 +6,7 @@ import {
   ensureLifecycleSweep,
   type InstanceSigningKey,
   isNetworkDown,
+  itemStopped,
   type JobHandler,
   type JobRow,
   NETWORK_PING_KIND,
@@ -26,9 +27,11 @@ import {
   type PublishPayload,
   pingDedupeKey,
   platformHost,
+  pruneActionLinks,
   pruneIdempotencyKeys,
   pruneJobs,
   publishKey,
+  RECEIPT_NOT_STOPPED_SQL,
   type ReceiptStage,
   type Registration,
   readNetworkStatus,
@@ -188,6 +191,8 @@ export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
     await pruneRateLimits(db, now);
     // Idempotency keys are for retries, not a record: thirty days is long past any retry.
     await pruneIdempotencyKeys(db, now);
+    // Links in the business's emails, thirty days after they stopped working.
+    await pruneActionLinks(db, now);
     // Kept signatures past their expiry, cached network answers and directories, old codes (ADR-017 §8).
     await pruneIdentity(db, now);
     // The lifecycle sweep queues its own successor; this re-queues it should a chain ever break.
@@ -419,6 +424,15 @@ export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
     });
     const row = rows[0];
     if (!row) return { note: `receipt ${p.receiptId} is gone; nothing published` };
+    // The customer asked the business not to use booking networks: nothing about them goes.
+    if (await itemStopped(db, String(row[3]))) {
+      await db.client.query({
+        sql: "UPDATE network_publications SET state = 'withheld', updated_at = ? WHERE receipt_id = ? AND state = 'queued'",
+        params: [now, p.receiptId],
+        method: "run",
+      });
+      return { note: `receipt ${p.receiptId} withheld: its customer asked us not to use booking networks` };
+    }
     const receipt: PublishedReceipt = {
       id: p.receiptId,
       jws: String(row[0]),
@@ -487,7 +501,7 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
     const { rows } = await db.client.query({
       sql: `SELECT p.receipt_id, p.stage, r.jws, r.ack_jws, r.kind, r.item_id
               FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-             WHERE p.network = ? AND p.state = 'queued'${kinds}${owedOnly}
+             WHERE p.network = ? AND p.state = 'queued'${kinds}${owedOnly} AND ${RECEIPT_NOT_STOPPED_SQL("r")}
                AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.dedupe_key = ? || ':' || p.network || ':' || p.receipt_id || ':' || p.stage
                                 AND j.status IN ('queued', 'running'))
              ORDER BY p.attempts, p.receipt_id, CASE p.stage WHEN 'issued' THEN 0 ELSE 1 END
@@ -545,6 +559,7 @@ async function backfill(db: Db, network: string, now: number, perHour: number): 
     sql: `INSERT OR IGNORE INTO network_publications (receipt_id, network, stage, state, attempts, last_error, updated_at)
           SELECT r.id, ?, 'issued', 'queued', 0, NULL, ? FROM receipts r
            WHERE NOT EXISTS (SELECT 1 FROM network_publications p WHERE p.receipt_id = r.id AND p.network = ? AND p.stage = 'issued')
+             AND ${RECEIPT_NOT_STOPPED_SQL("r")}
            ORDER BY r.id LIMIT ?`,
     params: [network, now, network, perHour],
     method: "run",
@@ -554,7 +569,7 @@ async function backfill(db: Db, network: string, now: number, perHour: number): 
   const acked = await db.client.query({
     sql: `INSERT OR IGNORE INTO network_publications (receipt_id, network, stage, state, attempts, last_error, updated_at)
           SELECT r.id, ?, 'acknowledged', 'queued', 0, NULL, ? FROM receipts r
-           WHERE r.ack_at IS NOT NULL
+           WHERE r.ack_at IS NOT NULL AND ${RECEIPT_NOT_STOPPED_SQL("r")}
              AND NOT EXISTS (SELECT 1 FROM network_publications p WHERE p.receipt_id = r.id AND p.network = ? AND p.stage = 'acknowledged')
            ORDER BY r.id LIMIT ?`,
     params: [network, now, network, left],
@@ -594,7 +609,7 @@ async function promisesOwed(db: Db, network: string, itemId: string, now: number
   const { rows } = await db.client.query({
     sql: `SELECT r.id, r.jws, r.ack_jws, r.kind, p.state FROM receipts r
             LEFT JOIN network_publications p ON p.receipt_id = r.id AND p.network = ? AND p.stage = 'issued'
-           WHERE r.item_id = ? AND r.kind <> 'outcome' ORDER BY r.id`,
+           WHERE r.item_id = ? AND r.kind <> 'outcome' AND ${RECEIPT_NOT_STOPPED_SQL("r")} ORDER BY r.id`,
     params: [network, itemId],
     method: "all",
   });

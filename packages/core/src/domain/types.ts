@@ -114,6 +114,9 @@ export const quoteRequestPayloadSchema = z.object({
       notes: z.string().max(2_000).optional(),
       /** What accepting the quote creates. */
       creates: z.enum(["booking", "order"]).default("order"),
+      /** For a quote that creates a booking: the time it is for (ADR-018 §3.3). */
+      startTime: isoDateTime.optional(),
+      endTime: isoDateTime.optional(),
     })
     .optional(),
 });

@@ -8,20 +8,14 @@ import type { IssueResult } from "./types";
 /**
  * A first contact's answers (ADR-017 §2.1), per network, in `pending_identity`. On `201` the key
  * and the first pass are sealed by the secret box: the pass so the status door can hand it back,
- * the key until it rides on the first email to the customer — or, within a day, an email of one
- * line — and then it is gone. Every row is deleted seven days after it was made.
+ * the key until it goes to the customer in an email of its own, a day after they first booked or
+ * ordered, and then it is gone. Every row is deleted seven days after it was made.
  *
  * The customer most often does not know any of this exists: they wrote to a business. So the key
- * reaches them as the business's own quiet line, a code for their assistant, and nothing else, and
- * only while the business keeps it on (`customers.emailKey`).
+ * reaches them in the business's own words, a code for their assistant with one line about the
+ * booking network and a link to the page that explains it (`customer/disclosure.ts`), and only
+ * while the business keeps it on (`customers.emailKey`).
  */
-export const KEY_LINE = "If you use an assistant, it can show this code next time so we recognise you:";
-const KEYS_LINE = "If you use an assistant, it can show these codes next time so we recognise you:";
-
-/** The one line an email to the customer ends with: the key, or with several networks each of them. */
-export function keyLine(keys: readonly string[]): string {
-  return `${keys.length > 1 ? KEYS_LINE : KEY_LINE} ${keys.join(" ")}`;
-}
 /** A key waits this long for an email to the customer to ride on, then goes in one of its own. */
 export const KEY_ALONE_AFTER_MS = 24 * 3_600_000;
 /** Nothing of a first contact is kept longer than this (§2.1, the network's own replay window). */
@@ -182,11 +176,17 @@ export function keysDeliveredStatement(itemId: string, networks: readonly string
   };
 }
 
-/** Items whose keys have waited a day for an email to ride on. */
+/**
+ * Items whose keys are due in their own email: a day after the first contact. Never a test item's,
+ * and never one whose email already failed for good, so neither can fill every run's batch and hold
+ * back the codes behind them.
+ */
 export async function keysDueAlone(db: Db, now: number, limit: number): Promise<string[]> {
   const { rows } = await db.client.query({
-    sql: `SELECT DISTINCT item_id FROM pending_identity
-           WHERE key_enc IS NOT NULL AND delivered_at IS NULL AND created_at <= ? ORDER BY item_id LIMIT ?`,
+    sql: `SELECT DISTINCT p.item_id FROM pending_identity p JOIN items i ON i.id = p.item_id
+           WHERE p.key_enc IS NOT NULL AND p.delivered_at IS NULL AND p.created_at <= ? AND COALESCE(i.sandbox, 0) = 0
+             AND NOT EXISTS (SELECT 1 FROM outbound_mail m WHERE m.job_key = 'key:' || p.item_id AND m.status = 'failed')
+           ORDER BY p.item_id LIMIT ?`,
     params: [now - KEY_ALONE_AFTER_MS, limit],
     method: "all",
   });

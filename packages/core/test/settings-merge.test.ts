@@ -98,6 +98,19 @@ describe("settings writes", () => {
     expect(s.booking.autoExpireHours).toBe(72);
   });
 
+  it("merge the minimum notice like any key: an hour by default, kept beside the rest, refused out of range", async () => {
+    const { db, caps } = await setup();
+    expect((await readSettings(db)).booking.minNoticeMin).toBe(60);
+    await caps.updateSettings(owner, { doc: { booking: { cancellationWindowMin: 120 } } });
+    await caps.updateSettings(owner, { doc: { booking: { minNoticeMin: 30 } } });
+    expect((await readSettings(db)).booking).toMatchObject({ cancellationWindowMin: 120, minNoticeMin: 30 });
+    await expect(caps.updateSettings(owner, { doc: { booking: { minNoticeMin: -1 } } })).rejects.toMatchObject({
+      code: "invalid_input",
+    });
+    await caps.updateSettings(owner, { doc: { booking: { minNoticeMin: null } } });
+    expect((await readSettings(db)).booking).toMatchObject({ cancellationWindowMin: 120, minNoticeMin: 60 });
+  });
+
   it("keep a key only a newer version knows", async () => {
     const { db, caps } = await setup();
     await store(db, { business: { name: "A", motto: "keep me" }, customers: { otp: { enabled: true } } });

@@ -55,6 +55,13 @@ export const LIMITS = {
   platform: { capacity: 6_000, perMs: 100 / 1000 } satisfies Limit,
   /** A Web Bot Auth directory this inbox has not fetched before: one new origin a minute per address (§2.4). */
   directory: { capacity: 1, perMs: 1 / 60_000 } satisfies Limit,
+  /**
+   * Asking for another time than the one the business proposed (ADR-018 §6): each one mails the
+   * owner and puts the item back on their desk, so ten an hour per address, which no real customer meets.
+   */
+  negotiate: { capacity: 10, perMs: 10 / 3_600_000 } satisfies Limit,
+  /** A POST from the page a link in the business's email opens: thirty an hour per address. */
+  link: { capacity: 30, perMs: 30 / 3_600_000 } satisfies Limit,
 } as const;
 
 export type LimitClass = keyof typeof LIMITS;
@@ -113,18 +120,33 @@ export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);
 }
 
+/** Asking for another time than the one proposed: `POST /v1/items/{id}/counter`. */
+export function isNegotiateRoute(method: string, path: string): boolean {
+  return method === "POST" && /^\/v1\/items\/[^/]+\/counter\/?$/.test(path);
+}
+
 /** MCP tools that send or check a one-time code. */
 export async function mcpVerifies(request: Request): Promise<boolean> {
-  if (request.method !== "POST") return false;
+  return (await mcpToolCalls(request)).includes("verify_customer");
+}
+
+/** MCP tools that ask for another time than the one proposed. */
+export async function mcpNegotiates(request: Request): Promise<boolean> {
+  return (await mcpToolCalls(request)).includes("suggest_time");
+}
+
+/** The tools a JSON-RPC body calls, a single call or a batch. */
+async function mcpToolCalls(request: Request): Promise<string[]> {
+  if (request.method !== "POST") return [];
   try {
     const body = (await request.clone().json()) as unknown;
     const calls = Array.isArray(body) ? body : [body];
-    return calls.some((m) => {
+    return calls.flatMap((m) => {
       const msg = m as { method?: unknown; params?: { name?: unknown } };
-      return msg.method === "tools/call" && msg.params?.name === "verify_customer";
+      return msg.method === "tools/call" && typeof msg.params?.name === "string" ? [msg.params.name] : [];
     });
   } catch {
-    return false;
+    return [];
   }
 }
 
@@ -132,15 +154,5 @@ export async function mcpVerifies(request: Request): Promise<boolean> {
 const CREATE_TOOLS = new Set(["create_booking", "create_order", "request_quote", "send_message"]);
 
 export async function mcpCreates(request: Request): Promise<boolean> {
-  if (request.method !== "POST") return false;
-  try {
-    const body = (await request.clone().json()) as unknown;
-    const calls = Array.isArray(body) ? body : [body];
-    return calls.some((m) => {
-      const msg = m as { method?: unknown; params?: { name?: unknown } };
-      return msg.method === "tools/call" && typeof msg.params?.name === "string" && CREATE_TOOLS.has(msg.params.name);
-    });
-  } catch {
-    return false;
-  }
+  return (await mcpToolCalls(request)).some((name) => CREATE_TOOLS.has(name));
 }

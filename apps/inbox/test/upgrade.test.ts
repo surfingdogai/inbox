@@ -304,7 +304,7 @@ describe("upgrading the live instance to several networks", () => {
         origin: NET,
         enabled: true,
         registration: "registered",
-        receipts: { published: 3, queued: 0, refused: 0, held: 0 },
+        receipts: { published: 3, queued: 0, refused: 0, held: 0, withheld: 0 },
       }),
     ]);
     // The manifest still names the network, spelled as before.
@@ -416,6 +416,7 @@ describe("upgrading the live instance to several networks", () => {
       cancellationWindowMin: 30,
       lateCancellation: "record",
       autoCompleteHours: 48,
+      minNoticeMin: 60,
     });
 
     // The tab from before the deploy cannot overwrite any of it: its version is long gone.

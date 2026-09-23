@@ -214,4 +214,37 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `network_status` ADD `platforms_checked_at` integer;",
     ],
   },
+  {
+    version: 12,
+    name: "0011_customer_links",
+    statements: [
+      "-- Links in the business's emails that open the customer's page (ADR-018 §5): one per email and\n-- action, signed, expiring, used once. A GET only shows; a POST acts. `terms_sha` is the fingerprint\n-- of the terms the email carried (for a details link, the question it answers), `lang` the\n-- language the page speaks, and `mail_key` the email the link went out in, which its siblings share.\nALTER TABLE `action_links` ADD `terms_sha` text NOT NULL DEFAULT '';",
+      "ALTER TABLE `action_links` ADD `lang` text NOT NULL DEFAULT 'en';",
+      "ALTER TABLE `action_links` ADD `mail_key` text;",
+      "CREATE INDEX IF NOT EXISTS `action_links_item` ON `action_links` (`item_id`);",
+      "CREATE INDEX IF NOT EXISTS `action_links_mail` ON `action_links` (`mail_key`);",
+      "CREATE INDEX IF NOT EXISTS `action_links_expires` ON `action_links` (`expires_at`);",
+    ],
+  },
+  {
+    version: 13,
+    name: "0012_customer_mail",
+    statements: [
+      "-- Every email this inbox sends, what it said and what became of it: a send that failed is visible\n-- on its item and is never shown as sent. One row per email (`job_key`: the notify job, or\n-- `key:<item>` for the code email); a retry sends the same row. `recipient` is `customer` or\n-- `owner`; `status` one of queued, sent, retrying, failed, skipped (`skip_reason`: no_address,\n-- no_sender, test_item).\nCREATE TABLE IF NOT EXISTS `outbound_mail` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text,\n\t`job_key` text NOT NULL,\n\t`recipient` text NOT NULL,\n\t`template` text NOT NULL,\n\t`lang` text NOT NULL,\n\t`entry_id` text,\n\t`event_id` text,\n\t`subject` text NOT NULL,\n\t`body_text` text NOT NULL,\n\t`message_ref` text NOT NULL,\n\t`provider_id` text,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`skip_reason` text,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`last_error` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`sent_at` integer\n);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `outbound_mail_job` ON `outbound_mail` (`job_key`);",
+      "CREATE INDEX IF NOT EXISTS `outbound_mail_item` ON `outbound_mail` (`item_id`, `created_at`);",
+      "CREATE INDEX IF NOT EXISTS `outbound_mail_status` ON `outbound_mail` (`status`, `updated_at`);",
+      "-- The ids a customer's reply names in In-Reply-To and References, and the item each belongs to:\n-- the item's anchor (first in the References of every email about it), each email's own ref, and\n-- the id the mail service gave the email. A reply that names any of them lands on that item.\nCREATE TABLE IF NOT EXISTS `mail_refs` (\n\t`ref` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+      "CREATE INDEX IF NOT EXISTS `mail_refs_item` ON `mail_refs` (`item_id`, `kind`);",
+    ],
+  },
+  {
+    version: 14,
+    name: "0013_customer_privacy",
+    statements: [
+      "-- A customer who asked the business not to use booking networks for them: set on every party that is\n-- that customer, so each door and each publisher can tell from the item alone that nothing about it\n-- goes to any network.\nALTER TABLE `parties` ADD `networks_off_at` integer;",
+      "-- Fingerprints (SHA-256) of a stopped customer's email address and phone number, and of their\n-- parties, so their next request (a new party) is stopped before any network is called, even after\n-- their data was erased. `via`: customer, owner or erased.\nCREATE TABLE IF NOT EXISTS `network_stops` (\n\t`hash` text PRIMARY KEY NOT NULL,\n\t`via` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+      "-- Who wrote a reply, when the request said so: `person` (an integration whose user typed it) or\n-- `automation`. Null: judged by who sent it.\nALTER TABLE `thread_entries` ADD `written_by` text;",
+    ],
+  },
 ];

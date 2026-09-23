@@ -6,10 +6,13 @@ import type { Action, Condition, RuleDefinition } from "./types";
  * test suite keeps the two in step.
  */
 export function summarizeRule(def: RuleDefinition): string {
-  const when = def.on.map(describeTrigger).join(" or ");
+  const triggers = def.on.map(describeTrigger);
+  // Three or more read as a list, set off from the conditions that follow.
+  const many = triggers.length > 2;
+  const when = many ? `${triggers.slice(0, -1).join(", ")} or ${triggers.at(-1)}` : triggers.join(" or ");
   const cond = describeCondition(def.if, true);
   const acts = def.actions.map(describeAction).filter(Boolean).join(", then ");
-  return `When ${when}${cond ? ` and ${cond}` : ""}: ${acts || "do nothing"}${def.stop ? ". Stop there" : ""}.`;
+  return `When ${when}${cond ? `${many ? "," : ""} and ${cond}` : ""}: ${acts || "do nothing"}${def.stop ? ". Stop there" : ""}.`;
 }
 
 const EVENT_WORDS: Record<string, string> = {
@@ -34,6 +37,10 @@ const EVENT_WORDS: Record<string, string> = {
   ship: "shipped",
   refund: "refunded",
   mark_spam: "marked as spam",
+  provide_info: "given the details asked for",
+  counter: "given another time by the customer",
+  record_cancel: "cancelled by the customer",
+  record_cancel_late: "cancelled late by the customer",
 };
 
 const TYPE_WORDS: Record<string, string> = {

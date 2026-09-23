@@ -55,6 +55,25 @@ export function useNetworks() {
   return useQuery({ queryKey: qk.networks, queryFn: api.networks, staleTime: 10_000, refetchInterval: 30_000 });
 }
 
+export function useMailStatus() {
+  return useQuery({ queryKey: ["mail", "status"], queryFn: api.mailStatus, staleTime: 60_000 });
+}
+
+/** Booking networks off for one customer; the item they were asked on is read again. */
+export function useStopNetworks(itemId: string) {
+  const invalidate = useInvalidateItem(itemId);
+  return useMutation({ mutationFn: (partyId: string) => api.stopNetworks(partyId, itemId), onSuccess: invalidate });
+}
+
+/** Erases one customer: the first call asks what it would erase (a 409 with `confirm`), the second does it. */
+export function useEraseCustomer(itemId: string) {
+  const invalidate = useInvalidateItem(itemId);
+  return useMutation({
+    mutationFn: (input: { partyId: string; confirm?: string }) => api.eraseCustomer(input.partyId, input.confirm),
+    onSuccess: invalidate,
+  });
+}
+
 export function useReceiptStatus() {
   return useQuery({ queryKey: ["receipts", "status"], queryFn: api.receiptStatus, staleTime: 60_000 });
 }

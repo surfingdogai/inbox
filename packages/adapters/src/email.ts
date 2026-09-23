@@ -1,4 +1,4 @@
-import { type Caller, type Capabilities, type Db, schema } from "@surfingdog/core";
+import { type Caller, type Capabilities, type Db, lookupForms, schema, ulid } from "@surfingdog/core";
 import { eq } from "drizzle-orm";
 import PostalMime, { type Email } from "postal-mime";
 
@@ -21,6 +21,10 @@ export type IngestResult =
   | { readonly outcome: "created"; readonly itemId: string; readonly accessToken?: string | undefined }
   | { readonly outcome: "replied"; readonly itemId: string }
   | { readonly outcome: "duplicate"; readonly itemId: string | null }
+  /** An automatic email (an out-of-office, a returned email) kept as a note on the item it answers. */
+  | { readonly outcome: "noted"; readonly itemId: string }
+  /** An automatic email that answers no item: not kept, never answered, never refused (a refusal would bounce). */
+  | { readonly outcome: "dropped"; readonly reason: string }
   | { readonly outcome: "rejected"; readonly reason: string };
 
 export const SUBJECT_TOKEN = /\[SDI-([0-9A-HJKMNP-TV-Z]{6,26})\]/i;
@@ -50,7 +54,32 @@ export async function ingestEmail(
   const text = stripQuotedReply(parsed.text ?? htmlToText(parsed.html ?? "")).trim() || "(empty message)";
   const subject = (parsed.subject ?? "").trim();
 
-  const itemId = await findThreadItem(db, parsed, mail.envelopeTo);
+  // An item whose customer was erased is answered by nothing: a reply to it starts afresh (a new
+  // item the business can answer), and nothing is written back onto what was erased.
+  const found = await findThreadItem(db, parsed, mail.envelopeTo);
+  const itemId = found && !(await erasedItem(db, found)) ? found : null;
+  // A mailbox answering by itself — an out-of-office, a returned email — never becomes a
+  // conversation and never gets an answer, or two mailboxes could write to each other for ever. It
+  // is kept as a note on the item it answers, for the business to read; answering none, it goes.
+  if (isAutomaticMail(parsed, mail.envelopeFrom)) {
+    const [row] = itemId
+      ? await db.orm.select({ id: schema.items.id }).from(schema.items).where(eq(schema.items.id, itemId))
+      : [];
+    if (!row) {
+      console.info("email: dropped an automatic email (an out-of-office or a returned email) that answers no item");
+      return { outcome: "dropped", reason: "automatic email that answers no item" };
+    }
+    const at = now();
+    await db.batch([
+      {
+        sql: `INSERT OR IGNORE INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at)
+              VALUES (?, ?, 'note', 'email', 'system', NULL, NULL, ?, ?, 'text', ?, ?)`,
+        params: [ulid(at), row.id, subject || null, `${AUTOMATIC_NOTE}\n\n${text}`.slice(0, 20_000), messageId, at],
+        method: "run",
+      },
+    ]);
+    return { outcome: "noted", itemId: row.id };
+  }
   const caller: Caller = {
     actor: { kind: "customer_human", id: `email:${from}`, channel: "email" },
     tier: mail.authenticated ? "verified_principal" : "anonymous",
@@ -67,19 +96,13 @@ export async function ingestEmail(
     if (row) {
       // The sender proves nothing but the thread; speak as the item's own party through the capability path.
       const asParty: Caller = { ...caller, actor: { ...caller.actor, partyId: row.partyId } };
+      // The Message-ID rides with the reply onto its thread entry, so a second delivery of the same
+      // email is known for what it is; an answer to what we asked moves the item on (ADR-018 N14).
       await caps.sendMessage(asParty, {
         item_id: row.id,
         body: text,
-        ...(messageId ? { idempotency_key: messageId } : {}),
+        ...(messageId ? { idempotency_key: messageId, message_id: messageId } : {}),
       });
-      if (messageId)
-        await db.client
-          .query({
-            sql: "UPDATE thread_entries SET message_id = ? WHERE item_id = ? AND message_id IS NULL AND direction = 'in' ORDER BY created_at DESC LIMIT 1",
-            params: [messageId, row.id],
-            method: "run",
-          })
-          .catch(() => undefined);
       return { outcome: "replied", itemId: row.id };
     }
   }
@@ -102,17 +125,45 @@ export async function ingestEmail(
   return { outcome: "created", itemId: view.item.id, accessToken: (created as { accessToken?: string }).accessToken };
 }
 
-/** Which item this email belongs to: reply headers first, then a plus address, then a subject token. */
+/**
+ * Which item this email belongs to: the ids it names in In-Reply-To and References first — ours
+ * (every email we send carries the item's anchor, `mail_refs`) or the customer's own earlier ones —
+ * then a plus address, then a subject token. At most twenty ids are looked at, In-Reply-To and the
+ * first and last of References, since a long thread's middle adds nothing a reply needs.
+ */
 async function findThreadItem(db: Db, parsed: Email, envelopeTo: string | undefined): Promise<string | null> {
-  const refs = [parsed.inReplyTo, ...(parsed.references ?? "").split(/\s+/)]
+  const references = (parsed.references ?? "").split(/\s+/).filter(Boolean);
+  const named = [parsed.inReplyTo, ...(references.length > 20 ? [references[0], ...references.slice(-19)] : references)]
     .map((r) => r?.trim())
-    .filter((r): r is string => Boolean(r));
-  for (const ref of refs) {
-    const [hit] = await db.orm
-      .select({ itemId: schema.threadEntries.itemId })
-      .from(schema.threadEntries)
-      .where(eq(schema.threadEntries.messageId, ref));
-    if (hit) return hit.itemId;
+    .filter((r): r is string => Boolean(r))
+    .slice(0, 20);
+  if (named.length) {
+    // Each id in the forms it may be stored in: bracketed or not, and a service's id as a local part.
+    const forms = named.map((r) => lookupForms(r));
+    const keys = [...new Set(forms.flat())].slice(0, 90);
+    const { rows } = await db.client.query({
+      sql: `SELECT ref, item_id FROM mail_refs WHERE ref IN (${keys.map(() => "?").join(", ")})`,
+      params: keys,
+      method: "all",
+    });
+    const byRef = new Map(rows.map((r) => [String(r[0]), String(r[1])]));
+    for (const list of forms) {
+      for (const key of list) {
+        const hit = byRef.get(key);
+        if (hit) return hit;
+      }
+    }
+    const theirs = [...new Set(named)].slice(0, 90);
+    const { rows: entries } = await db.client.query({
+      sql: `SELECT message_id, item_id FROM thread_entries WHERE message_id IN (${theirs.map(() => "?").join(", ")})`,
+      params: theirs,
+      method: "all",
+    });
+    const byId = new Map(entries.map((r) => [String(r[0]), String(r[1])]));
+    for (const ref of named) {
+      const hit = byId.get(ref);
+      if (hit) return hit;
+    }
   }
   const recipients = [
     envelopeTo,
@@ -138,6 +189,55 @@ async function findThreadItem(db: Db, parsed: Email, envelopeTo: string | undefi
     if (hit) return hit.id;
   }
   return null;
+}
+
+/** Whether the item's customer was erased (`customers.erase`). */
+async function erasedItem(db: Db, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM items i JOIN parties p ON p.id = i.party_id WHERE i.id = ? AND p.erased_at IS NOT NULL",
+    params: [itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+/** What heads an automatic email kept on its item, for the owner reading it. */
+export const AUTOMATIC_NOTE = "An automatic email from the customer's mailbox (an out-of-office or a returned email):";
+
+/**
+ * An email no person wrote: an automatic reply (`isAutomaticReply`), or a returned email — a
+ * delivery report (`multipart/report`), one naming `X-Failed-Recipients`, one from a mailer daemon or
+ * a postmaster, or one with an empty return path.
+ */
+export function isAutomaticMail(parsed: Pick<Email, "headers" | "from">, envelopeFrom?: string | undefined): boolean {
+  if (isAutomaticReply(parsed)) return true;
+  if (envelopeFrom !== undefined && /^<?\s*>?$/.test(envelopeFrom.trim())) return true;
+  const local = (parsed.from?.address ?? "").toLowerCase().split("@")[0] ?? "";
+  if (local === "mailer-daemon" || local === "postmaster") return true;
+  for (const h of parsed.headers ?? []) {
+    const key = h.key.toLowerCase();
+    const value = h.value.trim().toLowerCase();
+    if (key === "content-type" && value.startsWith("multipart/report")) return true;
+    if (key === "x-failed-recipients") return true;
+    if (key === "return-path" && /^<\s*>$/.test(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * An email a mailbox sent by itself: an out-of-office, a vacation notice, an autoresponder (RFC 3834
+ * `Auto-Submitted` other than `no`, the older `X-Autoreply`/`X-Autorespond`, or `Precedence:
+ * auto_reply`, `bulk`, `junk`). Nobody wrote it, so it answers nothing.
+ */
+export function isAutomaticReply(parsed: Pick<Email, "headers">): boolean {
+  for (const h of parsed.headers ?? []) {
+    const key = h.key.toLowerCase();
+    const value = h.value.trim().toLowerCase();
+    if (key === "auto-submitted" && value && !value.startsWith("no")) return true;
+    if (key === "x-autoreply" || key === "x-autorespond" || key === "x-autoresponder") return true;
+    if (key === "precedence" && /^(auto_reply|bulk|junk)\b/.test(value)) return true;
+  }
+  return false;
 }
 
 /** Drops quoted history and signatures: the part after "On … wrote:", lines starting with ">", and a trailing "-- " signature. */

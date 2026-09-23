@@ -5,11 +5,15 @@ import type { Machine } from "./machine";
 const owners = BUSINESS_ACTORS;
 const customers = CUSTOMER_ACTORS;
 const ownersAndSystem = [...BUSINESS_ACTORS, "system"] as const;
+/** Who records what a customer told the business (a cancellation by phone): its people and its AI, never a rule. */
+const recorders = ["owner", "staff", "owner_ai"] as const;
 
 export const proposeInput = z.object({
   startTime: isoDateTime,
   endTime: isoDateTime,
   totalPrice: moneySchema.optional(),
+  /** A word for the customer with the new time; it goes with the email and on the page. */
+  note: z.string().max(2_000).optional(),
 });
 export const quoteInput = z.object({
   totalPrice: moneySchema,
@@ -20,10 +24,23 @@ export const quoteInput = z.object({
     .default([]),
   notes: z.string().max(2_000).optional(),
   creates: z.enum(["booking", "order"]).default("order"),
+  /** For a quote that creates a booking: the time it is for (else the request's `requestedFor`). */
+  startTime: isoDateTime.optional(),
+  /** Defaults to the start plus the service's duration. */
+  endTime: isoDateTime.optional(),
 });
 export const paymentInput = z.object({ paymentRef: z.string().min(1).max(200), amount: moneySchema.optional() });
 export const paymentRequestInput = z.object({ paymentUrl: z.url().optional() });
 export const noteInput = z.object({ note: z.string().max(2_000).optional() });
+/** The customer's details, as long as an email reply can be. */
+export const detailsInput = z.object({ note: z.string().max(20_000).optional() });
+/** The customer asks for another time than the one we proposed. The end follows the service's duration. */
+export const counterInput = z.object({ startTime: isoDateTime, note: z.string().max(2_000).optional() });
+/** The owner records a customer's own cancellation: what they said, and when they asked (default now). */
+export const recordCancelInput = z.object({
+  note: z.string().trim().min(1, "say what the customer said").max(2_000),
+  askedAt: isoDateTime.optional(),
+});
 
 export type BookingState =
   | "requested"
@@ -69,6 +86,7 @@ export const bookingMachine: Machine<BookingState> = {
       from: ["needs_info"],
       to: "requested",
       by: [...customers, "connector"],
+      input: detailsInput,
       effects: ["notify_owner"],
     },
     {
@@ -77,6 +95,7 @@ export const bookingMachine: Machine<BookingState> = {
       from: ["requested", "needs_info"],
       to: "proposed",
       by: owners,
+      guards: ["not_too_soon"],
       input: proposeInput,
       effects: ["notify_customer"],
     },
@@ -86,17 +105,42 @@ export const bookingMachine: Machine<BookingState> = {
       from: ["proposed"],
       to: "confirmed",
       by: customers,
-      guards: ["proposal_present", "slot_available"],
-      effects: ["apply_proposal", "claim_slot", "issue_receipt:confirmed", "notify_owner"],
+      guards: ["proposal_present", "slot_available", "not_too_soon"],
+      effects: ["apply_proposal", "claim_slot", "issue_receipt:confirmed", "notify_owner", "notify_customer"],
     },
     {
+      // From `needs_info` too: the owner has what they need, however it came (ADR-018 N14).
       event: "confirm",
       label: "Confirm booking",
-      from: ["requested", "proposed"],
+      from: ["requested", "needs_info"],
       to: "confirmed",
       by: owners,
-      guards: ["slot_available"],
+      guards: ["slot_available", "not_too_soon"],
       effects: ["claim_slot", "issue_receipt:confirmed", "notify_customer"],
+    },
+    {
+      // The customer said yes to the time we proposed, by phone, email or in person: it books that
+      // time (ADR-018 N13). Only a person records a yes a person heard.
+      event: "confirm",
+      label: "Confirm the proposed time",
+      from: ["proposed"],
+      to: "confirmed",
+      by: owners,
+      byPerson: true,
+      internalNote: true,
+      guards: ["proposal_present", "slot_available", "not_too_soon"],
+      effects: ["apply_proposal", "claim_slot", "issue_receipt:confirmed", "notify_customer"],
+    },
+    {
+      // The customer's own other time: back to the business to confirm, with nothing held.
+      event: "counter",
+      label: "Pick another time",
+      from: ["proposed"],
+      to: "requested",
+      by: customers,
+      guards: ["customer_owns_item", "not_too_soon"],
+      input: counterInput,
+      effects: ["apply_counter", "notify_owner", "notify_customer"],
     },
     {
       event: "decline",
@@ -125,7 +169,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item"],
       input: noteInput,
-      effects: ["release_slot", "notify_owner", "close"],
+      effects: ["release_slot", "notify_owner", "notify_customer", "close"],
     },
     {
       event: "cancel",
@@ -135,7 +179,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "within_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
     },
     {
       // Fired by `cancel_item` once the window has closed, when the owner records late cancellations.
@@ -146,7 +190,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "outside_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
       unlisted: true,
     },
     {
@@ -166,6 +210,44 @@ export const bookingMachine: Machine<BookingState> = {
       by: owners,
       input: noteInput,
       effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+    },
+    // The customer asked the business to cancel (by phone, email, in person) and the business
+    // records it: the customer's cancellation, never the business's, judged at the moment they
+    // asked as the customer's own door would have judged it (ADR-017 §3.1).
+    {
+      event: "record_cancel",
+      label: "Customer cancelled",
+      from: ["requested", "needs_info", "proposed"],
+      to: "cancelled_by_customer",
+      by: recorders,
+      internalNote: true,
+      input: recordCancelInput,
+      effects: ["release_slot", "notify_customer", "close"],
+    },
+    {
+      event: "record_cancel",
+      label: "Customer cancelled",
+      from: ["confirmed"],
+      to: "cancelled_by_customer",
+      by: recorders,
+      internalNote: true,
+      guards: ["asked_within_window"],
+      input: recordCancelInput,
+      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+    },
+    {
+      // Fired by the owner door once `record_cancel` found the window closed when the customer asked,
+      // where the owner records late cancellations.
+      event: "record_cancel_late",
+      label: "Customer cancelled late",
+      from: ["confirmed"],
+      to: "cancelled_by_customer",
+      by: recorders,
+      internalNote: true,
+      guards: ["asked_outside_window"],
+      input: recordCancelInput,
+      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+      unlisted: true,
     },
     {
       event: "complete",
@@ -260,6 +342,7 @@ export const orderMachine: Machine<OrderState> = {
       from: ["needs_info"],
       to: "received",
       by: [...customers, "connector"],
+      input: detailsInput,
       effects: ["notify_owner"],
     },
     {
@@ -362,6 +445,28 @@ export const orderMachine: Machine<OrderState> = {
       input: noteInput,
       effects: ["issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
     },
+    // The customer asked the business to cancel and the business records it: their cancellation,
+    // not a promise the business broke (ADR-017 §3.1). A paid order is refunded instead.
+    {
+      event: "record_cancel",
+      label: "Customer cancelled",
+      from: ["received", "needs_info"],
+      to: "cancelled",
+      by: recorders,
+      internalNote: true,
+      input: recordCancelInput,
+      effects: ["notify_customer", "close"],
+    },
+    {
+      event: "record_cancel",
+      label: "Customer cancelled",
+      from: ["accepted", "awaiting_payment", "payment_failed"],
+      to: "cancelled",
+      by: recorders,
+      internalNote: true,
+      input: recordCancelInput,
+      effects: ["issue_receipt:outcome", "notify_customer", "close"],
+    },
     {
       event: "charge_back",
       label: "Record a charge-back",
@@ -428,25 +533,30 @@ export const quoteMachine: Machine<QuoteState> = {
       from: ["needs_info"],
       to: "received",
       by: [...customers, "connector"],
+      input: detailsInput,
       effects: ["notify_owner"],
     },
     {
+      // A new quote on a quoted request replaces the one before (ADR-018 §3.3).
       event: "quote",
       label: "Send quote",
-      from: ["received", "needs_info"],
+      from: ["received", "needs_info", "quoted"],
       to: "quoted",
       by: owners,
+      guards: ["quote_complete"],
       input: quoteInput,
       effects: ["notify_customer"],
     },
     {
+      // Accepting creates the promise, in the same batch: the booking confirmed with its slot
+      // claimed, or the order accepted (ADR-018 §3.3).
       event: "accept",
       label: "Accept quote",
       from: ["quoted"],
       to: "accepted",
       by: customers,
-      guards: ["customer_owns_item", "has_quote"],
-      effects: ["link_item", "notify_owner", "close"],
+      guards: ["customer_owns_item", "has_quote", "quote_valid", "not_too_soon", "slot_available"],
+      effects: ["link_item", "notify_owner", "notify_customer", "close"],
     },
     {
       event: "decline",
@@ -476,6 +586,8 @@ export const messageMachine: Machine<MessageState> = {
       from: ["answered", "closed"],
       to: "open",
       by: [...customers, ...owners, "system"],
+      // A customer's reply reopens it, however long they write.
+      input: detailsInput,
       effects: ["notify_owner"],
     },
     { event: "close", label: "Close", from: ["open", "answered"], to: "closed", by: owners, effects: ["close"] },

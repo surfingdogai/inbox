@@ -22,7 +22,8 @@ function inboxFor(env: Bindings): Inbox {
       ? cloudflareEmailMailOut(env.EMAIL)
       : env.RESEND_API_KEY
         ? resendMailOut(env.RESEND_API_KEY)
-        : logMailOut(console.log);
+        : // No mail service: every email is written to the log, and the item says it was not sent.
+          logMailOut(console.log, { delivers: false });
     inbox = createInbox({
       db: createDb(d1Client(env.DB)),
       mailOut,

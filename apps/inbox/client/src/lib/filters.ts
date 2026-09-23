@@ -1,7 +1,10 @@
 import type { ItemType, ItemView, ListParams, Page } from "./types";
 
-/** The rail: what the owner should look at, everything open, one type, or what is done. */
-export type Filter = "needs" | "all" | "done" | ItemType;
+/**
+ * The rail: what the owner should look at, everything open, one type, what is done, and items with
+ * an email to the customer that could not be sent.
+ */
+export type Filter = "needs" | "all" | "done" | "unsent" | ItemType;
 
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
@@ -12,6 +15,7 @@ export const FILTERS: readonly { readonly key: Filter; readonly label: string; r
   { key: "message", label: "Messages", type: "message" },
   { key: "refund", label: "Refunds", type: "refund" },
   { key: "done", label: "Done" },
+  { key: "unsent", label: "Email not sent" },
 ];
 
 export function parseFilter(value: unknown): Filter | undefined {
@@ -32,6 +36,8 @@ export function paramsFor(filter: Filter, q: string | undefined, sandbox: boolea
     case "done":
       // The API has no closed-only filter: ask for everything and keep the closed rows.
       return { ...base, open_only: false, limit: 50 };
+    case "unsent":
+      return { ...base, mail_failed: true, open_only: false };
     default:
       return { ...base, type: filter, open_only: true };
   }
@@ -92,6 +98,9 @@ export function countFor(counts: Counts | undefined, filter: Filter): string {
       return suffix(counts.all, counts.openMore);
     case "done":
       return suffix(counts.done, counts.doneMore);
+    case "unsent":
+      // Not counted: the rail's counts come from the open items.
+      return "";
     default:
       return suffix(counts.byType[filter], counts.openMore && counts.byType[filter] > 0);
   }

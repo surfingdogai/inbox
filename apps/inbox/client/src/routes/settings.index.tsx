@@ -4,7 +4,16 @@ import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
-import { qk, useProfile, useReceiptStatus, useSaveProfile, useSaveSettings, useSettings } from "../lib/queries";
+import { emailLangOf, mailBannerLines, otherLanguages } from "../lib/format";
+import {
+  qk,
+  useMailStatus,
+  useProfile,
+  useReceiptStatus,
+  useSaveProfile,
+  useSaveSettings,
+  useSettings,
+} from "../lib/queries";
 import { type SettingsForm as SettingsFormState, toSettingsDoc, toSettingsForm } from "../lib/settings";
 import type { Profile, SettingsDoc } from "../lib/types";
 
@@ -28,6 +37,7 @@ function GeneralPage() {
   return (
     <>
       {saved && <Toast tone="success" text={saved} onDismiss={() => setSaved(null)} />}
+      <MailBanner />
       {profile.isPending && <Loading />}
       {profile.isError && (
         <div className="card glass">
@@ -67,6 +77,23 @@ function GeneralPage() {
   );
 }
 
+/**
+ * What is wrong with email, when something is: no mail service (every email only goes to the log and
+ * shows as not sent), no address to send from, or no links in the emails. Nothing when all is well.
+ */
+function MailBanner() {
+  const mail = useMailStatus();
+  const lines = mailBannerLines(mail.data);
+  if (lines.length === 0) return null;
+  return (
+    <div className="test-banner" role="status">
+      {lines.map((line) => (
+        <p key={line}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
 function Loading() {
   return (
     <div className="card glass" aria-busy="true">
@@ -83,6 +110,9 @@ interface ProfileDraft {
   readonly domain: string;
   readonly timezone: string;
   readonly currency: string;
+  /** The language customers' emails are in: the first of the business's languages. */
+  readonly emailLang: "en" | "pt";
+  /** The others it speaks. */
   readonly languages: string;
 }
 
@@ -92,7 +122,8 @@ function ProfileForm({ initial, onSaved }: { initial: Profile; onSaved: () => vo
     domain: initial.domain ?? "",
     timezone: initial.timezone,
     currency: initial.currency,
-    languages: initial.languages.join(", "),
+    emailLang: emailLangOf(initial.languages),
+    languages: otherLanguages(initial.languages, emailLangOf(initial.languages)).join(", "),
   });
   const save = useSaveProfile();
   const problem = save.error ? problemOf(save.error) : null;
@@ -101,17 +132,15 @@ function ProfileForm({ initial, onSaved }: { initial: Profile; onSaved: () => vo
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (save.isPending) return;
-    const languages = form.languages
-      .split(/[,\s]+/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+    // The customers' email language first: it is the one every email to a customer is written in.
+    const languages = [form.emailLang, ...otherLanguages(form.languages.split(/[,\s]+/), form.emailLang)];
     save.mutate(
       {
         name: form.name.trim(),
         domain: form.domain.trim() ? form.domain.trim().toLowerCase() : null,
         timezone: form.timezone.trim(),
         currency: form.currency.trim().toUpperCase(),
-        ...(languages.length ? { languages } : {}),
+        languages,
       },
       { onSuccess: onSaved },
     );
@@ -166,7 +195,28 @@ function ProfileForm({ initial, onSaved }: { initial: Profile; onSaved: () => vo
             onChange={(e) => set("currency", e.target.value)}
           />
         </Field>
-        <Field id="p-langs" label="Languages" error={problem?.field("languages")} hint="Comma-separated, like pt, en.">
+        <Field
+          id="p-email-lang"
+          label="Your customers' emails are in"
+          hint="Unless a customer's assistant asks for the other one."
+        >
+          <select
+            id="p-email-lang"
+            className="input"
+            value={form.emailLang}
+            onChange={(e) => set("emailLang", e.target.value === "pt" ? "pt" : "en")}
+          >
+            <option value="en">English</option>
+            <option value="pt">Português</option>
+          </select>
+        </Field>
+        <Field
+          id="p-langs"
+          label="Other languages"
+          optional
+          error={problem?.field("languages")}
+          hint="Others you speak, comma-separated, like fr, de."
+        >
           <input
             id="p-langs"
             className="input"
@@ -248,6 +298,23 @@ function SettingsForm({
               step={1}
               value={form.cancellationWindowMin}
               onChange={(e) => set("cancellationWindowMin", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-notice"
+            label="Minimum notice (minutes)"
+            error={field("booking.minNoticeMin")}
+            hint="Customers can no longer book a time online this close to it. You can still book it yourself; nobody books a time that has started."
+          >
+            <input
+              id="s-notice"
+              className="input"
+              type="number"
+              min={0}
+              max={10080}
+              step={1}
+              value={form.minNoticeMin}
+              onChange={(e) => set("minNoticeMin", e.target.value)}
             />
           </Field>
           <Field
@@ -364,7 +431,7 @@ function SettingsForm({
             label="Tell me at"
             optional
             error={field("notifications.ownerEmail")}
-            hint="Where new items and replies are announced. Empty means no owner emails."
+            hint="Where new items and replies are announced. Empty means the address you sign in with."
           >
             <input
               id="s-owner-email"
@@ -389,7 +456,17 @@ function SettingsForm({
               onChange={(e) => set("appUrl", e.target.value)}
             />
           </Field>
-          <Field id="s-from" label="Send from" optional error={field("email.fromAddress")}>
+          <Field
+            id="s-from"
+            label="Send from"
+            optional
+            error={field("email.fromAddress")}
+            hint={
+              form.fromAddress.trim()
+                ? "Emails to your customers come from this address, in your name."
+                : "Emails to your customers come from this address. Without one they are not sent, unless your server has an address of its own; each item shows whether its emails went out."
+            }
+          >
             <input
               id="s-from"
               className="input"
@@ -411,7 +488,11 @@ function SettingsForm({
             label="Customers reply to"
             optional
             error={field("email.replyTo")}
-            hint="Usually the business mailbox."
+            hint={
+              form.replyTo.trim() || form.inboundSecretSet || form.inboundSecret.trim()
+                ? "Usually the business mailbox."
+                : "Usually the business mailbox. Customers' replies do not reach you yet: set this, or inbound email below."
+            }
           >
             <input
               id="s-reply"
@@ -562,11 +643,12 @@ function SettingsForm({
           </Field>
         </div>
         <Switch checked={form.emailKey} onChange={(v) => set("emailKey", v)}>
-          End a new customer's first email with a code for their assistant
+          Email a new customer a code for their assistant
         </Switch>
         <div className="hint">
-          One quiet line, in your name: “If you use an assistant, it can show this code next time so we recognise you.”
-          Off, no email carries it; an assistant still gets what it needs when it books.
+          A day after their first booking or order, a short email of its own, in your name: the code, and one line with
+          a link to a page on this inbox that explains the booking network. Off, no email carries it; an assistant still
+          gets what it needs when it books.
         </div>
       </section>
 

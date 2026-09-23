@@ -14,7 +14,7 @@ import {
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 /**
  * Receipts through the doors an agent actually uses (ADR-016): REST to book, the owner's API to
@@ -22,6 +22,9 @@ import { freshDb } from "./harness";
  * same acknowledgement through MCP. Runs on Node and inside workerd.
  */
 const T0 = Date.parse("2026-09-22T09:00:00Z");
+
+/** A weekday to come: the inbox books nothing in the past. */
+const DAY = futureDay();
 const ORIGIN = "https://inbox.test";
 
 async function setup() {
@@ -101,8 +104,8 @@ async function bookAndConfirm(s: Awaited<ReturnType<typeof setup>>) {
     jsonPost("/v1/bookings", {
       payload: {
         reservationFor: { serviceId: s.svc, name: "Full service" },
-        startTime: "2026-09-23T08:00:00Z",
-        endTime: "2026-09-23T09:30:00Z",
+        startTime: `${DAY}T08:00:00Z`,
+        endTime: `${DAY}T09:30:00Z`,
         totalPrice: { value: 4500, currency: "EUR" },
       },
       contact: { name: "Rita", email: "rita@example.com" },
@@ -118,8 +121,13 @@ async function bookAndConfirm(s: Awaited<ReturnType<typeof setup>>) {
     ),
   );
   expect(confirmed.status).toBe(200);
-  const run = await s.inbox.runner.runDue(s.db, { workerId: "test" });
-  expect(run.failed + run.dead).toBe(0);
+  // A request starts a run of its own after it answers (in workerd one may still be going, and a
+  // call meanwhile joins it): drain until nothing more is due, so the confirmation's jobs have run.
+  for (let i = 0; i < 5; i++) {
+    const run = await s.inbox.runner.runDue(s.db, { workerId: "test" });
+    expect(run.failed + run.dead).toBe(0);
+    if (run.claimed === 0) break;
+  }
   return { id: body.view.item.id, token: body.accessToken };
 }
 
@@ -173,6 +181,8 @@ describe("the manifest", () => {
           issue: true,
           share: { listing: true, counts: true, receipts: true },
           registration: "unregistered",
+          // The default network is the one that gets customers' addresses before it has verified us.
+          receives_emails: true,
           registered_at: null,
           last_ping_at: null,
           last_error: null,
@@ -181,7 +191,7 @@ describe("the manifest", () => {
           rules: { version: null, next: null, next_at: null, v2: false, checked_at: null },
           standing: null,
           ping_signature: null,
-          receipts: { published: 0, queued: 0, refused: 0, held: 0 },
+          receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
         },
       ],
     });

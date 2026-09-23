@@ -9,4 +9,5 @@ export * from "./context";
 export * from "./history";
 export * from "./match";
 export * from "./pending";
+export * from "./stops";
 export * from "./types";

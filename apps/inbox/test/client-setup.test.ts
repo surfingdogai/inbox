@@ -11,6 +11,7 @@ import {
   toWeekly,
 } from "../client/src/lib/hours";
 import { EMPTY_RULE, parseValue, showValue, toDefinition, toForm } from "../client/src/lib/rules";
+import { offerBodies, ownerEmailDoc } from "../client/src/lib/setup";
 
 // The rule editor reads rules back as the server words them, and turns its forms into the JSON the engine runs.
 describe("client rule summaries", () => {
@@ -143,5 +144,56 @@ describe("client opening hours", () => {
     expect(plusMinutes("23:30", 60)).toBe("23:59");
     expect(nextWindow([["09:00", "18:00"]])).toEqual(["18:00", "19:00"]);
     expect(nextWindow([])).toEqual(["09:00", "18:00"]);
+  });
+});
+
+describe("the setup wizard's offers", () => {
+  it("never saves a price typed with a comma as free", () => {
+    const services = offerBodies([{ name: "Consultation", minutes: "45", price: "45,50" }], "services", "EUR");
+    expect(services).toEqual({
+      kind: "services",
+      bodies: [
+        {
+          name: "Consultation",
+          duration_min: 45,
+          active: true,
+          price: { model: "fixed", value: 4550, currency: "EUR" },
+        },
+      ],
+    });
+    const products = offerBodies([{ name: "Coffee, 1kg", minutes: "", price: "1.234,50" }], "products", "EUR");
+    expect(products).toEqual({
+      kind: "products",
+      bodies: [{ name: "Coffee, 1kg", price: { value: 123450, currency: "EUR" }, active: true }],
+    });
+    for (const typed of ["45,50", "45.50", "45,5", "45"]) {
+      const r = offerBodies([{ name: "X", minutes: "60", price: typed }], "services", "EUR");
+      expect("bodies" in r && r.bodies[0]?.price?.value, typed).toBeGreaterThan(0);
+    }
+  });
+
+  it("stops at a price it cannot read, and at a product without one, instead of saving 0", () => {
+    expect(offerBodies([{ name: "Massage", minutes: "60", price: "45 euros" }], "services", "EUR")).toEqual({
+      problem: "Massage: Write a price like 45,50 or 45.50.",
+    });
+    expect(offerBodies([{ name: "Beans", minutes: "", price: "" }], "products", "EUR")).toEqual({
+      problem: "Beans needs a price. Write a price like 45,50 or 45.50.",
+    });
+    // A service may have no price; an unnamed row is not an offer.
+    expect(
+      offerBodies(
+        [
+          { name: "Chat", minutes: "15", price: "" },
+          { name: " ", minutes: "60", price: "abc" },
+        ],
+        "services",
+        "EUR",
+      ),
+    ).toEqual({ kind: "services", bodies: [{ name: "Chat", duration_min: 15, active: true }] });
+  });
+
+  it("saves where the owner hears of new requests as one merged key, empty meaning their sign-in address", () => {
+    expect(ownerEmailDoc(" ana@oficinamare.pt ")).toEqual({ notifications: { ownerEmail: "ana@oficinamare.pt" } });
+    expect(ownerEmailDoc("")).toEqual({ notifications: { ownerEmail: null } });
   });
 });

@@ -1,9 +1,17 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { consume, createApiKey, isCreateRoute, LIMITS, mcpCreates } from "@surfingdog/adapters";
+import {
+  consume,
+  createApiKey,
+  isCreateRoute,
+  isNegotiateRoute,
+  LIMITS,
+  mcpCreates,
+  mcpNegotiates,
+} from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, futureDay } from "./harness";
 
 /**
  * Rate limits on the doors anyone can open (packages/adapters/src/limits.ts). Without them one
@@ -12,6 +20,8 @@ import { freshDb } from "./harness";
  * owner. Addresses arrive as CF-Connecting-IP, the way Cloudflare delivers them.
  */
 const T0 = Date.parse("2026-09-22T10:00:00Z");
+/** Bookings go through the doors on the real clock: a day to come (nobody books a time that has started). */
+const DAY = futureDay();
 
 async function setup() {
   const db = await freshDb();
@@ -38,8 +48,8 @@ const booking = (svc: string, ip: string, headers: Record<string, string> = {}) 
     body: JSON.stringify({
       payload: {
         reservationFor: { serviceId: svc, name: "Full service" },
-        startTime: "2026-09-23T08:00:00Z",
-        endTime: "2026-09-23T09:30:00Z",
+        startTime: `${DAY}T08:00:00Z`,
+        endTime: `${DAY}T09:30:00Z`,
       },
       contact: { name: "Rita", email: "rita@example.com" },
     }),
@@ -149,8 +159,8 @@ describe("rate limits", () => {
         arguments: {
           payload: {
             reservationFor: { serviceId: svc, name: "Full service" },
-            startTime: "2026-09-23T08:00:00Z",
-            endTime: "2026-09-23T09:30:00Z",
+            startTime: `${DAY}T08:00:00Z`,
+            endTime: `${DAY}T09:30:00Z`,
           },
           contact: { email: "rita@example.com" },
           idempotency_key: "mcp-limit-1",
@@ -188,5 +198,41 @@ describe("the bucket arithmetic", () => {
     expect(await mcpCreates(call("create_booking"))).toBe(true);
     expect(await mcpCreates(call("list_services"))).toBe(false);
     expect(await mcpCreates(new Request("https://x/mcp", { method: "POST", body: "not json" }))).toBe(false);
+  });
+
+  it("classifies asking for another time, and limits it and the link page's POSTs on their own", async () => {
+    expect(isNegotiateRoute("POST", "/v1/items/01K5X/counter")).toBe(true);
+    expect(isNegotiateRoute("POST", "/v1/items/01K5X/accept")).toBe(false);
+    expect(isNegotiateRoute("GET", "/v1/items/01K5X/counter")).toBe(false);
+    const call = (name: string) =>
+      new Request("https://x/mcp", {
+        method: "POST",
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
+      });
+    expect(await mcpNegotiates(call("suggest_time"))).toBe(true);
+    expect(await mcpNegotiates(call("accept_offer"))).toBe(false);
+    expect(LIMITS.negotiate).toEqual({ capacity: 10, perMs: 10 / 3_600_000 });
+    expect(LIMITS.link).toEqual({ capacity: 30, perMs: 30 / 3_600_000 });
+
+    const { app } = await setup();
+    const counter = () =>
+      app.request("https://inbox.test/v1/items/01K5NOTANITEMAAAAAAAAAAAAA/counter", {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.20" },
+        body: JSON.stringify({ start_time: "2026-09-24T10:00:00Z" }),
+      });
+    for (let i = 0; i < LIMITS.negotiate.capacity; i++) expect((await counter()).status, `try ${i + 1}`).not.toBe(429);
+    expect((await counter()).status).toBe(429);
+    const page = () =>
+      app.request("https://inbox.test/c/not-a-token", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.21", "content-type": "application/x-www-form-urlencoded" },
+        body: "terms=x&v=1",
+      });
+    for (let i = 0; i < LIMITS.link.capacity; i++) expect((await page()).status, `post ${i + 1}`).toBe(404);
+    const refused = await page();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await refused.text()).toContain("Too many attempts.");
   });
 });

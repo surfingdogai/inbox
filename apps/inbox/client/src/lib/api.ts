@@ -7,13 +7,16 @@ import type {
   CreatedKey,
   CreateKeyBody,
   CreateWebhookBody,
+  CustomerSummary,
   DeliveryView,
+  EraseResult,
   FeedConnector,
   ItemDetail,
   ItemView,
   KeyList,
   KeyView,
   ListParams,
+  MailStatus,
   NetworkView,
   Page,
   PatchWebhookBody,
@@ -156,6 +159,7 @@ async function call<T>(method: string, path: string, opts: CallOptions = {}): Pr
 }
 
 const item = (id: string) => `/v1/owner/items/${encodeURIComponent(id)}`;
+const customerPath = (partyId: string) => `/v1/owner/customers/${encodeURIComponent(partyId)}`;
 
 export const api = {
   business: () => call<BusinessProfile>("GET", "/v1/business", { public: true }),
@@ -177,6 +181,19 @@ export const api = {
   receiptStatus: () => call<ReceiptStatus>("GET", "/v1/owner/receipts"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
   networks: () => call<{ networks: NetworkView[] }>("GET", "/v1/owner/networks"),
+  /** Whether email goes out at all, has an address to go from, and can carry answer links. */
+  mailStatus: () => call<MailStatus>("GET", "/v1/owner/mail"),
+
+  // ---- one customer: their data, networks off, erasure ----
+  customer: (partyId: string) => call<CustomerSummary>("GET", customerPath(partyId)),
+  exportCustomer: (partyId: string) => call<unknown>("GET", `${customerPath(partyId)}/export`),
+  stopNetworks: (partyId: string, itemId?: string) =>
+    call<CustomerSummary>("POST", `${customerPath(partyId)}/networks-off`, {
+      body: itemId ? { item_id: itemId } : {},
+    }),
+  /** Without `confirm` the answer is a 409 `confirm_erase` saying what would be erased, and the value to send. */
+  eraseCustomer: (partyId: string, confirm?: string) =>
+    call<EraseResult>("POST", `${customerPath(partyId)}/erase`, { body: confirm ? { confirm } : {} }),
 
   // ---- setup: who the business is, what it offers, when it is open, what runs on its own ----
   profile: () => call<Profile>("GET", "/v1/owner/profile"),

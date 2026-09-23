@@ -7,7 +7,9 @@ import { dateLocaliser, isClosed, readClosures } from "./closures";
 
 /**
  * Free slots for a service inside a window: opening hours from availability rules (a weekly
- * schedule in the business time zone, "09:00-18:00" style), minus what slot claims already hold.
+ * schedule in the business time zone, "09:00-18:00" style), minus what slot claims already hold,
+ * and never a time that starts before `now` plus the minimum notice (`booking.minNoticeMin`): a
+ * time that has passed, or that is too close to book online, is not offered.
  * Deterministic and cheap: at most 14 days, at most 200 slots returned.
  */
 export interface Slot {
@@ -31,7 +33,16 @@ export const DEFAULT_WEEKLY: Weekly = {
 
 export async function findSlots(
   db: Db,
-  input: { serviceId: string; from: string; to: string; timezone: string; limit?: number },
+  input: {
+    serviceId: string;
+    from: string;
+    to: string;
+    timezone: string;
+    limit?: number;
+    /** Nothing that starts before this, plus the notice, is offered. */
+    now: number;
+    minNoticeMin: number;
+  },
 ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
   if (!service?.active) {
@@ -71,7 +82,11 @@ export async function findSlots(
   const local = localiser(input.timezone);
   const slots: Slot[] = [];
   const limit = input.limit ?? 200;
-  const first = Math.ceil(from / step) * step;
+  // The first start worth looking at: inside the window, and not before the notice runs out.
+  const earliest = Math.max(from, input.now + input.minNoticeMin * 60_000);
+  const first = Math.ceil(earliest / step) * step;
+  const serviceView = { id: service.id, name: service.name, durationMin: service.durationMin };
+  if (first + duration > to) return { service: serviceView, slots };
   // One read of the claims across the whole window, then pure arithmetic per candidate.
   // The whole window in one read. bucketRange, not bucketsFor: this is a range to read, not a
   // booking to place, and the booking cap here made any window longer than a day fail.
@@ -92,7 +107,7 @@ export async function findSlots(
     const free = Math.min(...buckets.map((b) => spec.capacity - (taken.get(b)?.size ?? 0)));
     slots.push({ startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), available: free });
   }
-  return { service: { id: service.id, name: service.name, durationMin: service.durationMin }, slots };
+  return { service: serviceView, slots };
 }
 
 export type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };

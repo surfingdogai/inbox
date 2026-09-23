@@ -7,6 +7,7 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, problemOf } from "../lib/api";
 import {
+  emailWords,
   hostOf,
   MAX_NETWORKS,
   networkStatus,
@@ -86,7 +87,8 @@ function NetworksPage() {
         Customers' assistants may carry a pass from a network. Your inbox shows it to the network that issued it, with
         the customer's email, to learn whether the network knows them; you then see their standing there. With "Give
         first-time customers a key" on, a customer's first booking or order with an email sends that email to the
-        network, which keeps only a keyed hash of it and gives your inbox a key to email to them.
+        network, which keeps only a keyed hash of it and gives your inbox a key to email to them. A network gets
+        customers' email addresses only once it has verified your inbox. Test items never reach a network.
       </p>
       <p className="hint">
         A network you switch on later gets your older receipts too. It counts a booking or an order whose promise
@@ -188,6 +190,7 @@ function NetworkLine({
   const counts = n.share.receipts && (n.enabled || n.receipts.published > 0) ? receiptWords(n.receipts) : [];
   const rules = n.enabled ? rulesWords(n.rules) : null;
   const standing = standingWords(n);
+  const emails = n.enabled ? emailWords(n) : null;
   return (
     <div className={clsx("catalogue-row row-glass", !n.enabled && "is-archived")}>
       <div className="catalogue-main">
@@ -206,6 +209,7 @@ function NetworkLine({
           </div>
         )}
         {rules && <div className="hint">{rules}</div>}
+        {emails && <div className="hint">{emails}</div>}
         {n.enabled && (
           <div className="net-issue">
             <Switch checked={n.issue} onChange={onIssue} disabled={pending}>

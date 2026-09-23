@@ -126,6 +126,9 @@ export function receiptWords(r: NetworkView["receipts"]): string[] {
     waiting > 0 ? `${waiting} waiting` : null,
     r.refused ? `${r.refused} refused` : null,
     r.held ? `${r.held} outcome${r.held === 1 ? "" : "s"} held until the network reads them` : null,
+    r.withheld
+      ? `${r.withheld} never sent: the customer${r.withheld === 1 ? "" : "s"} asked us not to use networks`
+      : null,
   ].filter((s): s is string => s !== null);
 }
 
@@ -216,4 +219,14 @@ function dayWords(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
+}
+
+/**
+ * Whether customers' email addresses go to a network, in the owner's words: only once it has
+ * verified the inbox. Null for the network that always could (the default one), which says
+ * nothing new.
+ */
+export function emailWords(n: Pick<NetworkView, "receives_emails" | "registration">): string | null {
+  if (n.receives_emails && n.registration !== "registered") return null;
+  return `Customers' email addresses go to this network only once it has verified your inbox. Verified: ${n.registration === "registered" ? "yes" : "not yet"}.`;
 }
