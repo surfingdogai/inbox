@@ -3,8 +3,8 @@ title: Run your own network
 description: If you build agents or look after a group of local businesses, you can run a network of your own on the same open protocol as ours, with your own ranking rules.
 date: 2026-09-23
 author: Tiago Pita
-cover: /art/tile-agents.png
-coverAlt: Three pixel-art robots carrying letters, standing outside a small shop with a bell over the door and a paw print on the sign
+cover: /art/cover-networks.png
+coverAlt: A pixel-art dog on a surfboard holding up one envelope, with dotted lines running to four small island lighthouses, each shining a different colour
 ---
 
 When someone asks an assistant to book a haircut or order a birthday cake, the assistant needs somewhere to look. Our network is one of those places. It's a directory of Surfing Dog inboxes that agents can search. I don't want it to be the only one.
