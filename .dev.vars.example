@@ -1,9 +1,14 @@
-# Secrets for local development (copied to .dev.vars, never committed).
-# The Deploy to Cloudflare button prompts for these.
-# Seals connector credentials and webhook secrets (AES-256-GCM, ADR-015). One long random string,
-# or several comma-separated and newest first to rotate a key without downtime. Leave it empty and
-# the instance runs exactly as it does today, but refuses to store a secret rather than store it in
-# the clear. `openssl rand -base64 32` makes a good one.
-INBOX_SECRET_KEY=
-# Who may create the first owner account by magic link (comma-separated).
+# The values the Deploy to Cloudflare button asks for. For local development, copy this file to
+# .dev.vars (never committed) and fill it in.
+#
+# Your email address: only this address can sign in the first time. Several, comma-separated: the
+# first of them to sign in becomes the owner.
 INBOX_OWNER_EMAIL=
+# Locks stored secrets and signs receipts. Paste the output of `openssl rand -base64 32` and keep a
+# copy somewhere safe. Several, comma-separated and newest first, rotate a key without downtime.
+# Empty, the inbox runs but stores no secret and issues no receipt.
+INBOX_SECRET_KEY=
+# The address the inbox emails from, like inbox@yourdomain.com. Its domain must be onboarded to
+# Cloudflare Email Sending on the same account (Workers Paid). Empty, or not onboarded yet: your
+# sign-in link is written to the Worker's logs instead.
+MAIL_FROM=

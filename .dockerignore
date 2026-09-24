@@ -1,0 +1,17 @@
+# The image builds from a clean checkout: nothing from this machine's installs, builds or data.
+.git
+**/node_modules
+**/dist
+**/.astro
+.wrangler
+**/.wrangler
+data
+*.db
+*.db-*
+.env
+.env.*
+.dev.vars
+coverage
+**/.DS_Store
+Dockerfile
+.dockerignore

@@ -1,4 +1,4 @@
-import { type Db, randomToken, schema, ulid } from "@surfingdog/core";
+import { type Db, randomToken, readSettings, schema, ulid } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { Hono } from "hono";
@@ -73,6 +73,13 @@ export interface SessionDeps {
    * public host, "first to click becomes the owner" would be a takeover.
    */
   readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
+  /**
+   * Keeps the https address the owner signs in at as the Inbox address in Settings, when neither it
+   * nor INBOX_PUBLIC_URL is set: receipts, and the links in emails, need an address outside a request.
+   */
+  readonly rememberOrigin?: ((origin: string) => Promise<unknown>) | undefined;
+  /** Where a sign-in link goes when it cannot be emailed: the server's log (console.log). */
+  readonly log?: ((line: string) => void) | undefined;
 }
 
 async function mayBootstrap(deps: SessionDeps, email: string): Promise<boolean> {
@@ -83,6 +90,7 @@ async function mayBootstrap(deps: SessionDeps, email: string): Promise<boolean> 
 export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
   const app = new Hono<CallerEnv>();
   const now = deps.now ?? (() => Date.now());
+  const log = deps.log ?? ((line: string) => console.log(line));
 
   app.post("/magic-link", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { email?: string; redirect?: string };
@@ -109,6 +117,17 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       .where(eq(schema.users.email, email));
     const [anyUser] = await db(deps).select({ id: schema.users.id }).from(schema.users).limit(1);
     const known = Boolean(existing) || (!anyUser && (await mayBootstrap(deps, email)));
+    if (!known && !anyUser) {
+      // Nobody has signed in yet, so this is most likely the owner, and a typo in the value they
+      // typed into the deploy form would otherwise leave them waiting for nothing. The address asked
+      // for stays out of the log: on a public demo, which has no account, it is a stranger's.
+      const listed = deps.ownerEmails ? (await deps.ownerEmails()).length : 0;
+      log(
+        listed
+          ? "sign-in link not sent: that address is not in INBOX_OWNER_EMAIL, and nobody has signed in here yet, so check the value"
+          : "sign-in link not sent: INBOX_OWNER_EMAIL is empty, so nobody can create the first account; set it and ask again",
+      );
+    }
     if (known) {
       const token = randomToken(32);
       await deps.db.orm.insert(schema.loginTokens).values({
@@ -121,26 +140,36 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       const origin = publicOrigin(c.req.raw, deps.baseUrl);
       const link = `${origin}/auth/verify?token=${token}${body.redirect ? `&redirect=${encodeURIComponent(body.redirect)}` : ""}`;
       const name = await deps.businessName();
-      try {
-        await deps.mailOut.send({
-          from: { address: "inbox@localhost", name: name || "Surfing Dog Inbox" },
-          to: [email],
-          subject: `Sign in to ${name || "your inbox"}`,
-          text: `Open this link within 15 minutes to sign in:\n\n${link}\n\nIf you did not ask for it, ignore this email.`,
-        });
-      } catch (error) {
-        console.error("magic link: mail failed:", error instanceof Error ? error.message : error);
-        return c.json(
-          {
-            type: "https://surfingdog.ai/problems/mail_failed",
-            title: "Email could not be sent",
-            status: 502,
-            code: "mail_failed",
-            detail: "The sign-in email could not be sent. Try again in a minute, or sign in with an API key.",
-          },
-          502,
-          { "Content-Type": "application/problem+json" },
-        );
+      // The transport's own address first (MAIL_FROM), the one set up to send; else Send from in
+      // Settings. With neither there is nobody to send it as, and the link goes to the log.
+      const address = deps.mailOut.sender?.address ?? (await readSettings(deps.db)).email.fromAddress;
+      // Only people who can read this server's log see it there: whoever runs it.
+      const toLog = (why: string) => log(`sign-in link for ${email} (${why}), open it within 15 minutes: ${link}`);
+      if (!address) {
+        toLog("no address to send email from: set MAIL_FROM, or Send from in Settings");
+      } else {
+        try {
+          await deps.mailOut.send({
+            from: { address, name: name || deps.mailOut.sender?.name || "Surfing Dog Inbox" },
+            to: [email],
+            subject: `Sign in to ${name || "your inbox"}`,
+            text: `Open this link within 15 minutes to sign in:\n\n${link}\n\nIf you did not ask for it, ignore this email.`,
+          });
+        } catch (error) {
+          toLog(`the email could not be sent: ${error instanceof Error ? error.message : String(error)}`);
+          return c.json(
+            {
+              type: "https://surfingdog.ai/problems/mail_failed",
+              title: "Email could not be sent",
+              status: 502,
+              code: "mail_failed",
+              detail:
+                "The sign-in email could not be sent, so the link was written to this server's log instead, with the reason. Or sign in with an API key.",
+            },
+            502,
+            { "Content-Type": "application/problem+json" },
+          );
+        }
       }
     }
     return c.json({ ok: true, message: "If that address is known here, a sign-in link is on its way." });
@@ -206,6 +235,12 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
     }
     if (!user) throw new Error("user vanished");
     const session = await createSession(deps.db, user.id, c.req.raw, now());
+    // The address the owner opened their link at is the inbox's own, until they say otherwise.
+    if (user.role === "owner" && deps.rememberOrigin) {
+      await deps.rememberOrigin(publicOrigin(c.req.raw, deps.baseUrl)).catch((error) => {
+        console.error("sign-in: the Inbox address was not saved:", error instanceof Error ? error.message : error);
+      });
+    }
     setCookie(c, SESSION_COOKIE, session.token, {
       httpOnly: true,
       secure: publicOrigin(c.req.raw, deps.baseUrl).startsWith("https:"),
@@ -250,9 +285,20 @@ function db(deps: SessionDeps) {
 }
 
 /** Only same-origin paths may be redirect targets after sign-in. */
+/**
+ * A path on this site, or `/`. Anyone can put a `redirect` into the link mailed to the owner, and a
+ * browser reads `/\host` or `/<tab>/host` as `//host`, so the value is resolved the way a browser
+ * would and only kept when it stays here.
+ */
 export function safeRedirect(value: string | undefined): string {
-  if (!value?.startsWith("/") || value.startsWith("//")) return "/";
-  return value;
+  if (!value?.startsWith("/")) return "/";
+  const here = "https://inbox.invalid";
+  try {
+    const url = new URL(value, here);
+    return url.origin === here ? `${url.pathname}${url.search}${url.hash}` : "/";
+  } catch {
+    return "/";
+  }
 }
 
 export { getCookie };

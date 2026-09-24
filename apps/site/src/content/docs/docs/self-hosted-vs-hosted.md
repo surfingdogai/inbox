@@ -7,13 +7,13 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 
 | | Deploy to Cloudflare | Your own server | Hosted by us (not open yet) |
 | --- | --- | --- | --- |
-| Runs on | Cloudflare Workers on your account: D1, R2, Queues, cron | Node 22.16 or newer (Bun later) on any machine, `node:sqlite` | Our own servers, Node runtime, one SQLite file per business |
-| Set-up | The Deploy button provisions everything and asks for two values | Build the server bundle, run one process, put Caddy or nginx in front | A slug, a magic link |
-| Data | Your D1 database and R2 bucket | Your SQLite file and blob directory | One database per tenant on our servers, replicated with Litestream to object storage |
-| Email out | Cloudflare Email Service on Workers Paid with a Cloudflare zone; otherwise Resend, Postmark or SMTP | SMTP by default, or a provider adapter | Included, from `<slug>@mail.surfingdog.ai` with Reply-To the business, or your own domain with DKIM |
+| Runs on | Cloudflare Workers on your account: D1, Queues, cron | Node 22.16 or newer (Bun later) on any machine, `node:sqlite` | Our own servers, Node runtime, one SQLite file per business |
+| Set-up | The Deploy button provisions everything and asks for three values | Build the server bundle, run one process, put Caddy or nginx in front | A slug, a magic link |
+| Data | Your D1 database | Your SQLite file and blob directory | One database per tenant on our servers, replicated with Litestream to object storage |
+| Email out | Cloudflare Email Sending on Workers Paid, from `MAIL_FROM` on a domain onboarded there; or Resend | Cloudflare Email Sending or Resend; with neither, printed to the console | Included, from `<slug>@mail.surfingdog.ai` with Reply-To the business, or your own domain with DKIM |
 | Email in | Email Routing (needs a Cloudflare zone) or a provider webhook | Forwarding, a subdomain MX, or a provider webhook | Included: `<slug>@in.surfingdog.ai` |
 | Connectors (coming) | The same MIT connector SDK; you bring your own credentials (a Shopify custom app token, a Google OAuth client, a Stripe restricted key…) | Same | The same connectors as one-click apps through our registered OAuth apps; tokens refreshed and webhooks registered by us |
-| Backups | Yours (D1 time travel, R2) | Yours; Litestream or nightly snapshots are the documented path | Done by us |
+| Backups | Yours (D1 time travel) | Yours; Litestream or nightly snapshots are the documented path | Done by us |
 | Network | Join any network, or none, from settings | Same | Our network bundled: directory listing, receipts, reviews |
 | Domain | Your Worker route or custom domain | Yours | `<slug>.surfingdog.ai`, or your own hostname through Cloudflare for SaaS |
 | Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | Flat plus per confirmed item, metered from day one; announced when hosted opens |

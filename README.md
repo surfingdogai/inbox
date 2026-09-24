@@ -1,77 +1,74 @@
 # Surfing Dog Inbox
 
-An open-source, self-hostable **typed inbox for businesses**. It receives messages, quote
-requests, orders and bookings from people and from AI agents — through email, a web form, REST
-and MCP (and every agent protocol we can reasonably speak) — and turns them into structured
-items with a lifecycle that can be handled by rules, by the owner, or by the owner's own AI.
+An inbox for the bookings, orders, quote requests and messages that people and their AI agents send
+a business. Your rules answer the routine ones, and you see the rest. Open source, and you run it.
 
-Status: **0.1, in production on our own instance.** The core, the REST and MCP doors, email in,
-sessions, OAuth for the owner's AI, the owner app and its setup wizard, webhooks, feeds, signed
-receipts and network membership all work on both runtimes. An instance runs at
-https://inbox.surfingdog.ai and the network at https://network.surfingdog.ai. Read the decision
-records in [docs/adr/](docs/adr/) first.
+## Try it in 60 seconds
 
-- `apps/inbox` — the product: a Hono server + React SPA that runs on Cloudflare Workers and on Node/Bun.
-- `packages/core` — domain model, state machines, rules, receipts (AGPL-3.0).
-- `packages/platform` — the five runtime interfaces (Db, Blob, Jobs, MailIn, MailOut) and their adapters.
-- `packages/spec` — manifest, receipt and review formats with test vectors (MIT).
-- `packages/sdk` — typed client for the public and owner APIs (MIT).
-- `packages/ui` — design tokens, glass utilities and the kit page.
-- `docs/` — ADRs and plans.
+Add our demo bike shop to Claude or ChatGPT as a custom connector (an MCP server):
 
-Licence: AGPL-3.0 for the server and app; MIT for `packages/spec`, `packages/sdk` and the connector SDK.
-
-## Run it
-
-```bash
-pnpm install
-pnpm dev            # Node, SQLite in ./data/inbox.db, http://localhost:8787
-pnpm dev:workers    # the same app on workerd (D1, Queues, cron)
-pnpm test           # every test on Node and on Workers
+```
+https://demo.surfingdog.ai/mcp
 ```
 
-The Node build is one file: `pnpm --filter @surfingdog/inbox build:server` writes `apps/inbox/dist/server.mjs`.
-Run it with `node server.mjs` and these variables:
+Then ask it: *"Book a bike service with Oficina Maré on Saturday morning."* Watch the booking arrive,
+and the shop confirm it, at https://demo.surfingdog.ai/demo/live. The demo never emails anyone who uses
+it, shows no names and is wiped every night.
 
-| Variable | What |
-|---|---|
-| `INBOX_DB` | SQLite file (default `./data/inbox.db`) |
-| `INBOX_PUBLIC_URL` | The https URL people and agents reach you at. Behind a proxy set it, or pass `X-Forwarded-Proto`. |
-| `INBOX_STATIC` | Static files directory (the owner app) |
-| `INBOX_OWNER_EMAIL` | Comma-separated addresses that may create the first account by email link |
-| `INBOX_SECRET_KEY` | Seals connector credentials and webhook secrets. One long random string, or several comma-separated and newest first to rotate. Without it the instance runs as normal but refuses to store a secret. |
-| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | Real email through Cloudflare Email Service (`MAIL_FROM_NAME` optional) |
-| `RESEND_API_KEY` | Real email through Resend instead; with neither, mail is printed to the console |
-| `PORT`, `HOST` | Listen address (default 8787 on all interfaces) |
+The same with curl, step by step: https://surfingdog.ai/try/
 
-CLI: `node server.mjs create-owner-key` prints an owner API key, `seed-demo` adds a demo bike shop
-to an empty instance, `seed-showcase` the same shop with a week of items, `network-ping` reports to
-every network that is on now. `pnpm --filter @surfingdog/inbox shots` captures the owner app for the website.
+## Install
 
-Sign in at `/login` with an address from `INBOX_OWNER_EMAIL` (a link is emailed; in development the
-mail is printed to the console, so set `INBOX_OWNER_EMAIL=you@example.com pnpm dev` and copy the link) or
-with an owner key.
+**Node** 22.16+, 24 or 26. One process and one SQLite file.
 
-## Email in
+```bash
+git clone https://github.com/surfingdogai/inbox && cd inbox
+pnpm install
+pnpm --filter @surfingdog/inbox build
+node apps/inbox/dist/server.mjs        # http://localhost:8787
+```
 
-Every instance accepts raw MIME at `POST /v1/email/inbound` with the shared secret from Settings
-(`email.inboundSecret`) in `X-Inbox-Email-Secret`. Point a Mailgun route, a Postmark/SES inbound
-webhook or a forwarder at it. On Cloudflare, Email Routing delivers straight to the Worker's
-`email()` handler, no webhook needed. Messages are threaded by `In-Reply-To`/`References`, by a plus
-address (`inbox+<item id>@…`) or by a `[SDI-<item id>]` subject token, and deduplicated on
-`Message-ID`.
+**Docker**, built from this repository. The database lives in the volume.
 
-## Join networks
+```bash
+docker build -t surfingdog-inbox .
+docker run -p 8787:8787 -v inbox-data:/opt/inbox/data surfingdog-inbox
+```
 
-Settings → Networks. An inbox can report to several networks, and each one lists it in its own
-directory. The setting is `networks`, a map keyed by each network's https origin, at most eight;
-settings are merged, so adding one leaves the others as they are, and switching one off is
-`"enabled": false`. A fresh instance lists `https://network.surfingdog.ai`, switched off; any
-directory that implements `POST /v1/instances`, `POST /v1/instances/{domain}/ping` and
-`POST /v1/receipts` works. For each network that is on, the instance registers its domain (the
-network verifies it by fetching `/.well-known/agent-inbox.json` and checking that `instance` is
-your https origin) and then sends, every hour, its software version, runtime and the number of
-bookings, orders, quotes and messages created in the last 24 hours. It also publishes every receipt
-it issues, which names the customer only by a pseudonym; no name, address or message content leaves
-the instance. Each network is called on its own, so one that is down never holds up another, and
-what it missed is sent when it answers again.
+**Cloudflare Workers**, with D1, a queue and a cron. Press
+[Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox).
+What to have ready, and what to do after, is in the
+[quickstart](https://surfingdog.ai/docs/quickstart/#deploy-to-cloudflare). By hand, it's path A of
+the [install guide](https://surfingdog.ai/install.md).
+
+Or give your AI the install guide and let it do the work: it is written for that, with a check
+after every step.
+
+## Docs
+
+- [Quickstart](https://surfingdog.ai/docs/quickstart/): every setting, Docker, and a public demo of your own
+- [Connect your AI](https://surfingdog.ai/docs/connect-your-ai/): the owner's MCP server
+- [API](https://surfingdog.ai/docs/api/): REST and MCP; every instance also serves `/openapi.json`
+- [Decision records](docs/adr/): read these before changing how things work
+
+## Working on it
+
+```bash
+pnpm dev               # the server on Node, http://localhost:8787
+pnpm dev:workers       # the same app on workerd
+pnpm test              # every test, on Node and on Workers
+./scripts/verify.sh    # everything CI runs
+```
+
+- `apps/inbox`: the server and the owner app, one codebase for Workers and Node
+- `apps/site`: surfingdog.ai, with the docs
+- `packages/core`: items, their states, rules and receipts
+- `packages/adapters`: REST, MCP, sign-in, email in, webhooks and networks
+- `packages/platform`: the database, mail and job seams for each runtime
+- `packages/spec`: the discovery manifest and receipt formats, with test vectors
+- `packages/sdk`: verify webhooks; sign requests and check receipts from a customer's agent
+- `packages/ui`: design tokens and components
+
+## Licence
+
+AGPL-3.0 for the server and the app. MIT for `packages/spec` and `packages/sdk`.

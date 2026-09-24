@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:node": "vitest run --project node",
     "test:workers": "vitest run --project workers",
-    "build": "pnpm -r --if-present build",
+    "build": "pnpm --filter @surfingdog/inbox build:client",
+    "build:all": "pnpm -r --if-present build",
     "kit": "pnpm --filter @surfingdog/ui kit",
     "dev": "pnpm --filter @surfingdog/inbox dev",
     "dev:client": "pnpm --filter @surfingdog/inbox dev:client",
@@ -33,5 +34,24 @@
     "vitest": "catalog:",
     "wrangler": "^4.136.0"
   },
-  "type": "module"
+  "type": "module",
+  "cloudflare": {
+    "bindings": {
+      "INBOX_OWNER_EMAIL": {
+        "description": "Your email address. Only this address can sign in the first time."
+      },
+      "INBOX_SECRET_KEY": {
+        "description": "A long random string: run `openssl rand -base64 32` and paste the result. Keep a copy somewhere safe. It locks stored secrets and signs receipts."
+      },
+      "MAIL_FROM": {
+        "description": "The address your inbox emails from, like `inbox@yourdomain.com`. Its domain must be onboarded to [Email Sending](https://developers.cloudflare.com/email-service/get-started/send-emails/) on this account (Workers Paid). Leave it empty for now and your sign-in link is written to the Worker's logs."
+      },
+      "DB": {
+        "description": "Your inbox's database: every booking, order and message."
+      },
+      "JOBS": {
+        "description": "Background work: emails and rules."
+      }
+    }
+  }
 }

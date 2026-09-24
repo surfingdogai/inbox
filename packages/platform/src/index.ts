@@ -45,8 +45,8 @@ export interface MailOut {
    */
   send(mail: OutboundMail): Promise<{ messageId: string }>;
   /**
-   * The address this transport always sends from, whatever a message says, when it has one (the
-   * REST sender's configured address): a message with no sender of its own can still go out.
+   * The transport's own address (MAIL_FROM), when it has one: a message with no sender of its own,
+   * such as the owner's sign-in link, goes out from it. The REST sender sends every message from it.
    */
   readonly sender?: { readonly address: string; readonly name?: string | undefined } | undefined;
   /**

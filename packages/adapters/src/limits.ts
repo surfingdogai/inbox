@@ -66,6 +66,38 @@ export const LIMITS = {
 
 export type LimitClass = keyof typeof LIMITS;
 
+/** Limits by class, for a host that wants other numbers than `LIMITS` for some of them. */
+export type LimitTable = { readonly [K in LimitClass]?: Limit };
+
+/**
+ * A public demo (INBOX_DEMO): anyone's AI can book there and nobody is behind it to clean up, so
+ * every caller together shares one more bucket per class (`DEMO_SHARED`), on top of a tighter one
+ * per address. The per-address ones cannot be much tighter than `LIMITS`: an assistant like Claude
+ * or ChatGPT calls from its own servers, so everyone trying the demo through it arrives from a
+ * handful of addresses. The shared buckets are what bound a flood.
+ */
+export const DEMO_LIMITS: LimitTable = {
+  public: { capacity: 60, perMs: 1 / 1000 },
+  create: { capacity: 20, perMs: 40 / 3_600_000 },
+  verify: { capacity: 5, perMs: 5 / 3_600_000 },
+  negotiate: { capacity: 5, perMs: 5 / 3_600_000 },
+  link: { capacity: 10, perMs: 10 / 3_600_000 },
+};
+
+/**
+ * What every caller of a demo shares, whoever they are: at most about six hundred new items an hour,
+ * and ten sign-in links, which only ever go to the owner, so a crowd of addresses cannot fill the
+ * owner's mailbox with them.
+ */
+export const DEMO_SHARED: LimitTable = {
+  public: { capacity: 2_000, perMs: 20 / 1000 },
+  create: { capacity: 300, perMs: 600 / 3_600_000 },
+  auth: { capacity: 10, perMs: 10 / 3_600_000 },
+};
+
+/** The address a shared bucket is kept under. No client address or key id can take this form. */
+export const EVERYONE = "*";
+
 export interface Verdict {
   readonly allowed: boolean;
   /** Seconds until a request would be allowed again; 0 when allowed. */
@@ -80,9 +112,18 @@ export function clientAddress(request: Request): string {
   return "unknown";
 }
 
-/** Takes one token for (class, address). One statement: atomic on every runtime. */
-export async function consume(db: Db, cls: LimitClass, address: string, now: number): Promise<Verdict> {
-  const { capacity, perMs } = LIMITS[cls];
+/**
+ * Takes one token for (class, address). One statement: atomic on every runtime. `limit` replaces
+ * the class's numbers from `LIMITS`, for a host that sets its own (a demo).
+ */
+export async function consume(
+  db: Db,
+  cls: LimitClass,
+  address: string,
+  now: number,
+  limit: Limit = LIMITS[cls],
+): Promise<Verdict> {
+  const { capacity, perMs } = limit;
   const bucket = `${cls}:${address}`;
   const { rows } = await db.client.query({
     sql: `INSERT INTO rate_limits (bucket, tokens, updated_at) VALUES (?, ?, ?)

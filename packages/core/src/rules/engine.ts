@@ -6,6 +6,7 @@ import type { Item, ItemType } from "../domain/types";
 import { identityContext } from "../identity/context";
 import {
   availabilityRules,
+  business,
   itemEvents,
   items,
   parties,
@@ -289,7 +290,10 @@ export async function buildRuleContext(
     .orderBy(threadEntries.createdAt)
     .limit(5);
   const text = [item.subject ?? "", ...payloadText(item), ...thread.map((t) => t.body)].join("\n");
-  const facts = await bookingFacts(db, item, settings.business.timezone);
+  // Opening hours are the business's own, in its own time zone: the profile's, which the setup
+  // wizard writes and availability offers slots in, as every other reader takes it.
+  const [profile] = await db.orm.select({ timezone: business.timezone }).from(business).limit(1);
+  const facts = await bookingFacts(db, item, profile?.timezone ?? settings.business.timezone);
   const who = await identityContext(db, item, settings);
   return {
     item: forRules(item),
