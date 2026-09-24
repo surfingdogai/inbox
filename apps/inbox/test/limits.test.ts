@@ -190,27 +190,23 @@ describe("the bucket arithmetic", () => {
     expect(isCreateRoute("POST", "/v1/messages")).toBe(true);
     expect(isCreateRoute("GET", "/v1/bookings")).toBe(false);
     expect(isCreateRoute("POST", "/v1/items/x/cancel")).toBe(false);
-    const call = (name: string) =>
-      new Request("https://x/mcp", {
-        method: "POST",
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
-      });
-    expect(await mcpCreates(call("create_booking"))).toBe(true);
-    expect(await mcpCreates(call("list_services"))).toBe(false);
-    expect(await mcpCreates(new Request("https://x/mcp", { method: "POST", body: "not json" }))).toBe(false);
+    const call = (name: string) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } });
+    expect(mcpCreates(call("create_booking"))).toBe(true);
+    expect(mcpCreates(call("list_services"))).toBe(false);
+    // A batch creates when any call in it does; a body that is not JSON-RPC calls no tool.
+    expect(mcpCreates([call("list_services"), call("send_message")])).toBe(true);
+    expect(mcpCreates(undefined)).toBe(false);
+    expect(mcpCreates(null)).toBe(false);
+    expect(mcpCreates([null, 1, "x", { method: "tools/call", params: null }])).toBe(false);
   });
 
   it("classifies asking for another time, and limits it and the link page's POSTs on their own", async () => {
     expect(isNegotiateRoute("POST", "/v1/items/01K5X/counter")).toBe(true);
     expect(isNegotiateRoute("POST", "/v1/items/01K5X/accept")).toBe(false);
     expect(isNegotiateRoute("GET", "/v1/items/01K5X/counter")).toBe(false);
-    const call = (name: string) =>
-      new Request("https://x/mcp", {
-        method: "POST",
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } }),
-      });
-    expect(await mcpNegotiates(call("suggest_time"))).toBe(true);
-    expect(await mcpNegotiates(call("accept_offer"))).toBe(false);
+    const call = (name: string) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } });
+    expect(mcpNegotiates(call("suggest_time"))).toBe(true);
+    expect(mcpNegotiates(call("accept_offer"))).toBe(false);
     expect(LIMITS.negotiate).toEqual({ capacity: 10, perMs: 10 / 3_600_000 });
     expect(LIMITS.link).toEqual({ capacity: 30, perMs: 30 / 3_600_000 });
 

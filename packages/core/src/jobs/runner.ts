@@ -51,11 +51,14 @@ export type LaneOf = (payload: unknown) => string | undefined;
 export class JobRunner {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly lanes = new Map<string, LaneOf>();
-  private running: Promise<RunReport> | null = null;
+  private running: { readonly report: Promise<RunReport>; readonly since: number } | null = null;
   private readonly laneBudgetMs: number;
+  /** The wall clock that ages a shared run; jobs themselves run at the `now` each call passes. */
+  private readonly clock: () => number;
 
-  constructor(opts: { laneBudgetMs?: number } = {}) {
+  constructor(opts: { laneBudgetMs?: number; clock?: () => number } = {}) {
     this.laneBudgetMs = opts.laneBudgetMs ?? LANE_BUDGET_MS;
+    this.clock = opts.clock ?? Date.now;
   }
 
   register(kind: string, handler: JobHandler, opts: { lane?: LaneOf } = {}): this {
@@ -65,13 +68,27 @@ export class JobRunner {
     return this;
   }
 
-  /** Runs due jobs once. Concurrent calls in one process share the same run. */
-  runDue(db: Db, opts: { limit?: number; workerId?: string; now?: number } = {}): Promise<RunReport> {
-    if (this.running) return this.running;
-    this.running = this.run(db, opts).finally(() => {
-      this.running = null;
+  /**
+   * Runs due jobs once. Concurrent calls in one process share the same run, with two exceptions.
+   *
+   * A caller that awaits the run to finish its own work passes `join: false` and gets a run of its
+   * own. On Workers every request, cron tick and queue batch is an invocation of its own, and the I/O
+   * of a run belongs to the invocation that started it: when that one ends (a request's waitUntil
+   * runs out after 30 s), its run stops for good, and a cron tick that had joined it would wait on
+   * it for ever. Two runs at once are safe: each claims its rows with its own leased UPDATE.
+   *
+   * And a run older than a lease is not joined: whatever it claimed is free to claim again by now,
+   * and a run that stopped without settling must not stop every run after it.
+   */
+  runDue(db: Db, opts: { limit?: number; workerId?: string; now?: number; join?: boolean } = {}): Promise<RunReport> {
+    const join = opts.join !== false;
+    const current = this.running;
+    if (join && current && this.clock() - current.since < LEASE_MS) return current.report;
+    const report = this.run(db, opts).finally(() => {
+      if (this.running?.report === report) this.running = null;
     });
-    return this.running;
+    if (join) this.running = { report, since: this.clock() };
+    return report;
   }
 
   private async run(db: Db, opts: { limit?: number; workerId?: string; now?: number }): Promise<RunReport> {

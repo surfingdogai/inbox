@@ -10,7 +10,7 @@ import {
 } from "@surfingdog/core";
 import { LOCAL_SENDER, type MailOut, type OutboundMail } from "@surfingdog/platform";
 import { desc, eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { DEMO_SHOP_DOMAIN, type SeedDeps, seedShowcase } from "./seed";
 
 /**
@@ -245,9 +245,10 @@ export async function ensureDemo(
 ): Promise<{ seeded: boolean; active: boolean }> {
   let seeded = false;
   if (!(await isDemoShop(db))) {
-    if (!(await isEmptyInstance(db))) return { seeded: false, active: false };
-    seeded = (await seedDemoShop(db, now, deps)).seeded;
-    // Another process may have seeded it a moment before this one: then it is the demo shop all the same.
+    if (await isEmptyInstance(db)) seeded = (await seedDemoShop(db, now, deps)).seeded;
+    // Another request or process may have claimed the empty database a moment before this one, even
+    // between the two reads above (the shop's business row is the first thing a seed writes): then
+    // it is the demo shop all the same. Only a database that holds something else is refused.
     if (!seeded && !(await isDemoShop(db))) return { seeded: false, active: false };
   }
   const next = nextNightly(now);
@@ -799,11 +800,28 @@ export const LIVE_JS = `(() => {
 export const LIVE_FRESH_MS = 2_000;
 
 /**
+ * Keeps work another request may be waiting on running past this request's own end: on Workers,
+ * `waitUntil` carries it on if the client leaves (for up to 30 seconds). Node has nothing to extend.
+ */
+export function outlive(c: Context, work: Promise<unknown>): void {
+  try {
+    c.executionCtx.waitUntil(work.catch(() => {}));
+  } catch {
+    // No execution context: Node, or a test calling the app directly. The work runs on regardless.
+  }
+}
+
+/**
  * The demo's routes, mounted at /demo only when demo mode is on, and answered only once `active`
  * says this instance is the demo shop: on anything else they are a 404 like any unknown path. The
  * JSON may be read from any site, since it carries nothing about anyone: the website's Try page shows
- * it. Everyone polling it shares one reading every `LIVE_FRESH_MS`, so a crowd, or a script with no
- * limit to meet, costs the database one query set every two seconds, not one per request.
+ * it. Everyone polling it shares one reading for `LIVE_FRESH_MS`, so a crowd, or a script with no
+ * limit to meet, costs the database about one query set every two seconds, not one per request.
+ *
+ * A reading in progress is shared too, so a crowd arriving together still costs one. On Workers a
+ * reading belongs to the request that started it, and would stop for good if that request were
+ * cancelled (a tab closed mid-poll), leaving every request that shared it waiting for ever: so the
+ * request that starts one hands it to its own `waitUntil`, which carries it past its client leaving.
  */
 export function demoRoutes(deps: {
   db: Db;
@@ -812,7 +830,7 @@ export function demoRoutes(deps: {
 }): Hono<CallerEnv> {
   const clock = () => (deps.now ? deps.now() : Date.now());
   let cached: { at: number; feed: Promise<LiveFeed> } | null = null;
-  const feed = (): Promise<LiveFeed> => {
+  const feed = (c: Context): Promise<LiveFeed> => {
     const now = clock();
     if (!cached || now - cached.at >= LIVE_FRESH_MS || now < cached.at) {
       const reading = liveFeed(deps.db, now);
@@ -820,6 +838,7 @@ export function demoRoutes(deps: {
       reading.catch(() => {
         if (cached?.feed === reading) cached = null;
       });
+      outlive(c, reading);
     }
     return cached.feed;
   };
@@ -830,12 +849,12 @@ export function demoRoutes(deps: {
   });
   routes.get("/live", async (c) => {
     c.header("Cache-Control", "no-store");
-    return c.html(livePage(await feed()));
+    return c.html(livePage(await feed(c)));
   });
   routes.get("/live.json", async (c) => {
     c.header("Cache-Control", "no-store");
     c.header("Access-Control-Allow-Origin", "*");
-    return c.json(await feed());
+    return c.json(await feed(c));
   });
   routes.get("/live.js", (c) => {
     c.header("Cache-Control", "public, max-age=300");

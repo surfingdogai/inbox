@@ -174,21 +174,19 @@ export function createInbox(deps: AppDeps): Inbox {
   }
   const background = deps.background ?? ((work) => void work.catch(() => {}));
   // Whether this instance is the demo shop, decided once per process: an empty database becomes it,
-  // anything else is refused (demo.ts) and said so once. A failure to decide is tried again.
-  let demoReady: Promise<boolean> | null = null;
-  const demoActive = (): Promise<boolean> => {
-    if (!demo) return Promise.resolve(false);
-    demoReady ??= ensureDemo(deps.db, deps.now ? deps.now() : Date.now(), { receipts: caps.receipts }).then(
-      (r) => {
-        if (!r.active) console.error(`demo: ${DEMO_REFUSED}`);
-        return r.active;
-      },
-      (error) => {
-        demoReady = null;
-        throw error;
-      },
-    );
-    return demoReady;
+  // anything else is refused (demo.ts) and said so once. Only the answer is kept, never a check in
+  // progress: on Workers a check belongs to the request that started it and stops for good if that
+  // request is cancelled, so a request that waited on another's check could wait for ever. Requests
+  // that arrive before the first answer each ask for themselves: ensureDemo is safe to run at once,
+  // since only one of them can claim an empty database for the shop (seedShowcase).
+  let demoAnswer: boolean | null = null;
+  const demoActive = async (): Promise<boolean> => {
+    if (!demo) return false;
+    if (demoAnswer !== null) return demoAnswer;
+    const r = await ensureDemo(deps.db, deps.now ? deps.now() : Date.now(), { receipts: caps.receipts });
+    if (demoAnswer === null && !r.active) console.error(`demo: ${DEMO_REFUSED}`);
+    demoAnswer = r.active;
+    return r.active;
   };
   const prepare = async (): Promise<void> => {
     if (demo && !(await demoActive())) throw new Error(DEMO_REFUSED);

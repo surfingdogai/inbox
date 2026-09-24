@@ -164,21 +164,15 @@ export async function seedShowcase(
   deps: SeedDeps = {},
   opts: { demo?: boolean } = {},
 ): Promise<{ seeded: boolean; items: number }> {
-  const [existing] = await db.orm
-    .select({ id: schema.business.id })
-    .from(schema.business)
-    .where(eq(schema.business.id, "self"));
-  if (existing) return { seeded: false, items: 0 };
   const t0 = now - 10 * DAY;
-  await db.orm.insert(schema.business).values({
-    id: "self",
-    name: "Oficina Maré",
-    domain: opts.demo ? DEMO_SHOP_DOMAIN : SHOWCASE_DOMAIN,
-    timezone: TZ,
-    currency: "EUR",
-    createdAt: t0,
-    updatedAt: t0,
+  // The business row is the claim: one statement that only the first of two seeders at once wins,
+  // so the other returns here instead of failing half way (two requests can meet an empty demo).
+  const claim = await db.client.query({
+    sql: "INSERT OR IGNORE INTO business (id, name, domain, timezone, currency, created_at, updated_at) VALUES ('self', ?, ?, ?, ?, ?, ?)",
+    params: ["Oficina Maré", opts.demo ? DEMO_SHOP_DOMAIN : SHOWCASE_DOMAIN, TZ, "EUR", t0, t0],
+    method: "run",
   });
+  if (claim.changes === 0) return { seeded: false, items: 0 };
 
   const svc = { full: ulid(), puncture: ulid(), brakes: ulid(), custom: ulid(), truing: ulid() };
   await db.orm.insert(schema.services).values([

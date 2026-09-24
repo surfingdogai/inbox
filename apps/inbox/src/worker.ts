@@ -65,11 +65,13 @@ export default {
 
   // Cron, the queue and email run jobs without an HTTP request, so each migrates first, as the
   // Node server does at boot: the first tick after a deploy must not meet a table that is missing.
+  // Each awaits a run of its own (`join: false`): a run a request started belongs to that request,
+  // and stops for good when the request's time runs out, so joining it could leave this waiting.
   async queue(batch, env) {
     const inbox = inboxFor(env);
     const db = createDb(d1Client(env.DB));
     await ensureMigrated(db.client, MIGRATIONS);
-    await inbox.runner.runDue(db, { workerId: "queue" });
+    await inbox.runner.runDue(db, { workerId: "queue", join: false });
     for (const message of batch.messages) message.ack();
   },
 
@@ -83,7 +85,7 @@ export default {
     // A demo seeds itself and queues its nightly wipe; anything else has nothing to prepare. A demo
     // refused over a database that holds other data says why, and the jobs still run.
     await inbox.prepare().catch((error) => console.error("demo:", error instanceof Error ? error.message : error));
-    await inbox.runner.runDue(db, { workerId: "cron", limit: 100 });
+    await inbox.runner.runDue(db, { workerId: "cron", limit: 100, join: false });
   },
 
   // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.
@@ -98,6 +100,6 @@ export default {
       authenticated: true,
     });
     if (result.outcome === "rejected") message.setReject(result.reason);
-    await inbox.runner.runDue(db, { workerId: "email" });
+    await inbox.runner.runDue(db, { workerId: "email", join: false });
   },
 } satisfies ExportedHandler<Bindings>;

@@ -1,3 +1,4 @@
+import type { McpHttpHandler } from "@modelcontextprotocol/server";
 import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
@@ -89,10 +90,10 @@ const MAX_IDEMPOTENCY_KEY = 200;
  * field, or an MCP tool's argument): a repeated signature on such a request is a retry, answered
  * from what was stored; without one it is a replay (ADR-017 §2.4).
  */
-async function carriesIdempotencyKey(request: Request): Promise<boolean> {
+async function carriesIdempotencyKey(request: Request, body?: string): Promise<boolean> {
   if (request.headers.get("idempotency-key")) return true;
   try {
-    const text = await request.clone().text();
+    const text = body ?? (await request.clone().text());
     return /"idempotency_key"\s*:\s*"[^"]/.test(text);
   } catch {
     return false;
@@ -112,8 +113,76 @@ function retryIdentity(caller: Caller, request: Request): string {
  * A signature seen before: answered from the idempotency layer only when it is the first request's
  * retry — the same sender, the same idempotency key — and a copy (`401 replayed_signature`) otherwise.
  */
-async function isCopy(seen: Awaited<ReturnType<typeof agentFromRequest>>, request: Request): Promise<boolean> {
-  return seen.replayed && !(seen.retry === true && (await carriesIdempotencyKey(request)));
+async function isCopy(
+  seen: Awaited<ReturnType<typeof agentFromRequest>>,
+  request: Request,
+  body?: string,
+): Promise<boolean> {
+  return seen.replayed && !(seen.retry === true && (await carriesIdempotencyKey(request, body)));
+}
+
+/** An MCP request's body, read once: its bytes, as text, and parsed when it is JSON. */
+interface McpBody {
+  /** Null for a request without a body (a GET or a DELETE). */
+  readonly bytes: Uint8Array | null;
+  readonly text: string;
+  /** The JSON-RPC message or batch; undefined when there is no body or it is not JSON. */
+  readonly parsed: unknown;
+}
+
+/**
+ * Reads an MCP request's body exactly once, or answers null when it cannot be read.
+ *
+ * Everything the door needs from the body — which tools it calls (for the limits), its bytes (for a
+ * signature's digest), whether it carries an idempotency key — and the MCP handler itself work from
+ * this one reading, so no copy of the body is ever made. Before, every POST was copied three times
+ * for the limits and once more by the MCP handler, which on the 2026-07-28 path never read its copy:
+ * a branch of the request's stream left open for as long as the request lived.
+ */
+async function readMcpBody(request: Request): Promise<McpBody | null> {
+  if (request.method !== "POST" || request.body === null) return { bytes: null, text: "", parsed: undefined };
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await request.arrayBuffer());
+  } catch {
+    return null;
+  }
+  const text = new TextDecoder().decode(bytes);
+  let parsed: unknown;
+  try {
+    parsed = text.length === 0 ? undefined : JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+  return { bytes, text, parsed };
+}
+
+/** The JSON-RPC answer to a body that could not be read, as the MCP handler gives it. */
+function unreadableBody(): Response {
+  return Response.json(
+    { jsonrpc: "2.0", error: { code: -32700, message: "Parse error: the request body could not be read" }, id: null },
+    { status: 400 },
+  );
+}
+
+/**
+ * Hands a request to an MCP handler with the body the door already read. JSON goes as `parsedBody`,
+ * so the handler neither copies nor reads the request; anything else (empty, or not JSON) goes as a
+ * fresh request over the same bytes, for the handler to answer with its own parse error.
+ */
+function serveMcp(
+  handler: McpHttpHandler,
+  request: Request,
+  body: McpBody,
+  authInfo: NonNullable<NonNullable<Parameters<McpHttpHandler["fetch"]>[1]>["authInfo"]>,
+): Promise<Response> {
+  if (body.parsed !== undefined) return handler.fetch(request, { authInfo, parsedBody: body.parsed });
+  if (body.bytes === null) return handler.fetch(request, { authInfo });
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  headers.delete("transfer-encoding");
+  const again = new Request(request.url, { method: request.method, headers, body: body.bytes as BufferSource });
+  return handler.fetch(again, { authInfo });
 }
 
 /** A caller as a signed agent's request makes it (ADR-017 §2.4): what the door verified, and `Sdi-Pass`. */
@@ -363,7 +432,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;
     }
-    return mcpOwner.fetch(c.req.raw, { authInfo: authInfo(caller) });
+    const body = await readMcpBody(c.req.raw);
+    if (!body) return unreadableBody();
+    return serveMcp(mcpOwner, c.req.raw, body, authInfo(caller));
   });
   app.all("/mcp", async (c) => {
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_public", sandbox: await sandbox() });
@@ -371,37 +442,41 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;
     }
+    // The body, read once for everything below (readMcpBody).
+    const body = await readMcpBody(c.req.raw);
+    if (!body) return unreadableBody();
     // Every tool call is a POST; the ones that create an item also take a create token. A signed
     // request of any method takes one before any signature work (ADR-017 §2.4), as on REST.
     if (caller.auth?.kind !== "owner" && (c.req.method === "POST" || c.req.header("signature-input") !== undefined)) {
       const refused = await limited(
         c,
-        (await mcpCreates(c.req.raw))
+        mcpCreates(body.parsed)
           ? ["public", "create"]
-          : (await mcpVerifies(c.req.raw))
+          : mcpVerifies(body.parsed)
             ? ["public", "verify"]
-            : (await mcpNegotiates(c.req.raw))
+            : mcpNegotiates(body.parsed)
               ? ["public", "negotiate"]
               : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
     }
-    if (caller.auth?.kind === "owner") return mcpPublic.fetch(c.req.raw, { authInfo: authInfo(caller) });
+    if (caller.auth?.kind === "owner") return serveMcp(mcpPublic, c.req.raw, body, authInfo(caller));
     // An agent may sign its MCP calls too (ADR-017 §2.4): the POST's body is covered by its digest.
     const seen = await agentFromRequest(deps.db, c.req.raw, {
       baseUrl: deps.baseUrl,
       fetchImpl: deps.fetchImpl,
       now: clock(),
       retryAs: retryIdentity(caller, c.req.raw),
+      body: body.bytes ?? undefined,
     });
-    if (await isCopy(seen, c.req.raw)) return replayedSignature(c);
+    if (await isCopy(seen, c.req.raw, body.text)) return replayedSignature(c);
     // A platform's key has a bucket of its own, recognised by a network or not; a self-held key never.
     if (seen.agent.platform) {
       const refused = await limited(c, ["platform"], `platform:${seen.agent.platform}`);
       if (refused) return refused;
     }
-    const res = await mcpPublic.fetch(c.req.raw, { authInfo: authInfo(withAgent(caller, seen)) });
+    const res = await serveMcp(mcpPublic, c.req.raw, body, authInfo(withAgent(caller, seen)));
     if (!seen.header) return res;
     const out = new Response(res.body, res);
     out.headers.set("Sdi-Signature", seen.header);
