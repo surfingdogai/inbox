@@ -1,4 +1,4 @@
-import { type DbError, runMigrations } from "@surfingdog/platform";
+import { type DbError, ensureMigrated, type Migration, runMigrations, type SqliteClient } from "@surfingdog/platform";
 import { gt } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db";
@@ -414,5 +414,63 @@ describe("migration 6 — receipt events in the view", () => {
     expect(after.every((e) => e.itemId === itemId && e.itemType === "booking" && e.itemState === "confirmed")).toBe(
       true,
     );
+  });
+});
+
+/**
+ * Two requests can meet a migration nobody has applied yet: on Workers each request checks for
+ * itself (no request waits on a check another one started, which stops for good if that request is
+ * cancelled), and so can two isolates. Whoever comes second must carry on, not fail.
+ */
+describe("migrations applied from two places at once", () => {
+  const probe: Migration = {
+    version: 90_001,
+    name: "race_probe",
+    statements: ["CREATE TABLE race_probe (id TEXT PRIMARY KEY)"],
+  };
+
+  it("lets the one that comes second carry on when the first already made the table", async () => {
+    const base = (await fresh()).client;
+    let arrived = 0;
+    let release: () => void = () => {};
+    const both = new Promise<void>((r) => {
+      release = r;
+    });
+    // Both read the migration as missing, then both apply it: the second batch meets the table.
+    const client: SqliteClient = {
+      ...base,
+      batch: async (statements) => {
+        if (++arrived === 2) release();
+        await both;
+        return base.batch(statements);
+      },
+    };
+    const m = probe;
+    const done = await Promise.all([runMigrations(client, [m]), runMigrations(client, [m])]);
+    expect(done).toEqual([m.version, m.version]);
+    const { rows } = await base.query({ sql: "SELECT name FROM migrations WHERE version = ?", params: [m.version] });
+    expect(rows).toEqual([[m.name]]);
+  });
+
+  it("never makes a caller wait on a check another caller started and did not finish", async () => {
+    const base = (await fresh()).client;
+    let hang = true;
+    const client: SqliteClient = {
+      ...base,
+      query: (q) => {
+        if (hang && /FROM migrations/i.test(q.sql)) {
+          hang = false;
+          return new Promise(() => {});
+        }
+        return base.query(q);
+      },
+    };
+    void ensureMigrated(client, MIGRATIONS);
+    while (hang) await new Promise((r) => setTimeout(r, 1));
+    const second = await Promise.race([
+      ensureMigrated(client, MIGRATIONS),
+      new Promise<never>((_, no) => setTimeout(() => no(new Error("the second caller waited on the first")), 2_000)),
+    ]);
+    expect(second).toBe(MIGRATIONS.length);
   });
 });

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
-import { backoffMs, createRunner, JobRunner } from "../src/jobs/index";
+import { backoffMs, createRunner, JobRunner, LEASE_MS } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { jobs, outboundMail, services, users } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
@@ -168,6 +168,41 @@ describe("JobRunner", () => {
     // One run of the backlog, then the two that were waiting: not the whole backlog first.
     expect(ran.get("plain")).toBeLessThanOrEqual(3);
     expect(ran.get("other")).toBeLessThanOrEqual(3);
+  });
+
+  it("never leaves a run waiting on a run that stopped without finishing", async () => {
+    // On Workers a run belongs to the invocation that started it, and stops for good when that one
+    // ends: its promise never settles. Nothing after it may be stuck behind it.
+    const db = await setup();
+    await db.orm.insert(jobs).values({ id: ulid(), kind: "stuck", payload: {}, runAt: T0, createdAt: T0 });
+    let wall = 1_000_000;
+    let started = 0;
+    // The first attempt stops for good; a later one finishes.
+    const runner = new JobRunner({ clock: () => wall }).register("stuck", () => {
+      started++;
+      return started === 1 ? new Promise(() => {}) : Promise.resolve(undefined);
+    });
+    const within = <T>(p: Promise<T>, what: string) =>
+      Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error(`no answer: ${what}`)), 2_000))]);
+    void runner.runDue(db, { now: T0 });
+    while (started === 0) await new Promise((r) => setTimeout(r, 1));
+    // A caller that awaits its run (a cron tick, a queue batch) gets one of its own at once. The stuck
+    // job's lease still holds, so there is nothing for it to claim.
+    expect(await within(runner.runDue(db, { now: T0 + 1_000, join: false }), "a run of its own")).toEqual({
+      claimed: 0,
+      done: 0,
+      failed: 0,
+      dead: 0,
+      released: 0,
+    });
+    // Once a lease has passed, a joining caller starts a new run too, rather than waiting for ever,
+    // and the job the stopped run held is claimed again.
+    wall += LEASE_MS;
+    await db.orm.insert(jobs).values({ id: ulid(), kind: "fine", payload: {}, runAt: T0, createdAt: T0 });
+    runner.register("fine", async () => undefined);
+    const after = await within(runner.runDue(db, { now: T0 + LEASE_MS + 1_000 }), "a run after the lease");
+    expect(after).toEqual({ claimed: 2, done: 2, failed: 0, dead: 0, released: 0 });
+    expect(started).toBe(2);
   });
 
   it("notifies the owner and the customer by email after a booking is created and confirmed", async () => {

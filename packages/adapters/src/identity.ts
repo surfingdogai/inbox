@@ -488,6 +488,11 @@ export interface AgentOptions {
    * sender with the same key (a key in the body is covered by the signature's digest already).
    */
   readonly retryAs?: string | undefined;
+  /**
+   * The request's body, when the door has already read it (the MCP door reads a body exactly once).
+   * Absent, a copy of the request is read for the signature's digest.
+   */
+  readonly body?: Uint8Array | undefined;
 }
 
 export interface AgentOnRequest {
@@ -524,7 +529,9 @@ export async function agentFromRequest(db: Db, request: Request, opts: AgentOpti
   }
   const settings = await readSettings(db);
   const body =
-    request.method === "GET" || request.method === "HEAD" ? null : new Uint8Array(await request.clone().arrayBuffer());
+    request.method === "GET" || request.method === "HEAD"
+      ? null
+      : (opts.body ?? new Uint8Array(await request.clone().arrayBuffer()));
   const v = await verifyAgentRequest({
     method: request.method,
     url: request.url,

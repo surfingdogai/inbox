@@ -11,18 +11,21 @@ export interface Migration {
   readonly statements: readonly string[];
 }
 
-const inFlight = new WeakMap<SqliteClient, Promise<number>>();
+/**
+ * The version each client was brought to. Only a finished result is kept, never a run in progress:
+ * on Workers a request's I/O belongs to that request, and a run another request started stops for
+ * good when that request is cancelled (its client went away), so a promise shared with it could
+ * leave every later request waiting for ever. Requests that meet a cold isolate together each check
+ * for themselves, which costs a read or two; a migration two of them apply at once is handled below.
+ */
+const done = new WeakMap<SqliteClient, number>();
 
-export function ensureMigrated(client: SqliteClient, migrations: readonly Migration[]): Promise<number> {
-  let p = inFlight.get(client);
-  if (!p) {
-    p = runMigrations(client, migrations).catch((error) => {
-      inFlight.delete(client);
-      throw error;
-    });
-    inFlight.set(client, p);
-  }
-  return p;
+export async function ensureMigrated(client: SqliteClient, migrations: readonly Migration[]): Promise<number> {
+  const known = done.get(client);
+  if (known !== undefined) return known;
+  const version = await runMigrations(client, migrations);
+  done.set(client, version);
+  return version;
 }
 
 /** Runs pending migrations without the memo (for tests and admin tools). Returns the current version. */
@@ -60,8 +63,9 @@ export async function runMigrations(client: SqliteClient, migrations: readonly M
       ]);
     } catch (error) {
       const e = toDbError(error);
-      // Another isolate applied it first: re-read and carry on.
-      if (e.code === "unique" && (await readApplied(client)).get(m.version) === hash) {
+      // Another isolate or request applied it first (its table already exists, or its row does):
+      // the batch rolled back whole, so re-read and carry on.
+      if ((await readApplied(client).catch(() => new Map<number, string>())).get(m.version) === hash) {
         current = m.version;
         continue;
       }

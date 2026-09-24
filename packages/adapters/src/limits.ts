@@ -166,34 +166,33 @@ export function isNegotiateRoute(method: string, path: string): boolean {
   return method === "POST" && /^\/v1\/items\/[^/]+\/counter\/?$/.test(path);
 }
 
+/**
+ * The tools a JSON-RPC body calls, a single call or a batch. It takes the body the MCP door has
+ * already read and parsed, once: the door reads a request's body exactly once and hands the parsed
+ * value to everything that needs it, so no copy of the body is ever left unread (index.ts).
+ */
+export function mcpToolNames(body: unknown): string[] {
+  const calls = Array.isArray(body) ? body : [body];
+  return calls.flatMap((m) => {
+    if (typeof m !== "object" || m === null) return [];
+    const msg = m as { method?: unknown; params?: { name?: unknown } | null };
+    return msg.method === "tools/call" && typeof msg.params?.name === "string" ? [msg.params.name] : [];
+  });
+}
+
 /** MCP tools that send or check a one-time code. */
-export async function mcpVerifies(request: Request): Promise<boolean> {
-  return (await mcpToolCalls(request)).includes("verify_customer");
+export function mcpVerifies(body: unknown): boolean {
+  return mcpToolNames(body).includes("verify_customer");
 }
 
 /** MCP tools that ask for another time than the one proposed. */
-export async function mcpNegotiates(request: Request): Promise<boolean> {
-  return (await mcpToolCalls(request)).includes("suggest_time");
-}
-
-/** The tools a JSON-RPC body calls, a single call or a batch. */
-async function mcpToolCalls(request: Request): Promise<string[]> {
-  if (request.method !== "POST") return [];
-  try {
-    const body = (await request.clone().json()) as unknown;
-    const calls = Array.isArray(body) ? body : [body];
-    return calls.flatMap((m) => {
-      const msg = m as { method?: unknown; params?: { name?: unknown } };
-      return msg.method === "tools/call" && typeof msg.params?.name === "string" ? [msg.params.name] : [];
-    });
-  } catch {
-    return [];
-  }
+export function mcpNegotiates(body: unknown): boolean {
+  return mcpToolNames(body).includes("suggest_time");
 }
 
 /** MCP tools that create an item. The body is JSON-RPC, a single call or a batch. */
 const CREATE_TOOLS = new Set(["create_booking", "create_order", "request_quote", "send_message"]);
 
-export async function mcpCreates(request: Request): Promise<boolean> {
-  return (await mcpToolCalls(request)).some((name) => CREATE_TOOLS.has(name));
+export function mcpCreates(body: unknown): boolean {
+  return mcpToolNames(body).some((name) => CREATE_TOOLS.has(name));
 }
