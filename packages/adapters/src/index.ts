@@ -17,9 +17,7 @@ import {
   LIMITS,
   type LimitClass,
   type LimitTable,
-  mcpCreates,
-  mcpNegotiates,
-  mcpVerifies,
+  mcpCosts,
 } from "./limits";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
@@ -45,6 +43,7 @@ export * from "./responses";
 export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
+export * from "./untrusted";
 export * from "./webhooks/index";
 
 export interface DoorDeps {
@@ -227,12 +226,14 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     c: Context,
     classes: readonly LimitClass[],
     keyId?: string | undefined,
+    costs: Partial<Record<LimitClass, number>> = {},
   ): Promise<Response | null> => {
     const who = keyId ? `key:${keyId}` : `ip:${clientAddress(c.req.raw)}`;
     for (const cls of classes) {
-      const own = await consume(deps.db, cls, who, clock(), deps.limits?.[cls] ?? LIMITS[cls]);
+      const cost = costs[cls] ?? 1;
+      const own = await consume(deps.db, cls, who, clock(), deps.limits?.[cls] ?? LIMITS[cls], cost);
       const shared = deps.sharedLimits?.[cls];
-      const v = own.allowed && shared ? await consume(deps.db, cls, EVERYONE, clock(), shared) : own;
+      const v = own.allowed && shared ? await consume(deps.db, cls, EVERYONE, clock(), shared, cost) : own;
       if (!v.allowed) {
         return tooManyRequests(c, "Too many requests right now; wait a few minutes and try again.", v.retryAfterSec);
       }
@@ -373,6 +374,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       { raw, envelopeTo: c.req.header("x-envelope-to"), envelopeFrom: c.req.header("x-envelope-from") },
       { now: deps.now },
     );
+    // Too many from this sender, or for the whole mailbox: a 429 the gateway answers the sending
+    // server with as a temporary failure, so a real sender's mail arrives once the bucket refills.
+    if (result.outcome === "limited") {
+      return c.json(result, 429, { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterSec))) });
+    }
     return c.json(result, result.outcome === "rejected" ? 422 : 200);
   });
   app.route("/v1/owner", ownerRest(deps.caps));
@@ -434,6 +440,12 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }
     const body = await readMcpBody(c.req.raw);
     if (!body) return unreadableBody();
+    // A batch is as many calls as it holds: the rest of them pay too (mcpCosts).
+    const extra = caller.principal?.keyKind === "integration" ? (mcpCosts(body.parsed).public ?? 0) : 0;
+    if (extra > 0) {
+      const refused = await limited(c, ["integration"], caller.principal?.id, { integration: extra });
+      if (refused) return refused;
+    }
     return serveMcp(mcpOwner, c.req.raw, body, authInfo(caller));
   });
   app.all("/mcp", async (c) => {
@@ -442,23 +454,29 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;
     }
-    // The body, read once for everything below (readMcpBody).
+    // Every tool call is a POST, and a signed request of any method takes a token before any
+    // signature work (ADR-017 §2.4), as on REST. The flood guard comes before the body is read or
+    // parsed, so a refused caller costs no parsing; which tools it calls, and so which class of
+    // token they also take, can only be known after.
+    const counted =
+      caller.auth?.kind !== "owner" && (c.req.method === "POST" || c.req.header("signature-input") !== undefined);
+    if (counted) {
+      const refused = await limited(c, ["public"], caller.auth?.id);
+      if (refused) return refused;
+    }
+    // The body, read once for everything below (readMcpBody), within the size every route reads.
     const body = await readMcpBody(c.req.raw);
     if (!body) return unreadableBody();
-    // Every tool call is a POST; the ones that create an item also take a create token. A signed
-    // request of any method takes one before any signature work (ADR-017 §2.4), as on REST.
-    if (caller.auth?.kind !== "owner" && (c.req.method === "POST" || c.req.header("signature-input") !== undefined)) {
-      const refused = await limited(
-        c,
-        mcpCreates(body.parsed)
-          ? ["public", "create"]
-          : mcpVerifies(body.parsed)
-            ? ["public", "verify"]
-            : mcpNegotiates(body.parsed)
-              ? ["public", "negotiate"]
-              : ["public"],
-        caller.auth?.id,
-      );
+    // The ones that create an item take a create token too; codes and counters, their own: one
+    // for each such call, so a batch pays for everything in it (mcpCosts).
+    const costs = mcpCosts(body.parsed);
+    if (caller.principal?.keyKind === "integration" && costs.public) {
+      const refused = await limited(c, ["integration"], caller.principal.id, { integration: costs.public });
+      if (refused) return refused;
+    }
+    if (counted) {
+      const classes = (["public", "create", "verify", "negotiate"] as const).filter((cls) => costs[cls]);
+      const refused = classes.length ? await limited(c, classes, caller.auth?.id, costs) : null;
       if (refused) return refused;
     }
     if (caller.auth?.kind === "owner") return serveMcp(mcpPublic, c.req.raw, body, authInfo(caller));

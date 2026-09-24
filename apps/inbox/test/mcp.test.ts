@@ -265,7 +265,8 @@ describe("MCP doors", () => {
     const text = async (id: string) =>
       ((await client.callTool({ name: "get_item", arguments: { item_id: id } })).content as { text: string }[])[0]
         ?.text ?? "";
-    expect(await text("bk_old")).toMatch(/Next: nothing\.$/);
+    // What the customer wrote follows the sentence in its own block (untrusted.ts), never inside it.
+    expect(await text("bk_old")).toMatch(/Next: nothing\.(\n\n<<<UNTRUSTED [0-9a-f]{12}>>>|$)/);
     expect(await text("bk_new")).toContain("Next: no_show (Correct: no-show).");
   });
 

@@ -25,6 +25,7 @@ import {
   threadHeaders,
 } from "./mail-log";
 import type { JobHandler } from "./runner";
+import { ensureJob } from "./schedule";
 
 export { senderOf } from "./mail-log";
 
@@ -72,7 +73,11 @@ export function notifyHandler(
     if (!logged) {
       const composed =
         p.to === "owner"
-          ? ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null)
+          ? await capOwnerAlerts(
+              db,
+              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null),
+              now,
+            )
           : await customerMail(db, item, p, {
               jobKey: job.id,
               contact,
@@ -290,6 +295,121 @@ function ownerMail(
       "Reply in your inbox to answer.",
     ].join("\n"),
     ...(item.flags.sandbox ? { skip: "test_item" as const } : canSend ? {} : { skip: "no_sender" as const }),
+  };
+}
+
+/**
+ * Alerts the owner gets in an hour, at most, one per new request or message. A flood — a script, a
+ * mail loop, a busy morning — would bury the owner's mailbox and the mail service's goodwill with
+ * it; past this, each alert is kept on its item (`alert_limit`, shown there) and the owner gets one
+ * digest at the end of the hour saying how many more came and which, with the link to see them.
+ */
+export const OWNER_ALERTS_PER_HOUR = 20;
+
+/** The job that sends the hour's digest. */
+export const OWNER_DIGEST_KIND = "owner_digest";
+
+const HOUR = 3_600_000;
+
+/**
+ * An owner alert as it will be stored: itself while the hour has room, else held back for the
+ * hour's digest, which it queues (once per clock hour, at the end of it).
+ */
+async function capOwnerAlerts(db: Db, mail: ComposedMail, now: number): Promise<ComposedMail> {
+  if (mail.skip) return mail;
+  const since = now - HOUR;
+  const { rows } = await db.client.query({
+    sql: `SELECT COUNT(*) FROM outbound_mail
+           WHERE status IN ('queued', 'retrying', 'sent') AND updated_at >= ? AND created_at >= ?
+             AND recipient = 'owner' AND template LIKE 'owner.%' AND template <> 'owner.digest'`,
+    params: [since, since],
+    method: "all",
+  });
+  if (Number(rows[0]?.[0] ?? 0) < OWNER_ALERTS_PER_HOUR) return mail;
+  const bucket = Math.floor(now / HOUR);
+  await ensureJob(db, OWNER_DIGEST_KIND, `${OWNER_DIGEST_KIND}:${bucket}`, {
+    now,
+    runAt: (bucket + 1) * HOUR,
+    payload: { from: bucket * HOUR, to: (bucket + 1) * HOUR },
+  });
+  return { ...mail, skip: "alert_limit" };
+}
+
+/**
+ * The hour's digest: one email to the owner naming the alerts held back in it, newest last, at most
+ * thirty by name. It goes through the mail log like every other email, so a retry sends it once.
+ */
+export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } = {}): JobHandler {
+  return async (job, { db, now }) => {
+    const p = job.payload as { from: number; to: number };
+    const settings = await readSettings(db);
+    const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
+    const facts = await businessFacts(db, settings);
+    const sender = senderOf(settings, { transport: mailOut.sender, publicUrl, business: facts.name });
+    let logged = await mailByJob(db, job.id);
+    if (!logged) {
+      const { rows } = await db.client.query({
+        sql: `SELECT item_id, subject FROM outbound_mail
+               WHERE status = 'skipped' AND skip_reason = 'alert_limit' AND updated_at >= ? AND updated_at < ?
+                 AND recipient = 'owner'
+               ORDER BY created_at, id`,
+        params: [p.from, p.to],
+        method: "all",
+      });
+      if (rows.length === 0) return { note: "no alert was held back" };
+      const appUrl = settings.notifications.appUrl ?? "";
+      const shown = rows.slice(-30);
+      const text = [
+        `${rows.length} more request${rows.length === 1 ? "" : "s"} and message${rows.length === 1 ? "" : "s"} came in this hour than the ${OWNER_ALERTS_PER_HOUR} alerts an hour this inbox sends. Each one is in your inbox; ${rows.length > shown.length ? `the last ${shown.length}` : rows.length === 1 ? "it is" : "they are"}:`,
+        "",
+        ...shown.map(
+          (r) => `- ${oneLine(String(r[1] ?? ""))}${appUrl && r[0] ? ` ${appUrl}/items/${String(r[0])}` : ""}`,
+        ),
+        "",
+        ...(appUrl ? [`Open: ${appUrl}`, ""] : []),
+        "So many at once can be a busy hour, or someone sending requests by the hundred. Nothing was lost.",
+      ].join("\n");
+      logged = await storeMail(
+        db,
+        {
+          itemId: null,
+          jobKey: job.id,
+          recipient: "owner",
+          template: "owner.digest",
+          lang: "en",
+          subject: oneLine(`${rows.length} more new request${rows.length === 1 ? "" : "s"} this hour`),
+          text,
+          ...(sender ? {} : { skip: "no_sender" as const }),
+        },
+        mailDomain(sender?.from.address, publicUrl),
+        now,
+      );
+    }
+    if (logged.status === "skipped") return { note: `not sent: ${logged.skipReason ?? "skipped"}` };
+    if (logged.status === "sent" || logged.status === "failed") return { note: `already ${logged.status}` };
+    const address = await ownerAddressOf(db, settings);
+    if (!address || !sender) {
+      await db.client.query({
+        sql: "UPDATE outbound_mail SET status = 'skipped', skip_reason = ?, updated_at = ? WHERE id = ?",
+        params: [address ? "no_sender" : "no_address", now, logged.id],
+        method: "run",
+      });
+      return { note: `not sent: ${address ? "no sender" : "no address"}` };
+    }
+    await sendLogged(
+      db,
+      mailOut,
+      logged,
+      {
+        ...sender,
+        to: [address],
+        subject: logged.subject,
+        text: logged.bodyText,
+        headers: autoHeaders({ automatic: true, template: logged.template }),
+      },
+      { final: job.attempts >= job.maxAttempts, now },
+    );
+    return { note: "digest sent to the owner" };
   };
 }
 

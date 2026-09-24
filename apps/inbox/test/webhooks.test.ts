@@ -252,8 +252,9 @@ describe("webhook routes", () => {
 });
 
 describe("webhook MCP tools", () => {
-  it("exposes the integration tools on the owner server and creates an endpoint through them", async () => {
-    const { app, ownerKey } = await setup();
+  it("exposes the integration tools on the owner server, and leaves adding or re-pointing an endpoint to the owner", async () => {
+    const { app, db, ownerKey } = await setup();
+    const owner = { authorization: `Bearer ${ownerKey}` };
     const client = await connectOwner(app, ownerKey);
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names).toEqual(
@@ -271,30 +272,58 @@ describe("webhook MCP tools", () => {
       ]),
     );
 
-    const created = await client.callTool({
+    // The owner's AI, even holding the owner's own key, cannot add an endpoint: a customer's
+    // message could have asked it to. It is told to ask the owner, and nothing is stored.
+    const asked = await client.callTool({
       name: "create_webhook",
       arguments: { url: "https://hooks.example.com/inbox", events: ["booking.*"] },
     });
-    expect(created.isError, JSON.stringify(created.content)).toBeFalsy();
-    const hook = created.structuredContent as { id: string; secret: string };
+    expect(asked.isError).toBe(true);
+    const said = (asked.content as { text: string }[])[0]?.text ?? "";
+    expect(said).toContain("Only the owner can add a webhook endpoint");
+    expect(said).toContain("Settings → Integrations");
+    expect((asked.structuredContent as { error: { details: unknown } }).error.details).toMatchObject({
+      reason: "owner_in_person",
+      ask_owner: true,
+    });
+    expect(await db.orm.select().from(schema.webhooks)).toHaveLength(0);
+
+    // The owner adds it in person; the secret is in that answer and no other.
+    const made = await app.request(
+      post("/v1/owner/webhooks", { url: "https://hooks.example.com/inbox", events: ["booking.*"] }, owner),
+    );
+    expect(made.status).toBe(201);
+    const hook = (await made.json()) as { id: string; secret: string };
     expect(hook.secret.startsWith("whsec_")).toBe(true);
-    const text = (created.content as { text: string }[])[0]?.text ?? "";
-    expect(text).toContain(hook.secret);
-    expect(text).toMatch(/shown once/i);
 
     const listed = await client.callTool({ name: "list_webhooks", arguments: {} });
     expect(JSON.stringify(listed)).not.toContain("whsec_");
+    expect(JSON.stringify(listed)).toContain(hook.id);
 
     const events = await client.callTool({ name: "list_events", arguments: { limit: 50 } });
     const page = events.structuredContent as { events: { id: string }[]; next_cursor: string };
     expect(page.events).toHaveLength(3);
     expect(page.next_cursor).toBe("01JD00000000000000000000A3");
 
-    const refused = await client.callTool({
-      name: "create_webhook",
-      arguments: { url: "https://10.0.0.5.nip.internal/hook" },
-    });
-    expect(refused.isError).toBe(true);
+    // The AI may pause it, and nothing else: not re-point it, wake it, rotate or remove it.
+    const paused = await client.callTool({ name: "update_webhook", arguments: { webhook_id: hook.id, active: false } });
+    expect(paused.isError, JSON.stringify(paused.content)).toBeFalsy();
+    for (const [name, args] of [
+      ["update_webhook", { webhook_id: hook.id, url: "https://evil.example/hook" }],
+      ["update_webhook", { webhook_id: hook.id, active: true }],
+      ["update_webhook", { webhook_id: hook.id, active: false, payload_style: "full" }],
+      ["rotate_webhook_secret", { webhook_id: hook.id }],
+      ["delete_webhook", { webhook_id: hook.id }],
+    ] as const) {
+      const r = await client.callTool({ name, arguments: args });
+      expect(r.isError, `${name} ${JSON.stringify(args)}`).toBe(true);
+    }
+    const [row] = await db.orm.select().from(schema.webhooks);
+    expect(row).toMatchObject({ url: "https://hooks.example.com/inbox", active: 0, payloadStyle: "thin" });
+
+    // A private address is refused to the owner as well.
+    const local = await app.request(post("/v1/owner/webhooks", { url: "https://10.0.0.5.nip.internal/hook" }, owner));
+    expect(local.status).toBe(422);
   });
 
   it("keeps the public MCP server free of every one of them", async () => {
@@ -313,7 +342,7 @@ describe("webhook MCP tools", () => {
 
 /**
  * The whole of ADR-015 step two in one pass, through the real doors and nothing stubbed but the
- * receiver's socket: the owner adds an endpoint with an MCP tool, a customer's agent books over
+ * receiver's socket: the owner adds an endpoint over REST, a customer's agent books over
  * the public REST door, the owner confirms it, the job runner drains — and a server on the other
  * side of the internet gets two signed POSTs it can verify with the MIT helper we publish, while a
  * poller of `GET /v1/owner/events` sees exactly the same events under exactly the same ids.
@@ -361,14 +390,12 @@ describe("end to end: from a booking to a signed request on someone else's serve
     });
     const app = inbox.app;
 
-    // 1. The owner's AI adds the endpoint through the owner MCP server.
-    const client = await connectOwner(app, ownerKey);
-    const created = await client.callTool({
-      name: "create_webhook",
-      arguments: { url: RECEIVER, events: ["booking.*"], payload_style: "thin" },
-    });
-    expect(created.isError, JSON.stringify(created.content)).toBeFalsy();
-    const endpoint = created.structuredContent as { id: string; secret: string };
+    // 1. The owner adds the endpoint, in person (their AI may not: core access/outbound.ts).
+    const created = await app.request(
+      post("/v1/owner/webhooks", { url: RECEIVER, events: ["booking.*"], payload_style: "thin" }, auth),
+    );
+    expect(created.status, await created.clone().text()).toBe(201);
+    const endpoint = (await created.json()) as { id: string; secret: string };
 
     // The REST door sees the same endpoint, and never the secret.
     const listed = await app.request("https://inbox.example.com/v1/owner/webhooks", { headers: auth });

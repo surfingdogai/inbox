@@ -23,9 +23,10 @@ export type MailStatus = "queued" | "sent" | "retrying" | "failed" | "skipped";
 /**
  * `no_address`: the customer gave none; `no_sender`: nothing to send from; `no_service`: the instance
  * has no mail service, and its log took the email instead; `test_item`: a test item; `ack_limit`: the
- * address already had its acknowledgements for the day (`ACKS_PER_ADDRESS_PER_DAY`).
+ * address already had its acknowledgements for the day (`ACKS_PER_ADDRESS_PER_DAY`); `alert_limit`:
+ * the owner already had the hour's alerts, and this one is in the hour's digest (`OWNER_ALERTS_PER_HOUR`).
  */
-export type SkipReason = "no_address" | "no_sender" | "no_service" | "test_item" | "ack_limit";
+export type SkipReason = "no_address" | "no_sender" | "no_service" | "test_item" | "ack_limit" | "alert_limit";
 
 export interface MailRow {
   readonly id: string;

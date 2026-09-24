@@ -203,7 +203,11 @@ describe("the owner's doors to one customer", () => {
     expect((exported.structuredContent as { customer: { items: number } }).customer.items).toBe(1);
     const stopped = await client.callTool({ name: "stop_customer_networks", arguments: { party_id: party } });
     expect(stopped.isError).toBeFalsy();
-    expect(JSON.stringify(stopped.content)).toContain("Booking networks are off for Rita");
+    // The customer's name is their own words: quoted in the untrusted block, never in the sentence.
+    const said = (stopped.content as { text: string }[])[0]?.text ?? "";
+    expect(said).toContain("Booking networks are off for this customer (name below)");
+    expect(said.split("\n\n<<<UNTRUSTED")[0]).not.toContain("Rita");
+    expect(said).toMatch(/<<<UNTRUSTED [0-9a-f]{12}>>>[\s\S]*\| Rita/);
   });
 
   it("says in Settings when email does not go out", async () => {

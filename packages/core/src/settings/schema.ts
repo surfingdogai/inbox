@@ -200,22 +200,36 @@ const sections = {
     })
     .prefault({}),
   /**
-   * Who may do what with keys and scopes. Only the owner in person — signed in to the owner app, or
-   * with a full owner key — can change this section; the owner's AI and integration keys cannot.
+   * Who may do what with keys and scopes, and where security reports go. Only the owner in person —
+   * signed in to the owner app, or with a full owner key — can change this section; the owner's AI
+   * and integration keys cannot.
    */
   security: z
     .object({
+      /**
+       * Retired: the owner's AI no longer creates or revokes keys, whatever this says (a customer's
+       * message could talk it into handing one out). Kept so a stored document still reads.
+       */
       aiMayCreateKeys: z
         .boolean()
         .default(false)
-        .describe(
-          "Let the owner's AI create and revoke integration keys itself. Every key is named, scoped, listed in Settings → Keys and revocable in one click.",
-        ),
+        .describe("Retired: the owner's AI cannot create or revoke keys, whatever this says."),
       enforceScopes: z
         .boolean()
         .default(false)
         .describe(
           "Refuse a call outside the scopes of the key or AI app that makes it. Off, such a call goes through and is recorded under Settings → Keys; a later release turns this on for everyone.",
+        ),
+      /**
+       * Where someone who finds a security problem in this inbox reports it, as
+       * `/.well-known/security.txt` says (RFC 9116): an email address or an https URL. Empty, it is
+       * hello@ at this inbox's own host.
+       */
+      contact: z
+        .union([z.email(), z.url({ protocol: /^https$/ })])
+        .optional()
+        .describe(
+          "Where security problems are reported: an email address or an https URL, published in /.well-known/security.txt. Empty: hello@ this inbox's host.",
         ),
     })
     .prefault({}),

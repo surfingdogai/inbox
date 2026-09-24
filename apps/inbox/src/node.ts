@@ -22,6 +22,7 @@ import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
@@ -139,6 +140,10 @@ const loop = setInterval(() => {
 loop.unref();
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0" }, (info) => {
-  console.log(`Surfing Dog Inbox listening on http://${info.address}:${info.port} (database ${file})`);
-});
+// Timeouts a client that trickles its request cannot outlast (node-server.ts).
+serve(
+  { fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0", serverOptions: NODE_SERVER_OPTIONS },
+  (info) => {
+    console.log(`Surfing Dog Inbox listening on http://${info.address}:${info.port} (database ${file})`);
+  },
+);

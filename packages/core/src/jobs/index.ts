@@ -5,7 +5,7 @@ import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
-import { type NotifyPayload, notifyHandler } from "./notify";
+import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
 import { JobRunner } from "./runner";
 import { ensureJob } from "./schedule";
 
@@ -36,6 +36,8 @@ export function createRunner(deps: {
           secrets: deps.secrets ?? null,
         }),
       )
+      // Owner alerts past the hour's cap, in one email at the end of the hour.
+      .register(OWNER_DIGEST_KIND, ownerDigestHandler(deps.mailOut, deps.baseUrl ? { baseUrl: deps.baseUrl } : {}))
       .register("rules", async (job, { db, now }) => {
         const p = job.payload as { itemId: string; eventId: string; trigger: string };
         const r = await runRulesForEvent(db, { ...p, now });

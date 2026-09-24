@@ -39,7 +39,7 @@ import {
   VERSION,
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut } from "@surfingdog/platform";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import {
@@ -252,6 +252,17 @@ export function createInbox(deps: AppDeps): Inbox {
         : appHeaders(c, next),
   );
 
+  // Every route reads a bounded body, checked before anything reads or parses it: the declared
+  // length first, then the bytes as they stream, for a body sent without one. A megabyte is far
+  // above anything a booking, an order, a rule or the settings need; raw inbound email may be as
+  // large as Email Routing accepts.
+  const readsAny = bodyLimit({ maxSize: MAX_BODY, onError: (c) => tooLarge(c, MAX_BODY, "This inbox") });
+  const readsMail = bodyLimit({
+    maxSize: MAX_EMAIL_BODY,
+    onError: (c) => tooLarge(c, MAX_EMAIL_BODY, "Inbound email"),
+  });
+  app.use("*", (c, next) => (c.req.path === "/v1/email/inbound" ? readsMail(c, next) : readsAny(c, next)));
+
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {
     await ensureMigrated(deps.db.client, MIGRATIONS);
@@ -272,27 +283,30 @@ export function createInbox(deps: AppDeps): Inbox {
   // A demo reads small bodies only: nobody's AI books with a megabyte, and a stranger's megabytes
   // would sit in the database until the night.
   if (demo) {
-    app.use(
-      "*",
-      bodyLimit({
-        maxSize: DEMO_MAX_BODY,
-        onError: (c) =>
-          c.json(
-            {
-              type: "https://surfingdog.ai/problems/too_large",
-              title: "Too large",
-              status: 413,
-              code: "too_large",
-              detail: `This demo reads request bodies of up to ${DEMO_MAX_BODY / 1024} KB.`,
-            },
-            413,
-            { "Content-Type": "application/problem+json" },
-          ),
-      }),
-    );
+    app.use("*", bodyLimit({ maxSize: DEMO_MAX_BODY, onError: (c) => tooLarge(c, DEMO_MAX_BODY, "This demo") }));
   }
 
-  app.get("/healthz", (c) => c.json({ ok: true, version: VERSION }));
+  // Healthy means the database answers too, not only the process: a monitor that asks this learns
+  // of a database that went away, which a fixed answer never told it.
+  app.get("/healthz", async (c) => {
+    try {
+      await deps.db.client.query({ sql: "SELECT 1", params: [], method: "all" });
+      return c.json({ ok: true, version: VERSION, db: "ok" }, 200, { "Cache-Control": "no-store" });
+    } catch {
+      return c.json({ ok: false, version: VERSION, db: "unreachable" }, 503, { "Cache-Control": "no-store" });
+    }
+  });
+
+  // Where to report a security problem with this inbox (RFC 9116): the address the owner set in
+  // Settings (`security.contact`), else hello@ this inbox's own host. It expires in a year and is
+  // written afresh on every request, so it never goes stale.
+  app.get("/.well-known/security.txt", async (c) => {
+    const origin = publicOrigin(c.req.raw, deps.baseUrl);
+    const set = (await readSettings(deps.db)).security.contact;
+    return c.text(securityTxt({ origin, contact: set, now: deps.now ? deps.now() : Date.now() }), 200, {
+      "Cache-Control": "public, max-age=86400",
+    });
+  });
 
   app.get(MANIFEST_PATH, async (c) => {
     const origin = publicOrigin(c.req.raw, deps.baseUrl);
@@ -346,6 +360,49 @@ export function createInbox(deps: AppDeps): Inbox {
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
   return { app, runner, caps, prepare };
+}
+
+/** The largest request body any route reads, but raw inbound email's. */
+export const MAX_BODY = 1024 * 1024;
+/** Raw inbound email, as large as Email Routing accepts (and `POST /v1/email/inbound` checks). */
+export const MAX_EMAIL_BODY = 25 * 1024 * 1024;
+
+/** The 413 every body limit answers with, as a problem document. */
+function tooLarge(c: Context, max: number, who: string): Response {
+  const size = max >= 1024 * 1024 ? `${max / (1024 * 1024)} MB` : `${max / 1024} KB`;
+  return c.json(
+    {
+      type: "https://surfingdog.ai/problems/too_large",
+      title: "Too large",
+      status: 413,
+      code: "too_large",
+      detail: `${who} reads request bodies of up to ${size}.`,
+    },
+    413,
+    { "Content-Type": "application/problem+json" },
+  );
+}
+
+/**
+ * `/.well-known/security.txt` (RFC 9116): a contact — an email address becomes a `mailto:` — the
+ * canonical address of the file itself, and an expiry a year out, as the RFC asks.
+ */
+export function securityTxt(o: { origin: string; contact?: string | undefined; now: number }): string {
+  const host = new URL(o.origin).hostname;
+  const contact = o.contact
+    ? o.contact.startsWith("https://")
+      ? o.contact
+      : `mailto:${o.contact}`
+    : `mailto:hello@${host}`;
+  const expires = new Date(o.now + 365 * 86_400_000);
+  expires.setUTCHours(0, 0, 0, 0);
+  return [
+    `Contact: ${contact}`,
+    `Expires: ${expires.toISOString()}`,
+    "Preferred-Languages: en",
+    `Canonical: ${o.origin}/.well-known/security.txt`,
+    "",
+  ].join("\n");
 }
 
 /** The app alone, for tests and simple hosts. */

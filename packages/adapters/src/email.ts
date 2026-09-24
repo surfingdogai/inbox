@@ -1,6 +1,8 @@
 import { type Caller, type Capabilities, type Db, lookupForms, schema, ulid } from "@surfingdog/core";
+import { sha256Hex } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import PostalMime, { type Email } from "postal-mime";
+import { consume, EVERYONE } from "./limits";
 
 /**
  * The email door. Raw MIME comes from an Email Worker, a provider webhook or a forward; it is
@@ -25,6 +27,11 @@ export type IngestResult =
   | { readonly outcome: "noted"; readonly itemId: string }
   /** An automatic email that answers no item: not kept, never answered, never refused (a refusal would bounce). */
   | { readonly outcome: "dropped"; readonly reason: string }
+  /**
+   * Too many from this sender, or for the whole mailbox, right now: nothing kept. A temporary
+   * failure, so the sending server tries again later (`retryAfterSec`), never a bounce.
+   */
+  | { readonly outcome: "limited"; readonly reason: string; readonly retryAfterSec: number }
   | { readonly outcome: "rejected"; readonly reason: string };
 
 export const SUBJECT_TOKEN = /\[SDI-([0-9A-HJKMNP-TV-Z]{6,26})\]/i;
@@ -40,7 +47,28 @@ export async function ingestEmail(
   opts: { now?: (() => number) | undefined } = {},
 ): Promise<IngestResult> {
   const now = opts.now ?? (() => Date.now());
-  const parsed = await parseEmail(mail.raw);
+  // The sender's own bucket first, then one for the whole mailbox (limits.ts), both before the
+  // message is kept. In that order, a sender over its own limit — a mail loop, one script — takes
+  // nothing from the mailbox's: were it the other way round, its refused mail would still spend the
+  // mailbox's tokens, and one looping address would hold every customer's email back. A flood from
+  // addresses that change with every message is bounded by the mailbox's bucket all the same.
+  const envelope = mail.envelopeFrom?.trim().replace(/^<|>$/g, "").toLowerCase() || null;
+  if (envelope) {
+    const one = await consume(db, "emailSender", await senderBucket(envelope), now());
+    if (!one.allowed) return limitedMail(one.retryAfterSec);
+  }
+  let parsed: Email | null = null;
+  if (!envelope) {
+    // Without an envelope sender (a forward, some webhooks), the From is who is counted.
+    parsed = await parseEmail(mail.raw);
+    const sender = parsed.from?.address?.toLowerCase();
+    if (!sender) return { outcome: "rejected", reason: "no sender" };
+    const one = await consume(db, "emailSender", await senderBucket(sender), now());
+    if (!one.allowed) return limitedMail(one.retryAfterSec);
+  }
+  const everyone = await consume(db, "email", EVERYONE, now());
+  if (!everyone.allowed) return limitedMail(everyone.retryAfterSec);
+  parsed ??= await parseEmail(mail.raw);
   const from = parsed.from?.address?.toLowerCase();
   if (!from) return { outcome: "rejected", reason: "no sender" };
   const messageId = parsed.messageId?.trim() || null;
@@ -51,7 +79,7 @@ export async function ingestEmail(
       .where(eq(schema.threadEntries.messageId, messageId));
     if (dup) return { outcome: "duplicate", itemId: dup.itemId };
   }
-  const text = stripQuotedReply(parsed.text ?? htmlToText(parsed.html ?? "")).trim() || "(empty message)";
+  const text = cut(stripQuotedReply(parsed.text ?? htmlToText(parsed.html ?? "")).trim() || "(empty message)");
   const subject = (parsed.subject ?? "").trim();
 
   // An item whose customer was erased is answered by nothing: a reply to it starts afresh (a new
@@ -199,6 +227,35 @@ async function erasedItem(db: Db, itemId: string): Promise<boolean> {
     method: "all",
   });
   return rows.length > 0;
+}
+
+/**
+ * The bucket a sender is counted under: a hash of the address, never the address, so the limits
+ * table holds nobody's email (an erased customer's included) for the day a bucket lives.
+ */
+async function senderBucket(address: string): Promise<string> {
+  return `h:${(await sha256Hex(new TextEncoder().encode(address.slice(0, 320)))).slice(0, 32)}`;
+}
+
+function limitedMail(retryAfterSec: number): IngestResult {
+  console.info("email: too many emails right now; answered with a temporary failure");
+  return {
+    outcome: "limited",
+    reason: "too many emails right now; try again later",
+    retryAfterSec: Math.max(1, Math.ceil(retryAfterSec)),
+  };
+}
+
+/**
+ * A message's text as an item holds it: at most 20,000 characters (the schema's bound), the rest
+ * cut with a line that says so. A longer email is still a request someone made; refusing it would
+ * only have the sending server retry it for days.
+ */
+const MAX_TEXT = 20_000;
+function cut(text: string): string {
+  if (text.length <= MAX_TEXT) return text;
+  const note = "\n\n[The rest of this email was cut: it was too long to keep.]";
+  return `${text.slice(0, MAX_TEXT - note.length)}${note}`;
 }
 
 /** What heads an automatic email kept on its item, for the owner reading it. */

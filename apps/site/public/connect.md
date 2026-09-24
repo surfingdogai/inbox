@@ -11,10 +11,15 @@ until they answer.
 **Before you start.** You need the owner MCP at `https://<inbox>/mcp/owner`. If you are not
 connected, do Step 4 of https://surfingdog.ai/install.md first. Call `get_profile` to check. This
 work uses the scopes `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`,
-`availability:write`, `settings:read`, `setup:run`, `integrations:write`, and `keys:write` if you
-will make keys. If the person's client lets them choose scopes when they connect, they grant these.
-If the owner has switched on refusing calls outside scopes and a call is refused, they reconnect
-with these scopes.
+`availability:write`, `settings:read`, `setup:run` and `integrations:write`. If the person's client
+lets them choose scopes when they connect, they grant these. If the owner has switched on refusing
+calls outside scopes and a call is refused, they reconnect with these scopes.
+
+**What only the person does.** Making or revoking a key, adding or changing a webhook endpoint, and
+changing where alerts and emails go are done by the person, in the owner app. The inbox refuses
+them from you whatever your scopes: customers' messages reach you, and one could ask you to send the
+business's data somewhere. So you give the person the exact values and they paste them in. You can
+still list endpoints, test them, replay what they missed, and pause one.
 
 Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
 
@@ -52,11 +57,10 @@ work around it in a way that pretends it exists.
 
 ## Rules for you
 
-1. **One key per system.** Zapier gets a key, the shop gets another. Make it with
-   `create_api_key`. That works only after the owner switched on **Let my AI create keys** in
-   Settings → Keys. If it is off, ask them to switch it on, or to make the key there themselves.
-   The key is shown once: paste it straight into the other system, or give it to the person. Never
-   put the owner's own key, or your own sign-in, into another product.
+1. **One key per system.** Zapier gets a key, the shop gets another. The person makes it in
+   Settings → Keys → New key: tell them the name and the preset. The key is shown to them once, and
+   they paste it straight into the other system. Never put the owner's own key, or your own
+   sign-in, into another product.
 2. **The narrowest preset that works.**
 
    | Preset | Scopes | For |
@@ -93,19 +97,22 @@ work around it in a way that pretends it exists.
 
 ### A. Inbox → their software: a webhook
 
+The person adds the endpoint in Settings → Integrations → Where events go: the URL, the events
+(say `booking.confirm` and `booking.cancel`) and thin payloads. Then you check it:
+
 ```
-create_webhook {"url": "https://hooks.zapier.com/hooks/catch/…", "events": ["booking.confirm", "booking.cancel"], "payload_style": "thin"}
+list_webhooks {}
 send_test_event {"webhook_id": "…"}
 list_webhook_deliveries {"webhook_id": "…"}
 ```
 
-- The answer to `create_webhook` holds the signing secret, once. Code can check it with
+- The person sees the signing secret once, when they add the endpoint. Code can check it with
   `verifyWebhook` from `@surfingdog/sdk`, or any Standard Webhooks library. No-code tools cannot.
   For those, the receiver reads the item back with its key, so a forged call can only make it read
   real data.
-- For a receiver that checks a header instead (n8n Header Auth, Pipedream), add
-  `"headers": {"Authorization": "Bearer <a long random string>"}`. Up to five, sealed, never shown
-  again.
+- For a receiver that checks a header instead (n8n Header Auth, Pipedream), the person adds it with
+  the endpoint, such as `Authorization: Bearer <a long random string>`. Up to five, sealed, never
+  shown again.
 - `send_test_event` should answer `Delivered: HTTP 2xx`. Its type is `inbox.test`, and no item
   exists behind it. Receivers should skip it.
 - Event types are `<item type>.<event>`: `booking.create`, `booking.confirm`,
@@ -235,15 +242,14 @@ yourself.
 
 **Steps.**
 
-1. You: `create_api_key {"name": "Zapier", "preset": "automation"}`. Keep the key's `id`: it is the
-   `data.actor.id` of this flow's own writes.
+1. Person, in Settings → Keys: a new key named `Zapier` with the `automation` preset. Read its `id`
+   with `list_api_keys`: it is the `data.actor.id` of this flow's own writes.
 2. Person, in the tool: make the trigger and give you its URL.
    - Zapier: Webhooks by Zapier → Catch Hook.
    - Make: Webhooks → Custom webhook.
    - n8n: a Webhook node with Authentication set to Header Auth. Use its Production URL.
-3. You: `create_webhook {"url": "<that URL>", "events": ["booking.confirm"], "payload_style":
-   "thin"}`. For n8n, add `"headers": {"<header name>": "<header value>"}` with the same pair as the
-   n8n credential.
+3. Person, in Settings → Integrations: add that URL for `booking.confirm`, with thin payloads. For
+   n8n, they add a header with the same name and value as the n8n credential.
 4. You: `send_test_event {"webhook_id": "…"}`. The tool now has a sample of the event's shape. No
    item is behind it, so test the next step with a sandbox message (see Test, below).
 5. Person or you: add a step that reads the item. A GET on `data.url` with
@@ -270,8 +276,8 @@ curl -s -X POST https://<inbox>/v1/messages -H 'x-sandbox: 1' -H 'content-type: 
   -d '{"body": "Test for the new Zap", "contact": {"name": "Test", "email": "test@example.com"}}'
 ```
 
-If the flow listens to other events, add `message.create` for the test with `update_webhook` (send
-the whole `events` list), and take it out afterwards. Sandbox items still send the owner the usual
+If the flow listens to other events, ask the person to add `message.create` to the endpoint for the
+test in Settings → Integrations, and to take it out afterwards. Sandbox items still send the owner the usual
 email, so tell the person a test is coming. For the way back, have the flow fire `close` on that
 message. `get_item` should then show it closed, by the key's name.
 
@@ -283,8 +289,9 @@ message. `get_item` should then show it closed, by the key's name.
   polls instead: a Schedule Trigger calling `GET /v1/owner/events` (block C).
 - No-code tools cannot check the signature. Keep thin events and read the item back with the key.
 
-**Undo.** `delete_webhook {"webhook_id": "…"}`. `revoke_api_key {"key_id": "…"}` for a key you
-made; the person revokes their own keys in Settings → Keys. Turn off the Zap, scenario or workflow.
+**Undo.** Pause the endpoint at once with `update_webhook {"webhook_id": "…", "active": false}`; the
+person removes it in Settings → Integrations and revokes the key in Settings → Keys. Turn off the
+Zap, scenario or workflow.
 
 **Docs.** Zapier [Catch Hook](https://help.zapier.com/hc/en-us/articles/8496288690317-Trigger-Zaps-from-webhooks),
 [Custom Request](https://help.zapier.com/hc/en-us/articles/8496326446989-Send-webhooks-in-Zaps),
@@ -354,7 +361,8 @@ The goal: every customer and request in the inbox lands in the CRM exactly once.
 **Test.** A sandbox message from `test@example.com` (recipe 1). Check the CRM has one contact, then
 send a second sandbox message from the same address and check it still has one.
 
-**Undo.** `delete_webhook`, `revoke_api_key`, and the bridge's flow off. Remove test contacts by hand.
+**Undo.** Pause the endpoint (`update_webhook` with `active: false`); the person removes it and
+revokes the key in the owner app. Turn the bridge's flow off. Remove test contacts by hand.
 
 **Docs.** MCP servers: [HubSpot](https://developers.hubspot.com/changelog/remote-hubspot-mcp-server-is-now-generally-available),
 [Pipedrive](https://www.pipedrive.com/en/newsroom/pipedrive-launches-native-mcp-server-bringing-crm-workflows-directly-into-ai-assistants),
@@ -433,9 +441,10 @@ decides whether a slot is free.
 **Inbox bookings into the calendar the other tools check.** Works today, instantly, through a bridge.
 
 1. Key: `automation`, since the flow only reads bookings. Bridge: recipe 1.
-2. `create_webhook {"url": "…", "events": ["booking.confirm", "booking.accept", "booking.cancel",
-   "booking.cancel_late", "booking.cancel_by_business"], "payload_style": "thin"}`. `accept` is the
-   customer taking a time the business proposed, so it confirms the booking too.
+2. Person, in Settings → Integrations: an endpoint for the flow's URL with the events
+   `booking.confirm`, `booking.accept`, `booking.cancel`, `booking.cancel_late` and
+   `booking.cancel_by_business`, and thin payloads. `accept` is the customer taking a time the
+   business proposed, so it confirms the booking too.
 3. The flow reads the item. On `confirm` or `accept`, it creates a calendar event from
    `item.payload.startTime` to `item.payload.endTime`, with the inbox item id in the description. On any
    cancel, it finds the event by that id and deletes it.
@@ -470,7 +479,8 @@ The owner still gets the usual email. Confirm it with
 **Limits.** Keep the diary rule. If two systems both take bookings for the same person or room on
 their own, one of them will double-book.
 
-**Undo.** `delete_webhook`, `revoke_api_key`, and switch the rule back on if you switched it off.
+**Undo.** Pause the endpoint (`update_webhook` with `active: false`); the person removes it and
+revokes the key in the owner app. Switch the rule back on if you switched it off.
 
 **Docs.** Google Calendar [events](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert),
 Outlook [events](https://learn.microsoft.com/en-us/graph/api/user-post-events?view=graph-rest-1.0).
