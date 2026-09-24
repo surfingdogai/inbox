@@ -648,7 +648,7 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       tags: ["owner"],
       summary: "The networks this inbox reports to, and how each one is doing",
       description:
-        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin; the owner's AI and integration keys may add or switch one off, not switch one on.",
+        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin; the owner's AI and integration keys may switch one off or share less with it, not switch one on, let it issue keys or share more.",
       responses: json("Networks", R.looseSchema),
     }),
     async (c) => c.json(await caps.getNetworks(c.get("caller"))),
@@ -1155,7 +1155,7 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       summary:
         "Create an integration key: named, scoped, revocable. The key is in this response and in no other: store it now.",
       description:
-        "Give a preset (automation, shop_sync, calendar_sync, read_only) or scopes, or both. The owner's AI may create a key only once the owner has switched on security.aiMayCreateKeys in the owner app, and never one with settings:write; an integration key cannot create keys.",
+        "Give a preset (automation, shop_sync, calendar_sync, read_only) or scopes, or both. Only the owner in person creates keys: the owner's AI (over OAuth or the owner MCP) and integration keys get 403 not_allowed.",
       responses: json("The key, shown once", R.createdKeySchema, 201),
       write: true,
     }),

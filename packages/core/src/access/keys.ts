@@ -6,12 +6,12 @@ import { apiKeys, scopeRefusals } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, isOwnerInPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
+import { ownerOnlyError } from "./outbound";
 import {
   type CreateApiKeyInput,
   holdsScope,
   KEY_PRESETS,
   KEY_SCOPES,
-  OWNER_ONLY_KEY_SCOPES,
   type RevokeApiKeyInput,
   SCOPES,
   type Scope,
@@ -206,19 +206,19 @@ export class AccessCapabilities {
       ai_clients: aiClients,
       scopes: Object.entries(SCOPES).map(([scope, label]) => ({ scope, label })),
       presets: KEY_PRESETS,
-      security: { ai_may_create_keys: security.aiMayCreateKeys, enforce_scopes: security.enforceScopes },
+      // The owner's AI never manages keys any more (`assertMayManageKeys`), whatever is stored.
+      security: { ai_may_create_keys: false, enforce_scopes: security.enforceScopes },
     };
   }
 
   /**
-   * A new integration key, shown once. The owner in person may always mint one; their AI only once
-   * the owner has switched `security.aiMayCreateKeys` on, and never one with `settings:write`; an
-   * integration key never mints keys. The caller has to hold each scope it hands out — recorded,
-   * and refused when scopes are enforced, like every other scope.
+   * A new integration key, shown once. Only the owner in person mints one: never their AI, and never
+   * an integration key. The caller has to hold each scope it hands out — recorded, and refused when
+   * scopes are enforced, like every other scope.
    */
   async createKey(caller: Caller, input: CreateApiKeyInput): Promise<CreatedKey> {
     requireBusiness(caller);
-    const ai = await this.assertMayManageKeys(caller, "create");
+    this.assertMayManageKeys(caller, "create");
     const now = nowOf(caller);
     const preset = input.preset ? KEY_PRESETS.find((p) => p.key === input.preset) : undefined;
     const scopes = [...new Set<Scope>([...(preset?.scopes ?? []), ...(input.scopes ?? [])])].sort(
@@ -227,12 +227,6 @@ export class AccessCapabilities {
     if (scopes.length === 0) {
       throw new WriteError("invalid_input", "give the key a preset or at least one scope", {
         fields: [{ path: "scopes", problem: "missing", message: `pick from ${KEY_SCOPES.join(", ")}` }],
-      });
-    }
-    const ownerOnly = scopes.filter((s) => OWNER_ONLY_KEY_SCOPES.includes(s));
-    if (ai && ownerOnly.length) {
-      throw new WriteError("not_allowed", `only the owner can create a key with ${ownerOnly.join(", ")}`, {
-        fields: [{ path: "scopes", problem: "invalid", message: `leave out ${ownerOnly.join(", ")}` }],
       });
     }
     let expiresAt: number | null = null;
@@ -245,35 +239,27 @@ export class AccessCapabilities {
       }
     }
     for (const scope of scopes) await this.requireScope(caller, [scope], `create_api_key:${scope}`);
-    const createdBy = ai ? `owner_ai:${caller.principal?.name ?? caller.actor.id}` : "owner";
     const { id, key } = await mintApiKey(this.db, {
       kind: "integration",
       name: input.name,
       scopes,
       userId: caller.principal?.userId ?? null,
       expiresAt,
-      createdBy,
+      createdBy: "owner",
       now,
     });
     return { ...(await this.view(id, now)), key, key_note: KEY_NOTE };
   }
 
   /**
-   * Revoked at once, for good. The owner's AI may revoke only keys an AI made, and only with leave:
-   * the owner's own keys — the command-line key and every key the owner made in Settings → Keys —
-   * are the owner's to revoke, so an AI talked into it cannot cut off the owner's integrations.
+   * Revoked at once, for good, by the owner in person. (Keys an AI made before the owner's AI lost
+   * the right to manage keys stay listed with `created_by: owner_ai:…`, for the owner to revoke.)
    */
   async revokeKey(caller: Caller, input: RevokeApiKeyInput): Promise<KeyView> {
     requireBusiness(caller);
-    const ai = await this.assertMayManageKeys(caller, "revoke");
+    this.assertMayManageKeys(caller, "revoke");
     const now = nowOf(caller);
     const row = await this.row(input.key_id);
-    if (ai && !(row.kind === "integration" && row.createdBy?.startsWith("owner_ai:"))) {
-      throw new WriteError(
-        "not_allowed",
-        "only the owner can revoke a key the owner made, in Settings → Keys; the AI may revoke only keys an AI made",
-      );
-    }
     await this.db.client.query({
       sql: "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
       params: [now, row.id],
@@ -282,8 +268,14 @@ export class AccessCapabilities {
     return this.view(row.id, now);
   }
 
-  /** Whether a caller is the owner's AI (true) or the owner (false); throws for anyone else. */
-  private async assertMayManageKeys(caller: Caller, what: "create" | "revoke"): Promise<boolean> {
+  /**
+   * Keys are the owner's alone (`outbound.ts`): a key is standing access to every customer, and an
+   * AI that reads customers' messages can be talked into minting one and handing it on. So the
+   * owner's AI never creates or revokes one — over OAuth, or through the owner's MCP whatever it
+   * signed in with — and `security.aiMayCreateKeys` no longer lets it (it is kept only so that a
+   * stored document still reads); an integration key never manages keys either.
+   */
+  private assertMayManageKeys(caller: Caller, what: "create" | "revoke"): void {
     if (caller.actor.kind === "integration" || caller.principal?.keyKind === "integration") {
       throw new WriteError(
         "not_allowed",
@@ -291,15 +283,9 @@ export class AccessCapabilities {
       );
     }
     // Everything that comes through the owner MCP is an AI working for the owner, whatever it signed in with.
-    const ai = !isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner";
-    if (ai && !(await readSettings(this.db)).security.aiMayCreateKeys) {
-      throw new WriteError(
-        "not_allowed",
-        `The owner has not let their AI ${what} keys. Ask them to switch on "Let my AI create keys" in Settings → Keys, or to ${what} the key there themselves.`,
-        { details: { setting: "security.aiMayCreateKeys" } },
-      );
+    if (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner") {
+      throw ownerOnlyError(`${what} a key`, "Settings → Keys");
     }
-    return ai;
   }
 
   private async row(id: string): Promise<KeyRow> {

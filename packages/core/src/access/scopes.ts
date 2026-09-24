@@ -38,12 +38,6 @@ export const KEY_SCOPES = SCOPE_NAMES.filter((s) => s !== "keys:write" && s !== 
 ];
 
 /**
- * Scopes a key minted by the owner's AI may not carry: only the owner hands out a settings key, or
- * one that can erase a customer.
- */
-export const OWNER_ONLY_KEY_SCOPES: readonly Scope[] = ["settings:write", "customers:erase"];
-
-/**
  * Scopes an AI app cannot be granted by OAuth: erasing a customer is never the owner's AI's to do
  * (Tiago, 23 September 2026), so it is not offered to one.
  */
@@ -104,7 +98,7 @@ export const createApiKeyInput = z.object({
     .array(z.enum(KEY_SCOPES))
     .max(KEY_SCOPES.length)
     .optional()
-    .describe("The scopes, as narrow as the system needs. Never keys:write; settings:write only from the owner."),
+    .describe("The scopes, as narrow as the system needs. Never keys:write."),
   expires_at: isoDateTime.optional().describe("When the key stops working. Omit for a key that works until revoked."),
 });
 

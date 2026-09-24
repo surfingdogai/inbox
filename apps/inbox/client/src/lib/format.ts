@@ -519,6 +519,7 @@ export function deliveryWord(
 
 const SKIP_WORDS: Record<string, string> = {
   ack_limit: "this address already had 3 of these today",
+  alert_limit: "more than 20 alerts this hour; it is in the hour's digest instead",
   no_address: "no email address",
   no_sender: "no address to send from (Settings, Send from)",
   no_service: "this inbox has no mail service set up",

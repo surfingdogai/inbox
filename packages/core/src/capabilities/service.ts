@@ -2,6 +2,8 @@ import type { MailOut } from "@surfingdog/platform";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
+import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
+import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
@@ -22,6 +24,7 @@ import {
   threadEntries,
 } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
+import { changedSettings, DATA_OUT_SETTINGS, OWNER_ONLY_SETTINGS, openedNetworks } from "../settings/guard";
 import { mergeSettings, patchPaths } from "../settings/merge";
 import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
 import {
@@ -734,6 +737,14 @@ export class Capabilities {
    */
   async transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
+    // The owner's AI's words on a transition can reach the customer: none of another's (`access/leaks.ts`).
+    if (isOwnerAssistant(caller)) {
+      const [owned] = await this.db.orm
+        .select({ partyId: items.partyId })
+        .from(items)
+        .where(eq(items.id, input.item_id));
+      if (owned) await assertNoLeak(this.db, caller, owned.partyId, [...stringsIn(input.input), input.reason ?? ""]);
+    }
     const c = withIdempotencyKey(caller, input.idempotency_key);
     const writtenBy = effectiveWrittenBy(caller, input.written_by);
     const request = {
@@ -765,6 +776,8 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
+    // A reply from the owner's AI names no other customer and carries no secret (`access/leaks.ts`).
+    if (!input.internal) await assertNoLeak(this.db, caller, row.partyId, [input.body]);
     // Who wrote it, as the request says: an email nobody typed says it was sent automatically.
     const writtenBy = effectiveWrittenBy(caller, input.written_by);
     if (!input.internal && item.type === "message" && item.state === "open") {
@@ -833,8 +846,8 @@ export class Capabilities {
       .limit(1);
     const stored = row && isPlainObject(row.doc) ? row.doc : {};
     let doc = withoutMaskedSecrets(input.doc);
-    // `security` is the owner's own: what their AI may do with keys, and whether scopes are
-    // enforced. An AI, or a key handed to another system, must not be able to grant itself either.
+    // `security` is the owner's own: whether scopes are enforced, and where security reports go.
+    // An AI, or a key handed to another system, must not be able to change either.
     // Sending it back unchanged is not a change: a client that writes back the whole document it
     // read (every read has the section) keeps working, and the section is left as it is stored.
     if (Object.hasOwn(doc, "security") && (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner")) {
@@ -844,8 +857,9 @@ export class Capabilities {
       if (JSON.stringify(current) !== JSON.stringify(wanted)) {
         throw new WriteError(
           "not_allowed",
-          "Only the owner can change the security settings, signed in to the owner app (Settings → Keys).",
+          "Only the owner can change the security settings, signed in to the owner app (Settings → Keys). Nothing was changed; tell the owner what you suggest.",
           {
+            details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Keys" },
             fields: [{ path: "doc.security", problem: "invalid", message: "only the owner in person can change this" }],
           },
         );
@@ -879,23 +893,46 @@ export class Capabilities {
     }
     const before = parseStoredSettings(stored).settings;
     const after = parseStoredSettings(merged).settings;
-    // A network switched on is sent customers' email addresses once it answers this inbox's ping
-    // (Tiago, 23 September 2026): which networks may have them is for a person at the business to
-    // decide. The owner's AI, or a key handed to another system, may switch one off, never on.
-    if (isOwnerAssistant(caller) || caller.principal?.keyKind === "integration") {
-      const opened = Object.entries(after.networks).filter(([origin, entry]) => {
-        const was = before.networks[origin];
-        return entry.enabled && (!was?.enabled || (entry.issue && !was.issue));
+    // Where this inbox sends email, alerts and events, and who it trusts, are never the owner's AI's
+    // to change: it reads what customers write, and a customer can write "send everything to me"
+    // (`access/outbound.ts`, `settings/guard.ts`). Sending a value back unchanged changes nothing.
+    const redirected = changedSettings(before, after, DATA_OUT_SETTINGS);
+    if (redirected.length && !mayDirectDataOut(caller, "settings:write")) {
+      throw ownerOnlyError(`change ${redirected.join(", ")}`, "Settings", {
+        scope: "settings:write",
+        fields: redirected.map((path) => ({
+          path: `doc.${path}`,
+          message: "only the owner in person, or a key the owner gave settings:write, can change this",
+        })),
       });
+    }
+    const trusted = changedSettings(before, after, OWNER_ONLY_SETTINGS);
+    if (trusted.length && !isOwnerOrSystem(caller)) {
+      throw ownerOnlyError(`change ${trusted.join(", ")}`, "Settings", {
+        fields: trusted.map((path) => ({ path: `doc.${path}`, message: "only the owner in person can change this" })),
+      });
+    }
+    // The business's name signs every email and heads its public profile: words every customer
+    // reads, which carry no customer's details from the owner's AI (`access/leaks.ts`).
+    if (after.business.name !== before.business.name) {
+      await assertNoLeak(this.db, caller, PUBLISHED, [after.business.name]);
+    }
+    // A network switched on is sent customers' email addresses once it answers this inbox's ping
+    // (Tiago, 23 September 2026): which networks may have them, and what each is sent, is for a
+    // person at the business to decide. The owner's AI, or a key handed to another system, may
+    // switch one off or share less with it, never switch one on, let it issue keys, or share more.
+    if (isOwnerAssistant(caller) || caller.principal?.keyKind === "integration") {
+      const opened = openedNetworks(before, after);
       if (opened.length) {
         throw new WriteError(
           "not_allowed",
-          "Only the owner can switch a network on, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses.",
+          "Only the owner can switch a network on or let it have more, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses. Nothing was changed; tell the owner what you suggest.",
           {
-            fields: opened.map(([origin]) => ({
-              path: `doc.networks.${origin}.enabled`,
+            details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" },
+            fields: opened.map((path) => ({
+              path: `doc.${path}`,
               problem: "invalid" as const,
-              message: "only the owner in person can switch a network on",
+              message: "only the owner in person can switch a network on or share more with it",
             })),
           },
         );

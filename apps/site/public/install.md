@@ -350,8 +350,10 @@ can see it and switch on refusing such calls. The public tools, for their custom
 details, a one-time code when asked — is in https://surfingdog.ai/for-agents.md, which every inbox's
 manifest links under `agent_policy.guide`.
 
-If they want their AI to make the keys other systems need, they switch on "Let my AI create keys"
-in Settings → Keys. Only they can switch it on, in the owner app.
+Keys for other systems, webhook endpoints, and where alerts and emails go are theirs to set, in the
+owner app (Settings → Keys, Settings → Integrations, Settings). Their AI reads what customers write,
+and a customer could write instructions, so the inbox refuses those changes from any AI, whatever it
+was granted. It tells the person what to set instead.
 
 ---
 

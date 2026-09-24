@@ -121,6 +121,9 @@ function inboxOn(db: Db, fetchImpl?: typeof fetch) {
   return { inbox, app: inbox.app, request, drain };
 }
 
+/** The tools that change where the inbox sends its data: refused to the owner's AI whatever its scopes. */
+const OWNER_ONLY_TOOLS = new Set(["create_webhook", "update_webhook", "rotate_webhook_secret", "delete_webhook"]);
+
 async function connectOwner(app: App, bearer: string) {
   const fetchLike = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const merged = new Headers(init?.headers);
@@ -307,9 +310,11 @@ describe("upgrading to keys, scopes and attribution", () => {
     await drain();
     const mcp = await connectOwner(app, token);
     const listed = new Map((await mcp.listTools()).tools.map((t) => [t.name, t]));
-    const hook = await mcp.callTool({ name: "create_webhook", arguments: { url: RECEIVER } });
-    expect(hook.isError, text(hook)).toBeFalsy();
-    const webhookId = (hook.structuredContent as { id: string }).id;
+    // Endpoints are the owner's to add (core access/outbound.ts): this one is, in person.
+    const owner = { authorization: `Bearer ${await previousOwnerKey(db)}` };
+    const hook = await request("POST", "/v1/owner/webhooks", owner, { url: RECEIVER });
+    expect(hook.status, await hook.clone().text()).toBe(201);
+    const webhookId = ((await hook.json()) as { id: string }).id;
     const rule = {
       on: ["item.created"],
       if: { all: [{ path: "item.type", op: "eq", value: "order" }] },
@@ -348,8 +353,13 @@ describe("upgrading to keys, scopes and attribution", () => {
       const now = (t?.inputSchema as { required?: string[] } | undefined)?.required ?? [];
       expect([...now].sort(), name).toEqual([...required].sort());
       const r = await mcp.callTool({ name, arguments: args[name] ?? {} });
-      // Some calls fail on their own merits (an id that does not exist); none on its scopes.
+      // Some calls fail on their own merits (an id that does not exist); none on its scopes. Those
+      // that point the inbox's data somewhere are the owner's, and refused as such, never on scopes.
       expect(text(r), name).not.toMatch(/not given the scope|not_allowed/);
+      if (OWNER_ONLY_TOOLS.has(name)) {
+        expect(r.isError, name).toBe(true);
+        expect(text(r), name).toContain("Only the owner can");
+      }
     }
     // Recorded for the owner to see, one row per tool, none refused.
     const { rows } = await db.client.query({

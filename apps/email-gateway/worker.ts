@@ -51,7 +51,8 @@ export default {
       throw new Error(`inbox unreachable: ${(error as Error).message}`);
     }
     if (res.ok) return;
-    if (res.status >= 500) throw new Error(`inbox answered ${res.status}`);
+    // 5xx, and 429 (too many from this sender right now): temporary, so the sending server retries.
+    if (res.status >= 500 || res.status === 429) throw new Error(`inbox answered ${res.status}`);
     // 4xx is a permanent answer: wrong secret, refused sender, too large. Bounce with the reason.
     message.setReject(`inbox refused the message (${res.status})`);
   },

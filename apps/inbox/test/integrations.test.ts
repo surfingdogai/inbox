@@ -216,7 +216,7 @@ describe("keys and scopes", () => {
     expect(listed.items.find((k) => k.id === zap.id)?.refusals.map((r) => r.operation)).toEqual(["GET /services"]);
   });
 
-  it("lets the owner's AI mint a key only after the owner allows it, and never a settings key", async () => {
+  it("never lets the owner's AI mint or revoke a key, over OAuth or MCP, whatever the old switch says", async () => {
     const { app, db, owner, ownerKey } = await setup();
     const zap = await mintKey(app, owner, { name: "Zapier", preset: "automation" });
     // An integration key never mints keys.
@@ -224,56 +224,32 @@ describe("keys and scopes", () => {
       req("POST", "/v1/owner/api-keys", { name: "x", preset: "read_only" }, { authorization: `Bearer ${zap.key}` }),
     );
     expect(byKey.status).toBe(403);
-    // Over OAuth, not without leave.
-    const claude = await oauthToken(db);
+    // Over OAuth, even with keys:write in its grant.
+    const claude = await oauthToken(db, "inbox:read keys:write offline_access");
     const byAi = await app.request(
       req("POST", "/v1/owner/api-keys", { name: "Shop", preset: "shop_sync" }, claude.auth),
     );
     expect(byAi.status).toBe(403);
-    expect(await byAi.text()).toContain("Let my AI create keys");
+    expect(await byAi.json()).toMatchObject({ code: "not_allowed", details: { ask_owner: true } });
 
-    // Over MCP — even holding the owner's own key, an AI is an AI — not without leave either.
+    // Over MCP — even holding the owner's own key, an AI is an AI — and even with the retired switch on.
+    await app.request(req("PUT", "/v1/owner/settings", { doc: { security: { aiMayCreateKeys: true } } }, owner));
     const mcp = await connectOwner(app, ownerKey);
     const refused = await mcp.callTool({ name: "create_api_key", arguments: { name: "Shop", preset: "shop_sync" } });
     expect(refused.isError).toBe(true);
-    expect(text(refused)).toContain("Let my AI create keys");
-    // And the AI cannot give itself leave.
-    const selfGrant = await mcp.callTool({
-      name: "update_settings",
-      arguments: { doc: { security: { aiMayCreateKeys: true } } },
-    });
-    expect(selfGrant.isError).toBe(true);
-
-    await app.request(req("PUT", "/v1/owner/settings", { doc: { security: { aiMayCreateKeys: true } } }, owner));
-    const made = await mcp.callTool({
-      name: "create_api_key",
-      arguments: { name: "Shop", preset: "shop_sync", idempotency_key: "mint-shop" },
-    });
-    expect(made.isError, text(made)).toBeFalsy();
-    const shop = made.structuredContent as { id: string; key: string; created_by: string };
-    expect(shop.key.startsWith("sdi_own_")).toBe(true);
-    expect(text(made)).toContain(shop.key);
-    // A retried call with the same key is the same key, not a second one.
-    const again = await mcp.callTool({
-      name: "create_api_key",
-      arguments: { name: "Shop", preset: "shop_sync", idempotency_key: "mint-shop" },
-    });
-    expect((again.structuredContent as { id: string; key: string }).id).toBe(shop.id);
-    expect((again.structuredContent as { key: string }).key).toBe(shop.key);
-    const settingsKey = await mcp.callTool({
-      name: "create_api_key",
-      arguments: { name: "Bad", scopes: ["settings:write"] },
-    });
-    expect(settingsKey.isError).toBe(true);
-
-    // The AI may revoke what it made, but not the owner's own key.
-    const cliId = (
-      (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
-        items: { id: string; name: string }[];
-      }
-    ).items.find((k) => k.name === "cli")?.id;
-    expect((await mcp.callTool({ name: "revoke_api_key", arguments: { key_id: cliId } })).isError).toBe(true);
-    expect((await mcp.callTool({ name: "revoke_api_key", arguments: { key_id: shop.id } })).isError).toBeFalsy();
+    expect(text(refused)).toContain("Settings → Keys");
+    expect(text(refused)).toContain("Tell the owner");
+    // And it cannot revoke one: not the owner's, not the command line's.
+    expect((await mcp.callTool({ name: "revoke_api_key", arguments: { key_id: zap.id } })).isError).toBe(true);
+    const listed = (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
+      items: { id: string; name: string; active: boolean }[];
+      security: { ai_may_create_keys: boolean };
+    };
+    expect(listed.items.map((k) => [k.name, k.active])).toEqual([
+      ["Zapier", true],
+      ["cli", true],
+    ]);
+    expect(listed.security.ai_may_create_keys).toBe(false);
   });
 
   it("gives the owner's AI its own name in the history, and keeps the owner's rights on the machines", async () => {

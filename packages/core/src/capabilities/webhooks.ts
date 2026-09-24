@@ -1,5 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import { desc, eq } from "drizzle-orm";
+import { requireDataOutAuthority } from "../access/outbound";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { webhookDeliveries, webhooks as webhooksTable } from "../schema/tables";
@@ -366,6 +367,8 @@ export class WebhookCapabilities {
 
   async createWebhook(caller: Caller, input: S.CreateWebhookInput): Promise<WebhookWithSecret> {
     requireOwner(caller);
+    // A new address for the inbox's events is the owner's (`access/outbound.ts`): never the AI's.
+    requireDataOutAuthority(caller, "integrations:write", "add a webhook endpoint", "Settings → Integrations");
     const box = requireSecretBox(this.box);
     const now = nowOf(caller);
     const bad = checkWebhookUrl(input.url, (await this.config()).allowPrivateTargets);
@@ -390,6 +393,22 @@ export class WebhookCapabilities {
 
   async updateWebhook(caller: Caller, input: S.UpdateWebhookInput): Promise<WebhookView> {
     requireOwner(caller);
+    // Pausing an endpoint sends nothing anywhere, so the AI may; re-pointing it, waking it, or
+    // changing what or how much it is sent is the owner's (`access/outbound.ts`).
+    const pauseOnly =
+      input.active === false &&
+      input.url === undefined &&
+      input.events === undefined &&
+      input.payload_style === undefined &&
+      (input.headers === undefined || Object.keys(input.headers).length === 0);
+    if (!pauseOnly) {
+      requireDataOutAuthority(
+        caller,
+        "integrations:write",
+        "change a webhook endpoint (only pausing one, active=false, is yours)",
+        "Settings → Integrations",
+      );
+    }
     const now = nowOf(caller);
     const current = await this.row(input.webhook_id);
     if (input.url !== undefined) {
@@ -451,6 +470,12 @@ export class WebhookCapabilities {
    */
   async rotateWebhookSecret(caller: Caller, input: S.WebhookIdInput): Promise<WebhookWithSecret> {
     requireOwner(caller);
+    requireDataOutAuthority(
+      caller,
+      "integrations:write",
+      "rotate a webhook's signing secret",
+      "Settings → Integrations",
+    );
     const box = requireSecretBox(this.box);
     const now = nowOf(caller);
     const row = await this.row(input.webhook_id);
@@ -472,6 +497,13 @@ export class WebhookCapabilities {
 
   async deleteWebhook(caller: Caller, input: S.WebhookIdInput): Promise<{ deleted: true }> {
     requireOwner(caller);
+    // Removing one loses its delivery log and cuts a system the owner connected: pausing is the AI's.
+    requireDataOutAuthority(
+      caller,
+      "integrations:write",
+      "remove a webhook endpoint (pause it with active=false instead)",
+      "Settings → Integrations",
+    );
     await this.row(input.webhook_id);
     // The deliveries point at the endpoint, so they go in the same batch or the foreign key bites.
     await this.db.batch([

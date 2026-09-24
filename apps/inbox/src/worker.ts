@@ -88,7 +88,10 @@ export default {
     await inbox.runner.runDue(db, { workerId: "cron", limit: 100, join: false });
   },
 
-  // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.
+  // Cloudflare Email Routing hands us the raw MIME. It forwards mail whose From fails DMARC under a
+  // `p=none` policy — gmail.com's and outlook.com's among them — so a From address proves nothing
+  // here, exactly as on the Node server's webhook: a sender the business knows is asked for a
+  // one-time code, never joined to that customer on the From alone.
   async email(message, env) {
     const inbox = inboxFor(env);
     const db = createDb(d1Client(env.DB));
@@ -97,8 +100,10 @@ export default {
       raw: message.raw,
       envelopeTo: message.to,
       envelopeFrom: message.from,
-      authenticated: true,
+      authenticated: false,
     });
+    // Too many right now: a temporary failure, which the sending server retries, never a bounce.
+    if (result.outcome === "limited") throw new Error(`inbound email limited: retry in ${result.retryAfterSec}s`);
     if (result.outcome === "rejected") message.setReject(result.reason);
     await inbox.runner.runDue(db, { workerId: "email", join: false });
   },

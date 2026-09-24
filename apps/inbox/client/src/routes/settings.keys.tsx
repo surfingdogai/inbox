@@ -22,8 +22,8 @@ interface Notice {
 /**
  * Settings → Keys: one named, scoped key per system that calls this inbox — Zapier, a shop, a
  * till, a form plugin — each revocable in one click, and what each one called outside its scopes.
- * The two switches here are the owner's alone: whether their AI may make keys, and whether a call
- * outside a key's scopes is refused or only written down.
+ * What is here is the owner's alone: keys (their AI can no longer make or revoke one), whether a
+ * call outside a key's scopes is refused or only written down, and where security reports go.
  */
 function KeysPage() {
   const keys = useKeys();
@@ -36,18 +36,17 @@ function KeysPage() {
   );
 }
 
-/* --- The two switches ------------------------------------------------------ */
+/* --- What only the owner does, and where security reports go ---------------- */
 
 function SecurityCard({ list }: { list: KeyList | undefined }) {
   const settings = useSettings();
   const save = useSaveSettings();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<Notice | null>(null);
-  const security = settings.data?.doc.security ?? {
-    aiMayCreateKeys: list?.security.ai_may_create_keys ?? false,
-    enforceScopes: list?.security.enforce_scopes ?? false,
-  };
-  const change = (patch: Record<string, boolean>, done: string) => {
+  const enforceScopes = settings.data?.doc.security.enforceScopes ?? list?.security.enforce_scopes ?? false;
+  const savedContact = settings.data?.doc.security.contact ?? "";
+  const [contact, setContact] = useState<string | null>(null);
+  const change = (patch: Record<string, unknown>, done: string) => {
     if (!settings.data || save.isPending) return;
     save.reset();
     setNotice(null);
@@ -56,37 +55,25 @@ function SecurityCard({ list }: { list: KeyList | undefined }) {
       {
         onSuccess: () => {
           setNotice({ tone: "success", text: done });
+          setContact(null);
           void qc.invalidateQueries({ queryKey: qk.keys });
         },
         onError: (e) => setNotice({ tone: "danger", text: problemOf(e).detail }),
       },
     );
   };
+  const typed = contact ?? savedContact;
   return (
     <section className="card glass stack">
-      <SectionHead title="What your AI may do with keys" />
+      <SectionHead title="Only you" />
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
-      <Switch
-        checked={security.aiMayCreateKeys}
-        disabled={!settings.data || save.isPending}
-        onChange={(on) =>
-          change(
-            { aiMayCreateKeys: on },
-            on
-              ? "Your AI can now create and revoke integration keys. Each one appears here."
-              : "Your AI can no longer create or revoke keys.",
-          )
-        }
-      >
-        Let my AI create keys
-      </Switch>
       <p className="hint">
-        When your AI connects your shop, till or Zapier, it can make the key that system needs instead of asking you to.
-        Every key it makes is named, limited to the scopes it chose, listed below, and revocable in one click. It can
-        never make a key that changes settings, and it cannot revoke the keys you made.
+        Your AI reads what customers write, and a customer can write instructions. So your AI cannot create or revoke
+        keys, add or change webhooks, change where alerts and emails go, or switch a network on: you do those here, and
+        it asks you when one is needed.
       </p>
       <Switch
-        checked={security.enforceScopes}
+        checked={enforceScopes}
         disabled={!settings.data || save.isPending}
         onChange={(on) =>
           change(
@@ -103,6 +90,42 @@ function SecurityCard({ list }: { list: KeyList | undefined }) {
         Off, such a call still goes through and is recorded under its key below, so you can see what would break before
         anything does. A later release turns this on for everyone.
       </p>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const value = typed.trim();
+          change(
+            { contact: value === "" ? null : value },
+            value === "" ? "Security reports go to hello@ this inbox's address." : "Security contact saved.",
+          );
+        }}
+      >
+        <Field
+          id="security-contact"
+          label="Where security problems are reported"
+          optional
+          hint="An email address or an https page, published at /.well-known/security.txt for anyone who finds a problem. Empty: hello@ this inbox's address."
+        >
+          <input
+            id="security-contact"
+            className="input"
+            value={typed}
+            maxLength={320}
+            placeholder="security@yourdomain.com"
+            onChange={(e) => setContact(e.target.value)}
+          />
+        </Field>
+        <div>
+          <button
+            type="submit"
+            className="btn btn-secondary btn-sm"
+            disabled={!settings.data || save.isPending || typed.trim() === savedContact}
+          >
+            Save
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

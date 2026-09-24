@@ -159,42 +159,47 @@ describe("keys", () => {
     expect(revoked.revoked_at).not.toBeNull();
   });
 
-  it("never lets an integration key mint or revoke, nor the owner's AI without the owner's leave", async () => {
+  it("never lets an integration key or the owner's AI mint or revoke a key, whatever the old switch says", async () => {
     const { db, caps } = await setup();
     await expect(caps.access.createKey(zapier, { name: "x", preset: "read_only" })).rejects.toMatchObject({
       code: "not_allowed",
     });
     await expect(caps.access.createKey(claude, { name: "Shop", preset: "shop_sync" })).rejects.toMatchObject({
       code: "not_allowed",
-      details: { setting: "security.aiMayCreateKeys" },
+      details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Keys" },
     });
-    // The AI cannot grant itself the right.
+    // The AI cannot change the security section at all.
     await expect(caps.updateSettings(claude, { doc: { security: { aiMayCreateKeys: true } } })).rejects.toMatchObject({
       code: "not_allowed",
     });
     await expect(caps.updateSettings(zapier, { doc: { security: { enforceScopes: true } } })).rejects.toMatchObject({
       code: "not_allowed",
     });
+    // The retired switch, set by the owner, lets the AI in no more than before.
     await caps.updateSettings(owner, { doc: { security: { aiMayCreateKeys: true } } });
-
-    const shop = await caps.access.createKey(claude, { name: "Shop", preset: "shop_sync" });
-    expect(shop.created_by).toBe("owner_ai:Claude");
-    // It holds none of catalogue:write itself, which is recorded (log first), not refused.
-    const list = await caps.access.listKeys(owner);
-    expect(list.ai_clients[0]?.refusals.map((r) => r.operation)).toContain("create_api_key:catalogue:write");
-    // Never a settings key from the AI.
-    await expect(caps.access.createKey(claude, { name: "Bad", scopes: ["settings:write"] })).rejects.toMatchObject({
+    await expect(caps.access.createKey(claude, { name: "Shop", preset: "shop_sync" })).rejects.toMatchObject({
       code: "not_allowed",
     });
-    // The AI may revoke a key an AI made, but never the owner's own: neither the command-line key
-    // nor a key the owner made in Settings → Keys.
+    expect((await caps.access.listKeys(owner)).security.ai_may_create_keys).toBe(false);
+    // Nor may it revoke any key: the command-line key, one the owner made, or one an AI made before.
     const cli = await mintApiKey(db, { kind: "owner", name: "cli", now: T0 });
     await expect(caps.access.revokeKey(claude, { key_id: cli.id })).rejects.toMatchObject({ code: "not_allowed" });
     const ownersZap = await caps.access.createKey(owner, { name: "Zapier", preset: "automation" });
     await expect(caps.access.revokeKey(claude, { key_id: ownersZap.id })).rejects.toMatchObject({
       code: "not_allowed",
     });
-    expect((await caps.access.revokeKey(claude, { key_id: shop.id })).active).toBe(false);
+    const byAiBefore = await mintApiKey(db, {
+      kind: "integration",
+      name: "Shop",
+      scopes: ["catalogue:write"],
+      createdBy: "owner_ai:Claude",
+      now: T0,
+    });
+    await expect(caps.access.revokeKey(claude, { key_id: byAiBefore.id })).rejects.toMatchObject({
+      code: "not_allowed",
+    });
+    // The owner revokes it in person.
+    expect((await caps.access.revokeKey(owner, { key_id: byAiBefore.id })).active).toBe(false);
   });
 
   it("asks for a scope, and refuses an expiry in the past", async () => {

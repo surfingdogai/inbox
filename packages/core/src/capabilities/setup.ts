@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
@@ -96,6 +97,8 @@ export class SetupCapabilities {
     ) {
       throw ownerMoney("currency", "The currency is money, and money is the owner's: leave it as it is.");
     }
+    // The name signs every email and heads the public profile: every customer reads it.
+    await this.published(caller, [input.name, input.domain]);
     const next = {
       name: input.name ?? current.name,
       domain: input.domain === undefined ? current.domain : input.domain,
@@ -124,6 +127,20 @@ export class SetupCapabilities {
     };
   }
 
+  /**
+   * Words from the owner's AI that every customer can read — the catalogue, the business's name, a
+   * rule's reply — carry no customer's email address or phone number and no secret (`access/leaks.ts`):
+   * a customer's message could have asked the AI to publish them.
+   */
+  private async published(caller: Caller, texts: readonly (string | null | undefined)[]): Promise<void> {
+    await assertNoLeak(
+      this.db,
+      caller,
+      PUBLISHED,
+      texts.filter((t): t is string => typeof t === "string"),
+    );
+  }
+
   // ---- services ---------------------------------------------------------------
 
   async listServices(caller: Caller): Promise<ServiceRow[]> {
@@ -137,6 +154,7 @@ export class SetupCapabilities {
    */
   async createService(caller: Caller, input: S.ServiceInput): Promise<ServiceRow> {
     requireOwner(caller);
+    await this.published(caller, [input.name, input.description]);
     const now = nowOf(caller);
     const id = ulid();
     const held = isOwnerAssistant(caller) && hasAmount(input.price);
@@ -161,6 +179,7 @@ export class SetupCapabilities {
   async updateService(caller: Caller, input: S.UpdateServiceInput): Promise<ServiceRow> {
     requireOwner(caller);
     const { service_id, ...patch } = input;
+    await this.published(caller, [patch.name, patch.description]);
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.service(service_id);
       const currency = (await this.profile()).currency;
@@ -215,6 +234,7 @@ export class SetupCapabilities {
   /** A new product. One the owner's AI adds is saved unpublished: a product always has a price. */
   async createProduct(caller: Caller, input: S.ProductInput): Promise<ProductRow> {
     requireOwner(caller);
+    await this.published(caller, [input.sku, input.name, input.description]);
     const now = nowOf(caller);
     const id = ulid();
     const held = isOwnerAssistant(caller);
@@ -239,6 +259,7 @@ export class SetupCapabilities {
   async updateProduct(caller: Caller, input: S.UpdateProductInput): Promise<ProductRow> {
     requireOwner(caller);
     const { product_id, ...patch } = input;
+    await this.published(caller, [patch.sku, patch.name, patch.description]);
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.product(product_id);
       const same =
@@ -360,6 +381,8 @@ export class SetupCapabilities {
     requirePositive(input.definition);
     // A rule acts on its own for as long as it is on: one that prices is the owner's to write.
     if (isOwnerAssistant(caller) && pricesSomething(input.definition)) throw ruleMoney();
+    // What a rule replies or notes goes to whoever it fires for: words any customer may read.
+    await this.published(caller, stringsIn(input.definition.actions));
     const now = nowOf(caller);
     const id = ulid();
     await this.db.orm.insert(rulesTable).values({
@@ -378,7 +401,10 @@ export class SetupCapabilities {
   async updateRule(caller: Caller, input: S.UpdateRuleInput): Promise<RuleView> {
     requireOwner(caller);
     const { rule_id, expected_version, ...patch } = input;
-    if (patch.definition) requirePositive(patch.definition);
+    if (patch.definition) {
+      requirePositive(patch.definition);
+      await this.published(caller, stringsIn(patch.definition.actions));
+    }
     if (isOwnerAssistant(caller) && (patch.definition !== undefined || patch.enabled === true)) {
       // The owner's pricing rule stays as the owner wrote it: the AI may rename it or switch it off,
       // never rewrite it, switch it on, or turn a rule of its own into one.
