@@ -2,7 +2,6 @@
 import HeroFlow from "./HeroFlow.astro";
 
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
-const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
 ---
 
 <section class="hero wrap" aria-labelledby="hero-h">
@@ -17,7 +16,7 @@ const LIVE = "https://inbox.surfingdog.ai/.well-known/agent-inbox.json";
     </p>
     <div class="actions">
       <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
-      <a class="btn btn-secondary btn-lg" href={LIVE} rel="noopener">See a live inbox</a>
+      <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>
     </div>
     <p class="position">
       <span class="u-line" aria-hidden="true"></span>

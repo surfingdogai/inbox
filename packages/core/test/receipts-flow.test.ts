@@ -234,6 +234,37 @@ describe("an instance that cannot sign", () => {
   });
 });
 
+describe("an instance with no INBOX_PUBLIC_URL", () => {
+  // A one-click deploy has nobody to type an address: the owner's first sign-in keeps the one they
+  // opened their link at as the Inbox address, and receipts name it.
+  it("signs with the Inbox address in Settings as the issuer", async () => {
+    const { db, caps, runner, svc } = await setup({ baseUrl: null });
+    expect(await caps.rememberInboxAddress("https://inbox.oficinamare.pt", T0)).toBe(true);
+    expect((await caps.receipts.status()).issuer).toBe(ISS);
+    const v = await book(caps, svc, "rita@example.com");
+    await caps.transitionItem(owner(T0 + 1), { item_id: v.item.id, event: "confirm" });
+    await runner.runDue(db, { now: T0 + 2 });
+    const [receipt] = await caps.receipts.forItem(v.item.id);
+    if (!receipt) throw new Error("no receipt");
+    const claims = await verifyReceipt(receipt.jws, (await caps.receipts.jwks()).keys);
+    expect(claims).toMatchObject({ iss: ISS, knd: "confirmed" });
+  });
+
+  it("keeps only an https origin, never overwrites one, and leaves INBOX_PUBLIC_URL to win", async () => {
+    const plain = await setup({ baseUrl: null });
+    expect(await plain.caps.rememberInboxAddress("http://localhost:8787", T0)).toBe(false);
+    expect(await plain.caps.rememberInboxAddress("not a url", T0)).toBe(false);
+    expect(await plain.caps.rememberInboxAddress("https://first.example/some/path", T0)).toBe(true);
+    expect(await plain.caps.rememberInboxAddress("https://second.example", T0)).toBe(false);
+    expect((await plain.caps.getSettings(owner())).doc.notifications.appUrl).toBe("https://first.example");
+
+    const set = await setup();
+    expect(await set.caps.rememberInboxAddress("https://elsewhere.example", T0)).toBe(false);
+    expect((await set.caps.getSettings(owner())).doc.notifications.appUrl).toBeUndefined();
+    expect((await set.caps.receipts.status()).issuer).toBe(ISS);
+  });
+});
+
 describe("the acknowledgement", () => {
   async function issued() {
     const s = await setup();

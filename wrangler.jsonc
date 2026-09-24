@@ -18,10 +18,13 @@
       "/openapi.json",
       "/.well-known/*",
       "/healthz",
-      "/c/*"
+      "/c/*",
+      "/demo/*"
     ]
   },
-  // One business = one database. The Deploy button provisions these from the names below.
+  // This file is a template. The Deploy to Cloudflare button creates the database and the queue from
+  // the names below and writes the new database's id in place of the zeros; by hand, `wrangler d1
+  // create` prints the id to paste. One business = one database.
   "d1_databases": [
     {
       "binding": "DB",
@@ -30,7 +33,9 @@
       "migrations_dir": "apps/inbox/migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "surfingdog-inbox-blobs" }],
+  // Email out through Cloudflare Email Sending. It sends from MAIL_FROM, which must be on a domain
+  // onboarded to Email Sending on the same account. Without that, sign-in links go to the logs.
+  "send_email": [{ "name": "EMAIL" }],
   "queues": {
     "producers": [{ "binding": "JOBS", "queue": "surfingdog-inbox-jobs" }],
     "consumers": [{ "queue": "surfingdog-inbox-jobs", "max_batch_size": 10, "max_retries": 3 }]

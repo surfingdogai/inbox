@@ -4,6 +4,8 @@ import {
   cloudflareEmailMailOut,
   cloudflareEmailRestMailOut,
   cloudflareHeaders,
+  consoleMailOut,
+  resendMailOut,
 } from "../src/mail";
 
 /**
@@ -184,5 +186,41 @@ describe("the REST API", () => {
       fetchImpl,
     );
     await expect(out.send(mail)).rejects.toThrow(/invalid_request_schema \(code 10001\)/);
+  });
+});
+
+describe("a transport's own address (MAIL_FROM)", () => {
+  // The binding and Resend have no sender of their own: without MAIL_FROM a message that names none,
+  // such as the owner's sign-in link, has nobody to go out as.
+  it("is the binding's and Resend's sender when given, and absent otherwise", () => {
+    const binding: CloudflareEmailBinding = { send: async () => ({ messageId: "m" }) };
+    const from = { address: "inbox@oficinamare.pt", name: "Oficina Maré" };
+    expect(cloudflareEmailMailOut(binding, from).sender).toEqual(from);
+    expect(cloudflareEmailMailOut(binding).sender).toBeUndefined();
+    expect(resendMailOut("re_key", fetch, from).sender).toEqual(from);
+    expect(resendMailOut("re_key").sender).toBeUndefined();
+  });
+});
+
+describe("no mail service", () => {
+  it("writes the whole message to the log, link included, cuts a customer's key, and delivers nothing", async () => {
+    const lines: string[] = [];
+    const out = consoleMailOut((line) => lines.push(line));
+    expect(out.delivers).toBe(false);
+    await out.send({
+      from: { address: "inbox@localhost" },
+      to: ["owner@oficinamare.pt"],
+      subject: "Sign in to Oficina Maré",
+      text: "Open this link within 15 minutes to sign in:\n\nhttps://inbox.test/auth/verify?token=abc123",
+    });
+    await out.send({
+      from: { address: "inbox@localhost" },
+      to: ["rita@example.com"],
+      subject: "Your key",
+      text: "sdkey1_network.example_abcdefghijklmnop_abcdefghijklmnopqrstuvwxyz234567",
+    });
+    expect(lines[0]).toContain("https://inbox.test/auth/verify?token=abc123");
+    expect(lines[1]).toContain("sdkey1_network.example_abcdefghijklmnop_…");
+    expect(lines[1]).not.toContain("qrstuvwxyz234567");
   });
 });

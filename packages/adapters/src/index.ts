@@ -9,10 +9,13 @@ import { agentFromRequest } from "./identity";
 import {
   clientAddress,
   consume,
+  EVERYONE,
   isCreateRoute,
   isNegotiateRoute,
   isVerifyRoute,
+  LIMITS,
   type LimitClass,
+  type LimitTable,
   mcpCreates,
   mcpNegotiates,
   mcpVerifies,
@@ -63,6 +66,10 @@ export interface DoorDeps {
   readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
   /** Outbound fetch for agents' key directories (tests inject a fake). */
   readonly fetchImpl?: typeof fetch | undefined;
+  /** Other numbers than `LIMITS` for some classes, per caller (a public demo sets `DEMO_LIMITS`). */
+  readonly limits?: LimitTable | undefined;
+  /** Buckets every caller shares, taken after the caller's own (a public demo sets `DEMO_SHARED`). */
+  readonly sharedLimits?: LimitTable | undefined;
 }
 
 /** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
@@ -154,7 +161,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   ): Promise<Response | null> => {
     const who = keyId ? `key:${keyId}` : `ip:${clientAddress(c.req.raw)}`;
     for (const cls of classes) {
-      const v = await consume(deps.db, cls, who, clock());
+      const own = await consume(deps.db, cls, who, clock(), deps.limits?.[cls] ?? LIMITS[cls]);
+      const shared = deps.sharedLimits?.[cls];
+      const v = own.allowed && shared ? await consume(deps.db, cls, EVERYONE, clock(), shared) : own;
       if (!v.allowed) {
         return tooManyRequests(c, "Too many requests right now; wait a few minutes and try again.", v.retryAfterSec);
       }
@@ -257,6 +266,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       now: deps.now,
       baseUrl: deps.baseUrl,
       ownerEmails: deps.ownerEmails,
+      rememberOrigin: (origin) => deps.caps.rememberInboxAddress(origin),
     }),
   );
   app.route(

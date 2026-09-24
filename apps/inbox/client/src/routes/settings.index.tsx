@@ -446,7 +446,7 @@ function SettingsForm({
             label="Inbox address"
             optional
             error={field("notifications.appUrl")}
-            hint="Used in email links, like https://inbox.example.com. Networks also know your inbox by it."
+            hint="Used in email links and receipts, like https://inbox.example.com. Filled in when you first sign in. Networks also know your inbox by it."
           >
             <input
               id="s-app-url"

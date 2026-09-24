@@ -2,6 +2,8 @@ import {
   type CallerEnv,
   type ClientMetadata,
   createIdentityPort,
+  DEMO_LIMITS,
+  DEMO_SHARED,
   FEED_IMPORT_KIND,
   feedImportHandler,
   identityIssueHandler,
@@ -38,7 +40,22 @@ import {
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut } from "@surfingdog/platform";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
+import {
+  DEMO_MAX_BODY,
+  DEMO_NIGHTLY_KIND,
+  DEMO_REFUSED,
+  type DemoOptions,
+  demoNightlyHandler,
+  demoRoutes,
+  ensureDemo,
+  noNetworkFetch,
+  noNetworkHandler,
+  noWebhookHandler,
+  ownerOnlyMailOut,
+  silentMailOut,
+} from "./demo";
 
 export interface AppDeps {
   readonly db: Db;
@@ -66,12 +83,24 @@ export interface AppDeps {
    * Only a test that writes an event and polls for it in the same tick ever passes zero.
    */
   readonly eventSettleMs?: number | undefined;
+  /**
+   * A public demo shop (INBOX_DEMO=1, demo.ts): no customer is ever emailed, no network is ever
+   * called, rules confirm bookings and accept small orders, limits are tighter, the shop is wiped
+   * and seeded every night, and `/demo/live` shows what is happening. Absent, none of this exists.
+   */
+  readonly demo?: DemoOptions | undefined;
 }
 
 export interface Inbox {
   readonly app: Hono<CallerEnv>;
   readonly runner: JobRunner;
   readonly caps: Capabilities;
+  /**
+   * Gets the instance ready before it serves: in a demo, seeds the shop when the database is empty
+   * and queues the nightly run. Nothing to do otherwise. Safe to call on every boot and every cron
+   * tick. In a demo over a database that already holds anything, it throws `DEMO_REFUSED`.
+   */
+  readonly prepare: () => Promise<void>;
 }
 
 /**
@@ -88,11 +117,17 @@ export function createInbox(deps: AppDeps): Inbox {
     deps.baseUrl,
     deps.eventSettleMs,
   );
-  const mailOut = deps.mailOut ?? logMailOut();
+  const demo = deps.demo;
+  const transport = deps.mailOut ?? logMailOut();
+  // A demo emails nobody but its owner (demo.ts): every customer email, reply, code and per-item
+  // alert goes to a transport that delivers nothing, and a sign-in link only ever to the owner.
+  const mailOut = demo ? silentMailOut() : transport;
+  const ownerMail = demo ? ownerOnlyMailOut(transport, demo.ownerEmails, console.log, demo.from) : transport;
   const network = {
     baseUrl: deps.baseUrl,
     version: VERSION,
-    fetchImpl: deps.fetchImpl,
+    // A demo speaks to no network, whatever its settings say.
+    fetchImpl: demo ? noNetworkFetch : deps.fetchImpl,
     // The hourly ping is signed with the receipt key when there is one (ADR-017 §7.3), and is then
     // answered with the business's own standing at each network.
     instanceKey: async () => (caps.secrets ? caps.receipts.keys.active() : null),
@@ -126,7 +161,38 @@ export function createInbox(deps: AppDeps): Inbox {
     )
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
     .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }));
+  if (demo) {
+    for (const kind of [NETWORK_PING_ONE_KIND, NETWORK_PUBLISH_KIND, NETWORK_RECEIPT_KIND, IDENTITY_ISSUE_KIND]) {
+      runner.register(kind, noNetworkHandler);
+    }
+    // Nor does anything a tester typed leave by a webhook, whoever set one up.
+    for (const kind of [WEBHOOK_FANOUT_KIND, WEBHOOK_DELIVERY_KIND]) runner.register(kind, noWebhookHandler);
+    runner.register(
+      DEMO_NIGHTLY_KIND,
+      demoNightlyHandler({ mailOut: transport, demo, baseUrl: deps.baseUrl, seed: { receipts: caps.receipts } }),
+    );
+  }
   const background = deps.background ?? ((work) => void work.catch(() => {}));
+  // Whether this instance is the demo shop, decided once per process: an empty database becomes it,
+  // anything else is refused (demo.ts) and said so once. A failure to decide is tried again.
+  let demoReady: Promise<boolean> | null = null;
+  const demoActive = (): Promise<boolean> => {
+    if (!demo) return Promise.resolve(false);
+    demoReady ??= ensureDemo(deps.db, deps.now ? deps.now() : Date.now(), { receipts: caps.receipts }).then(
+      (r) => {
+        if (!r.active) console.error(`demo: ${DEMO_REFUSED}`);
+        return r.active;
+      },
+      (error) => {
+        demoReady = null;
+        throw error;
+      },
+    );
+    return demoReady;
+  };
+  const prepare = async (): Promise<void> => {
+    if (demo && !(await demoActive())) throw new Error(DEMO_REFUSED);
+  };
 
   // Security headers on every response, owner app and API alike, set here rather than in a proxy
   // so every self-hoster gets them whatever sits in front. Each one is chosen, not defaulted: Hono's
@@ -165,11 +231,35 @@ export function createInbox(deps: AppDeps): Inbox {
     },
     referrerPolicy: "no-referrer",
   });
-  app.use("*", (c, next) => (c.req.path.startsWith("/c/") ? pageHeaders(c, next) : appHeaders(c, next)));
+  // The demo's live view runs one script of its own and reads only its own feed.
+  const demoHeaders = secureHeaders({
+    ...common,
+    contentSecurityPolicy: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      styleSrc: ["'unsafe-inline'"],
+      imgSrc: ["'self'"],
+      baseUri: ["'none'"],
+      formAction: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+    referrerPolicy: "no-referrer",
+  });
+  app.use("*", (c, next) =>
+    c.req.path.startsWith("/c/")
+      ? pageHeaders(c, next)
+      : demo && c.req.path.startsWith("/demo/")
+        ? demoHeaders(c, next)
+        : appHeaders(c, next),
+  );
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {
     await ensureMigrated(deps.db.client, MIGRATIONS);
+    // A demo seeds itself on its first request, so a fresh Worker has a shop before its first cron.
+    if (demo)
+      await demoActive().catch((error) => console.error("demo:", error instanceof Error ? error.message : error));
     await next();
     if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
       const work = runner.runDue(deps.db, { workerId: "request" });
@@ -180,6 +270,29 @@ export function createInbox(deps: AppDeps): Inbox {
       }
     }
   });
+
+  // A demo reads small bodies only: nobody's AI books with a megabyte, and a stranger's megabytes
+  // would sit in the database until the night.
+  if (demo) {
+    app.use(
+      "*",
+      bodyLimit({
+        maxSize: DEMO_MAX_BODY,
+        onError: (c) =>
+          c.json(
+            {
+              type: "https://surfingdog.ai/problems/too_large",
+              title: "Too large",
+              status: 413,
+              code: "too_large",
+              detail: `This demo reads request bodies of up to ${DEMO_MAX_BODY / 1024} KB.`,
+            },
+            413,
+            { "Content-Type": "application/problem+json" },
+          ),
+      }),
+    );
+  }
 
   app.get("/healthz", (c) => c.json({ ok: true, version: VERSION }));
 
@@ -215,7 +328,10 @@ export function createInbox(deps: AppDeps): Inbox {
     baseUrl: deps.baseUrl,
     version: VERSION,
     sandbox: async () => (await readSettings(deps.db)).testMode,
-    mailOut,
+    // The doors send one kind of mail, the owner's sign-in link.
+    mailOut: ownerMail,
+    limits: demo ? DEMO_LIMITS : undefined,
+    sharedLimits: demo ? DEMO_SHARED : undefined,
     businessName: async () => (await caps.getBusinessProfile()).name,
     fetchClientMetadata: deps.fetchClientMetadata,
     fetchImpl: deps.fetchImpl,
@@ -227,8 +343,11 @@ export function createInbox(deps: AppDeps): Inbox {
     },
   });
 
+  // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.
+  if (demo) app.route("/demo", demoRoutes({ db: deps.db, now: deps.now, active: demoActive }));
+
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
-  return { app, runner, caps };
+  return { app, runner, caps, prepare };
 }
 
 /** The app alone, for tests and simple hosts. */

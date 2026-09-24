@@ -47,6 +47,22 @@ export function forgetSession(): void {
   lookup = null;
 }
 
+/**
+ * Where to go after signing in: a path on this site, or nothing. `/login?redirect=…` is a link anyone
+ * can send the owner, and a browser reads `//host`, `/\host` and `/<tab>/host` as another site, so
+ * the value is resolved the way the browser would and kept only when it stays here.
+ */
+export function sameSitePath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.startsWith("/")) return undefined;
+  const here = "https://inbox.invalid";
+  try {
+    const url = new URL(value, here);
+    return url.origin === here ? `${url.pathname}${url.search}${url.hash}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A stored key counts at once; otherwise the cookie decides. Route guards await this. */
 export async function ensureSignedIn(): Promise<boolean> {
   if (getKey()) return true;

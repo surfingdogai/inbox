@@ -1,8 +1,16 @@
 import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
 import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
-import { cloudflareEmailMailOut, ensureMigrated, logMailOut, type MailOut, resendMailOut } from "@surfingdog/platform";
+import {
+  cloudflareEmailMailOut,
+  consoleMailOut,
+  ensureMigrated,
+  type MailOut,
+  resendMailOut,
+} from "@surfingdog/platform";
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
+import { flagOn } from "./demo";
+import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 
 type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
@@ -11,6 +19,14 @@ type Bindings = Env & {
   INBOX_SECRET_KEY?: string;
   /** The https URL this instance is reached at. Receipts name it as their issuer (ADR-016). */
   INBOX_PUBLIC_URL?: string;
+  /** `1` makes this instance a public demo shop (demo.ts). */
+  INBOX_DEMO?: string;
+  /**
+   * The address the owner's sign-in link and alerts go out from, on a domain onboarded to Email
+   * Sending on this account. The EMAIL binding has no sender of its own.
+   */
+  MAIL_FROM?: string;
+  MAIL_FROM_NAME?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -18,21 +34,22 @@ const inboxes = new WeakMap<object, Inbox>();
 function inboxFor(env: Bindings): Inbox {
   let inbox = inboxes.get(env.DB);
   if (!inbox) {
-    const mailOut: MailOut = env.EMAIL
-      ? cloudflareEmailMailOut(env.EMAIL)
-      : env.RESEND_API_KEY
-        ? resendMailOut(env.RESEND_API_KEY)
-        : // No mail service: every email is written to the log, and the item says it was not sent.
-          logMailOut(console.log, { delivers: false });
+    const from = senderFrom(env.MAIL_FROM, env.MAIL_FROM_NAME);
+    // Resend when a key is set, else the EMAIL binding the Deploy button adds. With neither, every
+    // email is written to the Worker's logs, sign-in links included, and the item says it was not sent.
+    const mailOut: MailOut = env.RESEND_API_KEY
+      ? resendMailOut(env.RESEND_API_KEY, undefined, from)
+      : env.EMAIL
+        ? cloudflareEmailMailOut(env.EMAIL, from)
+        : consoleMailOut(console.log);
+    const ownerEmails = listFrom(env.INBOX_OWNER_EMAIL);
     inbox = createInbox({
       db: createDb(d1Client(env.DB)),
       mailOut,
-      ownerEmails: (env.INBOX_OWNER_EMAIL ?? "")
-        .split(",")
-        .map((e) => e.trim())
-        .filter(Boolean),
-      secretKey: env.INBOX_SECRET_KEY,
-      baseUrl: env.INBOX_PUBLIC_URL,
+      ownerEmails,
+      secretKey: secretKeyFrom(env.INBOX_SECRET_KEY),
+      baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
+      demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
     });
     inboxes.set(env.DB, inbox);
   }
@@ -62,7 +79,11 @@ export default {
     await ensureNetworkPing(db);
     // Bookings that ended, payments that never came (ADR-017 §3.1): every quarter hour.
     await ensureLifecycleSweep(db);
-    await inboxFor(env).runner.runDue(db, { workerId: "cron", limit: 100 });
+    const inbox = inboxFor(env);
+    // A demo seeds itself and queues its nightly wipe; anything else has nothing to prepare. A demo
+    // refused over a database that holds other data says why, and the jobs still run.
+    await inbox.prepare().catch((error) => console.error("demo:", error instanceof Error ? error.message : error));
+    await inbox.runner.runDue(db, { workerId: "cron", limit: 100 });
   },
 
   // Cloudflare Email Routing hands us the raw MIME; DKIM/SPF were checked upstream.

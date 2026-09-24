@@ -28,6 +28,16 @@ export interface SeedDeps {
   readonly receipts?: ReceiptCapabilities | undefined;
 }
 
+/** The showcase shop's domain. */
+export const SHOWCASE_DOMAIN = "oficinamare.pt";
+
+/**
+ * The public demo's copy of the shop has a domain of its own, and a public demo only ever wipes an
+ * instance whose business has it. `.example` is reserved (RFC 2606), so no real business has it, and
+ * nothing but the demo's own seed writes it: not seed-demo, not seed-showcase, not the setup wizard.
+ */
+export const DEMO_SHOP_DOMAIN = "oficinamare.example";
+
 /**
  * A demo business so a fresh instance has something to show: Oficina Maré, a bicycle workshop in
  * Ericeira. Idempotent; never touches an instance that already has a business row.
@@ -41,7 +51,7 @@ export async function seedDemo(db: Db, now = Date.now(), _deps: SeedDeps = {}): 
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",
-    domain: "oficinamare.pt",
+    domain: SHOWCASE_DOMAIN,
     timezone: "Europe/Lisbon",
     currency: "EUR",
     createdAt: now,
@@ -144,11 +154,15 @@ const EUR = (value: number) => ({ value, currency: "EUR" });
  * opening hours with Saturday mornings, notifications and network membership on. Everything goes
  * through the real write path with timestamps relative to now, and the rules run as they would
  * have, so timelines say who did what. Idempotent like seedDemo.
+ *
+ * `demo` is the public demo's copy (demo.ts): the same shop with no owner address, no sender and no
+ * network, since a demo emails nobody and reports to nobody.
  */
 export async function seedShowcase(
   db: Db,
   now = Date.now(),
   deps: SeedDeps = {},
+  opts: { demo?: boolean } = {},
 ): Promise<{ seeded: boolean; items: number }> {
   const [existing] = await db.orm
     .select({ id: schema.business.id })
@@ -159,7 +173,7 @@ export async function seedShowcase(
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",
-    domain: "oficinamare.pt",
+    domain: opts.demo ? DEMO_SHOP_DOMAIN : SHOWCASE_DOMAIN,
     timezone: TZ,
     currency: "EUR",
     createdAt: t0,
@@ -332,12 +346,22 @@ export async function seedShowcase(
   };
   await caps.updateSettings(system, {
     doc: {
-      business: { name: "Oficina Maré", timezone: TZ, currency: "EUR", languages: ["pt", "en"] },
+      // A demo is tried from anywhere, so it answers in English first.
+      business: {
+        name: "Oficina Maré",
+        timezone: TZ,
+        currency: "EUR",
+        languages: opts.demo ? ["en", "pt"] : ["pt", "en"],
+      },
       booking: { cancellationWindowMin: 120, holdOnPropose: true, autoExpireHours: 48 },
       orders: { maxValueWithoutApprovalMinor: 20_000 },
-      notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://inbox.oficinamare.pt" },
-      email: { fromAddress: "inbox@oficinamare.pt", fromName: "Oficina Maré", replyTo: "hello@oficinamare.pt" },
-      networks: { [DEFAULT_NETWORK]: { enabled: true } },
+      ...(opts.demo
+        ? {}
+        : {
+            notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://inbox.oficinamare.pt" },
+            email: { fromAddress: "inbox@oficinamare.pt", fromName: "Oficina Maré", replyTo: "hello@oficinamare.pt" },
+            networks: { [DEFAULT_NETWORK]: { enabled: true } },
+          }),
     },
   });
 

@@ -95,7 +95,10 @@ export class ReceiptCapabilities {
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretBox | null,
-    /** The `iss` of every receipt: `INBOX_PUBLIC_URL`. A job has no request to derive it from. */
+    /**
+     * The `iss` of every receipt: `INBOX_PUBLIC_URL`, else the Inbox address in Settings. A job has
+     * no request to derive it from.
+     */
     private readonly baseUrl: string | undefined,
     private readonly clock: () => number = Date.now,
   ) {
@@ -106,7 +109,7 @@ export class ReceiptCapabilities {
    * Whether this instance can issue receipts, and if not, the one sentence that says why. The
    * setup screen and the job note both use it, so an owner hears the same reason in both places.
    */
-  readiness(): { ok: true } | { ok: false; reason: string } {
+  readiness(settings?: Settings): { ok: true } | { ok: false; reason: string } {
     if (!this.secrets) {
       return {
         ok: false,
@@ -114,18 +117,29 @@ export class ReceiptCapabilities {
           "INBOX_SECRET_KEY is not set, so the signing key could only be stored in the clear; no receipt is issued.",
       };
     }
-    if (!this.baseUrl) {
+    if (!this.issuer(settings)) {
       return {
         ok: false,
-        reason: "INBOX_PUBLIC_URL is not set, so a receipt could not name its issuer; none is issued.",
+        reason:
+          "This inbox has no public address yet (INBOX_PUBLIC_URL, or the Inbox address in Settings), so a receipt could not name its issuer; none is issued.",
       };
     }
     return { ok: true };
   }
 
-  /** The issuer every receipt names: the public origin, no trailing slash. */
-  issuer(): string | null {
-    return this.baseUrl ? this.baseUrl.replace(/\/+$/, "") : null;
+  /**
+   * The issuer every receipt names: `INBOX_PUBLIC_URL` with no trailing slash, else the origin of the
+   * Inbox address in Settings (which the owner's first sign-in fills in), else none.
+   */
+  issuer(settings?: Settings): string | null {
+    if (this.baseUrl) return this.baseUrl.replace(/\/+$/, "");
+    const typed = settings?.notifications.appUrl;
+    if (!typed) return null;
+    try {
+      return new URL(typed).origin;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -149,7 +163,8 @@ export class ReceiptCapabilities {
     const existing = await this.row(itemId, kind, outcome ?? "");
     if (existing) return { outcome: "already", receipt: view(existing) };
 
-    const ready = this.readiness();
+    const settings = await readSettings(this.db);
+    const ready = this.readiness(settings);
     if (!ready.ok) return { outcome: "skipped", note: ready.reason };
 
     const [item] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
@@ -176,8 +191,6 @@ export class ReceiptCapabilities {
             : `a ${item.type} promises nothing, so it has no ${kind} receipt`,
       };
     }
-    const settings = await readSettings(this.db);
-
     // A promise names the person each network presented for the item (`per`). While a first
     // contact is still waiting for a network's answer it waits too, for at most fifteen minutes
     // from the item's creation, and then goes without (§3.2).
@@ -216,7 +229,7 @@ export class ReceiptCapabilities {
 
     const iat = Math.floor((opts.eventId ? ((await this.eventTime(opts.eventId)) ?? now) : now) / 1000);
     const base = {
-      iss: this.issuer(),
+      iss: this.issuer(settings),
       sub,
       itm: item.id,
       typ: item.type,
@@ -385,7 +398,8 @@ export class ReceiptCapabilities {
 
   /** For the owner: readiness plus counts, one query each, nothing about any customer. */
   async status(): Promise<ReceiptStatus> {
-    const ready = this.readiness();
+    const settings = await readSettings(this.db);
+    const ready = this.readiness(settings);
     const [keys, issued, acked] = await Promise.all([
       this.db.orm.select({ n: count() }).from(signingKeys).where(isNull(signingKeys.retiredAt)),
       this.db.orm.select({ n: count() }).from(receipts),
@@ -394,7 +408,7 @@ export class ReceiptCapabilities {
     return {
       ready: ready.ok,
       reason: ready.ok ? null : ready.reason,
-      issuer: this.issuer(),
+      issuer: this.issuer(settings),
       keys: Number(keys[0]?.n ?? 0),
       issued: Number(issued[0]?.n ?? 0),
       acknowledged: Number(acked[0]?.n ?? 0),

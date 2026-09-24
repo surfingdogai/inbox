@@ -5,7 +5,7 @@ import { KeyRound, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Sun } from "../components/Feedback";
 import { api, problemOf } from "../lib/api";
-import { ensureSignedIn, KEY_PREFIX, signInWithKey } from "../lib/auth";
+import { ensureSignedIn, KEY_PREFIX, sameSitePath, signInWithKey } from "../lib/auth";
 import { useBusiness } from "../lib/queries";
 
 interface LoginSearch {
@@ -14,10 +14,13 @@ interface LoginSearch {
 }
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
-    ...(typeof search.redirect === "string" && search.redirect.startsWith("/") ? { redirect: search.redirect } : {}),
-    ...(search.reason === "expired" ? { reason: "expired" as const } : {}),
-  }),
+  validateSearch: (search: Record<string, unknown>): LoginSearch => {
+    const back = sameSitePath(search.redirect);
+    return {
+      ...(back ? { redirect: back } : {}),
+      ...(search.reason === "expired" ? { reason: "expired" as const } : {}),
+    };
+  },
   beforeLoad: async ({ search }) => {
     if (await ensureSignedIn()) throw redirect({ href: search.redirect ?? "/" });
   },
@@ -158,8 +161,8 @@ function SentState({ onAnother }: { onAnother: () => void }) {
         If <b>{lastEmail}</b> belongs to this inbox, a sign-in link is on its way. It works for 15 minutes.
       </p>
       <p className="hint">
-        Nothing there? Look in spam, or ask the owner to add your address. Without a mail provider set up, the link is
-        written to the server log instead.
+        Nothing there? Look in spam, or ask the owner to add your address. If this inbox can't send email yet, the link
+        is in the server's log instead. On Cloudflare, that's your Worker's logs in the dashboard.
       </p>
       {problem && (
         <p className="hint error" role="alert">
@@ -249,7 +252,7 @@ function KeyForm({
           aria-describedby="owner-key-hint"
         />
         <div id="owner-key-hint" className={clsx("hint", shown && "error")} aria-live="polite">
-          {shown ?? "Create one with `pnpm key` on the server, or under Settings once signed in by email."}
+          {shown ?? "Make one in Settings → Keys once you're signed in, or with create-owner-key on your own server."}
         </div>
       </div>
       <button type="submit" className="btn btn-primary btn-lg" disabled={verify.isPending}>

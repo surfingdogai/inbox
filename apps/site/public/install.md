@@ -26,8 +26,8 @@ Ask the person which they want. Both are fully supported; the software is identi
 | | **Cloudflare Workers** | **Their own server** |
 |---|---|---|
 | Good when | They have no server and want it managed | They have a VPS, or want the data on their own machine |
-| Cost | Workers Paid, about $5/month, plus usage | Whatever the server costs |
-| Needs | A Cloudflare account, the domain on Cloudflare | A Linux box, Node 22.16+, 24 or 26, and a domain |
+| Cost | The free plan runs it. Sending email needs Workers Paid, about $5/month | Whatever the server costs |
+| Needs | A Cloudflare account; for email and their own subdomain, the domain on Cloudflare | A Linux box, Node 22.16+, 24 or 26, and a domain |
 | Database | D1 | One SQLite file |
 
 If they have no preference and no server, take Cloudflare.
@@ -45,8 +45,10 @@ node --version    # 22.16+, 24 or 26
 npx wrangler --version
 ```
 
-They need a Cloudflare account on the **Workers Paid** plan, their domain on Cloudflare, and
-**R2 enabled** (dash.cloudflare.com → R2 → Enable; it is a product switch, not a permission).
+They need a Cloudflare account. The free plan runs the inbox. To send email (sign-in links,
+alerts, customer replies) they need **Workers Paid** and their domain onboarded to **Email Sending**
+(dashboard → Email Service → Email Sending → Onboard Domain). Ask whether they want email now; the
+inbox works without it, and the sign-in link then goes to the Worker's logs.
 
 ### A2. Get the code
 
@@ -54,13 +56,12 @@ They need a Cloudflare account on the **Workers Paid** plan, their domain on Clo
 git clone https://github.com/surfingdogai/inbox && cd inbox && pnpm install
 ```
 
-### A3. Create the three resources
+### A3. Create the two resources
 
 Wrangler will open a browser to sign in the first time.
 
 ```bash
 npx wrangler d1 create surfingdog-inbox
-npx wrangler r2 bucket create surfingdog-inbox-blobs
 npx wrangler queues create surfingdog-inbox-jobs
 ```
 
@@ -81,6 +82,16 @@ Ask the person which email address should be able to sign in as the owner, then:
 ```bash
 printf 'THEIR_EMAIL' | npx wrangler secret put INBOX_OWNER_EMAIL
 ```
+
+If they want email now, ask which address the inbox should send from. Its domain must be onboarded
+to Email Sending on the same account (`npx wrangler email sending list` shows which are). Then:
+
+```bash
+printf 'inbox@theirdomain.com' | npx wrangler secret put MAIL_FROM
+```
+
+`wrangler.jsonc` already has the `send_email` binding this uses. Without MAIL_FROM, or with an
+address whose domain is not onboarded, the sign-in link is written to the Worker's logs instead.
 
 ### A5. Build and deploy
 
@@ -115,12 +126,16 @@ Verify, and only continue when it answers:
 curl -s https://inbox.theirdomain.com/healthz
 ```
 
-Then tell the instance its own address, so links in its emails are right:
+Then tell the instance its own address, so links in its emails and its receipts name it:
 
 ```bash
 printf 'https://inbox.theirdomain.com' | npx wrangler secret put INBOX_PUBLIC_URL
-npx wrangler deploy
 ```
+
+Without INBOX_PUBLIC_URL, the owner's first sign-in saves the address they signed in at as the
+Inbox address in Settings, and the inbox uses that. Setting it here is still better once the
+subdomain is final. Use `secret put`, not a plain-text variable: a plain variable added in the
+dashboard is removed by the next deploy.
 
 ---
 
@@ -139,7 +154,18 @@ git clone https://github.com/surfingdogai/inbox && cd inbox && pnpm install
 pnpm --filter @surfingdog/inbox build
 ```
 
-That writes `apps/inbox/dist/server.mjs` and `apps/inbox/dist/client`. Copy both to the server.
+That writes `apps/inbox/dist/server.mjs` and `apps/inbox/dist/client`. On the server, create the
+service user and copy both into `/opt/inbox`:
+
+```bash
+useradd --system --home-dir /opt/inbox --shell /usr/sbin/nologin inbox
+mkdir -p /opt/inbox/data
+cp apps/inbox/dist/server.mjs /opt/inbox/server.mjs
+cp -r apps/inbox/dist/client /opt/inbox/client
+chown -R inbox:inbox /opt/inbox/data
+```
+
+The repository's `Dockerfile` does these same steps, if they would rather run a container.
 
 ### B3. Configuration
 
@@ -153,6 +179,7 @@ Write `/opt/inbox/.env`, readable only by the service user:
 
 ```bash
 INBOX_DB=/opt/inbox/data/inbox.db
+INBOX_STATIC=/opt/inbox/client
 INBOX_PUBLIC_URL=https://inbox.theirdomain.com
 INBOX_OWNER_EMAIL=them@theirdomain.com
 INBOX_SECRET_KEY=<the key you just generated>
@@ -207,8 +234,13 @@ curl -s https://inbox.theirdomain.com/login
 ```
 
 Tell the person to open `/login` and enter the address you set as `INBOX_OWNER_EMAIL`. They get a
-link by email. If no mail provider is configured yet, the link is printed in the server's log, so
-read it from there and give it to them.
+link by email. If the inbox cannot send email yet, the link is written to the server's log instead,
+with the reason. Read it from there and give it to them. It works once, for 15 minutes. If the
+log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo: set it again.
+
+- On their own server: `journalctl -u inbox` (or the container's log).
+- On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask for the link again, or
+  open the Worker in the dashboard, go to Logs, and search for `sign-in link`.
 
 Alternatively mint a key. On their own server:
 
@@ -278,12 +310,13 @@ that proves the last hop.
 
 ### Email out, optional
 
-Without it, sign-in links and notifications are written to the log instead of sent. Either:
+Without it, sign-in links are written to the log and other email is not sent. The item says so.
 
-```bash
-RESEND_API_KEY=…                                  # Resend
-CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_EMAIL_TOKEN=… MAIL_FROM=inbox@theirdomain.com   # Cloudflare
-```
+- **Cloudflare Workers:** `MAIL_FROM` (step A4), through the `send_email` binding.
+- **Their own server, Cloudflare Email Sending:** `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`
+  and `MAIL_FROM=inbox@theirdomain.com`.
+- **Either, through Resend:** `RESEND_API_KEY`, with `MAIL_FROM` on a domain verified at Resend.
+  On Workers it is used instead of the binding when it is set.
 
 ---
 

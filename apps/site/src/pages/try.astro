@@ -1,0 +1,483 @@
+---
+// The first thing a developer should do: let their own AI book something, and watch it land.
+// The shop is a demo instance (INBOX_DEMO=1): it emails no one who uses it, calls no network, shows nothing
+// about anyone, and is wiped every night. The feed below reads its public live view.
+import Layout from "../layouts/Layout.astro";
+import { DEMO_FEED, DEMO_LIVE, DEMO_MCP, DEMO_PROMPT, DEMO_URL } from "../lib/demo";
+
+/** A Saturday to put in the curl example; the script swaps in the coming one. 10:00Z is open all year. */
+const saturday = (() => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7 || 7));
+  return d.toISOString().slice(0, 10);
+})();
+
+const BOOK = `curl -s -X POST ${DEMO_URL}/v1/bookings \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "payload": {
+      "reservationFor": { "serviceId": "<id>", "name": "Full service" },
+      "startTime": "${saturday}T10:00:00Z",
+      "endTime": "${saturday}T11:30:00Z"
+    },
+    "contact": { "name": "Rita" }
+  }'`;
+const SERVICES = `curl -s ${DEMO_URL}/v1/services | jq '.items[] | {id, name}'`;
+const STATUS = `curl -s "${DEMO_URL}/v1/items/<item id>?access_token=<token>" | jq .item.state`;
+const TOOLS = `curl -s ${DEMO_MCP} \\
+  -H 'content-type: application/json' \\
+  -H 'accept: application/json, text/event-stream' \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`;
+---
+
+<Layout
+  title="Try it · Surfing Dog"
+  description="Connect Claude or ChatGPT to a demo bike shop, ask it to book a service, and watch the booking arrive. About a minute, no sign-up."
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="try-h">
+    <p class="eyebrow">Try it</p>
+    <h1 class="h-page" id="try-h">Let your AI book a bike service</h1>
+    <p class="lede">
+      Oficina Maré is a pretend bike workshop running Surfing Dog Inbox. Point your AI at it, ask for a booking,
+      and watch the shop confirm it. It takes about a minute, and there is nothing to sign up for.
+    </p>
+  </section>
+
+  <section class="section section-tight" aria-label="Three steps">
+    <div class="wrap">
+      <ol class="grid-cards steps" data-reveal="stagger">
+        <li class="glass card step">
+          <span class="num" aria-hidden="true">1</span>
+          <h2 class="h-card">Connect your AI</h2>
+          <p class="card-text">
+            In Claude or ChatGPT, add a custom connector (an MCP server) with this address. No key, no sign-in.
+          </p>
+          <p class="copy mono">
+            <code>{DEMO_MCP}</code>
+            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_MCP} hidden>Copy</button>
+          </p>
+        </li>
+        <li class="glass card step">
+          <span class="num" aria-hidden="true">2</span>
+          <h2 class="h-card">Ask for a booking</h2>
+          <p class="card-text">Paste this, or say it your own way. Any name will do.</p>
+          <p class="copy prompt">
+            <span>{DEMO_PROMPT}</span>
+            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_PROMPT} hidden>Copy</button>
+          </p>
+        </li>
+        <li class="glass card step">
+          <span class="num" aria-hidden="true">3</span>
+          <h2 class="h-card">Watch it arrive</h2>
+          <p class="card-text">
+            It shows up below within a few seconds. The shop's own rules confirm a booking when the slot is free,
+            and accept a small order.
+          </p>
+          <p class="copy"><a class="link" href="#live">See the shop live</a></p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="live" aria-labelledby="live-h">
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Live</p>
+          <h2 class="h-section" id="live-h">What the shop is getting</h2>
+        </div>
+        <a class="btn btn-secondary btn-sm" href={DEMO_LIVE} rel="noopener">Open the full view</a>
+      </div>
+      <div class="glass panel feed" data-feed={DEMO_FEED}>
+        <p class="status" data-feed-status>
+          <i class="beat" aria-hidden="true"></i>
+          <span data-feed-text>Looking for the shop</span>
+        </p>
+        <ul class="rows" data-feed-list aria-live="polite"></ul>
+        <noscript><p class="hint">The feed needs JavaScript. <a class="link" href={DEMO_LIVE}>Open the full view</a> instead.</p></noscript>
+      </div>
+      <p class="fine">
+        The demo never emails anyone who uses it, never shows a name, an address or a message, and is wiped every night.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="curl-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">For developers</p>
+          <h2 class="h-section" id="curl-h">The same with curl</h2>
+          <p class="lede">The shop speaks plain REST too. Find the service, book it, then ask how it went.</p>
+        </div>
+      </div>
+      <ol class="calls">
+        <li>
+          <p class="card-text">The services, with their ids:</p>
+          <pre class="glass panel code"><code>{SERVICES}</code></pre>
+        </li>
+        <li>
+          <p class="card-text">A full service on Saturday morning. Put the id in:</p>
+          <pre class="glass panel code"><code data-saturday={saturday}>{BOOK}</code></pre>
+        </li>
+        <li>
+          <p class="card-text">
+            The answer carries the booking's id, <code>view.item.id</code>, and an <code>accessToken</code>. A second
+            later the booking says <code>confirmed</code>:
+          </p>
+          <pre class="glass panel code"><code>{STATUS}</code></pre>
+        </li>
+        <li>
+          <p class="card-text">And the tools an AI sees over MCP:</p>
+          <pre class="glass panel code"><code>{TOOLS}</code></pre>
+        </li>
+      </ol>
+      <p class="hint">
+        Every call is in <a class="link" href={`${DEMO_URL}/openapi.json`} rel="noopener">openapi.json</a>, and the
+        <a class="link" href="/docs/api/">API page</a> explains them.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="own-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="glass panel own">
+        <div>
+          <h2 class="h-section" id="own-h">Want one for your business?</h2>
+          <p class="card-text">It is open source. Run it on your own server or on Cloudflare.</p>
+        </div>
+        <div class="own-actions">
+          <a class="btn btn-primary" href="/install/">Install it</a>
+          <a class="btn btn-secondary" href="/docs/quickstart/">Quickstart</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 900px) {
+    .steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  .num {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin-bottom: var(--sp-1);
+    border-radius: var(--radius-pill);
+    background: linear-gradient(135deg, var(--tangerine), var(--flamingo), var(--violet));
+    color: #ffffff;
+    font-family: var(--font-display);
+    font-size: var(--fs-ui);
+    font-weight: 700;
+  }
+  .copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin: auto 0 0;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+    overflow-wrap: anywhere;
+  }
+  .copy.prompt {
+    font-size: var(--fs-card);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .copy code {
+    font-size: var(--fs-mono);
+  }
+
+  .feed {
+    padding: var(--sp-3);
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: var(--sp-1) var(--sp-2) var(--sp-2);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .beat {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--ink-3);
+  }
+  .feed.is-live .beat {
+    background: var(--palm);
+  }
+  .rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rows :global(li) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "dot main pill" ". meta meta";
+    gap: 2px var(--sp-3);
+    align-items: center;
+    padding: var(--sp-3) var(--sp-2);
+    border-top: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+  }
+  .rows :global(.dot) {
+    grid-area: dot;
+  }
+  .rows :global(.main) {
+    grid-area: main;
+    font-size: var(--fs-card);
+    overflow-wrap: anywhere;
+  }
+  .rows :global(.what) {
+    color: var(--ink-2);
+  }
+  .rows :global(.when) {
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .rows :global(.pill) {
+    grid-area: pill;
+  }
+  .rows :global(.meta) {
+    grid-area: meta;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  @media (max-width: 560px) {
+    .rows :global(li) {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: "dot main" ". pill" ". meta";
+    }
+    .rows :global(.pill) {
+      justify-self: start;
+      margin: var(--sp-1) 0 2px;
+    }
+  }
+
+  .calls {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    /* minmax(0, …): a long curl line scrolls inside its box instead of widening the page on a phone. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-5);
+  }
+  .calls .card-text {
+    margin-bottom: var(--sp-2);
+  }
+  .code {
+    margin: 0;
+    padding: var(--sp-4);
+    overflow-x: auto;
+    font-size: var(--fs-mono);
+    line-height: 1.6;
+  }
+
+  .own {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4) var(--sp-6);
+  }
+  .own .card-text {
+    margin-top: var(--sp-2);
+  }
+  .own-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .feed.is-live .beat {
+      animation: beat 2s var(--ease) infinite;
+    }
+    .rows :global(li.is-new) {
+      animation: arrive 0.7s var(--ease) both;
+    }
+    .rows :global(.pill.is-happy) {
+      animation: happy 0.7s var(--ease) both;
+    }
+  }
+  @keyframes beat {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--palm) 55%, transparent);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 8px transparent;
+    }
+  }
+  /* A new request drops in with a little sky behind it, then settles. */
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+      background: color-mix(in srgb, var(--flamingo) 14%, transparent);
+    }
+    60% {
+      opacity: 1;
+      background: color-mix(in srgb, var(--sun) 12%, transparent);
+    }
+    to {
+      transform: none;
+      background: transparent;
+    }
+  }
+  /* Confirmed or accepted: the pill hops once. */
+  @keyframes happy {
+    0% {
+      transform: scale(1) rotate(0);
+    }
+    35% {
+      transform: scale(1.18) rotate(-4deg);
+    }
+    65% {
+      transform: scale(0.96) rotate(2deg);
+    }
+    100% {
+      transform: scale(1) rotate(0);
+    }
+  }
+</style>
+
+<script>
+  // Copy buttons appear only where the clipboard is there to use.
+  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-copy]"))) {
+    if (!navigator.clipboard) break;
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      const label = button.textContent ?? "Copy";
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy ?? "");
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Select it instead";
+      }
+      window.setTimeout(() => {
+        button.textContent = label;
+      }, 1600);
+    });
+  }
+
+  // The curl example books the coming Saturday, whenever the page was built.
+  const code = document.querySelector<HTMLElement>("[data-saturday]");
+  if (code?.dataset.saturday) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7 || 7));
+    code.textContent = (code.textContent ?? "").replaceAll(code.dataset.saturday, d.toISOString().slice(0, 10));
+  }
+
+  // The live feed: the demo shop's public view, polled while the page is visible. It holds only a
+  // type, the shop's name for what was asked for, a time, a state and how it arrived.
+  type Entry = {
+    key: string;
+    type: string;
+    what: string;
+    when: string | null;
+    state_label: string;
+    tone: "good" | "waiting" | "stopped";
+    via: string;
+    at: number;
+    test: boolean;
+  };
+  const feed = document.querySelector<HTMLElement>("[data-feed]");
+  const list = document.querySelector<HTMLUListElement>("[data-feed-list]");
+  const text = document.querySelector<HTMLElement>("[data-feed-text]");
+  const TYPES: Record<string, [string, string]> = {
+    booking: ["Booking", "booking"],
+    order: ["Order", "order"],
+    quote_request: ["Quote", "quote"],
+    message: ["Message", "message"],
+    refund: ["Refund", "refund"],
+  };
+  const TONES = { good: "tint-success", waiting: "tint-warning", stopped: "" };
+  const ago = (ms: number) => {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 45) return "just now";
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 36) return `${h} h ago`;
+    const d = Math.round(h / 24);
+    return `${d} day${d === 1 ? "" : "s"} ago`;
+  };
+  const el = (tag: string, cls: string, content?: string) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (content !== undefined) e.textContent = content;
+    return e;
+  };
+  const seen = new Map<string, string>();
+  let first = true;
+  const row = (item: Entry) => {
+    const [label, tint] = TYPES[item.type] ?? [item.type, ""];
+    const li = el("li", "");
+    const dot = el("i", `dot dot-${tint}`);
+    dot.setAttribute("aria-hidden", "true");
+    const main = el("span", "main");
+    main.append(el("b", "", label), " ", el("span", "what", item.what));
+    if (item.when) main.append(" ", el("span", "when", item.when));
+    const pill = el("span", `pill ${TONES[item.tone] ?? ""}`, item.state_label);
+    const meta = el("span", "meta", `${item.via} · ${ago(item.at)}${item.test ? " · test" : ""}`);
+    li.append(dot, main, pill, meta);
+    const before = seen.get(item.key);
+    if (!first && before === undefined) li.classList.add("is-new");
+    if (!first && item.tone === "good" && before !== item.state_label) pill.classList.add("is-happy");
+    return li;
+  };
+  // One reading at a time, and none that hangs: a shop that does not answer in eight seconds is down.
+  let busy = false;
+  const tick = async () => {
+    if (!feed || !list || !text || document.hidden || busy) return;
+    busy = true;
+    try {
+      const res = await fetch(feed.dataset.feed ?? "", { cache: "no-store", signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(String(res.status));
+      const body = (await res.json()) as { business?: string; items?: Entry[] };
+      const items = (body.items ?? []).slice(0, 8);
+      list.replaceChildren(...items.map(row));
+      seen.clear();
+      for (const item of items) seen.set(item.key, item.state_label);
+      first = false;
+      feed.classList.add("is-live");
+      text.textContent = `Live from ${body.business ?? "the shop"}`;
+    } catch {
+      feed.classList.remove("is-live");
+      text.textContent = "The shop is not answering right now. Try again in a minute.";
+    } finally {
+      busy = false;
+    }
+  };
+  if (feed) {
+    void tick();
+    window.setInterval(tick, 4000);
+    document.addEventListener("visibilitychange", () => void tick());
+  }
+</script>

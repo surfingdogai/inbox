@@ -32,6 +32,31 @@ export function logMailOut(log: (line: string) => void = () => {}, opts: { deliv
 }
 
 /**
+ * No mail service: the whole message is written to the log, so a sign-in link can be copied from the
+ * terminal (Node) or the Worker's logs. A customer's network key or pass is not the operator's to
+ * copy: its secret is cut. `delivers: false`, so the mail log never records a message as sent.
+ */
+export function consoleMailOut(log: (line: string) => void = console.log): MailOut {
+  return {
+    // Nothing leaves this machine, so a message with no sender of its own can still be shown.
+    sender: LOCAL_SENDER,
+    delivers: false,
+    async send(mail) {
+      const body = mail.text
+        .replace(/\b(sd(?:key|pass)1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}\b/g, "$1…")
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+      const headers = Object.entries(mail.headers ?? {})
+        .map(([k, v]) => `    ${k}: ${v}\n`)
+        .join("");
+      log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${headers}${body}`);
+      return { messageId: `console-${crypto.randomUUID()}` };
+    },
+  };
+}
+
+/**
  * Cloudflare Email Service `send_email` binding (structural type; `env.EMAIL` satisfies it).
  *
  * The shape is workerd's own `EmailAddress`: `{ email, name }`, name required, or a plain string.
@@ -84,8 +109,17 @@ export function cloudflareHeaders(headers: Record<string, string> | undefined): 
   return Object.keys(out).length ? out : undefined;
 }
 
-export function cloudflareEmailMailOut(binding: CloudflareEmailBinding): MailOut {
+/**
+ * The binding sends from the address a message names, which must be on a domain onboarded to Email
+ * Sending on the same account. `sender` (MAIL_FROM) is the address a message with none of its own
+ * goes out from, such as the owner's sign-in link.
+ */
+export function cloudflareEmailMailOut(
+  binding: CloudflareEmailBinding,
+  sender?: { address: string; name?: string | undefined } | undefined,
+): MailOut {
   return {
+    ...(sender ? { sender } : {}),
     async send(mail) {
       const r = await binding.send({
         from: mail.from.name ? { email: mail.from.address, name: mail.from.name } : mail.from.address,
@@ -101,9 +135,14 @@ export function cloudflareEmailMailOut(binding: CloudflareEmailBinding): MailOut
   };
 }
 
-/** Resend's HTTP API; runs anywhere fetch does. */
-export function resendMailOut(apiKey: string, fetchImpl: typeof fetch = fetch): MailOut {
+/** Resend's HTTP API; runs anywhere fetch does. `sender` (MAIL_FROM) is for messages that name none. */
+export function resendMailOut(
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+  sender?: { address: string; name?: string | undefined } | undefined,
+): MailOut {
   return {
+    ...(sender ? { sender } : {}),
     async send(mail) {
       const res = await fetchImpl("https://api.resend.com/emails", {
         method: "POST",

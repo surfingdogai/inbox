@@ -157,6 +157,42 @@ describe("setup: availability", () => {
   });
 });
 
+describe("setup: opening hours in rules", () => {
+  // The wizard writes the time zone to the business profile, and availability offers slots in it.
+  // A rule once judged "inside opening hours" in the settings' default UTC instead, so in Lisbon the
+  // first hour of the day went to a person and the hour after closing was confirmed.
+  it("are judged in the business's own time zone, as availability offers them", async () => {
+    const { caps } = await setup();
+    await caps.setup.updateProfile(owner, { timezone: "Europe/Lisbon" });
+    await caps.setup.setWeekly(owner, { weekly: { mon: [["09:00", "17:00"]] } });
+    const svc = await caps.setup.createService(owner, {
+      name: "Full service",
+      duration_min: 60,
+      capacity: 1,
+      granularity_min: 60,
+      active: true,
+      sort: 0,
+      buffer_before_min: 0,
+      buffer_after_min: 0,
+    });
+    const hours = async (start: string, end: string) => {
+      const made = (await caps.createBooking(customer, {
+        payload: { reservationFor: { serviceId: svc.id, name: "Full service" }, startTime: start, endTime: end },
+        contact: { email: "rita@example.com" },
+      })) as { view: { item: { id: string } } };
+      const test = await caps.setup.testRule(owner, {
+        definition: (PRESETS.appointments ?? [])[0]?.definition as never,
+        item_id: made.view.item.id,
+      });
+      return test.facts.withinBusinessHours;
+    };
+    // Monday 5 October 2026, summer time in Lisbon (UTC+1): 09:00 there is 08:00 UTC.
+    expect(await hours("2026-10-05T08:00:00.000Z", "2026-10-05T09:00:00.000Z")).toBe(true);
+    // 16:30 to 17:30 in Lisbon runs past closing.
+    expect(await hours("2026-10-05T15:30:00.000Z", "2026-10-05T16:30:00.000Z")).toBe(false);
+  });
+});
+
 describe("setup: rules", () => {
   it("applies presets, edits with optimistic versions, summarises in words and tests against a real item", async () => {
     const { caps } = await setup();

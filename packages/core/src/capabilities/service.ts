@@ -934,6 +934,46 @@ export class Capabilities {
     return redact(after, version);
   }
 
+  /**
+   * Keeps `origin` as the Inbox address (`notifications.appUrl`) when the host has no public URL of
+   * its own (`INBOX_PUBLIC_URL`) and none is set yet: the owner's sign-in calls it with the https
+   * address they opened their link at. Receipts, links in emails and networks read the Inbox address
+   * when there is no request to take one from, so an instance deployed with one click, where nobody
+   * typed an address, still has one. Never overwrites: the owner changes it in Settings.
+   */
+  async rememberInboxAddress(origin: string, now: number = Date.now()): Promise<boolean> {
+    if (this.baseUrl) return false;
+    let url: URL;
+    try {
+      url = new URL(origin);
+    } catch {
+      return false;
+    }
+    if (url.protocol !== "https:") return false;
+    const [row] = await this.db.orm
+      .select({ doc: settingsTable.doc, version: settingsTable.version })
+      .from(settingsTable)
+      .limit(1);
+    if (parseStoredSettings(row?.doc ?? {}).settings.notifications.appUrl) return false;
+    const system: Caller = {
+      actor: { kind: "system", id: "sign-in", channel: "system" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => now,
+    };
+    try {
+      await this.updateSettings(system, {
+        doc: { notifications: { appUrl: url.origin } },
+        ...(row ? { expected_version: row.version } : {}),
+      });
+      return true;
+    } catch (error) {
+      // Someone saved the settings at the same moment: theirs stands, and the next sign-in tries again.
+      if (error instanceof WriteError && error.code === "version_conflict") return false;
+      throw error;
+    }
+  }
+
   /** Every network in settings, switched on or not, with how it is going and what it has been sent. */
   async getNetworks(caller: Caller): Promise<{ networks: NetworkView[] }> {
     requireBusiness(caller);

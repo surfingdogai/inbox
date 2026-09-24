@@ -29,10 +29,19 @@ describe("worker", () => {
     expect(html).not.toContain("<script");
   });
 
+  it("answers /demo itself, and has no live view on an instance that is not a demo", async () => {
+    const res = await SELF.fetch("https://example.com/demo/live");
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("application/json");
+  });
+
   it("has its platform bindings", async () => {
     expect(env.DB).toBeDefined();
-    expect(env.BLOBS).toBeDefined();
+    // Email out: the binding the Deploy to Cloudflare button adds, so MAIL_FROM is all it needs.
+    expect(env.EMAIL).toBeDefined();
     expect(env.JOBS).toBeDefined();
+    // Nothing stores files, so the button asks nobody to switch on R2.
+    expect("BLOBS" in env).toBe(false);
     // D1 hides sqlite_version(); check the features the core relies on instead.
     await env.DB.exec("CREATE VIRTUAL TABLE IF NOT EXISTS t USING fts5(body)");
     await env.DB.prepare("INSERT INTO t VALUES (?)").bind("confirm the booking for tuesday").run();

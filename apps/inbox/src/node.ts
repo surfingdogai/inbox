@@ -13,13 +13,15 @@ import {
 } from "@surfingdog/core";
 import {
   cloudflareEmailRestMailOut,
+  consoleMailOut,
   ensureMigrated,
-  LOCAL_SENDER,
   type MailOut,
   resendMailOut,
 } from "@surfingdog/platform";
 import { nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
+import { flagOn } from "./demo";
+import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
@@ -30,7 +32,9 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  * Email Service (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN + MAIL_FROM), else Resend
  * (RESEND_API_KEY), else the console. INBOX_OWNER_EMAIL (comma-separated) lists who may create the
  * first account by magic link. INBOX_SECRET_KEY (comma-separated, newest first) seals connector
- * credentials and webhook secrets; without it the instance refuses to store one.
+ * credentials and webhook secrets; without it the instance refuses to store one. INBOX_DEMO=1 makes
+ * it a public demo shop (demo.ts): it seeds itself, emails nobody but the owner, calls no network,
+ * and wipes itself every night.
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
@@ -42,17 +46,15 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 mkdirSync(path.dirname(file), { recursive: true });
 const db = createDb(nodeSqliteClient(file));
+const publicUrl = publicUrlFrom(process.env.INBOX_PUBLIC_URL);
+const from = senderFrom(process.env.MAIL_FROM, process.env.MAIL_FROM_NAME);
 
 const command = process.argv[2];
 if (command) {
   await ensureMigrated(db.client, MIGRATIONS);
   // Seeds confirm items, and a confirmed item earns a receipt when the host can sign one.
   const seedDeps = {
-    receipts: new Capabilities(
-      db,
-      createSecretBox(parseSecretKeys(process.env.INBOX_SECRET_KEY)),
-      process.env.INBOX_PUBLIC_URL,
-    ).receipts,
+    receipts: new Capabilities(db, createSecretBox(parseSecretKeys(process.env.INBOX_SECRET_KEY)), publicUrl).receipts,
   };
   if (command === "create-owner-key") {
     const { key } = await createApiKey(db, { kind: "owner", name: process.argv[3] ?? "cli" });
@@ -85,30 +87,41 @@ await ensureMigrated(db.client, MIGRATIONS);
 await ensureNetworkPing(db);
 // The quarter-hourly lifecycle sweep (ADR-017 §3.1) queues its own successor from here on.
 await ensureLifecycleSweep(db);
+// No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the terminal.
 const mailOut: MailOut =
-  process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_TOKEN && process.env.MAIL_FROM
+  process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_TOKEN && from
     ? cloudflareEmailRestMailOut({
         accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
         token: process.env.CLOUDFLARE_EMAIL_TOKEN,
-        from: { address: process.env.MAIL_FROM, name: process.env.MAIL_FROM_NAME },
+        from,
       })
     : process.env.RESEND_API_KEY
-      ? resendMailOut(process.env.RESEND_API_KEY)
+      ? resendMailOut(process.env.RESEND_API_KEY, undefined, from)
       : consoleMailOut();
-const ownerEmails = (process.env.INBOX_OWNER_EMAIL ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
-const { app, runner } = createInbox({
+const ownerEmails = listFrom(process.env.INBOX_OWNER_EMAIL);
+const demo = flagOn(process.env.INBOX_DEMO);
+const { app, runner, prepare } = createInbox({
   db,
   mailOut,
-  baseUrl: process.env.INBOX_PUBLIC_URL,
+  baseUrl: publicUrl,
   ownerEmails,
-  secretKey: process.env.INBOX_SECRET_KEY,
+  secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
+  demo: demo ? { ownerEmails, from } : undefined,
 });
+if (demo) {
+  // A demo only starts on an empty database. Over anything else it would mute the instance's mail
+  // and serve nothing, so it does not start at all: the operator sees why at once.
+  try {
+    await prepare();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+  console.log("Demo mode: the shop is seeded, nobody but the owner is emailed, and it is wiped every night.");
+}
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
-const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known", "/c"];
+const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known", "/c", "/demo"];
 const isDoor = (p: string) => DOOR_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
 
 const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");
@@ -124,31 +137,6 @@ const loop = setInterval(() => {
   runner.runDue(db, { workerId: `node:${process.pid}` }).catch((error) => console.error("jobs:", error));
 }, 1_000);
 loop.unref();
-
-/**
- * No mail provider: the whole message goes to stdout, so a sign-in link can be copied from the
- * terminal. A customer's network key or pass is not the operator's to copy: its secret is cut.
- */
-function consoleMailOut(): MailOut {
-  return {
-    // Nothing leaves this machine, so a message with no sender of its own can still be shown, and
-    // the mail log never records it as sent.
-    sender: LOCAL_SENDER,
-    delivers: false,
-    async send(mail) {
-      const body = mail.text
-        .replace(/\b(sd(?:key|pass)1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}\b/g, "$1…")
-        .split("\n")
-        .map((line) => `    ${line}`)
-        .join("\n");
-      const headers = Object.entries(mail.headers ?? {})
-        .map(([k, v]) => `    ${k}: ${v}\n`)
-        .join("");
-      console.log(`mail to ${mail.to.join(", ")}: ${mail.subject}\n${headers}${body}`);
-      return { messageId: `console-${crypto.randomUUID()}` };
-    },
-  };
-}
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0" }, (info) => {
