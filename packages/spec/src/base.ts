@@ -12,11 +12,64 @@ export type ItemType = z.infer<typeof itemTypeSchema>;
 
 export const trustTierSchema = z.enum(["anonymous", "signed_agent", "verified_principal", "reputed_principal"]);
 
-/** Public profile data the directory may index. Nothing else about a business ever leaves the instance. */
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+
+/** One opening window, `[opens, closes)` in the business's zone. Closing is after opening: no overnight windows. */
+export const openingWindowSchema = z
+  .tuple([hhmm, hhmm])
+  .refine(([opens, closes]) => opens < closes, { message: "closing time must be after opening time" });
+const openingDay = z.array(openingWindowSchema).max(6);
+
+/** The inbox's own weekly hours: windows per weekday, at most six a day; a day left out is closed. */
+export const weeklyHoursSchema = z
+  .object({
+    mon: openingDay,
+    tue: openingDay,
+    wed: openingDay,
+    thu: openingDay,
+    fri: openingDay,
+    sat: openingDay,
+    sun: openingDay,
+  })
+  .partial();
+
+/** Whole days closed, inclusive, as dates in the business's zone. */
+export const closureDaysSchema = z
+  .object({ from: z.iso.date(), to: z.iso.date() })
+  .refine((c) => c.to >= c.from, { message: "to must not be before from", path: ["to"] });
+
+/**
+ * When the business is open (ADR-017 A2.5): its weekly hours and closures exactly as the inbox keeps them, with the
+ * IANA zone they are in. A network keeps them only with a zone it knows and at least one good window, and shows
+ * closures that have not ended.
+ */
+export const profileHoursSchema = z.object({
+  timezone: z.string().min(1).max(64).describe("IANA zone, e.g. Europe/Lisbon: every time and date in hours is in it."),
+  weekly: weeklyHoursSchema,
+  closures: z.array(closureDaysSchema).max(100).default([]),
+});
+export type ProfileHours = z.infer<typeof profileHoursSchema>;
+
+/** A service the business offers, by name, and how it is taken; prices and durations stay at the inbox. */
+export const profileServiceSchema = z.object({
+  name: z.string().min(1).max(80),
+  type: z.enum(["booking", "order", "quote_request"]),
+});
+
+/**
+ * Public profile data the directory may index. Nothing else about a business ever leaves the instance. A network
+ * checks each field alone and drops a bad one alone (ADR-017 A2.5; `vectors/profile.json`).
+ */
 export const profileSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(500).optional(),
-  categories: z.array(z.string().max(60)).max(10).default([]),
+  categories: z
+    .array(z.string().max(60))
+    .max(10)
+    .default([])
+    .describe(
+      "Slugs from vocab/categories.json (a label or synonym in any of its languages is read as its slug); anything else is kept as a free tag.",
+    ),
   languages: z.array(z.string().max(12)).max(10).default([]),
   address: z
     .object({
@@ -29,6 +82,8 @@ export const profileSchema = z.object({
   geo: z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) }).optional(),
   url: z.url().optional(),
   contact_email: z.email().optional(),
+  hours: profileHoursSchema.optional(),
+  services: z.array(profileServiceSchema).max(30).optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -145,5 +200,11 @@ export const manifestSchema = z.object({
   receipt_keys: z.object({ keys: z.array(z.record(z.string(), z.unknown())) }),
   /** The networks this instance publishes its receipts to, as https origins; empty when none. */
   review_services: z.array(z.url()),
+  /**
+   * Whether to be in the networks' directories (ADR-017 A2.3), for an inbox that cannot sign its calls:
+   * `{"listed": false}` leaves, and saying nothing or `true` comes back. A network acts when this changes,
+   * and it never undoes a signed `POST /v1/instances/{domain}/listing`.
+   */
+  directory: z.object({ listed: z.boolean() }).optional(),
 });
 export type Manifest = z.infer<typeof manifestSchema>;

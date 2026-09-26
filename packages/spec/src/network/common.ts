@@ -98,6 +98,7 @@ export const networkErrorCodeSchema = z.enum([
   "pass_requires_signature",
   "not_your_receipt",
   "report_requires_signature",
+  "unlinked",
   // 404
   "unknown_pass",
   "unknown_issuer",
@@ -112,6 +113,8 @@ export const networkErrorCodeSchema = z.enum([
   // 410
   "revoked",
   "cursor_expired",
+  // 413
+  "too_large",
   // 422
   "unknown_key",
   "unknown_ref",
@@ -119,6 +122,7 @@ export const networkErrorCodeSchema = z.enum([
   "bad_typ",
   "not_yet",
   "report_window",
+  "contest_window",
   "bad_code",
   "code_expired",
   "positive_only",

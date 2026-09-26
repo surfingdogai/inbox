@@ -32,6 +32,12 @@ export const personStandingSchema = z.object({
   since: timestampSchema,
   unusual_use: z.boolean().describe("The pass was seen at over 10 businesses in 24 h, or has two signing keys."),
   rules: z.int().min(1).describe("The rules version in force, as GET /v1/ranking publishes it."),
+  scored: z
+    .boolean()
+    .optional()
+    .describe(
+      "false while the network scores no customer (ADR-017 A2.10): the rest is then as for a person with no record and says nothing about the person's outcomes. A network before Amendment 2 sends none.",
+    ),
 });
 export type PersonStanding = z.infer<typeof personStandingSchema>;
 
@@ -106,6 +112,12 @@ export const presentationRequestSchema = z
       .enum(["otp", "dkim"])
       .optional()
       .describe("How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7)."),
+    resume: z
+      .boolean()
+      .optional()
+      .describe(
+        "The customer lifted their stop at this business: lifts a stop the business made for them (ADR-017 A2.1), never one they made.",
+      ),
   })
   .superRefine((r, ctx) => {
     const n = [r.pass, r.key, r.agent_key].filter((v) => v !== undefined).length;
@@ -154,7 +166,7 @@ export const personViewSchema = z.object({
       state: z.string(),
       dated_at: timestampSchema,
       contest_id: z.string().nullable(),
-      contest_status: z.string().optional(),
+      contest_status: z.string().optional().describe("open, disputed, withdrawn or upheld (ADR-017 A2.9)."),
     }),
   ),
   keys: z.array(
@@ -192,10 +204,26 @@ export const personViewSchema = z.object({
       created_at: timestampSchema,
     }),
   ),
+  stopped: z
+    .array(
+      z.object({
+        business: z.string().describe("The business's domain."),
+        since: timestampSchema,
+        by: z.enum(["you", "the business"]).describe("Who asked: the person, or the business on their behalf."),
+      }),
+    )
+    .optional()
+    .describe(
+      "The businesses this person stopped (ADR-017 A2.1), newest first. A network before Amendment 2 sends none.",
+    ),
 });
 export type PersonView = z.infer<typeof personViewSchema>;
 
-/** `POST /v1/person/contests` (session): a broken outcome about the person, to be counted half until withdrawn. */
+/**
+ * `POST /v1/person/contests` (session): a broken outcome about the person. From rules version 5 it
+ * counts nothing while the contest is open, half once the business disputes it, and never once the
+ * business withdraws it or lets 14 days pass (ADR-017 A2.9); before, half until withdrawn.
+ */
 export const contestRequestSchema = z.object({ evidence: z.string().min(1).max(64) });
 export const contestCreatedSchema = z.object({ id: z.string() });
 
@@ -213,3 +241,63 @@ export const recoveryFinishRequestSchema = z.object({
 });
 export const recoverySessionSchema = z.object({ session: sessionStringSchema, expires_at: timestampSchema });
 export const recoveredKeySchema = z.object({ key: keyStringSchema, pass: passStringSchema });
+
+/**
+ * A customer's stop and erasure (ADR-017 Amendment 2, A2.1–A2.2). When a customer stops a business,
+ * the business's inbox tells each network with `POST /v1/unlinks` (sdi-instance/1). The network cuts
+ * the person from that business: everything of theirs there moves onto an anonymous stand-in, so the
+ * business keeps its record whole and the person's record loses that business's outcomes, and the
+ * business cannot present them again until they lift the stop (`resume` on a presentation).
+ */
+export const unlinkRequestSchema = z
+  .object({
+    request_id: z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{1,64}$/)
+      .describe("The network replays the same answer for the same request_id for 7 days."),
+    ppids: z
+      .array(ppidSchema)
+      .max(8)
+      .optional()
+      .describe("Every ppid this network gave this business for the customer: one per address they used."),
+    presentations: z
+      .array(presentationIdSchema)
+      .max(200)
+      .optional()
+      .describe("The presentations the inbox kept for the customer's items."),
+  })
+  .superRefine((r, ctx) => {
+    if ((r.ppids?.length ?? 0) + (r.presentations?.length ?? 0) === 0) {
+      ctx.addIssue({ code: "custom", message: "name the customer by ppids or presentations", path: [] });
+    }
+  });
+export type UnlinkRequest = z.infer<typeof unlinkRequestSchema>;
+
+/** `200`: how many persons and items were cut from this business, and which items still wait for an outcome. */
+export const unlinkResponseSchema = z.object({
+  unlinked: z.int().min(0).describe("Persons cut from this business; 0 when the ids name nobody it was given."),
+  items: z.int().min(0),
+  open_items: z
+    .array(z.string())
+    .describe("Items whose promise has no outcome yet: the inbox still publishes their outcomes, without per."),
+});
+export type UnlinkResponse = z.infer<typeof unlinkResponseSchema>;
+
+/** `POST /v1/person/unlinks` and `/v1/person/unlinks/remove` (session): the person stops, or lets again, one business. */
+export const personUnlinkRequestSchema = z.object({
+  business: z.string().min(1).max(253).describe("The business's domain."),
+});
+export const personUnlinkResponseSchema = z.object({
+  business: z.string(),
+  stopped: z.boolean(),
+  since: timestampSchema.optional(),
+  by: z.enum(["you", "the business"]).optional(),
+});
+
+/**
+ * `POST /v1/person/erase` (a session made from an emailed code in the last hour): everything that
+ * can act as the person is revoked at once, and their record is erased; each business keeps its own
+ * record, bound to no one.
+ */
+export const personEraseRequestSchema = z.object({ confirm: z.literal("erase") });
+export const personEraseResponseSchema = z.object({ erasing: z.literal(true), message: z.string() });

@@ -8,7 +8,8 @@ or network:
   claims v2 (ADR-017 §3.2),
 - every message an inbox exchanges with a network (ADR-017 §7): registration and the ping,
   persons, presentations, passes, delegations, recovery, reports and contests, the directory and
-  the published rules — described for people in [`docs/protocol/network.md`](../../docs/protocol/network.md).
+  the published rules — described for people in [`docs/protocol/network.md`](../../docs/protocol/network.md),
+- the tools a network offers assistants at `/mcp` (ADR-017 A2.7): what each takes and answers.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -22,9 +23,14 @@ implementations:
 | `passes.json` | key, pass and pass-reference strings, `ppid`, `email_mac`, and 43 email normalisation cases |
 | `scoring.json` | the network's scores (ADR-017 §5): every worked example, the R5 grid, ageing, hold and release |
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
+| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags |
+| `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
+
+`vocab/categories.json` is the categories list a profile names its categories from: each slug with
+its English and Portuguese labels and synonyms.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by
-`npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`
-and `ordering.json` come from the network unchanged. `packages/core/test/*-vectors.test.ts` checks
+`npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`,
+`ordering.json`, `profile.json` and `mcp.json` come from the network unchanged. `packages/core/test/*-vectors.test.ts` checks
 every file against the code on Node and in workerd; the network checks the same files in Go.

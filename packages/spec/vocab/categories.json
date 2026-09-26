@@ -1,0 +1,753 @@
+{
+  "description": "The directory's categories: a small, open list. A business's profile names its categories by slug, label or synonym, in English or Portuguese (Portugal), with any capitals and accents; a network keeps the slug, and keeps anything else a profile names as a free tag. New slugs come by a change to this file, which raises version.",
+  "version": 1,
+  "languages": ["en", "pt"],
+  "categories": [
+    {
+      "slug": "restaurant",
+      "labels": { "en": "Restaurant", "pt": "Restaurante" },
+      "synonyms": {
+        "en": [
+          "restaurants",
+          "dining",
+          "bistro",
+          "eatery",
+          "diner",
+          "pizzeria",
+          "pizza",
+          "sushi",
+          "steakhouse",
+          "tapas",
+          "takeaway",
+          "take-away",
+          "seafood",
+          "burgers"
+        ],
+        "pt": ["restaurantes", "tasca", "marisqueira", "churrasqueira", "pizzaria", "cervejaria", "comida para fora"]
+      }
+    },
+    {
+      "slug": "cafe",
+      "labels": { "en": "Café", "pt": "Café" },
+      "synonyms": {
+        "en": ["cafes", "coffee shop", "coffee", "tea room", "tearoom", "brunch"],
+        "pt": ["cafés", "cafetaria", "snack-bar", "salão de chá"]
+      }
+    },
+    {
+      "slug": "bakery",
+      "labels": { "en": "Bakery", "pt": "Padaria e pastelaria" },
+      "synonyms": {
+        "en": ["bakeries", "bread", "patisserie", "pastry shop", "pastries", "cake shop", "cakes"],
+        "pt": ["padaria", "pastelaria", "confeitaria", "bolos", "pão"]
+      }
+    },
+    {
+      "slug": "bar",
+      "labels": { "en": "Bar", "pt": "Bar" },
+      "synonyms": {
+        "en": ["bars", "pub", "pubs", "wine bar", "cocktail bar", "cocktails", "brewery", "taproom"],
+        "pt": ["bares", "taberna", "bar de vinhos"]
+      }
+    },
+    {
+      "slug": "grocery",
+      "labels": { "en": "Grocery", "pt": "Mercearia" },
+      "synonyms": {
+        "en": [
+          "grocer",
+          "groceries",
+          "supermarket",
+          "convenience store",
+          "deli",
+          "delicatessen",
+          "organic shop",
+          "health food",
+          "butcher",
+          "fishmonger",
+          "greengrocer",
+          "wine shop"
+        ],
+        "pt": [
+          "supermercado",
+          "minimercado",
+          "talho",
+          "peixaria",
+          "frutaria",
+          "loja de produtos naturais",
+          "produtos biológicos",
+          "garrafeira",
+          "charcutaria"
+        ]
+      }
+    },
+    {
+      "slug": "shop",
+      "labels": { "en": "Shop", "pt": "Loja" },
+      "synonyms": {
+        "en": [
+          "shops",
+          "store",
+          "retail",
+          "boutique",
+          "gift shop",
+          "gifts",
+          "clothing",
+          "clothes",
+          "fashion",
+          "bookshop",
+          "bookstore",
+          "shoes",
+          "furniture",
+          "homeware",
+          "toys",
+          "second hand",
+          "vintage"
+        ],
+        "pt": [
+          "lojas",
+          "comércio",
+          "loja de roupa",
+          "roupa",
+          "moda",
+          "livraria",
+          "prendas",
+          "sapataria",
+          "mobiliário",
+          "decoração",
+          "brinquedos",
+          "segunda mão"
+        ]
+      }
+    },
+    {
+      "slug": "hair-beauty",
+      "labels": { "en": "Hair & beauty", "pt": "Cabeleireiro e estética" },
+      "synonyms": {
+        "en": [
+          "hair",
+          "hairdresser",
+          "hairdressers",
+          "hairdressing",
+          "hair salon",
+          "salon",
+          "barber",
+          "barbers",
+          "barbershop",
+          "beauty",
+          "beauty salon",
+          "beautician",
+          "nails",
+          "nail salon",
+          "manicure",
+          "pedicure",
+          "makeup",
+          "make-up",
+          "lashes",
+          "brows",
+          "waxing"
+        ],
+        "pt": [
+          "cabeleireiro",
+          "cabeleireira",
+          "cabeleireiros",
+          "barbearia",
+          "barbeiro",
+          "estética",
+          "esteticista",
+          "salão de beleza",
+          "unhas",
+          "manicura",
+          "pedicura",
+          "maquilhagem",
+          "depilação",
+          "pestanas",
+          "sobrancelhas"
+        ]
+      }
+    },
+    {
+      "slug": "wellness",
+      "labels": { "en": "Massage & wellness", "pt": "Massagem e bem-estar" },
+      "synonyms": {
+        "en": [
+          "massage",
+          "massages",
+          "massage therapist",
+          "spa",
+          "day spa",
+          "reflexology",
+          "sauna",
+          "reiki",
+          "aromatherapy",
+          "meditation"
+        ],
+        "pt": [
+          "massagem",
+          "massagens",
+          "massagista",
+          "bem-estar",
+          "reflexologia",
+          "termas",
+          "meditação",
+          "aromaterapia"
+        ]
+      }
+    },
+    {
+      "slug": "fitness",
+      "labels": { "en": "Fitness & sport", "pt": "Fitness e desporto" },
+      "synonyms": {
+        "en": [
+          "gym",
+          "gyms",
+          "personal trainer",
+          "personal training",
+          "yoga",
+          "pilates",
+          "crossfit",
+          "sport",
+          "sports",
+          "swimming",
+          "climbing",
+          "martial arts"
+        ],
+        "pt": ["ginásio", "ginásios", "treinador pessoal", "ioga", "desporto", "natação", "escalada", "artes marciais"]
+      }
+    },
+    {
+      "slug": "health",
+      "labels": { "en": "Health clinic", "pt": "Clínica e saúde" },
+      "synonyms": {
+        "en": [
+          "health",
+          "clinic",
+          "medical",
+          "medical clinic",
+          "doctor",
+          "gp",
+          "physiotherapy",
+          "physio",
+          "physiotherapist",
+          "osteopath",
+          "osteopathy",
+          "chiropractor",
+          "nutritionist",
+          "dietitian",
+          "pharmacy",
+          "chemist",
+          "optician",
+          "podiatrist",
+          "podiatry",
+          "nurse",
+          "acupuncture",
+          "speech therapy"
+        ],
+        "pt": [
+          "saúde",
+          "clínica",
+          "clínica médica",
+          "médico",
+          "médica",
+          "fisioterapia",
+          "fisioterapeuta",
+          "osteopatia",
+          "osteopata",
+          "quiroprático",
+          "nutricionista",
+          "farmácia",
+          "ótica",
+          "óptica",
+          "podologia",
+          "podologista",
+          "enfermagem",
+          "enfermeira",
+          "acupuntura",
+          "terapia da fala"
+        ]
+      }
+    },
+    {
+      "slug": "dental",
+      "labels": { "en": "Dentist", "pt": "Dentista" },
+      "synonyms": {
+        "en": [
+          "dentists",
+          "dental",
+          "dental clinic",
+          "dental surgery",
+          "orthodontist",
+          "orthodontics",
+          "dental hygienist"
+        ],
+        "pt": ["dentistas", "clínica dentária", "médico dentista", "ortodontia", "ortodontista", "higiene oral"]
+      }
+    },
+    {
+      "slug": "therapy",
+      "labels": { "en": "Therapy & counselling", "pt": "Terapia e psicologia" },
+      "synonyms": {
+        "en": [
+          "therapy",
+          "therapist",
+          "counselling",
+          "counseling",
+          "counsellor",
+          "psychologist",
+          "psychology",
+          "psychotherapy",
+          "psychotherapist",
+          "couples therapy"
+        ],
+        "pt": [
+          "terapia",
+          "terapeuta",
+          "psicólogo",
+          "psicóloga",
+          "psicologia",
+          "psicoterapia",
+          "psicoterapeuta",
+          "aconselhamento",
+          "terapia de casal"
+        ]
+      }
+    },
+    {
+      "slug": "trades",
+      "labels": { "en": "Building & home repairs", "pt": "Obras e reparações" },
+      "synonyms": {
+        "en": [
+          "trades",
+          "builder",
+          "builders",
+          "building",
+          "home repairs",
+          "plumber",
+          "plumbing",
+          "electrician",
+          "electrical",
+          "carpenter",
+          "carpentry",
+          "painter",
+          "decorator",
+          "handyman",
+          "roofer",
+          "roofing",
+          "tiler",
+          "locksmith",
+          "renovation",
+          "renovations",
+          "gardener",
+          "gardening",
+          "landscaping",
+          "air conditioning",
+          "heating"
+        ],
+        "pt": [
+          "obras",
+          "construção",
+          "canalizador",
+          "canalização",
+          "eletricista",
+          "electricista",
+          "carpinteiro",
+          "carpintaria",
+          "pintor",
+          "faz-tudo",
+          "telhados",
+          "ladrilhador",
+          "serralheiro",
+          "remodelação",
+          "remodelações",
+          "reparações domésticas",
+          "jardineiro",
+          "jardinagem",
+          "ar condicionado",
+          "aquecimento"
+        ]
+      }
+    },
+    {
+      "slug": "cleaning",
+      "labels": { "en": "Cleaning", "pt": "Limpezas" },
+      "synonyms": {
+        "en": [
+          "cleaner",
+          "cleaners",
+          "house cleaning",
+          "home cleaning",
+          "office cleaning",
+          "window cleaning",
+          "laundry",
+          "launderette",
+          "dry cleaning",
+          "dry cleaner",
+          "ironing"
+        ],
+        "pt": ["limpeza", "empresa de limpeza", "empregada de limpeza", "lavandaria", "limpeza a seco", "engomadoria"]
+      }
+    },
+    {
+      "slug": "auto",
+      "labels": { "en": "Cars & bikes", "pt": "Automóveis e bicicletas" },
+      "synonyms": {
+        "en": [
+          "car",
+          "cars",
+          "garage",
+          "mechanic",
+          "car repair",
+          "car service",
+          "car wash",
+          "tyres",
+          "tires",
+          "motorbike",
+          "motorcycle",
+          "scooter",
+          "bike",
+          "bikes",
+          "bicycle",
+          "bicycles",
+          "bike repair",
+          "bike shop",
+          "bike rental"
+        ],
+        "pt": [
+          "automóvel",
+          "automóveis",
+          "carro",
+          "carros",
+          "oficina",
+          "oficina automóvel",
+          "mecânico",
+          "lavagem de carros",
+          "pneus",
+          "mota",
+          "motas",
+          "bicicleta",
+          "bicicletas",
+          "reparação de bicicletas",
+          "aluguer de bicicletas"
+        ]
+      }
+    },
+    {
+      "slug": "repair",
+      "labels": { "en": "Repairs", "pt": "Reparações" },
+      "synonyms": {
+        "en": [
+          "phone repair",
+          "electronics repair",
+          "appliance repair",
+          "shoe repair",
+          "cobbler",
+          "watch repair",
+          "tailor",
+          "alterations",
+          "key cutting"
+        ],
+        "pt": [
+          "reparação",
+          "arranjos",
+          "reparação de telemóveis",
+          "reparação de eletrodomésticos",
+          "sapateiro",
+          "relojoeiro",
+          "costureira",
+          "arranjos de costura"
+        ]
+      }
+    },
+    {
+      "slug": "legal",
+      "labels": { "en": "Legal", "pt": "Advocacia" },
+      "synonyms": {
+        "en": ["lawyer", "lawyers", "solicitor", "solicitors", "attorney", "law firm", "notary", "legal advice"],
+        "pt": [
+          "advogado",
+          "advogada",
+          "advogados",
+          "escritório de advogados",
+          "solicitador",
+          "notário",
+          "jurídico",
+          "apoio jurídico"
+        ]
+      }
+    },
+    {
+      "slug": "accounting",
+      "labels": { "en": "Accounting", "pt": "Contabilidade" },
+      "synonyms": {
+        "en": ["accountant", "accountants", "bookkeeping", "bookkeeper", "tax", "tax advisor", "tax return", "payroll"],
+        "pt": ["contabilista", "contabilistas", "contas", "impostos", "fiscalidade", "declaração de irs"]
+      }
+    },
+    {
+      "slug": "consulting",
+      "labels": { "en": "Consulting", "pt": "Consultoria" },
+      "synonyms": {
+        "en": [
+          "consultant",
+          "consultancy",
+          "business consulting",
+          "business advice",
+          "advisory",
+          "marketing",
+          "strategy"
+        ],
+        "pt": ["consultor", "consultora", "assessoria", "consultoria de gestão"]
+      }
+    },
+    {
+      "slug": "it-services",
+      "labels": { "en": "IT & web", "pt": "Informática e web" },
+      "synonyms": {
+        "en": [
+          "it",
+          "it support",
+          "tech support",
+          "computer repair",
+          "computers",
+          "web",
+          "web design",
+          "web development",
+          "website",
+          "websites",
+          "software",
+          "developer",
+          "app development"
+        ],
+        "pt": [
+          "informática",
+          "apoio informático",
+          "assistência informática",
+          "reparação de computadores",
+          "design web",
+          "desenvolvimento web",
+          "sites",
+          "programação",
+          "programador"
+        ]
+      }
+    },
+    {
+      "slug": "education",
+      "labels": { "en": "Lessons & tutoring", "pt": "Aulas e explicações" },
+      "synonyms": {
+        "en": [
+          "lessons",
+          "tutoring",
+          "tutor",
+          "classes",
+          "school",
+          "language school",
+          "language lessons",
+          "music lessons",
+          "dance classes",
+          "driving school",
+          "courses",
+          "teacher"
+        ],
+        "pt": [
+          "aulas",
+          "explicações",
+          "explicador",
+          "explicadora",
+          "escola",
+          "escola de línguas",
+          "aulas de línguas",
+          "aulas de música",
+          "aulas de dança",
+          "escola de condução",
+          "cursos",
+          "formação",
+          "professor",
+          "professora"
+        ]
+      }
+    },
+    {
+      "slug": "events",
+      "labels": { "en": "Events & catering", "pt": "Eventos e catering" },
+      "synonyms": {
+        "en": [
+          "event",
+          "event planning",
+          "catering",
+          "caterer",
+          "wedding",
+          "weddings",
+          "party",
+          "parties",
+          "venue",
+          "event venue",
+          "dj"
+        ],
+        "pt": [
+          "evento",
+          "eventos",
+          "organização de eventos",
+          "casamento",
+          "casamentos",
+          "festa",
+          "festas",
+          "espaço para eventos"
+        ]
+      }
+    },
+    {
+      "slug": "photography",
+      "labels": { "en": "Photography", "pt": "Fotografia" },
+      "synonyms": {
+        "en": ["photographer", "photo studio", "photos", "video", "videography", "videographer"],
+        "pt": ["fotógrafo", "fotógrafa", "estúdio fotográfico", "videógrafo", "filmagem"]
+      }
+    },
+    {
+      "slug": "stay",
+      "labels": { "en": "Places to stay", "pt": "Alojamento" },
+      "synonyms": {
+        "en": [
+          "hotel",
+          "hotels",
+          "hostel",
+          "hostels",
+          "guesthouse",
+          "guest house",
+          "b&b",
+          "bed and breakfast",
+          "holiday rental",
+          "holiday apartment",
+          "apartment rental",
+          "accommodation",
+          "lodging",
+          "camping",
+          "villa"
+        ],
+        "pt": [
+          "alojamento local",
+          "pousada",
+          "pensão",
+          "residencial",
+          "turismo rural",
+          "casa de férias",
+          "parque de campismo",
+          "campismo"
+        ]
+      }
+    },
+    {
+      "slug": "tours",
+      "labels": { "en": "Tours & activities", "pt": "Passeios e atividades" },
+      "synonyms": {
+        "en": [
+          "tour",
+          "tour guide",
+          "guided tours",
+          "activities",
+          "excursions",
+          "surf school",
+          "surf lessons",
+          "surfing",
+          "surf",
+          "kayak",
+          "boat trips",
+          "boat tours",
+          "diving",
+          "scuba",
+          "wine tasting",
+          "experiences"
+        ],
+        "pt": [
+          "passeios",
+          "atividades",
+          "actividades",
+          "visitas guiadas",
+          "guia turístico",
+          "excursões",
+          "escola de surf",
+          "aulas de surf",
+          "passeios de barco",
+          "mergulho",
+          "provas de vinho",
+          "experiências"
+        ]
+      }
+    },
+    {
+      "slug": "pets",
+      "labels": { "en": "Pets", "pt": "Animais" },
+      "synonyms": {
+        "en": [
+          "pet",
+          "dog grooming",
+          "groomer",
+          "vet",
+          "vets",
+          "veterinary",
+          "veterinarian",
+          "pet shop",
+          "dog walking",
+          "dog walker",
+          "pet sitting",
+          "kennel",
+          "kennels",
+          "cattery"
+        ],
+        "pt": [
+          "animais de estimação",
+          "veterinário",
+          "veterinária",
+          "clínica veterinária",
+          "tosquias",
+          "banhos e tosquias",
+          "loja de animais",
+          "passeio de cães",
+          "hotel para animais"
+        ]
+      }
+    },
+    {
+      "slug": "florist",
+      "labels": { "en": "Florist", "pt": "Florista" },
+      "synonyms": {
+        "en": ["florists", "flowers", "flower shop", "plants", "garden centre", "garden center"],
+        "pt": ["floristas", "flores", "plantas", "viveiro", "loja de flores"]
+      }
+    },
+    {
+      "slug": "crafts",
+      "labels": { "en": "Crafts & makers", "pt": "Artesanato" },
+      "synonyms": {
+        "en": [
+          "craft",
+          "crafts",
+          "handmade",
+          "maker",
+          "makers",
+          "artisan",
+          "ceramics",
+          "pottery",
+          "jewellery",
+          "jewelry",
+          "woodwork",
+          "leather",
+          "textiles"
+        ],
+        "pt": [
+          "artesão",
+          "artesã",
+          "feito à mão",
+          "cerâmica",
+          "olaria",
+          "joalharia",
+          "bijuteria",
+          "marcenaria",
+          "couro",
+          "têxteis"
+        ]
+      }
+    }
+  ]
+}

@@ -192,6 +192,12 @@ export const rankingV3Schema = z.object({
     .describe("What the order never reads: advertising, money, amounts, who is searching…"),
   changelog: z.array(rankingChangeSchema),
   next: nextRulesSchema.nullable(),
+  customer_scoring: z
+    .string()
+    .optional()
+    .describe(
+      "Present, on every version from 3 a network serves, while it scores no customer: what that changes (ADR-017 A2.10).",
+    ),
 });
 export type RankingV3 = z.infer<typeof rankingV3Schema>;
 
@@ -206,6 +212,43 @@ export const rankingV4Schema = rankingV3Schema.extend({
   rules: z.string().describe('The rules name, "0.1.1".'),
 });
 export type RankingV4 = z.infer<typeof rankingV4Schema>;
+
+/**
+ * Version 5: network rules 0.1.2 (ADR-017 Amendment 2, accepted 26 September 2026). Version 4's shape and
+ * numbers, with: `order.member` (who may call the network and is scored), `order.listed` now the directory's
+ * own predicate, `order.leaving` and `order.set_aside`; `timing.dormant_days`, `timing.dormant_notice_days`
+ * and `timing.contest_days`; `limits.listing_changes_per_day`; `weights.stand_ins`, how a customer who
+ * stopped a business or erased their record counts there; `weights.contest_weighs`, now what a contest does
+ * (A2.9); and `order.filters`, what a search may ask (A2.5, A2.6). In force the moment a network publishes
+ * it when no more than one business is a member of it then, otherwise at 00:00 UTC on the sixteenth day after.
+ */
+export const rankingV5Schema = rankingV4Schema.extend({
+  version: z.literal(5),
+  rules: z.string().describe('The rules name, "0.1.2".'),
+  order: rankingOrderSchema.extend({
+    member: z.string(),
+    leaving: z.string(),
+    set_aside: z.string(),
+    filters: z
+      .string()
+      .optional()
+      .describe(
+        "What a search may ask, all of which only leaves businesses out, and the words q ignores (A2.5, A2.6).",
+      ),
+  }),
+  timing: rankingTimingSchema.extend({
+    dormant_days: days.describe(
+      "Silence (no ping that counts, no good manifest fetch) before a business is set aside.",
+    ),
+    dormant_notice_days: days.describe("The least time between the warning to its contact and being set aside."),
+    contest_days: days.describe(
+      "How long the business has to dispute a customer's contest; left unanswered, it is upheld (A2.9).",
+    ),
+  }),
+  limits: rankingLimitsSchema.extend({ listing_changes_per_day: z.int() }),
+  weights: rankingWeightsSchema.extend({ stand_ins: z.string() }),
+});
+export type RankingV5 = z.infer<typeof rankingV5Schema>;
 
 /** Version 2: the neutral order during the redesign (22 September 2026). */
 export const rankingV2Schema = z.object({
@@ -223,6 +266,7 @@ export type RankingV2 = z.infer<typeof rankingV2Schema>;
 export const rankingV1Schema = z.looseObject({ version: z.literal(1), status: z.literal("withdrawn") });
 
 export const rankingDocumentSchema = z.discriminatedUnion("version", [
+  rankingV5Schema,
   rankingV4Schema,
   rankingV3Schema,
   rankingV2Schema,

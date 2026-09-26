@@ -71,6 +71,10 @@
           "minimum": 1,
           "maximum": 9007199254740991,
           "description": "The rules version in force, as GET /v1/ranking publishes it."
+        },
+        "scored": {
+          "description": "false while the network scores no customer (ADR-017 A2.10): the rest is then as for a person with no record and says nothing about the person's outcomes. A network before Amendment 2 sends none.",
+          "type": "boolean"
         }
       },
       "required": ["tier", "score", "kept", "broken", "businesses", "email_proven", "since", "unusual_use", "rules"]

@@ -50,6 +50,10 @@
           "minimum": 1,
           "maximum": 9007199254740991,
           "description": "The rules version in force, as GET /v1/ranking publishes it."
+        },
+        "scored": {
+          "description": "false while the network scores no customer (ADR-017 A2.10): the rest is then as for a person with no record and says nothing about the person's outcomes. A network before Amendment 2 sends none.",
+          "type": "boolean"
         }
       },
       "required": ["tier", "score", "kept", "broken", "businesses", "email_proven", "since", "unusual_use", "rules"]
@@ -101,6 +105,7 @@
             "type": ["string", "null"]
           },
           "contest_status": {
+            "description": "open, disputed, withdrawn or upheld (ADR-017 A2.9).",
             "type": "string"
           }
         },
@@ -278,6 +283,30 @@
           }
         },
         "required": ["id", "business", "purpose", "via", "pass_ref", "created_at"]
+      }
+    },
+    "stopped": {
+      "description": "The businesses this person stopped (ADR-017 A2.1), newest first. A network before Amendment 2 sends none.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "business": {
+            "type": "string",
+            "description": "The business's domain."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "by": {
+            "type": "string",
+            "enum": ["you", "the business"],
+            "description": "Who asked: the person, or the business on their behalf."
+          }
+        },
+        "required": ["business", "since", "by"]
       }
     }
   },

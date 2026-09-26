@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/unlinks",
+  "type": "object",
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$",
+      "description": "The network replays the same answer for the same request_id for 7 days."
+    },
+    "ppids": {
+      "description": "Every ppid this network gave this business for the customer: one per address they used.",
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{22}$",
+        "description": "The person's pairwise id at this business: stable here, different at every other business."
+      }
+    },
+    "presentations": {
+      "description": "The presentations the inbox kept for the customer's items.",
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{22}$"
+      }
+    }
+  },
+  "required": ["request_id"]
+}

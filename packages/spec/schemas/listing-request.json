@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/instances/{domain}/listing",
+  "type": "object",
+  "properties": {
+    "listed": {
+      "type": "boolean"
+    }
+  },
+  "required": ["listed"]
+}

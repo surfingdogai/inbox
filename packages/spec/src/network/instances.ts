@@ -29,7 +29,19 @@ export const instanceRegistrationResponseSchema = z.object({
 export const instanceStatusSchema = z.object({
   domain: z.string(),
   status: z.enum(["pending", "verified", "unreachable"]),
-  listed: z.boolean(),
+  listed: z
+    .boolean()
+    .describe(
+      "In the directory. A verified business that is not listed left it (delisted_at) or was set aside for silence (dormant_since); it may still call the network.",
+    ),
+  delisted_at: timestampSchema
+    .nullable()
+    .optional()
+    .describe("When the business left the directory, or null (ADR-017 A2.3)."),
+  dormant_since: timestampSchema
+    .nullable()
+    .optional()
+    .describe("When the business was set aside because its inbox had not answered for 90 days, or null (A2.4)."),
   verified_at: timestampSchema.nullable(),
   last_checked_at: timestampSchema.nullable(),
   last_ping_at: timestampSchema.nullable(),
@@ -57,6 +69,13 @@ export const pingRequestSchema = z.object({
   version: z.string().max(64),
   runtime: z.string().max(32),
   counts: pingCountsSchema.optional(),
+  manifest_sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional()
+    .describe(
+      "SHA-256 of the manifest as the inbox serves it, lowercase hex. Read on a signed ping only: when it is not what the network holds, the network fetches the manifest at once (A2.5).",
+    ),
 });
 export type PingRequest = z.infer<typeof pingRequestSchema>;
 
@@ -74,12 +93,20 @@ export const reportCaseSchema = z.object({
 });
 export type ReportCase = z.infer<typeof reportCaseSchema>;
 
-/** An open contest of one of the business's broken outcomes about a customer. */
+/**
+ * An open contest of one of the business's broken outcomes about a customer. It may withdraw the
+ * outcome at any time, and dispute the contest until `respond_by` (ADR-017 A2.9).
+ */
 export const contestCaseSchema = z.object({
   id: z.string(),
   evidence_id: z.string(),
   out: z.string(),
   created_at: timestampSchema,
+  respond_by: timestampSchema
+    .optional()
+    .describe(
+      "The last moment the business may dispute it: 14 days after it was filed, or after rules version 5 took effect for one filed before. A network before Amendment 2 sends none.",
+    ),
 });
 export type ContestCase = z.infer<typeof contestCaseSchema>;
 
@@ -90,6 +117,19 @@ export const businessStandingSchema = z.object({
   ranked: z.boolean().describe("score_int ≥ 4000 (building): sorts before the newcomers' shuffle."),
 });
 
+/**
+ * Whether a business is in the directory (ADR-017 A2.3–A2.4). A business that left it, or was set aside
+ * for silence, is still verified: it pings, publishes, presents and is scored as before.
+ */
+export const listingStateSchema = z.object({
+  listed: z.boolean(),
+  delisted_at: timestampSchema.nullable().describe("When it left the directory, or null."),
+  dormant_since: timestampSchema
+    .nullable()
+    .describe("When it was set aside because its inbox had not answered for 90 days, or null."),
+});
+export type ListingState = z.infer<typeof listingStateSchema>;
+
 /** A signed ping's `200`: only the domain's own key sees this, since anyone may ping for any domain. */
 export const signedPingResponseSchema = z.object({
   ok: z.literal(true),
@@ -98,7 +138,26 @@ export const signedPingResponseSchema = z.object({
   reports: z.array(reportCaseSchema).max(200),
   contests: z.array(contestCaseSchema).max(200),
   standing: businessStandingSchema,
+  listing: listingStateSchema.optional().describe("Whether the business is in the directory (A2.3–A2.4)."),
 });
+
+/**
+ * `POST /v1/instances/{domain}/listing`, signed sdi-instance/1 by that domain (ADR-017 A2.3): `false` leaves
+ * the directory at once, `true` comes back from the next :00. Asking for what already holds changes nothing;
+ * at most 10 changes a day (`429 rate_limited`). An inbox that cannot sign says the same with its manifest's
+ * `directory`.
+ */
+export const listingRequestSchema = z.object({ listed: z.boolean() });
+export type ListingRequest = z.infer<typeof listingRequestSchema>;
+
+/** `200`: where the business stands now, and when a listed one is in the directory's order. */
+export const listingResponseSchema = listingStateSchema.extend({
+  domain: z.string(),
+  shown_from: timestampSchema
+    .nullable()
+    .describe("When a listed business is in the directory's hourly order: now, or the next :00. Null when not listed."),
+});
+export type ListingResponse = z.infer<typeof listingResponseSchema>;
 export type SignedPingResponse = z.infer<typeof signedPingResponseSchema>;
 
 /**
@@ -116,9 +175,15 @@ export const reportFiledSchema = z.object({ id: z.string(), status: z.literal("o
 /** `POST /v1/reports/{id}/response` (sdi-instance/1, the reported business). */
 export const reportAnswerSchema = z.object({ answer: z.literal("dispute") });
 /** `POST /v1/contests/{id}/response` (sdi-instance/1, the business that recorded the outcome). */
-export const contestAnswerSchema = z.object({ answer: z.literal("withdraw") });
+export const contestAnswerSchema = z.object({
+  answer: z
+    .enum(["withdraw", "dispute"])
+    .describe(
+      "withdraw takes the outcome back, at any time; dispute says it is right, while the contest is open and until its respond_by (else 422 contest_window). ADR-017 A2.9.",
+    ),
+});
 export const caseAnsweredSchema = z.object({
   id: z.string(),
-  status: z.string().describe("disputed, for a report; withdrawn, for a contest."),
+  status: z.string().describe("disputed, for a report; withdrawn or disputed, for a contest."),
   answer: z.enum(["dispute", "withdraw"]),
 });

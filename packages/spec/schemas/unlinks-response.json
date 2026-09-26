@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/unlinks: 200",
+  "type": "object",
+  "properties": {
+    "unlinked": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Persons cut from this business; 0 when the ids name nobody it was given."
+    },
+    "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "open_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Items whose promise has no outcome yet: the inbox still publishes their outcomes, without per."
+    }
+  },
+  "required": ["unlinked", "items", "open_items"]
+}

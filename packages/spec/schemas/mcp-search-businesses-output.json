@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP search_businesses: structuredContent",
+  "type": "object",
+  "properties": {
+    "businesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "The business's own domain, where its inbox is."
+          },
+          "name": {
+            "type": "string",
+            "description": "As the business wrote it."
+          },
+          "description": {
+            "description": "As the business wrote it.",
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "description": "ISO 3166-1 alpha-2.",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "distance_km": {
+            "description": "Searches near a point only.",
+            "type": "number",
+            "minimum": 0
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Slugs of the categories list."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other words the business gave for what it does."
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "takes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What its inbox takes: booking, order, quote_request, message, refund."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["booking", "order", "quote_request"]
+                }
+              },
+              "required": ["name", "type"]
+            },
+            "description": "Names and how each is taken; prices, durations and free times are at its inbox."
+          },
+          "open_now": {
+            "description": "Open at the moment of the answer by the hours it published, in its own time zone; null when it published none.",
+            "type": ["boolean", "null"]
+          },
+          "hours_today": {
+            "description": "Today's hours in its own time zone, like \"09:00–13:00, 14:00–19:00\", or \"closed today\"; null when it published none.",
+            "type": ["string", "null"]
+          },
+          "answering": {
+            "type": "boolean",
+            "description": "Its inbox answered this network within the last day."
+          },
+          "inbox": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "mcp": {
+                "description": "Where an assistant books, orders or asks.",
+                "type": "string",
+                "format": "uri"
+              },
+              "rest": {
+                "type": "string",
+                "format": "uri"
+              },
+              "openapi": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "required": ["url"],
+            "description": "The business's own inbox: go there to book, order or ask. This directory takes nothing."
+          },
+          "standing": {
+            "description": "From the last nightly count of the promises it kept; absent while the directory's order is neutral.",
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "enum": ["new", "building", "trusted"]
+              },
+              "ranked": {
+                "type": "boolean",
+                "description": "Its record puts it before the daily shuffle."
+              },
+              "in_words": {
+                "type": "string",
+                "description": "The tier in one plain sentence; never a mark against the business."
+              }
+            },
+            "required": ["tier", "ranked", "in_words"]
+          },
+          "listing_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Its full listing on this network (GET /v1/businesses/{domain})."
+          }
+        },
+        "required": [
+          "domain",
+          "name",
+          "categories",
+          "tags",
+          "languages",
+          "takes",
+          "services",
+          "open_now",
+          "hours_today",
+          "answering",
+          "inbox",
+          "listing_url"
+        ]
+      },
+      "description": "In the directory's published order: no one can pay to move in it."
+    },
+    "next_cursor": {
+      "description": "Pass it as cursor for the next page; null on the last.",
+      "type": ["string", "null"]
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["version", "url"],
+      "description": "The rules that ordered these businesses (GET /v1/ranking?version=N)."
+    }
+  },
+  "required": ["businesses", "next_cursor", "rules"]
+}

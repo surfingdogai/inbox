@@ -36,6 +36,11 @@
         }
       },
       "required": ["bookings", "orders", "quotes", "messages"]
+    },
+    "manifest_sha256": {
+      "description": "SHA-256 of the manifest as the inbox serves it, lowercase hex. Read on a signed ping only: when it is not what the network holds, the network fetches the manifest at once (A2.5).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   },
   "required": ["version", "runtime"]
