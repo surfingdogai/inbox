@@ -35,12 +35,20 @@ export const DATA_OUT_SETTINGS: readonly Watched[] = [
 ];
 
 /**
- * Who is trusted, which only the owner in person changes — never the AI and never a key:
- * the secret the inbound mail webhook is let in by, calling private addresses (SSRF), the hosts an
- * agent's signature may name, and how hard a customer's one-time code is to guess. (`security`
+ * Who is trusted, which only the owner in person changes — never the AI and never a key: the
+ * bounds of what automation may agree to (`negotiation`), the secret the inbound mail webhook is
+ * let in by, calling private addresses (SSRF), the hosts an agent's signature may name, and how
+ * hard a customer's one-time code is to guess. (`security`
  * itself, and switching a network on, have checks of their own in `updateSettings`.)
  */
 export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
+  // How long offers stay open, how many rounds automation may go, whether we may withdraw what we
+  // proposed (ADR-018 §10): the bounds of what the owner's AI and rules agree to.
+  { path: ["negotiation"] },
+  // The return policy and who the business sells to, as who it is (ADR-018 §7, §10): what the owner's
+  // AI approves is bounded by them, and they go in every confirmation to a customer.
+  { path: ["returns"] },
+  { path: ["commerce"] },
   { path: ["email", "inboundSecret"] },
   { path: ["integrations", "webhooks", "allowPrivateTargets"] },
   { path: ["identity", "extraAuthorities"] },

@@ -3,7 +3,7 @@ import { type Db, networkSuccessStatement, schema, setFlags, ulid } from "@surfi
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay, nextDay } from "./harness";
+import { confirmed, freshDb, futureDay, nextDay } from "./harness";
 
 /**
  * The page a link in the business's email opens (ADR-018 §5), through the whole app: the email
@@ -64,7 +64,8 @@ async function drain(s: S) {
 
 /** A booking the customer asked for, and another time the owner proposed; the email that says so. */
 async function proposed(s: S, at = `${DAY}T13:00:00Z`) {
-  const created = await s.app.request(
+  const created = await confirmed(
+    (r) => s.app.request(r),
     post("/v1/bookings", {
       payload: {
         reservationFor: { serviceId: s.svc, name: "Full service" },
@@ -155,7 +156,8 @@ describe("the customer's page", () => {
     }).format(new Date(at));
     // The business set its zone in its profile; the settings still hold the default, UTC.
     expect(text).toContain(local);
-    expect(text).not.toContain("UTC");
+    // Not in the links: their random tokens can hold the letters "UTC".
+    expect(text.replace(/https?:\/\/\S+/g, "")).not.toContain("UTC");
   });
 
   it("reads no more of a POST than its form can be, however the body is sent", async () => {
@@ -265,7 +267,8 @@ describe("the customer's page", () => {
     const s = await setup();
     const { id, links } = await proposed(s);
     const page = await (await s.app.request(`${BASE}${links.Accept}`)).text();
-    const other = await s.app.request(
+    const other = await confirmed(
+      (r) => s.app.request(r),
       post("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: s.svc, name: "Full service" },
@@ -304,7 +307,8 @@ describe("the customer's page", () => {
 
   it("takes the details asked for, escaping the business's words, and refuses an empty answer", async () => {
     const s = await setup();
-    const created = await s.app.request(
+    const created = await confirmed(
+      (r) => s.app.request(r),
       post("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: s.svc, name: "Full service" },

@@ -39,6 +39,10 @@ const TITLES: Record<string, string> = {
   offer_expired: "No longer valid",
   no_offer: "Nothing to answer",
   confirm_erase: "Confirm the erasure first",
+  confirm_withdrawal: "Confirm the withdrawal first",
+  outside_limits: "Outside the owner's limits",
+  draft_stale: "The draft is out of date",
+  geo_terms: "A price may not depend on where someone is",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };

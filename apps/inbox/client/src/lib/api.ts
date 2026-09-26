@@ -11,6 +11,7 @@ import type {
   DeliveryView,
   EraseResult,
   FeedConnector,
+  Floor,
   ItemDetail,
   ItemView,
   KeyList,
@@ -177,6 +178,11 @@ export const api = {
     call<TransitionResult>("POST", `${item(id)}/transitions`, { body, idempotent: true }),
   reply: (id: string, body: ReplyBody) =>
     call<TransitionResult | ItemView>("POST", `${item(id)}/replies`, { body, idempotent: true }),
+  /** Sends the draft automation made outside the owner's limits, as it is (the owner in person only). */
+  sendDraft: (id: string, draftId: string) =>
+    call<TransitionResult>("POST", `${item(id)}/offers/draft/send`, { body: { draft_id: draftId }, idempotent: true }),
+  dropDraft: (id: string, draftId: string) =>
+    call<{ dropped: boolean }>("DELETE", `${item(id)}/offers/draft`, { query: { draft_id: draftId } }),
   getSettings: () => call<SettingsDoc>("GET", "/v1/owner/settings"),
   receiptStatus: () => call<ReceiptStatus>("GET", "/v1/owner/receipts"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
@@ -208,6 +214,11 @@ export const api = {
   patchProduct: (id: string, body: ProductBody) =>
     call<ProductRow>("PATCH", `/v1/owner/products/${encodeURIComponent(id)}`, { body }),
   archiveProduct: (id: string) => call<ProductRow>("DELETE", `/v1/owner/products/${encodeURIComponent(id)}`),
+  floors: () => call<{ floors: Floor[] }>("GET", "/v1/owner/catalogue/floors"),
+  putFloor: (kind: Floor["kind"], refId: string, floorMinor: number | null) =>
+    call<{ floors: Floor[] }>("PUT", "/v1/owner/catalogue/floors", {
+      body: { floors: [{ kind, ref_id: refId, floor_minor: floorMinor }] },
+    }),
   availability: () => call<Availability>("GET", "/v1/owner/availability"),
   putWeekly: (weekly: Weekly, serviceId?: string) =>
     call<Availability>("PUT", "/v1/owner/availability", {

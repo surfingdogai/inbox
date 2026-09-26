@@ -119,6 +119,11 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
         <li>
           <p class="card-text">A full service on Saturday morning. Put the id in:</p>
           <pre class="glass panel code"><code data-saturday={saturday}>{BOOK}</code></pre>
+          <p class="card-text">
+            It has a price, so the first answer is <code>409 confirm_terms</code>: what the customer confirms before
+            it binds them (<code>details.summary</code>) and its fingerprint (<code>details.terms_sha</code>). Send the
+            same request again with <code>"terms_sha"</code> added, as an assistant does on its person's yes.
+          </p>
         </li>
         <li>
           <p class="card-text">

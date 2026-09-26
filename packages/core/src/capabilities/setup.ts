@@ -1,14 +1,17 @@
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
+import { isOwnerOrSystem } from "../access/outbound";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import { ulid } from "../ids";
+import { amountsIn, discountIn, speltAmountIn } from "../negotiation/amounts";
+import { allFloors, type FloorView, floorStatement } from "../negotiation/catalogue";
 import { describeAction, summarizeRule } from "../rules/describe";
 import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
 import { PRESETS, presetFor } from "../rules/presets";
-import { isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
+import { geoTermsProblem, isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
 import { type Action, type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   availabilityRules,
@@ -20,7 +23,7 @@ import {
   services,
 } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
+import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { heldForPrice } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
@@ -158,6 +161,9 @@ export class SetupCapabilities {
     const now = nowOf(caller);
     const id = ulid();
     const held = isOwnerAssistant(caller) && hasAmount(input.price);
+    if (input.withdrawal !== undefined && input.withdrawal !== "standard" && !isPerson(caller))
+      throw withdrawalOwners();
+    if (input.negotiable === false && !isPerson(caller)) throw negotiableOwners();
     await this.db.orm.insert(services).values({
       id,
       name: input.name,
@@ -170,6 +176,8 @@ export class SetupCapabilities {
       price: (input.price ?? null) as ServiceRow["price"],
       active: input.active && !held ? 1 : 0,
       sort: input.sort,
+      ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
+      ...(input.negotiable === false ? { negotiable: 0 } : {}),
       createdAt: now,
       updatedAt: now,
     });
@@ -180,6 +188,12 @@ export class SetupCapabilities {
     requireOwner(caller);
     const { service_id, ...patch } = input;
     await this.published(caller, [patch.name, patch.description]);
+    if (patch.withdrawal !== undefined && !isPerson(caller)) {
+      if ((await this.service(service_id)).withdrawal !== patch.withdrawal) throw withdrawalOwners();
+    }
+    if (patch.negotiable !== undefined && !isPerson(caller)) {
+      if ((await this.service(service_id)).negotiable !== (patch.negotiable ? 1 : 0)) throw negotiableOwners();
+    }
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.service(service_id);
       const currency = (await this.profile()).currency;
@@ -207,6 +221,8 @@ export class SetupCapabilities {
         price: patch.price === undefined ? undefined : JSON.stringify(patch.price),
         active: patch.active === undefined ? undefined : patch.active ? 1 : 0,
         sort: patch.sort,
+        withdrawal: patch.withdrawal,
+        negotiable: patch.negotiable === undefined ? undefined : patch.negotiable ? 1 : 0,
       },
       nowOf(caller),
       "service_id",
@@ -238,6 +254,9 @@ export class SetupCapabilities {
     const now = nowOf(caller);
     const id = ulid();
     const held = isOwnerAssistant(caller);
+    if (input.withdrawal !== undefined && input.withdrawal !== "standard" && !isPerson(caller))
+      throw withdrawalOwners();
+    if (input.negotiable === false && !isPerson(caller)) throw negotiableOwners();
     try {
       await this.db.orm.insert(products).values({
         id,
@@ -247,6 +266,8 @@ export class SetupCapabilities {
         price: input.price,
         stock: input.stock ?? null,
         active: input.active && !held ? 1 : 0,
+        ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
+        ...(input.negotiable === false ? { negotiable: 0 } : {}),
         createdAt: now,
         updatedAt: now,
       });
@@ -260,6 +281,12 @@ export class SetupCapabilities {
     requireOwner(caller);
     const { product_id, ...patch } = input;
     await this.published(caller, [patch.sku, patch.name, patch.description]);
+    if (patch.withdrawal !== undefined && !isPerson(caller)) {
+      if ((await this.product(product_id)).withdrawal !== patch.withdrawal) throw withdrawalOwners();
+    }
+    if (patch.negotiable !== undefined && !isPerson(caller)) {
+      if ((await this.product(product_id)).negotiable !== (patch.negotiable ? 1 : 0)) throw negotiableOwners();
+    }
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.product(product_id);
       const same =
@@ -282,6 +309,8 @@ export class SetupCapabilities {
           price: patch.price === undefined ? undefined : JSON.stringify(patch.price),
           stock: patch.stock,
           active: patch.active === undefined ? undefined : patch.active ? 1 : 0,
+          withdrawal: patch.withdrawal,
+          negotiable: patch.negotiable === undefined ? undefined : patch.negotiable ? 1 : 0,
         },
         nowOf(caller),
         "product_id",
@@ -379,8 +408,10 @@ export class SetupCapabilities {
   async createRule(caller: Caller, input: S.RuleInput): Promise<RuleView> {
     requireOwner(caller);
     requirePositive(input.definition);
-    // A rule acts on its own for as long as it is on: one that prices is the owner's to write.
-    if (isOwnerAssistant(caller) && pricesSomething(input.definition)) throw ruleMoney();
+    // A rule acts on its own for as long as it is on, and its words go out as the owner's own: one that
+    // prices, or says an amount or something off a price, is the owner's to write — not the AI's, nor a
+    // key's without money:write (ADR-018 §4).
+    if (!holdsMoney(caller) && ownersMoneyRule(input.definition)) throw ruleMoney();
     // What a rule replies or notes goes to whoever it fires for: words any customer may read.
     await this.published(caller, stringsIn(input.definition.actions));
     const now = nowOf(caller);
@@ -405,14 +436,14 @@ export class SetupCapabilities {
       requirePositive(patch.definition);
       await this.published(caller, stringsIn(patch.definition.actions));
     }
-    if (isOwnerAssistant(caller) && (patch.definition !== undefined || patch.enabled === true)) {
+    if (!holdsMoney(caller) && (patch.definition !== undefined || patch.enabled === true)) {
       // The owner's pricing rule stays as the owner wrote it: the AI may rename it or switch it off,
       // never rewrite it, switch it on, or turn a rule of its own into one.
       const stored = await this.rule(rule_id);
       const next = patch.definition ?? stored.definition;
       const rewritten = patch.definition !== undefined && JSON.stringify(next) !== JSON.stringify(stored.definition);
       const switchedOn = patch.enabled === true && !stored.enabled;
-      if (pricesSomething(next) && (rewritten || switchedOn)) throw ruleMoney();
+      if (ownersMoneyRule(next) && (rewritten || switchedOn)) throw ruleMoney();
     }
     const now = nowOf(caller);
     const sets: string[] = ["version = version + 1", "updated_at = ?"];
@@ -563,6 +594,57 @@ export class SetupCapabilities {
 
   // ---- helpers ----------------------------------------------------------------
 
+  // ---- floors: the lowest price automation may go to (the owner's alone) ------------------
+
+  /**
+   * The owner's floors (ADR-018 §4): the lowest price the owner's AI, rules and another system's key
+   * may go to for each product or service. Only the owner in person reads them — never the AI, never a
+   * key, never a public door — so no customer's message can get anyone to recite one.
+   */
+  async listFloors(caller: Caller): Promise<{ floors: FloorView[] }> {
+    requireOwnerInPerson(caller, "see the lowest prices");
+    return { floors: await allFloors(this.db) };
+  }
+
+  /** Sets or clears floors, each for a product or service of the catalogue. The owner in person only. */
+  async setFloors(caller: Caller, input: S.SetFloorsInput): Promise<{ floors: FloorView[] }> {
+    requireOwnerInPerson(caller, "set the lowest prices");
+    const problems: { path: string; problem: "invalid"; message: string }[] = [];
+    for (const [i, f] of input.floors.entries()) {
+      const table = f.kind === "product" ? products : services;
+      const [row] = await this.db.orm
+        .select({ id: table.id, price: table.price })
+        .from(table)
+        .where(eq(table.id, f.ref_id));
+      if (!row) {
+        problems.push({ path: `floors.${i}.ref_id`, problem: "invalid", message: `no such ${f.kind}` });
+        continue;
+      }
+      // On the price's own basis, and never above it: a lowest price above the price is no price at all.
+      const price = row.price as { model?: string; value?: number } | null;
+      const list = f.kind === "product" || price?.model === "fixed" ? (price?.value ?? null) : null;
+      if (f.floor_minor !== null && list !== null && f.floor_minor > list) {
+        problems.push({
+          path: `floors.${i}.floor_minor`,
+          problem: "invalid",
+          message: "above its price: the lowest price is at most the price itself",
+        });
+      }
+    }
+    if (problems.length) {
+      throw new WriteError(
+        "invalid_input",
+        `Invalid input: ${problems.map((p) => `${p.path} ${p.message}`).join("; ")}`,
+        {
+          fields: problems,
+        },
+      );
+    }
+    const now = nowOf(caller);
+    await this.db.batch(input.floors.map((f) => floorStatement(f.kind, f.ref_id, f.floor_minor, now)));
+    return { floors: await allFloors(this.db) };
+  }
+
   private async patchRow(
     table: "services" | "products",
     id: string,
@@ -603,7 +685,10 @@ function ruleView(row: typeof rulesTable.$inferSelect): RuleView {
   };
 }
 
-/** ADR-017 §8.3: a rule that reads a customer's standing may only speed things up or ask a person. */
+/**
+ * ADR-017 §8.3: a rule that reads a customer's standing may only speed things up or ask a person.
+ * ADR-018 §4: one that reads where they live or come from may not set a price or terms.
+ */
 function requirePositive(definition: RuleDefinition): void {
   const problem = positiveOnlyProblem(definition);
   if (problem) {
@@ -611,10 +696,29 @@ function requirePositive(definition: RuleDefinition): void {
       fields: [{ path: "definition.actions", problem: "invalid", message: problem }],
     });
   }
+  const geo = geoTermsProblem(definition);
+  if (geo) {
+    throw new WriteError("geo_terms", geo, {
+      fields: [{ path: "definition.if", problem: "invalid", message: geo }],
+    });
+  }
 }
 
 function requireOwner(caller: Caller): void {
   if (isCustomer(caller)) throw new WriteError("not_allowed", "setup needs an owner or staff principal");
+}
+
+/**
+ * The owner in person (ADR-018 §4): signed in to the owner app, or a full owner key from the command
+ * line — never the owner's AI, never a key handed to another system. What bounds automation is theirs.
+ */
+function requireOwnerInPerson(caller: Caller, what: string): void {
+  if (isOwnerOrSystem(caller)) return;
+  throw new WriteError(
+    "not_allowed",
+    `Only the owner can ${what}, signed in to the owner app: they bound what automation may agree to. Nothing was changed.`,
+    { details: { reason: "owner_in_person", ask_owner: true } },
+  );
 }
 
 function unknown(path: string, message: string): WriteError {
@@ -659,6 +763,32 @@ function servicePriceKey(
  * The owner's AI reached for money (Tiago, 23 September 2026): the refusal it reads, which tells it
  * to leave the owner a note instead.
  */
+/**
+ * Whether customers may withdraw from what the business sells is the law's, read by a person (ADR-018
+ * §7): the owner or staff set the exception, never the owner's AI or another system's key.
+ */
+function negotiableOwners(): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "Whether customers may suggest their own price for this is the owner's to set, in the app. Tell the owner in a note (reply with internal: true) what you suggest.",
+    {
+      fields: [{ path: "negotiable", problem: "invalid", message: "only the owner changes this" }],
+      details: { reason: "owner_only", draft_for_owner: true },
+    },
+  );
+}
+
+function withdrawalOwners(): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "Whether customers may withdraw from this, and why not, is the owner's to set, in the app. Tell the owner in a note (reply with internal: true) what you know.",
+    {
+      fields: [{ path: "withdrawal", problem: "invalid", message: "only the owner changes this" }],
+      details: { reason: "owner_only", draft_for_owner: true },
+    },
+  );
+}
+
 function ownerMoney(path: string, what: string): WriteError {
   return new WriteError(
     "not_allowed",
@@ -688,10 +818,25 @@ function pricesSomething(definition: RuleDefinition | null | undefined): boolean
   });
 }
 
+/**
+ * Whether a rule's words name an amount of money or something off a price (ADR-018 §4): a rule's reply
+ * or note goes to the customer as the owner's own words, unjudged, so only the owner writes one that does.
+ */
+function wordsNameMoney(definition: RuleDefinition | null | undefined): boolean {
+  const actions: unknown = definition?.actions;
+  if (!Array.isArray(actions)) return false;
+  return stringsIn(actions).some((t) => amountsIn(t).length > 0 || discountIn(t) || speltAmountIn(t));
+}
+
+/** A rule only the owner writes: one that prices, or whose words name money. */
+function ownersMoneyRule(definition: RuleDefinition | null | undefined): boolean {
+  return pricesSomething(definition) || wordsNameMoney(definition);
+}
+
 function ruleMoney(): WriteError {
   return ownerMoney(
     "definition.actions",
-    "A rule that sends a quote or names an amount prices things on its own, and prices are the owner's.",
+    "A rule that sends a quote, or whose words name an amount or something off a price, prices things on its own, and prices are the owner's.",
   );
 }
 

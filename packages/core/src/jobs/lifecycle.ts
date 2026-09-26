@@ -1,4 +1,5 @@
-import type { MailOut, SqlInput } from "@surfingdog/platform";
+import type { MailOut, SqlInput, Statement } from "@surfingdog/platform";
+import { eq } from "drizzle-orm";
 import { businessFacts } from "../customer/audience";
 import { keyMail, privacyUrl } from "../customer/disclosure";
 import { customerLang } from "../customer/lang";
@@ -7,12 +8,17 @@ import type { Db } from "../db";
 import type { ItemType } from "../domain/types";
 import { keysDeliveredStatement, keysDueAlone, keysFor, prunePending } from "../identity/pending";
 import { itemStopped } from "../identity/stops";
+import { lawOf } from "../negotiation/holidays";
+import { insertOfferStatement } from "../negotiation/offers";
 import { receiptSha } from "../receipts/sign";
+import { items } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
+import { legacyRows } from "../write/offers";
 import { transitionItem } from "../write/transition";
+import { rowToItem } from "../write/views";
 import { autoHeaders, mailByJob, mailDomain, senderOf, sendLogged, storeMail, threadHeaders } from "./mail-log";
 import type { JobHandler } from "./runner";
 import { ensureJob } from "./schedule";
@@ -26,6 +32,14 @@ import { ensureJob } from "./schedule";
  *   acknowledges it);
  * - an order whose payment was requested `orders.payDays` ago and never arrived lapses: a neutral
  *   close for the networks, while the order stays open for a late payment;
+ * - a request nobody answered lapses at its clock (`request_expires_at`: a booking's
+ *   `booking.autoExpireHours`, an order's or a quote request's `negotiation.counterValidHours`), and
+ *   what we proposed lapses at its validity (ADR-018 §1); the customer is told either way, in the
+ *   business's words. A request from before the clock existed has none and never lapses here;
+ * - a change to a confirmed booking or an accepted order that nobody answered by its date lapses,
+ *   either side's, and the promise stays as agreed; the customer is told;
+ * - what a proposed booking or a quoted request held before offers had a table becomes its offer,
+ *   a batch a run, so it lapses when its email said it would;
  * - receipts issued before receipts had a `sha` get one;
  * - a first contact's key goes to the customer a day after they first booked or ordered, in an
  *   email of its own with a line about the booking network (ADR-017 §2.1), while the business keeps
@@ -99,6 +113,35 @@ export function lifecycleSweepHandler(
     });
     const lapsed = await fire(db, system, unpaid, "lapse", "payment was requested and never arrived");
 
+    // What we proposed before offers had a table becomes its offer first, so it can lapse below.
+    const backfilled = await backfillOffers(db, settings, batch);
+    const unanswered = await ids(db, {
+      sql: `SELECT id FROM items
+             WHERE request_expires_at IS NOT NULL AND request_expires_at <= ?
+               AND type IN ('booking', 'order', 'quote_request') AND state IN ('requested', 'received', 'needs_info')
+             ORDER BY request_expires_at, id LIMIT ?`,
+      params: [now, batch],
+    });
+    const requests = await fire(db, system, unanswered, "expire", "nobody answered the request in time");
+    const stale = await ids(db, {
+      sql: `SELECT o.item_id FROM item_offers o JOIN items i ON i.id = o.item_id
+             WHERE o.status = 'open' AND o.by = 'business' AND o.valid_through IS NOT NULL AND o.valid_through <= ?
+               AND i.state IN ('proposed', 'quoted')
+             ORDER BY o.valid_through, o.item_id LIMIT ?`,
+      params: [now, batch],
+    });
+    const offers = await fire(db, system, stale, "expire", "what we proposed was not answered in time");
+    // A change to a promise nobody answered in time, either side's: the promise stays as agreed.
+    const unchanged = await ids(db, {
+      sql: `SELECT item_id FROM item_offers
+             WHERE status = 'open' AND kind = 'change' AND valid_through IS NOT NULL AND valid_through <= ?
+             ORDER BY valid_through, item_id LIMIT ?`,
+      params: [now, batch],
+    });
+    const changes = await fire(db, system, unchanged, "expire_change", "the change was not answered in time");
+    // A refund whose date is near and not paid yet: the owner is told once (ADR-018 §7).
+    const alerted = await alertRefundsDue(db, settings, now, batch);
+
     const hashed = await backfillShas(db);
 
     const keyed =
@@ -107,18 +150,73 @@ export function lifecycleSweepHandler(
         : 0;
     await prunePending(db, now);
 
-    const full = (ended.length === batch && completed.done > 0) || (unpaid.length === batch && lapsed.done > 0);
+    const full =
+      (ended.length === batch && completed.done > 0) ||
+      (unpaid.length === batch && lapsed.done > 0) ||
+      (unanswered.length === batch && requests.done > 0) ||
+      (stale.length === batch && offers.done > 0) ||
+      (unchanged.length === batch && changes.done > 0) ||
+      backfilled === batch;
     if (full || hashed === SHA_BATCH) {
       await ensureJob(db, LIFECYCLE_SWEEP_KIND, `${sweepKey(now)}:${link + 1}`, {
         now,
         payload: { link: link + 1 } satisfies SweepPayload,
       });
     }
-    const skipped = [...completed.skipped, ...lapsed.skipped];
+    const skipped = [
+      ...completed.skipped,
+      ...lapsed.skipped,
+      ...requests.skipped,
+      ...offers.skipped,
+      ...changes.skipped,
+    ];
+    const expired = requests.done + offers.done + changes.done;
     return {
-      note: `${completed.done} completed, ${lapsed.done} lapsed, ${hashed} receipt sha(s)${keyed ? `, ${keyed} key email(s)` : ""}${full || hashed === SHA_BATCH ? ", more to do" : ""}${skipped.length ? `; skipped ${skipped.join(" | ")}` : ""}`,
+      note: `${completed.done} completed, ${lapsed.done} lapsed, ${hashed} receipt sha(s)${expired ? `, ${expired} expired` : ""}${backfilled ? `, ${backfilled} offer(s) kept` : ""}${keyed ? `, ${keyed} key email(s)` : ""}${alerted ? `, ${alerted} refund(s) due` : ""}${full || hashed === SHA_BATCH ? ", more to do" : ""}${skipped.length ? `; skipped ${skipped.join(" | ")}` : ""}`,
     };
   };
+}
+
+/** Days before a refund's date that the owner is told it is due, when it is still unpaid. */
+export const REFUND_ALERT_DAYS = 3;
+/** In Portugal a late refund of a withdrawal is owed twice over (DL 24/2014 art. 12(6)): the owner hears from day 10. */
+export const PT_WITHDRAWAL_ALERT_DAYS = 10;
+
+/**
+ * The owner is told once of each refund whose date is near and that is not paid yet: three days before
+ * it, or, in Portugal, from the tenth day after a withdrawal. One email per refund, ever (its job key).
+ */
+async function alertRefundsDue(db: Db, settings: Settings, now: number, batch: number): Promise<number> {
+  const { rows } = await db.client.query({
+    sql: `SELECT id, json_extract(payload, '$.refundDue'), json_extract(payload, '$.noticeAt'), json_extract(payload, '$.kind')
+            FROM items
+           WHERE type = 'refund' AND state IN ('approved', 'goods_received') AND COALESCE(sandbox, 0) = 0
+             AND json_extract(payload, '$.refundDue') IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.dedupe_key = 'refund_due:' || items.id)
+             AND NOT EXISTS (SELECT 1 FROM outbound_mail m WHERE m.item_id = items.id AND m.template = 'owner.refund_due')
+           ORDER BY json_extract(payload, '$.refundDue'), id LIMIT ?`,
+    params: [batch],
+    method: "all",
+  });
+  const pt = lawOf(settings.commerce.legal.country) === "pt";
+  let alerted = 0;
+  for (const r of rows) {
+    const due = Date.parse(String(r[1]));
+    if (!Number.isFinite(due)) continue;
+    const notice = typeof r[2] === "string" ? Date.parse(r[2]) : Number.NaN;
+    const from =
+      pt && r[3] === "withdrawal" && Number.isFinite(notice)
+        ? Math.min(due - REFUND_ALERT_DAYS * 86_400_000, notice + PT_WITHDRAWAL_ALERT_DAYS * 86_400_000)
+        : due - REFUND_ALERT_DAYS * 86_400_000;
+    if (now < from) continue;
+    const id = String(r[0]);
+    await ensureJob(db, "notify", `refund_due:${id}`, {
+      now,
+      payload: { to: "owner", itemId: id, event: "refund_due" },
+    });
+    alerted++;
+  }
+  return alerted;
 }
 
 async function ids(db: Db, q: { sql: string; params: SqlInput[] }): Promise<string[]> {
@@ -287,6 +385,34 @@ const KEY_MAIL_ATTEMPTS = 8;
 function cutKey(key: string): string {
   const m = /^(sdkey1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}$/.exec(key);
   return m ? `${m[1]}…` : "…";
+}
+
+/**
+ * A proposed booking or a quoted request from before offers had a table gets the offer it holds
+ * (ADR-018 §11), `batch` a run, with the id every writer gives it: a transition that reaches it first
+ * writes the same row, and the second insert is ignored. Nothing is sent again.
+ */
+async function backfillOffers(db: Db, settings: Settings, batch: number): Promise<number> {
+  const { rows } = await db.client.query({
+    sql: `SELECT i.id FROM items i
+           WHERE ((i.type = 'booking' AND i.state = 'proposed') OR (i.type = 'quote_request' AND i.state = 'quoted'))
+             AND NOT EXISTS (SELECT 1 FROM item_offers o WHERE o.item_id = i.id)
+           ORDER BY i.id LIMIT ?`,
+    params: [batch],
+    method: "all",
+  });
+  const statements: Statement[] = [];
+  for (const r of rows) {
+    const [row] = await db.orm
+      .select()
+      .from(items)
+      .where(eq(items.id, String(r[0])));
+    if (!row) continue;
+    const offers = await legacyRows(db, rowToItem(row), row.requestExpiresAt, settings);
+    statements.push(...offers.map((o) => insertOfferStatement(o, { orIgnore: true })));
+  }
+  if (statements.length) await db.batch(statements);
+  return statements.length;
 }
 
 /** Receipts written before `sha` existed (0008) get it, a slice per run. */

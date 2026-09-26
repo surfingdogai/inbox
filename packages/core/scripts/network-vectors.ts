@@ -4,6 +4,8 @@
  *   packages/spec/vectors/signatures.json   sdi-instance/1 and sdi-agent/1 requests (both tags), forwarded agent_key
  *   packages/spec/vectors/passes.json       key, pass and pass-reference strings, ppid, email_mac, email normalisation
  *   packages/spec/vectors/receipts-v2.json  v2 claims: every promise kind and every inbox outcome, an ack with pas
+ *   packages/spec/vectors/receipts-v6.json  rules version 6: amended receipts, refunds, trm and acc, the
+ *                                           refund-refused report, and how a reader on rules 5 takes each
  *
  * Ed25519 is deterministic and every input here is fixed, so the files are reproducible byte for
  * byte: `gen-network-vectors.ts` writes them and `test/network-vectors.test.ts` rebuilds them on
@@ -14,9 +16,10 @@
  * Pure WebCrypto: no Node APIs, so the tests run it inside workerd too. Nothing here is a secret:
  * the instance key is RFC 8037's published test key and the others come from ASCII seeds.
  */
-import { OUTCOMES } from "@surfingdog/spec";
+import { AMENDMENT_LIMITS, OUTCOMES, REPORT_WHYS } from "@surfingdog/spec";
+import { type OfferForm, type OfferTerms, termsSha } from "../src/customer/offer";
 import { CUSTOMER_ACTORS } from "../src/domain/types";
-import { bookingMachine, orderMachine } from "../src/machine/tables";
+import { bookingMachine, orderMachine, refundMachine } from "../src/machine/tables";
 import {
   agentKeyOf,
   formatKey,
@@ -29,7 +32,7 @@ import {
   TAG_WEB_BOT_AUTH,
   verifyAgentRequest,
 } from "../src/protocol/index";
-import { ACK_TYP, ALG, b64u, RECEIPT_TYP, receiptSha, signReceipt, thumbprint } from "../src/receipts/sign";
+import { ACK_TYP, ALG, b64u, RECEIPT_TYP, receiptSha, signReceipt, thumbprint, trmOf } from "../src/receipts/sign";
 
 const enc = new TextEncoder();
 
@@ -871,8 +874,9 @@ export async function buildNetworkVectors() {
   // --- receipts-v2.json -----------------------------------------------------------------------
 
   const receiptsV2 = await buildReceiptsV2(instance, agent, passRef);
+  const receiptsV6 = await buildReceiptsV6(instance, agent, passRef);
 
-  return { signatures, passes, receiptsV2 };
+  return { signatures, passes, receiptsV2, receiptsV6 };
 }
 
 /** Email normalisation: input → normalised, or null when refused. Written by hand from ADR-017 §2. */
@@ -1133,7 +1137,9 @@ async function buildReceiptsV2(instance: VectorKey, agent: VectorKey, passRef: s
   const base = receipts[0]?.payload as Payload;
   const outcomeBase = receipts[1]?.payload as Payload;
   const orderPromise = receipts[12]?.payload as Payload;
-  const refusedClaims: { name: string; payload: Payload; code: string }[] = [
+  // `kept5`: refused under rules 6 only for a claim rules 5 do not know (`trm`, `acc`), which a reader on
+  // rules 5 ignores however it looks, keeping the rest.
+  const refusedClaims: { name: string; payload: Payload; code: string; kept5?: true }[] = [
     { name: "ver 3", payload: { ...base, ver: 3 }, code: "bad_payload" },
     {
       name: "v2 about a quote request",
@@ -1205,7 +1211,8 @@ async function buildReceiptsV2(instance: VectorKey, agent: VectorKey, passRef: s
     now: RECEIPTS_V2_NOW,
     issuer: { kid: instance.kid, public_jwk: instance.public_jwk, private_jwk: instance.private_jwk },
     agent: { kid: agent.kid, public_jwk: agent.public_jwk, private_jwk: agent.private_jwk },
-    outcomes: OUTCOMES,
+    // The table as rules versions 3 to 5 have it: the rows version 6 added are in receipts-v6.json.
+    outcomes: OUTCOMES.filter((o) => !("since" in o)),
     receipts,
     acknowledgements,
     refused_receipts,
@@ -1265,20 +1272,46 @@ const OUTCOME_PATHS: {
     by: "business",
     out: "booking.cancelled_late_by_customer",
   },
+  // A withdrawal within the legal period (ADR-018 §7), the customer's own or recorded for them: their
+  // choice, and never late.
+  { typ: "booking", event: "withdraw", from: ["confirmed"], by: "customer", out: "booking.cancelled_by_customer" },
+  {
+    typ: "booking",
+    event: "record_withdrawal",
+    from: ["confirmed"],
+    by: "business",
+    out: "booking.cancelled_by_customer",
+  },
   { typ: "order", event: "fulfil", from: ["accepted", "paid", "fulfilling"], by: "business", out: "order.fulfilled" },
   {
     typ: "order",
     event: "record_cancel",
-    from: ["accepted", "awaiting_payment", "payment_failed"],
+    from: ["accepted", "awaiting_payment", "payment_failed", "paid", "fulfilling"],
     by: "business",
     out: "order.cancelled_by_customer",
   },
   {
     typ: "order",
     event: "cancel",
-    from: ["accepted", "awaiting_payment", "payment_failed"],
+    from: ["accepted", "awaiting_payment", "payment_failed", "paid", "fulfilling"],
     by: "business",
     out: "order.not_fulfilled",
+  },
+  // A withdrawal before the goods went out ends the order, neutrally (ADR-018 §7, §8); after, the
+  // order was kept and its goods come back as a return, which records nothing on it.
+  {
+    typ: "order",
+    event: "withdraw",
+    from: ["accepted", "awaiting_payment", "payment_failed", "paid", "fulfilling"],
+    by: "customer",
+    out: "order.cancelled_by_customer",
+  },
+  {
+    typ: "order",
+    event: "record_withdrawal",
+    from: ["accepted", "awaiting_payment", "payment_failed", "paid", "fulfilling"],
+    by: "business",
+    out: "order.cancelled_by_customer",
   },
   {
     typ: "order",
@@ -1343,3 +1376,481 @@ function transitionPaths() {
 
 /** The moment every v2 receipt is checked at: after the last one, so none is "not yet". */
 export const RECEIPTS_V2_NOW = 1792000000;
+
+/** The moment every rules-version-6 receipt is checked at: after the last one. */
+export const RECEIPTS_V6_NOW = 1793000000;
+
+/**
+ * Rules version 6 (ADR-017 Amendment 3): a booking and an order whose promise both sides changed, with
+ * the outcome that reads the latest agreed dates; a refund's promise and each of its outcomes; how a
+ * reader on rules 5 takes each receipt (`rules_5`: the claims it keeps, or null where it refuses
+ * them); the claims version 6 still refuses; an acknowledgement of an amendment; the report of a
+ * refused lawful claim; and every path through the refund machine and every change event.
+ */
+async function buildReceiptsV6(instance: VectorKey, agent: VectorKey, passRef: string) {
+  const sub = "0wWorHT-zGDpWTirCnd5ixnX05zWga0OGKCyrQ6VfB0";
+  const iss = `https://${INBOX}`;
+  const header = { alg: ALG, typ: RECEIPT_TYP, kid: instance.kid };
+  const key = { kid: instance.kid, publicJwk: instance.public_jwk, privateJwk: instance.private_jwk };
+  const presentation = b64u((await sha256("vector:presentation")).slice(0, 16));
+  const per = [{ n: NETWORK, p: presentation }];
+  const DAY = 86_400;
+  const HOUR = 3_600;
+  const iso = (t: number) => new Date(t * 1000).toISOString();
+
+  type Payload = Record<string, unknown>;
+  const receipts: {
+    name: string;
+    header: object;
+    payload: Payload;
+    jws: string;
+    sha: string;
+    /** What a reader on rules 5 keeps of the claims, or null where it refuses them (422 bad_payload). */
+    rules_5: Payload | null;
+    /**
+     * The terms both sides agreed (`form` names their kind), their `terms_sha`, and the key `trm` binds
+     * them under, as the business would disclose it in a dispute.
+     */
+    agreed?: Agreed;
+  }[] = [];
+  type Agreed = { form: OfferForm; terms: OfferTerms; terms_sha: string; trm_key: string };
+  const add = async (name: string, payload: Payload, agreed?: Agreed) => {
+    const jws = await signReceipt(payload as never, key as never);
+    const { trm: _trm, acc: _acc, ...kept } = payload;
+    const refused = payload.typ === "refund" || payload.knd === "amended";
+    receipts.push({
+      name,
+      header,
+      payload,
+      jws,
+      sha: await receiptSha(jws),
+      rules_5: refused ? null : kept,
+      ...(agreed ? { agreed } : {}),
+    });
+    return { payload, jws };
+  };
+  /** The agreed terms of one offer, their fingerprint, and `trm` under a key from a fixed seed. */
+  const agree = async (label: string, form: OfferForm, terms: OfferTerms): Promise<{ agreed: Agreed; trm: string }> => {
+    const key = await sha256(`vector:trm:${label}`);
+    const sha = await termsSha(form, terms);
+    return { agreed: { form, terms, terms_sha: sha, trm_key: b64u(key) }, trm: await trmOf(key, sha) };
+  };
+
+  // A booking: confirmed with its terms, then moved twice — our change the customer accepted, then
+  // theirs we accepted — and completed at the latest time.
+  const bItm = "01M3D6A0B1C2D3E4F5G6H7J8K9";
+  const bIat = 1790100000;
+  const bDue = bIat + 7 * DAY;
+  const service = { name: "Full service", serviceId: "01M3D6SERVICE0000000000000" };
+  const bTerms: OfferTerms = {
+    startTime: iso(bDue),
+    endTime: iso(bDue + 90 * 60),
+    partySize: 1,
+    totalPrice: { value: 4500, currency: "EUR" },
+    itemOffered: service,
+  };
+  const bPromiseNonce = await nonceOf(`${bItm}:promise`);
+  const bAgreed = await agree("booking", "time", bTerms);
+  await add(
+    "booking promise (confirmed) carrying trm: rules 5 keeps it without",
+    {
+      iss,
+      sub,
+      itm: bItm,
+      typ: "booking",
+      knd: "confirmed",
+      iat: bIat,
+      nonce: bPromiseNonce,
+      amt: { value: 4500, currency: "EUR" },
+      ver: 2,
+      due: bDue,
+      end: bDue + 90 * 60,
+      trm: bAgreed.trm,
+      per,
+    },
+    bAgreed.agreed,
+  );
+  const moves: { at: number; start: number; acc: "customer" | "business" }[] = [
+    { at: bIat + DAY, start: bDue + 2 * DAY, acc: "customer" },
+    { at: bIat + 2 * DAY, start: bDue + 3 * DAY, acc: "business" },
+  ];
+  let k = 0;
+  let amendedBooking = "";
+  let amendedBookingIat = 0;
+  for (const m of moves) {
+    k++;
+    const terms: OfferTerms = { ...bTerms, startTime: iso(m.start), endTime: iso(m.start + 90 * 60) };
+    const change = await agree(`booking change ${k}`, "change", terms);
+    const r = await add(
+      `booking amended (${k}): the ${m.acc} accepted a change to the time`,
+      {
+        iss,
+        sub,
+        itm: bItm,
+        typ: "booking",
+        knd: "amended",
+        iat: m.at,
+        nonce: await nonceOf(`${bItm}:amended:${k}`),
+        ver: 2,
+        ref: bPromiseNonce,
+        due: m.start,
+        end: m.start + 90 * 60,
+        trm: change.trm,
+        acc: m.acc,
+      },
+      change.agreed,
+    );
+    if (k === 1) {
+      amendedBooking = r.jws;
+      amendedBookingIat = m.at;
+    }
+  }
+  const latest = moves[moves.length - 1] as (typeof moves)[number];
+  await add("booking outcome after two amendments: due and end are the latest amendment's", {
+    iss,
+    sub,
+    itm: bItm,
+    typ: "booking",
+    knd: "outcome",
+    iat: latest.start + 90 * 60 + 600,
+    nonce: await nonceOf(`${bItm}:outcome`),
+    ver: 2,
+    out: "booking.completed",
+    ref: bPromiseNonce,
+    due: latest.start,
+    end: latest.start + 90 * 60,
+    per,
+  });
+
+  // An order: accepted, its delivery moved later at the customer's asking, and fulfilled.
+  const oItm = "01M3D6M0N1P2Q3R4S5T6V7W8X9";
+  const oIat = 1790200000;
+  const oDue = oIat + 5 * DAY;
+  const oTerms: OfferTerms = {
+    lines: [
+      { name: "Chain", productId: "01M3D6PRODUCT0000000000000", quantity: 2, price: { value: 1850, currency: "EUR" } },
+    ],
+    totalPrice: { value: 3700, currency: "EUR" },
+    delivery: { method: "delivery", when: iso(oDue) },
+  };
+  const oPromiseNonce = await nonceOf(`${oItm}:promise`);
+  const oAgreed = await agree("order", "order", oTerms);
+  await add(
+    "order promise (accepted) carrying trm",
+    {
+      iss,
+      sub,
+      itm: oItm,
+      typ: "order",
+      knd: "accepted",
+      iat: oIat,
+      nonce: oPromiseNonce,
+      amt: { value: 3700, currency: "EUR" },
+      ver: 2,
+      due: oDue,
+      trm: oAgreed.trm,
+    },
+    oAgreed.agreed,
+  );
+  const oMoved = oDue + 4 * DAY;
+  const oChange: OfferTerms = { ...oTerms, delivery: { method: "delivery", when: iso(oMoved) } };
+  const oChanged = await agree("order change", "change", oChange);
+  await add(
+    "order amended: the business accepted the customer's later delivery date",
+    {
+      iss,
+      sub,
+      itm: oItm,
+      typ: "order",
+      knd: "amended",
+      iat: oIat + DAY,
+      nonce: await nonceOf(`${oItm}:amended:1`),
+      ver: 2,
+      ref: oPromiseNonce,
+      due: oMoved,
+      trm: oChanged.trm,
+      acc: "business",
+    },
+    oChanged.agreed,
+  );
+  await add("order outcome after its amendment: due is the amendment's", {
+    iss,
+    sub,
+    itm: oItm,
+    typ: "order",
+    knd: "outcome",
+    iat: oMoved - HOUR,
+    nonce: await nonceOf(`${oItm}:outcome`),
+    ver: 2,
+    out: "order.fulfilled",
+    ref: oPromiseNonce,
+    due: oMoved,
+  });
+
+  // Refunds, each on an item of its own: promised when their date is fixed, then paid by it, paid
+  // after it, or dropped by the customer.
+  const refunds: { itm: string; out: string; at: (due: number, iat: number) => number; aut?: boolean }[] = [
+    { itm: "01M3D6R0R1R2R3R4R5R6R7R8R9", out: "refund.honoured", at: (due) => due - DAY },
+    { itm: "01M3D6R0R1R2R3R4R5R6R7R8RA", out: "refund.late", at: (due) => due + 2 * DAY },
+    { itm: "01M3D6R0R1R2R3R4R5R6R7R8RB", out: "refund.cancelled_by_customer", at: (_due, iat) => iat + HOUR },
+  ];
+  let refundPromise: Payload = {};
+  let refundOutcome: Payload = {};
+  let j = 0;
+  for (const r of refunds) {
+    j++;
+    const iat = 1790300000 + j * 1000;
+    const due = iat + 14 * DAY;
+    const nonce = await nonceOf(`${r.itm}:promise`);
+    const promise = {
+      iss,
+      sub,
+      itm: r.itm,
+      typ: "refund",
+      knd: "accepted",
+      iat,
+      nonce,
+      amt: { value: 2990, currency: "EUR" },
+      ver: 2,
+      due,
+    };
+    await add(`refund promise (accepted) for ${r.out}: due is the date it must be paid by, amt what is owed`, promise);
+    const outcome = {
+      iss,
+      sub,
+      itm: r.itm,
+      typ: "refund",
+      knd: "outcome",
+      iat: r.at(due, iat),
+      nonce: await nonceOf(`${r.itm}:outcome`),
+      ver: 2,
+      out: r.out,
+      ref: nonce,
+      due,
+    };
+    await add(`refund outcome ${r.out}`, outcome);
+    if (j === 1) {
+      refundPromise = promise;
+      refundOutcome = outcome;
+    }
+  }
+
+  // Claims version 6 still refuses. Each is properly signed: only its claims are wrong.
+  const bPromise = receipts[0]?.payload as Payload;
+  const bAmended = receipts[1]?.payload as Payload;
+  const bOutcome = receipts[3]?.payload as Payload;
+  // `kept5`: refused under rules 6 only for a claim rules 5 do not know (`trm`, `acc`), which a reader on
+  // rules 5 ignores however it looks, keeping the rest.
+  const refusedClaims: { name: string; payload: Payload; code: string; kept5?: true }[] = [
+    { name: "an amendment without trm", payload: { ...bAmended, trm: undefined }, code: "bad_payload" },
+    { name: "an amendment without acc", payload: { ...bAmended, acc: undefined }, code: "bad_payload" },
+    { name: "an amendment without ref", payload: { ...bAmended, ref: undefined }, code: "bad_payload" },
+    { name: "an amendment naming an outcome", payload: { ...bAmended, out: "booking.completed" }, code: "bad_payload" },
+    { name: "acc says someone else", payload: { ...bAmended, acc: "network" }, code: "bad_payload" },
+    {
+      name: "a refund amended",
+      payload: { ...refundPromise, knd: "amended", ref: refundPromise.nonce, trm: bPromise.trm, acc: "customer" },
+      code: "bad_payload",
+    },
+    { name: "a refund confirmed", payload: { ...refundPromise, knd: "confirmed" }, code: "bad_payload" },
+    { name: "a refund paid", payload: { ...refundPromise, knd: "paid" }, code: "bad_payload" },
+    {
+      name: "a refund with an end",
+      payload: { ...refundPromise, end: (refundPromise.due as number) + 60 },
+      code: "bad_payload",
+    },
+    { name: "a refund's outcome on an order", payload: { ...refundOutcome, typ: "order" }, code: "bad_payload" },
+    {
+      name: "an order's outcome on a refund",
+      payload: { ...refundOutcome, out: "order.fulfilled" },
+      code: "bad_payload",
+    },
+    {
+      name: "the refund-refused report as a receipt",
+      payload: { ...bOutcome, typ: "order", end: undefined, out: "order.refund_refused" },
+      code: "bad_payload",
+    },
+    { name: "trm on an outcome", payload: { ...bOutcome, trm: bPromise.trm }, code: "bad_payload", kept5: true },
+    { name: "acc on a promise", payload: { ...bPromise, acc: "customer" }, code: "bad_payload", kept5: true },
+    {
+      name: "trm is not a SHA-256 in base64url",
+      payload: { ...bPromise, trm: "not-a-fingerprint" },
+      code: "bad_payload",
+      kept5: true,
+    },
+  ];
+  const refused_receipts = [];
+  for (const r of refusedClaims) {
+    const payload = JSON.parse(JSON.stringify(r.payload)) as Payload; // drops the undefined claims
+    const { trm: _trm, acc: _acc, ...kept } = payload;
+    refused_receipts.push({
+      name: r.name,
+      payload,
+      jws: await signJws(header, payload, instance.private_jwk),
+      code: r.code,
+      rules_5: r.kept5 ? kept : null,
+    });
+  }
+
+  // A verified acknowledgement of the amendment itself: the token counter-signs that very receipt.
+  const ackHeader = { alg: ALG, typ: ACK_TYP, jwk: agent.public_jwk };
+  const ackPayload = {
+    rcp: "01M3D6RCPT00000000000000AM",
+    sha: await receiptSha(amendedBooking),
+    iat: amendedBookingIat + 600,
+    pas: passRef,
+  };
+  const acknowledgements = [
+    {
+      name: "an acknowledgement of an amendment, which is what lets a network honour more than three",
+      header: ackHeader,
+      payload: ackPayload,
+      jws: await signJws(ackHeader, ackPayload, agent.private_jwk),
+      receipt_jws: amendedBooking,
+      verify_at: amendedBookingIat + 600,
+    },
+  ];
+
+  // The report of a refused lawful claim (A3.3), and the reasons each report takes.
+  const orderSha = receipts.find((r) => r.payload.itm === oItm && r.payload.knd === "accepted")?.sha as string;
+  const reports = [
+    ...(REPORT_WHYS["order.refund_refused"] ?? []).map((why) => ({
+      name: `order.refund_refused for ${why}`,
+      request: { receipt: orderSha, out: "order.refund_refused", why, pass_ref: passRef },
+      ok: true,
+    })),
+    {
+      name: "order.refund_refused for closed: a refused claim says which one",
+      request: { receipt: orderSha, out: "order.refund_refused", why: "closed", pass_ref: passRef },
+      ok: false,
+    },
+    {
+      name: "order.not_received for withdrawal_refused: the reasons are the refund report's",
+      request: { receipt: orderSha, out: "order.not_received", why: "withdrawal_refused", pass_ref: passRef },
+      ok: false,
+    },
+  ];
+
+  return {
+    $comment:
+      "Test vectors for rules version 6 (ADR-017 Amendment 3), MIT. The instance key is RFC 8037 A.1 and the agent's seed is ASCII 'surfingdog-inbox-agent-vector-01', as in receipts-v2.json: re-signing `payload` reproduces `jws` byte for byte. Verify every receipt at `now`. `receipts` are valid under rules 6; `rules_5` is what a reader on rules 5 keeps of each (`trm` and `acc` ignored), or null where it refuses the claims with 422 bad_payload (a refund, an amendment). Each amendment's `ref` is its item's earliest promise, and an outcome's `due` and `end` are its item's latest amendment's (greatest iat, then nonce), else its promise's. Amendments and a refund's receipts name no presentation (`per`). `agreed` gives the terms both sides agreed and what a business discloses to prove them: `terms_sha` = base64url(SHA-256(canonical JSON of {kind: form, ...terms})), and `trm` = base64url(HMAC-SHA-256(key = base64url-decoded `trm_key`, message = terms_sha as ASCII)). `outcomes` are the rows version 6 adds to §3's table (none has a customer's side); `amendment_limits` what a network honours without a verified acknowledgement. `refused_receipts` are signed correctly and refused for their claims under rules 6; their `rules_5` is what a reader on rules 5 keeps of them (`trm` and `acc` ignored however they look: on an outcome, malformed, `acc` on a promise), or null where it refuses them too. `reports` are POST /v1/reports bodies and whether they are well formed. `transitions` is every path through the refund machine, with the outcome it records by `when` its date stood, and every change to a booking or an order, which records no outcome and issues an amended receipt when accepted. Generated by packages/core/scripts/gen-network-vectors.ts.",
+    spec: "surfingdog-inbox/0",
+    rules: 6,
+    now: RECEIPTS_V6_NOW,
+    issuer: { kid: instance.kid, public_jwk: instance.public_jwk, private_jwk: instance.private_jwk },
+    agent: { kid: agent.kid, public_jwk: agent.public_jwk, private_jwk: agent.private_jwk },
+    outcomes: OUTCOMES.filter((o) => "since" in o),
+    amendment_limits: AMENDMENT_LIMITS,
+    receipts,
+    acknowledgements,
+    refused_receipts,
+    reports,
+    transitions: transitionPathsV6(),
+  };
+}
+
+/**
+ * The refund machine's paths and the changes to bookings and orders (ADR-017 Amendment 3, ADR-018
+ * §8), with the outcome each records, written by hand: a refund paid by its date is kept, after it
+ * broken, before any date was fixed kept at once; one the customer drops closes its promise
+ * neutrally, or closes nothing when no date was fixed; everything else records none. `when` says how
+ * the refund's date stood: `by_due`, `after_due`, `no_due` (nothing fixed it yet), or null when it
+ * does not matter. A change records no outcome; accepted, it issues an `amended` receipt.
+ */
+function transitionPathsV6() {
+  const paths: {
+    typ: string;
+    event: string;
+    from: string;
+    to: string;
+    actor: string;
+    when: "by_due" | "after_due" | "no_due" | "due_fixed" | null;
+    out: string | null;
+    aut: 0 | 1;
+    receipt: "amended" | "accepted" | null;
+  }[] = [];
+  const REFUND_OPEN = ["approved", "goods_received"];
+  for (const t of refundMachine.transitions) {
+    for (const from of t.from) {
+      for (const actor of t.by) {
+        const aut = AUTOMATIC_ACTORS.includes(actor) ? 1 : 0;
+        const promises = t.event === "approve" || t.event === "goods_back" ? ("accepted" as const) : null;
+        if (t.event === "refund" && REFUND_OPEN.includes(from)) {
+          for (const [when, out] of [
+            ["by_due", "refund.honoured"],
+            ["after_due", "refund.late"],
+            ["no_due", "refund.honoured"],
+          ] as const) {
+            paths.push({
+              typ: "refund",
+              event: t.event,
+              from,
+              to: t.to,
+              actor,
+              when,
+              out,
+              aut: aut as 0 | 1,
+              receipt: null,
+            });
+          }
+        } else if ((t.event === "cancel" || t.event === "record_cancel") && REFUND_OPEN.includes(from)) {
+          paths.push({
+            typ: "refund",
+            event: t.event,
+            from,
+            to: t.to,
+            actor,
+            when: "due_fixed",
+            out: "refund.cancelled_by_customer",
+            aut: aut as 0 | 1,
+            receipt: null,
+          });
+          paths.push({
+            typ: "refund",
+            event: t.event,
+            from,
+            to: t.to,
+            actor,
+            when: "no_due",
+            out: null,
+            aut: 0,
+            receipt: null,
+          });
+        } else {
+          paths.push({
+            typ: "refund",
+            event: t.event,
+            from,
+            to: t.to,
+            actor,
+            when: null,
+            out: null,
+            aut: 0,
+            receipt: promises,
+          });
+        }
+      }
+    }
+  }
+  for (const m of [bookingMachine, orderMachine]) {
+    for (const t of m.transitions) {
+      if (!t.event.endsWith("_change")) continue;
+      for (const from of t.from) {
+        for (const actor of t.by) {
+          paths.push({
+            typ: m.type,
+            event: t.event,
+            from,
+            to: t.to,
+            actor,
+            when: null,
+            out: null,
+            aut: 0,
+            receipt: t.event === "accept_change" ? "amended" : null,
+          });
+        }
+      }
+    }
+  }
+  return paths;
+}

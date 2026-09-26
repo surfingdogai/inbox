@@ -18,6 +18,44 @@ export * from "./machine/machine";
 export * from "./machine/outcomes";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";
+export type { FloorKind, FloorView } from "./negotiation/catalogue";
+export {
+  amendmentsSendable,
+  itemAmended,
+  RECEIPT_AMENDMENTS_ISSUED_SQL,
+  RECEIPT_NOT_AMENDED_SQL,
+} from "./negotiation/changes";
+export type { DraftView } from "./negotiation/drafts";
+export {
+  BREACHES,
+  type Breach,
+  checkAccept,
+  checkOffer,
+  effectiveFloor,
+  type LimitLine,
+} from "./negotiation/limits";
+export {
+  legacyOfferId,
+  OFFER_STATUSES,
+  type OfferRow,
+  type OfferSide,
+  type OfferStatus,
+  type OfferView,
+  offerRows,
+  offerView,
+  REASON_CODES,
+  type ReasonCode,
+} from "./negotiation/offers";
+export {
+  MAX_REWARDS,
+  type Reward,
+  rewardConditionProblem,
+  rewardFor,
+  rewardPrice,
+  rewardProblems,
+  rewardsOf,
+  type Standing,
+} from "./negotiation/rewards";
 export * from "./network/index";
 export * from "./protocol/index";
 export * from "./receipts/index";

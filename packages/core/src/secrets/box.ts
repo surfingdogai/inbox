@@ -40,6 +40,11 @@ export type SecretPurpose =
  */
 export type MacPurpose =
   | "receipt-subject"
+  /**
+   * `trm` on a receipt (ADR-017 Amendment 3): the key each agreed offer's fingerprint is bound under,
+   * so a network cannot test guessed terms against it.
+   */
+  | "receipt-terms"
   /** Links in the business's emails (ADR-018 §5): rotating the secret retires every link out there. */
   | "action-link";
 

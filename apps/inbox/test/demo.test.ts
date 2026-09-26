@@ -16,7 +16,7 @@ import {
   wipeDemo,
 } from "../src/demo";
 import { localTime, seedSurfingDog } from "../src/seed";
-import { freshDb } from "./harness";
+import { confirmed, confirmedTool, freshDb } from "./harness";
 
 /**
  * The public demo shop (INBOX_DEMO=1, src/demo.ts). Anyone's AI can book there and type anyone's
@@ -89,7 +89,8 @@ async function demoInbox(opts: { fetchImpl?: typeof fetch } = {}) {
 async function visit(s: Awaited<ReturnType<typeof demoInbox>>) {
   const slot = nextSaturdayMorning();
   const contact = { name: PII.name, email: PII.email, phone: PII.phone };
-  const booking = await s.app.request(
+  const booking = await confirmed(
+    (r) => s.app.request(r),
     post("/v1/bookings", {
       payload: {
         reservationFor: { serviceId: s.full, name: PII.bookingName },
@@ -110,7 +111,7 @@ async function visit(s: Awaited<ReturnType<typeof demoInbox>>) {
   });
   const client = new Client({ name: "test-agent", version: "0" });
   await client.connect(transport);
-  const order = await client.callTool({
+  const order = await confirmedTool((p) => client.callTool(p), {
     name: "create_order",
     arguments: {
       payload: {
@@ -126,7 +127,7 @@ async function visit(s: Awaited<ReturnType<typeof demoInbox>>) {
     },
   });
   expect(order.isError ?? false).toBe(false);
-  const smallOrder = await client.callTool({
+  const smallOrder = await confirmedTool((p) => client.callTool(p), {
     name: "create_order",
     arguments: {
       payload: {

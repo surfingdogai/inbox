@@ -144,17 +144,25 @@ export function networkPublicationStatement(
   };
 }
 
-/** A receipt by id, or by what makes it unique: its item, kind and outcome ('' for a promise). */
+/**
+ * A receipt by id, or by what makes it unique: its item, kind, outcome ('' for a promise) and the
+ * agreed change it records ('' for all but an amendment).
+ */
 export type ReceiptRef =
   | { readonly id: string }
-  | { readonly itemId: string; readonly kind: string; readonly outcome?: string | undefined };
+  | {
+      readonly itemId: string;
+      readonly kind: string;
+      readonly outcome?: string | undefined;
+      readonly offerId?: string | undefined;
+    };
 
 function receiptWhere(receipt: ReceiptRef): { where: string; params: string[] } {
   return "id" in receipt
     ? { where: "id = ?", params: [receipt.id] }
     : {
-        where: "item_id = ? AND kind = ? AND outcome = ?",
-        params: [receipt.itemId, receipt.kind, receipt.outcome ?? ""],
+        where: "item_id = ? AND kind = ? AND outcome = ? AND offer_id = ?",
+        params: [receipt.itemId, receipt.kind, receipt.outcome ?? "", receipt.offerId ?? ""],
       };
 }
 
@@ -326,6 +334,64 @@ export const V2_ONLY_KINDS: readonly string[] = ["accepted", "outcome"];
  */
 export function takesV2(status: Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion"> | undefined): boolean {
   return Math.max(status?.rulesVersion ?? 0, status?.rulesNextVersion ?? 0) >= V2_RULES_VERSION;
+}
+
+/**
+ * The first rules version that reads agreed changes and refunds (ADR-017 Amendment 3): the kind
+ * `amended`, `typ: "refund"` and its outcomes, and the claims `trm` and `acc`.
+ */
+export const V6_RULES_VERSION = 6;
+
+/**
+ * Whether a network may be **sent** what version 6 added — an `amended` receipt, a refund's — as it
+ * is sent claims v2: its rules in force, or the ones it has announced, are version 6 or later. A
+ * network stores what announced rules add from the day it announces them (§11).
+ */
+export function takesV6(status: Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion"> | undefined): boolean {
+  return Math.max(status?.rulesVersion ?? 0, status?.rulesNextVersion ?? 0) >= V6_RULES_VERSION;
+}
+
+/**
+ * Whether a network **applies** version 6: its rules in force are 6 or later, so it reads the latest
+ * amendment's dates for the promise it holds. Only then may this inbox move a promise the network
+ * holds, and send it a promise that moved: under version 5 it would hold the business to the date
+ * first agreed and count a booking moved later as a promise never closed (R30).
+ */
+export function appliesV6(status: Pick<NetworkStatusRow, "rulesVersion"> | undefined): boolean {
+  return (status?.rulesVersion ?? 0) >= V6_RULES_VERSION;
+}
+
+/** Whether a receipt is one only version 6 reads: an amendment, or anything about a refund. */
+export function isV6Only(kind: string, payload: unknown): boolean {
+  return kind === "amended" || (payload as { typ?: unknown } | null)?.typ === "refund";
+}
+
+/** The same, as a condition on a `receipts` row alias. */
+export const RECEIPT_V6_ONLY_SQL = (alias: string): string =>
+  `(${alias}.kind = 'amended' OR json_extract(${alias}.payload, '$.typ') = 'refund')`;
+
+/** The rules each of these networks applies and has announced, as their status rows last said. */
+export async function networkRulesOf(
+  db: Db,
+  networks: readonly string[],
+): Promise<Map<string, Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion">>> {
+  const out = new Map<string, Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion">>();
+  const unique = [...new Set(networks)];
+  for (let i = 0; i < unique.length; i += 90) {
+    const chunk = unique.slice(i, i + 90);
+    const { rows } = await db.client.query({
+      sql: `SELECT network, rules_version, rules_next_version FROM network_status WHERE network IN (${chunk.map(() => "?").join(", ")})`,
+      params: chunk,
+      method: "all",
+    });
+    for (const r of rows) {
+      out.set(String(r[0]), {
+        rulesVersion: r[1] === null ? null : Number(r[1]),
+        rulesNextVersion: r[2] === null ? null : Number(r[2]),
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -517,13 +583,16 @@ export interface NetworkView {
   readonly failing_since: string | null;
   /**
    * The rules the network applies (`/v1/ranking`), and whether it is sent receipt claims v2 —
-   * acceptances and outcomes — which it is from rules version 3, in force or announced.
+   * acceptances and outcomes — which it is from rules version 3, in force or announced; and
+   * version 6's agreed changes and refunds (`v6`), in force or announced. A promise that moved goes
+   * to it only once version 6 is in force.
    */
   readonly rules: {
     readonly version: number | null;
     readonly next: number | null;
     readonly next_at: string | null;
     readonly v2: boolean;
+    readonly v6: boolean;
     readonly checked_at: string | null;
   };
   /**
@@ -534,8 +603,10 @@ export interface NetworkView {
   /** What became of the last ping's signature (`PingSignature`); null before the first ping. */
   readonly ping_signature: string | null;
   /**
-   * What it has been sent. `held` are queued acceptances and outcomes waiting for the network to
-   * take claims v2; `queued` counts them too.
+   * What it has been sent. `held` are queued receipts waiting for the network to take the rules
+   * that read them: acceptances and outcomes (claims v2, version 3), agreed changes and refunds
+   * (version 6), and every receipt of a promise that moved (version 6 in force); `queued` counts
+   * them too.
    */
   readonly receipts: {
     readonly published: number;
@@ -558,9 +629,12 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
       method: "all",
     }),
     db.client.query({
-      sql: `SELECT p.network, p.state, r.kind IN ('accepted', 'outcome'), COUNT(*)
+      sql: `SELECT p.network, p.state, r.kind IN ('accepted', 'outcome'), ${RECEIPT_V6_ONLY_SQL("r")},
+                   COALESCE(json_extract(r.payload, '$.ver'), 1) = 2
+                     AND EXISTS (SELECT 1 FROM item_offers ao WHERE ao.item_id = r.item_id AND ao.kind = 'change' AND ao.status = 'accepted'),
+                   COUNT(*)
               FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-             WHERE p.network IN (${marks}) GROUP BY 1, 2, 3`,
+             WHERE p.network IN (${marks}) GROUP BY 1, 2, 3, 4, 5`,
       params: origins,
       method: "all",
     }),
@@ -574,9 +648,14 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
     const network = String(r[0]);
     const t = tally.get(network) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 };
     const state = String(r[1]);
-    const n = Number(r[3]);
+    const n = Number(r[5]);
     if (state === "published" || state === "queued" || state === "refused" || state === "withheld") t[state] += n;
-    if (state === "queued" && Number(r[2]) === 1 && !takesV2(byNetwork.get(network))) t.held += n;
+    const s = byNetwork.get(network);
+    const waits =
+      (Number(r[2]) === 1 && !takesV2(s)) ||
+      (Number(r[3]) === 1 && !takesV6(s)) ||
+      (Number(r[4]) === 1 && !appliesV6(s));
+    if (state === "queued" && waits) t.held += n;
     tally.set(network, t);
   }
   const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
@@ -600,6 +679,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
         next: s?.rulesNextVersion ?? null,
         next_at: iso(s?.rulesNextAt ?? null),
         v2: takesV2(s),
+        v6: takesV6(s),
         checked_at: iso(s?.rulesCheckedAt ?? null),
       },
       standing:

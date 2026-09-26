@@ -39,8 +39,22 @@ const EVENT_WORDS: Record<string, string> = {
   mark_spam: "marked as spam",
   provide_info: "given the details asked for",
   counter: "given another time by the customer",
+  retract: "withdrawn by us",
   record_cancel: "cancelled by the customer",
   record_cancel_late: "cancelled late by the customer",
+  propose_change: "asked for a change to what was agreed",
+  accept_change: "changed, as both agreed",
+  decline_change: "kept as agreed after a change was declined",
+  retract_change: "kept as agreed after a change was withdrawn",
+  expire_change: "kept as agreed after a change lapsed",
+  approve: "approved",
+  withdraw: "withdrawn from by the customer",
+  record_withdrawal: "withdrawn from by the customer",
+  request_return: "sent back by the customer",
+  open_return: "given a return",
+  goods_back: "back with us",
+  dispute_goods: "disputed on its return",
+  record_delivery: "delivered",
 };
 
 const TYPE_WORDS: Record<string, string> = {
@@ -48,7 +62,7 @@ const TYPE_WORDS: Record<string, string> = {
   order: "an order",
   quote_request: "a quote request",
   message: "a message",
-  refund: "a refund",
+  refund: "a return or refund",
 };
 
 export function describeTrigger(trigger: string): string {

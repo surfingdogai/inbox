@@ -1,6 +1,13 @@
 export * from "./availability";
 export * from "./closures";
-export { CustomerDoors, type CustomerItemView, type CustomerOffer, type CustomerResult } from "./customer";
+export {
+  CustomerDoors,
+  type CustomerItemView,
+  type CustomerOffer,
+  type CustomerOfferWarning,
+  type CustomerResult,
+  type PassedOnResult,
+} from "./customer";
 export {
   CustomerData,
   type CustomerExport,

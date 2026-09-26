@@ -92,10 +92,13 @@ A code works for about ten minutes and a few tries; if it expires, ask for anoth
 
 ## 5. Acknowledge receipts, and report only what happened
 
-When a business issues a receipt on your item (a booking confirmed, an order accepted, and how it
-ended), counter-sign it: `acknowledge_receipt` (MCP) or `POST /v1/items/{id}/receipt-ack` with
-`counter_signature`. A broken promise may be reported to the network, signed, and only when it really
-happened. Both count as verified evidence only when signed (step 7).
+When a business issues a receipt on your item (a booking confirmed, an order accepted, a change you
+both agreed, a refund owed, and how each ended), counter-sign it: `acknowledge_receipt` (MCP) or
+`POST /v1/items/{id}/receipt-ack` with `counter_signature`. A broken promise may be reported to the
+network, signed, and only when it really happened: that includes a lawful withdrawal, a claim for
+faulty goods, or a return the business refused with nothing repaid (`order.refund_refused`, on
+networks whose rules are version 6 or later; acknowledging that the goods came does not stop it). Both count as verified evidence only when signed
+(step 7).
 
 ## 6. What you must never do
 
@@ -128,23 +131,64 @@ An inbox answers every request, signed or not. When a signature does not verify 
 
 ## 8. When the business proposes something, relay it as it is
 
-A business may answer a booking with another time, send a quote, or ask for a detail. The item's
-status (`get_item_status`, or `GET /v1/items/{id}`) then says so: `waiting_on: "you"`, and an `offer`
-with its `terms`, a `deadline` and `human`, the business's own words. Tell your person `offer.human`
-as it is, in the language it is in; it names the time with its zone and the price, and says when
-accepting means an obligation to pay.
+A business may answer a booking with another time, send a quote, suggest changes to an order, or
+ask for a detail. The item's status (`get_item_status`, or `GET /v1/items/{id}`) then says so:
+`waiting_on: "you"`, and an `offer` with its `id`, `terms`, a `deadline` and `human`, the business's
+own words. Relay `offer.human` as the business said it, in the language it is in; it names the time
+with its zone and the price, and says when accepting means an obligation to pay. When `warnings`
+says `price_changed`, make sure your person saw the new price.
 
-- On their clear yes, call `accept_offer` (`POST /v1/items/{id}/accept`) with `terms_sha`, the
-  fingerprint of the terms they said yes to. Without it nothing is booked: the answer gives you the
+- Accept only on your person's clear yes to the summary: `accept_offer`
+  (`POST /v1/items/{id}/accept`) with `terms_sha`, the fingerprint of the terms they said yes to,
+  and `offer_id`, the offer's `id`. Without `terms_sha` nothing is booked: the answer gives you the
   terms to show them. If the business changed its proposal meanwhile, you get the new terms
   (`offer_changed`): ask again.
-- Otherwise `decline_offer`, or `suggest_time` with one of the free times `check_availability` lists.
-  Answer before the `deadline`: a proposed time closes at the business's minimum notice before it
-  starts, and `check_availability` never lists a time inside that notice or one that has started.
+- Otherwise `decline_offer`, or `make_offer` with only what they would change: another time
+  (`suggest_time` does the same, with one of the free times `check_availability` lists), other
+  quantities or a delivery date for an order, how many or for when for a quote. The business sets
+  its prices: a price of your person's own goes to a person there as their message (`passed_on`),
+  and what the business proposed still stands. So does a suggestion after a few rounds. Only where
+  `get_business_profile` says `price_negotiable: true` may `make_offer` carry a price of theirs
+  (`total_price` for a proposed time, `unit_price` on the lines of changes to an order), in the
+  business's currency; the business takes it or answers, and taking it binds your person to pay it.
+- A price may have been chosen for your person: a reward for their record with the business. The
+  business says so in `offer.human` and the confirm summary, with its list price beside it, and
+  `disclosures` holds `personalised_price`. Relay it as it is; it is the price, not a price to argue.
+- Answer before the `deadline`: after it the offer lapses (`offer_expired`), and the business tells
+  your person. A proposed time also closes at the business's minimum notice before it starts, and
+  `check_availability` never lists a time inside that notice or one that has started. A request
+  nobody answers lapses too, after a few days.
 - When the business asked for a detail, send it with `provide_details`.
+
+A confirmed booking or an accepted order can change later, without being cancelled. When your
+person wants another time, other quantities or another delivery date, ask with `suggest_time` or
+`make_offer`: what was agreed stands until the business says yes, and the status shows the request
+as `requested_change` (`decline_offer` takes it back). When the business asks for a change, the
+status carries an `offer` of `kind: "change"`: relay it, `accept_offer` on their clear yes, or
+`decline_offer` to keep what was agreed. If a change cannot be taken online, it goes to a person at
+the business as your person's message (`passed_on`), and what was agreed still stands.
 
 The business may also email the person the same choice as links; whichever answer comes first
 counts, and the other is told it is already done.
+
+## 9. Before your person orders, and if they change their mind
+
+A booking or an order that carries a price binds your person only once they confirmed it. Send
+`create_booking` or `create_order` as usual: without `terms_sha` nothing is sent, and the answer
+(`409 confirm_terms`, or on MCP a result starting "Nothing is sent yet") holds `summary` — what,
+when, from whom, the total, whether they may withdraw, and that confirming means paying — and
+`terms_sha`. Show them the summary as it is; on their clear yes, send the same request again with
+that `terms_sha`.
+
+Your person may withdraw from an order, or from a booking they paid for, within the period the
+business states (`withdrawal` on the item's status: `available`, `until`), without giving a reason.
+`withdraw_from_contract` (`POST /v1/items/{id}/withdraw`) first returns the statement to show them
+(`confirm_withdrawal`); send `confirm_withdrawal: true` once they confirm. What they paid comes
+back; once the goods reached them, the goods go back first. It is never refused: past the period,
+or for something that cannot be returned, it goes to a person at the business, who answers. Once
+the goods reached them, `request_return` asks to send them back: `faulty`, `not_as_described` or
+`wrong_item` cost them nothing. The item's status lists each return under `refunds`, in the
+business's words.
 
 The item's status also carries the conversation (`thread`): what the business wrote to your person
 and what they wrote, oldest first, never the business's internal notes. Relay the business's

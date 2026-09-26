@@ -12,7 +12,7 @@ import { availabilityRules, business, itemEvents, items, products, rules, servic
 import type { Caller } from "../src/write/index";
 import { createItem } from "../src/write/index";
 import { rowToItem } from "../src/write/views";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The business sets its prices (ADR-018 §3.1–3.2, Tiago 23 September 2026: "Always the business"). An
@@ -94,7 +94,7 @@ async function setup(vertical?: keyof typeof PRESETS) {
   const drain = async () => {
     for (let i = 0; i < 5; i++) if ((await runner.runDue(db, { now: T0 + i })).claimed === 0) break;
   };
-  return { db, svc, prod, caps: new Capabilities(db), mail, drain };
+  return { db, svc, prod, caps: confirming(new Capabilities(db)), mail, drain };
 }
 
 const tuesday = (hour: number) => ({
@@ -252,7 +252,11 @@ describe("the business sets its prices", () => {
     expect(custom.view.item.payload).toEqual({
       orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }],
       totalPrice: EUR(100),
+      // The request is the customer's first offer (ADR-018 §1), open for the business to take.
+      offer: expect.objectContaining({ by: "customer", rev: 1, status: "open" }),
     });
+    // How far a negotiation has gone is the business's to count: the customer's side never reads it.
+    expect((custom.view.item.payload as { offer?: object }).offer).not.toHaveProperty("round");
     // With a catalogue line beside it, the catalogue line is the business's and the total follows.
     const mixed = await caps.createOrder(agent, {
       payload: {

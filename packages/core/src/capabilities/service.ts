@@ -5,11 +5,15 @@ import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
+import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
-import type { Item } from "../domain/types";
+import type { Item, ItemType } from "../domain/types";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
+import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
+import { type OfferView, offerRows, offerView } from "../negotiation/offers";
+import { rewardProblems } from "../negotiation/rewards";
 import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
@@ -50,10 +54,14 @@ import {
   permissionKind,
   withIdempotencyKey,
 } from "../write/caller";
+import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, WriteError } from "../write/errors";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
+import { heldReplyStatements, namesOtherMoney } from "../write/limits";
+import { isAutomation } from "../write/offers";
+import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
@@ -77,6 +85,37 @@ export interface BusinessProfile {
   readonly currency: string;
   readonly languages: readonly string[];
   readonly item_types: readonly string[];
+  /**
+   * Whether a customer's own price is taken as a counter (ADR-018 Q1). False: time, quantities and
+   * delivery can be suggested; a price goes to a person at the business as the customer's message.
+   */
+  readonly price_negotiable: boolean;
+  /** The business's return policy (ADR-018 §6, §7), as schema.org's `MerchantReturnPolicy`. */
+  readonly return_policy: ReturnPolicy;
+  /** Who the business is, as the law asks before a contract (CRD art. 6(1)): only what the owner filled in. */
+  readonly trader?: Trader | undefined;
+}
+
+/** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
+export interface ReturnPolicy {
+  readonly "@type": "MerchantReturnPolicy";
+  readonly returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow";
+  readonly merchantReturnDays: number;
+  readonly returnMethod: "https://schema.org/ReturnByMail";
+  readonly returnFees: "https://schema.org/FreeReturn" | "https://schema.org/ReturnFeesCustomerResponsibility";
+  readonly itemDefectReturnFees: "https://schema.org/FreeReturn";
+  readonly refundType: "https://schema.org/FullRefund";
+  readonly returnPolicyCountry?: string | undefined;
+}
+
+export interface Trader {
+  readonly legal_name: string;
+  readonly address?: string | undefined;
+  readonly country?: string | undefined;
+  readonly email?: string | undefined;
+  readonly phone?: string | undefined;
+  readonly vat_id?: string | undefined;
+  readonly complaints_url?: string | undefined;
 }
 
 export interface Page<T> {
@@ -94,6 +133,10 @@ export interface ItemStatus extends ItemView {
   readonly offer?: CustomerItemView["offer"];
   readonly waiting_on?: CustomerItemView["waiting_on"];
   readonly next?: CustomerItemView["next"];
+  /** For a booking or an order: whether the customer may withdraw from it now, and until when (ADR-018 §7). */
+  readonly withdrawal?: CustomerItemView["withdrawal"];
+  /** Its returns and refunds, in the business's words. */
+  readonly refunds?: CustomerItemView["refunds"];
   /**
    * The conversation as the customer has it: what they wrote and what the business wrote to them,
    * oldest first, the last fifty — never the business's internal notes. `automated` marks what a
@@ -166,6 +209,11 @@ export interface ItemDetail extends ItemView {
   }[];
   /** Every email about the item, to the customer and to the owner, and what became of each. */
   readonly mail: readonly MailView[];
+  /**
+   * What the owner's AI, a rule or another system would have offered outside the owner's limits
+   * (ADR-018 §4), waiting for the owner to send or drop; null when there is none.
+   */
+  readonly draft: DraftView | null;
 }
 
 /** The settings document as a read returns it: secrets masked, and named in `redacted`. */
@@ -174,6 +222,12 @@ export interface SettingsView {
   readonly version: number;
   /** Settings paths that hold a secret this read masks as `REDACTED_SECRET`, e.g. `email.inboundSecret`. */
   readonly redacted: readonly string[];
+  /**
+   * Settings the reader may not see, left out of `doc` (ADR-018 §4): the owner's limits for automation
+   * (`negotiation.ai`) and rewards (`negotiation.rewards`), which only the owner in person reads. A
+   * write that leaves them out keeps them.
+   */
+  readonly withheld: readonly string[];
 }
 
 export class Capabilities {
@@ -303,7 +357,23 @@ export class Capabilities {
       timezone: row?.timezone ?? s.business.timezone,
       currency: row?.currency ?? s.business.currency,
       languages: row?.languages?.length ? row.languages : s.business.languages,
-      item_types: ["message", "quote_request", "booking", "order"],
+      item_types: ["message", "quote_request", "booking", "order", "refund"],
+      // Price counters (ADR-018 Q1): off out of the box, and a price of the customer's own goes to a person.
+      price_negotiable: s.negotiation.priceCounters,
+      return_policy: {
+        "@type": "MerchantReturnPolicy",
+        returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+        merchantReturnDays: s.returns.days,
+        returnMethod: "https://schema.org/ReturnByMail",
+        returnFees:
+          s.returns.postage === "business"
+            ? "https://schema.org/FreeReturn"
+            : "https://schema.org/ReturnFeesCustomerResponsibility",
+        itemDefectReturnFees: "https://schema.org/FreeReturn",
+        refundType: "https://schema.org/FullRefund",
+        ...(s.commerce.legal.country ? { returnPolicyCountry: s.commerce.legal.country } : {}),
+      },
+      ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
     };
   }
 
@@ -389,18 +459,27 @@ export class Capabilities {
    * with an email and nothing carried, each network that issues is asked for a first key (ADR-017
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
-  createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
+  async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    // Priced for this customer once — the owner's reward for their record included — so the summary
+    // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
+    const pricing = await this.customer.pricingFor(c, input);
+    // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
+    const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
     return this.people.create(
-      withIdempotencyKey(caller, input.idempotency_key),
-      { type: "booking", payload: input.payload, contact: input.contact, message: input.message },
+      c,
+      { type: "booking", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
       input,
     );
   }
 
-  createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
+  async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    const pricing = await this.customer.pricingFor(c, input);
+    const confirmed = await this.customer.confirmCreate(c, "order", input, pricing);
     return this.people.create(
-      withIdempotencyKey(caller, input.idempotency_key),
-      { type: "order", payload: input.payload, contact: input.contact, message: input.message },
+      c,
+      { type: "order", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
       input,
     );
   }
@@ -420,7 +499,7 @@ export class Capabilities {
     const item = rowToItem(row);
     // A customer reads it in the business's words and language, with what we proposed and who we wait on.
     const view = isCustomer(caller)
-      ? await this.customer.present(item, await this.customer.audienceOf(item, c))
+      ? await this.customer.present(item, await this.customer.audienceOf(item, c), nowOf(c))
       : viewFor(item, permissionKind(caller));
     return {
       ...view,
@@ -473,6 +552,20 @@ export class Capabilities {
 
   private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    // A retry of a cancellation that was taken as a withdrawal is answered as that withdrawal.
+    if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) {
+      try {
+        return await transitionItem(this.db, c, { itemId: input.item_id, event: "withdraw", ...note });
+      } catch (error) {
+        if (!(error instanceof WriteError && error.code === "idempotency_mismatch")) throw error;
+      }
+    }
+    // While the right of withdrawal runs over something paid for, the customer's cancel of what was
+    // agreed is their withdrawal (ADR-018 §7): never late, and what they paid comes back. Before any
+    // payment a cancel stays a cancel, as it always was: it ends the same way and owes nothing.
+    if (isCustomer(c) && (await this.withdrawalRuns(c, input.item_id))) {
+      return transitionItem(this.db, c, { itemId: input.item_id, event: "withdraw", ...note });
+    }
     try {
       return await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
     } catch (error) {
@@ -487,6 +580,21 @@ export class Capabilities {
       if (!closed && !retried) throw error;
       return transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
     }
+  }
+
+  /**
+   * Whether the customer may withdraw from this booking or order now, and it was paid for, before its
+   * goods went out: a cancel is then their withdrawal. Once the goods reached them, a return is its
+   * own door; before a payment, a cancel does what a withdrawal would.
+   */
+  private async withdrawalRuns(c: Caller, itemId: string): Promise<boolean> {
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
+    if (!row || (row.type !== "booking" && row.type !== "order")) return false;
+    const item = rowToItem(row);
+    // A booking has the right only once paid; an order's cancel covers it until it is.
+    const paid = item.type === "booking" ? ["confirmed"] : ["paid", "fulfilling"];
+    if (!paid.includes(item.state)) return false;
+    return (await withdrawalOf(this.db, item, await readSettings(this.db), nowOf(c))).available;
   }
 
   /**
@@ -521,7 +629,7 @@ export class Capabilities {
     // is told, and they read it as closed — never "spam", never our flags.
     if (customer && item.state === "spam") {
       await appendThreadEntry(this.db, c, item, input.body, "in", input.message_id, { quiet: true });
-      return this.customer.present(item, await this.customer.audienceOf(item, c));
+      return this.customer.present(item, await this.customer.audienceOf(item, c), nowOf(c));
     }
     // Only the customer's own words: an automatic reply from their mailbox moves nothing (below).
     const moves = !opts.automatic;
@@ -550,13 +658,16 @@ export class Capabilities {
     }
     await this.appendEntry(c, item, input.body, "in", input.message_id);
     if (!customer) return viewFor(item, permissionKind(caller));
-    return this.customer.present(item, await this.customer.audienceOf(item, c));
+    return this.customer.present(item, await this.customer.audienceOf(item, c), nowOf(c));
   }
 
   /** A transition's answer as its customer reads it: the business's words, none of its flags. */
   private async asCustomerSees(c: Caller, r: TransitionResult): Promise<TransitionResult> {
     if (!isCustomer(c)) return r;
-    return { ...r, view: await this.customer.present(r.view.item, await this.customer.audienceOf(r.view.item, c)) };
+    return {
+      ...r,
+      view: await this.customer.present(r.view.item, await this.customer.audienceOf(r.view.item, c), nowOf(c)),
+    };
   }
 
   /**
@@ -678,6 +789,7 @@ export class Capabilities {
       ),
       mailForItem(this.db, item.id),
     ]);
+    const draft = await draftRow(this.db, item.id);
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -727,6 +839,7 @@ export class Capabilities {
         created_at: new Date(m.createdAt).toISOString(),
         entry_id: m.entryId,
       })),
+      draft: draft ? draftView(draft, await draftIsStale(this.db, draft, item.version)) : null,
     };
   }
 
@@ -770,6 +883,147 @@ export class Capabilities {
     }
   }
 
+  /**
+   * Every offer of an item (ADR-018 §1), oldest first: the customer's request, what the business
+   * proposed, each answer, what was agreed, and what became of each — drafts included.
+   */
+  async listOffers(caller: Caller, input: T.GetItemInput): Promise<{ offers: OfferView[]; draft: DraftView | null }> {
+    requireBusiness(caller);
+    const [row] = await this.db.orm
+      .select({ id: items.id, version: items.version })
+      .from(items)
+      .where(eq(items.id, input.item_id));
+    if (!row) throw new WriteError("not_found", "no such item");
+    const draft = await draftRow(this.db, row.id);
+    return {
+      offers: (await offerRows(this.db, row.id)).map(offerView),
+      draft: draft ? draftView(draft, await draftIsStale(this.db, draft, row.version)) : null,
+    };
+  }
+
+  /**
+   * Sends the draft the owner's AI, a rule or another system made outside the owner's limits (ADR-018
+   * §4), as it is: the transition it would have made, made now by the owner. Only the owner in person —
+   * signed in, or with a full owner key, never through the owner's MCP — so the AI cannot approve its
+   * own drafts. A draft made on the item as it no longer stands is `draft_stale`: the owner offers afresh.
+   */
+  async sendOfferDraft(caller: Caller, input: T.OfferDraftInput): Promise<TransitionResult> {
+    requireBusiness(caller);
+    if (!isOwnerOrSystem(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the owner sends a draft, signed in to the owner app: it is outside the limits they set for you. Tell the owner it is waiting for them; tell the customer only that a person will reply.",
+        { details: { reason: "owner_in_person", ask_owner: true } },
+      );
+    }
+    const [row] = await this.db.orm.select({ version: items.version }).from(items).where(eq(items.id, input.item_id));
+    if (!row) throw new WriteError("not_found", "no such item");
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    const draft = await draftRow(this.db, input.item_id);
+    if (!draft || (input.draft_id !== undefined && draft.id !== input.draft_id)) {
+      // Sent already, by this very request: its answer is the one stored.
+      if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) {
+        return transitionItem(this.db, c, { itemId: input.item_id, event: "draft", hashInput: input });
+      }
+      throw new WriteError("not_found", "there is no draft on this item: it was sent or dropped", {
+        details: { draft_id: input.draft_id ?? null },
+      });
+    }
+    if (await draftIsStale(this.db, draft, row.version)) {
+      throw new WriteError(
+        "draft_stale",
+        "The item has moved since this draft was made, so it cannot go as it is: make your own offer, or drop it.",
+        { details: { draft_id: draft.id, terms: draft.terms } },
+      );
+    }
+    return transitionItem(this.db, c, {
+      itemId: input.item_id,
+      event: draft.event,
+      input: draft.input,
+      expectedVersion: row.version,
+      hashInput: input,
+      extraStatements: [dropDraftStatement(input.item_id, draft.id)],
+      fromDraft: true,
+    });
+  }
+
+  /**
+   * Drops an item's draft, unsent (ADR-018 §4): the owner's in person, as sending it is. A draft is how
+   * the owner hears what automation would have agreed outside their limits; the AI that made it, or a
+   * customer's message talking it round, does not get to take it back before they read it.
+   */
+  async dropOfferDraft(caller: Caller, input: T.OfferDraftInput): Promise<{ dropped: boolean }> {
+    requireBusiness(caller);
+    if (!isOwnerOrSystem(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the owner drops a draft, signed in to the owner app: it is how they hear what you would have offered outside their limits. Tell the owner if it is no longer wanted.",
+        { details: { reason: "owner_in_person", ask_owner: true } },
+      );
+    }
+    const [row] = await this.db.orm.select({ id: items.id }).from(items).where(eq(items.id, input.item_id));
+    if (!row) throw new WriteError("not_found", "no such item");
+    const res = await this.db.client.query(dropDraftStatement(input.item_id, input.draft_id));
+    return { dropped: (res.changes ?? 0) > 0 };
+  }
+
+  /**
+   * The business's offer on an item (ADR-018 §6), for the event its state takes: another time for a
+   * booking and changes to an order (`propose`), a quote for a quote request (`quote`). It is that
+   * transition, with every check `transition_item` makes.
+   */
+  async makeOffer(caller: Caller, input: T.MakeBusinessOfferInput): Promise<TransitionResult> {
+    requireBusiness(caller);
+    const [row] = await this.db.orm
+      .select({ type: items.type, state: items.state })
+      .from(items)
+      .where(eq(items.id, input.item_id));
+    if (!row) throw new WriteError("not_found", "no such item");
+    // A confirmed booking or an accepted order takes a change to what was agreed; before that, an offer.
+    const event = isChangeable({ type: row.type as ItemType, state: row.state })
+      ? "propose_change"
+      : row.type === "booking" || row.type === "order"
+        ? "propose"
+        : row.type === "quote_request"
+          ? "quote"
+          : null;
+    if (!event) {
+      throw new WriteError("wrong_state", `a ${row.type} takes no offer: reply to the customer instead`, {
+        details: { state: row.state },
+      });
+    }
+    return this.transitionItem(caller, {
+      item_id: input.item_id,
+      event,
+      input: input.input,
+      ...(input.expected_version !== undefined ? { expected_version: input.expected_version } : {}),
+      ...(input.written_by ? { written_by: input.written_by } : {}),
+      ...(input.idempotency_key ? { idempotency_key: input.idempotency_key } : {}),
+    });
+  }
+
+  /**
+   * A return a customer asked for by email or phone (ADR-018 §6), written down on their fulfilled order
+   * for the business to answer later: the owner, staff or the owner's AI may open one; approving it is
+   * bounded by the owner's policy (`return_allowed`).
+   */
+  async openReturn(caller: Caller, input: T.OpenReturnInput): Promise<TransitionResult> {
+    return this.transitionItem(caller, {
+      item_id: input.item_id,
+      event: "open_return",
+      input: {
+        reasonCode: input.reason,
+        note: input.note,
+        ...(input.lines?.length ? { lines: input.lines } : {}),
+        ...(input.wants ? { wants: input.wants } : {}),
+        ...(input.entry_id ? { entryId: input.entry_id } : {}),
+        ...(input.asked_at ? { askedAt: input.asked_at } : {}),
+      },
+      ...(input.written_by ? { written_by: input.written_by } : {}),
+      ...(input.idempotency_key ? { idempotency_key: input.idempotency_key } : {}),
+    });
+  }
+
   /** A reply to the customer (answers an open message) or an internal note. */
   async reply(caller: Caller, input: T.ReplyInput): Promise<TransitionResult | ItemView> {
     requireBusiness(caller);
@@ -780,6 +1034,51 @@ export class Capabilities {
     if (!input.internal) await assertNoLeak(this.db, caller, row.partyId, [input.body]);
     // Who wrote it, as the request says: an email nobody typed says it was sent automatically.
     const writtenBy = effectiveWrittenBy(caller, input.written_by);
+    // Words from automation naming money we have not offered are a person's to send (ADR-018 §4; DL
+    // 7/2004 art. 32(1)): kept as a note for the owner, the item marked for them, nothing sent.
+    // A person at the business typed it into their own system (an integration key's `written_by`):
+    // their words, not automation's.
+    const held =
+      !input.internal &&
+      writtenBy !== "person" &&
+      isAutomation(caller) &&
+      (await namesOtherMoney(this.db, item, await offerRows(this.db, item.id), input.body));
+    if (held) {
+      const keyed = withIdempotencyKey(caller, input.idempotency_key);
+      const { result } = await once(
+        this.db,
+        keyed,
+        "items.reply",
+        { item_id: input.item_id, body: input.body, internal: input.internal, written_by: writtenBy },
+        async (): Promise<TransitionResult> => {
+          const plan = await heldReplyStatements({
+            db: this.db,
+            caller,
+            item,
+            body: input.body,
+            writtenBy: writtenBy ?? null,
+            now: nowOf(caller),
+          });
+          try {
+            await this.db.batch(plan.statements);
+          } catch (error) {
+            const [now] = await this.db.orm.select({ version: items.version }).from(items).where(eq(items.id, item.id));
+            if (now && now.version !== item.version) {
+              throw new WriteError("version_conflict", "the item changed while the reply was being kept: try again", {
+                details: { currentVersion: now.version },
+              });
+            }
+            throw error;
+          }
+          return {
+            view: viewFor(plan.item, permissionKind(caller)),
+            replayed: false,
+            held: { breaches: ["amount_named"] },
+          };
+        },
+      );
+      return result;
+    }
     if (!input.internal && item.type === "message" && item.state === "open") {
       return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
         itemId: item.id,
@@ -826,7 +1125,7 @@ export class Capabilities {
       .limit(1);
     // Leniently, like every other reader: a stored value this version rejects is shown as its
     // default, and the owner app saving the page writes only what the owner changed.
-    return redact(parseStoredSettings(row?.doc ?? {}).settings, row?.version ?? 0);
+    return redact(parseStoredSettings(row?.doc ?? {}).settings, row?.version ?? 0, caller);
   }
 
   /**
@@ -884,6 +1183,18 @@ export class Capabilities {
       });
       if (issues.length) throw fromZod(new z.ZodError(issues), "doc");
     }
+    // Rewards (ADR-018 §4, Q3) are checked when written: a condition on the customer's record only, a
+    // percentage within bounds, words fit for a customer. One that does not check out is never applied.
+    const rewardsPatch = (prepared.patch as { negotiation?: { rewards?: unknown } }).negotiation?.rewards;
+    if (rewardsPatch !== undefined) {
+      const problems = rewardProblems(
+        (merged.negotiation as { rewards?: unknown } | undefined)?.rewards,
+        "doc.negotiation.rewards",
+      );
+      if (problems.length) {
+        throw new WriteError("invalid_input", `Invalid input: ${describeProblems(problems)}`, { fields: problems });
+      }
+    }
     const json = JSON.stringify(merged);
     // What is stored is what was sent, unknown keys included, so its size is bounded here.
     if (json.length > MAX_SETTINGS_BYTES) {
@@ -911,6 +1222,52 @@ export class Capabilities {
       throw ownerOnlyError(`change ${trusted.join(", ")}`, "Settings", {
         fields: trusted.map((path) => ({ path: `doc.${path}`, message: "only the owner in person can change this" })),
       });
+    }
+    // The value above which an order waits for a person (`over_approval_value`, ADR-018 §4) bounds what
+    // the owner's AI, rules and a key may accept alone: they may tighten it, never loosen it (0 is none),
+    // or a customer's message could ask the AI to lift it and then accept the order it held.
+    const approval = (v: number) => (v > 0 ? v : Number.POSITIVE_INFINITY);
+    if (
+      !isOwnerOrSystem(caller) &&
+      approval(after.orders.maxValueWithoutApprovalMinor) > approval(before.orders.maxValueWithoutApprovalMinor)
+    ) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the owner can raise or lift the order value they accept only in person, in the owner app (Settings): it bounds what you may accept alone. Nothing was changed. Tell the owner what you were asked to do and let them decide; do not try another way.",
+        {
+          details: { reason: "owner_in_person", ask_owner: true, where: "Settings" },
+          fields: [
+            {
+              path: "doc.orders.maxValueWithoutApprovalMinor",
+              problem: "invalid",
+              message: "only the owner in person can raise or lift this",
+            },
+          ],
+        },
+      );
+    }
+    // Until the owner sets a cutoff of its own, the cancellation window is also how close to a
+    // booking the owner's AI may take a customer's change (ADR-018 §3.1, Amendment 3): a limit on the
+    // AI, which the AI may tighten but never loosen, or a customer's message could ask it to.
+    if (
+      isOwnerAssistant(caller) &&
+      after.negotiation.changes.customerCutoffMin === null &&
+      after.booking.cancellationWindowMin < before.booking.cancellationWindowMin
+    ) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the owner can shorten the cancellation window, in the owner app (Settings): it is also how close to a booking you may take a customer's change. Nothing was changed. Tell the owner what you were asked to do and let them decide; do not try another way.",
+        {
+          details: { reason: "owner_in_person", ask_owner: true, where: "Settings" },
+          fields: [
+            {
+              path: "doc.booking.cancellationWindowMin",
+              problem: "invalid",
+              message: "only the owner in person can shorten this while it bounds changes",
+            },
+          ],
+        },
+      );
     }
     // The business's name signs every email and heads its public profile: words every customer
     // reads, which carry no customer's details from the owner's AI (`access/leaks.ts`).
@@ -968,7 +1325,7 @@ export class Capabilities {
     if (started.length) {
       await this.db.batch(started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)));
     }
-    return redact(after, version);
+    return redact(after, version, caller);
   }
 
   /**
@@ -1081,7 +1438,7 @@ function metaString(meta: unknown, key: string): string | null {
   return typeof v === "string" ? v : null;
 }
 
-function redact(settings: Settings, version: number): SettingsView {
+function redact(settings: Settings, version: number, caller: Caller): SettingsView {
   const doc = structuredClone(settings) as unknown as Record<string, Record<string, unknown> | undefined>;
   const redacted: string[] = [];
   for (const [section, key] of SECRET_SETTINGS_PATHS) {
@@ -1092,8 +1449,24 @@ function redact(settings: Settings, version: number): SettingsView {
       redacted.push(`${section}.${key}`);
     }
   }
-  return { doc: doc as unknown as Settings, version, redacted };
+  // The owner's limits for automation and rewards are the owner's to read (ADR-018 §4): the owner's AI
+  // and a key handed to another system learn a limit as a code when they meet it, never as a number a
+  // customer's message could get them to recite.
+  const withheld: string[] = [];
+  if (!isOwnerOrSystem(caller)) {
+    const negotiation = doc.negotiation;
+    for (const key of WITHHELD_NEGOTIATION) {
+      if (negotiation && key in negotiation) {
+        delete negotiation[key];
+        withheld.push(`negotiation.${key}`);
+      }
+    }
+  }
+  return { doc: doc as unknown as Settings, version, redacted, withheld };
 }
+
+/** What only the owner in person reads of `negotiation`: automation's limits, and the rewards. */
+const WITHHELD_NEGOTIATION = ["ai", "rewards"] as const;
 
 /** A write that carries a secret as a read masked it means "keep it": that value is left out. */
 function withoutMaskedSecrets(doc: Record<string, unknown>): Record<string, unknown> {
@@ -1144,6 +1517,20 @@ function decodeCursor(cursor: string): { updatedAt: number; id: string } {
 }
 
 /** Never pass user text to FTS raw: tokenise, quote, prefix-match. */
+/** The trader's identity as the profile shows it: only what the owner filled in. */
+function traderOf(legal: Settings["commerce"]["legal"]): Trader {
+  const opt = (v: string) => (v.trim() ? v.trim() : undefined);
+  return {
+    legal_name: legal.legalName.trim(),
+    ...(opt(legal.address) ? { address: legal.address.trim() } : {}),
+    ...(opt(legal.country) ? { country: legal.country } : {}),
+    ...(opt(legal.email) ? { email: legal.email.trim() } : {}),
+    ...(opt(legal.phone) ? { phone: legal.phone.trim() } : {}),
+    ...(opt(legal.vatId) ? { vat_id: legal.vatId.trim() } : {}),
+    ...(opt(legal.complaintsUrl) ? { complaints_url: legal.complaintsUrl.trim() } : {}),
+  };
+}
+
 export function ftsQuery(q: string): string {
   const terms = q
     .split(/\s+/)

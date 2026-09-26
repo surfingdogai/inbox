@@ -296,3 +296,26 @@ export async function subjectHash(key: CryptoKey, identity: string): Promise<str
   const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(identity) as BufferSource);
   return b64u(new Uint8Array(mac));
 }
+
+/**
+ * The key one agreed offer's `trm` is bound under (ADR-017 Amendment 3): HMAC-SHA-256 of `offer:<id>`
+ * under the instance's `receipt-terms` key. Per offer, so disclosing it in a dispute proves that
+ * offer's terms and says nothing about any other.
+ */
+export async function termsKeyFor(master: CryptoKey, offerId: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.sign("HMAC", master, encoder.encode(`offer:${offerId}`) as BufferSource));
+}
+
+/**
+ * `trm`: base64url(HMAC-SHA-256(key, terms_sha)), the fingerprint of the terms both sides agreed,
+ * bound under a key only the business holds until it discloses it. A bare `terms_sha` would let
+ * anyone holding the receipt test guesses — which service, which products, how many, from the
+ * business's public catalogue — and a receipt is not a copy of the order (ADR-016). Whoever is
+ * shown the key and the terms can check them against the signed receipt.
+ */
+export async function trmOf(key: Uint8Array, termsSha: string): Promise<string> {
+  const k = await crypto.subtle.importKey("raw", key as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  return b64u(new Uint8Array(await crypto.subtle.sign("HMAC", k, encoder.encode(termsSha) as BufferSource)));
+}

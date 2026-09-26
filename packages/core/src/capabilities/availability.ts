@@ -42,6 +42,8 @@ export async function findSlots(
     /** Nothing that starts before this, plus the notice, is offered. */
     now: number;
     minNoticeMin: number;
+    /** A booking looking for somewhere to move: its own places do not count as taken. */
+    exceptItemId?: string | undefined;
   },
 ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
@@ -95,7 +97,7 @@ export async function findSlots(
     new Date(first).toISOString(),
     new Date(Math.min(to + duration, first + 14 * 86_400_000 + duration)).toISOString(),
   );
-  const taken = await readClaims(db, spec.resourceKey, allBuckets, "");
+  const taken = await readClaims(db, spec.resourceKey, allBuckets, input.exceptItemId ?? "");
   for (let start = first; start + duration <= to && slots.length < limit; start += step) {
     const end = start + duration;
     if (!withinOpening(local, weekly, start, end)) continue;
@@ -108,6 +110,55 @@ export async function findSlots(
     slots.push({ startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(), available: free });
   }
   return { service: serviceView, slots };
+}
+
+/**
+ * Whether one time is one the business would offer for a service (`findSlots`, for a single
+ * candidate of any length): on the service's grid, inside opening hours, on a day it is open, and
+ * free for its whole length — counting every claim but the item's own (`exceptItemId`), so a
+ * booking can move to a time that overlaps where it is now.
+ */
+export async function slotOffered(
+  db: Db,
+  input: {
+    readonly serviceId: string;
+    readonly start: number;
+    readonly end: number;
+    readonly timezone: string;
+    readonly exceptItemId: string;
+  },
+): Promise<boolean> {
+  const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
+  if (!service?.active || !(input.end > input.start)) return false;
+  if (input.start % (service.granularityMin * 60_000) !== 0) return false;
+  const rules = await db.orm
+    .select()
+    .from(availabilityRules)
+    .where(
+      and(
+        eq(availabilityRules.kind, "open"),
+        or(eq(availabilityRules.serviceId, service.id), isNull(availabilityRules.serviceId)),
+      ),
+    );
+  const weekly = (rules.find((r) => r.serviceId === service.id)?.weekly ??
+    rules[0]?.weekly ??
+    DEFAULT_WEEKLY) as Weekly;
+  if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return false;
+  const closures = await readClosures(db, service.id);
+  const localDate = dateLocaliser(input.timezone);
+  if (
+    closures.length > 0 &&
+    (isClosed(closures, localDate(input.start)) || isClosed(closures, localDate(input.end - 1)))
+  )
+    return false;
+  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
+  let buckets: number[];
+  try {
+    buckets = bucketsFor(spec, new Date(input.start).toISOString(), new Date(input.end).toISOString());
+  } catch {
+    return false;
+  }
+  return planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, input.exceptItemId)).ok;
 }
 
 export type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };

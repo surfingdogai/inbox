@@ -39,7 +39,9 @@ export interface PartyView {
 const ACTION_RANK = [
   "confirm",
   "accept",
+  "accept_change",
   "approve",
+  "goods_back",
   "counter",
   "quote",
   "answer",
@@ -49,13 +51,19 @@ const ACTION_RANK = [
   "fulfil",
   "complete",
   "propose",
+  "propose_change",
+  "record_delivery",
   "request_info",
+  "retract",
+  "retract_change",
   "provide_info",
   "reopen",
   "unspam",
   "refund",
+  "open_return",
   "close",
   "decline",
+  "decline_change",
   "reject",
   "no_show",
   "payment_failed",
@@ -66,8 +74,11 @@ const ACTION_RANK = [
   "cancel_by_business",
   "record_cancel",
   "record_cancel_late",
+  "record_withdrawal",
+  "dispute_goods",
   "mark_spam",
   "expire",
+  "expire_change",
   "lapse",
 ];
 const rankOf = (event: string) => {
@@ -114,11 +125,37 @@ export function viewFor(
   const machine = machines[item.type];
   const customer = CUSTOMER_KINDS.has(actor);
   const lang = (audience ?? DEFAULT_AUDIENCE).lang;
+  // What we proposed is withdrawn only when it said it was subject to our confirmation (ADR-018 §2).
+  const withdrawable = (item.payload as { offer?: { binding?: boolean } }).offer?.binding === false;
+  // A change to a promise is answered by the side it was asked of, and taken back by the one who
+  // asked (we only when it said it was subject to our confirmation); with none open, it can be asked.
+  const change = (item.payload as { change?: { by: "business" | "customer" } }).change;
+  const side = customer ? "customer" : "business";
+  const changeShown = (event: string) => {
+    // The owner also records a customer's yes to our own change, given to a person.
+    if (event === "accept_change") return change !== undefined && (change.by !== side || !customer);
+    if (event === "decline_change") return change !== undefined && change.by !== side;
+    if (event === "retract_change") return change?.by === side && (customer || withdrawable);
+    return true;
+  };
+  // A booking nothing was paid for is a reservation to cancel, not a contract to withdraw from (ADR-018 §7).
+  const paidBooking =
+    item.type !== "booking" || item.payload.paymentRef !== undefined || (item.payload.paidAmount?.value ?? 0) > 0;
   const transitions = availableTransitions(machine, item.state, actor)
-    .filter((t) => !hidden?.has(t.event))
+    .filter(
+      (t) =>
+        !hidden?.has(t.event) &&
+        (t.event !== "retract" || withdrawable) &&
+        changeShown(t.event) &&
+        (t.event !== "record_withdrawal" || paidBooking),
+    )
     .map((t, i) => ({
       event: t.event,
-      label: customer ? customerLabel(t.event, item.type, item.state, lang) : t.label,
+      label: customer
+        ? customerLabel(t.event, item.type, item.state, lang)
+        : t.event === "accept_change" && change?.by === "business"
+          ? "Customer accepted the change"
+          : t.label,
       i,
     }))
     .sort((a, b) => rankOf(a.event) - rankOf(b.event) || a.i - b.i)
@@ -135,7 +172,15 @@ export function viewFor(
  */
 export function customerItem(item: Item): Item {
   const { flags: _flags, ...rest } = item;
-  return { ...rest, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
+  // Nor how far a negotiation has gone: the round is the business's to count (ADR-018 §4).
+  const offer = (item.payload as { offer?: Record<string, unknown> }).offer;
+  const payload = offer
+    ? (() => {
+        const { round: _round, ...pointer } = offer;
+        return { ...item.payload, offer: pointer };
+      })()
+    : item.payload;
+  return { ...rest, payload, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
 }
 
 const TYPE_WORD: Record<ItemType, string> = {
@@ -172,6 +217,7 @@ const STATE_WORD: Record<string, string> = {
   closed: "closed",
   spam: "marked as spam",
   approved: "approved",
+  goods_received: "back with the business, waiting for the refund",
   rejected: "rejected",
   refunded: "refunded",
 };
@@ -191,7 +237,28 @@ export function describe(item: Item): string {
   const prices = statedPrices(item);
   const who = item.channel === "email" || item.channel === "form" ? "The customer" : "The customer's assistant";
   const price = prices ? ` ${who} suggested ${moneyText(prices.stated)}; your price is ${moneyText(prices.ours)}.` : "";
-  return `${what}${when} is ${STATE_WORD[item.state] ?? item.state}.${price} Reference ${item.id}.`;
+  const state =
+    item.type === "order" && item.state === "proposed"
+      ? "waiting for the customer's answer to the changes the business suggested"
+      : (STATE_WORD[item.state] ?? item.state);
+  return `${what}${when} is ${state}.${price}${changeLine(item)} Reference ${item.id}.`;
+}
+
+/** A change asked for and not answered yet, for the business: who asked, and what it would be. */
+function changeLine(item: Item): string {
+  if (item.type === "booking" && item.payload.change) {
+    const to = formatWhen(item.payload.change.startTime);
+    return item.payload.change.by === "customer"
+      ? ` The customer asks to move it to ${to}.`
+      : ` You asked the customer to move it to ${to}; waiting for their answer.`;
+  }
+  if (item.type === "order" && item.payload.change) {
+    const total = moneyText(item.payload.change.totalPrice);
+    return item.payload.change.by === "customer"
+      ? ` The customer asks for changes to it (total ${total}).`
+      : ` You asked the customer for changes to it (total ${total}); waiting for their answer.`;
+  }
+  return "";
 }
 
 /** The price a customer's request stated beside the business's own, when they differ (ADR-018 §3.2). */

@@ -417,6 +417,7 @@ describe("upgrading the live instance to several networks", () => {
       lateCancellation: "record",
       autoCompleteHours: 48,
       minNoticeMin: 60,
+      maxHolds: 2,
     });
 
     // The tab from before the deploy cannot overwrite any of it: its version is long gone.

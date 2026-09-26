@@ -11,11 +11,20 @@
     },
     "out": {
       "type": "string",
-      "enum": ["booking.no_show_business", "order.not_received"]
+      "enum": ["booking.no_show_business", "order.not_received", "order.refund_refused"]
     },
     "why": {
       "type": "string",
-      "enum": ["closed", "no_one_there", "not_delivered", "other"]
+      "enum": [
+        "closed",
+        "no_one_there",
+        "not_delivered",
+        "other",
+        "withdrawal_refused",
+        "faulty_refused",
+        "goods_disputed_unpaid"
+      ],
+      "description": "One of the reasons its out takes (REPORT_WHYS)."
     },
     "pass_ref": {
       "type": "string",

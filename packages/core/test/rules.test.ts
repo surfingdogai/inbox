@@ -18,7 +18,7 @@ import {
   threadEntries,
 } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const customer: Caller = {
@@ -59,7 +59,7 @@ async function setup(vertical: keyof typeof PRESETS) {
     })) ?? [],
   );
   const runner = createRunner({ mailOut: logMailOut() });
-  return { db, svc, caps: new Capabilities(db), runner };
+  return { db, svc, caps: confirming(new Capabilities(db)), runner };
 }
 
 async function drain(db: ReturnType<typeof createDb>, runner: ReturnType<typeof createRunner>) {

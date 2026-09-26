@@ -21,11 +21,12 @@
     },
     "typ": {
       "type": "string",
-      "enum": ["booking", "order"]
+      "enum": ["booking", "order", "refund"],
+      "description": "A booking or an order; a refund (a return or a withdrawal of one) since rules version 6."
     },
     "knd": {
       "type": "string",
-      "enum": ["confirmed", "paid", "accepted", "outcome"]
+      "enum": ["confirmed", "paid", "accepted", "outcome", "amended"]
     },
     "iat": {
       "type": "integer",
@@ -75,11 +76,14 @@
         "order.charged_back",
         "booking.cancelled_by_customer",
         "order.cancelled_by_customer",
-        "order.lapsed"
+        "order.lapsed",
+        "refund.honoured",
+        "refund.late",
+        "refund.cancelled_by_customer"
       ]
     },
     "ref": {
-      "description": "With an outcome: the nonce of the item's earliest promise.",
+      "description": "With an outcome or an amendment: the nonce of the item's earliest promise.",
       "type": "string",
       "pattern": "^[0-9a-f]{32}$"
     },
@@ -87,13 +91,23 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 137438953472,
-      "description": "A booking's start; an order's payload.delivery.when, else iat + 30 days. Outcomes copy their promise's."
+      "description": "A booking's start; an order's payload.delivery.when, else iat + 30 days; the date a refund must be paid by. An amendment names the new one; outcomes copy the latest amendment's, else their promise's."
     },
     "end": {
       "description": "A booking's end.",
       "type": "integer",
       "minimum": 1,
       "maximum": 137438953472
+    },
+    "trm": {
+      "description": "Rules version 6: base64url(HMAC-SHA-256(k, terms_sha)), the terms both sides agreed (their offer's terms_sha) under a key k the business derives for that offer and discloses only to settle a dispute, so nobody can test guessed terms against it. On a promise or an amendment; never scored.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "acc": {
+      "description": "Rules version 6, with an amendment: who accepted the change.",
+      "type": "string",
+      "enum": ["customer", "business"]
     },
     "aut": {
       "description": "1 when the system fired the transition, not a person.",

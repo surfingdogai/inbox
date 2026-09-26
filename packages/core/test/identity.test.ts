@@ -18,7 +18,7 @@ import { availabilityRules, items, jobs, parties, products, rules, services } fr
 import { readSettings } from "../src/settings/schema";
 import { WriteError } from "../src/write/errors";
 import type { Caller } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * Customers the business already knows (ADR-017 §8.2) and the rules that may read a standing
@@ -75,7 +75,7 @@ async function setup(vertical?: keyof typeof PRESETS) {
     );
   }
   const mail = logMailOut();
-  const caps = new Capabilities(db);
+  const caps = confirming(new Capabilities(db));
   caps.people.attachMail(mail);
   const runner = createRunner({ mailOut: mail });
   let slot = 0;

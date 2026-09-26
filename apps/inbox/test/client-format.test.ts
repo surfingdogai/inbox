@@ -61,6 +61,12 @@ describe("receipts in words", () => {
     expect(receiptWord(r("outcome", "booking.completed", { aut: 1 }))).toBe("Completed automatically");
     expect(receiptWord(r("outcome", "booking.cancelled_late_by_customer"))).toBe("Cancelled late by the customer");
     expect(receiptWord(r("outcome", "order.lapsed", { aut: 1 }))).toBe("Lapsed unpaid automatically");
+    // Rules version 6: a change both sides agreed, and a refund's promise and outcomes.
+    expect(receiptWord(r("amended", null))).toBe("Change agreed");
+    expect(receiptWord(r("accepted", null, { typ: "refund" }))).toBe("Refund due");
+    expect(receiptWord(r("outcome", "refund.honoured"))).toBe("Refunded on time");
+    expect(receiptWord(r("outcome", "refund.late"))).toBe("Refunded late");
+    expect(receiptWord(r("outcome", "refund.cancelled_by_customer"))).toBe("Return dropped by the customer");
   });
 });
 

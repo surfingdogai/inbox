@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createInbox, type Inbox } from "../src/app";
 import { DEMO_NIGHTLY_KIND, liveFeed, nextNightly } from "../src/demo";
 import { localTime, seedShowcase, seedSurfingDog } from "../src/seed";
-import { freshDb } from "./harness";
+import { confirmed, freshDb } from "./harness";
 
 /**
  * The public demo, attacked (src/demo.ts). Each test is a way a stranger, or an operator's slip,
@@ -136,7 +136,8 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
     const inbox = demoOn(db);
     await inbox.prepare();
     // A phone number, typed as the quantity of a real product.
-    const made = await inbox.app.request(
+    const made = await confirmed(
+      (r) => inbox.app.request(r),
       post("/v1/orders", {
         payload: {
           orderedItem: [
@@ -174,7 +175,8 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
     // shop had room for were gone after twelve, and the rest heard "that time is taken".
     const ids: string[] = [];
     for (let i = 0; i < 40; i++) {
-      const res = await inbox.app.request(
+      const res = await confirmed(
+        (r) => inbox.app.request(r),
         post(
           "/v1/bookings",
           {

@@ -4,7 +4,7 @@ import { networksLink, schema, ulid } from "@surfingdog/core";
 import { logMailOut, type MailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { confirmed, freshDb, futureDay } from "./harness";
 
 /**
  * A customer's privacy through the whole app (Tiago, 23 September 2026): the page the code email
@@ -48,7 +48,8 @@ async function setup(opts: { languages?: string[]; mailOut?: MailOut } = {}) {
   const owner = await createApiKey(db, { kind: "owner", name: "t" });
   const auth = { authorization: `Bearer ${owner.key}` };
   const book = async (email = "rita@example.com") => {
-    const res = await inbox.app.request(
+    const res = await confirmed(
+      (r) => inbox.app.request(r),
       post("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: svc, name: "Full service" },

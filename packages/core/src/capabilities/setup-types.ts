@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isoDateTime } from "../domain/types";
+import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
 import { ruleDefinitionSchema } from "../rules/schema";
 
 /** Inputs of the owner's setup operations: profile, services, products, opening hours, rules. */
@@ -59,6 +59,17 @@ export const serviceInput = z.object({
   price: priceSchema.optional(),
   active: z.boolean().default(true),
   sort: z.number().int().min(0).max(10_000).default(0),
+  withdrawal: withdrawalFlagSchema
+    .optional()
+    .describe(
+      "Whether customers who paid in advance may withdraw within the legal period: standard, or dated_leisure (for a set date), urgent_repair, … Only the owner sets it.",
+    ),
+  negotiable: z
+    .boolean()
+    .optional()
+    .describe(
+      "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
+    ),
 });
 export const updateServiceInput = serviceInput.partial().extend({ service_id: z.string().min(1) });
 export const serviceIdInput = z.object({ service_id: z.string().min(1) });
@@ -70,9 +81,38 @@ export const productInput = z.object({
   price: z.object({ value: z.number().int().min(0), currency: z.string().length(3) }),
   stock: z.number().int().min(0).nullable().optional().describe("null = not tracked"),
   active: z.boolean().default(true),
+  withdrawal: withdrawalFlagSchema
+    .optional()
+    .describe(
+      "Whether customers may return it within the legal period: standard, or the exception the law allows (perishable, personalised, sealed_hygiene, …). Only the owner sets it.",
+    ),
+  negotiable: z
+    .boolean()
+    .optional()
+    .describe(
+      "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
+    ),
 });
 export const updateProductInput = productInput.partial().extend({ product_id: z.string().min(1) });
 export const productIdInput = z.object({ product_id: z.string().min(1) });
+
+/**
+ * The owner's floors (ADR-018 §4): the lowest price the owner's AI, rules and another system's key
+ * may go to for a product or a service, on the same basis as its price (a product's per unit, a
+ * service's per booking or per person). null clears one. The owner's alone, never shown to anyone else.
+ */
+export const setFloorsInput = z.object({
+  floors: z
+    .array(
+      z.object({
+        kind: z.enum(["product", "service"]),
+        ref_id: z.string().min(1).max(64),
+        floor_minor: z.number().int().min(0).nullable().describe("Minor units (cents); null clears it."),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
 
 export const setWeeklyInput = z.object({
   weekly: weeklySchema,
@@ -108,6 +148,7 @@ export type UpdateServiceInput = z.infer<typeof updateServiceInput>;
 export type ProductInput = z.infer<typeof productInput>;
 export type UpdateProductInput = z.infer<typeof updateProductInput>;
 export type SetWeeklyInput = z.infer<typeof setWeeklyInput>;
+export type SetFloorsInput = z.infer<typeof setFloorsInput>;
 export type SetClosuresInput = z.infer<typeof setClosuresInput>;
 export type RuleInput = z.infer<typeof ruleInput>;
 export type UpdateRuleInput = z.infer<typeof updateRuleInput>;

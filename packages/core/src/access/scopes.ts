@@ -22,6 +22,7 @@ export const SCOPES = {
   "integrations:write": "add, change and test webhooks and product feeds",
   "keys:write": "create and revoke integration keys",
   "customers:erase": "erase one customer's personal data (it cannot be undone)",
+  "money:write": "record payments and refunds, and price offers and quotes, as your shop or till does",
   offline_access: "stay connected without asking again",
 } as const;
 
@@ -39,9 +40,12 @@ export const KEY_SCOPES = SCOPE_NAMES.filter((s) => s !== "keys:write" && s !== 
 
 /**
  * Scopes an AI app cannot be granted by OAuth: erasing a customer is never the owner's AI's to do
- * (Tiago, 23 September 2026), so it is not offered to one.
+ * (23 September 2026), so it is not offered to one; nor is money (ADR-018 §4, Q2: time yes,
+ * money no): the owner's AI never records a payment or a refund, and offers a price only within the
+ * owner's limits, whatever it holds. A key handed to another system holds `money:write` only when the
+ * owner gives it; without it, that system is held to the owner's limits as the owner's AI is.
  */
-export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase"];
+export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:write"];
 
 /**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes

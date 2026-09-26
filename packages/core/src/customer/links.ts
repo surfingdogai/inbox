@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import type { SecretBox } from "../secrets/box";
 import type { CustomerLang } from "./lang";
-import { base64Url, openOffer } from "./offer";
+import { base64Url, isChangeable, openChange, openOffer, promiseTerms, termsSha } from "./offer";
 
 /**
  * Links in the business's emails (ADR-018 §5): Accept, Decline, Pick another time, Send the details.
@@ -24,9 +24,22 @@ export type LinkAction =
   | "other_time"
   | "accept_quote"
   | "decline_quote"
+  /** The changes we suggested to an order. */
+  | "accept_order"
+  | "decline_order"
+  /** A change we asked for to a confirmed booking or an accepted order: take it, or keep what was agreed. */
+  | "accept_change"
+  | "keep_as_is"
+  /** The customer asks to move their confirmed booking: the free times, then their request. */
+  | "change_time"
   | "details"
   /** The page about the booking network, from the code email, where the customer can switch it off for themselves. */
-  | "networks_off";
+  | "networks_off"
+  /**
+   * "Withdraw from contract here" (ADR-018 §7; CRD art. 11a): the statement, then "Confirm withdrawal".
+   * Bound to the item, not to terms, and living as long as the right does.
+   */
+  | "withdraw";
 
 export const LINK_ACTIONS: readonly LinkAction[] = [
   "accept_time",
@@ -34,8 +47,14 @@ export const LINK_ACTIONS: readonly LinkAction[] = [
   "other_time",
   "accept_quote",
   "decline_quote",
+  "accept_order",
+  "decline_order",
+  "accept_change",
+  "keep_as_is",
+  "change_time",
   "details",
   "networks_off",
+  "withdraw",
 ];
 
 export interface LinkRow {
@@ -58,12 +77,21 @@ export interface LinkRow {
  * too late rather than that the link is dead. Without such a date, two weeks; the link to stop the
  * booking network, a year.
  */
-export const LINK_MAX_MS: Readonly<Record<"time" | "quote" | "details" | "networks", number>> = {
+export const LINK_MAX_MS: Readonly<
+  Record<"time" | "quote" | "order" | "change" | "details" | "networks" | "withdraw", number>
+> = {
   time: 14 * 86_400_000,
   quote: 30 * 86_400_000,
+  order: 14 * 86_400_000,
+  change: 14 * 86_400_000,
   details: 14 * 86_400_000,
   networks: 365 * 86_400_000,
+  /** Goods not yet delivered: their period has not begun, so the link lives on until a later email's. */
+  withdraw: 60 * 86_400_000,
 };
+
+/** What a withdrawal link is bound to: the contract itself, whatever changes in it. */
+export const withdrawSha = (itemId: string): string => `withdraw:${itemId}`;
 export const LINK_GRACE_MS = 86_400_000;
 
 /** Rows are kept this long after they expire, then the hourly housekeeping drops them. */
@@ -146,10 +174,20 @@ export async function detailsSha(db: Db, itemId: string): Promise<string> {
 }
 
 /**
+ * What a link to ask for another time is bound to: the booking as it stands, so any change to it
+ * retires the links sent before (`change_time`).
+ */
+export async function standingSha(item: Item): Promise<string> {
+  return termsSha("time", promiseTerms(item) ?? {});
+}
+
+/**
  * The links for one email about `item`, when it waits for the customer's answer: Accept, Decline,
- * Pick another time for a time we proposed; Accept, Decline for a quote; Send the details for a
- * question. Null when there is nothing to answer, or no secret to sign them with, or no public
- * address for them to point at: the email then asks for a reply instead.
+ * Pick another time for a time we proposed; Accept, Decline for a quote or for changes we suggested
+ * to an order; Accept the change, Keep it as it is for a change we asked for to a promise; Send the
+ * details for a question. A confirmed booking with no change of ours open carries Change the time,
+ * until its start less the notice. Null when there is nothing to answer, or no secret to sign them
+ * with, or no public address for them to point at: the email then asks for a reply instead.
  */
 export async function linksForEmail(
   db: Db,
@@ -162,16 +200,64 @@ export async function linksForEmail(
     readonly now: number;
     /** A proposed time's links stop working when the notice before it starts. */
     readonly minNoticeMin?: number | undefined;
+    /**
+     * The customer may withdraw from the contract (ADR-018 §7): until when (null while the period has
+     * not begun). The email then carries "Withdraw from contract here" as well.
+     */
+    readonly withdraw?: { readonly until: number | null } | undefined;
   },
 ): Promise<Map<LinkAction, string> | null> {
   if (!box || !input.base) return null;
+  const answers = await answerLinks(db, box, item, input);
+  if (!input.withdraw) return answers;
+  const until = (input.withdraw.until ?? input.now + LINK_MAX_MS.withdraw) + LINK_GRACE_MS;
+  const tokens = await mintLinks(
+    db,
+    box,
+    {
+      itemId: item.id,
+      mailKey: input.mailKey,
+      lang: input.lang,
+      termsSha: withdrawSha(item.id),
+      expiresAt: until,
+      actions: ["withdraw"],
+    },
+    input.now,
+  );
+  const token = tokens.get("withdraw");
+  if (!token) return answers;
+  const out = new Map(answers ?? []);
+  out.set("withdraw", linkUrl(input.base, token));
+  return out;
+}
+
+/** The links that answer what we asked or proposed, when something waits for the customer's answer. */
+async function answerLinks(
+  db: Db,
+  box: SecretBox,
+  item: Item,
+  input: {
+    readonly mailKey: string;
+    readonly lang: CustomerLang;
+    readonly base: string;
+    readonly now: number;
+    readonly minNoticeMin?: number | undefined;
+  },
+): Promise<Map<LinkAction, string> | null> {
   const offer = await openOffer(item, { minNoticeMin: input.minNoticeMin ?? 0 });
   let actions: LinkAction[];
   let termsSha: string;
   let until: number;
   if (offer) {
-    const max = offer.kind === "time" ? LINK_MAX_MS.time : LINK_MAX_MS.quote;
-    actions = offer.kind === "time" ? ["accept_time", "decline_time", "other_time"] : ["accept_quote", "decline_quote"];
+    const max = LINK_MAX_MS[offer.kind];
+    actions =
+      offer.kind === "time"
+        ? ["accept_time", "decline_time", "other_time"]
+        : offer.kind === "order"
+          ? ["accept_order", "decline_order"]
+          : offer.kind === "change"
+            ? ["accept_change", "keep_as_is"]
+            : ["accept_quote", "decline_quote"];
     termsSha = offer.termsSha;
     // Until the answer-by date the email shows, and a day more; no date, the usual time.
     const deadline = offer.deadline ? Date.parse(offer.deadline) : Number.NaN;
@@ -180,6 +266,11 @@ export async function linksForEmail(
     actions = ["details"];
     termsSha = await detailsSha(db, item.id);
     until = input.now + LINK_MAX_MS.details;
+  } else if (item.type === "booking" && isChangeable(item) && openChange(item)?.by !== "business") {
+    // Another time, asked for from the page: until the notice before the booking starts.
+    actions = ["change_time"];
+    termsSha = await standingSha(item);
+    until = Date.parse(item.payload.startTime) - (input.minNoticeMin ?? 0) * 60_000;
   } else {
     return null;
   }

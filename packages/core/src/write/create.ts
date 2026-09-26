@@ -15,7 +15,9 @@ import { networksStopped, stopFollowsStatements, stopViaOf } from "../identity/s
 import type { IdentityAnswer } from "../identity/types";
 import { randomToken, ulid } from "../ids";
 import { machines } from "../machine/tables";
+import { insertOfferStatement, pointerOf } from "../negotiation/offers";
 import { secretHash } from "../protocol/credentials";
+import { readSettings } from "../settings/schema";
 import { hashJson, hashText } from "../util/canonical";
 import { actorMeta, type Caller, isCustomer, isOwnerAssistant, nowOf, permissionKind } from "./caller";
 import {
@@ -29,8 +31,9 @@ import {
   webhookFanoutStatement,
 } from "./common";
 import { fromZod, WriteError } from "./errors";
+import { NEGOTIATES, requestExpiry, requestRow } from "./offers";
 import { planParty } from "./party";
-import { priceFromCatalogue } from "./pricing";
+import { type PricingFor, priceFromCatalogue } from "./pricing";
 import { defaultSubject, type ItemView, viewFor } from "./views";
 
 export interface CreateInput {
@@ -51,7 +54,25 @@ export interface CreateInput {
    * and is written in the same batch; it is never part of the idempotency hash.
    */
   readonly identity?: IdentityInput | undefined;
+  /**
+   * The customer confirmed the request's summary before sending it (the confirm step, ADR-018 §5):
+   * their request binds them, as their offer.
+   */
+  readonly confirmed?: boolean | undefined;
+  /**
+   * Who a customer's request is priced for (ADR-018 §4, Q3): the owner's rewards and the customer's
+   * standing as this inbox knows it, worked out once by the door so the confirm step's summary and the
+   * request as written hold the same price. Absent, catalogue lines are at the list price. Never part
+   * of the idempotency hash.
+   */
+  readonly pricing?: PricingFor | undefined;
 }
+
+/**
+ * The payload fields only the business writes: what was paid, when the goods went out and arrived, a
+ * change to what was agreed. A customer's request never arrives holding them (ADR-018 §3.4, §7).
+ */
+const BUSINESS_FIELDS = ["paymentRef", "paidAmount", "paymentUrl", "fulfilledAt", "deliveredAt", "change"] as const;
 
 export interface CreateResult {
   readonly view: ItemView;
@@ -76,7 +97,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
   // signature or a pass presented again is the same request.
-  const { identity: _identity, ...hashed } = input;
+  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, ...hashed } = input;
   const requestHash = idem ? await hashJson({ op: "create", scope: idem.scope, input: hashed }) : undefined;
   if (idem) {
     const hit = await findIdempotent(db, idem);
@@ -102,15 +123,29 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   // product or a fixed-price service costs is kept beside the price, never as it. The owner's AI
   // making a request itself is priced the same way: time yes, money no (Tiago, 23 September 2026),
   // so a figure of its own is never the price, and one the catalogue does not give waits for a person.
+  // The price is the customer's own: the owner's reward for their record, when they earned one (Q3).
   const priced =
     isCustomer(caller) || isOwnerAssistant(caller)
-      ? await priceFromCatalogue(db, input.type, parsed.data as Record<string, unknown>)
+      ? await priceFromCatalogue(
+          db,
+          input.type,
+          parsed.data as Record<string, unknown>,
+          isCustomer(caller) ? input.pricing : undefined,
+        )
       : { payload: parsed.data as Record<string, unknown>, unpriced: false };
   // What is stored is read back through the same schema: a priced payload it would refuse (a total
   // too large to write down exactly) is refused here, never written for every later read to fail on.
   const checked = schema.safeParse(priced.payload);
   if (!checked.success) throw fromZod(checked.error, "payload");
   const payload = checked.data as Record<string, unknown>;
+  // Only the inbox says where a negotiation stands, and what the business proposed or quoted: a
+  // request never arrives holding the business's answer.
+  delete payload.offer;
+  delete payload.proposed;
+  delete payload.quote;
+  // Nor what only the business records: a payment, the goods' delivery, a change to a promise. (A price
+  // chosen for them is the pricing's alone: it drops one the request carried.)
+  if (isCustomer(caller)) for (const field of BUSINESS_FIELDS) delete payload[field];
 
   // Customers the business already knows (ADR-017 §8.2): a strong match joins its party, a weak one
   // gets a party of its own that names the known one; either way the create does it, in its batch.
@@ -162,17 +197,35 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     closedAt: null,
     payload,
   } as Item;
+  const eventId = ulid();
+  // The request is the customer's first offer (ADR-018 §1). One a customer sent lapses by its clock,
+  // so nobody is bound by a request left unanswered; one the business wrote down itself (the owner,
+  // a shop's system, a connector) waits for it with none, until the customer next answers.
+  const settings = NEGOTIATES.has(input.type) ? await readSettings(db) : undefined;
+  const requestExpiresAt = settings && isCustomer(caller) ? requestExpiry(input.type, payload, settings, now) : null;
+  const request = settings
+    ? await requestRow({
+        itemId: id,
+        type: input.type,
+        payload,
+        caller,
+        validThrough: requestExpiresAt,
+        eventId,
+        now,
+        confirmed: input.confirmed === true,
+      })
+    : undefined;
+  if (request) payload.offer = pointerOf(request);
   const view = viewFor(item, permissionKind(caller), undefined, undefined, audience);
   const response = { view, accessToken };
-  const eventId = ulid();
 
   const statements: Statement[] = [];
   if (idem && requestHash) statements.push(idempotencyStatement(idem, requestHash, 201, response, id, now));
   statements.push(...party.statements);
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
-            agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at)
-          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+            agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at)
+          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
     params: [
       id,
       input.type,
@@ -191,9 +244,11 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       who.possiblePartyId,
       now,
       now,
+      requestExpiresAt,
     ],
     method: "run",
   });
+  if (request) statements.push(insertOfferStatement(request));
   if (stopped) {
     // The party stopped, and the address this request gave fingerprinted: a request from it alone
     // later is stopped at the door, even if it is an address of theirs the inbox had not seen.
@@ -239,6 +294,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         sandbox: flags.sandbox,
         // A price the business did not set: no rule confirms or accepts it (ADR-018 §3.2).
         ...(priced.unpriced ? { unpriced: true } : {}),
+        // A price the owner's reward gave this customer (ADR-018 §4): for the owner's history.
+        ...(payload.personalised ? { personalised: true } : {}),
         ...actorMeta(caller),
       },
       now,

@@ -444,7 +444,11 @@
           "order.charged_back",
           "booking.cancelled_by_customer",
           "order.cancelled_by_customer",
-          "order.lapsed"
+          "order.lapsed",
+          "refund.honoured",
+          "refund.late",
+          "refund.cancelled_by_customer",
+          "order.refund_refused"
         ]
       },
       "additionalProperties": {

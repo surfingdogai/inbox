@@ -42,3 +42,48 @@ export function futureDay(daysAhead = 7): string {
 export function nextDay(day: string): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 }
+
+/**
+ * A request as a customer's assistant sends it once its person confirmed the summary (ADR-018 §5): a
+ * priced booking or order answered `409 confirm_terms` is sent again, as it was, with the fingerprint
+ * it was given. Anything else is answered as it is.
+ */
+export async function confirmed(
+  send: (request: Request) => Response | Promise<Response>,
+  request: Request,
+): Promise<Response> {
+  // Only a create: an acceptance's confirm step is each test's own to answer.
+  const create = request.method === "POST" && /\/v1\/(bookings|orders)\/?$/.test(new URL(request.url).pathname);
+  const body = create ? await request.clone().text() : "";
+  const first = await send(request);
+  if (first.status !== 409 || !body) return first;
+  const problem = (await first
+    .clone()
+    .json()
+    .catch(() => null)) as { code?: string; details?: { terms_sha?: unknown } } | null;
+  const sha = problem?.code === "confirm_terms" ? problem.details?.terms_sha : undefined;
+  if (typeof sha !== "string") return first;
+  const json = JSON.parse(body) as Record<string, unknown>;
+  return send(
+    new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify({ ...json, terms_sha: sha }),
+    }),
+  );
+}
+
+/**
+ * A tool call as an assistant makes it once its person confirmed: a priced create answered with the
+ * summary to confirm (`structuredContent.confirm`) is called again with its `terms_sha`.
+ */
+export async function confirmedTool<R>(
+  call: (params: { name: string; arguments: Record<string, unknown> }) => Promise<R>,
+  params: { name: string; arguments: Record<string, unknown> },
+): Promise<R> {
+  const first = await call(params);
+  const sha = (first as { structuredContent?: { confirm?: { terms_sha?: unknown } } }).structuredContent?.confirm
+    ?.terms_sha;
+  if (typeof sha !== "string") return first;
+  return call({ ...params, arguments: { ...params.arguments, terms_sha: sha } });
+}

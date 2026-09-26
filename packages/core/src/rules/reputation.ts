@@ -36,6 +36,11 @@ export const NEGATIVE_EVENTS: ReadonlySet<string> = new Set([
   "record_cancel",
   "record_cancel_late",
   "expire",
+  "retract",
+  // A change to what was agreed: a standing may take one, never refuse one or let it go.
+  "decline_change",
+  "retract_change",
+  "expire_change",
   "close",
   "mark_spam",
   "no_show",
@@ -43,6 +48,8 @@ export const NEGATIVE_EVENTS: ReadonlySet<string> = new Set([
   "charge_back",
   "record_charge_back",
   "lapse",
+  // A return refused, or what came back disputed: never a standing's to decide (ADR-018 §4).
+  "dispute_goods",
 ]);
 
 export function readsReputation(c: Condition): boolean {
@@ -61,9 +68,52 @@ export function readsFlags(c: Condition): boolean {
   return c.path === "item.flags" || c.path.startsWith("item.flags.");
 }
 
+/**
+ * Offers of the rule's own terms (ADR-018 §4, positive first): a time, changes or a price the rule
+ * names rather than the customer's own ask. Read with a standing, that is "not trusted, so a later
+ * time" or a price by standing, which only the owner's rewards may set; until offers are checked
+ * against what the customer asked, a rule that reads a standing confirms or accepts, never offers.
+ */
+export const OFFER_EVENTS: ReadonlySet<string> = new Set(["propose", "quote", "propose_change"]);
+
+/**
+ * Where someone lives or comes from, as a condition could read it: an address, a country, a region, a
+ * postcode, a language or locale, a nationality or residence (ADR-018 §4; Reg. 2018/302 arts. 2(14),
+ * 4(1)). A rule is a general condition, so one that reads these may not set a price or terms.
+ */
+const GEO_PATH = /(?:address|country|countries|region|postal|locality|locale|language|\blang\b|nationalit|residen)/i;
+
+export function readsGeography(c: Condition): boolean {
+  if ("all" in c) return c.all.some(readsGeography);
+  if ("any" in c) return c.any.some(readsGeography);
+  if ("not" in c) return readsGeography(c.not);
+  if ("fn" in c) return false;
+  return GEO_PATH.test(c.path);
+}
+
+/** Input keys that name an amount: a transition carrying one sets a price. */
+const MONEY_INPUT: ReadonlySet<string> = new Set(["totalPrice", "lines", "amount", "price", "orderedItem"]);
+
+/** An action that sets a price or terms: an offer of the rule's own, or a transition naming an amount. */
+export function setsTerms(a: Action): boolean {
+  if (a.action !== "transition") return false;
+  return OFFER_EVENTS.has(a.event) || Object.keys(a.input ?? {}).some((k) => MONEY_INPUT.has(k));
+}
+
+/** Why a rule may not be saved for where it reads the customer lives or comes from, or null. */
+export function geoTermsProblem(def: RuleDefinition): string | null {
+  if (!readsGeography(def.if)) return null;
+  const bad = def.actions.filter(setsTerms);
+  if (bad.length === 0) return null;
+  const what = bad.map((a) => (a.action === "transition" ? a.event : a.action)).join(", ");
+  return `a rule that reads where a customer lives or comes from (an address, a country, a language) may not set a price or terms: ${what} (geo_terms)`;
+}
+
 /** An action a reputation may not take. */
 export function isNegative(a: Action): boolean {
-  return a.action === "enqueue" || (a.action === "transition" && NEGATIVE_EVENTS.has(a.event));
+  return (
+    a.action === "enqueue" || (a.action === "transition" && (NEGATIVE_EVENTS.has(a.event) || OFFER_EVENTS.has(a.event)))
+  );
 }
 
 /** Why a rule may not be saved as it is, or null when it may. */
@@ -85,6 +135,9 @@ const WANTED: Readonly<Record<string, string>> = {
   record_cancel: "cancel this",
   record_cancel_late: "cancel this",
   expire: "let this expire",
+  retract: "withdraw what we proposed",
+  propose: "propose other terms",
+  quote: "send a quote",
   close: "close this",
   mark_spam: "mark this as spam",
   no_show: "mark this as a no-show",

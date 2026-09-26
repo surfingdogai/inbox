@@ -4,13 +4,16 @@ import { type BusinessFacts, businessFacts } from "../customer/audience";
 import { oneLine } from "../customer/format";
 import { customerLang } from "../customer/lang";
 import { cutLinks, fillLinks, linksForEmail } from "../customer/links";
-import { isAutomated, renderCustomerMail } from "../customer/mail";
+import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../customer/mail";
+import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { machines } from "../machine/tables";
+import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
   autoHeaders,
@@ -192,8 +195,9 @@ async function customerMail(
   },
 ): Promise<ComposedMail | { note: string }> {
   // The acknowledgement goes only while nothing has happened since the request: a booking a rule
-  // confirmed in the meantime gets its confirmation, not both.
-  if (p.event === "create") {
+  // confirmed in the meantime gets its confirmation, not both. A return is acknowledged as it starts,
+  // agreed or not: a withdrawal is acknowledged at once (ADR-018 §7).
+  if (p.event === "create" && item.type !== "refund") {
     if (item.state !== machines[item.type].initial || (await customerMailExists(db, item.id))) {
       return { note: "no acknowledgement: the customer already heard from us" };
     }
@@ -203,12 +207,19 @@ async function customerMail(
   // mailbox. What the business itself does next is always sent. One held back shows on the item.
   const ackLimited =
     p.event === "create" &&
+    item.type !== "refund" &&
     !item.flags.sandbox &&
     Boolean(o.contact?.email) &&
     (await acksToday(db, o.contact?.email ?? "", o.now)) >= ACKS_PER_ADDRESS_PER_DAY;
   const facts = o.facts;
   const lang = customerLang(o.contact?.locale, facts.languages);
   const cause = await causeOf(db, p);
+  // What lapsed, and until when it could have been taken. One that lapsed long before anybody noticed
+  // (an offer from before offers had a table, reached late) closes quietly: news that old is no news.
+  const lapsedAt = p.event === "expire" && p.eventId ? await lapsedAtOf(db, p.eventId) : null;
+  if (lapsedAt !== null && o.now - lapsedAt > STALE_EXPIRY_MS) {
+    return { note: "no email: what lapsed had lapsed long before" };
+  }
   // A test item emails nobody (Tiago, 23 September 2026): it is kept, and says so.
   const skip = item.flags.sandbox
     ? ("test_item" as const)
@@ -222,6 +233,18 @@ async function customerMail(
   // What waits for the customer's answer carries the links to give it: a page on this inbox, in
   // the customer's language (ADR-018 §5). Without a secret to sign them, or an address for them to
   // point at, the email asks for a reply instead.
+  // The right of withdrawal as it stands (ADR-018 §7): the confirmations carry it, and its link.
+  const law = lawOf(o.settings.commerce.legal.country);
+  const right =
+    item.type === "booking" || item.type === "order" ? await withdrawalOf(db, item, o.settings, o.now) : null;
+  const withdrawal: MailWithdrawal = {
+    available: right?.available === true,
+    until: right?.until ? new Date(right.until).toISOString() : null,
+    kind: item.type === "booking" ? "service" : "goods",
+    exception: right?.exception && right.exception !== "standard" ? right.exception : null,
+    law,
+    days: o.settings.returns.days,
+  };
   const links = skip
     ? null
     : await linksForEmail(db, o.secrets, item, {
@@ -230,7 +253,10 @@ async function customerMail(
         base: o.base,
         now: o.now,
         minNoticeMin: o.settings.booking.minNoticeMin,
+        ...(right?.available && CONFIRMING.has(p.event) ? { withdraw: { until: right.until } } : {}),
       });
+  // The return or refund the change made: what the email says of the money.
+  const refund = item.type !== "refund" && p.eventId ? await refundMadeBy(db, item.id, p.eventId) : null;
   const [linkedRow] = item.linkedItemId ? await db.orm.select().from(items).where(eq(items.id, item.linkedItemId)) : [];
   const rendered = renderCustomerMail({
     item,
@@ -248,7 +274,15 @@ async function customerMail(
     unpriced: (p.event === "create" || item.state === "proposed") && (await createdUnpriced(db, item.id)),
     cancellationWindowMin: o.settings.booking.cancellationWindowMin,
     minNoticeMin: o.settings.booking.minNoticeMin,
-    revised: p.event === "quote" && cause.fromState === "quoted",
+    revised:
+      (p.event === "quote" && cause.fromState === "quoted") ||
+      (p.event === "propose" && cause.fromState === "proposed"),
+    lapsedAt: lapsedAt === null ? null : new Date(lapsedAt).toISOString(),
+    closedChange: p.eventId && CLOSES_CHANGE.has(p.event) ? await closedChangeOf(db, p.eventId) : null,
+    withdrawal,
+    trader: o.settings.commerce.legal,
+    refund,
+    returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
     now: o.now,
   });
   return {
@@ -264,6 +298,36 @@ async function customerMail(
     text: cutLinks(rendered.text),
     ...(skip ? { skip } : {}),
   };
+}
+
+/**
+ * The events whose email confirms a contract the customer may withdraw from, and so carries the link
+ * to withdraw (ADR-018 §7; CRD arts. 8(7), 11a).
+ */
+const CONFIRMING: ReadonlySet<string> = new Set([
+  "confirm",
+  "accept",
+  "accept_change",
+  "record_payment",
+  "request_payment",
+  "fulfil",
+]);
+
+/** The return or refund an event of an order or a booking made: created in the same batch, caused by it. */
+async function refundMadeBy(db: Db, itemId: string, eventId: string): Promise<Item | null> {
+  const { rows } = await db.client.query({
+    sql: `SELECT i.id FROM items i JOIN item_events e ON e.item_id = i.id AND e.seq = 1
+           WHERE i.type = 'refund' AND i.linked_item_id = ? AND e.causation_id = ? LIMIT 1`,
+    params: [itemId, eventId],
+    method: "all",
+  });
+  const id = rows[0]?.[0];
+  if (id === null || id === undefined) return null;
+  const [row] = await db.orm
+    .select()
+    .from(items)
+    .where(eq(items.id, String(id)));
+  return row ? rowToItem(row) : null;
 }
 
 /** The owner's email: what happened, who it is from, where to open it. In the owner's app's language. */
@@ -413,6 +477,44 @@ export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } 
   };
 }
 
+/** An expiry told this long after the date it passed is not told at all. */
+export const STALE_EXPIRY_MS = 7 * 86_400_000;
+
+/** Until when the offer an expiry closed could have been accepted, or null. */
+async function lapsedAtOf(db: Db, eventId: string): Promise<number | null> {
+  const { rows } = await db.client.query({
+    sql: "SELECT valid_through FROM item_offers WHERE closed_event_id = ? AND status = 'expired' AND by = 'business' LIMIT 1",
+    params: [eventId],
+    method: "all",
+  });
+  const at = rows[0]?.[0];
+  return at === null || at === undefined ? null : Number(at);
+}
+
+/** The events that close a change to a promise without making it. */
+const CLOSES_CHANGE: ReadonlySet<string> = new Set(["decline_change", "retract_change", "expire_change"]);
+
+/** The change an event closed: who asked for it, and the promise as it would have been. */
+async function closedChangeOf(
+  db: Db,
+  eventId: string,
+): Promise<{ by: "business" | "customer"; terms: OfferTerms } | null> {
+  const { rows } = await db.client.query({
+    sql: "SELECT by, terms FROM item_offers WHERE closed_event_id = ? AND kind = 'change' LIMIT 1",
+    params: [eventId],
+    method: "all",
+  });
+  const r = rows[0];
+  if (!r) return null;
+  let terms: OfferTerms = {};
+  try {
+    terms = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as OfferTerms;
+  } catch {
+    terms = {};
+  }
+  return { by: r[0] === "customer" ? "customer" : "business", terms };
+}
+
 /** Acknowledgements one address gets in a day, at most. */
 export const ACKS_PER_ADDRESS_PER_DAY = 3;
 
@@ -503,16 +605,43 @@ export async function causeOf(
 
 const textOf = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+const CHANGE_WORDS: Readonly<Record<string, string>> = {
+  propose_change: "asks for a change",
+  accept_change: "accepted your change",
+  decline_change: "keeps it as agreed",
+  retract_change: "withdrew their change",
+  // Returns (ADR-018 §3.4, §7): what the customer did, in the owner's words.
+  withdraw: "withdrew from the contract",
+  request_return: "asks to send it back",
+};
+
 const TYPE_WORD: Record<Item["type"], string> = {
   message: "message",
   quote_request: "quote request",
   booking: "booking",
   order: "order",
-  refund: "refund request",
+  refund: "return",
 };
 
 function ownerSubject(item: Item, event: string, who: string): string {
   if (event === "create") return `New ${TYPE_WORD[item.type]} from ${who}: ${item.subject ?? ""}`.trim();
+  // A refund whose date is near (ADR-018 §7): it is owed by then, and late it is owed twice in Portugal.
+  if (event === "refund_due" && item.type === "refund") {
+    const due = item.payload.refundDue ? ` by ${item.payload.refundDue.slice(0, 10)}` : "";
+    return `Refund due${due}: ${who}, ${item.subject ?? TYPE_WORD[item.type]}`;
+  }
   if (event === "message") return `${who} replied: ${item.subject ?? TYPE_WORD[item.type]}`;
+  // What automation would have offered outside the owner's limits waits for them (ADR-018 §4).
+  if (event === "draft_offer") {
+    return `A draft waits for you, outside your limits: ${TYPE_WORD[item.type]} for ${who}, ${item.subject ?? ""}`.trim();
+  }
+  // A reply automation wrote naming money we have not offered, kept for them as a note (ADR-018 §4).
+  if (event === "held_reply") {
+    return `A reply waits for you, naming an amount: ${TYPE_WORD[item.type]} for ${who}, ${item.subject ?? ""}`.trim();
+  }
+  // A change to what was agreed says what happened to it: the state it leaves is the one it had.
+  if (event === "cancel" && item.type === "refund") return `${who} dropped their return: ${item.subject ?? ""}`.trim();
+  const change = CHANGE_WORDS[event];
+  if (change) return `${who} ${change}: ${TYPE_WORD[item.type]} ${item.subject ?? ""}`.trim();
   return `${who}: ${TYPE_WORD[item.type]} ${item.state.replaceAll("_", " ")}`;
 }

@@ -1,7 +1,8 @@
 /**
  * Writes the network protocol's vectors and JSON Schemas into packages/spec (ADR-017 §7.4):
  *
- *   vectors/signatures.json, vectors/passes.json, vectors/receipts-v2.json   from ./network-vectors.ts
+ *   vectors/signatures.json, vectors/passes.json, vectors/receipts-v2.json,
+ *   vectors/receipts-v6.json                                                 from ./network-vectors.ts
  *   schemas/<name>.json                                                      from @surfingdog/spec's JSON_SCHEMAS
  *
  * Run from packages/core, then format:
@@ -23,6 +24,7 @@ const v = await buildNetworkVectors();
 write(path.join(spec, "vectors/signatures.json"), v.signatures);
 write(path.join(spec, "vectors/passes.json"), v.passes);
 write(path.join(spec, "vectors/receipts-v2.json"), v.receiptsV2);
+write(path.join(spec, "vectors/receipts-v6.json"), v.receiptsV6);
 
 const dir = path.join(spec, "schemas");
 mkdirSync(dir, { recursive: true });
@@ -33,5 +35,6 @@ console.log(
   `signatures: ${v.signatures.requests.length} requests, ${v.signatures.forwarded.length} forwarded; ` +
     `passes: ${v.passes.parse.length} strings, ${v.passes.emails.length} emails; ` +
     `receipts-v2: ${v.receiptsV2.receipts.length} receipts, ${v.receiptsV2.refused_receipts.length} refused; ` +
+    `receipts-v6: ${v.receiptsV6.receipts.length} receipts, ${v.receiptsV6.refused_receipts.length} refused, ${v.receiptsV6.transitions.length} paths; ` +
     `schemas: ${Object.keys(JSON_SCHEMAS).length}`,
 );

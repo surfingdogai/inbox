@@ -101,10 +101,11 @@ export type ReceiptKindV1 = z.infer<typeof receiptKindV1Schema>;
 
 /**
  * Every kind of receipt an inbox issues and returns on an item: the v1 promises, and since claims
- * v2 (ADR-017 §3.2) the promise `accepted` and the `outcome` that closes a promise. A v1 receipt's
- * claims still name only the v1 kinds.
+ * v2 (ADR-017 §3.2) the promise `accepted` and the `outcome` that closes a promise; since rules
+ * version 6 (ADR-017 Amendment 3) also `amended`, a change to a promise both sides agreed. A v1
+ * receipt's claims still name only the v1 kinds.
  */
-export const receiptKindSchema = z.enum(["confirmed", "paid", "accepted", "outcome"]);
+export const receiptKindSchema = z.enum(["confirmed", "paid", "accepted", "outcome", "amended"]);
 export type ReceiptKind = z.infer<typeof receiptKindSchema>;
 
 export const moneySchema = z.object({

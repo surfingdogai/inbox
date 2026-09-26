@@ -22,6 +22,7 @@ import { ActionConfirm } from "./ActionConfirm";
 import { Conversation } from "./Conversation";
 import { CustomerBlock } from "./Customer";
 import { CustomerData } from "./CustomerData";
+import { DraftCard } from "./Draft";
 import { Emails } from "./Emails";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
@@ -159,6 +160,14 @@ export function ItemDetailView({
           customer={query.data.customer}
           onDone={(text) => setNotice({ tone: "success", text })}
         />
+        {query.data.draft && (
+          <DraftCard
+            itemId={item.id}
+            draft={query.data.draft}
+            tz={tz}
+            onDone={(text) => setNotice({ tone: "success", text })}
+          />
+        )}
         {waiting && <p className="hint">{waiting}</p>}
         {transitions.length > 0 ? (
           <div className="actions">

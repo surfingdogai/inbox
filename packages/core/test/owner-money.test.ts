@@ -7,7 +7,7 @@ import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The owner's AI is held like a rule where money is concerned (Tiago, 23 September 2026, "time yes,
@@ -78,7 +78,7 @@ async function setup() {
   await db.orm
     .insert(products)
     .values({ id: product, sku: "SD-1", name: "Saddle", price: EUR(15_000), createdAt: T0, updatedAt: T0 });
-  const caps = new Capabilities(db);
+  const caps = confirming(new Capabilities(db));
   let slot = 0;
   const book = (serviceId: string, extra: Record<string, unknown> = {}) => {
     const hour = 8 + ++slot;
@@ -139,30 +139,30 @@ describe("the owner's AI and the customer's price", () => {
     expect(await stateOf(s.db, order.view.item.id)).not.toBe("received");
   });
 
-  it("sends no quote, and proposes a time only at the catalogue's price", async () => {
+  it("sends no quote, and proposes a time only at the catalogue's price: the rest is a draft for the owner", async () => {
     const s = await setup();
     const q = await s.caps.requestQuote(customer, {
       payload: { itemOffered: { name: "Wheel rebuild" }, description: "Rear wheel" },
       contact: { email: "rita@example.com" },
     });
     const quote = { totalPrice: EUR(31_000), validThrough: "2026-09-28T18:00:00Z" };
-    const e = await refusal(s.caps.transitionItem(ai, { item_id: q.view.item.id, event: "quote", input: quote }));
-    expect(e.code).toBe("not_allowed");
-    expect(e.details).toMatchObject({ reason: "owner_money", draft_for_owner: true });
+    // A quote prices what the catalogue does not: outside the owner's limits, kept for them, never sent.
+    const drafted = await s.caps.transitionItem(ai, { item_id: q.view.item.id, event: "quote", input: quote });
+    expect(drafted.drafted?.breaches).toEqual(["custom_line"]);
+    expect(await stateOf(s.db, q.view.item.id)).toBe("received");
+    expect(drafted.view.item.flags.needsHuman).toBe(true);
     await s.caps.transitionItem(person, { item_id: q.view.item.id, event: "quote", input: quote });
     expect(await stateOf(s.db, q.view.item.id)).toBe("quoted");
 
     const b = await s.book(s.svc.fixed);
     const later = { startTime: "2026-09-23T10:00:00Z", endTime: "2026-09-23T11:00:00Z" };
-    const cheaper = await refusal(
-      s.caps.transitionItem(ai, {
-        item_id: b.view.item.id,
-        event: "propose",
-        input: { ...later, totalPrice: EUR(5_000) },
-      }),
-    );
-    expect(cheaper.code).toBe("not_allowed");
-    expect(cheaper.fields?.[0]?.path).toBe("input.totalPrice");
+    const cheaper = await s.caps.transitionItem(ai, {
+      item_id: b.view.item.id,
+      event: "propose",
+      input: { ...later, totalPrice: EUR(5_000) },
+    });
+    expect(cheaper.drafted?.breaches).toEqual(["below_floor"]);
+    expect(await stateOf(s.db, b.view.item.id)).toBe("requested");
     // The catalogue's own price, or none at all, is only a time.
     await s.caps.transitionItem(ai, {
       item_id: b.view.item.id,

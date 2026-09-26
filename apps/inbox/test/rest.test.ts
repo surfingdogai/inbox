@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createApp, createInbox } from "../src/app";
-import { freshDb, futureDay, nextDay } from "./harness";
+import { freshDb, futureDay, nextDay, confirmed as sentConfirmed } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 
@@ -53,13 +53,19 @@ describe("REST door", () => {
       },
       contact: { name: "Rita", email: "rita@example.com" },
     };
-    const first = await app.request(jsonPost("/v1/bookings", body, { "idempotency-key": "k-1" }));
+    const first = await sentConfirmed(
+      (r) => app.request(r),
+      jsonPost("/v1/bookings", body, { "idempotency-key": "k-1" }),
+    );
     expect(first.status).toBe(201);
     const created = (await first.json()) as { view: { item: { id: string; state: string } }; accessToken: string };
     expect(created.view.item.state).toBe("requested");
     expect(created.accessToken).toBeTruthy();
 
-    const again = await app.request(jsonPost("/v1/bookings", body, { "idempotency-key": "k-1" }));
+    const again = await sentConfirmed(
+      (r) => app.request(r),
+      jsonPost("/v1/bookings", body, { "idempotency-key": "k-1" }),
+    );
     expect(again.status).toBe(200);
     expect(again.headers.get("idempotent-replayed")).toBe("true");
     expect(((await again.json()) as { view: { item: { id: string } } }).view.item.id).toBe(created.view.item.id);
@@ -101,7 +107,8 @@ describe("REST door", () => {
     // Two hours from now: inside the default 24-hour window, so a cancellation now is late.
     const start = Math.ceil((Date.now() + 2 * 3_600_000) / 1_800_000) * 1_800_000;
     const created = (await (
-      await app.request(
+      await sentConfirmed(
+        (r) => app.request(r),
         jsonPost("/v1/bookings", {
           payload: {
             reservationFor: { serviceId: svc, name: "Full service" },
@@ -132,7 +139,8 @@ describe("REST door", () => {
 
     // An order's payment can fail, and the owner is offered what can follow.
     const order = (await (
-      await app.request(
+      await sentConfirmed(
+        (r) => app.request(r),
         jsonPost("/v1/orders", {
           payload: {
             orderedItem: [{ name: "Chain", quantity: 1, price: { value: 1500, currency: "EUR" } }],
@@ -152,12 +160,21 @@ describe("REST door", () => {
     expect(failed.status).toBe(200);
     const view = (await failed.json()) as { view: { item: { state: string }; transitions: { event: string }[] } };
     expect(view.view.item.state).toBe("payment_failed");
-    expect(view.view.transitions.map((t) => t.event)).toEqual(["record_payment", "cancel", "record_cancel"]);
+    expect(view.view.transitions.map((t) => t.event)).toEqual([
+      "record_payment",
+      "propose_change",
+      "cancel",
+      "record_cancel",
+      "record_withdrawal",
+    ]);
   });
 
   it("explains invalid input as a problem document with fields", async () => {
     const { app } = await setup();
-    const res = await app.request(jsonPost("/v1/bookings", { payload: { reservationFor: { serviceId: "x" } } }));
+    const res = await sentConfirmed(
+      (r) => app.request(r),
+      jsonPost("/v1/bookings", { payload: { reservationFor: { serviceId: "x" } } }),
+    );
     expect(res.status).toBe(422);
     expect(res.headers.get("content-type")).toContain("application/problem+json");
     const p = (await res.json()) as { code: string; fields: { path: string; problem: string }[] };
@@ -190,7 +207,8 @@ describe("REST door", () => {
       createdAt: T0,
       updatedAt: T0,
     });
-    const booked = await app.request(
+    const booked = await sentConfirmed(
+      (r) => app.request(r),
       jsonPost("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: svc, name: "Full service" },
@@ -208,7 +226,8 @@ describe("REST door", () => {
     });
     expect(b.view.human).toContain("Our price is €100.00.");
 
-    const ordered = await app.request(
+    const ordered = await sentConfirmed(
+      (r) => app.request(r),
       jsonPost("/v1/orders", {
         payload: {
           orderedItem: [
@@ -248,7 +267,8 @@ describe("REST door", () => {
     const { app, svc, ownerKey } = await setup();
     const owner = { authorization: `Bearer ${ownerKey}` };
     const book = async (start: string, end: string) => {
-      const r = await app.request(
+      const r = await sentConfirmed(
+        (r) => app.request(r),
         jsonPost("/v1/bookings", {
           payload: {
             reservationFor: { serviceId: svc, name: "Full service" },
@@ -352,7 +372,8 @@ describe("REST door", () => {
         body: JSON.stringify({ doc: { email: { fromAddress: "hello@oficinamare.pt" } } }),
       }),
     );
-    const res = await inbox.app.request(
+    const res = await sentConfirmed(
+      (r) => inbox.app.request(r),
       jsonPost("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: svc, name: "Full service" },

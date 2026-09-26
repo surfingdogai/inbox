@@ -2,12 +2,14 @@ import type { Statement } from "@surfingdog/platform";
 import type { InboxOutcomeCode, ReceiptKind, ReceiptPayload, ReceiptPayloadV2 } from "@surfingdog/spec";
 import { PROMISE_KINDS, receiptPayloadSchema, receiptPayloadV2Schema } from "@surfingdog/spec";
 import { asc, count, eq, isNotNull, isNull } from "drizzle-orm";
+import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import { CUSTOMER_ACTORS, type Money } from "../domain/types";
 import { identityPending } from "../identity/pending";
 import { itemStopped } from "../identity/stops";
 import { ulid } from "../ids";
-import { networkReceiptStatements, type ReceiptRef } from "../network/index";
+import { itemAmended } from "../negotiation/changes";
+import { appliesV6, networkReceiptStatements, networkRulesOf, type ReceiptRef, takesV6 } from "../network/index";
 import { items, parties, receipts, signingKeys } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { enabledNetworks, readSettings, type Settings } from "../settings/schema";
@@ -23,6 +25,8 @@ import {
   receiptSha,
   signReceipt,
   subjectHash,
+  termsKeyFor,
+  trmOf,
   verifyAck,
 } from "./sign";
 
@@ -38,7 +42,7 @@ import {
 /** What a door returns: the receipt itself plus the two facts about it the JWS does not carry. */
 export interface ReceiptView {
   readonly id: string;
-  /** A promise (`confirmed`, `paid`, `accepted`) or the `outcome` that closed one. */
+  /** A promise (`confirmed`, `paid`, `accepted`), the `outcome` that closed one, or a change both sides agreed to it (`amended`). */
   readonly kind: ReceiptKind;
   /** The outcome an `outcome` receipt records (ADR-017 §3), e.g. `booking.completed`; null on a promise. */
   readonly outcome: InboxOutcomeCode | null;
@@ -80,6 +84,8 @@ export interface IssueOptions {
   readonly aut?: boolean | undefined;
   /** The event that caused the receipt: its time is the receipt's `iat` (ADR-017 §3.1). */
   readonly eventId?: string | undefined;
+  /** The agreed change an `amended` receipt records (ADR-017 Amendment 3); required for that kind. */
+  readonly offerId?: string | undefined;
 }
 
 type ReceiptRow = typeof receipts.$inferSelect;
@@ -143,14 +149,21 @@ export class ReceiptCapabilities {
   }
 
   /**
-   * Issues the `kind` receipt for an item, once — for an `outcome`, once per outcome. A second call
-   * (a retried job, a second runner) finds the row and returns it; the unique index on (item, kind,
-   * outcome) settles the race between two that arrive together.
+   * Issues the `kind` receipt for an item, once — for an `outcome`, once per outcome; for an
+   * `amended`, once per agreed change. A second call (a retried job, a second runner) finds the row
+   * and returns it; the unique index on (item, kind, outcome, change) settles the race between two
+   * that arrive together.
    *
    * Bookings and orders a customer made carry claims v2 (ADR-017 §3.2): `ver`, `due`, a booking's
    * `end`, the networks' presentations as `per`, and on an outcome its code, `ref` to the item's
-   * earliest promise and `aut`. An outcome whose item has no promise yet issues that promise first.
-   * Items the business made itself keep v1 promises and record no outcomes (§3.1).
+   * earliest promise and `aut`. An outcome or an amendment whose item has no promise yet issues that
+   * promise first, and an outcome each agreed change without its receipt. Items the business made
+   * itself keep v1 promises and record no outcomes and no changes (§3.1). Since rules version 6
+   * (ADR-017 Amendment 3): a change both sides agreed is an `amended` receipt with the new dates,
+   * the terms' fingerprint (`trm`) and who accepted it (`acc`), and outcomes carry the latest
+   * amendment's dates; a refund of such a booking or order has receipts of its own (`typ: refund`),
+   * its promise when its date is fixed and its outcome when it is paid or dropped; and a promise
+   * carries `trm` when every network it goes to takes version 6.
    */
   async issue(
     itemId: string,
@@ -160,7 +173,11 @@ export class ReceiptCapabilities {
   ): Promise<IssueOutcome> {
     const outcome = kind === "outcome" ? (opts.outcome ?? null) : null;
     if (kind === "outcome" && !outcome) return { outcome: "skipped", note: "an outcome receipt needs its outcome" };
-    const existing = await this.row(itemId, kind, outcome ?? "");
+    const offerId = kind === "amended" ? (opts.offerId ?? "") : "";
+    if (kind === "amended" && !offerId) {
+      return { outcome: "skipped", note: "an amended receipt names the change it records" };
+    }
+    const existing = await this.row(itemId, kind, outcome ?? "", offerId);
     if (existing) return { outcome: "already", receipt: view(existing) };
 
     const settings = await readSettings(this.db);
@@ -174,29 +191,22 @@ export class ReceiptCapabilities {
     // happened when nothing did, and a network cannot tell it from the real thing.
     if (flags.sandbox) return { outcome: "skipped", note: "sandbox items never get a receipt" };
     // Promised before outcomes were recorded (0008): made under the rules of the day, closed by hand.
-    if (kind === "outcome" && item.legacyPromise === 1) {
+    if ((kind === "outcome" || kind === "amended") && item.legacyPromise === 1) {
       return {
         outcome: "skipped",
-        note: `this ${item.type} was promised before outcomes were recorded, so it records no outcome (R18)`,
+        note: `this ${item.type} was promised before outcomes were recorded, so it records no ${kind === "outcome" ? "outcome" : "change"} (R18)`,
       };
     }
 
-    const v2 = (item.type === "booking" || item.type === "order") && V2_CREATORS.has(await this.creatorOf(item.id));
-    if (!v2 && (kind === "accepted" || kind === "outcome")) {
-      return {
-        outcome: "skipped",
-        note:
-          item.type === "booking" || item.type === "order"
-            ? `the business made this ${item.type} itself, so it records no ${kind === "outcome" ? outcome : kind} receipt (ADR-017 §3.1)`
-            : `a ${item.type} promises nothing, so it has no ${kind} receipt`,
-      };
-    }
+    const skip = await this.eligibility(item, kind, outcome);
+    if (skip) return { outcome: "skipped", note: skip };
+    const v2 = item.type === "refund" || (await this.v2Item(item.id, item.type));
     // A promise names the person each network presented for the item (`per`). While a first
     // contact is still waiting for a network's answer it waits too, for at most fifteen minutes
     // from the item's creation, and then goes without (§3.2).
     if (
       v2 &&
-      kind !== "outcome" &&
+      isPromise(kind) &&
       now - item.createdAt < PROMISE_WAITS_FOR_IDENTITY_MS &&
       (await identityPending(this.db, item.id))
     ) {
@@ -206,16 +216,27 @@ export class ReceiptCapabilities {
       };
     }
 
-    // An outcome closes the item's earliest promise; an item that has none yet (its promise job
-    // failed, or it was promised before receipts were on) gets it first, dated by its own event.
+    // An outcome or an amendment closes or moves the item's earliest promise; an item that has none
+    // yet (its promise job failed, or it was promised before receipts were on) gets it first, dated
+    // by its own event.
     let promises = await this.promisesOf(item.id);
-    if (kind === "outcome" && promises.length === 0) {
-      const first = await this.firstPromiseEvent(item.id, item.type);
+    if ((kind === "outcome" || kind === "amended") && promises.length === 0) {
+      const first = await this.firstPromiseEvent(item, outcome, opts.eventId);
       if (!first)
-        return { outcome: "skipped", note: `this ${item.type} never made a promise, so no outcome closes one` };
+        return {
+          outcome: "skipped",
+          note: `this ${item.type} never made a promise, so no ${kind} closes or moves one`,
+        };
       const made = await this.issue(item.id, first.kind, now, { eventId: first.eventId });
       if (made.outcome === "skipped" || made.outcome === "deferred") return made;
       promises = await this.promisesOf(item.id);
+    }
+    // An outcome reads the latest agreed dates, so each agreed change has its receipt before it.
+    if (kind === "outcome" && item.type !== "refund") {
+      for (const change of await this.changesWithoutReceipt(item.id)) {
+        const made = await this.issue(item.id, "amended", now, { offerId: change.id, eventId: change.eventId });
+        if (made.outcome === "deferred") return made;
+      }
     }
     const earliest = promises[0];
 
@@ -227,7 +248,11 @@ export class ReceiptCapabilities {
     const box = this.secrets as SecretBox; // readiness() proved it above
     const sub = await subjectHash(await box.mac("receipt-subject"), identity);
 
-    const iat = Math.floor((opts.eventId ? ((await this.eventTime(opts.eventId)) ?? now) : now) / 1000);
+    const at = Math.floor((opts.eventId ? ((await this.eventTime(opts.eventId)) ?? now) : now) / 1000);
+    // A network takes the latest amendment by `iat`, then nonce (Amendment 3): two changes agreed in
+    // one second, or an event clock a second behind, must still sort in the order they were agreed.
+    const { iat, nonce } =
+      kind === "amended" ? await this.amendmentOrder(item.id, offerId, at) : { iat: at, nonce: newNonce() };
     const base = {
       iss: this.issuer(settings),
       sub,
@@ -235,31 +260,70 @@ export class ReceiptCapabilities {
       typ: item.type,
       knd: kind,
       iat,
-      nonce: newNonce(),
+      nonce,
     };
+    // Which networks it goes to: decided before the claims, since a promise's `trm` depends on them.
+    const targets = await this.networksFor(settings, item.id, kind, v2);
     let payload: ReceiptPayload | ReceiptPayloadV2;
     if (!v2) {
       const money = amountOf(item, kind);
       const pay = paymentOf(item, kind);
       payload = receiptPayloadSchema.parse({ ...base, ...(money ? { amt: money } : {}), ...(pay ? { pay } : {}) });
     } else {
-      // The item's due and end come from its earliest promise, so every receipt of the item agrees
-      // on them; the first promise works them out from the item (§3.2).
-      const dates = earliest ? datesOf(item, earliest, settings) : datesOf(item, { iat }, settings);
+      const claims: Record<string, unknown> = { ...base, ver: 2 };
       const per = await this.perOf(item.id);
-      const claims: Record<string, unknown> = { ...base, ver: 2, due: dates.due };
-      if (dates.end !== undefined) claims.end = dates.end;
-      if (kind === "outcome") {
-        claims.out = outcome;
+      if (kind === "amended") {
+        // A change both sides agreed (ADR-017 Amendment 3): the promise's new dates, the fingerprint of
+        // the terms agreed, and who said yes to them.
+        const change = await this.agreedChange(item.id, offerId);
+        if (!change) return { outcome: "skipped", note: `no agreed change ${offerId} on this ${item.type}` };
+        // The dates in force once this change is agreed: the earliest promise's, moved by every change
+        // agreed up to and including it, in order — so one that names no delivery date keeps the date
+        // the change before it named, not the one first promised.
+        let dates = datesOf(item, earliest ?? { iat }, settings);
+        for (const terms of await this.agreedChangeTermsUpTo(item.id, offerId))
+          dates = changeDates(item.type, terms, dates);
+        claims.due = dates.due;
+        if (dates.end !== undefined) claims.end = dates.end;
         claims.ref = (earliest?.payload as { nonce?: unknown } | undefined)?.nonce;
-        if (opts.aut) claims.aut = 1;
+        claims.trm = await trmOf(await termsKeyFor(await box.mac("receipt-terms"), offerId), change.termsSha);
+        claims.acc = change.by === "business" ? "customer" : "business";
       } else {
-        const money = amountOf(item, kind);
-        const pay = paymentOf(item, kind);
-        if (money) claims.amt = money;
-        if (pay) claims.pay = pay;
+        // Every receipt of the item agrees on its dates: the latest agreed change's, else the earliest
+        // promise's; the first promise works them out from the item (§3.2) — from the terms agreed
+        // before any change, when it is signed only after one (its job failed, or it waited for a
+        // first contact's answer): it says what was promised when it was made, and the amendments
+        // say how it moved.
+        const latest = kind === "outcome" ? await this.latestAmendment(item.id) : undefined;
+        const agreed = item.type === "booking" || item.type === "order" ? await this.agreedOffer(item.id) : null;
+        const promised =
+          !earliest && agreed && (await itemAmended(this.db, item.id)) ? asAgreed(item, agreed.terms) : item;
+        const dates = datesOf(promised, latest ?? earliest ?? { iat }, settings);
+        claims.due = dates.due;
+        if (dates.end !== undefined) claims.end = dates.end;
+        if (kind === "outcome") {
+          claims.out = outcome;
+          claims.ref = (earliest?.payload as { nonce?: unknown } | undefined)?.nonce;
+          if (opts.aut) claims.aut = 1;
+        } else {
+          const money = amountOf(item, kind);
+          const pay = paymentOf(item, kind);
+          if (money) claims.amt = money;
+          if (pay) claims.pay = pay;
+          // The terms both sides agreed, only where every network the promise goes to reads them.
+          if (agreed?.termsSha && targets.length > 0) {
+            const rules = await networkRulesOf(this.db, targets);
+            if (targets.every((n) => takesV6(rules.get(n)))) {
+              claims.trm = await trmOf(await termsKeyFor(await box.mac("receipt-terms"), agreed.id), agreed.termsSha);
+            }
+          }
+        }
       }
-      if (per.length) claims.per = per;
+      // A refund's receipts and an amendment are about the business's promise, not the person: they
+      // name no presentation. They still carry the customer's pseudonym (`sub`), the same as the
+      // order's, which a network needs to weigh repeat evidence per customer (ADR-017 §5, R7), so it
+      // can tell a return is theirs: what protects the customer is that none of it counts (A3.5).
+      if (per.length && item.type !== "refund" && kind !== "amended") claims.per = per;
       const parsed = receiptPayloadV2Schema.safeParse(claims);
       if (!parsed.success) {
         return {
@@ -277,14 +341,14 @@ export class ReceiptCapabilities {
     const id = ulid(now);
     // The row and, when someone is listening, the webhook fanout for `<type>.receipt_issued` go in
     // one batch (ADR-015 §5): the event id is the receipt id, which is what `events_v1` shows.
-    // A losing writer in the (item, kind, outcome) race inserts nothing, and its fanout job then
-    // finds an event with the winner's id missing and stops — one line of noise, no duplicate.
+    // A losing writer in the (item, kind, outcome, change) race inserts nothing, and its fanout job
+    // then finds an event with the winner's id missing and stops — one line of noise, no duplicate.
     const statements: Statement[] = [
       {
-        sql: `INSERT INTO receipts (id, item_id, kind, outcome, jws, payload, kid, subject_hash, issued_at, sha)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (item_id, kind, outcome) DO NOTHING`,
-        params: [id, item.id, kind, outcome ?? "", jws, JSON.stringify(payload), key.kid, sub, now, sha],
+        sql: `INSERT INTO receipts (id, item_id, kind, outcome, offer_id, jws, payload, kid, subject_hash, issued_at, sha)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (item_id, kind, outcome, offer_id) DO NOTHING`,
+        params: [id, item.id, kind, outcome ?? "", offerId, jws, JSON.stringify(payload), key.kid, sub, now, sha],
         method: "run",
       },
     ];
@@ -294,15 +358,15 @@ export class ReceiptCapabilities {
     // Every network the owner switched on gets every receipt, so each directory can count what
     // was kept; which of them a network is sent is the publisher's call, by the rules it applies.
     // Nothing about the customer travels: the receipt names them by pseudonym only. The rows name
-    // the receipt by (item, kind, outcome), so a writer that loses the race queues the winner's.
-    const ref: ReceiptRef = { itemId: item.id, kind, outcome: outcome ?? "" };
+    // the receipt by (item, kind, outcome, change), so a writer that loses the race queues the winner's.
+    const ref: ReceiptRef = { itemId: item.id, kind, outcome: outcome ?? "", offerId };
     // A customer who asked the business not to use booking networks: the receipt is theirs to hold,
     // and no network is sent it (Tiago, 23 September 2026).
-    for (const network of await this.networksFor(settings, item.id, kind)) {
+    for (const network of targets) {
       statements.push(...networkReceiptStatements(network, "issued", now, ref));
     }
     await this.db.batch(statements);
-    const written = await this.row(itemId, kind, outcome ?? "");
+    const written = await this.row(itemId, kind, outcome ?? "", offerId);
     if (!written) throw new WriteError("internal", "the receipt was written and then could not be read back");
     return { outcome: written.jws === jws ? "issued" : "already", receipt: view(written) };
   }
@@ -387,7 +451,13 @@ export class ReceiptCapabilities {
         );
       }
     }
-    for (const network of await this.networksFor(await readSettings(this.db), row.itemId, row.kind as ReceiptKind)) {
+    const dated = (row.payload as { ver?: unknown } | null)?.ver === 2;
+    for (const network of await this.networksFor(
+      await readSettings(this.db),
+      row.itemId,
+      row.kind as ReceiptKind,
+      dated,
+    )) {
       statements.push(...networkReceiptStatements(network, "acknowledged", now, { id: row.id }));
     }
     await this.db.batch(statements);
@@ -420,9 +490,165 @@ export class ReceiptCapabilities {
     return { keys: await this.keys.published() };
   }
 
-  private async row(itemId: string, kind: ReceiptKind, outcome = ""): Promise<ReceiptRow | undefined> {
+  private async row(itemId: string, kind: ReceiptKind, outcome = "", offerId = ""): Promise<ReceiptRow | undefined> {
     const rows = await this.db.orm.select().from(receipts).where(eq(receipts.itemId, itemId));
-    return rows.find((r) => r.kind === kind && r.outcome === outcome);
+    return rows.find((r) => r.kind === kind && r.outcome === outcome && r.offerId === offerId);
+  }
+
+  /**
+   * Why this item earns no `kind` receipt, or null when it does. Bookings and orders a customer made
+   * carry claims v2 and every kind; those the business made itself keep v1 promises (§3.1). A refund
+   * follows the booking or order it refunds (ADR-017 Amendment 3): its promise and its outcome when
+   * a customer made that one, else nothing.
+   */
+  private async eligibility(
+    item: ItemRow,
+    kind: ReceiptKind,
+    outcome: InboxOutcomeCode | null,
+  ): Promise<string | null> {
+    if (item.type === "refund") {
+      const refunded = item.linkedItemId
+        ? (
+            await this.db.orm
+              .select({ id: items.id, type: items.type })
+              .from(items)
+              .where(eq(items.id, item.linkedItemId))
+          )[0]
+        : undefined;
+      if (!refunded || !(await this.v2Item(refunded.id, refunded.type))) {
+        return "the business made what this refunds itself, so its refund records no receipt (ADR-017 §3.1)";
+      }
+      // Nothing was paid (on delivery, on account), so nothing is owed back: a refund of nothing
+      // promises nothing (A3.5), and a kept outcome for it would be reputation had for free.
+      const owed = (item.payload as { amount?: unknown }).amount;
+      if (!isMoney(owed) || owed.value <= 0)
+        return "this refund owes nothing, so it promises nothing and records no receipt";
+      if (kind !== "accepted" && kind !== "outcome")
+        return `a refund's receipts are its promise and its outcome, not ${kind}`;
+      return null;
+    }
+    if ((kind === "accepted" || kind === "outcome" || kind === "amended") && !(await this.v2Item(item.id, item.type))) {
+      return item.type === "booking" || item.type === "order"
+        ? `the business made this ${item.type} itself, so it records no ${kind === "outcome" ? outcome : kind} receipt (ADR-017 §3.1)`
+        : `a ${item.type} promises nothing, so it has no ${kind} receipt`;
+    }
+    return null;
+  }
+
+  /** Whether a booking or an order carries claims v2: a customer, or a shop's connector, made it. */
+  private async v2Item(itemId: string, type: string): Promise<boolean> {
+    return (type === "booking" || type === "order") && V2_CREATORS.has(await this.creatorOf(itemId));
+  }
+
+  /** The changes both sides agreed to the item's promise that have no receipt yet, oldest first. */
+  private async changesWithoutReceipt(itemId: string): Promise<{ id: string; eventId: string | undefined }[]> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT o.id, o.closed_event_id FROM item_offers o
+             WHERE o.item_id = ? AND o.kind = 'change' AND o.status = 'accepted'
+               AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.item_id = o.item_id AND r.kind = 'amended' AND r.offer_id = o.id)
+             ORDER BY o.rev`,
+      params: [itemId],
+      method: "all",
+    });
+    return rows.map((r) => ({ id: String(r[0]), eventId: r[1] === null ? undefined : String(r[1]) }));
+  }
+
+  /** An agreed change to the item's promise: its terms, their fingerprint, and whose it was. */
+  private async agreedChange(
+    itemId: string,
+    offerId: string,
+  ): Promise<{ terms: OfferTerms; termsSha: string; by: string } | null> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT terms, terms_sha, by FROM item_offers
+             WHERE id = ? AND item_id = ? AND kind = 'change' AND status = 'accepted'`,
+      params: [offerId, itemId],
+      method: "all",
+    });
+    const r = rows[0];
+    if (!r) return null;
+    const terms = (typeof r[0] === "string" ? JSON.parse(r[0]) : r[0]) as OfferTerms;
+    return { terms, termsSha: String(r[1]), by: String(r[2]) };
+  }
+
+  /**
+   * The offer both sides last agreed that made the promise — never a change to it, which its own
+   * amendment names — with its terms and their fingerprint (null when that is not one), if the item's
+   * offers say.
+   */
+  private async agreedOffer(
+    itemId: string,
+  ): Promise<{ id: string; terms: OfferTerms; termsSha: string | null } | null> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT id, terms, terms_sha FROM item_offers
+             WHERE item_id = ? AND kind <> 'change' AND status = 'accepted' ORDER BY rev DESC LIMIT 1`,
+      params: [itemId],
+      method: "all",
+    });
+    const r = rows[0];
+    if (!r) return null;
+    const terms = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as OfferTerms;
+    const sha = typeof r[2] === "string" && /^[A-Za-z0-9_-]{43}$/.test(r[2]) ? r[2] : null;
+    return { id: String(r[0]), terms, termsSha: sha };
+  }
+
+  /** The terms of every change both sides agreed to the item's promise, in order, up to and including this one. */
+  private async agreedChangeTermsUpTo(itemId: string, offerId: string): Promise<OfferTerms[]> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT id, terms FROM item_offers WHERE item_id = ? AND kind = 'change' AND status = 'accepted'
+               AND rev <= (SELECT rev FROM item_offers WHERE id = ? AND item_id = ?)
+             ORDER BY rev`,
+      params: [itemId, offerId, itemId],
+      method: "all",
+    });
+    return rows.map((r) => (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as OfferTerms);
+  }
+
+  /**
+   * The `iat` and nonce of the amendment for one agreed change, so that a network ordering the item's
+   * amendments by `iat`, then nonce, finds them in the order they were agreed: never dated before a
+   * change agreed earlier, and when in the same second, a nonce after theirs and before any agreed
+   * later. `at` is the moment of acceptance, in Unix seconds.
+   */
+  private async amendmentOrder(itemId: string, offerId: string, at: number): Promise<{ iat: number; nonce: string }> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT o.rev, json_extract(r.payload, '$.iat'), json_extract(r.payload, '$.nonce'),
+                   (SELECT m.rev FROM item_offers m WHERE m.id = ? AND m.item_id = ?)
+              FROM receipts r JOIN item_offers o ON o.id = r.offer_id AND o.item_id = r.item_id
+             WHERE r.item_id = ? AND r.kind = 'amended'`,
+      params: [offerId, itemId, itemId],
+      method: "all",
+    });
+    const mine = Number(rows[0]?.[3]);
+    const others = rows.map((r) => ({ rev: Number(r[0]), iat: Number(r[1]), nonce: String(r[2]) }));
+    const before = others.filter((o) => o.rev < mine);
+    const iat = Math.max(at, ...before.map((o) => o.iat));
+    const lower = before
+      .filter((o) => o.iat === iat)
+      .map((o) => o.nonce)
+      .sort()
+      .at(-1);
+    const upper = others
+      .filter((o) => o.rev > mine && o.iat === iat)
+      .map((o) => o.nonce)
+      .sort()[0];
+    const nonce = nonceBetween(lower, upper);
+    if (nonce) return { iat, nonce };
+    // No nonce between them (two adjacent 128-bit values): a second later still follows every earlier one.
+    return { iat: lower === undefined ? iat : iat + 1, nonce: newNonce() };
+  }
+
+  /** The item's latest amendment: the greatest `iat`, then nonce, as a network reads them (Amendment 3). */
+  private async latestAmendment(itemId: string): Promise<ReceiptRow | undefined> {
+    const rows = await this.db.orm.select().from(receipts).where(eq(receipts.itemId, itemId));
+    const claims = (r: ReceiptRow) => r.payload as { iat?: number; nonce?: string };
+    return rows
+      .filter((r) => r.kind === "amended")
+      .sort(
+        (a, b) =>
+          Number(claims(a).iat ?? 0) - Number(claims(b).iat ?? 0) ||
+          String(claims(a).nonce ?? "").localeCompare(String(claims(b).nonce ?? "")),
+      )
+      .at(-1);
   }
 
   /** The item's promises, earliest first: by `iat`, then nonce, as a network orders them (§3.3). */
@@ -438,21 +664,42 @@ export class ReceiptCapabilities {
       );
   }
 
-  /** The kind of the item's first promise and the event that made it: a confirmation, an acceptance. */
+  /**
+   * The kind of the item's first promise and the event that made it: a confirmation, an acceptance;
+   * for a refund, the event that fixed the date it must be paid by (its creation, an approval, the
+   * goods' arrival), or — paid before any fixed it — the payment itself. A refund dropped before
+   * its date was fixed promised nothing.
+   */
   private async firstPromiseEvent(
-    itemId: string,
-    type: string,
+    item: ItemRow,
+    outcome: InboxOutcomeCode | null,
+    causedBy: string | undefined,
   ): Promise<{ kind: ReceiptKind; eventId: string } | null> {
+    if (item.type === "refund") {
+      if (typeof (item.payload as { refundDue?: unknown }).refundDue === "string") {
+        const { rows } = await this.db.client.query({
+          sql: `SELECT id FROM item_events WHERE item_id = ?
+                  AND ((event = 'create' AND to_state = 'approved') OR event IN ('approve', 'goods_back'))
+                ORDER BY seq DESC LIMIT 1`,
+          params: [item.id],
+          method: "all",
+        });
+        const eventId = rows[0]?.[0];
+        return eventId === undefined ? null : { kind: "accepted", eventId: String(eventId) };
+      }
+      const paid = outcome === "refund.honoured" || outcome === "refund.late";
+      return paid && causedBy ? { kind: "accepted", eventId: causedBy } : null;
+    }
     const promised =
-      type === "booking"
+      item.type === "booking"
         ? { kind: "confirmed" as const, state: "confirmed" }
-        : type === "order"
+        : item.type === "order"
           ? { kind: "accepted" as const, state: "accepted" }
           : null;
     if (!promised) return null;
     const { rows } = await this.db.client.query({
       sql: "SELECT id FROM item_events WHERE item_id = ? AND to_state = ? ORDER BY seq LIMIT 1",
-      params: [itemId, promised.state],
+      params: [item.id, promised.state],
       method: "all",
     });
     const eventId = rows[0]?.[0];
@@ -501,13 +748,23 @@ export class ReceiptCapabilities {
 
   /**
    * The networks a receipt of this item goes to: every one switched on that takes receipts, and —
-   * for an outcome — also one that stopped taking them after it was sent the item's promise, which
-   * is owed the outcome that closes it (ADR-017 §3.2).
+   * for an outcome or an amendment — also one that stopped taking them after it was sent the item's
+   * promise, which is owed what closes or moves it (ADR-017 §3.2). A promise both sides changed goes
+   * only to a network that applies rules version 6 (ADR-017 Amendment 3): any other would hold the
+   * business to the date first agreed (a promise that names no date, claims v1, goes as before).
+   * What version 6 added goes to every one, and waits for a network that does not take it yet, as
+   * claims v2 wait (the publisher).
    */
-  private async networksFor(settings: Settings, itemId: string, kind: ReceiptKind): Promise<string[]> {
+  private async networksFor(
+    settings: Settings,
+    itemId: string,
+    kind: ReceiptKind,
+    /** Whether the receipt names a date a network holds the business to (claims v2). */
+    dated: boolean,
+  ): Promise<string[]> {
     if (await itemStopped(this.db, itemId)) return [];
     const networks = new Set(enabledNetworks(settings, "receipts"));
-    if (kind === "outcome") {
+    if (kind === "outcome" || kind === "amended") {
       const { rows } = await this.db.client.query({
         sql: `SELECT DISTINCT p.network FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
                WHERE r.item_id = ? AND r.kind <> 'outcome' AND p.stage = 'issued' AND p.state = 'published'`,
@@ -519,8 +776,71 @@ export class ReceiptCapabilities {
         if (settings.networks[network]?.enabled) networks.add(network);
       }
     }
+    if (kind === "amended" || (dated && (await itemAmended(this.db, itemId)))) {
+      const rules = await networkRulesOf(this.db, [...networks]);
+      for (const n of [...networks]) if (!appliesV6(rules.get(n))) networks.delete(n);
+    }
     return [...networks].sort();
   }
+}
+
+const isPromise = (kind: ReceiptKind) => (PROMISE_KINDS as readonly string[]).includes(kind);
+
+const NONCE = /^[0-9a-f]{32}$/;
+const NONCE_MAX = (1n << 128n) - 1n;
+
+/**
+ * A fresh random nonce strictly after `lower` and before `upper` (either may be absent), in the same
+ * 32 lowercase hex digits `newNonce` writes, so it sorts between them as text and as a number. Drawn
+ * inside the gap itself, never by retrying whole draws: a neighbour near either end of the range
+ * would otherwise leave a draw little chance to land in it. Null when nothing fits between them, or
+ * a neighbour is not a nonce of ours.
+ */
+function nonceBetween(lower: string | undefined, upper: string | undefined): string | null {
+  if ((lower !== undefined && !NONCE.test(lower)) || (upper !== undefined && !NONCE.test(upper))) return null;
+  const lo = lower === undefined ? 0n : BigInt(`0x${lower}`) + 1n;
+  const hi = upper === undefined ? NONCE_MAX : BigInt(`0x${upper}`) - 1n;
+  if (lo > hi) return null;
+  const drawn = BigInt(`0x${newNonce()}`) % (hi - lo + 1n);
+  return (lo + drawn).toString(16).padStart(32, "0");
+}
+
+/**
+ * When a promise is due after a change both sides agreed, in Unix seconds: a booking's new start and
+ * end; an order's new delivery date, else when it was due before (a change of quantities does not
+ * move an order agreed with no date).
+ */
+function changeDates(
+  type: string,
+  terms: OfferTerms,
+  before: { due: number; end?: number },
+): { due: number; end?: number } {
+  const seconds = (iso: string | undefined) => {
+    const ms = iso ? Date.parse(iso) : Number.NaN;
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : undefined;
+  };
+  if (type === "booking") {
+    const due = seconds(terms.startTime) ?? before.due;
+    const end = seconds(terms.endTime);
+    return end === undefined ? { due } : { due, end };
+  }
+  return { due: seconds(terms.delivery?.when) ?? before.due };
+}
+
+/**
+ * The item as it stood on these agreed terms: a booking's times, an order's delivery (none when the
+ * terms name none), for a promise signed only after a change moved them.
+ */
+function asAgreed(item: ItemRow, terms: OfferTerms): ItemRow {
+  const payload = { ...(item.payload as Record<string, unknown>) };
+  if (item.type === "booking") {
+    if (terms.startTime) payload.startTime = terms.startTime;
+    if (terms.endTime) payload.endTime = terms.endTime;
+  } else if (item.type === "order") {
+    if (terms.delivery) payload.delivery = terms.delivery;
+    else delete payload.delivery;
+  }
+  return { ...item, payload } as ItemRow;
 }
 
 /**
@@ -538,11 +858,18 @@ function datesOf(
     return typeof claims.end === "number" ? { due: claims.due, end: claims.end } : { due: claims.due };
   }
   const iat = Number(promise.iat ?? claims.iat ?? 0);
-  const p = item.payload as { startTime?: string; endTime?: string; delivery?: { when?: string } };
+  const p = item.payload as {
+    startTime?: string;
+    endTime?: string;
+    delivery?: { when?: string };
+    refundDue?: string;
+  };
   const seconds = (iso: string | undefined) => {
     const ms = iso ? Date.parse(iso) : Number.NaN;
     return Number.isFinite(ms) ? Math.floor(ms / 1000) : undefined;
   };
+  // A refund is due when it must be paid by; paid before any date was fixed, when it was paid.
+  if (item.type === "refund") return { due: seconds(p.refundDue) ?? iat };
   if (item.type === "booking") {
     const due = seconds(p.startTime) ?? iat;
     const end = seconds(p.endTime);
@@ -578,9 +905,13 @@ function identityOf(partyId: string, contact: unknown): string {
   return `party:${partyId}`;
 }
 
-/** The value the receipt attests, when the item states one. Never derived, never summed here. */
+/**
+ * The value the receipt attests, when the item states one. Never derived, never summed here. A
+ * refund's promise attests what is owed.
+ */
 function amountOf(item: ItemRow, kind: ReceiptKind): Money | undefined {
   const p = item.payload as Record<string, unknown>;
+  if (item.type === "refund") return isMoney(p.amount) ? p.amount : undefined;
   if (item.type === "order" && kind === "paid" && isMoney(p.paidAmount)) return p.paidAmount;
   if (isMoney(p.totalPrice)) return p.totalPrice;
   return undefined;

@@ -1,4 +1,7 @@
 import type { SqliteClient } from "@surfingdog/platform";
+import type { Capabilities } from "../src/capabilities/service";
+import type { Caller } from "../src/write/caller";
+import { WriteError } from "../src/write/errors";
 
 /** A SqliteClient for whichever runtime the test runs on. */
 export async function makeClient(): Promise<SqliteClient> {
@@ -26,4 +29,34 @@ export async function resetTables(client: SqliteClient): Promise<void> {
     ...tables.map((t) => ({ sql: `DELETE FROM "${t}"`, method: "run" as const })),
     { sql: "DELETE FROM search_fts", method: "run" },
   ]);
+}
+
+/**
+ * Capabilities whose customers say yes at the confirm step (ADR-018 §5): a priced booking or order
+ * asked for without `terms_sha` is sent again with the fingerprint its `confirm_terms` answer gave,
+ * as an assistant does once its person confirmed the summary. For tests about something else; the
+ * confirm step's own tests use the capabilities as they are.
+ */
+export function confirming<C extends Capabilities>(caps: C): C {
+  const again =
+    <I extends { terms_sha?: string | undefined }, R>(fn: (caller: Caller, input: I) => Promise<R>) =>
+    async (caller: Caller, input: I): Promise<R> => {
+      try {
+        return await fn(caller, input);
+      } catch (error) {
+        const sha = (error as WriteError).details?.terms_sha;
+        if (
+          !(error instanceof WriteError) ||
+          error.code !== "confirm_terms" ||
+          input.terms_sha ||
+          typeof sha !== "string"
+        ) {
+          throw error;
+        }
+        return fn(caller, { ...input, terms_sha: sha });
+      }
+    };
+  caps.createBooking = again(caps.createBooking.bind(caps));
+  caps.createOrder = again(caps.createOrder.bind(caps));
+  return caps;
 }

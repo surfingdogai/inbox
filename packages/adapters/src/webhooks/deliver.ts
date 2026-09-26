@@ -5,6 +5,8 @@ import {
   eventBaseUrl,
   hiddenTransitions,
   type JobHandler,
+  offerRows,
+  offerView,
   openWebhookHeaders,
   readSettings,
   rowToItem,
@@ -358,6 +360,27 @@ export async function buildEvent(
   data.transitions = view.transitions;
   data.human = view.human;
   if (party) data.party = party;
+  if (event.source === "item_event") {
+    // The offer the event made or closed (ADR-018 §9): what was proposed, answered, agreed or let lapse.
+    const offers = await offerRows(db, event.itemId);
+    const offer = offers.find((o) => o.eventId === event.id) ?? offers.find((o) => o.closedEventId === event.id);
+    if (offer) {
+      const v = offerView(offer);
+      data.offer = {
+        id: v.id,
+        rev: v.rev,
+        round: v.round,
+        by: v.by,
+        kind: v.kind,
+        form: v.form,
+        status: v.status,
+        valid_through: v.valid_through,
+        terms_sha: v.terms_sha,
+        terms: v.terms,
+        shown: v.shown,
+      };
+    }
+  }
   if (event.source === "thread_entry") {
     const [entry] = await db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.id, event.id));
     if (entry) {
