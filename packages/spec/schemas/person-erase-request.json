@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/person/erase",
+  "type": "object",
+  "properties": {
+    "confirm": {
+      "type": "string",
+      "const": "erase"
+    }
+  },
+  "required": ["confirm"]
+}

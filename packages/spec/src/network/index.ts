@@ -5,6 +5,7 @@
 export * from "./common";
 export * from "./directory";
 export * from "./instances";
+export * from "./mcp";
 export * from "./persons";
 export * from "./ranking";
 export * from "./receipts";

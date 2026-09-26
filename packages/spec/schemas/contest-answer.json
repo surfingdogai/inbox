@@ -5,7 +5,8 @@
   "properties": {
     "answer": {
       "type": "string",
-      "const": "withdraw"
+      "enum": ["withdraw", "dispute"],
+      "description": "withdraw takes the outcome back, at any time; dispute says it is right, while the contest is open and until its respond_by (else 422 contest_window). ADR-017 A2.9."
     }
   },
   "required": ["answer"]

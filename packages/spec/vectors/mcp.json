@@ -1,0 +1,857 @@
+{
+  "description": "What an assistant reads (ADR-017 Amendment 2, A2.7): for each listing as GET /v1/businesses answers it, at now, the card search_businesses and get_business give on the network named here. takes is item_types; inbox holds https://<domain> and only the mcp, rest and openapi doors that are https, on a host name, with no user, written as RFC 3986 writes a URI (ASCII only: anything else percent-encoded, a % only before two hex digits, at most one #), and hold no space, control character, Bidi_Control character or tag character (U+E0000 to U+E007F); hours_today is the day of now in the business's own zone, \"closed today\" when a closure holds that date or the day has no window, null without hours; distance_km is rounded to the nearest 10 metres; standing is the reputation's tier and ranked, with standing's words for the tier. Then one whole answer of each tool. From the network.",
+  "network": "https://network.example",
+  "standing": {
+    "building": "Building a record of promises kept.",
+    "new": "No standing yet, which says nothing against it: every business starts here.",
+    "trusted": "Trusted: a long record of promises kept."
+  },
+  "cards": [
+    {
+      "name": "open now, trusted, near a point: only the https doors an assistant may use; distance to the nearest 10 metres",
+      "now": "2026-12-01T10:30:00Z",
+      "listing": {
+        "domain": "ana-salon.example",
+        "name": "Ana's Salon",
+        "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+        "city": "Lisboa",
+        "country": "PT",
+        "address": {
+          "street": "Rua X 1",
+          "locality": "Lisboa",
+          "postal_code": "1100-001",
+          "country": "PT"
+        },
+        "categories": ["hair-beauty"],
+        "tags": ["vegan"],
+        "languages": ["pt", "en"],
+        "item_types": ["booking", "order"],
+        "protocols": {
+          "email": "mailto:hello@ana-salon.example",
+          "mcp": "https://ana-salon.example/mcp",
+          "mcp_owner": "https://ana-salon.example/mcp/owner",
+          "openapi": "https://ana-salon.example/openapi.json",
+          "rest": "https://ana-salon.example/v1"
+        },
+        "hours": {
+          "timezone": "Europe/Lisbon",
+          "weekly": {
+            "sat": [["09:00", "13:00"]],
+            "tue": [["09:00", "13:00"], ["14:00", "19:00"]]
+          },
+          "closures": [
+            {
+              "from": "2026-12-24",
+              "to": "2026-12-26"
+            }
+          ]
+        },
+        "open_now": true,
+        "services": [
+          {
+            "name": "Haircut",
+            "type": "booking"
+          },
+          {
+            "name": "Gift card",
+            "type": "order"
+          }
+        ],
+        "geo": {
+          "lat": 38.711,
+          "lng": -9.13
+        },
+        "distance_km": 0.52349,
+        "url": "https://ana-salon.example/",
+        "manifest_url": "https://ana-salon.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "last_ping_at": "2026-12-01T10:00:00Z",
+        "receipts": {
+          "issued": 41,
+          "acknowledged": 12,
+          "last_at": "2026-11-30T18:00:00Z"
+        },
+        "answering": true,
+        "online": true,
+        "not_answering_since": null,
+        "rank_pos": 1,
+        "rank_shuffle": "0f1e2d3c4b5a6978",
+        "reputation": {
+          "ranked": true,
+          "score": 0.8123,
+          "tier": "trusted",
+          "kept": 40,
+          "broken": 1,
+          "customers": 12,
+          "verified_share": 0.25,
+          "rules": 4,
+          "rules_url": "https://network.example/v1/ranking?version=4"
+        }
+      },
+      "card": {
+        "domain": "ana-salon.example",
+        "name": "Ana's Salon",
+        "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+        "website": "https://ana-salon.example/",
+        "city": "Lisboa",
+        "country": "PT",
+        "distance_km": 0.52,
+        "categories": ["hair-beauty"],
+        "tags": ["vegan"],
+        "languages": ["pt", "en"],
+        "takes": ["booking", "order"],
+        "services": [
+          {
+            "name": "Haircut",
+            "type": "booking"
+          },
+          {
+            "name": "Gift card",
+            "type": "order"
+          }
+        ],
+        "open_now": true,
+        "hours_today": "09:00–13:00, 14:00–19:00",
+        "answering": true,
+        "inbox": {
+          "url": "https://ana-salon.example",
+          "mcp": "https://ana-salon.example/mcp",
+          "rest": "https://ana-salon.example/v1",
+          "openapi": "https://ana-salon.example/openapi.json"
+        },
+        "standing": {
+          "tier": "trusted",
+          "ranked": true,
+          "in_words": "Trusted: a long record of promises kept."
+        },
+        "listing_url": "https://network.example/v1/businesses/ana-salon.example"
+      }
+    },
+    {
+      "name": "no hours published, new, not answering: open_now and hours_today null; a door over http is left out",
+      "now": "2026-12-01T10:30:00Z",
+      "listing": {
+        "domain": "tutor.example",
+        "name": "Explicações Maré",
+        "description": "Maths and physics, secondary school.",
+        "city": "Lisboa",
+        "country": "PT",
+        "address": {
+          "locality": "Lisboa",
+          "country": "PT"
+        },
+        "categories": ["education"],
+        "tags": [],
+        "languages": ["pt-pt", "fr"],
+        "item_types": ["booking", "quote_request"],
+        "protocols": {
+          "mcp": "http://tutor.example/mcp"
+        },
+        "open_now": null,
+        "services": [],
+        "manifest_url": "https://tutor.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "receipts": {
+          "issued": 0,
+          "acknowledged": 0
+        },
+        "answering": false,
+        "online": false,
+        "not_answering_since": "2026-11-28T08:00:00Z",
+        "rank_pos": 2,
+        "rank_shuffle": "8a7b6c5d4e3f2a1b",
+        "reputation": {
+          "ranked": false,
+          "score": 0,
+          "tier": "new",
+          "kept": 40,
+          "broken": 1,
+          "customers": 12,
+          "verified_share": 0.25,
+          "rules": 4,
+          "rules_url": "https://network.example/v1/ranking?version=4"
+        }
+      },
+      "card": {
+        "domain": "tutor.example",
+        "name": "Explicações Maré",
+        "description": "Maths and physics, secondary school.",
+        "city": "Lisboa",
+        "country": "PT",
+        "categories": ["education"],
+        "tags": [],
+        "languages": ["pt-pt", "fr"],
+        "takes": ["booking", "quote_request"],
+        "services": [],
+        "open_now": null,
+        "hours_today": null,
+        "answering": false,
+        "inbox": {
+          "url": "https://tutor.example"
+        },
+        "standing": {
+          "tier": "new",
+          "ranked": false,
+          "in_words": "No standing yet, which says nothing against it: every business starts here."
+        },
+        "listing_url": "https://network.example/v1/businesses/tutor.example"
+      }
+    },
+    {
+      "name": "today is the business's own: 12:00 UTC on a Tuesday is 01:00 on Wednesday in Auckland; a door with a hidden character is left out",
+      "now": "2026-12-01T12:00:00Z",
+      "listing": {
+        "domain": "kiwi-cafe.example",
+        "name": "Kiwi Café",
+        "city": "Auckland",
+        "country": "NZ",
+        "categories": ["cafe"],
+        "tags": [],
+        "languages": ["en"],
+        "item_types": ["order"],
+        "protocols": {
+          "mcp": "https://kiwi-cafe.example/mcp",
+          "openapi": "https://kiwi-cafe.example/\u202enosj.ipanepo"
+        },
+        "hours": {
+          "timezone": "Pacific/Auckland",
+          "weekly": {
+            "wed": [["08:00", "17:00"]]
+          },
+          "closures": []
+        },
+        "open_now": false,
+        "services": [],
+        "manifest_url": "https://kiwi-cafe.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "receipts": {
+          "issued": 0,
+          "acknowledged": 0
+        },
+        "answering": true,
+        "online": true,
+        "not_answering_since": null,
+        "rank_pos": 3,
+        "rank_shuffle": "1b2a3f4e5d6c7b8a",
+        "reputation": {
+          "ranked": true,
+          "score": 0.52,
+          "tier": "building",
+          "kept": 40,
+          "broken": 1,
+          "customers": 12,
+          "verified_share": 0.25,
+          "rules": 4,
+          "rules_url": "https://network.example/v1/ranking?version=4"
+        }
+      },
+      "card": {
+        "domain": "kiwi-cafe.example",
+        "name": "Kiwi Café",
+        "city": "Auckland",
+        "country": "NZ",
+        "categories": ["cafe"],
+        "tags": [],
+        "languages": ["en"],
+        "takes": ["order"],
+        "services": [],
+        "open_now": false,
+        "hours_today": "08:00–17:00",
+        "answering": true,
+        "inbox": {
+          "url": "https://kiwi-cafe.example",
+          "mcp": "https://kiwi-cafe.example/mcp"
+        },
+        "standing": {
+          "tier": "building",
+          "ranked": true,
+          "in_words": "Building a record of promises kept."
+        },
+        "listing_url": "https://network.example/v1/businesses/kiwi-cafe.example"
+      }
+    },
+    {
+      "name": "a closure wins over the day's hours",
+      "now": "2026-12-26T10:00:00Z",
+      "listing": {
+        "domain": "ana-salon.example",
+        "name": "Ana's Salon",
+        "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+        "city": "Lisboa",
+        "country": "PT",
+        "address": {
+          "street": "Rua X 1",
+          "locality": "Lisboa",
+          "postal_code": "1100-001",
+          "country": "PT"
+        },
+        "categories": ["hair-beauty"],
+        "tags": ["vegan"],
+        "languages": ["pt", "en"],
+        "item_types": ["booking", "order"],
+        "protocols": {
+          "email": "mailto:hello@ana-salon.example",
+          "mcp": "https://ana-salon.example/mcp",
+          "mcp_owner": "https://ana-salon.example/mcp/owner",
+          "openapi": "https://ana-salon.example/openapi.json",
+          "rest": "https://ana-salon.example/v1"
+        },
+        "hours": {
+          "timezone": "Europe/Lisbon",
+          "weekly": {
+            "sat": [["09:00", "13:00"]],
+            "tue": [["09:00", "13:00"], ["14:00", "19:00"]]
+          },
+          "closures": [
+            {
+              "from": "2026-12-24",
+              "to": "2026-12-26"
+            }
+          ]
+        },
+        "open_now": false,
+        "services": [
+          {
+            "name": "Haircut",
+            "type": "booking"
+          },
+          {
+            "name": "Gift card",
+            "type": "order"
+          }
+        ],
+        "geo": {
+          "lat": 38.711,
+          "lng": -9.13
+        },
+        "url": "https://ana-salon.example/",
+        "manifest_url": "https://ana-salon.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "last_ping_at": "2026-12-01T10:00:00Z",
+        "receipts": {
+          "issued": 41,
+          "acknowledged": 12,
+          "last_at": "2026-11-30T18:00:00Z"
+        },
+        "answering": true,
+        "online": true,
+        "not_answering_since": null,
+        "rank_pos": 1,
+        "rank_shuffle": "0f1e2d3c4b5a6978",
+        "reputation": {
+          "ranked": true,
+          "score": 0.8123,
+          "tier": "trusted",
+          "kept": 40,
+          "broken": 1,
+          "customers": 12,
+          "verified_share": 0.25,
+          "rules": 4,
+          "rules_url": "https://network.example/v1/ranking?version=4"
+        }
+      },
+      "card": {
+        "domain": "ana-salon.example",
+        "name": "Ana's Salon",
+        "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+        "website": "https://ana-salon.example/",
+        "city": "Lisboa",
+        "country": "PT",
+        "categories": ["hair-beauty"],
+        "tags": ["vegan"],
+        "languages": ["pt", "en"],
+        "takes": ["booking", "order"],
+        "services": [
+          {
+            "name": "Haircut",
+            "type": "booking"
+          },
+          {
+            "name": "Gift card",
+            "type": "order"
+          }
+        ],
+        "open_now": false,
+        "hours_today": "closed today",
+        "answering": true,
+        "inbox": {
+          "url": "https://ana-salon.example",
+          "mcp": "https://ana-salon.example/mcp",
+          "rest": "https://ana-salon.example/v1",
+          "openapi": "https://ana-salon.example/openapi.json"
+        },
+        "standing": {
+          "tier": "trusted",
+          "ranked": true,
+          "in_words": "Trusted: a long record of promises kept."
+        },
+        "listing_url": "https://network.example/v1/businesses/ana-salon.example"
+      }
+    },
+    {
+      "name": "the neutral order has no standing; a day without windows is closed today; a door on another host is kept",
+      "now": "2026-11-30T10:00:00Z",
+      "listing": {
+        "domain": "neutral.example",
+        "name": "Oficina Maré",
+        "city": "Ericeira",
+        "country": "PT",
+        "categories": ["auto"],
+        "tags": [],
+        "languages": [],
+        "item_types": [],
+        "protocols": {
+          "mcp": "https://inbox-host.example/neutral/mcp"
+        },
+        "hours": {
+          "timezone": "Europe/Lisbon",
+          "weekly": {
+            "tue": [["09:00", "18:00"]]
+          },
+          "closures": []
+        },
+        "open_now": false,
+        "services": [],
+        "manifest_url": "https://neutral.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "receipts": {
+          "issued": 0,
+          "acknowledged": 0
+        },
+        "answering": true,
+        "online": true,
+        "not_answering_since": null
+      },
+      "card": {
+        "domain": "neutral.example",
+        "name": "Oficina Maré",
+        "city": "Ericeira",
+        "country": "PT",
+        "categories": ["auto"],
+        "tags": [],
+        "languages": [],
+        "takes": [],
+        "services": [],
+        "open_now": false,
+        "hours_today": "closed today",
+        "answering": true,
+        "inbox": {
+          "url": "https://neutral.example",
+          "mcp": "https://inbox-host.example/neutral/mcp"
+        },
+        "listing_url": "https://network.example/v1/businesses/neutral.example"
+      }
+    },
+    {
+      "name": "a door that is not written as a URI (a letter outside ASCII, a brace) is left out",
+      "now": "2026-12-01T10:30:00Z",
+      "listing": {
+        "domain": "pao-quente.example",
+        "name": "Pão Quente",
+        "city": "Lisboa",
+        "country": "PT",
+        "categories": ["bakery"],
+        "tags": [],
+        "languages": ["pt"],
+        "item_types": ["order"],
+        "protocols": {
+          "mcp": "https://pao-quente.example/encomendas/mcp",
+          "openapi": "https://pao-quente.example/v1/{openapi}.json",
+          "rest": "https://pao-quente.example/encomendação"
+        },
+        "open_now": null,
+        "services": [],
+        "manifest_url": "https://pao-quente.example/.well-known/agent-inbox.json",
+        "verified_at": "2026-09-01T09:00:00Z",
+        "receipts": {
+          "issued": 0,
+          "acknowledged": 0
+        },
+        "answering": true,
+        "online": true,
+        "not_answering_since": null,
+        "rank_pos": 4,
+        "rank_shuffle": "5e6f7a8b9c0d1e2f",
+        "reputation": {
+          "ranked": true,
+          "score": 0.45,
+          "tier": "building",
+          "kept": 40,
+          "broken": 1,
+          "customers": 12,
+          "verified_share": 0.25,
+          "rules": 4,
+          "rules_url": "https://network.example/v1/ranking?version=4"
+        }
+      },
+      "card": {
+        "domain": "pao-quente.example",
+        "name": "Pão Quente",
+        "city": "Lisboa",
+        "country": "PT",
+        "categories": ["bakery"],
+        "tags": [],
+        "languages": ["pt"],
+        "takes": ["order"],
+        "services": [],
+        "open_now": null,
+        "hours_today": null,
+        "answering": true,
+        "inbox": {
+          "url": "https://pao-quente.example",
+          "mcp": "https://pao-quente.example/encomendas/mcp"
+        },
+        "standing": {
+          "tier": "building",
+          "ranked": true,
+          "in_words": "Building a record of promises kept."
+        },
+        "listing_url": "https://network.example/v1/businesses/pao-quente.example"
+      }
+    }
+  ],
+  "search_businesses": {
+    "businesses": [
+      {
+        "domain": "ana-salon.example",
+        "name": "Ana's Salon",
+        "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+        "website": "https://ana-salon.example/",
+        "city": "Lisboa",
+        "country": "PT",
+        "distance_km": 0.52,
+        "categories": ["hair-beauty"],
+        "tags": ["vegan"],
+        "languages": ["pt", "en"],
+        "takes": ["booking", "order"],
+        "services": [
+          {
+            "name": "Haircut",
+            "type": "booking"
+          },
+          {
+            "name": "Gift card",
+            "type": "order"
+          }
+        ],
+        "open_now": true,
+        "hours_today": "09:00–13:00, 14:00–19:00",
+        "answering": true,
+        "inbox": {
+          "url": "https://ana-salon.example",
+          "mcp": "https://ana-salon.example/mcp",
+          "rest": "https://ana-salon.example/v1",
+          "openapi": "https://ana-salon.example/openapi.json"
+        },
+        "standing": {
+          "tier": "trusted",
+          "ranked": true,
+          "in_words": "Trusted: a long record of promises kept."
+        },
+        "listing_url": "https://network.example/v1/businesses/ana-salon.example"
+      },
+      {
+        "domain": "tutor.example",
+        "name": "Explicações Maré",
+        "description": "Maths and physics, secondary school.",
+        "city": "Lisboa",
+        "country": "PT",
+        "categories": ["education"],
+        "tags": [],
+        "languages": ["pt-pt", "fr"],
+        "takes": ["booking", "quote_request"],
+        "services": [],
+        "open_now": null,
+        "hours_today": null,
+        "answering": false,
+        "inbox": {
+          "url": "https://tutor.example"
+        },
+        "standing": {
+          "tier": "new",
+          "ranked": false,
+          "in_words": "No standing yet, which says nothing against it: every business starts here."
+        },
+        "listing_url": "https://network.example/v1/businesses/tutor.example"
+      }
+    ],
+    "next_cursor": "eyJtIjoicmFuayIsInAiOjJ9",
+    "rules": {
+      "version": 4,
+      "url": "https://network.example/v1/ranking?version=4"
+    }
+  },
+  "get_business": {
+    "domain": "ana-salon.example",
+    "name": "Ana's Salon",
+    "description": "Cuts, colour and styling in Alfama. Walk-ins before noon.",
+    "website": "https://ana-salon.example/",
+    "city": "Lisboa",
+    "country": "PT",
+    "categories": ["hair-beauty"],
+    "tags": ["vegan"],
+    "languages": ["pt", "en"],
+    "takes": ["booking", "order"],
+    "services": [
+      {
+        "name": "Haircut",
+        "type": "booking"
+      },
+      {
+        "name": "Gift card",
+        "type": "order"
+      }
+    ],
+    "open_now": true,
+    "hours_today": "09:00–13:00, 14:00–19:00",
+    "answering": true,
+    "inbox": {
+      "url": "https://ana-salon.example",
+      "mcp": "https://ana-salon.example/mcp",
+      "rest": "https://ana-salon.example/v1",
+      "openapi": "https://ana-salon.example/openapi.json"
+    },
+    "standing": {
+      "tier": "trusted",
+      "ranked": true,
+      "in_words": "Trusted: a long record of promises kept."
+    },
+    "listing_url": "https://network.example/v1/businesses/ana-salon.example",
+    "address": {
+      "street": "Rua X 1",
+      "locality": "Lisboa",
+      "postal_code": "1100-001",
+      "country": "PT"
+    },
+    "hours": {
+      "timezone": "Europe/Lisbon",
+      "weekly": {
+        "sat": [["09:00", "13:00"]],
+        "tue": [["09:00", "13:00"], ["14:00", "19:00"]]
+      },
+      "closures": [
+        {
+          "from": "2026-12-24",
+          "to": "2026-12-26"
+        }
+      ]
+    },
+    "outcomes": {
+      "booking.cancelled_by_business": 1,
+      "booking.cancelled_by_customer": 0,
+      "booking.cancelled_late_by_customer": 0,
+      "booking.completed": 36,
+      "booking.no_show_business": 0,
+      "booking.no_show_customer": 0,
+      "order.cancelled_by_customer": 0,
+      "order.charged_back": 0,
+      "order.fulfilled": 4,
+      "order.lapsed": 0,
+      "order.not_fulfilled": 0,
+      "order.not_received": 0,
+      "order.payment_failed": 0,
+      "promise.unclosed": 0
+    }
+  },
+  "list_categories": {
+    "version": 1,
+    "categories": [
+      {
+        "slug": "restaurant",
+        "labels": {
+          "en": "Restaurant",
+          "pt": "Restaurante"
+        }
+      },
+      {
+        "slug": "cafe",
+        "labels": {
+          "en": "Café",
+          "pt": "Café"
+        }
+      },
+      {
+        "slug": "bakery",
+        "labels": {
+          "en": "Bakery",
+          "pt": "Padaria e pastelaria"
+        }
+      },
+      {
+        "slug": "bar",
+        "labels": {
+          "en": "Bar",
+          "pt": "Bar"
+        }
+      },
+      {
+        "slug": "grocery",
+        "labels": {
+          "en": "Grocery",
+          "pt": "Mercearia"
+        }
+      },
+      {
+        "slug": "shop",
+        "labels": {
+          "en": "Shop",
+          "pt": "Loja"
+        }
+      },
+      {
+        "slug": "hair-beauty",
+        "labels": {
+          "en": "Hair & beauty",
+          "pt": "Cabeleireiro e estética"
+        }
+      },
+      {
+        "slug": "wellness",
+        "labels": {
+          "en": "Massage & wellness",
+          "pt": "Massagem e bem-estar"
+        }
+      },
+      {
+        "slug": "fitness",
+        "labels": {
+          "en": "Fitness & sport",
+          "pt": "Fitness e desporto"
+        }
+      },
+      {
+        "slug": "health",
+        "labels": {
+          "en": "Health clinic",
+          "pt": "Clínica e saúde"
+        }
+      },
+      {
+        "slug": "dental",
+        "labels": {
+          "en": "Dentist",
+          "pt": "Dentista"
+        }
+      },
+      {
+        "slug": "therapy",
+        "labels": {
+          "en": "Therapy & counselling",
+          "pt": "Terapia e psicologia"
+        }
+      },
+      {
+        "slug": "trades",
+        "labels": {
+          "en": "Building & home repairs",
+          "pt": "Obras e reparações"
+        }
+      },
+      {
+        "slug": "cleaning",
+        "labels": {
+          "en": "Cleaning",
+          "pt": "Limpezas"
+        }
+      },
+      {
+        "slug": "auto",
+        "labels": {
+          "en": "Cars & bikes",
+          "pt": "Automóveis e bicicletas"
+        }
+      },
+      {
+        "slug": "repair",
+        "labels": {
+          "en": "Repairs",
+          "pt": "Reparações"
+        }
+      },
+      {
+        "slug": "legal",
+        "labels": {
+          "en": "Legal",
+          "pt": "Advocacia"
+        }
+      },
+      {
+        "slug": "accounting",
+        "labels": {
+          "en": "Accounting",
+          "pt": "Contabilidade"
+        }
+      },
+      {
+        "slug": "consulting",
+        "labels": {
+          "en": "Consulting",
+          "pt": "Consultoria"
+        }
+      },
+      {
+        "slug": "it-services",
+        "labels": {
+          "en": "IT & web",
+          "pt": "Informática e web"
+        }
+      },
+      {
+        "slug": "education",
+        "labels": {
+          "en": "Lessons & tutoring",
+          "pt": "Aulas e explicações"
+        }
+      },
+      {
+        "slug": "events",
+        "labels": {
+          "en": "Events & catering",
+          "pt": "Eventos e catering"
+        }
+      },
+      {
+        "slug": "photography",
+        "labels": {
+          "en": "Photography",
+          "pt": "Fotografia"
+        }
+      },
+      {
+        "slug": "stay",
+        "labels": {
+          "en": "Places to stay",
+          "pt": "Alojamento"
+        }
+      },
+      {
+        "slug": "tours",
+        "labels": {
+          "en": "Tours & activities",
+          "pt": "Passeios e atividades"
+        }
+      },
+      {
+        "slug": "pets",
+        "labels": {
+          "en": "Pets",
+          "pt": "Animais"
+        }
+      },
+      {
+        "slug": "florist",
+        "labels": {
+          "en": "Florist",
+          "pt": "Florista"
+        }
+      },
+      {
+        "slug": "crafts",
+        "labels": {
+          "en": "Crafts & makers",
+          "pt": "Artesanato"
+        }
+      }
+    ]
+  }
+}

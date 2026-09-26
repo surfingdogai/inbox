@@ -178,6 +178,60 @@
       }
     },
     {
+      "name": "sdi-instance/1: POST /v1/unlinks (a customer stopped this business)",
+      "profile": "sdi-instance/1",
+      "receiver": "network",
+      "authority": "network.example.com",
+      "now": 1790001030,
+      "request": {
+        "method": "POST",
+        "url": "https://network.example.com/v1/unlinks",
+        "headers": {
+          "Content-Type": "application/json",
+          "Sdi-Instance": "https://inbox.example.com",
+          "Content-Digest": "sha-256=:VH4IPFJvN6fM6kQJBsT4pWRL+OCkWIjvV6plsXWVTAE=:",
+          "Signature-Input": "sig1=(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0005\"",
+          "Signature": "sig1=:FUJQyPU48UzUb4rqBm4iZAFGmsKHRXW4hDRRqS+ZGY2qf5dQGs1eeHQWa8NjaykRJYM6Rjds1jv7quDIKBjtDA==:"
+        },
+        "body": "{\"request_id\":\"01M34AVYNXTNSE2RC495H3W8QS\",\"ppids\":[\"3q2-7wEBAgMEBQYHCAkKCw\"],\"presentations\":[\"AAECAwQFBgcICQoLDA0ODw\"]}"
+      },
+      "signature_input": "(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0005\"",
+      "signature": "FUJQyPU48UzUb4rqBm4iZAFGmsKHRXW4hDRRqS+ZGY2qf5dQGs1eeHQWa8NjaykRJYM6Rjds1jv7quDIKBjtDA==",
+      "signature_base": "\"@method\": POST\n\"@authority\": network.example.com\n\"@path\": /v1/unlinks\n\"content-digest\": sha-256=:VH4IPFJvN6fM6kQJBsT4pWRL+OCkWIjvV6plsXWVTAE=:\n\"sdi-instance\": https://inbox.example.com\n\"@signature-params\": (\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0005\"",
+      "expect": {
+        "ok": true,
+        "domain": "inbox.example.com",
+        "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+      }
+    },
+    {
+      "name": "sdi-instance/1: POST /v1/instances/{domain}/listing (the business leaves the directory)",
+      "profile": "sdi-instance/1",
+      "receiver": "network",
+      "authority": "network.example.com",
+      "now": 1790001030,
+      "request": {
+        "method": "POST",
+        "url": "https://network.example.com/v1/instances/inbox.example.com/listing",
+        "headers": {
+          "Content-Type": "application/json",
+          "Sdi-Instance": "https://inbox.example.com",
+          "Content-Digest": "sha-256=:DvdB0yIlIEMzeunynsVhY+ovlBP8w01YeDmhATQs/AM=:",
+          "Signature-Input": "sig1=(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0006\"",
+          "Signature": "sig1=:N3pI7tdtoti5TPXeQ85ux8K8rnMwNxsoE0oKmv+0lyq1DJonNUtLrHK2cU+vBkUAKRYjcdtx5xlqazlb9NLDBw==:"
+        },
+        "body": "{\"listed\":false}"
+      },
+      "signature_input": "(\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0006\"",
+      "signature": "N3pI7tdtoti5TPXeQ85ux8K8rnMwNxsoE0oKmv+0lyq1DJonNUtLrHK2cU+vBkUAKRYjcdtx5xlqazlb9NLDBw==",
+      "signature_base": "\"@method\": POST\n\"@authority\": network.example.com\n\"@path\": /v1/instances/inbox.example.com/listing\n\"content-digest\": sha-256=:DvdB0yIlIEMzeunynsVhY+ovlBP8w01YeDmhATQs/AM=:\n\"sdi-instance\": https://inbox.example.com\n\"@signature-params\": (\"@method\" \"@authority\" \"@path\" \"content-digest\" \"sdi-instance\");created=1790001000;expires=1790001300;keyid=\"kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k\";alg=\"ed25519\";tag=\"sdi-instance\";nonce=\"vector-instance-0006\"",
+      "expect": {
+        "ok": true,
+        "domain": "inbox.example.com",
+        "keyid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+      }
+    },
+    {
       "name": "sdi-agent/1, self-held key: POST a booking to an inbox with a pass reference",
       "profile": "sdi-agent/1",
       "receiver": "inbox",

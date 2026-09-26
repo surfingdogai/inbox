@@ -194,6 +194,12 @@ export async function buildNetworkVectors() {
     runtime: "workers",
     counts: { bookings: 3, orders: 1, quotes: 0, messages: 2 },
   });
+  const listingBody = JSON.stringify({ listed: false });
+  const unlinkBody = JSON.stringify({
+    request_id: "01M34AVYNXTNSE2RC495H3W8QS",
+    ppids: ["3q2-7wEBAgMEBQYHCAkKCw"],
+    presentations: ["AAECAwQFBgcICQoLDA0ODw"],
+  });
   const bookingBody = JSON.stringify({
     service_id: "haircut",
     start: "2026-10-01T10:00:00Z",
@@ -392,6 +398,26 @@ export async function buildNetworkVectors() {
         `https://${NETWORK}/v1/instances/${INBOX}/ping`,
         null,
         "vector-instance-0004",
+      )),
+      expect: { ok: true, domain: INBOX, keyid: instance.kid },
+    },
+    {
+      ...(await signedInstance(
+        "sdi-instance/1: POST /v1/unlinks (a customer stopped this business)",
+        "POST",
+        `https://${NETWORK}/v1/unlinks`,
+        unlinkBody,
+        "vector-instance-0005",
+      )),
+      expect: { ok: true, domain: INBOX, keyid: instance.kid },
+    },
+    {
+      ...(await signedInstance(
+        "sdi-instance/1: POST /v1/instances/{domain}/listing (the business leaves the directory)",
+        "POST",
+        `https://${NETWORK}/v1/instances/${INBOX}/listing`,
+        listingBody,
+        "vector-instance-0006",
       )),
       expect: { ok: true, domain: INBOX, keyid: instance.kid },
     },

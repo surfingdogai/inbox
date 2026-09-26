@@ -1,22 +1,35 @@
 import {
+  businessCardSchema,
   businessesResponseSchema,
+  categoriesResponseSchema,
+  categoryVocabularySchema,
+  getBusinessOutputSchema,
   isRetriedPublication,
   JSON_SCHEMAS,
   jsonSchemaOf,
+  listCategoriesOutputSchema,
+  listingSchema,
+  MCP_TOOL_NAMES,
   parseReceiptClaims,
   personIssuanceRequestSchema,
   pingRequestSchema,
   presentationRequestSchema,
+  profileSchema,
   rankingDocumentSchema,
   receiptAckPayloadV2Schema,
   receiptPayloadV2Schema,
   rulesOf,
+  searchBusinessesInputSchema,
+  searchBusinessesOutputSchema,
 } from "@surfingdog/spec";
 import { describe, expect, it } from "vitest";
+import mcpVectors from "../../spec/vectors/mcp.json";
 import ordering from "../../spec/vectors/ordering.json";
 import passes from "../../spec/vectors/passes.json";
+import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
 import signatures from "../../spec/vectors/signatures.json";
+import vocabulary from "../../spec/vocab/categories.json";
 import { buildNetworkVectors } from "../scripts/network-vectors";
 import type { ActorKind, ItemType } from "../src/domain/types";
 import { outcomeOf } from "../src/machine/outcomes";
@@ -361,6 +374,175 @@ describe("ordering.json (the network's, read here as any consumer would)", () =>
 
   it("a directory page parses", () => {
     expect(businessesResponseSchema.safeParse({ businesses: [], next_cursor: null }).success).toBe(true);
+  });
+});
+
+/**
+ * How the categories list compares terms: lower case, accents off, every run of anything but letters and digits one
+ * space, and the words "and" and "e" (Portuguese "and") left out.
+ */
+const foldTerm = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/æ/g, "ae")
+    .replace(/œ/g, "oe")
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w !== "" && w !== "and" && w !== "e")
+    .join(" ");
+
+describe("profile.json and vocab/categories.json (the network's, read here as any consumer would)", () => {
+  it("the categories list is well formed, and no term names two slugs", () => {
+    const v = categoryVocabularySchema.parse(vocabulary);
+    const named = new Map<string, string>();
+    for (const c of v.categories) {
+      const terms = [c.slug];
+      for (const lang of v.languages) {
+        expect(c.labels[lang], `${c.slug}: ${lang} label`).toBeTruthy();
+        terms.push(c.labels[lang] ?? "", ...(c.synonyms[lang] ?? []));
+      }
+      for (const t of terms) {
+        const f = foldTerm(t);
+        expect(f, `${c.slug}: ${t}`).not.toBe("");
+        expect(named.get(f) ?? c.slug, `${t} names ${named.get(f)} and ${c.slug}`).toBe(c.slug);
+        named.set(f, c.slug);
+      }
+    }
+    expect(foldTerm("Cabeleireiro e Estética")).toBe(foldTerm("cabeleireiro & estetica"));
+    const answer = { version: v.version, categories: v.categories.map(({ slug, labels }) => ({ slug, labels })) };
+    expect(categoriesResponseSchema.safeParse(answer).success).toBe(true);
+  });
+
+  it("what a network keeps from each profile is a listing's shape, naming only the list's slugs", () => {
+    expect(profileVectors.vocabulary_version).toBe(vocabulary.version);
+    const slugs = new Set(vocabulary.categories.map((c) => c.slug));
+    for (const c of profileVectors.cases) {
+      const kept: Record<string, unknown> = c.kept;
+      for (const s of kept.categories as string[]) expect(slugs.has(s), `${c.name}: ${s}`).toBe(true);
+      const listing = {
+        ...kept,
+        name: kept.name || "A business",
+        domain: "ana.example",
+        geo: kept.geo ?? undefined,
+        hours: kept.hours ?? undefined,
+        open_now: kept.hours ? false : null,
+        item_types: [],
+        protocols: {},
+        manifest_url: "https://ana.example/.well-known/agent-inbox.json",
+        verified_at: "2026-12-01T10:00:00Z",
+        receipts: { issued: 0, acknowledged: 0 },
+        answering: true,
+        online: true,
+        not_answering_since: null,
+      };
+      const r = listingSchema.safeParse(listing);
+      expect(r.success, `${c.name}: ${JSON.stringify(r.error?.issues)}`).toBe(true);
+    }
+  });
+
+  it("the contract's own example is a valid profile, and so is the inbox's hours shape", () => {
+    expect(profileSchema.safeParse(profileVectors.cases[0]?.profile).success).toBe(true);
+    const bad = { name: "x", hours: { timezone: "Europe/Lisbon", weekly: { mon: [["18:00", "09:00"]] } } };
+    expect(profileSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+/** A space, a control character, a Bidi_Control character or a tag character: text that reads otherwise than it is. */
+const readsOtherwise = /[\s\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\u{E0000}-\u{E007F}]/u;
+
+/**
+ * An https door as a card may hand it on: on a host name, with no user, and written as RFC 3986 writes a URI (ASCII only,
+ * a `%` only before two hex digits, at most one `#`), so that it holds to the schemas' `format: uri`.
+ */
+function cardDoor(url: string): boolean {
+  const host = /^https:\/\/([^/?#]*)/.exec(url)?.[1] ?? "";
+  return (
+    /^[A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]*$/.test(url) &&
+    !/%(?![0-9A-Fa-f]{2})/.test(url) &&
+    url.split("#").length <= 2 &&
+    /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+(:[0-9]+)?$/.test(host)
+  );
+}
+
+/** Today's hours in the business's own zone at `now`, as mcp.json's description says a network derives them. */
+function hoursToday(
+  hours:
+    | { timezone: string; weekly: Partial<Record<string, string[][]>>; closures: { from: string; to: string }[] }
+    | undefined,
+  now: string,
+): string | null {
+  if (!hours) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: hours.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(new Date(now));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const date = `${part("year")}-${part("month")}-${part("day")}`;
+  if (hours.closures.some((c) => c.from <= date && date <= c.to)) return "closed today";
+  const windows = hours.weekly[part("weekday").toLowerCase().slice(0, 3)] ?? [];
+  return windows.length === 0 ? "closed today" : windows.map(([opens, closes]) => `${opens}–${closes}`).join(", ");
+}
+
+describe("mcp.json (the network's, read here as any consumer would)", () => {
+  it("every card, and every whole answer, holds to the tools' schemas", () => {
+    for (const c of mcpVectors.cards) {
+      const r = businessCardSchema.safeParse(c.card);
+      expect(r.success, `${c.name}: ${JSON.stringify(r.error?.issues)}`).toBe(true);
+      expect(listingSchema.safeParse(c.listing).success, `${c.name}: the listing`).toBe(true);
+    }
+    for (const [name, schema, answer] of [
+      ["search_businesses", searchBusinessesOutputSchema, mcpVectors.search_businesses],
+      ["get_business", getBusinessOutputSchema, mcpVectors.get_business],
+      ["list_categories", listCategoriesOutputSchema, mcpVectors.list_categories],
+    ] as const) {
+      const r = schema.safeParse(answer);
+      expect(r.success, `${name}: ${JSON.stringify(r.error?.issues)}`).toBe(true);
+    }
+    expect([...MCP_TOOL_NAMES]).toEqual(["search_businesses", "get_business", "list_categories"]);
+    expect(searchBusinessesInputSchema.safeParse({ query: "haircut alfama", limit: 21 }).success).toBe(false);
+    expect(searchBusinessesInputSchema.safeParse({ near: { lat: 38.7, lng: -9.1 }, open_now: true }).success).toBe(
+      true,
+    );
+  });
+
+  it("a card is derived from its listing as the file says", () => {
+    for (const { name, now, listing, card } of mcpVectors.cards) {
+      const l = listingSchema.parse(listing);
+      const doors = Object.fromEntries(
+        (["mcp", "rest", "openapi"] as const).flatMap((d) => {
+          const url = l.protocols[d];
+          return url?.startsWith("https://") && !readsOtherwise.test(url) && cardDoor(url) ? [[d, url]] : [];
+        }),
+      );
+      expect(card.inbox, name).toEqual({ url: `https://${l.domain}`, ...doors });
+      expect(card.takes, name).toEqual(l.item_types);
+      expect(card.open_now ?? null, name).toBe(l.open_now ?? null);
+      expect(card.hours_today, name).toBe(hoursToday(l.hours, now));
+      expect(card.listing_url, name).toBe(`${mcpVectors.network}/v1/businesses/${l.domain}`);
+      const distance = l.distance_km === undefined ? undefined : Math.round(l.distance_km * 100) / 100;
+      expect((card as { distance_km?: number }).distance_km, name).toBe(distance);
+      const standing = (card as { standing?: { tier: string; ranked: boolean; in_words: string } }).standing;
+      if (l.reputation) {
+        expect(standing, name).toEqual({
+          tier: l.reputation.tier,
+          ranked: l.reputation.ranked,
+          in_words: mcpVectors.standing[l.reputation.tier],
+        });
+      } else {
+        expect(standing, name).toBeUndefined();
+      }
+    }
+  });
+
+  it("no standing is a mark against a business", () => {
+    for (const words of Object.values(mcpVectors.standing)) {
+      expect(words.toLowerCase()).not.toMatch(/bad|poor|low|warn|avoid|untrust|risk|caution|broken|fail/);
+    }
   });
 });
 

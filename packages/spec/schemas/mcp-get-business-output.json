@@ -1,15 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "GET /v1/businesses/{domain}",
+  "title": "MCP get_business: structuredContent",
   "type": "object",
   "properties": {
     "domain": {
-      "type": "string"
+      "type": "string",
+      "description": "The business's own domain, where its inbox is."
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "description": "As the business wrote it."
     },
     "description": {
+      "description": "As the business wrote it.",
+      "type": "string"
+    },
+    "website": {
       "type": "string"
     },
     "city": {
@@ -21,7 +27,119 @@
       "minLength": 2,
       "maxLength": 2
     },
+    "distance_km": {
+      "description": "Searches near a point only.",
+      "type": "number",
+      "minimum": 0
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Slugs of the categories list."
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Other words the business gave for what it does."
+    },
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "takes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What its inbox takes: booking, order, quote_request, message, refund."
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "type": {
+            "type": "string",
+            "enum": ["booking", "order", "quote_request"]
+          }
+        },
+        "required": ["name", "type"]
+      },
+      "description": "Names and how each is taken; prices, durations and free times are at its inbox."
+    },
+    "open_now": {
+      "description": "Open at the moment of the answer by the hours it published, in its own time zone; null when it published none.",
+      "type": ["boolean", "null"]
+    },
+    "hours_today": {
+      "description": "Today's hours in its own time zone, like \"09:00–13:00, 14:00–19:00\", or \"closed today\"; null when it published none.",
+      "type": ["string", "null"]
+    },
+    "answering": {
+      "type": "boolean",
+      "description": "Its inbox answered this network within the last day."
+    },
+    "inbox": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "mcp": {
+          "description": "Where an assistant books, orders or asks.",
+          "type": "string",
+          "format": "uri"
+        },
+        "rest": {
+          "type": "string",
+          "format": "uri"
+        },
+        "openapi": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["url"],
+      "description": "The business's own inbox: go there to book, order or ask. This directory takes nothing."
+    },
+    "standing": {
+      "description": "From the last nightly count of the promises it kept; absent while the directory's order is neutral.",
+      "type": "object",
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["new", "building", "trusted"]
+        },
+        "ranked": {
+          "type": "boolean",
+          "description": "Its record puts it before the daily shuffle."
+        },
+        "in_words": {
+          "type": "string",
+          "description": "The tier in one plain sentence; never a mark against the business."
+        }
+      },
+      "required": ["tier", "ranked", "in_words"]
+    },
+    "listing_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Its full listing on this network (GET /v1/businesses/{domain})."
+    },
     "address": {
+      "description": "The street only when the business published one.",
       "type": "object",
       "properties": {
         "street": {
@@ -40,44 +158,8 @@
         }
       }
     },
-    "categories": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Slugs of the categories list (GET /v1/categories)."
-    },
-    "tags": {
-      "description": "What the profile named that is not in the categories list (A2.5).",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "languages": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "item_types": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "protocols": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "type": "string"
-      },
-      "description": "Protocol name → entry URL."
-    },
     "hours": {
-      "description": "Absent when the business published none, or none the network could read.",
+      "description": "The whole week, and the closures that have not ended.",
       "type": "object",
       "properties": {
         "timezone": {
@@ -250,182 +332,6 @@
       },
       "required": ["timezone", "weekly", "closures"]
     },
-    "open_now": {
-      "description": "Open at the moment of the answer by the hours it published, in its own zone, a closure winning; null when it published none. A cached answer may be minutes old.",
-      "type": ["boolean", "null"]
-    },
-    "services": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
-          },
-          "type": {
-            "type": "string",
-            "enum": ["booking", "order", "quote_request"]
-          }
-        },
-        "required": ["name", "type"]
-      }
-    },
-    "geo": {
-      "type": "object",
-      "properties": {
-        "lat": {
-          "type": "number"
-        },
-        "lng": {
-          "type": "number"
-        }
-      },
-      "required": ["lat", "lng"]
-    },
-    "distance_km": {
-      "description": "Near searches only.",
-      "type": "number",
-      "minimum": 0
-    },
-    "url": {
-      "type": "string"
-    },
-    "manifest_url": {
-      "type": "string",
-      "format": "uri"
-    },
-    "verified_at": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-    },
-    "last_ping_at": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-    },
-    "software": {
-      "type": "object",
-      "properties": {
-        "version": {
-          "type": "string"
-        },
-        "runtime": {
-          "type": "string"
-        }
-      }
-    },
-    "receipts": {
-      "type": "object",
-      "properties": {
-        "issued": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Promises only."
-        },
-        "acknowledged": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "customers": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "last_at": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-        }
-      },
-      "required": ["issued", "acknowledged"]
-    },
-    "answering": {
-      "type": "boolean",
-      "description": "A ping, signed or not, within 24 h and no failed manifest sweep since."
-    },
-    "online": {
-      "type": "boolean",
-      "description": "An alias of answering."
-    },
-    "not_answering_since": {
-      "anyOf": [
-        {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "rank_pos": {
-      "description": "Position in the hourly snapshot's order.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 9007199254740991
-    },
-    "rank_shuffle": {
-      "description": "The first 16 hex digits of SHA-256(\"<YYYY-MM-DD>:<business uuid>\"): a string, never a number.",
-      "type": "string",
-      "pattern": "^[0-9a-f]{16}$"
-    },
-    "reputation": {
-      "type": "object",
-      "properties": {
-        "ranked": {
-          "type": "boolean",
-          "description": "score ≥ 0.40 (building): sorts before the daily shuffle."
-        },
-        "score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "tier": {
-          "type": "string",
-          "enum": ["new", "building", "trusted"]
-        },
-        "kept": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "broken": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "customers": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Distinct customers (§5.3)."
-        },
-        "verified_share": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "The share of weight from verified evidence."
-        },
-        "rules": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991,
-          "description": "The rules version that ordered this listing."
-        },
-        "rules_url": {
-          "type": "string",
-          "format": "uri"
-        }
-      },
-      "required": ["ranked", "score", "tier", "kept", "broken", "customers", "verified_share", "rules"]
-    },
     "outcomes": {
       "type": "object",
       "propertyNames": {
@@ -451,22 +357,23 @@
         "type": "integer",
         "minimum": 0,
         "maximum": 9007199254740991
-      }
+      },
+      "description": "How many of the promises made at this business closed with each outcome (ADR-017 §3)."
     }
   },
   "required": [
     "domain",
     "name",
     "categories",
+    "tags",
     "languages",
-    "item_types",
-    "protocols",
-    "manifest_url",
-    "verified_at",
-    "receipts",
+    "takes",
+    "services",
+    "open_now",
+    "hours_today",
     "answering",
-    "online",
-    "not_answering_since",
+    "inbox",
+    "listing_url",
     "outcomes"
   ]
 }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/person/erase: 202",
+  "type": "object",
+  "properties": {
+    "erasing": {
+      "type": "boolean",
+      "const": true
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": ["erasing", "message"]
+}

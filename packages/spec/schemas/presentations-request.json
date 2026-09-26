@@ -84,6 +84,10 @@
       "description": "How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7).",
       "type": "string",
       "enum": ["otp", "dkim"]
+    },
+    "resume": {
+      "description": "The customer lifted their stop at this business: lifts a stop the business made for them (ADR-017 A2.1), never one they made.",
+      "type": "boolean"
     }
   }
 }

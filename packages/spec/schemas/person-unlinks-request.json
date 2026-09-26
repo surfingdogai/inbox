@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/person/unlinks and /v1/person/unlinks/remove",
+  "type": "object",
+  "properties": {
+    "business": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's domain."
+    }
+  },
+  "required": ["business"]
+}

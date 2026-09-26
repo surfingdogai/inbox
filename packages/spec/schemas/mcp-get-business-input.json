@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP get_business: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's domain, like ana-salon.example, as search_businesses gave it."
+    }
+  },
+  "required": ["domain"]
+}

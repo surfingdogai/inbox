@@ -8,7 +8,7 @@
     },
     "status": {
       "type": "string",
-      "description": "disputed, for a report; withdrawn, for a contest."
+      "description": "disputed, for a report; withdrawn or disputed, for a contest."
     },
     "answer": {
       "type": "string",
