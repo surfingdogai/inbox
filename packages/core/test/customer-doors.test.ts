@@ -1,6 +1,7 @@
 import { runMigrations } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import type { CustomerResult } from "../src/capabilities/customer";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { ulid } from "../src/ids";
@@ -8,7 +9,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, itemEvents, items, jobs, services, slotClaims, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, setFlags, transitionItem, WriteError } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The customer's answers to what the business proposed (ADR-018 §5, §6), through the assistant's
@@ -58,7 +59,11 @@ async function setup(): Promise<{ db: Db; caps: Capabilities; svc: string }> {
     createdAt: T0,
     updatedAt: T0,
   });
-  return { db, caps: new Capabilities(db, createSecretBox(["customer-doors-test-secret-0123456789"])), svc };
+  return {
+    db,
+    caps: confirming(new Capabilities(db, createSecretBox(["customer-doors-test-secret-0123456789"]))),
+    svc,
+  };
 }
 
 /** A booking an anonymous customer asked for, to which the owner proposed another time. */
@@ -312,7 +317,10 @@ describe("accept_offer", () => {
     expect(late.status).toBe(410);
 
     clock.now = T0 + 60 * MIN;
-    const r = await s.caps.customer.acceptOffer(anon(token), { item_id: qid, terms_sha: status.offer?.terms_sha });
+    const r = (await s.caps.customer.acceptOffer(anon(token), {
+      item_id: qid,
+      terms_sha: status.offer?.terms_sha,
+    })) as CustomerResult;
     expect(r.view.item.state).toBe("accepted");
     expect(r.linked?.item).toMatchObject({ type: "order", state: "accepted" });
     expect(r.linked?.human).toMatch(/^Your order .* is accepted\./);
@@ -394,14 +402,15 @@ describe("suggest_time", () => {
       s.caps.customer.suggestTime(anon(token), { item_id: id, start_time: "2026-09-24T10:30:00Z" }),
     );
     expect(taken.code).toBe("slot_taken");
-    // A time not proposed any more has nothing to answer.
-    const confirmed = await fail(
-      s.caps.customer.suggestTime(anon(other.accessToken), {
-        item_id: other.view.item.id,
-        start_time: "2026-09-24T14:00:00Z",
-      }),
-    );
-    expect(confirmed.code).toBe("no_offer");
+    // On a confirmed booking it asks to move it, and the booking stays as agreed until we say yes.
+    const moved = await s.caps.customer.suggestTime(anon(other.accessToken), {
+      item_id: other.view.item.id,
+      start_time: "2026-09-24T14:00:00Z",
+    });
+    expect(moved.view).toMatchObject({
+      item: { state: "confirmed", payload: { startTime: "2026-09-24T10:00:00Z" } },
+      requested_change: { terms: { startTime: "2026-09-24T14:00:00.000Z" } },
+    });
   });
 });
 

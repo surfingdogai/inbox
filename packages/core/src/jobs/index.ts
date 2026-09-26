@@ -52,6 +52,7 @@ export function createRunner(deps: {
           outcome: p.outcome,
           aut: p.aut === 1,
           eventId: p.eventId,
+          offerId: p.offerId,
         });
         // A skip is a decision, not a failure: the reason is recorded here and the job is done.
         // Retrying would not change the environment it is complaining about.
@@ -61,7 +62,7 @@ export function createRunner(deps: {
           await ensureJob(
             db,
             "issue_receipt",
-            `receipt:${p.itemId}:${p.outcome ?? p.kind}:wait:${Math.floor(now / 60_000)}`,
+            `receipt:${p.itemId}:${p.outcome ?? (p.offerId ? `${p.kind}:${p.offerId}` : p.kind)}:wait:${Math.floor(now / 60_000)}`,
             {
               now,
               runAt: now + 60_000,
@@ -92,13 +93,17 @@ export function createRunner(deps: {
   );
 }
 
-/** What a transition queues for a receipt: the kind, and for an outcome which one and whether nobody decided it. */
+/**
+ * What a transition queues for a receipt: the kind, for an outcome which one and whether nobody
+ * decided it, and for an amendment the change both sides agreed.
+ */
 export interface IssueReceiptPayload {
   readonly itemId: string;
   readonly kind: ReceiptKind;
   readonly eventId?: string;
   readonly outcome?: InboxOutcomeCode;
   readonly aut?: 0 | 1;
+  readonly offerId?: string;
 }
 
 export type { NotifyPayload };

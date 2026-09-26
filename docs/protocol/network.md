@@ -16,6 +16,7 @@ network's own `GET /v1/ranking`. When this text and the vectors disagree, **the 
 | Signed requests | [`vectors/signatures.json`](../../packages/spec/vectors/signatures.json) |
 | Keys, passes, email normalisation | [`vectors/passes.json`](../../packages/spec/vectors/passes.json) |
 | Receipt claims v2 | [`vectors/receipts-v2.json`](../../packages/spec/vectors/receipts-v2.json) |
+| Rules version 6: amendments, refunds, `trm`, `acc` | [`vectors/receipts-v6.json`](../../packages/spec/vectors/receipts-v6.json) |
 | Receipts v1 and acknowledgements | [`vectors/receipts.json`](../../packages/spec/vectors/receipts.json) (ADR-016) |
 | Scores | [`vectors/scoring.json`](../../packages/spec/vectors/scoring.json) |
 | Order, shuffle, cursors | [`vectors/ordering.json`](../../packages/spec/vectors/ordering.json) |
@@ -347,13 +348,18 @@ changelog, next}` with every number a network may choose; `status` is `announced
 `retired`. The schema is `ranking`. Version 5 (network rules 0.1.2, ADR-017 Amendment 2) adds, among
 others, `timing.contest_days` and `weights.contest_weighs` (§5.4). A network puts version 5 in force
 the moment it publishes it when no more than one business is a member of it then, and otherwise at
-00:00 UTC on the sixteenth day after the day it published it. While a network scores no customer
-(§5.2), every version from 3 that it serves also carries `customer_scoring`, a sentence saying so.
+00:00 UTC on the sixteenth day after the day it published it. Version 6 (network rules 0.1.3, ADR-017
+Amendment 3) adds `amendments` and `refunds` (§6.1) and takes effect the same way. While
+a network scores no customer (§5.2), every version from 3 that it serves also carries
+`customer_scoring`, a sentence saying so.
 
 An inbox reads it daily: it sends every receipt (§6) to a network whose rules, in force or
 announced in `next`, are version 3 or later. To the others it sends only the promises v1 already
 knew, `confirmed` and `paid`, whose v1 claims are unchanged (a v1 reader ignores the members it
-does not know); acceptances and outcomes wait for the network to move to version 3.
+does not know); acceptances and outcomes wait for the network to move to version 3. What version 6
+adds (§6.1) — amendments and refunds' receipts — goes likewise only to a network whose rules, in
+force or announced, are version 6 or later, and waits for the others; every receipt of a promise
+that changed goes only once version 6 is **in force** there (§6.1).
 
 ### 4.5 Leaving the directory, and silence
 
@@ -568,10 +574,15 @@ link to it from the page its key email links to (§7).
 `POST /v1/reports {receipt, out, why, pass_ref}` comes from the customer's agent, signed
 sdi-agent/1 with a key delegated to the pass `pass_ref` names (else `403
 report_requires_signature`). `receipt` is any receipt of the item (its JWS or its sha); `out` is
-`booking.no_show_business` or `order.not_received`; `why` is `closed`, `no_one_there`,
-`not_delivered` or `other`. → `202 {id, status: "open", respond_by}`. Refusals: `403
-not_your_receipt`, `404 not_found`, `404 unknown_pass`, `410 revoked`, `422 report_window`
-(outside `due` + 1 h to `due` + 90 days), `409 already_reported`, `409 you_acknowledged_it`.
+`booking.no_show_business` or `order.not_received`, with `why` `closed`, `no_one_there`,
+`not_delivered` or `other`; or, from rules version 6, `order.refund_refused` (a lawful withdrawal,
+a claim under the legal guarantee, or goods disputed with nothing repaid, refused), with `why`
+`withdrawal_refused`, `faulty_refused` or `goods_disputed_unpaid` (`REPORT_WHYS`; any other pair is
+`400 bad_payload`). → `202 {id, status: "open", respond_by}`. Refusals: `403 not_your_receipt`,
+`404 not_found`, `404 unknown_pass`, `410 revoked`, `422 report_window` (outside `due` + 1 h to
+`due` + 90 days, and to `due` + 730 days for `order.refund_refused`, `due` being the latest
+amendment's), `409 already_reported`, `409 you_acknowledged_it` (never for `order.refund_refused`:
+acknowledging that the goods came does not stop it).
 
 The business sees open reports in its signed ping and may answer within 14 days with
 `POST /v1/reports/{id}/response {"answer": "dispute"}`. It sees open contests there too, each with
@@ -673,6 +684,45 @@ its outcome.
 
 Which outcome stands, how evidence is dated and weighed, and when a promise counts as unclosed are
 ADR-017 §3 and §5; `scoring.json` holds the arithmetic.
+
+### 6.1 Rules version 6: changes both sides agreed, and refunds
+
+Version 6 (ADR-017 Amendment 3; rules "0.1.3") adds values and claims and renames none. A
+network puts it in force as it did version 5 (§4.4); until then a network that has announced it
+stores what it adds and scores none of it.
+
+| Claim | Rule |
+|---|---|
+| `typ` | also `refund`: a refund, return or withdrawal of a booking or an order, on an item of its own; its `knd` is only `accepted` (its promise) or `outcome` |
+| `knd` | also `amended`: a change to a booking's or an order's promise both sides agreed, never a refund's |
+| `ref` | also on an amendment, required: the `nonce` of the item's earliest promise |
+| `due`, `end` | an amendment names the new ones (an order's `due` stays the earlier one when the change names no delivery date); the latest amendment (greatest `iat`, then nonce) sets them for notice, R30 and reports, and outcomes carry them, except that a customer's cancellation is late only against the later of that `due` and the date last verifiably agreed; a refund's `due` is the date it must be paid by |
+| `trm` | 43 base64url characters: `base64url(HMAC-SHA-256(k, terms_sha))`, the fingerprint of the terms both sides agreed under a key `k` the business derives for that offer and discloses only to settle a dispute (so it cannot be tested against guesses); required on an amendment, optional on a promise, never on an outcome. Evidence for a dispute, never scored |
+| `acc` | `customer` or `business`, who accepted the change; required on an amendment and only there |
+| `per` | never on an amendment or a refund's receipts: they are about the business's promise |
+
+| Outcome | Item | Business row | Customer row | `o` | Recorded by |
+|---|---|---|---|---|---|
+| `refund.honoured` | refund | kept | — | 1 | inbox, when paid by `due` (or before any `due` was fixed) |
+| `refund.late` | refund | broken | — | 1 | inbox, when paid after `due` |
+| `refund.cancelled_by_customer` | refund | — | — | — | inbox, when the customer drops a return after its `due` was fixed |
+| `order.refund_refused` | order | broken | — | 1 | a report that stands (§5.4) |
+
+A refund's promise is issued when its date is fixed: at once when nothing has to come back, else
+when the goods do. Without a verified acknowledgement of the amendment itself, a network honours at
+most 3 amendments per item, moving `due`, and the date R30 reads (a booking's `end`, else `due`), at
+most 90 days either way from the earliest promise's (`AMENDMENT_LIMITS`); one beyond is stored and
+changes nothing. No version 6 outcome has a customer's row, and an amendment on the business's word
+alone never makes a customer's cancellation late: it is judged against the later of the item's
+`due` and the date last verifiably agreed (the latest acknowledged amendment's, else the earliest
+promise's). A network on version 5 refuses `typ: "refund"` and `knd: "amended"`
+(`422 bad_payload`) and ignores `trm` and `acc` however they look (malformed, on an outcome, `acc`
+on a promise); `parseReceiptClaims(payload, {rules})` does exactly that. An inbox sends version 6's receipts only to a network whose rules, in force or announced, are
+6 or later; it carries `trm` on a promise only when every network the promise goes to then takes
+version 6; and it moves the dates of a promise a network holds, and sends a promise that moved,
+only where version 6 is in force, so R30 never counts a moved booking as unclosed. An outcome goes
+after its promise and its amendments. `receipts-v6.json` pins all of it, with every path through
+the refund machine.
 
 ## 7. What an inbox does
 

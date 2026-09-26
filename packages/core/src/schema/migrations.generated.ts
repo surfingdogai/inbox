@@ -247,4 +247,48 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- Who wrote a reply, when the request said so: `person` (an integration whose user typed it) or\n-- `automation`. Null: judged by who sent it.\nALTER TABLE `thread_entries` ADD `written_by` text;",
     ],
   },
+  {
+    version: 15,
+    name: "0014_offers",
+    statements: [
+      "-- Offers (ADR-018 §1): what one side put to the other — the customer's request, a time or a quote we\n-- proposed, a counter, the changes we suggested to an order — each an immutable snapshot of the terms,\n-- fingerprinted. `form` is the kind `terms_sha` names (time, quote, order, request), so a time or a\n-- quote fingerprints exactly as the links already sent do. At most one open and one draft per item;\n-- every verb closes the open one and opens the next in the batch of its transition.\nCREATE TABLE IF NOT EXISTS `item_offers` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`rev` integer NOT NULL,\n\t`parent_id` text,\n\t`kind` text NOT NULL,\n\t`form` text NOT NULL,\n\t`by` text NOT NULL,\n\t`actor_kind` text NOT NULL,\n\t`actor_id` text NOT NULL,\n\t`round` integer DEFAULT 1 NOT NULL,\n\t`status` text NOT NULL,\n\t`valid_through` integer,\n\t`terms` text NOT NULL,\n\t`terms_sha` text NOT NULL,\n\t`changes` text,\n\t`shown` text,\n\t`authored` text NOT NULL,\n\t`binding` integer DEFAULT 1 NOT NULL,\n\t`reason_code` text,\n\t`note` text,\n\t`event_id` text,\n\t`closed_event_id` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `item_offers_item_rev` ON `item_offers` (`item_id`, `rev`);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `item_offers_one_open` ON `item_offers` (`item_id`) WHERE `status` = 'open';",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `item_offers_one_draft` ON `item_offers` (`item_id`) WHERE `status` = 'draft';",
+      "CREATE INDEX IF NOT EXISTS `item_offers_due` ON `item_offers` (`status`, `valid_through`);",
+      "-- A slot held while a time we proposed waits for the customer's answer is an ordinary claim that\n-- carries the offer it holds for; the claim of an agreed booking carries ''.\nALTER TABLE `slot_claims` ADD `offer_id` text DEFAULT '' NOT NULL;",
+      "CREATE INDEX IF NOT EXISTS `slot_claims_offer` ON `slot_claims` (`item_id`, `offer_id`);",
+      "-- When a request waiting on the business, or on the customer's details, lapses: set by the write\n-- path from now on. NULL on every row that exists today, which therefore never lapses on its own.\nALTER TABLE `items` ADD `request_expires_at` integer;",
+      "CREATE INDEX IF NOT EXISTS `items_request_expiry` ON `items` (`request_expires_at`) WHERE `request_expires_at` IS NOT NULL;",
+    ],
+  },
+  {
+    version: 16,
+    name: "0015_returns",
+    statements: [
+      "-- Returns and the right of withdrawal (ADR-018 §3.4, §7). What the law lets a product or service be\n-- excepted from withdrawal: `standard` (the right runs), or one of personalised, perishable,\n-- sealed_hygiene, sealed_media, mixed, dated_leisure, urgent_repair, digital_started, price_fluctuates.\n-- It is shown before the order, so it is public like the rest of the catalogue row; only the owner in\n-- person sets it, and feeds never write it.\nALTER TABLE `products` ADD `withdrawal` text DEFAULT 'standard' NOT NULL;",
+      "ALTER TABLE `services` ADD `withdrawal` text DEFAULT 'standard' NOT NULL;",
+      "-- The returns and refunds of an order or a booking name it as their linked item, and are found by it.\nCREATE INDEX IF NOT EXISTS `items_linked` ON `items` (`linked_item_id`) WHERE `linked_item_id` IS NOT NULL;",
+    ],
+  },
+  {
+    version: 17,
+    name: "0016_limits",
+    statements: [
+      "-- The owner's limits (ADR-018 §4). A floor is the lowest price the owner lets automation go to for a\n-- product or a service: the owner's alone, so it lives apart from the catalogue rows, which the public\n-- doors and the owner's AI read whole. No read of a product or a service can ever carry one.\nCREATE TABLE IF NOT EXISTS `price_floors` (\n\t`kind` text NOT NULL,\n\t`ref_id` text NOT NULL,\n\t`floor_minor` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tPRIMARY KEY (`kind`, `ref_id`)\n);",
+      "-- Whether a customer may suggest a price of their own for it, while price counters are on (Q1).\n-- Public like the rest of the row; only the owner in person changes it, and feeds never write it.\nALTER TABLE `products` ADD `negotiable` integer DEFAULT 1 NOT NULL;",
+      "ALTER TABLE `services` ADD `negotiable` integer DEFAULT 1 NOT NULL;",
+      "-- What the owner's AI, a rule or another system would have offered outside the owner's limits: kept\n-- for a person to send or drop, never sent. One per item, the latest; not an offer anyone saw, so it\n-- takes no place among the item's offers.\nCREATE TABLE IF NOT EXISTS `offer_drafts` (\n\t`item_id` text PRIMARY KEY NOT NULL,\n\t`id` text NOT NULL,\n\t`event` text NOT NULL,\n\t`input` text NOT NULL,\n\t`terms` text NOT NULL,\n\t`breaches` text NOT NULL,\n\t`item_version` integer NOT NULL,\n\t`actor_kind` text NOT NULL,\n\t`actor_id` text NOT NULL,\n\t`actor_name` text,\n\t`created_at` integer NOT NULL\n);",
+      "-- Keys handed to another system keep doing what they did: setting prices and recording payments and\n-- refunds, as a shop or a till does. From now on a key does that only with `money:write`; without\n-- it, it is held to the owner's limits as the owner's AI is.\nUPDATE `api_keys` SET `scopes` = json_insert(`scopes`, '$[#]', 'money:write')\n WHERE `kind` = 'integration' AND `revoked_at` IS NULL AND json_valid(`scopes`)\n   AND EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` IN ('inbox:write', '*'))\n   AND NOT EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` = 'money:write');",
+    ],
+  },
+  {
+    version: 18,
+    name: "0017_amended_receipts",
+    statements: [
+      "-- Rules version 6 (ADR-017 Amendment 3): a change both sides agreed to a promise is a receipt of its\n-- own, kind `amended`, one per change. A receipt is now one per item, kind, outcome and the agreed\n-- change it records: every receipt issued before this migration keeps `offer_id` = '' and is unchanged\n-- and still unique. The unique index is swapped in the same batch, as 0008 swapped it, so there is no\n-- moment in which two receipts of one kind could be written.\nALTER TABLE `receipts` ADD `offer_id` text DEFAULT '' NOT NULL;",
+      "DROP INDEX IF EXISTS `receipts_item_kind_outcome`;",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `receipts_item_kind_outcome_offer` ON `receipts` (`item_id`,`kind`,`outcome`,`offer_id`);",
+    ],
+  },
 ];

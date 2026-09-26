@@ -6,7 +6,7 @@ import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 // The published verifier, by path (MIT, deliberately not a dependency of this AGPL app).
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { createInbox } from "../src/app";
-import { freshDb } from "./harness";
+import { confirmed, freshDb } from "./harness";
 
 /**
  * What an existing integration sees after people and outcomes arrive (ADR-017 §2.5, R18): a
@@ -157,7 +157,8 @@ async function drain(inbox: ReturnType<typeof createInbox>, db: Db) {
 describe("an existing integration after ADR-017", () => {
   it("answers a request with no pass or key as before, adding only identity, and calls no network when none is on", async () => {
     const s = await setup("none");
-    const created = await s.app.request(
+    const created = await confirmed(
+      (r) => s.app.request(r),
       post("/v1/bookings", { payload: booking(s.svc), contact: { name: "Rita", email: "rita@example.com" } }),
     );
     expect(created.status).toBe(201);
@@ -177,8 +178,11 @@ describe("an existing integration after ADR-017", () => {
     const id = body.view.item.id;
     const status = await s.app.request(`${ORIGIN}/v1/items/${id}?access_token=${body.accessToken}`);
     expect(status.status).toBe(200);
-    // ADR-018 §6 added what the business waits for, the reference and the conversation; nothing that was there went.
+    // ADR-018 §6 added what the business waits for, what was agreed, a change the customer asked
+    // for, the reference, the conversation, the right of withdrawal and the returns; nothing that was
+    // there went.
     expect(Object.keys((await status.json()) as object).sort()).toEqual([
+      "agreed",
       "human",
       "identity",
       "item",
@@ -186,9 +190,12 @@ describe("an existing integration after ADR-017", () => {
       "offer",
       "receipts",
       "reference",
+      "refunds",
+      "requested_change",
       "thread",
       "transitions",
       "waiting_on",
+      "withdrawal",
     ]);
     await s.afterResponse();
     expect(await stateOf(s.db, id)).toBe("confirmed");
@@ -205,7 +212,8 @@ describe("an existing integration after ADR-017", () => {
     it(`books a first contact when the network ${mode === "answers" ? "answers" : mode === "down" ? "is down" : "never answers"}, and the owner's rule confirms it in the pass after the request`, async () => {
       const s = await setup(mode);
       const started = Date.now();
-      const res = await s.app.request(
+      const res = await confirmed(
+        (r) => s.app.request(r),
         post("/v1/bookings", { payload: booking(s.svc), contact: { name: "Rita", email: "rita@example.com" } }),
       );
       const took = Date.now() - started;
@@ -228,7 +236,8 @@ describe("an existing integration after ADR-017", () => {
   it("still tells both sides when an accepted order is cancelled, by the customer or by the owner", async () => {
     const s = await setup("none");
     const order = async () => {
-      const r = await s.app.request(
+      const r = await confirmed(
+        (r) => s.app.request(r),
         post("/v1/orders", {
           payload: {
             orderedItem: [{ name: "Chain", quantity: 1, price: { value: 1500, currency: "EUR" } }],
@@ -269,7 +278,8 @@ describe("an existing integration after ADR-017", () => {
 
   it("keeps every webhook field it had, adds the outcome, and signs it so the published helper verifies", async () => {
     const s = await setup("none", { webhooks: true });
-    const res = await s.app.request(
+    const res = await confirmed(
+      (r) => s.app.request(r),
       post("/v1/bookings", { payload: booking(s.svc), contact: { name: "Rita", email: "rita@example.com" } }),
     );
     const id = ((await res.json()) as { view: { item: { id: string } } }).view.item.id;

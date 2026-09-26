@@ -176,6 +176,8 @@ export interface ServiceRow {
   readonly price: ServicePrice | null;
   readonly active: number;
   readonly sort: number;
+  /** Whether a customer may suggest a price of their own for it, while price counters are on (0/1). */
+  readonly negotiable?: number | undefined;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -192,6 +194,7 @@ export type ServiceBody = Partial<{
   readonly price: ServicePrice;
   readonly active: boolean;
   readonly sort: number;
+  readonly negotiable: boolean;
 }>;
 
 export interface ProductRow {
@@ -202,6 +205,7 @@ export interface ProductRow {
   readonly price: Money;
   readonly stock: number | null;
   readonly active: number;
+  readonly negotiable?: number | undefined;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -213,7 +217,16 @@ export type ProductBody = Partial<{
   readonly price: Money;
   readonly stock: number | null;
   readonly active: boolean;
+  readonly negotiable: boolean;
 }>;
+
+/** The owner's lowest prices (ADR-018 §4): what their AI, rules and other systems may go down to. */
+export interface Floor {
+  readonly kind: "product" | "service";
+  readonly ref_id: string;
+  readonly floor_minor: number;
+  readonly updated_at: string;
+}
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export type Window = readonly [string, string];

@@ -250,6 +250,37 @@ export const rankingV5Schema = rankingV4Schema.extend({
 });
 export type RankingV5 = z.infer<typeof rankingV5Schema>;
 
+/**
+ * Version 6: network rules 0.1.3 (ADR-017 Amendment 3, accepted 29 Sep 2026). Version 5's shape and numbers, and what agreed
+ * changes and refunds add: the kind `amended` and how far unverified amendments may move a promise, refunds on
+ * items of their own with `refund.honoured`, `refund.late` and `refund.cancelled_by_customer`, the report
+ * `order.refund_refused` and its window, and `trm` on promises, never scored. In force the moment a network
+ * publishes it when no more than one business is a member of it then, otherwise at 00:00 UTC on the sixteenth
+ * day after (as version 5's N1).
+ */
+export const rankingAmendmentsSchema = z.object({
+  unverified_max: z.int().min(0).describe("Amendments per item honoured without a verified acknowledgement."),
+  due_shift_days_max: days.describe(
+    "How far each may move due, and the date R30 reads (a booking's end, else due), either way from the earliest promise's.",
+  ),
+  dates_from: z.string().describe("Which amendment sets due and end: the latest, by iat then nonce."),
+});
+
+export const rankingRefundsSchema = z.object({
+  promise: z.string().describe("When a refund's promise is issued, and what its due and amt are."),
+  honoured_o: z.number().describe("Weight of refund.honoured, kept for the business."),
+  late_o: z.number().describe("Weight of refund.late, broken for the business."),
+  report_window_days: days.describe("order.refund_refused may be reported from due + 1 h for this many days."),
+});
+
+export const rankingV6Schema = rankingV5Schema.extend({
+  version: z.literal(6),
+  rules: z.string().describe('The rules name, "0.1.3".'),
+  amendments: rankingAmendmentsSchema,
+  refunds: rankingRefundsSchema,
+});
+export type RankingV6 = z.infer<typeof rankingV6Schema>;
+
 /** Version 2: the neutral order during the redesign (22 September 2026). */
 export const rankingV2Schema = z.object({
   version: z.literal(2),
@@ -266,6 +297,7 @@ export type RankingV2 = z.infer<typeof rankingV2Schema>;
 export const rankingV1Schema = z.looseObject({ version: z.literal(1), status: z.literal("withdrawn") });
 
 export const rankingDocumentSchema = z.discriminatedUnion("version", [
+  rankingV6Schema,
   rankingV5Schema,
   rankingV4Schema,
   rankingV3Schema,
@@ -276,7 +308,8 @@ export type RankingDocument = z.infer<typeof rankingDocumentSchema>;
 
 /**
  * The rules a network applies now, and the next ones it has announced: what an inbox reads daily
- * to decide what to send (v2 receipts go to networks at version 3 or later, §2.5).
+ * to decide what to send (v2 receipts go to networks at version 3 or later, §2.5; agreed changes
+ * and refunds to those at version 6 or later, Amendment 3).
  */
 export function rulesOf(doc: RankingDocument): { inForce: number; next: z.infer<typeof nextRulesSchema> | null } {
   if (doc.version === 1) return { inForce: 1, next: null };

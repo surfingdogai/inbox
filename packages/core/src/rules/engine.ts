@@ -14,7 +14,7 @@ import {
   services,
   threadEntries,
 } from "../schema/tables";
-import { readSettings } from "../settings/schema";
+import { readSettings, SECRET_SETTINGS_PATHS, type Settings } from "../settings/schema";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -26,7 +26,7 @@ import { appendThreadEntry } from "../write/thread";
 import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 import { evaluate, type RuleContext, renderTemplate } from "./evaluate";
-import { isNegative, readsFlags, readsReputation, skippedSentence } from "./reputation";
+import { isNegative, readsFlags, readsGeography, readsReputation, setsTerms, skippedSentence } from "./reputation";
 import { MAX_DEPTH, MAX_RULES_PER_EVENT, type Rule, ruleDefinitionSchema } from "./schema";
 
 /**
@@ -113,6 +113,27 @@ export async function runRulesForEvent(
         }
         continue;
       }
+      // A rule saved before this check that reads where a customer lives or comes from sets no price or
+      // terms (ADR-018 §4): the action is skipped, and the owner reads why.
+      if (readsGeography(rule.if) && setsTerms(action)) {
+        report.errors.push(
+          `${rule.name}: geo_terms: skipped ${action.action === "transition" ? action.event : action.action}, because the rule reads where the customer lives or comes from`,
+        );
+        try {
+          await recordRuleSkipped(db, {
+            itemId: current.id,
+            ruleId: rule.id,
+            reason: `${rule.name.trim() ? `Rule '${rule.name.trim()}'` : "This rule"} wanted to set a price or terms, but rules that read where a customer lives or comes from cannot`,
+            causation,
+            now,
+          });
+        } catch (error) {
+          report.errors.push(
+            `${rule.name}: the skipped action could not be noted on the item: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        continue;
+      }
       try {
         switch (action.action) {
           case "transition": {
@@ -172,8 +193,13 @@ export async function runRulesForEvent(
         report.errors.push(`${rule.name}: ${message}`);
         // The promise waits for a person to price it (ADR-018 §3.2), or to book a time inside the
         // minimum notice, which no rule does (the founder, 23 September 2026): the rule asks one instead.
-        const guard = error instanceof WriteError ? error.details?.guard : undefined;
-        if (guard === "business_priced" || guard === "not_too_soon") {
+        const guard =
+          error instanceof WriteError
+            ? error.code === "outside_limits"
+              ? "outside_limits"
+              : error.details?.guard
+            : undefined;
+        if (guard === "business_priced" || guard === "not_too_soon" || guard === "outside_limits") {
           try {
             current = (
               await setFlags(db, ruleActor, {
@@ -182,7 +208,9 @@ export async function runRulesForEvent(
                 reason:
                   guard === "business_priced"
                     ? `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`
-                    : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
+                    : guard === "outside_limits"
+                      ? `${rule.name}: a person decides this, because it is outside the limits you set for automation`
+                      : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
                 causation,
               })
             ).item;
@@ -312,11 +340,25 @@ export async function buildRuleContext(
     person: who.person,
     customer: who.customer,
     agent: who.agent,
-    settings: settings as unknown as Record<string, unknown>,
+    settings: ruleSettings(settings),
     now,
     text,
     facts,
   };
+}
+
+/**
+ * The settings as a rule reads them: without the owner's limits for automation and their rewards
+ * (ADR-018 §4), which bind rules and which the owner's AI may not learn as numbers, and without any
+ * secret. What a rule reads, the AI reads too — by testing a condition on it (`test_rule`) or by a
+ * reply that renders it — so neither is in a rule's reach.
+ */
+export function ruleSettings(settings: Settings): Record<string, unknown> {
+  const doc = structuredClone(settings) as unknown as Record<string, Record<string, unknown> | undefined>;
+  for (const [section, key] of SECRET_SETTINGS_PATHS) delete doc[section]?.[key];
+  delete doc.negotiation?.ai;
+  delete doc.negotiation?.rewards;
+  return doc;
 }
 
 /**

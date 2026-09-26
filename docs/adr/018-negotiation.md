@@ -5,8 +5,17 @@ review; the founder decided the six open questions the same day (**Q1**–**Q6**
 marked where they bite), and the body follows his answers. **Q5 shipped first, on its own, as a fix
 to the code of that day** (§3.2). The customer's answers to a proposed time and a quote, by their
 assistant and by links in the business's email (§5, §6), shipped next, in a first build that
-[Amendment 1](#amendment-1-23-sep-2026-the-first-build-of-the-customers-answers) records; the rest
-is not built yet. A number marked \* is a *default*
+[Amendment 1](#amendment-1-23-sep-2026-the-first-build-of-the-customers-answers) records; offers
+themselves, with their deadlines, followed ([Amendment 2](#amendment-2-24-sep-2026-offers-and-their-deadlines)),
+then changes to a promise ([Amendment 3](#amendment-3-24-sep-2026-changes-to-what-was-agreed)),
+then returns, withdrawal and the confirm step before a priced request
+([Amendment 4](#amendment-4-25-sep-2026-returns-withdrawal-and-the-confirm-step)), then the owner's
+limits in code, a customer's own price and rewards
+([Amendment 5](#amendment-5-26-sep-2026-the-owners-limits-price-counters-and-rewards)), then the
+receipts of network rules version 6 (§8,
+[Amendment 6](#amendment-6-26-sep-2026-the-receipts-of-rules-version-6)), which ADR-017's Amendment 3
+proposes (rules version 5 went to ADR-017's Amendment 2, accepted on 26 September 2026); the rest is
+not built yet. A number marked \* is a *default*
 The founder may change without a new ADR. The legal points are research, not advice, and need
 a lawyer before they become Terms or public copy.
 
@@ -48,7 +57,7 @@ research is `protocols.md`, `patterns.md` and `law.md`, all of 23 September 2026
    change or decline. The business is bound by what it sends; the customer only through a confirm
    step echoing the summary it saw (CRD art. 8(2)). The business prices catalogue lines and
    fixed-price services (Q5), a fix that ships before the rest.
-7. **Haggling never counts (Q4, rules version 5).** An agreed change amends the promise; a refund
+7. **Haggling never counts (Q4, rules version 6).** An agreed change amends the promise; a refund
    paid on time is kept, a late one broken, and a lawful return refused is broken by verified
    report.
 8. **A good record may earn a better price (Q3)**, only through the owner's own reward rules:
@@ -64,7 +73,7 @@ The founder, 23 September 2026, answering the six questions put to him:
 | Q1 | Can customers haggle on price? | Off by default; the owner can switch it on (`negotiation.priceCounters`). Time, quantity and delivery can always be countered. While it is off, a price counter goes to a person as a message and is never refused (§4). | "Off by default, owner can switch on" |
 | Q2 | What may the owner's AI and rules agree to on their own, out of the box? | Time yes, money no: any free time within 7 days, a reschedule before the cutoff, returns inside the policy, recording withdrawals; never a discount, a custom line's price or a refund payment. The owner can change each one (§4, §10). | "Time yes, money no" |
 | Q3 | May a customer's good record get them a better price? | Yes: rewards the owner sets as rules, within the owner's limits, never worse than the list price, applied by the inbox and never by AI haggling, with the personalised-price notice in the business's voice whenever a price is personalised by automated decision (CRD art. 6(1)(ea)) (§4, §5). | "yes, thats the whole plan, reward good clients" |
-| Q4 | How do negotiated changes and returns count in the network? | All of it, as network rules version 5: `amended` receipts; `refund.honoured` and `refund.late` on the refund's own receipts; a refused lawful withdrawal broken by verified report (`order.refund_refused`); `trm` on promises (§8). | "All of it, one rules version" |
+| Q4 | How do negotiated changes and returns count in the network? | All of it, as one network rules version, version 6 (ADR-017 Amendment 3; version 5 went to Amendment 2): `amended` receipts; `refund.honoured` and `refund.late` on the refund's own receipts; a refused lawful withdrawal broken by verified report (`order.refund_refused`); `trm` on promises (§8). | "All of it, one rules version" |
 | Q5 | Does the business, not the customer's assistant, set the price? | Always the business, for catalogue lines and fixed-price services. It ships first, on its own, as a fix (§3.2). | "Always the business" |
 | Q6 | The code for the customer's assistant, in the business's emails | Only in its own short email, a day after the first contact, in the business's name; it rides on no other email (§12). | "Its own short email, a day later" |
 
@@ -544,7 +553,7 @@ unknown customer is one, unless a positive signal such as a VAT number says othe
              "assumedTransitDays": 7 }   // days ≥ 14, refundDays ≤ 14; restockingPct on `policy` returns only
 ```
 
-## 8. Reputation (ADR-017): rules version 5 (Q4)
+## 8. Reputation (ADR-017): rules version 6 (Q4)
 
 | Case | Business | Customer | Code |
 |---|---|---|---|
@@ -572,15 +581,17 @@ agent reports against the order's receipt, from the refusal to 90 days after it.
 
 **What the network must learn.** Receipt claims are frozen once they ship
 (`packages/spec/src/network/receipts.ts`): `typ` is booking or order and `knd` a closed enum, so a
-network on rules version 4 refuses an `amended` or a refund receipt (`422 bad_payload`). **Rules
-version 5** (Q4) adds `typ: "refund"`, `knd: "amended"`, the optional claims `trm` and `acc`, the
-three `refund.*` outcomes and the report `order.refund_refused`: new values and claims, never a
-renamed one. Like any rules change it is announced 15 days ahead (ADR-017 §11), as an amendment to
-ADR-017 (§12). The inbox sends these receipts only to a network whose `rules_version`, or announced
-next version, is 5 or later (the gate from 0008).
+network on rules before version 6 refuses an `amended` or a refund receipt (`422 bad_payload`).
+**Rules version 6** (Q4, ADR-017 Amendment 3) adds `typ: "refund"`, `knd: "amended"`, the optional
+claims `trm` and `acc`, the three `refund.*` outcomes and the report `order.refund_refused`: new
+values and claims, never a renamed one. As an amendment to ADR-017 (§12) it takes effect as version
+5 did (ADR-017 N1): the moment a network publishes it when no more than one business is a member
+there, otherwise after 15 days' notice (ADR-017 §11). The inbox sends these receipts only to a
+network whose `rules_version`, or announced next version, is 6 or later (the gate from 0008).
 
 Without a verified acknowledgement the network honours at most 3\* amendments per item, moving
-`due` by at most 90 days\* in all, so a business cannot postpone R30 on its own word. A customer
+`due`, and a booking's `end`, by at most 90 days\* either way, so a business cannot postpone R30 on
+its own word; and a change on its word alone never makes a customer's cancellation late. A customer
 neither earns nor loses standing by returning. Against wardrobing and serial returns the business
 has what the law gives it: the refund waits for the goods or proof of sending, a person deducts
 diminished value item by item, the product exceptions, disclosed return postage, and its own say on
@@ -655,7 +666,7 @@ SHA-256 and HMAC are WebCrypto in `packages/core`: one implementation.
 - `machine/outcomes.ts`: `PROMISE_STATES` (typed booking and order only) gains `refund:
   ["approved", "goods_received"]`; `codeOf` gains the `refund.*` codes; `withdraw` → the existing
   neutral cancel codes; change events → null. `packages/spec/src/network/receipts.ts` (`typ`,
-  `knd`, `OUTCOMES`, `trm`, `acc`) and its vectors gain rules version 5's values and claims (§8),
+  `knd`, `OUTCOMES`, `trm`, `acc`) and its vectors gain rules version 6's values and claims (§8),
   added and never renamed, since claims are frozen once they ship.
 - `receipts/capabilities.ts`: `due`/`end` from the latest accepted terms; `ref` stays the earliest.
 - `jobs/lifecycle.ts`: the new clocks. `rules/reputation.ts`: `NEGATIVE_EVENTS`,
@@ -669,7 +680,7 @@ SHA-256 and HMAC are WebCrypto in `packages/core`: one implementation.
   first contact, in the business's name, and never on an offer, confirmation, withdrawal or any
   other email. The code itself still names the network's host (`sdkey1_<host>_…`), so the emails
   about the order stay purely the business's.
-- ADR-017, as an amendment in force as rules version 5 (Q4): §3's table and "never counts" line;
+- ADR-017, as an amendment in force as rules version 6 (Q4; ADR-017 Amendment 3): §3's table and "never counts" line;
   §3.3 R30 reads the latest amendment; §3.4 the `order.refund_refused` report and its window; §14;
   and `booking.lateCancellation` applies only where no withdrawal right runs.
 
@@ -763,6 +774,535 @@ body in the points below, which await his review:
   verifies by answering the inbox's ping, which any host can do, only a person at the business
   switches a network on or lets it issue codes; the owner's AI and integration keys may switch one
   off, never on.
+
+## Amendment 2 (24 Sep 2026): offers and their deadlines
+
+**Status: proposed.** The offer of §1 and its six verbs are built, with the deadlines of §1 and §11,
+on the doors Amendment 1 shipped. It differs from the body, and from Amendment 1, in these points,
+which await review:
+
+- **The table** is `item_offers`, in migration `0014_offers` (0011–0013 were taken), with §1's
+  columns and one more, `form`: the kind the fingerprint names — `time` (a booking's time, either
+  side's), `quote`, `order` (an order's lines, total and delivery, either side's) and `request` (what a
+  quote request asks for: the thing, how many, for when; never its words or a budget). The
+  fingerprint stays Amendment 1's, `base64url(SHA-256(canonical {kind: form, …terms}))` with the field
+  names the item holds (`price`, a quote's `validThrough`), so a time or a quote fingerprints exactly
+  as the links already emailed. Each offer's terms are the projection of what the item holds after
+  the transition that makes it, so the row and the projection never differ. `slot_claims` gains
+  `offer_id` (a hold) and `items` gains `request_expires_at` (below). No draft is written yet: drafts
+  come with the owner's limits, and the unique index for them is already there.
+- **The payload's pointer** is `offer: {id, rev, by, round, status, validThrough, held?, binding?}`,
+  in the payload's own camelCase; `status` is `open` or `accepted`, `held` marks a time held for the
+  customer, `binding: false` one we may still withdraw.
+- **Rounds.** The customer's request is round 1, and each answer that is not a yes is one more;
+  replacing one's own offer keeps its round. `negotiation.maxRounds` (3\*) bounds automation (the
+  owner's AI, a rule), which past it is refused (`guard_failed`, `round_left`, `draft_for_owner`)
+  until drafts exist, and a customer, whose next suggestion goes to a person as their message
+  (`202`, `passed_on`, `waiting_on: "us"` as the details door already says); a person at the business
+  is never bounded.
+- **The doors** are Amendment 1's verbs, plus: `offer_id` on `accept_offer` and `decline_offer` (an
+  answer to an offer since replaced is `409 offer_changed`), their aliases
+  `/v1/items/{id}/offers/{offer}/accept` and `/decline`, `reason_code` on a decline (kept on the
+  declined offer), and `POST /v1/items/{id}/offers` (`make_offer`) with only what the customer would
+  change: a time, quantities or a delivery date for changes to an order, how many or for when for a
+  quote. A price of their own (`total_price`, `unit_price`), `party_size`, or anything else that is
+  not a counter the business could take is kept as their message for a person (Q1, off out of the
+  box: `GET /v1/business` says `price_negotiable: false`, and there is no switch yet). The confirm
+  step on a customer's own offer is not built. The owner has `list_offers` and `make_offer`; there is
+  nothing for `send_offer_draft` to send yet.
+- **Validity (§1).** A time a person proposes holds until its start less the
+  minimum notice, the deadline its email has always shown; what the owner's AI or a rule proposes
+  holds at most `negotiation.offerValidHours` (48\*); a quote or changes to an order hold until the
+  date they give, else `offerValidHours` (a quote's `validThrough` is no longer required). A proposed
+  time held before offers had a table keeps the deadline its email gave.
+- **The request's own clock** is `items.request_expires_at`: a booking `booking.autoExpireHours` on
+  (now read) and never later than its start, an order or a quote request
+  `negotiation.counterValidHours` on, wound again whenever the request goes back to the business or
+  the business asks the customer something. A request made before this migration has none and never
+  lapses on its own, so an upgraded instance does not close and email every old request at once;
+  neither does one the business wrote down itself (the owner, a shop's system, an integration key),
+  since the customer did not send it. Either gets a clock only once the customer next acts (answers a
+  question, suggests another time): the business's own question never closes an order a shop already
+  took. While the customer's request stays open, its offer's `valid_through` and the payload's
+  pointer follow the clock.
+- **Withdrawing** our open offer — `retract`, and Amendment 1's `request_info` from `proposed` —
+  closes it (`retracted`) and opens the customer's request again as it stands on the item, a new
+  offer of theirs: the business's `confirm` or `accept` always takes an open offer of the customer's.
+  `retract` needs the offer to be non-binding, which today means `negotiation.binding` off: every
+  offer then says it is subject to our confirmation.
+- **Orders** gain `proposed` and `expired` (terminal, before any promise). `propose` (the owner, staff,
+  their AI, a rule) carries the lines as they would be, an optional delivery and validity, and the
+  inbox works out the total; the owner's AI and rules may change quantities and delivery, never a
+  price (each line a catalogue product at its catalogue price). The customer accepts (the order is
+  accepted on the changes, with its receipt), declines (`cancel`, as for a proposed time), or answers
+  with quantities or a date (`counter`, back to `received`); a person records a yes given by phone
+  (`accept` from `proposed`, `byPerson`). Links in the email: **Accept** and **Decline**; the change
+  is a reply or the assistant's `make_offer`.
+- **Quotes** gain the customer's `counter` (how many, for when; back to `received`, the quote gone)
+  and `retract`. The owner's `accept` of a priced counter is not built: price counters are off.
+- **Late, never refused (§1).** A business `confirm` of a booking, or `accept` of an order, whose
+  request's clock had run out before the sweep reached it becomes our `propose` on the same terms,
+  which the customer accepts; the answer says `converted: "request_lapsed"`.
+- **Expiry** is checked in the write that would accept (`410 offer_expired`, in the customer's words
+  for a time, a quote or changes) and swept every quarter hour as the `system` actor
+  (`request_lapsed`, `offer_lapsed`), which tells the customer in the business's words: we could not
+  answer in time, we did not hear back, or what we proposed lapsed and until when it held. A rule may
+  still `expire` a request as before, but what we proposed (a time, a quote) only once it lapsed, and
+  the customer is now told then too. A lapse found more than 7 days after its date (an old offer from
+  before this table) closes without an email.
+- **Automation is held to what we said.** What we proposed binds us until it lapses, so the owner's
+  AI and rules never take it back: no `retract`, `request_info`, `decline`, `cancel` or `expire` of an
+  open binding offer before its date (`guard_failed`, `offer_binding`, `draft_for_owner`); recording
+  the customer's own no (`record_cancel`) stays theirs. They never offer a customer a dearer price
+  than the business last offered them in the negotiation, a price a person gave included (§1,
+  `worse_than_before`); never accept a customer's answer holding a price that is not the catalogue's;
+  and a rule never proposes a time without a price of its own on a request the customer priced (Q5).
+  What they send with a later date than `offerValidHours` carries the capped date, so the customer
+  reads the date it holds until. A rule that reads a customer's standing proposes and quotes nothing
+  until offers are checked against the customer's own terms (§4, positive first). The owner's AI
+  records no payment, failed payment, charge-back or refund, and names no payment link (Q2).
+- **Answers are pinned.** A decline or a suggestion naming an offer (`offer_id`) is written on the
+  item as it was checked, so it never lands on an offer made meanwhile (`409 offer_changed`), as an
+  accept already was. A request never arrives holding the business's answer (`offer`, `proposed`,
+  `quote` are dropped at create), and a customer's words alone in `make_offer` go to a person as their
+  message. The customer's side never reads the round.
+- **Items from before** get their offer lazily, with an id every writer agrees on (`lgo_<item>`), in
+  the batch of their next transition; the sweep writes it first for proposed bookings and quoted
+  requests, a batch a run, so they lapse when their emails said. Nothing is sent again.
+- **Holds (§3.1)** are built as written: `booking.holdOnPropose` (now read) and `booking.maxHolds`
+  (2\*), counted per party or per signed assistant.
+- **Settings**: `negotiation.offerValidHours`, `counterValidHours`, `maxRounds` and `binding`, which
+  only the owner in person changes; `priceCounters`, `perCustomer`, `changes`, `rewards` and `ai.*`
+  come with what reads them. Erasure rewrites an offer's note, the words it was shown with, and what
+  the customer named, keeping its terms, amounts and fingerprint; a customer's export lists the
+  offers; a full webhook carries `data.offer` for the offer its event made or closed.
+
+## Amendment 3 (24 Sep 2026): changes to what was agreed
+
+**Status: proposed.** Changes to a confirmed booking or an accepted order (§3.1, §3.2) are built on
+Amendment 2's offers. They differ from the body in these points, which await review:
+
+- **The change is an offer** of `kind: change` and `form: change`: its terms are the booking (time,
+  party, price) or the order (lines, total, delivery) as it would be, a full snapshot, and the
+  fingerprint names `change`, so a yes to a change is never a yes to a time or an order that
+  happened to hold the same terms. Its parent is the open change it answers, else the offer both
+  sides last agreed; a promise from before offers had a table gets that agreed offer, written from
+  what it holds, in the same batch. While one is open the payload carries it as `change: {by, …}`
+  and points `offer` at it; accepted, it becomes the promise; otherwise the pointer goes back to
+  what was agreed. No migration: the tables of Amendment 2 hold it.
+- **Five events** on `confirmed` bookings and on orders from `accepted` to `fulfilling`, each leaving
+  the item where it was: `propose_change` (either side; a new one answers the other side's open
+  change, `countered`, or replaces the asker's own, `superseded`), `accept_change` and
+  `decline_change` (the side it was asked of), `retract_change` (the asker; the business only when
+  `negotiation.binding` is off) and `expire_change` (the system, at its date). A customer who asks
+  again before we answered is one round further, so asking over and over reaches a person after
+  `negotiation.maxRounds`. A promise that ends another way — cancelled, completed, fulfilled,
+  charged back — ends its open change with it (declined, withdrawn, or lapsed when the system ends
+  it), and lets its hold go. A person at the business records a customer's yes to our own change,
+  given by phone or in person, with `accept_change` and an internal note (§3.1's
+  `record_acceptance`, as `confirm` from `proposed` does for a time); the owner's AI cannot.
+- **What each side may ask.** The customer: another start for a booking, one we would offer (open,
+  on the grid, free but for its own places), keeping its length; other quantities of an order's
+  lines (by index, 0 drops one) or another delivery date. Never a price or a party size: those, and
+  a note alone, go to a person as their message (`202`, `passed_on`: "what we agreed stands"). The
+  business: another start and end (its length by default) and a price of the owner's; an order's
+  lines and delivery; a date to answer by. A change that changes nothing is refused as one.
+- **Deadlines.** The customer's lapses `negotiation.counterValidHours` on, and before either start;
+  ours at the date it gives, else before either start less the minimum notice (a booking) or
+  `negotiation.offerValidHours` on (an order); what automation asks, at most `offerValidHours`. A
+  deadline is checked in the write that would accept it (`410 offer_expired`, "what we agreed
+  stands"), and the quarter-hour sweep closes what lapsed (`expire_change`) and tells the customer.
+  A customer's change we take after it lapsed goes back to them as our change on the same terms
+  (`converted: "change_lapsed"`): late, never refused.
+- **Holds and places.** A change we ask for to a booking is held as a proposed time is
+  (`booking.holdOnPropose`, `booking.maxHolds`), counting the booking's own places as taken, since
+  they stay its own until the change is accepted; a move onto its own time that capacity cannot hold
+  twice goes out unheld. Accepting releases every place of the item and claims the new time in the
+  same batch.
+- **Limits.** At most `negotiation.changes.maxPerItem` (3\*, at most 3) accepted changes to a
+  promise, and none moving what it is due, or when a booking ends, more than 90 days from what was
+  first agreed, either way (`AMENDMENT_LIMITS` in core, until rules version 6 puts them in the spec). An order agreed with
+  no delivery date was due `orders.dueDays` after it was agreed, as its receipts say, and the 90 days
+  count from then. Every accepted
+  change counts: §8's "unverified" (a receipt no acknowledgement answers) needs the `amended`
+  receipts. Past either, the customer's change goes to a person, and the owner is refused
+  (`changes_left`) with the way to do it: the customer's own cancellation and a new booking or order.
+- **Where a network holds the promise, nothing changes yet.** A network on rules before version 6
+  holds a promise to the date it was sent with, and would count a booking moved later as a promise
+  never closed; and until this inbox sends rules version 6's `amended` receipts, even a network on 6
+  would not see the change. So a change is recorded only when no receipt of the item was published to a
+  network and none that takes receipts is switched on for it (a customer who stopped networks aside),
+  or the promise carries no due date (the business wrote it down itself: claims v1), or it is a test
+  (`amendments_live`). Otherwise the customer's change goes to a person, and the owner is told to
+  record the customer's cancellation and take a new booking. This is stricter than "rules version 6
+  in force" and loosens when the receipts ship. A promise once changed is never sent to a network
+  at all — not its promise, its acknowledgement or its outcome, and not to a network switched on
+  after the change, whose backfill would otherwise send the date first agreed and count the
+  promise unclosed (ADR-017 R30): its receipts stay the business's own, `withheld` where a
+  publication was queued.
+- **No `amended` receipt yet**, and no `receipts.offer_id`: both come with rules version 6 (§8). The
+  promise's receipts keep the due date first agreed, and an outcome copies it, as today; with no
+  network in the way that is a date nobody else holds.
+- **Orders and money.** Before payment is asked for, a change may change an order's total. Once it
+  was asked for or made (`awaiting_payment`, `payment_failed`, `paid`, or a payment recorded), a
+  change keeps the total: a customer's that does not goes to a person, and ours is refused
+  (`total_fixed`: a second order for more, a refund for less). That holds at acceptance too: a change
+  asked for before payment and accepted after it is not made. The customer's yes to ours, then, or
+  once a network holds the promise (above), goes to a person as their message (`202`, `passed_on`,
+  by their assistant or from the email's page), never refused; what was agreed stands until a
+  person answers. §3.2's "a new total updates the
+  payment request" and the linked `price_adjustment` refund come with refunds.
+- **Automation (Q2).** `negotiation.ai.mayAcceptChanges` (on\*) lets the owner's AI and rules accept
+  a customer's change to a free time, before `negotiation.changes.customerCutoffMin` (empty\* = the
+  cancellation window) and, for an order, only at the catalogue's prices; `mayProposeChanges`
+  (off\*) lets them ask for one, moving the time or the quantities and delivery, never a price (no
+  line dearer than was agreed, so a price a person gave is not put back up to the catalogue's) or a
+  longer booking. While the cancellation window is also the cutoff, the owner's AI may lengthen it
+  but never shorten it, since it is then a limit on the AI. Otherwise `guard_failed` (`change_allowed`, `owner_money` or `business_priced`) with
+  `draft_for_owner`. Both are `negotiation` settings, so only the owner in person changes them; the
+  AI still reads them in `get_settings` (withholding `negotiation.ai` comes with the money limits).
+  Integration keys act as the owner, as before.
+- **The confirm step.** Accepting our change takes `terms_sha` like any offer; `obligation_to_pay`,
+  and the page's "Order with obligation to pay", only when it asks more of the customer than what
+  was agreed; otherwise the button is "Confirm the change". A customer's own change carries no
+  confirm step yet, as Amendment 2 says of their offers.
+- **Doors.** On a promise, `make_offer` and `suggest_time` ask for a change; `accept_offer` and
+  `decline_offer` answer ours (`offer.kind: change`); `decline_offer` on their own takes it back. The
+  status gains `requested_change` (their change while we have not answered). The owner's
+  `make_offer` asks for a change on a promise. Our change's email carries **Accept the change** and
+  **Keep it as it is**; every email about a confirmed booking with no change of ours open carries
+  **Change the time**, which opens the free times (its own places free to it, its own time left out)
+  and asks for one; a link is bound to the booking as it stood, so any change retires the links sent
+  before. A customer changes an order by reply or through their assistant.
+- **Words.** "Can we move your booking … from … to …? If that does not suit you, your booking stays as
+  it is."; "We have received your request to move … Until we confirm, your booking stays for …";
+  "Done: your booking … is now for …"; "We cannot move … to …, so your booking stays for …"; "Our
+  suggestion to move … has lapsed"; in Portuguese alike ("Podemos mudar a sua marcação …?", "Feito:
+  … passa para …", "… mantém-se para …"). Owners are told who asked for or answered a change.
+- **Reputation.** No change counts: a change event records no outcome. `NEGATIVE_EVENTS` gains
+  `decline_change`, `retract_change` and `expire_change`, and `OFFER_EVENTS` `propose_change`, so a
+  rule that reads a standing may take a customer's change but never refuse one or ask for one.
+
+## Amendment 4 (25 Sep 2026): returns, withdrawal and the confirm step
+
+**Status: proposed.** Returns and refunds (§3.4), the right of withdrawal and its function (§7, CRD
+art. 11a), the business cancelling a paid order (§3.2), the return policy in the profile (§6) and the
+confirm step before a priced request binds a consumer (§5) are built on Amendments 2 and 3. They
+differ from the body in these points, which await review:
+
+- **The migration** is `0015_returns`: `products.withdrawal` and `services.withdrawal` (text, default
+  `standard`), and an index on `items.linked_item_id`, by which an order or a booking finds its
+  returns. The flags are public like the rest of the catalogue row (they are shown before the order);
+  the owner or staff set them, never the owner's AI or another system's key, and feeds never write
+  them. `floor_minor` and `negotiable` come with the owner's limits.
+- **Settings.** `returns` (`days` ≥ 14\*, `postage`, `refundDays` ≤ 14\*, `respondHours` 48\*,
+  `assumedTransitDays` 7\*) and `commerce` (`customers`: `both`\*, `consumers` or `businesses`; `legal`:
+  `legalName`, `address`, `country`, `phone`, `email`, `vatId`, `complaintsUrl`) are the owner's in
+  person, like `negotiation`, as is the new `negotiation.ai.mayAuthorizeReturnsInPolicy` (on\*).
+  `country` (two letters) picks the law: Portugal's, the UK's (GB), else the EU's. `refundOn`,
+  `collect`, `restockingPct` and `offerCredit` wait for settlements.
+- **A return is a `refund` item** linked to its order or booking, made in the batch of the transition
+  that makes it, as the same customer's (its party, access token, identity columns and
+  presentations), with its own `create` event caused by that transition. Its payload keeps `amount`
+  (what is owed) and gains `kind` (`withdrawal`, `faulty`, `policy`, `cancellation`;
+  `price_adjustment` is reserved, since a change that lowers a paid total is still refused),
+  `reasonCode`, `lines`, `wants`, `noticeAt`, `goodsBack`, `returnBy`, `instructions`, `evidenceAt`,
+  `refundDue`, `disputed`, `paymentRef` and `paidAmount`; `reason` becomes optional, and a refund
+  written before reads as it did. States: `requested`, `approved`, `goods_received`, `refunded`,
+  `rejected`, `cancelled`. `approve` (the owners; automation as below) sets whether goods come back,
+  by when (14 days\*) and how; `reject` is a person's, with the reason the customer reads, and has no
+  way past a withdrawal, nor past any return the customer asked for while they could still withdraw,
+  whatever reason they gave (`not_withdrawal`); `goods_back` (the owner, staff, a connector) fixes when
+  the refund is due, and only where goods were to come back (`goods_expected`), so it never moves the
+  date of a refund that had nothing to wait for; `dispute_goods` is a person's, its note the
+  customer's to read, and the refund waits; `refund` (a connector, the owner, staff) pays at least
+  what is owed and at most what is left of what was paid; the customer's `cancel` (of a return of
+  goods only, which they then keep: money owed with nothing to send back is not theirs to drop by a
+  click) and a person's `record_cancel` (never the owner's AI's) drop it.
+- **Settlements are not built.** `offer_resolution` (a partial refund, an exchange, credit) and every
+  deduction need the customer's yes to an offer of `kind: resolution`; until they exist, a refund of
+  less than what is owed is refused (`refund_amount`) and the business settles in words and in full.
+- **What makes a return.** Before the goods went out, a withdrawal (`withdraw`, `record_withdrawal`)
+  ends the order, neutrally, and what was paid is owed back within 14 days of the notice
+  (`withdrawal`, `approved`, nothing to come back); nothing paid, no refund item. After it the order
+  stays `fulfilled` (it was kept) and the withdrawal is a return, `approved`, the goods to come back
+  within 14 days of the notice and the refund due at the later of the notice's 14 days and three days\*
+  after they arrive. The customer's `request_return` (and the business's `open_return`, for one asked
+  for by phone) is `faulty` for faulty, not as described or the wrong item, `withdrawal` (agreed at
+  once) for anything else while the period runs, else `policy`; one return of an order is open at a
+  time (`no_open_return`). The business's `cancel` of a paid order is a person's: `order.not_fulfilled`,
+  and a `cancellation` refund due in `returns.refundDays`; so is its `cancel_by_business` of a paid
+  booking (`booking.cancelled_by_business`), whose email says by when. `record_cancel` (or `record_cancel_late`) of a
+  paid order or a paid booking, asked while the customer could still withdraw, is their withdrawal
+  whatever the business calls it: it is recorded as `record_withdrawal`, dated as they asked, never
+  late, owed back within 14 days, and the owner's AI makes it only from their message. Otherwise
+  `record_cancel` of a paid order is the customer's (`order.cancelled_by_customer`) and their refund
+  waits for the business (`policy`, `requested`). The same goods never come back twice: a return takes
+  only what earlier returns (neither refused nor dropped) left with the customer, owes at most what is
+  left of what was paid (`nothing_to_return` when nothing is), and no refund records more than that.
+  A booking gains `record_payment` (a connector, the owner, staff), which makes it a paid contract
+  (payments under another reference add up, a deposit and then the rest; the last one told again
+  counts once); `withdraw` and `record_withdrawal` then cancel it, never late
+  (`booking.cancelled_by_customer`), and refund what was paid.
+- **The right, as built.** A consumer (unless `commerce.customers` is `businesses`), nothing excepted,
+  a booking paid for and not begun, within the period: goods from delivery (`deliveredAt`, set by
+  `fulfil` or `record_delivery`; else `fulfil` plus `assumedTransitDays`) and before it, a service from
+  the booking. Every item counts as a contract made at a distance, erring toward the customer: a
+  business that also sells face to face records those sales elsewhere or flags them. The period is
+  counted by Regulation 1182/71 in the business's zone, its end moved off weekends and Portugal's
+  national holidays or England and Wales's bank holidays (Easter computed); elsewhere weekends only,
+  which can only end a period later than the law. The 12 months more for a customer never told are
+  in the pure function but not applied: every confirmation now tells them. A booking is withdrawn from
+  before it starts; the pro rata for a service begun at the customer's request comes with settlements.
+  A withdrawal the business records is judged at the moment the customer said it — their message on
+  the item (`entryId`), which the owner's AI must name, or the time a person types — and so is a return
+  it opens for them (`open_return` with `entry_id` or `asked_at`).
+- **The withdrawal function.** Every email that confirms such a contract (accepted, paid, fulfilled,
+  confirmed, a change accepted) carries the period and a **Withdraw from contract here** link while
+  the right runs, living until the period ends and a day (60 days\* while the goods are on their way);
+  the first confirmation (accepted, paid) also carries the model form of Annex I(B) (DL 24/2014's in
+  Portuguese, the UK's model cancellation form in English under GB law) and who the business is. An
+  excepted contract's confirmation says why there is none. The page shows the statement — name,
+  contract, email for the copy — and sends it on **Confirm withdrawal**; past the right it says so and
+  still sends it, as a return under the policy once the goods reached them, else as the customer's
+  message. The assistant's `withdraw_from_contract` is the same two steps: `409 confirm_withdrawal`
+  with the statement, then the withdrawal with `confirm_withdrawal: true`; never refused. The
+  customer's `cancel_item` on something paid for is their withdrawal while the right runs; before a
+  payment it stays the cancel it always was, which ends the same way and owes nothing. A link page of
+  an email sent before this build does not yet offer the withdrawal link.
+- **The acknowledgement** goes at once, from the withdrawal's own email (the order's, or the
+  return's), with the statement as sent, the refund's date or the goods to send back, and who pays
+  for that. The PT 24-hour check and the separate alert are not built: nothing delays it, and the item
+  shows when an email was not sent. The owner is told once, three days\* before a refund falls due,
+  and in Portugal from the tenth day after a withdrawal.
+- **Automation (Q2).** The owner's AI and rules may approve a return while
+  `mayAuthorizeReturnsInPolicy` is on: faulty goods, or inside the owner's policy (`returns.days`,
+  nothing excepted, whoever the customer), and always with the goods coming back
+  (`return_allowed`, `return_outside_policy`); a refund with nothing sent back is a payment
+  (`owner_money`). Refusing, disputing, dropping a return for the customer, cancelling a paid order,
+  recording a payment or a refund, and the return settings are never theirs. `maxRefundMinor` is not
+  built.
+- **The confirm step (C17).** A consumer's `create_booking` or `create_order` that carries a price of
+  the business's, above zero, writes nothing without `terms_sha`: `409 confirm_terms` with the summary
+  (the thing and the time or the lines, the total, the trader's name and address, the right of
+  withdrawal or the exception, the express request for a service starting within the period, the
+  obligation to pay), `terms_sha` (the request's own fingerprint, `form` `time` or `order`) and
+  `obligation_to_pay: true`; on MCP an ordinary result with the question. No idempotency row is kept,
+  so the confirmed retry is a first request, and the request then binds the customer (`binding` on
+  its offer). A booking's fingerprint names the service (`itemOffered`), so a yes to one service never
+  books another at the same price and time; offers compare it only when both sides name it. A request holding no price of the business's yet, a free one, a business customer's, and
+  one the business writes down itself need none. Counters, changes and requests by email or from
+  before this build are taken as today: converting an unconfirmed request into the business's own
+  offer is not built.
+- **Doors.** `POST /v1/items/{id}/withdraw` (`withdraw_from_contract`), `POST /v1/items/{id}/returns`
+  (`request_return`, `201`), and for the owner `POST /v1/owner/items/{id}/returns` (`open_return`).
+  Both customer doors are in the `negotiate` rate class. The status door gains `withdrawal`
+  (`available`, `until`, `label`, and `why`, `reason` when not) and `refunds` (each return's id,
+  reference, state and sentence); `next` gains `withdraw_from_contract` and `request_return`.
+  `GET /v1/business` gains `refund` in `item_types`, `return_policy` (schema.org
+  `MerchantReturnPolicy`) and `trader`; the network's directory profile is unchanged.
+- **Words.** EN and PT, and the UK's for English under GB law (cancel, a cancellation). A customer
+  reads "your return", never "refund request"; every sentence is the business's.
+- **Reputation.** No receipt for a refund yet: `refund.honoured`, `refund.late`,
+  `order.refund_refused` and the refund's own promise receipt come with rules version 6. A withdrawal
+  records the neutral cancellation codes that exist; a return after fulfilment records nothing on the
+  order. A charge-back while a return is open, or after a refund paid past its date, records nothing
+  against the customer. Returns and refunds are left out of the business's own history of a customer.
+
+## Amendment 5 (26 Sep 2026): the owner's limits, price counters and rewards
+
+**Status: proposed.** The owner's limits (§4), a customer's own price (Q1), rewards (Q3) and the
+personalised-price notice (§5) are built on Amendments 2 to 4. They differ from the body in these
+points, which await review:
+
+- **The migration** is `0016_limits`: the owner's floors in a table of their own, `price_floors`
+  (`kind` `product` or `service`, `ref_id`, `floor_minor`), not a catalogue column, since the public
+  catalogue and the owner's AI read catalogue rows whole; `products.negotiable` and
+  `services.negotiable` (1\*); the drafts table (below); and `money:write` given to every live
+  integration key that holds `inbox:write` or everything, so today's integrations keep working.
+- **Who is automation.** The owner's AI (an OAuth app, or anything on the owner's MCP, even with a
+  full owner key), a rule, and an integration key without the new scope `money:write` ("record
+  payments and refunds, and price offers and quotes, as your shop or till does", offered to no AI
+  app). Without it a key records no payment, failed payment, charge-back or refund and gives no payment
+  link (`403 not_allowed`, `money_recorded`). The owner in person is never held.
+- **The limits built** are `below_floor`, `above_list`, `counter_priced`, `custom_line`, `time_moved`,
+  `delivery_later`, `worse_than_before`, `rounds_exhausted`, `change_not_allowed` and
+  `over_approval_value`, judged in the write for every offer automation makes (a time, changes to an
+  order, a quote, a change to what was agreed) and every acceptance of a customer's price, on each
+  catalogue line priced for this customer. The effective floor is max(`floor_minor`, P × (1 −
+  `maxDiscountPct`/100)), rounded up, and never above P itself: a list price the owner lowered under
+  its floor may still be offered. Refunds and returns keep Amendment 4's guards (`refund_over_max`,
+  `owner_money`, `return_outside_policy`). **Not built:** `deposit_changed` (no deposit terms exist),
+  and `legal_identity_missing`, which would draft every priced offer automation makes for an owner who
+  has not filled `commerce.legal` in yet — out of the box, time proposals included — against Q2;
+  still to decide, with an owner-app prompt to fill it in as the likely alternative.
+- **`amount_named`**, new: words from automation name only money the business offered (DL 7/2004
+  art. 32(1)). A reply from the owner's AI or a key without `money:write` naming an amount that neither
+  the item's business-side terms, nor the catalogue, holds — the customer's own stated or countered
+  price included — or something off a price, is kept as an internal note, the item marked for a person
+  (`202`, `held`); a transition note that does so makes an offer a draft and refuses anything else
+  (`422 outside_limits`). An amount is a number beside a currency, so times and party sizes never are.
+  A rule's words are the owner's own and are not judged.
+- **Drafts** live in their own table, `offer_drafts` (one per item, the latest, with the
+  transition's input), not as `item_offers` rows of status `draft`: a draft is no offer anyone saw, so
+  it takes no rev or round. Making one is the self-transition `draft_offer` (`needsHuman`, no word to
+  the customer, no rule run), answered `202 drafted {id, breaches}`; the owner is emailed once an hour
+  per item at most. It is stale once anything but a flag or another draft moved the item. Only the owner
+  in person sends it (`POST …/offers/draft/send`; there is no MCP tool) or drops it. Past the last round
+  and worse than before are now drafts, not the refusals `round_left` and `worse_than_before` of
+  Amendment 2; a customer past the last round is still passed to a person.
+- **Reading the limits.** `get_settings` leaves out `negotiation.ai` and `negotiation.rewards` for
+  anyone but the owner in person and names them in `withheld`; a write without them keeps them.
+  Floors are read and written only at `GET`/`PUT /v1/owner/catalogue/floors`, by the owner in person,
+  never above the price. Errors, drafts and sentences carry codes, never a number.
+- **Price counters (Q1).** `negotiation.priceCounters` (off\*); `GET /v1/business` says
+  `price_negotiable`. On, `total_price` (a proposed time) and `unit_price` (the lines of changes to an
+  order) are the customer's counter, in the business's currency; automation takes one at or above the
+  floor, never answers a price with a price. It goes to a person as the customer's message, never
+  refused, when off, on a quote, on what is not `negotiable`, past `perCustomer.open` (3\*) open
+  negotiations on price or `perCustomer.priceCounters` (3\*) prices for the same product or service in
+  `perCustomer.days` (30\*), and past the last round. The email page (`/c/`) offers times only; a price
+  of their own comes through their assistant or a reply.
+- **Rewards (Q3).** `negotiation.rewards`, keyed by name (at most 20): `if` (a rule condition reading
+  only `customer_known`, `customer.*`, `person_trusted`, `person_tier_on` and `person.*`, with `all` and
+  `any`; `not`, anything else and an empty group are refused when saved), `pct` 1–50, `only` (ids, null
+  for all), `says` (≤ 200, checked against the words a customer never reads from the business). P =
+  min(list, max(⌊list × (1 − pct/100)⌋, floor)); the best match applies. The inbox prices a request at
+  P when it is created (the door loads the customer's standing) and a catalogue line automation offers
+  at the list price is offered at P; a price a person types is theirs, with no notice. A rewarded line
+  keeps `listPrice`, the payload `personalised {listPrice, says?}`; the notice ("Your price: … (our
+  price …). We personalised this price for you by automated decision-making.") is in the confirm
+  summary, `offer.human`, the status sentence, the emails, and `disclosures: ["personalised_price"]`.
+  Rewards are not applied to quotes or custom lines.
+- **Rules.** A rule that reads a standing still offers nothing of its own (stricter than
+  `noWorseThanDefault`, which is not built); one that reads an address, a country, a language or a
+  nationality may not set a price or terms (`422 geo_terms` when saved; skipped and noted when an
+  older one runs). `offer_resolution` joins `NEGATIVE_EVENTS` when settlements exist.
+- **The owner app** gains the limits and price counters in Settings, each product's and service's
+  lowest price and `negotiable`, and the draft on the item, to send as it is or drop. Rewards are
+  written through the settings document for now.
+- **Hardened after an independent review**, each with a test that failed first:
+  - An acceptance by automation above the list price is `above_list` (an assistant that mistook
+    cents for euros), and a customer's own price for what a person priced — a service priced `from`
+    or by quote, a longer time — is `custom_line`: no floor judges it. A price the inbox itself put on
+    a rewarded request stays acceptable if the owner changes the rewards before it is confirmed.
+  - A time automation offers must be one we would offer (open, not closed, on the grid): else
+    `time_moved`, as §4's table says.
+  - The notice goes with every price automation puts below the list, named or kept (a customer's
+    price taken by proposing another time at it), and with a draft the owner sends as it is.
+  - `amount_named` reads amounts glued to or spaced from their currency, spelt out in words (EN, PT),
+    per cent in words, and half price or free of charge; the names of lines automation writes; and a
+    catalogue price only beside the name of what it prices ("€18.50 and it's yours" is held).
+  - The owner's AI, and a key without `money:write`, may not write, change or switch on a rule whose
+    words name an amount or a discount (a rule's words go out unjudged, as the owner's), nor a pricing
+    rule; nor raise or lift `orders.maxValueWithoutApprovalMinor` (lowering it is fine).
+  - Rules no longer read `negotiation.ai`, `negotiation.rewards` or any secret from the settings:
+    `test_rule` was an oracle for each, a reply template a recital.
+  - A reward whose condition a customer with no record meets ("no no-shows", "not trusted"), or that
+    reads `customer.match` or `customer.open_bookings`, is refused when saved and never applied: a
+    reward only ever lifts, so it is never a price for everyone but those with something against them.
+  - Only the owner in person drops a draft, as only they send one.
+  - `maxRefundMinor` bounds what automation agrees with nothing to send back for the whole order,
+    counting the order's other refunds agreed so: a claim split line by line never goes past it.
+
+## Amendment 6 (26 Sep 2026): the receipts of rules version 6
+
+**Status: proposed.** The inbox side of §8 (Q4) is built: agreed changes and refunds are signed
+receipts, sent to the networks that read them. The rules themselves are ADR-017's Amendment 3
+(accepted in substance in Q4), rules version 6 (`"0.1.3"`): version 5 went to ADR-017's Amendment 2,
+accepted and in force on 26 Sep 2026, and on the same day it was decided that these receipts come as
+version 6, taking effect as version 5 did (ADR-017 N1): the moment a network publishes it when no
+more than one business is a member there, otherwise at 00:00 UTC on the sixteenth day after, at
+least 15 days' notice. It was published, and in force on our network, on 29 September 2026. A network at version 5
+is sent exactly what it was sent before: nothing below waits on it or reaches it until it takes 6. This differs from the body, and from Amendments 3 and 4, in these points, which
+await review:
+
+- **The migration** is `0017_amended_receipts`: `receipts.offer_id` ('' for every receipt but an
+  amendment), and the unique index swapped to `(item_id, kind, outcome, offer_id)` in the same batch,
+  as 0008 swapped it; every receipt issued before keeps its row, unchanged. The receipt job's dedupe
+  key for an amendment is `receipt:<item>:amended:<offer>`.
+- **An amendment** (`knd: amended`) is issued for each change both sides accepted (`accept_change`,
+  by either door, a yes a person recorded included), dated by the acceptance: `ref` the item's
+  earliest promise, `due` and `end` the new times (an order changed without a delivery date keeps the
+  `due` the change before it set, else its promise's), `trm` the change offer's `terms_sha` bound
+  under that offer's own key (below), `acc` whoever said yes, and no `per`. Its `iat` is the moment of
+  acceptance, never before a change agreed earlier; two agreed in the same second get nonces in the
+  order they were agreed, so a network's latest (greatest `iat`, then nonce) is the one agreed last. None for a promise the business
+  wrote down itself (claims v1), one made before outcomes were recorded, or a test. An outcome issues
+  first any agreed change that has no receipt yet, as it issues a missing promise, and carries the
+  latest amendment's `due` and `end`; the promise's own receipts keep the dates they were signed with.
+  A promise signed only after a change (its job failed, or it waited for a first contact's answer)
+  still names the dates and `trm` of the offer that made it, never the change's.
+- **The limits** (3 changes, 90 days) are measured from the `due`, and a booking's `end`, of the
+  item's earliest promise receipt, the date every network holding it measures from, and only without one from the terms first
+  agreed: raising `orders.dueDays` after an order was accepted with no date must not buy it more room
+  than a network will honour.
+- **Where a network holds the promise** (this replaces Amendment 3's "nothing changes yet" and "a
+  promise once changed is never sent to a network"): a change is recorded only when every network that
+  holds the promise (a publication of the item's receipts published or queued) or will be sent it (one
+  switched on to take receipts, unless the customer stopped the networks) applies rules version 6 —
+  in force, since announced is not enough: until then it holds the business to the date first agreed.
+  With no network in the way, at once, as before. The receipts of a changed promise go only to a
+  network that applies version 6, and only once each agreed change has its receipt: its promise, each
+  amendment, then its outcome. Anywhere else they wait, counted as held, never withheld, and a network
+  switched on later gets them from its backfill once it applies version 6. The customer's side is
+  unchanged: their change still goes to a person as their message while the promise cannot move.
+- **Refunds** have receipts of their own (`typ: refund`) when the order or booking they refund was a
+  customer's (C14): the promise (`knd: accepted`) when its date is fixed — as the refund is made, when
+  it is owed at once (a withdrawal before the goods went out, a paid order or booking the business
+  cancels); at `approve` with nothing to come back; at `goods_back` — with `due` that date and `amt`
+  what is owed; `refund.honoured` or `refund.late` at `refund`, by the second the receipts carry;
+  `refund.cancelled_by_customer` when the customer drops it (or a person records that they did) after
+  its date was fixed, and nothing before. Paid before any date was fixed, the promise is issued with
+  the payment and kept. The refund machine's `cancel` and `record_cancel` are split by whether
+  anything was agreed, so only the agreed ones queue an outcome. A refund's receipts carry no `trm`:
+  nothing both sides agreed has a fingerprint until settlements exist. A refund that owes nothing (the
+  order was to be paid on delivery or on account) promises nothing and has no receipts, so no kept
+  outcome can be had for returning what was never paid for. The customer's own `cancel` drops a
+  return only while the goods are still with them (`approved`), as Amendment 4 says ("which they then
+  keep"): once they are back (`goods_received`), dropping it is a person's `record_cancel`.
+- **`trm`** is not §8's bare `terms_sha`, which anyone holding the receipt could test guesses against
+  (which service, which products, how many, from the public catalogue): it is
+  `base64url(HMAC-SHA-256(k, terms_sha))`, `k` = HMAC of `offer:<id>` under a key derived from
+  `INBOX_SECRET_KEY` (`receipt-terms`), one per offer, for the business to disclose with the terms in
+  a dispute. On a promise it is the offer that made it (never a change), carried only when the
+  promise goes to at least one network and every one takes version 6 (C12); a business with no network
+  on issues none. `k` comes from the newest `INBOX_SECRET_KEY`, as the pseudonyms do (ADR-016): a
+  disclosure for a receipt signed before the key rotated derives `k` from each key in the ring until one
+  matches its `trm`. Amendments and a refund's receipts name no presentation (`per`); they still carry
+  the customer's pseudonym (`sub`), which a network needs to weigh repeat evidence per customer (R7),
+  so a network can tell a return is theirs: what protects the customer is ADR-017's A3.5, that none of it counts.
+- **Sending.** What only version 6 reads — an amendment, a refund's receipts — goes to a network whose
+  rules, in force or announced, are 6 or later, and waits for the others, as claims v2 wait for
+  version 3; with receipts switched off, a network still gets the amendments and outcomes of promises
+  it holds. Only a receipt that names a date (claims v2) waits because its promise moved: a promise
+  the business wrote down itself (claims v1) names none and goes as before. The owner's Settings →
+  Networks says which rules each network takes and how many receipts wait for newer ones;
+  `get_networks` says so to the owner's AI.
+- **The spec** (`@surfingdog/spec`, MIT) gains exactly §8's values and claims, none renamed:
+  `amended`, `typ: refund`, `trm`, `acc`, the three `refund.*` outcomes and the report
+  `order.refund_refused` (rows marked `since: 6`, none on a customer's side), `parseReceiptClaims`
+  with the rules a reader takes (below 6 it refuses what version 6 added and ignores `trm` and `acc`),
+  `AMENDMENT_LIMITS` (moved from core: 3 unverified, 90 days), the reasons each report takes
+  (`REPORT_WHYS`), and the ranking document's version 6 (version 5's, with `amendments` and
+  `refunds`, rules `0.1.3`). `receipts-v6.json` pins every claim, how a rules 5 reader takes it, and
+  every path through the refund machine; `receipts-v2.json` keeps the table of rules 3 to 5.
+- **The refused-claim report's window** is from the order's `due` + 1 h to `due` + 730 days\* (the EU's
+  minimum legal guarantee), not §8's "from the refusal to 90 days after it": a network never sees a
+  refusal (C13).
+- **Not here.** The network's side — reading version 6 at intake, R30 over a refund's promise, the
+  new report and its window, the version 6 ranking document, the announcement and the emails to
+  listed businesses (ADR-017 §11) — is the network's own work. A return whose goods a person
+  disputed, and that is then never paid, becomes `promise.unclosed` nine days after its date (R30):
+  the business has no way to close a disputed return but to pay it or for the customer to drop it.
+  §3.4 has `dispute_goods` come "before the refund is promised", and §8 has disputed goods make no
+  refund promise; as built, `goods_back` promises the refund and `dispute_goods` follows it, so a
+  dispute that ends unpaid can count twice against the business: `promise.unclosed` on the refund and
+  a verified `order.refund_refused` (`goods_disputed_unpaid`) on the order. Letting a person dispute
+  what arrived instead of marking it received would match §3.4, but a business could then dispute
+  every return to escape any date. Still to decide. Likewise, a return whose goods the business
+  never marks as received has no refund promise at all, and the customer's only recourse is the report:
+  the customer has no door to give proof of sending, which fixes the date in law.
 
 ## Sources
 

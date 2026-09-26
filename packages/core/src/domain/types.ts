@@ -93,6 +93,31 @@ export const quoteLineSchema = z.object({
   price: moneySchema,
 });
 
+/**
+ * Where the item's negotiation stands (ADR-018 §1): its open offer, else the last one both sides
+ * agreed, as the inbox keeps it on the payload so webhooks, rules and screens can read it. Only the
+ * inbox writes it; `item_offers` holds the offers themselves.
+ */
+export const offerPointerSchema = z.object({
+  id: z.string().min(1).max(64),
+  rev: z.number().int().min(1),
+  /** Who made it: the business, or the customer (their request, their counter). */
+  by: z.enum(["business", "customer"]),
+  /** 1 for the first offer, one more for each answer that is not a yes. */
+  round: z.number().int().min(1),
+  status: z.enum(["open", "accepted"]),
+  /** Until when it can be accepted. */
+  validThrough: isoDateTime.optional(),
+  /** A time we proposed whose place we hold until the customer answers. */
+  held: z.literal(true).optional(),
+  /** We may withdraw it before the customer answers (`negotiation.binding` off). */
+  binding: z.literal(false).optional(),
+});
+export type OfferPointer = z.infer<typeof offerPointerSchema>;
+
+/** Who asked for a change to a promise: the business, or the customer. */
+export const changeBySchema = z.enum(["business", "customer"]);
+
 export const quoteRequestPayloadSchema = z.object({
   itemOffered: z.object({
     name: z.string().min(1).max(200),
@@ -119,6 +144,7 @@ export const quoteRequestPayloadSchema = z.object({
       endTime: isoDateTime.optional(),
     })
     .optional(),
+  offer: offerPointerSchema.optional(),
 });
 
 /**
@@ -129,6 +155,19 @@ export const customerStatedPriceSchema = moneySchema.describe(
   "The price the customer's request stated, where it differed from the business's own. Never the price: the business sets it.",
 );
 
+/**
+ * A price the inbox chose for this customer (ADR-018 §4, §5): the owner's reward for their record, a
+ * discount the owner let automation give, or their own price automation accepted. It carries the list
+ * price beside it, and the notice goes with it wherever the price is shown (CRD art. 6(1)(ea)): the
+ * owner's own line for the customer (`says`) after it. A price a person typed carries none. Only the
+ * inbox writes it.
+ */
+export const personalisedSchema = z.object({
+  listPrice: moneySchema,
+  says: z.string().max(200).optional(),
+});
+export type Personalised = z.infer<typeof personalisedSchema>;
+
 export const bookingPayloadSchema = z.object({
   reservationFor: z.object({ serviceId: z.string().min(1), name: z.string().min(1).max(200) }),
   startTime: isoDateTime,
@@ -137,10 +176,40 @@ export const bookingPayloadSchema = z.object({
   /** A fixed-price service's price is the business's, from its catalogue (ADR-018 §3.1). */
   totalPrice: moneySchema.optional(),
   customerStatedPrice: customerStatedPriceSchema.optional(),
+  /** The price is this customer's own (a reward, a discount, their price taken): the notice goes with it. */
+  personalised: personalisedSchema.optional(),
   resourceId: z.string().optional(),
   notes: z.string().max(5_000).optional(),
+  /**
+   * A payment or deposit recorded for the booking (`record_payment`): it gates nothing, but a booking
+   * paid at a distance is a contract the customer may withdraw from (ADR-018 §3.1, §7). Only the
+   * business writes these.
+   */
+  paymentRef: z.string().max(200).optional(),
+  paidAmount: moneySchema.optional(),
   /** An alternative offered by the business; accepting it moves it into startTime/endTime. */
-  proposed: z.object({ startTime: isoDateTime, endTime: isoDateTime, totalPrice: moneySchema.optional() }).optional(),
+  proposed: z
+    .object({
+      startTime: isoDateTime,
+      endTime: isoDateTime,
+      totalPrice: moneySchema.optional(),
+      personalised: personalisedSchema.optional(),
+    })
+    .optional(),
+  /**
+   * A change to the confirmed booking that one side asked for and the other has not answered yet
+   * (ADR-018 §3.1): the booking as it would be. Accepted, it becomes the booking; declined, withdrawn
+   * or lapsed, it goes and the booking stays as it was. Only the inbox writes it.
+   */
+  change: z
+    .object({
+      by: changeBySchema,
+      startTime: isoDateTime,
+      endTime: isoDateTime,
+      totalPrice: moneySchema.optional(),
+    })
+    .optional(),
+  offer: offerPointerSchema.optional(),
 });
 
 export const orderLineSchema = z.object({
@@ -152,6 +221,8 @@ export const orderLineSchema = z.object({
   price: moneySchema,
   /** The unit price the customer's request stated for this line, where it differed from the business's. */
   customerStatedPrice: customerStatedPriceSchema.optional(),
+  /** The catalogue's unit price, where this line's is the customer's own (a reward, a discount). Only the inbox writes it. */
+  listPrice: moneySchema.optional(),
 });
 
 export const orderPayloadSchema = z.object({
@@ -159,19 +230,136 @@ export const orderPayloadSchema = z.object({
   /** The lines' prices times their quantities, once any line is the business's to price (ADR-018 §3.2). */
   totalPrice: moneySchema,
   customerStatedPrice: customerStatedPriceSchema.optional(),
+  /** The total is this customer's own (a reward, a discount, their price taken): the notice goes with it. */
+  personalised: personalisedSchema.optional(),
   billingAddress: postalAddressSchema.optional(),
   shippingAddress: postalAddressSchema.optional(),
   delivery: z.object({ method: z.enum(["pickup", "delivery", "digital"]), when: isoDateTime.optional() }).optional(),
   paymentMethod: z.string().max(60).optional(),
   paymentRef: z.string().max(200).optional(),
+  /** What the payment recorded came to, when it said (`record_payment`). */
+  paidAmount: moneySchema.optional(),
   paymentUrl: z.url().optional(),
   notes: z.string().max(5_000).optional(),
+  /** When the business marked it fulfilled (`fulfil`): the goods' withdrawal clock starts from delivery, else from this plus the transit days. */
+  fulfilledAt: isoDateTime.optional(),
+  /** When the goods reached the customer (`fulfil`, `record_delivery`): the withdrawal period runs from it (ADR-018 §7). */
+  deliveredAt: isoDateTime.optional(),
+  /**
+   * The changes the business suggested (ADR-018 §3.2), while the customer's answer is awaited:
+   * the lines as they would be, their total, and when it would be delivered. Accepting moves them
+   * into the order.
+   */
+  proposed: z
+    .object({
+      orderedItem: z.array(orderLineSchema).min(1).max(200),
+      totalPrice: moneySchema,
+      delivery: z
+        .object({ method: z.enum(["pickup", "delivery", "digital"]), when: isoDateTime.optional() })
+        .optional(),
+      personalised: personalisedSchema.optional(),
+    })
+    .optional(),
+  /**
+   * A change to the accepted order that one side asked for and the other has not answered yet
+   * (ADR-018 §3.2): its lines, total and delivery as they would be. Accepted, it becomes the order;
+   * otherwise the order stays as it was. Only the inbox writes it.
+   */
+  change: z
+    .object({
+      by: changeBySchema,
+      orderedItem: z.array(orderLineSchema).min(1).max(200),
+      totalPrice: moneySchema,
+      delivery: z
+        .object({ method: z.enum(["pickup", "delivery", "digital"]), when: isoDateTime.optional() })
+        .optional(),
+    })
+    .optional(),
+  offer: offerPointerSchema.optional(),
 });
 
+/**
+ * What the law lets a product or service be excepted from withdrawal (ADR-018 §7; CRD art. 16, PT
+ * DL 24/2014 art. 17): `standard` when the right runs. Read narrowly: preset options are not
+ * personalisation, and long-life dry goods are not perishable.
+ */
+export const withdrawalFlagSchema = z
+  .enum([
+    "standard",
+    "personalised",
+    "perishable",
+    "sealed_hygiene",
+    "sealed_media",
+    "mixed",
+    "dated_leisure",
+    "urgent_repair",
+    "digital_started",
+    "price_fluctuates",
+  ])
+  .describe(
+    "Whether the customer may withdraw within the legal period: standard, or the exception the law allows (personalised, perishable, sealed_hygiene, sealed_media, mixed, dated_leisure, urgent_repair, digital_started, price_fluctuates).",
+  );
+export type WithdrawalFlag = z.infer<typeof withdrawalFlagSchema>;
+
+/**
+ * What a return or a refund is (ADR-018 §3.4): the customer's withdrawal within the legal period,
+ * faulty goods under the legal guarantee, a return under the business's own policy, a paid order the
+ * business cancelled, or a change that lowered a paid total.
+ */
+export const refundKindSchema = z.enum(["withdrawal", "faulty", "policy", "cancellation", "price_adjustment"]);
+export type RefundKind = z.infer<typeof refundKindSchema>;
+
+/** Why the customer sends it back. */
+export const returnReasonSchema = z
+  .enum(["changed_mind", "faulty", "wrong_item", "not_as_described", "other"])
+  .describe("Why: changed_mind, faulty, wrong_item, not_as_described or other.");
+
+/** Which lines of the order come back, and how many of each (by index in its orderedItem); none named, all of them. */
+export const returnLinesSchema = z
+  .array(z.object({ index: z.number().int().min(0).max(199), quantity: z.number().int().min(1).max(1_000_000) }))
+  .max(200);
+
+/**
+ * A return or a refund (ADR-018 §3.4): what is owed (`amount`), for which order or booking, why,
+ * and where it stands — what has to come back and by when, when the goods arrived, and when the
+ * refund is due. Every field but the order and the amount is optional, so a refund written before
+ * returns were built still reads. Only the inbox writes it.
+ */
 export const refundPayloadSchema = z.object({
+  /** The order, or the booking paid at a distance, it refunds. */
   orderItemId: z.string().min(1),
+  /** What we owe the customer. */
   amount: moneySchema,
-  reason: z.string().min(1).max(2_000),
+  reason: z.string().min(1).max(2_000).optional(),
+  kind: refundKindSchema.optional(),
+  reasonCode: returnReasonSchema.optional(),
+  /** Only some of the order's lines. */
+  lines: returnLinesSchema.optional(),
+  /** What the customer would like instead of their money back. */
+  wants: z.enum(["refund", "exchange", "credit"]).optional(),
+  /** When the customer told us (the withdrawal's notice, the return's request). */
+  noticeAt: isoDateTime.optional(),
+  /** Whether goods have to come back before the refund; false: nothing does. */
+  goodsBack: z.boolean().optional(),
+  /** Until when the customer sends them. */
+  returnBy: isoDateTime.optional(),
+  /** How to send them back. */
+  instructions: z
+    .object({
+      method: z.enum(["post", "drop_off", "collection"]),
+      address: z.string().max(500).optional(),
+      note: z.string().max(2_000).optional(),
+    })
+    .optional(),
+  /** When the goods, or proof of sending them, reached us. */
+  evidenceAt: isoDateTime.optional(),
+  /** When the refund is due: fixed once nothing more has to come back (ADR-018 §8). */
+  refundDue: isoDateTime.optional(),
+  /** The goods that came back are not what was sold: the refund waits while a person sorts it out. */
+  disputed: z.object({ note: z.string().min(1).max(2_000), at: isoDateTime }).optional(),
+  paymentRef: z.string().max(200).optional(),
+  /** What was refunded, when it was. */
+  paidAmount: moneySchema.optional(),
 });
 
 export const payloadSchemas = {
@@ -219,5 +407,5 @@ export const PII_PATHS: Record<ItemType, readonly string[]> = {
   quote_request: ["description", "deliveryAddress"],
   booking: ["notes"],
   order: ["billingAddress", "shippingAddress", "notes"],
-  refund: ["reason"],
+  refund: ["reason", "disputed"],
 };

@@ -227,9 +227,13 @@ export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);
 }
 
-/** Asking for another time than the one proposed: `POST /v1/items/{id}/counter`. */
+/**
+ * Answering what the business proposed with terms of one's own: another time
+ * (`POST /v1/items/{id}/counter`), or anything else (`POST /v1/items/{id}/offers`); and withdrawing
+ * or asking for a return (`/withdraw`, `/returns`), each of which puts the item on the owner's desk.
+ */
 export function isNegotiateRoute(method: string, path: string): boolean {
-  return method === "POST" && /^\/v1\/items\/[^/]+\/counter\/?$/.test(path);
+  return method === "POST" && /^\/v1\/items\/[^/]+\/(counter|offers|withdraw|returns)\/?$/.test(path);
 }
 
 /**
@@ -251,9 +255,11 @@ export function mcpVerifies(body: unknown): boolean {
   return mcpToolNames(body).includes("verify_customer");
 }
 
-/** MCP tools that ask for another time than the one proposed. */
+/** MCP tools that answer what the business proposed with terms of one's own, withdraw, or ask for a return. */
+const NEGOTIATE_TOOLS = new Set(["suggest_time", "make_offer", "withdraw_from_contract", "request_return"]);
+
 export function mcpNegotiates(body: unknown): boolean {
-  return mcpToolNames(body).includes("suggest_time");
+  return mcpToolNames(body).some((name) => NEGOTIATE_TOOLS.has(name));
 }
 
 /** MCP tools that create an item. The body is JSON-RPC, a single call or a batch. */
@@ -276,7 +282,7 @@ export function mcpCosts(body: unknown): Partial<Record<LimitClass, number>> {
   const costs: Partial<Record<LimitClass, number>> = {
     create: count((n) => CREATE_TOOLS.has(n)),
     verify: count((n) => n === "verify_customer"),
-    negotiate: count((n) => n === "suggest_time"),
+    negotiate: count((n) => NEGOTIATE_TOOLS.has(n)),
     public: Math.max(0, messages - 1),
   };
   for (const k of Object.keys(costs) as LimitClass[]) if (!costs[k]) delete costs[k];

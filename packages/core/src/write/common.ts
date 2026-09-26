@@ -213,6 +213,11 @@ export async function diagnoseFailure(
       });
     }
   }
+  // Another writer made or closed an offer of this item first (the sweep writing a legacy item's
+  // offer, a race on the one open offer): read the item again and judge afresh.
+  if (ctx.itemId && /item_offers/.test(e.message)) {
+    throw new WriteError("version_conflict", "the item changed while you were writing; read it again and retry");
+  }
   if (ctx.claims) {
     for (const [bucket, ordinal] of ctx.claims.claims) {
       const [row] = await db.orm

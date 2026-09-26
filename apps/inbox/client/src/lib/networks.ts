@@ -115,9 +115,10 @@ export function sinceWords(iso: string, now: number = Date.now(), locale?: strin
 }
 
 /**
- * "12 receipts published", "3 waiting", "1 refused", "2 outcomes held until the network reads
- * them": only the ones there are. Held ones are acceptances and outcomes a network on older rules
- * is not sent yet; they go when it moves to rules that read them.
+ * "12 receipts published", "3 waiting", "1 refused", "2 held until the network reads them": only
+ * the ones there are. Held ones are receipts a network on older rules is not sent yet — outcomes
+ * before rules version 3, agreed changes and refunds before version 6 — which go when it moves to
+ * rules that read them.
  */
 export function receiptWords(r: NetworkView["receipts"]): string[] {
   const waiting = r.queued - r.held;
@@ -125,7 +126,7 @@ export function receiptWords(r: NetworkView["receipts"]): string[] {
     `${r.published} receipt${r.published === 1 ? "" : "s"} published`,
     waiting > 0 ? `${waiting} waiting` : null,
     r.refused ? `${r.refused} refused` : null,
-    r.held ? `${r.held} outcome${r.held === 1 ? "" : "s"} held until the network reads them` : null,
+    r.held ? `${r.held} held until the network reads them` : null,
     r.withheld
       ? `${r.withheld} never sent: the customer${r.withheld === 1 ? "" : "s"} asked us not to use networks`
       : null,
@@ -134,16 +135,23 @@ export function receiptWords(r: NetworkView["receipts"]): string[] {
 
 /**
  * Which rules the network applies and what that means for what it is sent, in one line, or null
- * before the network has said (ADR-017 §2.5): from rules version 3 — in force or announced — it
- * gets how each booking and order ended; before that, confirmations and payments only.
+ * before the network has said (ADR-017 §2.5, Amendment 3): from rules version 3 — in force or
+ * announced — it gets how each booking and order ended; from version 6 also the changes you and
+ * your customers agree and your refunds; before version 3, confirmations and payments only.
  */
 export function rulesWords(r: NetworkView["rules"], locale?: string): string | null {
   if (r.version === null) return null;
-  if (!r.v2) return `Rules version ${r.version}: it gets confirmations and payments, not yet how they ended.`;
-  if (r.version >= 3) return `Rules version ${r.version}: it gets how each booking and order ended.`;
   const when = r.next_at
     ? ` from ${new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(r.next_at))}`
     : "";
+  if (!r.v2) return `Rules version ${r.version}: it gets confirmations and payments, not yet how they ended.`;
+  if (r.version >= 6) {
+    return `Rules version ${r.version}: it gets how each booking and order ended, the changes agreed to them, and refunds.`;
+  }
+  if (r.v6) {
+    return `Rules version ${r.version}, version ${r.next}${when}: it gets how each booking and order ended, and already takes the changes agreed to them and refunds. A booking or order that changed goes to it once version ${r.next} is in force.`;
+  }
+  if (r.version >= 3) return `Rules version ${r.version}: it gets how each booking and order ended.`;
   return `Rules version ${r.version}, version ${r.next}${when}: it already gets how each booking and order ended.`;
 }
 

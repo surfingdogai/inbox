@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COPY, copyFor, vars } from "../src/customer/copy";
+import { COPY, copyFor, vars, WITHDRAWAL_UK, withdrawalCopy } from "../src/customer/copy";
 import { statusSentence } from "../src/customer/describe";
 import { moneyIn, shortRef, whenText, zoneName } from "../src/customer/format";
 import { customerLang, langFromHeader } from "../src/customer/lang";
@@ -74,6 +74,21 @@ describe("the customer's words", () => {
       }
     });
   }
+
+  it("in the UK's words too: cancel, a cancellation, and nothing else", () => {
+    const all = strings(WITHDRAWAL_UK);
+    expect(all.length).toBeGreaterThan(20);
+    for (const { path, text } of all) {
+      expect(text.trim().length, path).toBeGreaterThan(0);
+      for (const word of FORBIDDEN_EN) expect(text, `${path}: ${text}`).not.toMatch(word);
+      expect(text, path).not.toMatch(/\bwithdraw/i);
+    }
+    expect(withdrawalCopy("en", "uk").label).toBe("Cancel this contract here");
+    expect(withdrawalCopy("en", "eu").label).toBe("Withdraw from contract here");
+    expect(withdrawalCopy("en", "pt").confirm).toBe("Confirm withdrawal");
+    expect(withdrawalCopy("pt", "uk").label).toBe("Retrate-se do contrato aqui");
+    expect(withdrawalCopy("pt", "pt").confirm).toBe("Confirmar retratação");
+  });
 
   it("has the same entries in every language", () => {
     // Portuguese says some states twice, once for each gender.

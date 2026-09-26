@@ -5,10 +5,14 @@ import {
   isoDateTime,
   itemTypeSchema,
   messagePayloadSchema,
+  moneySchema,
   orderLineSchema,
   orderPayloadSchema,
   quoteRequestPayloadSchema,
+  returnLinesSchema,
+  returnReasonSchema,
 } from "../domain/types";
+import { reasonCodeSchema } from "../machine/tables";
 
 /**
  * Inputs of the capability set. Every door (REST, MCP, A2A, …) validates against these, so an
@@ -61,7 +65,7 @@ export const checkAvailabilityInput = z.object({
 });
 
 export const requestQuoteInput = z.object({
-  payload: quoteRequestPayloadSchema.omit({ quote: true }),
+  payload: quoteRequestPayloadSchema.omit({ quote: true, offer: true }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   idempotency_key: idempotencyKey,
@@ -72,23 +76,56 @@ export const requestQuoteInput = z.object({
  * The customer's side of a booking or an order: the business's own fields (a proposal, a payment
  * reference, the price a request stated, ADR-018 §3.2) are not the customer's to send.
  */
+/**
+ * The confirm step before a priced request binds a consumer (ADR-018 §5; CRD art. 8(2)): the
+ * fingerprint of the terms they said yes to, from the `409 confirm_terms` a request without it gets.
+ */
+const confirmedTerms = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/)
+  .optional()
+  .describe(
+    "The fingerprint of the terms your person confirmed (details.terms_sha of the 409 confirm_terms a priced request without it gets). Nothing is sent to the business without it when the request carries a price.",
+  );
+
 export const createBookingInput = z.object({
-  payload: bookingPayloadSchema.omit({ proposed: true, customerStatedPrice: true }),
+  payload: bookingPayloadSchema.omit({
+    proposed: true,
+    customerStatedPrice: true,
+    offer: true,
+    change: true,
+    paymentRef: true,
+    paidAmount: true,
+  }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  terms_sha: confirmedTerms,
   idempotency_key: idempotencyKey,
   ...carried,
 });
 
 export const createOrderInput = z.object({
-  payload: orderPayloadSchema.omit({ paymentRef: true, paymentUrl: true, customerStatedPrice: true }).extend({
-    orderedItem: z
-      .array(orderLineSchema.omit({ customerStatedPrice: true }))
-      .min(1)
-      .max(200),
-  }),
+  payload: orderPayloadSchema
+    .omit({
+      paymentRef: true,
+      paymentUrl: true,
+      paidAmount: true,
+      customerStatedPrice: true,
+      proposed: true,
+      offer: true,
+      change: true,
+      fulfilledAt: true,
+      deliveredAt: true,
+    })
+    .extend({
+      orderedItem: z
+        .array(orderLineSchema.omit({ customerStatedPrice: true }))
+        .min(1)
+        .max(200),
+    }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  terms_sha: confirmedTerms,
   idempotency_key: idempotencyKey,
   ...carried,
 });
@@ -163,8 +200,19 @@ export const verifyCustomerInput = z.object({
  * they said yes to, from `offer.terms_sha` in the item's status. Without it nothing is written and
  * the answer carries the terms to show them.
  */
+/** The offer an answer is for, so an answer to one the business has since replaced does nothing. */
+const offerId = z
+  .string()
+  .min(1)
+  .max(64)
+  .optional()
+  .describe(
+    "The offer you answer: offer.id from get_item_status. If the business has replaced it since, nothing is done (409 offer_changed, with the current one).",
+  );
+
 export const acceptOfferInput = z.object({
   item_id: z.string().min(1),
+  offer_id: offerId,
   terms_sha: z
     .string()
     .regex(/^[A-Za-z0-9_-]{43}$/)
@@ -179,7 +227,9 @@ export const acceptOfferInput = z.object({
 
 export const declineOfferInput = z.object({
   item_id: z.string().min(1),
+  offer_id: offerId,
   reason: z.string().max(2_000).optional().describe("Anything your person wants the business to know."),
+  reason_code: reasonCodeSchema.optional(),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
   ...carried,
@@ -196,6 +246,51 @@ export const suggestTimeInput = z.object({
   ...carried,
 });
 
+/**
+ * The customer's own terms in answer to what the business proposed (ADR-018 §2, §6): only what they
+ * would change. Time, quantities and delivery come back to the business as their request; a price of
+ * their own, or a change past the last round, goes to a person there as their message, never refused.
+ */
+export const makeOfferInput = z.object({
+  item_id: z.string().min(1),
+  offer_id: offerId,
+  terms: z
+    .object({
+      start_time: isoDateTime
+        .optional()
+        .describe(
+          "Another start: for a booking, one of the free times check_availability lists (the end follows the service's length); for a quote request, the time it is for.",
+        ),
+      party_size: z.number().int().min(1).max(1_000).optional().describe("Another number of people."),
+      quantity: z.number().int().min(1).max(1_000_000).optional().describe("How many, for a quote request."),
+      lines: z
+        .array(
+          z.object({
+            index: z.number().int().min(0).max(199),
+            quantity: z.number().int().min(0).max(1_000_000),
+            unit_price: moneySchema.optional(),
+          }),
+        )
+        .max(200)
+        .optional()
+        .describe(
+          "For changes the business suggested to an order: other quantities for its lines, by index in offer.terms.lines; 0 drops a line. unit_price, a price of your own for a line, only where the business's profile says price_negotiable.",
+        ),
+      delivery_when: isoDateTime.optional().describe("Another delivery date, for an order."),
+      total_price: moneySchema
+        .optional()
+        .describe(
+          "A price of your own for a time the business proposed. Taken as your answer only where the business's profile says price_negotiable; otherwise it goes to a person there as your message, and what it proposed still stands.",
+        ),
+    })
+    .describe("Only what your person would change."),
+  note: z.string().max(2_000).optional().describe("Anything your person wants the business to know."),
+  reason_code: reasonCodeSchema.optional(),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
 export const provideDetailsInput = z.object({
   item_id: z.string().min(1),
   details: z.string().trim().min(1).max(5_000).describe("The answer to what the business asked."),
@@ -204,7 +299,70 @@ export const provideDetailsInput = z.object({
   ...carried,
 });
 
+/**
+ * The customer withdraws from their contract (ADR-018 §7; CRD art. 11a, "Withdraw from contract
+ * here"): two steps. Without `confirm_withdrawal`, nothing is sent and the answer is the statement to
+ * show them (`409 confirm_withdrawal`); with it, the withdrawal, then an acknowledgement by email.
+ */
+export const withdrawInput = z.object({
+  item_id: z.string().min(1),
+  confirm_withdrawal: z
+    .boolean()
+    .optional()
+    .describe(
+      "true once your person confirmed the statement you were shown. Left out, nothing is sent: you get the statement.",
+    ),
+  lines: returnLinesSchema
+    .optional()
+    .describe(
+      "Once the goods reached them: only these lines (by index in the order's orderedItem), and how many of each.",
+    ),
+  note: z.string().max(2_000).optional().describe("Anything your person wants to tell the business."),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
+/** The customer asks to send goods back (ADR-018 §3.4): faulty, not as described, the wrong item, or changed their mind. */
+export const requestReturnInput = z.object({
+  item_id: z.string().min(1),
+  reason: returnReasonSchema,
+  lines: returnLinesSchema
+    .optional()
+    .describe("Which lines of the order (by index in orderedItem), and how many of each; all of them when left out."),
+  wants: z
+    .enum(["refund", "exchange", "credit"])
+    .optional()
+    .describe("What your person would like: a refund, an exchange, or credit."),
+  note: z.string().max(2_000).optional(),
+  access_token: accessToken,
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
 // ---- owner -----------------------------------------------------------------
+
+/** A return a customer asked for by email or phone, which the business writes down to answer later. */
+export const openReturnInput = z.object({
+  item_id: z.string().min(1),
+  reason: returnReasonSchema,
+  note: z.string().trim().min(1).max(2_000).describe("What the customer asked, in their words: kept for the business."),
+  lines: returnLinesSchema.optional(),
+  wants: z.enum(["refund", "exchange", "credit"]).optional(),
+  entry_id: z
+    .string()
+    .min(1)
+    .max(64)
+    .optional()
+    .describe(
+      "The customer's message asking for it (an entry of the order's thread, from get_item): the return is judged as of its arrival.",
+    ),
+  asked_at: isoDateTime
+    .optional()
+    .describe("When they asked by phone or in person (a person only; default now): the return is judged as of then."),
+  written_by: z.enum(["person", "automation"]).optional(),
+  idempotency_key: idempotencyKey,
+});
 
 export const listItemsInput = z.object({
   type: itemTypeSchema.optional(),
@@ -227,6 +385,30 @@ export const listItemsInput = z.object({
 });
 
 export const getItemInput = z.object({ item_id: z.string().min(1) });
+
+/**
+ * The business's offer on an item (ADR-018 §6), for the event the item's state takes: another time
+ * for a booking (`propose`), changes to an order (`propose`), a quote for a quote request (`quote`).
+ * `input` is that event's input, as `transition_item` takes it.
+ */
+export const makeBusinessOfferInput = z.object({
+  item_id: z.string().min(1),
+  input: z.record(z.string(), z.unknown()),
+  expected_version: z.number().int().min(1).optional(),
+  written_by: z.enum(["person", "automation"]).optional(),
+  idempotency_key: idempotencyKey,
+});
+
+/**
+ * An item's draft (ADR-018 §4): what the owner's AI, a rule or another system would have offered
+ * outside the owner's limits. `draft_id` pins the one the owner read, so a newer one is never sent or
+ * dropped by mistake.
+ */
+export const offerDraftInput = z.object({
+  item_id: z.string().min(1),
+  draft_id: z.string().min(1).max(64).optional().describe("The draft's id, as the item or its offers show it."),
+  idempotency_key: idempotencyKey,
+});
 
 /**
  * Who wrote what goes to the customer (the founder, 23 September 2026): anything a person did not type
@@ -302,9 +484,15 @@ export type VerifyCustomerInput = z.infer<typeof verifyCustomerInput>;
 export type AcceptOfferInput = z.infer<typeof acceptOfferInput>;
 export type DeclineOfferInput = z.infer<typeof declineOfferInput>;
 export type SuggestTimeInput = z.infer<typeof suggestTimeInput>;
+export type MakeOfferInput = z.infer<typeof makeOfferInput>;
 export type ProvideDetailsInput = z.infer<typeof provideDetailsInput>;
+export type WithdrawInput = z.infer<typeof withdrawInput>;
+export type RequestReturnInput = z.infer<typeof requestReturnInput>;
+export type OpenReturnInput = z.infer<typeof openReturnInput>;
 export type ListItemsInput = z.infer<typeof listItemsInput>;
 export type GetItemInput = z.infer<typeof getItemInput>;
+export type MakeBusinessOfferInput = z.infer<typeof makeBusinessOfferInput>;
+export type OfferDraftInput = z.infer<typeof offerDraftInput>;
 export type TransitionItemInput = z.infer<typeof transitionItemInput>;
 export type ReplyInput = z.infer<typeof replyInput>;
 export type CustomerInput = z.infer<typeof customerInput>;

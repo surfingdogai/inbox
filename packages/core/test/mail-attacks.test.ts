@@ -11,7 +11,7 @@ import { services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller } from "../src/write/caller";
 import { transitionItem } from "../src/write/transition";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The customer's emails, attacked: what the mail log keeps must not answer for the customer, an
@@ -54,7 +54,7 @@ async function setup(opts: { mailOut?: MailOut; settings?: Record<string, unknow
     updatedAt: T0,
   });
   const secrets = createSecretBox(["mail-attacks-test-secret-0123456789abcdef"]);
-  const caps = new Capabilities(db, secrets, opts.baseUrl);
+  const caps = confirming(new Capabilities(db, secrets, opts.baseUrl));
   await caps.updateSettings(owner(), {
     doc: {
       business: { name: "Oficina Maré", timezone: "Europe/Lisbon" },

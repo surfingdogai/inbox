@@ -113,14 +113,22 @@ export function planClaims(
   return { ok: true, claims };
 }
 
-/** INSERT statements for the claims, 25 rows each to stay under D1's 100 bound parameters. */
-export function claimStatements(resourceKey: string, itemId: string, claims: readonly [number, number][]): Statement[] {
+/**
+ * INSERT statements for the claims, 20 rows each to stay under D1's 100 bound parameters. A claim
+ * with `offerId` is a hold: a time we proposed, kept for the customer until they answer.
+ */
+export function claimStatements(
+  resourceKey: string,
+  itemId: string,
+  claims: readonly [number, number][],
+  offerId = "",
+): Statement[] {
   const out: Statement[] = [];
-  for (let i = 0; i < claims.length; i += 25) {
-    const chunk = claims.slice(i, i + 25);
+  for (let i = 0; i < claims.length; i += 20) {
+    const chunk = claims.slice(i, i + 20);
     out.push({
-      sql: `INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id) VALUES ${chunk.map(() => "(?, ?, ?, ?)").join(", ")}`,
-      params: chunk.flatMap(([bucket, ordinal]) => [resourceKey, bucket, ordinal, itemId]),
+      sql: `INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES ${chunk.map(() => "(?, ?, ?, ?, ?)").join(", ")}`,
+      params: chunk.flatMap(([bucket, ordinal]) => [resourceKey, bucket, ordinal, itemId, offerId]),
       method: "run",
     });
   }
@@ -129,4 +137,26 @@ export function claimStatements(resourceKey: string, itemId: string, claims: rea
 
 export function releaseStatement(itemId: string): Statement {
   return { sql: "DELETE FROM slot_claims WHERE item_id = ?", params: [itemId], method: "run" };
+}
+
+/** Lets go of a time held for the customer; an agreed booking's own claim is never touched. */
+export function releaseHoldStatement(itemId: string): Statement {
+  return { sql: "DELETE FROM slot_claims WHERE item_id = ? AND offer_id <> ''", params: [itemId], method: "run" };
+}
+
+/**
+ * How many other items of this customer hold a time right now (ADR-018 §3.1): their party's, or the
+ * assistant's that made the request (its key's thumbprint), so no one parks places by asking.
+ */
+export async function holdsOf(
+  db: Db,
+  who: { readonly itemId: string; readonly partyId: string; readonly agent: string | null },
+): Promise<number> {
+  const { rows } = await db.client.query({
+    sql: `SELECT COUNT(DISTINCT c.item_id) FROM slot_claims c JOIN items i ON i.id = c.item_id
+           WHERE c.offer_id <> '' AND c.item_id <> ? AND (i.party_id = ? OR (? IS NOT NULL AND i.agent_thumbprint = ?))`,
+    params: [who.itemId, who.partyId, who.agent, who.agent],
+    method: "all",
+  });
+  return Number(rows[0]?.[0] ?? 0);
 }

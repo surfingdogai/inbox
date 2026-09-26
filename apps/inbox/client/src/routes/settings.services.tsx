@@ -7,7 +7,7 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { problemOf } from "../lib/api";
 import { formatMoney } from "../lib/format";
-import { useProducts, useProductWrite, useProfile, useServices, useServiceWrite } from "../lib/queries";
+import { useFloors, useProducts, useProductWrite, useProfile, useServices, useServiceWrite } from "../lib/queries";
 import type { ProductRow, ServiceRow } from "../lib/types";
 
 export const Route = createFileRoute("/settings/services")({
@@ -30,6 +30,7 @@ function ServicesPage() {
 
 function ServicesCard({ currency }: { currency: string }) {
   const services = useServices();
+  const floors = useFloors();
   const write = useServiceWrite();
   const [editing, setEditing] = useState<Editing>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -80,7 +81,7 @@ function ServicesCard({ currency }: { currency: string }) {
           currency={currency}
           pending={write.isPending}
           error={problem}
-          onSubmit={(body) => write.mutate({ body }, { onSuccess: () => done("Service added.") })}
+          onSubmit={(body, floor) => write.mutate({ body, floor }, { onSuccess: () => done("Service added.") })}
           onCancel={() => setEditing(null)}
         />
       )}
@@ -96,7 +97,10 @@ function ServicesCard({ currency }: { currency: string }) {
             error={editing === s.id || confirm === s.id ? problem : null}
             onEdit={() => open(s.id)}
             onCancel={() => setEditing(null)}
-            onSave={(body) => write.mutate({ id: s.id, body }, { onSuccess: () => done("Service saved.") })}
+            floor={floors.data?.get(`service:${s.id}`) ?? null}
+            onSave={(body, floor) =>
+              write.mutate({ id: s.id, body, floor }, { onSuccess: () => done("Service saved.") })
+            }
             onAskArchive={() => {
               write.reset();
               setConfirm(s.id);
@@ -123,6 +127,7 @@ function ServicesCard({ currency }: { currency: string }) {
 
 function ServiceLine({
   service: s,
+  floor,
   editing,
   confirming,
   currency,
@@ -144,7 +149,8 @@ function ServiceLine({
   error: ReturnType<typeof problemOf> | null;
   onEdit: () => void;
   onCancel: () => void;
-  onSave: (body: Parameters<typeof ServiceEditor>[0]["onSubmit"] extends (b: infer B) => void ? B : never) => void;
+  floor: number | null;
+  onSave: Parameters<typeof ServiceEditor>[0]["onSubmit"];
   onAskArchive: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -181,6 +187,7 @@ function ServiceLine({
         <div className="wide">
           <ServiceEditor
             initial={s}
+            floor={floor}
             currency={currency}
             pending={pending}
             error={error}
@@ -214,6 +221,7 @@ function ServiceLine({
 
 function ProductsCard({ currency }: { currency: string }) {
   const products = useProducts();
+  const floors = useFloors();
   const write = useProductWrite();
   const [editing, setEditing] = useState<Editing>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -258,7 +266,7 @@ function ProductsCard({ currency }: { currency: string }) {
           currency={currency}
           pending={write.isPending}
           error={problem}
-          onSubmit={(body) => write.mutate({ body }, { onSuccess: () => done("Product added.") })}
+          onSubmit={(body, floor) => write.mutate({ body, floor }, { onSuccess: () => done("Product added.") })}
           onCancel={() => setEditing(null)}
         />
       )}
@@ -273,7 +281,10 @@ function ProductsCard({ currency }: { currency: string }) {
             error={editing === p.id ? problem : null}
             onEdit={() => open(p.id)}
             onCancel={() => setEditing(null)}
-            onSave={(body) => write.mutate({ id: p.id, body }, { onSuccess: () => done("Product saved.") })}
+            floor={floors.data?.get(`product:${p.id}`) ?? null}
+            onSave={(body, floor) =>
+              write.mutate({ id: p.id, body, floor }, { onSuccess: () => done("Product saved.") })
+            }
             onArchive={() =>
               write.mutate({ id: p.id, archive: true }, { onSuccess: () => done(`${p.name} is no longer for sale.`) })
             }
@@ -292,6 +303,7 @@ function ProductsCard({ currency }: { currency: string }) {
 
 function ProductLine({
   product: p,
+  floor,
   editing,
   currency,
   pending,
@@ -309,7 +321,8 @@ function ProductLine({
   error: ReturnType<typeof problemOf> | null;
   onEdit: () => void;
   onCancel: () => void;
-  onSave: (body: Parameters<typeof ProductEditor>[0]["onSubmit"] extends (b: infer B) => void ? B : never) => void;
+  floor: number | null;
+  onSave: Parameters<typeof ProductEditor>[0]["onSubmit"];
   onArchive: () => void;
   onRestore: () => void;
 }) {
@@ -346,6 +359,7 @@ function ProductLine({
         <div className="wide">
           <ProductEditor
             initial={p}
+            floor={floor}
             currency={currency}
             pending={pending}
             error={error}

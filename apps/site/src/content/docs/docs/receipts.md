@@ -1,9 +1,9 @@
 ---
 title: Receipts
-description: The signed proof an instance issues when it makes a promise — a booking confirmed, an order accepted or paid — and when the promise closes, how an agent reads and verifies it, and how it counter-signs.
+description: The signed proof an instance issues when it makes a promise — a booking confirmed, an order accepted or paid, a refund owed — when both sides change it, and when it closes; how an agent reads and verifies it, and how it counter-signs.
 ---
 
-A **receipt** is the instance's signed statement about a transaction: this booking was confirmed, this order was paid — a **promise** — and later how it ended: the booking happened, the customer did not turn up, the order went out — an **outcome**. It is a compact JWS, Ed25519, small enough to sit in a header, and it names the customer only by a pseudonym. Both sides can hold one, a network can count one, and nobody who sees one learns an address.
+A **receipt** is the instance's signed statement about a transaction: this booking was confirmed, this order was paid, this refund is owed by the 14th — a **promise** — then any change both sides agreed to it — an **amendment** — and later how it ended: the booking happened, the customer did not turn up, the order went out, the refund was paid on time — an **outcome**. It is a compact JWS, Ed25519, small enough to sit in a header, and it names the customer only by a pseudonym. Both sides can hold one, a network can count one, and nobody who sees one learns an address.
 
 Receipts are issued by the instance and counter-signed by the customer's agent. They are the ground a review will later stand on: a review is only ever accepted against a receipt, in both directions. Reviews themselves are not built yet; receipts are.
 
@@ -26,18 +26,32 @@ Outcomes, `knd: "outcome"` with the code in `out` ([ADR-017](https://github.com/
 | booking | `complete`, by you, or by the system `booking.autoCompleteHours` (48) after the end unless it was marked a no-show | `booking.completed` |
 | booking | `no_show` | `booking.no_show_customer` |
 | booking | `cancel_by_business` once confirmed | `booking.cancelled_by_business` |
-| booking | the customer's `cancel` within the window, or their cancellation you record (`record_cancel`) when they asked within it | `booking.cancelled_by_customer` |
+| booking | the customer's `cancel` within the window, or their cancellation you record (`record_cancel`) when they asked within it; their withdrawal from a booking they paid for (`withdraw`, `record_withdrawal`), never late | `booking.cancelled_by_customer` |
 | booking | the customer's cancellation after the window (`cancel_late`, or `record_cancel_late` when you record it and they asked after it), when `booking.lateCancellation` is `record` | `booking.cancelled_late_by_customer` |
 | order | `fulfil` | `order.fulfilled` |
-| order | your `cancel` once accepted | `order.not_fulfilled` |
-| order | the customer's `cancel` once accepted, or their cancellation you record (`record_cancel`) | `order.cancelled_by_customer` |
+| order | your `cancel` once accepted, paid or not | `order.not_fulfilled` |
+| order | the customer's `cancel` once accepted, their cancellation you record (`record_cancel`), or their withdrawal before it went out (`withdraw`, `record_withdrawal`) | `order.cancelled_by_customer` |
 | order | `payment_failed` | `order.payment_failed` |
-| order | `charge_back`, or `record_charge_back` on a completed order | `order.charged_back` |
+| order | `charge_back`, or `record_charge_back` on a completed order, unless a return of it is open or was refunded late | `order.charged_back` |
 | order | the system's `lapse`, `orders.payDays` (14) after payment was requested and none came | `order.lapsed` |
 
-A no-show recorded by mistake, or a completion that should have been one, can be corrected once, until the booking would have completed on its own: the later receipt is the one a network keeps. After that the correction is no longer offered. Bookings and orders promised before the upgrade that brought outcomes are left as they were: never completed or lapsed by the system, no outcome recorded, closed by you. Declines, expiries, cancellations before anything was confirmed or accepted, quotes, messages and refunds close no promise and issue no outcome.
+A no-show recorded by mistake, or a completion that should have been one, can be corrected once, until the booking would have completed on its own: the later receipt is the one a network keeps. After that the correction is no longer offered. Bookings and orders promised before the upgrade that brought outcomes are left as they were: never completed or lapsed by the system, no outcome recorded, closed by you. Declines, expiries, cancellations before anything was confirmed or accepted, quotes and messages close no promise and issue no outcome. An order the customer withdraws from after it went out stays `order.fulfilled`: its return is an item of its own, with receipts of its own (below).
 
-The transition writes a job in the same batch as the event; the job signs within the second on a live instance, and `iat` is the time of the event itself. One receipt per item, kind and outcome: a job that runs twice finds the row and stops. **Sandbox items never get one.** A receipt for a rehearsal would be a signed statement that something happened when nothing did. Bookings and orders you, your staff or a rule created keep the `confirmed` and `paid` receipts they always had and record no outcome: the networks count what customers asked for.
+### Changes and refunds (network rules version 6)
+
+These are the receipts [ADR-017](https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md)'s Amendment 3 adds, as network rules version 6. A network announces a rules version 15 days before it takes effect (at once while no other business is a member of it), and each network is sent them only once it takes version 6 (see [Networks](#networks)).
+
+| Item | Event | Receipt |
+|---|---|---|
+| booking, order | `accept_change`: a change to a confirmed booking or an accepted order, accepted by the other side, a yes given by phone and recorded by a person included | `knd: "amended"`, one per change |
+| refund | its date is fixed: the refund is made owed at once (a withdrawal before the goods went out, a paid order or booking you cancel), approved with nothing to come back, or the goods are back (`goods_back`) | `typ: "refund"`, `knd: "accepted"` |
+| refund | `refund`, paid by its date (or before any date was fixed) | `refund.honoured` |
+| refund | `refund`, paid after its date | `refund.late` |
+| refund | the customer drops the return after its date was fixed (`record_cancel` when they tell you; their own `cancel` works only while the goods are still with them, before any date is fixed, and records nothing) | `refund.cancelled_by_customer` |
+
+A change that was proposed and then declined, withdrawn or left to lapse issues nothing: what was agreed stands. A return dropped before its date was fixed promised nothing and closes nothing. A refund's receipts follow the order or booking it refunds: one of an order you wrote down yourself has none, and nor has one that owes nothing (the order was to be paid on delivery or on account). An amendment's dates are the promise's as every change up to it left them, and a change agreed in the same second as the one before it still sorts after it. `refund.honoured` counts as kept for the business, `refund.late` as broken; a refund promised and never paid is, for a network, a promise nobody closed. None of these is ever a mark on the customer: returning goods or withdrawing from a contract earns and costs a customer nothing, and a network judges a customer's cancellation against the later of the latest agreed date and the last one the customer's own assistant acknowledged, so a change nobody can show they agreed never makes it late. Without that acknowledgement a network honours at most three changes to one promise, none moving its date, or a booking's end, more than 90 days from the first; the instance holds you to the same.
+
+The transition writes a job in the same batch as the event; the job signs within the second on a live instance, and `iat` is the time of the event itself. One receipt per item, kind, outcome and agreed change: a job that runs twice finds the row and stops. **Sandbox items never get one.** A receipt for a rehearsal would be a signed statement that something happened when nothing did. Bookings and orders you, your staff or a rule created keep the `confirmed` and `paid` receipts they always had and record no outcome and no change: the networks count what customers asked for.
 
 Two settings gate it. `INBOX_SECRET_KEY` seals the private key before it is stored, so an instance without one creates no key and issues nothing rather than keep a signing key in the clear. `INBOX_PUBLIC_URL` is the `iss` claim, and a job has no request to derive it from. Without either, the job records the reason and finishes; nothing is retried, and the owner's Settings page says which one is missing.
 
@@ -80,19 +94,21 @@ The header is `{"alg":"EdDSA","typ":"sdi-receipt+jws","kid":"<kid>"}`. The claim
 | `iss` | The issuing instance: its public origin, no trailing slash. Where the keys are. |
 | `sub` | Who it is about, as a pseudonym: `base64url(HMAC-SHA-256(pepper, identity))`, where the pepper is derived from the instance's secret key and never leaves it. Two receipts for one customer on one instance share it; the same customer on another instance does not. Never an address, and never a bare hash of one. |
 | `itm` | The item's id on the issuing instance. |
-| `typ` | The item type: `booking`, `order`. |
-| `knd` | `confirmed`, `paid`, `accepted` or `outcome`. |
+| `typ` | The item type: `booking`, `order`, and since rules version 6 `refund` (a refund's own receipts). |
+| `knd` | `confirmed`, `paid`, `accepted` or `outcome`, and since rules version 6 `amended`. A refund's receipts are `accepted` (its promise) and `outcome`. |
 | `iat` | Issued at, Unix seconds: when the event that caused it happened. |
 | `nonce` | 128 bits of hex. A network deduplicates on `(iss, nonce)`, so a receipt shown twice counts once. |
 | `amt` | On a promise, the amount the item states, in minor units, when it states one. For a paid order it is the amount recorded as paid. Never derived, never summed. |
 | `pay` | How it was paid, when the instance knows (`card`, `transfer`…). |
 | `ver` | `2` on the receipts of bookings and orders a customer made (claims v2); absent on the others, which are v1. |
 | `out` | On an outcome, how the promise ended: one of the codes above. |
-| `ref` | On an outcome, the `nonce` of the item's earliest promise. |
-| `due` | When the item is due, Unix seconds: a booking's start; an order's delivery time, else 30 days (`orders.dueDays`) after it was accepted. Every receipt of an item carries the same one. |
-| `end` | A booking's end. |
+| `ref` | On an outcome or an amendment, the `nonce` of the item's earliest promise. |
+| `due` | When the item is due, Unix seconds: a booking's start; an order's delivery time, else 30 days (`orders.dueDays`) after it was accepted; a refund's date to be paid by. A promise keeps the date it was made with; an amendment names the new one, and an outcome carries the latest amendment's, else its promise's. |
+| `end` | A booking's end, likewise. |
+| `trm` | Rules version 6: the terms both sides agreed, as `base64url(HMAC-SHA-256(k, terms_sha))` — `terms_sha` is the fingerprint the customer confirmed, `k` a key the business derives for that offer alone and discloses only to settle a dispute, so nobody holding the receipt can test guessed terms against it. On an amendment always, on a booking's or an order's promise only when every network it is sent to takes version 6. Evidence for a dispute; a network never scores it. |
+| `acc` | Rules version 6, on an amendment: who accepted the change, `customer` or `business`. |
 | `aut` | `1` when nobody decided it: the system completed the booking, or a rule fired the transition. |
-| `per` | `[{"n": "<network host>", "p": "<presentation id>"}]`: each network's presentation of the customer for this item, when their assistant presented one. Each network reads only its own entry. |
+| `per` | `[{"n": "<network host>", "p": "<presentation id>"}]`: each network's presentation of the customer for this item, when their assistant presented one. Each network reads only its own entry. Never on an amendment or a refund's receipts, which are about the business's promise. |
 
 No customer name, no address, no line items. A receipt proves a transaction happened and what it was worth. It is not a copy of the order.
 
@@ -165,7 +181,7 @@ The instance publishes every receipt to each network switched on in Settings →
 
 Each network is kept track of on its own, receipt by receipt, so nothing is lost to one that is down: a receipt waits for a network that does not answer, or does not know the instance yet, and goes out when it does. A network switched on later is sent every receipt issued before it, oldest first, up to a thousand an hour; it counts a completion whose promise reached it more than a day late at half, so switching on early is what counts.
 
-Which receipts a network gets depends on the rules it applies, which the instance reads once a day from its `GET /v1/ranking`: from rules version 3 — in force, or announced in `next` — it gets every receipt, acceptances and outcomes included; before that, the `confirmed` and `paid` promises it has always had, and the rest waits until it moves on. An outcome goes after its promise, and a network that stopped taking receipts in Settings still gets the outcomes of the promises it was sent. The instance tries again when the network answers `404`, `408`, `425`, `429`, a redirect or a server error, or a problem document whose `code` is `unknown_key`, `unknown_ref`, `unknown_instance` or `unknown_issuer`; any other refusal is the network's verdict on that receipt, recorded once and not sent again. Settings → Networks shows how many receipts each network has.
+Which receipts a network gets depends on the rules it applies, which the instance reads once a day from its `GET /v1/ranking`: from rules version 3 — in force, or announced in `next` — it gets every receipt, acceptances and outcomes included; before that, the `confirmed` and `paid` promises it has always had, and the rest waits until it moves on. From rules version 6, in force or announced, it also gets amendments and refunds' receipts, which wait until then. A booking or an order whose promise both sides changed goes to a network only once version 6 is **in force** there — its promise, each amendment and its outcome, in that order — since a network on older rules would hold the business to the date first agreed; for the same reason a change can be made only while every network that holds the promise, or will be sent it, has version 6 in force (with none switched on, at once). An outcome goes after its promise and amendments, and a network that stopped taking receipts in Settings still gets the amendments and outcomes of the promises it was sent. The instance tries again when the network answers `404`, `408`, `425`, `429`, a redirect or a server error, or a problem document whose `code` is `unknown_key`, `unknown_ref`, `unknown_instance` or `unknown_issuer`; any other refusal is the network's verdict on that receipt, recorded once and not sent again. Settings → Networks shows how many receipts each network has.
 
 `per` in a receipt names the presentation a network made of the customer for that item, when their assistant presented a pass: that is how a network ties the item to its person, and each network reads only its own entry. A network that never saw the person on that item counts the receipt without one.
 
@@ -175,11 +191,11 @@ Any service that speaks this one endpoint can be a review service, and an instan
 
 ## For implementers
 
-`packages/spec/vectors/receipts.json` in the repository (MIT) holds fixed keys, the `sub` derivation with its inputs, two receipts whose JWS an implementation must reproduce byte for byte, a valid acknowledgement, and every refusal with the error code it must raise. `packages/spec/vectors/receipts-v2.json` does the same for claims v2: a promise and its outcome for each of the eleven outcomes, an acknowledgement with `pas`, the refused claims, and every path through the booking and order state machines with the outcome it records. A verifier in any language is right when it agrees with those files.
+`packages/spec/vectors/receipts.json` in the repository (MIT) holds fixed keys, the `sub` derivation with its inputs, two receipts whose JWS an implementation must reproduce byte for byte, a valid acknowledgement, and every refusal with the error code it must raise. `packages/spec/vectors/receipts-v2.json` does the same for claims v2: a promise and its outcome for each of the eleven outcomes, an acknowledgement with `pas`, the refused claims, and every path through the booking and order state machines with the outcome it records. `packages/spec/vectors/receipts-v6.json` does the same for rules version 6: amended bookings and orders and the outcomes that read their latest dates, a refund's promise and each of its outcomes, what a reader on rules 5 keeps of each (it ignores `trm` and `acc`, however they look, and refuses refunds and amendments), the claims still refused and what a reader on rules 5 keeps of those, an acknowledgement of an amendment, the `order.refund_refused` report, and every path through the refund machine. A verifier in any language is right when it agrees with those files.
 
 ## As events
 
-A receipt being issued, and being counter-signed, are events on the item like any transition: `booking.receipt_issued`, `booking.receipt_acknowledged`, `order.receipt_issued`, `order.receipt_acknowledged`. They appear in `GET /v1/owner/events` and reach your [webhooks](/docs/webhooks/) under the same subscriptions (`order.*` includes them); in the full payload style, `data.receipt` carries the receipt. The issue event's id is the receipt's id; the acknowledgement's is that id with `:ack`.
+A receipt being issued, and being counter-signed, are events on the item like any transition: `booking.receipt_issued`, `booking.receipt_acknowledged`, `order.receipt_issued`, `order.receipt_acknowledged`, and a refund's `refund.receipt_issued` and `refund.receipt_acknowledged`. They appear in `GET /v1/owner/events` and reach your [webhooks](/docs/webhooks/) under the same subscriptions (`order.*` includes them); in the full payload style, `data.receipt` carries the receipt. The issue event's id is the receipt's id; the acknowledgement's is that id with `:ack`.
 
 ## Keys
 

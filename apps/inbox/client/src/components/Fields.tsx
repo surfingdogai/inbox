@@ -1,6 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useState } from "react";
-import { capitalise, channelWord, formatAddress, formatDateTime, formatMoney, formatWhen } from "../lib/format";
+import {
+  capitalise,
+  channelWord,
+  formatAddress,
+  formatDateTime,
+  formatMoney,
+  formatWhen,
+  RETURN_KIND,
+} from "../lib/format";
 import type { Item, ItemOf, Money } from "../lib/types";
 
 /** The typed card body: the facts of the payload, per type, then how and when it arrived. */
@@ -66,7 +74,7 @@ function Typed({ item, tz }: { item: Item; tz: string | undefined }) {
         </F>
       );
     case "refund":
-      return <RefundFields item={item} />;
+      return <RefundFields item={item} tz={tz} />;
   }
 }
 
@@ -149,19 +157,32 @@ function QuoteFields({ item, tz }: { item: ItemOf<"quote_request">; tz: string |
   );
 }
 
-function RefundFields({ item }: { item: ItemOf<"refund"> }) {
+function RefundFields({ item, tz }: { item: ItemOf<"refund">; tz: string | undefined }) {
   const p = item.payload;
   return (
     <>
-      <F label="Amount">{formatMoney(p.amount)}</F>
-      <F label="For order">
+      <F label="What">{RETURN_KIND[p.kind ?? "policy"] ?? "Return"}</F>
+      <F label="Owed">{formatMoney(p.amount)}</F>
+      <F label="For">
         <Link to="/items/$id" params={{ id: p.orderItemId }} search={(prev) => prev} className="mono">
           {p.orderItemId}
         </Link>
       </F>
-      <F label="Reason" wide prose>
-        {p.reason}
-      </F>
+      {p.lines?.length ? <F label="Lines">{p.lines.map((l) => `#${l.index + 1} × ${l.quantity}`).join(", ")}</F> : null}
+      {p.goodsBack && p.returnBy && <F label="Send back by">{formatDateTime(p.returnBy, tz)}</F>}
+      {p.evidenceAt && <F label="Goods back">{formatDateTime(p.evidenceAt, tz)}</F>}
+      {p.refundDue && <F label="Refund due by">{formatDateTime(p.refundDue, tz)}</F>}
+      {p.paidAmount && <F label="Refunded">{formatMoney(p.paidAmount)}</F>}
+      {p.disputed && (
+        <F label="Not what we sold" wide prose>
+          {p.disputed.note}
+        </F>
+      )}
+      {p.reason && (
+        <F label="Reason" wide prose>
+          {p.reason}
+        </F>
+      )}
     </>
   );
 }

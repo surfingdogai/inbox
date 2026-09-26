@@ -16,7 +16,7 @@ describe("app", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { instance: string; item_types: string[]; protocols: Record<string, string> };
     expect(body.instance).toBe("https://inbox.example.com");
-    expect(body.item_types).toEqual(["message", "quote_request", "booking", "order"]);
+    expect(body.item_types).toEqual(["message", "quote_request", "booking", "order", "refund"]);
     expect(body.protocols).toEqual({
       openapi: "https://inbox.example.com/openapi.json",
       rest: "https://inbox.example.com/v1",

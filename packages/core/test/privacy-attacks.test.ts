@@ -11,7 +11,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * Attacks on the stop and the erasure (the founder, 23 September 2026), each a case a careless owner, a
@@ -91,7 +91,7 @@ async function setup() {
     ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((d) => [d, [["08:00", "20:00"]]]),
   );
   await db.orm.insert(availabilityRules).values({ id: ulid(), kind: "open", weekly: week, createdAt: T0 });
-  const caps = new Capabilities(db, createSecretBox(["privacy-attack-instance-key-0123456789"]), BASE);
+  const caps = confirming(new Capabilities(db, createSecretBox(["privacy-attack-instance-key-0123456789"]), BASE));
   await caps.updateSettings(owner(), {
     doc: {
       business: { name: "Oficina Maré" },

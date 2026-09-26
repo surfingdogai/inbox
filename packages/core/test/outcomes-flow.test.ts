@@ -300,9 +300,9 @@ describe("a booking", () => {
     for (const b of [inTime, late]) await fire(s, owner(T0 + MIN), b.id, "confirm");
     await s.drain(T0 + MIN);
 
-    // The customer sees one way to cancel; the inbox picks which it is.
+    // The customer sees one way to cancel, beside asking for another time; the inbox picks which it is.
     const status = await s.caps.getItemStatus(customer(T0), { item_id: late.id, access_token: late.token });
-    expect(status.transitions.map((t) => t.event)).toEqual(["cancel"]);
+    expect(status.transitions.map((t) => t.event)).toEqual(["propose_change", "cancel"]);
 
     await s.caps.cancelItem(customer(T0 + HOUR), { item_id: inTime.id, access_token: inTime.token });
     const lateCancel = await s.caps.cancelItem(customer(late.start - 3 * HOUR), {

@@ -420,6 +420,415 @@ function SettingsForm({
               Hold the slot while a proposed time is pending
             </Switch>
           </div>
+          <Field
+            id="s-holds"
+            label="Times held per customer"
+            error={field("booking.maxHolds")}
+            hint="At most this many proposed times held at once for one customer; past it a time goes out unheld, theirs if still free."
+          >
+            <input
+              id="s-holds"
+              className="input"
+              type="number"
+              min={0}
+              max={10}
+              step={1}
+              value={form.maxHolds}
+              onChange={(e) => set("maxHolds", e.target.value)}
+            />
+          </Field>
+        </div>
+      </section>
+
+      <section className="card glass">
+        <h3 className="sec">Offers and answers</h3>
+        <div className="settings-grid">
+          <Field
+            id="s-offer-hours"
+            label="What you propose holds for (hours)"
+            error={field("negotiation.offerValidHours")}
+            hint="A quote or changes to an order sent without a date. What your AI or a rule proposes holds at most this long. A time you propose holds until its start, less the minimum notice."
+          >
+            <input
+              id="s-offer-hours"
+              className="input"
+              type="number"
+              min={1}
+              max={2160}
+              step={1}
+              value={form.offerValidHours}
+              onChange={(e) => set("offerValidHours", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-counter-hours"
+            label="Orders and quote requests lapse after (hours)"
+            error={field("negotiation.counterValidHours")}
+            hint="An order or a quote request nobody answered, after it came in or the customer last answered; the customer is told."
+          >
+            <input
+              id="s-counter-hours"
+              className="input"
+              type="number"
+              min={1}
+              max={2160}
+              step={1}
+              value={form.counterValidHours}
+              onChange={(e) => set("counterValidHours", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-rounds"
+            label="Rounds before you answer yourself"
+            error={field("negotiation.maxRounds")}
+            hint="Back and forth on one request. Past it your AI and rules propose nothing more, and a customer's next suggestion comes to you as their message."
+          >
+            <input
+              id="s-rounds"
+              className="input"
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={form.maxRounds}
+              onChange={(e) => set("maxRounds", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Switch checked={form.binding} onChange={(v) => set("binding", v)}>
+              What I propose binds me until it lapses
+            </Switch>
+            <div className="hint">
+              Off, each time, quote or change says it is subject to your confirmation, and you can withdraw it before
+              the customer answers.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card glass">
+        <h3 className="sec">Prices, and what your AI may agree to</h3>
+        <div className="settings-grid">
+          <div className="wide">
+            <Switch checked={form.priceCounters} onChange={(v) => set("priceCounters", v)}>
+              Customers may suggest a price of their own
+            </Switch>
+            <div className="hint">
+              Off, a price they suggest comes to you as their message and what you proposed stands. On, it is their
+              answer, for you to take or answer; your AI and rules take one only at or above your lowest price, never
+              haggle.
+            </div>
+          </div>
+          <Field
+            id="s-ai-discount"
+            label="Discount your AI and rules may give (%)"
+            error={field("negotiation.ai.maxDiscountPct")}
+            hint="Off the customer's price, never under the lowest price you set for a product or service. 0: none."
+          >
+            <input
+              id="s-ai-discount"
+              className="input"
+              type="number"
+              min={0}
+              max={50}
+              step={1}
+              value={form.aiDiscountPct}
+              onChange={(e) => set("aiDiscountPct", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-ai-shift"
+            label="How far from the time asked they may propose (hours)"
+            error={field("negotiation.ai.maxTimeShiftMin")}
+            hint="Always a free time. Further than this, what they would propose is kept as a draft for you."
+          >
+            <input
+              id="s-ai-shift"
+              className="input"
+              type="number"
+              min={0}
+              max={720}
+              step={1}
+              value={form.aiTimeShiftHours}
+              onChange={(e) => set("aiTimeShiftHours", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-ai-delay"
+            label="Days later than asked they may deliver"
+            error={field("negotiation.ai.maxDelayDays")}
+            hint="For changes to an order. 0: never later than the customer asked."
+          >
+            <input
+              id="s-ai-delay"
+              className="input"
+              type="number"
+              min={0}
+              max={90}
+              step={1}
+              value={form.aiDelayDays}
+              onChange={(e) => set("aiDelayDays", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-ai-refund"
+            label="Refund they may agree with nothing sent back, per order, up to"
+            optional
+            error={field("negotiation.ai.maxRefundMinor")}
+            hint="Empty: never. Refunding itself is always yours, or your till's."
+          >
+            <input
+              id="s-ai-refund"
+              className="input"
+              inputMode="decimal"
+              value={form.aiRefundMax}
+              onChange={(e) => set("aiRefundMax", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Switch checked={form.aiPricesCustom} onChange={(v) => set("aiPricesCustom", v)}>
+              My AI and rules may price what the catalogue does not
+            </Switch>
+            <div className="hint">
+              A quote, a line of their own, a longer booking. Off, they draft it for you. Outside any of these limits
+              nothing is sent: you find a draft on the item, to send as it is, change, or drop.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card glass">
+        <h3 className="sec">Changes to what was agreed</h3>
+        <div className="settings-grid">
+          <Field
+            id="s-changes"
+            label="Changes per booking or order"
+            error={field("negotiation.changes.maxPerItem")}
+            hint="Once agreed, at most this many (3 at most). Past it, a customer's request comes to you as their message."
+          >
+            <input
+              id="s-changes"
+              className="input"
+              type="number"
+              min={0}
+              max={3}
+              step={1}
+              value={form.maxChanges}
+              onChange={(e) => set("maxChanges", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-change-cutoff"
+            label="Customers' changes need you from (minutes before)"
+            optional
+            error={field("negotiation.changes.customerCutoffMin")}
+            hint="After this, only you accept a customer's change to a booking, not your AI or a rule. Empty means the cancellation window."
+          >
+            <input
+              id="s-change-cutoff"
+              className="input"
+              type="number"
+              min={0}
+              step={1}
+              value={form.changeCutoffMin}
+              onChange={(e) => set("changeCutoffMin", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Switch checked={form.aiAcceptsChanges} onChange={(v) => set("aiAcceptsChanges", v)}>
+              My AI and rules may accept a customer's change
+            </Switch>
+            <div className="hint">
+              To a free time before the cutoff, at your prices; never one that changes a price.
+            </div>
+          </div>
+          <div className="wide">
+            <Switch checked={form.aiProposesChanges} onChange={(v) => set("aiProposesChanges", v)}>
+              My AI and rules may ask customers for a change
+            </Switch>
+            <div className="hint">
+              Another time, other quantities or a delivery date; if the customer says no, it stays as agreed.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card glass">
+        <h3 className="sec">Returns, and who you are</h3>
+        <div className="settings-grid">
+          <Field
+            id="s-return-days"
+            label="Days to change their mind"
+            error={field("returns.days")}
+            hint="From delivery, or from booking for a service they paid for. The law gives 14 at least; more is your own policy."
+          >
+            <input
+              id="s-return-days"
+              className="input"
+              type="number"
+              min={14}
+              max={365}
+              step={1}
+              value={form.returnDays}
+              onChange={(e) => set("returnDays", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-postage"
+            label="Sending things back is paid by"
+            error={field("returns.postage")}
+            hint="Faulty goods always come back at your cost."
+          >
+            <select
+              id="s-postage"
+              className="input"
+              value={form.returnPostage}
+              onChange={(e) => set("returnPostage", e.target.value === "business" ? "business" : "customer")}
+            >
+              <option value="customer">The customer</option>
+              <option value="business">You</option>
+            </select>
+          </Field>
+          <Field
+            id="s-refund-days"
+            label="You refund within (days)"
+            error={field("returns.refundDays")}
+            hint="Once nothing more has to come back; 14 at most. A withdrawal is refunded within 14 days of the customer's notice."
+          >
+            <input
+              id="s-refund-days"
+              className="input"
+              type="number"
+              min={1}
+              max={14}
+              step={1}
+              value={form.refundDays}
+              onChange={(e) => set("refundDays", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-respond"
+            label="You answer a return within (hours)"
+            error={field("returns.respondHours")}
+            hint="Customers are told this when they ask to send something back."
+          >
+            <input
+              id="s-respond"
+              className="input"
+              type="number"
+              min={1}
+              max={336}
+              step={1}
+              value={form.respondHours}
+              onChange={(e) => set("respondHours", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-sells-to"
+            label="You sell to"
+            error={field("commerce.customers")}
+            hint="Unless only businesses, customers confirm the price before they order, and may withdraw."
+          >
+            <select
+              id="s-sells-to"
+              className="input"
+              value={form.sellsTo}
+              onChange={(e) =>
+                set(
+                  "sellsTo",
+                  e.target.value === "businesses"
+                    ? "businesses"
+                    : e.target.value === "consumers"
+                      ? "consumers"
+                      : "both",
+                )
+              }
+            >
+              <option value="both">Anyone</option>
+              <option value="consumers">Consumers</option>
+              <option value="businesses">Businesses only</option>
+            </select>
+          </Field>
+          <div className="wide">
+            <Switch checked={form.aiApprovesReturns} onChange={(v) => set("aiApprovesReturns", v)}>
+              My AI and rules may approve a return inside my policy
+            </Switch>
+            <div className="hint">
+              With the goods coming back; never paying a refund, refusing a return or keeping part.
+            </div>
+          </div>
+          <Field
+            id="s-legal-name"
+            label="Legal name"
+            optional
+            error={field("commerce.legal.legalName")}
+            hint="Every confirmation says who customers are buying from."
+          >
+            <input
+              id="s-legal-name"
+              className="input"
+              value={form.legalName}
+              onChange={(e) => set("legalName", e.target.value)}
+            />
+          </Field>
+          <Field id="s-legal-address" label="Address" optional error={field("commerce.legal.address")}>
+            <input
+              id="s-legal-address"
+              className="input"
+              value={form.legalAddress}
+              onChange={(e) => set("legalAddress", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="s-legal-country"
+            label="Country"
+            optional
+            error={field("commerce.legal.country")}
+            hint="Two letters, like PT or GB: the consumer law you sell under, its words and its holidays."
+          >
+            <input
+              id="s-legal-country"
+              className="input"
+              maxLength={2}
+              value={form.legalCountry}
+              onChange={(e) => set("legalCountry", e.target.value)}
+            />
+          </Field>
+          <Field id="s-legal-email" label="Email" optional error={field("commerce.legal.email")}>
+            <input
+              id="s-legal-email"
+              className="input"
+              type="email"
+              value={form.legalEmail}
+              onChange={(e) => set("legalEmail", e.target.value)}
+            />
+          </Field>
+          <Field id="s-legal-phone" label="Phone" optional error={field("commerce.legal.phone")}>
+            <input
+              id="s-legal-phone"
+              className="input"
+              value={form.legalPhone}
+              onChange={(e) => set("legalPhone", e.target.value)}
+            />
+          </Field>
+          <Field id="s-vat" label="VAT number" optional error={field("commerce.legal.vatId")}>
+            <input id="s-vat" className="input" value={form.vatId} onChange={(e) => set("vatId", e.target.value)} />
+          </Field>
+          <Field
+            id="s-complaints"
+            label="Where customers can complain"
+            optional
+            error={field("commerce.legal.complaintsUrl")}
+            hint="A web address; in Portugal, your Livro de Reclamações page. A refused return points to it."
+          >
+            <input
+              id="s-complaints"
+              className="input"
+              type="url"
+              value={form.complaintsUrl}
+              onChange={(e) => set("complaintsUrl", e.target.value)}
+            />
+          </Field>
         </div>
       </section>
 

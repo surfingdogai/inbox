@@ -90,6 +90,8 @@ export interface CustomerExport {
     readonly thread: readonly Record<string, unknown>[];
     readonly emails: readonly Record<string, unknown>[];
     readonly receipts: readonly Record<string, unknown>[];
+    /** What each side put to the other (ADR-018 §1): every offer, with its terms and what became of it. */
+    readonly offers: readonly Record<string, unknown>[];
   }[];
 }
 
@@ -156,7 +158,7 @@ export class CustomerData {
     for (const part of inChunks(ids)) {
       itemRows.push(...(await this.db.orm.select().from(itemsTable).where(inArray(itemsTable.id, part))));
     }
-    const [events, thread, emails, receipts] = await Promise.all([
+    const [events, thread, emails, receipts, offers] = await Promise.all([
       rows(
         (m) =>
           `SELECT item_id, seq, event, from_state, to_state, actor_kind, reason, created_at FROM item_events WHERE item_id IN (${m}) ORDER BY item_id, seq`,
@@ -175,6 +177,12 @@ export class CustomerData {
       rows(
         (m) =>
           `SELECT item_id, id, kind, outcome, sha, issued_at, ack_at, jws FROM receipts WHERE item_id IN (${m}) ORDER BY item_id, issued_at`,
+        ids,
+      ),
+      rows(
+        (m) =>
+          `SELECT item_id, id, rev, by, status, terms, terms_sha, valid_through, note, reason_code, created_at, updated_at
+             FROM item_offers WHERE item_id IN (${m}) AND status <> 'draft' ORDER BY item_id, rev`,
         ids,
       ),
     ]);
@@ -225,6 +233,19 @@ export class CustomerData {
       acknowledged_at: iso(r[6]),
       jws: r[7],
     }));
+    const of = byItem(offers, (r) => ({
+      id: r[1],
+      rev: Number(r[2]),
+      by: r[3],
+      status: r[4],
+      terms: parse(r[5]),
+      terms_sha: r[6],
+      valid_through: iso(r[7]),
+      note: r[8],
+      reason_code: r[9],
+      created_at: iso(r[10]),
+      closed_at: r[4] === "open" ? null : iso(r[11]),
+    }));
     const itemsOut = itemRows
       .map((r) => rowToItem(r))
       .sort((a, b) => a.id.localeCompare(b.id))
@@ -234,6 +255,7 @@ export class CustomerData {
         thread: th.get(item.id) ?? [],
         emails: em.get(item.id) ?? [],
         receipts: rc.get(item.id) ?? [],
+        offers: of.get(item.id) ?? [],
       }));
     return {
       exported_at: new Date(nowOf(caller)).toISOString(),
@@ -503,13 +525,14 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
             AND json_extract(payload, '$.itemOffered.productId') IS NULL`,
         [ERASED, ...part],
       ),
+      // A return's words, the parcel it describes, the payment it went back by; its amounts and dates stay.
       run(
-        `UPDATE items SET payload = json_set(payload, '$.reason', ?), subject = ?
+        `UPDATE items SET payload = json_remove(json_set(payload, '$.reason', ?), '$.disputed', '$.paymentRef', '$.instructions'), subject = ?
           WHERE type = 'refund' AND party_id IN ${inParties}`,
         [ERASED, ERASED, ...part],
       ),
       run(
-        `UPDATE items SET payload = json_remove(payload, '$.notes') WHERE type = 'booking' AND party_id IN ${inParties}`,
+        `UPDATE items SET payload = json_remove(payload, '$.notes', '$.paymentRef') WHERE type = 'booking' AND party_id IN ${inParties}`,
       ),
       run(
         `UPDATE items SET payload = json_remove(payload, '$.notes', '$.billingAddress', '$.shippingAddress', '$.paymentRef', '$.paymentUrl')
@@ -530,6 +553,33 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
             AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
       ),
+      // What each side put to the other keeps its terms, amounts and fingerprint (which proves the terms
+      // without their words); the notes, what they were shown in words, and what they named go.
+      run(
+        `UPDATE item_offers SET note = CASE WHEN note IS NULL THEN NULL ELSE ? END,
+                shown = CASE WHEN shown IS NULL THEN NULL ELSE json_set(shown, '$.human', ?) END,
+                terms = json_remove(terms, '$.notes'),
+                actor_id = CASE WHEN actor_kind IN (${CUSTOMER_ACTORS}) THEN ? ELSE actor_id END
+          WHERE item_id IN ${theirItems}`,
+        [ERASED, ERASED, ERASED_ACTOR, ...part],
+      ),
+      run(
+        `UPDATE item_offers SET terms = json_set(terms, '$.itemOffered.name', ?)
+          WHERE item_id IN ${theirItems} AND json_extract(terms, '$.itemOffered.name') IS NOT NULL
+            AND json_extract(terms, '$.itemOffered.serviceId') IS NULL
+            AND json_extract(terms, '$.itemOffered.productId') IS NULL`,
+        [ERASED, ...part],
+      ),
+      run(
+        `UPDATE item_offers SET terms = json_set(terms, '$.lines', (
+            SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', ?) ELSE json(e.value) END)
+              FROM json_each(item_offers.terms, '$.lines') e))
+          WHERE item_id IN ${theirItems}
+            AND EXISTS (SELECT 1 FROM json_each(item_offers.terms, '$.lines') e WHERE ${OFF_CATALOGUE})`,
+        [ERASED, ...part],
+      ),
+      // A draft waiting for the owner was never sent: it goes whole, with whatever it quoted of them.
+      run(`DELETE FROM offer_drafts WHERE item_id IN ${theirItems}`, [...part]),
       run(`UPDATE items SET access_token_hash = NULL WHERE party_id IN ${inParties}`),
       run(
         `UPDATE items SET possible_party_id = NULL, customer_match = CASE WHEN customer_match = 'weak' THEN 'none' ELSE customer_match END

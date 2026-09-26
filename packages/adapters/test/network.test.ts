@@ -368,6 +368,7 @@ describe("pinging a network", () => {
       next: 3,
       next_at: "2026-10-09T00:00:00.000Z",
       v2: true,
+      v6: false,
       checked_at: new Date(now).toISOString(),
     });
     // A day's cache: the next hour's ping does not ask again.

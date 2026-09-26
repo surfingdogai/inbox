@@ -41,5 +41,15 @@ export {
   type RenderedMail,
   renderCustomerMail,
 } from "./mail";
-export { type OfferTerms, type OpenOffer, openOffer, termsSha } from "./offer";
+export {
+  changedPaths,
+  moneyChanged,
+  type OfferForm,
+  type OfferLine,
+  type OfferTerms,
+  type OpenOffer,
+  openOffer,
+  termsSha,
+  timeDeadline,
+} from "./offer";
 export type { CustomerPage, LinkActResult, PageField, PageForm, PageLink, PageSection } from "./page";

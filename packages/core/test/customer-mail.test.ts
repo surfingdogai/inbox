@@ -22,7 +22,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { services } from "../src/schema/tables";
 import type { Caller } from "../src/write/caller";
 import { describeToCustomer } from "../src/write/views";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * What a customer reads (the founder, 23 September 2026): most customers do not know which software a
@@ -309,17 +309,17 @@ describe("the emails a business sends its customer", () => {
         refund("approved"),
         { event: "approve" },
         "refund.approved",
-        "Your refund",
-        "We have approved your refund request.",
+        "Your return",
+        "We will refund €12.00, to the way you paid.",
       ],
+      [refund("rejected"), { event: "reject" }, "refund.rejected", "Your return", "We cannot accept the return:"],
       [
-        refund("rejected"),
-        { event: "reject" },
-        "refund.rejected",
-        "Your refund",
-        "Sorry, we cannot approve your refund request.",
+        refund("refunded"),
+        { event: "refund" },
+        "refund.refunded",
+        "Your return",
+        "We have refunded €12.00 to the way you paid.",
       ],
-      [refund("refunded"), { event: "refund" }, "refund.refunded", "Your refund", "We have refunded €12.00."],
       [
         booking("no_show"),
         { event: "no_show" },
@@ -698,8 +698,8 @@ describe("the emails a business sends its customer", () => {
       [
         refund("refunded"),
         { event: "refund" },
-        "O seu reembolso",
-        `Fizemos o reembolso de ${moneyIn({ value: 1200, currency: "EUR" }, "pt")}.`,
+        "A sua devolução",
+        `Devolvemos ${moneyIn({ value: 1200, currency: "EUR" }, "pt")} pelo mesmo meio de pagamento.`,
       ],
     ];
     for (const [item, extra, subject, first] of cases) {
@@ -854,7 +854,7 @@ describe("the emails a customer gets", () => {
       createdAt: T0,
       updatedAt: T0,
     });
-    const caps = new Capabilities(db);
+    const caps = confirming(new Capabilities(db));
     await caps.updateSettings(owner(), {
       doc: {
         business: { name: "Oficina Maré", languages },

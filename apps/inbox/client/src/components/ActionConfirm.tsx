@@ -43,7 +43,12 @@ export function ActionConfirm({
   onSubmit: (input: Record<string, unknown> | undefined) => void;
   onCancel: () => void;
 }) {
-  const kind = inputKindFor(transition.event, item.state);
+  const kind = inputKindFor(
+    transition.event,
+    item.state,
+    item.type,
+    (item.payload as { change?: { by: string } }).change?.by,
+  );
   const settings = useSettings();
   const [local, setLocal] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -57,7 +62,21 @@ export function ActionConfirm({
 
   const [total, setTotal] = useState("");
   const [validThrough, setValidThrough] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([]);
+  // Changes to an order start from the order as it stands: its lines, their products, its delivery.
+  const order = item.type === "order" ? (item.payload.proposed ?? item.payload) : undefined;
+  const [lines, setLines] = useState<LineDraft[]>(() =>
+    kind === "order_propose" && order
+      ? order.orderedItem.map((l, i) => ({
+          id: 1_000 + i,
+          name: l.name,
+          quantity: String(l.quantity),
+          price: moneyMajor(l.price),
+          ...(l.productId ? { productId: l.productId } : {}),
+          ...(l.sku ? { sku: l.sku } : {}),
+        }))
+      : [],
+  );
+  const [deliveryWhen, setDeliveryWhen] = useState(isoToLocal(order?.delivery?.when));
   const [notes, setNotes] = useState("");
   const [creates, setCreates] = useState<"order" | "booking">("order");
   const quoteFor = item.type === "quote_request" ? item.payload.requestedFor : undefined;
@@ -65,6 +84,12 @@ export function ActionConfirm({
   const [quoteEnd, setQuoteEnd] = useState("");
   const nextId = useRef(1);
 
+  const [returnReason, setReturnReason] = useState("faulty");
+  // A return asked for comes back unless the owner lets the customer keep it.
+  const refund = item.type === "refund" ? item.payload : undefined;
+  const [keepItem, setKeepItem] = useState(refund?.goodsBack === false);
+  const [method, setMethod] = useState<"post" | "drop_off" | "collection">("post");
+  const [address, setAddress] = useState("");
   const [ref, setRef] = useState("");
   const [amount, setAmount] = useState("");
   const [url, setUrl] = useState("");
@@ -76,6 +101,19 @@ export function ActionConfirm({
       case "note":
       case "agreed":
         return { ok: true, input: note.trim() ? { note: note.trim() } : undefined };
+      case "note_required":
+        if (!note.trim()) return { ok: false, problem: "Say why, in words for the customer." };
+        return { ok: true, input: { note: note.trim() } };
+      case "return_approve":
+        return {
+          ok: true,
+          input: keepItem
+            ? { goodsBack: false }
+            : { goodsBack: true, instructions: { method, ...(address.trim() ? { address: address.trim() } : {}) } },
+        };
+      case "return_open":
+        if (!note.trim()) return { ok: false, problem: "Say what the customer asked, in a few words." };
+        return { ok: true, input: { reasonCode: returnReason, note: note.trim() } };
       case "customer_cancel": {
         if (!note.trim()) return { ok: false, problem: "Say what the customer said, in a few words." };
         // Left as it was, it means now, which the server knows to the second.
@@ -102,11 +140,43 @@ export function ActionConfirm({
           },
         };
       }
+      case "order_propose": {
+        const parsed: Record<string, unknown>[] = [];
+        for (const l of lines.filter((x) => x.name.trim())) {
+          const quantity = Number(l.quantity);
+          const linePrice = parseMoney(l.price, currency);
+          if (!Number.isInteger(quantity) || quantity < 1 || !linePrice) {
+            return { ok: false, problem: `Line “${l.name}” needs a whole quantity and a price.` };
+          }
+          parsed.push({
+            ...(l.productId ? { productId: l.productId } : {}),
+            ...(l.sku ? { sku: l.sku } : {}),
+            name: l.name.trim(),
+            quantity,
+            price: linePrice,
+          });
+        }
+        if (parsed.length === 0) return { ok: false, problem: "Keep at least one line; to say no, decline instead." };
+        const when = deliveryWhen ? localToIso(deliveryWhen) : undefined;
+        if (deliveryWhen && !when) return { ok: false, problem: "The delivery date must be a date and time." };
+        const valid = validThrough ? localToIso(validThrough) : undefined;
+        if (validThrough && !valid) return { ok: false, problem: "Valid through must be a date and time." };
+        return {
+          ok: true,
+          input: {
+            orderedItem: parsed,
+            ...(when ? { delivery: { method: order?.delivery?.method ?? "delivery", when } } : {}),
+            ...(valid ? { validThrough: valid } : {}),
+            ...(note.trim() ? { note: note.trim() } : {}),
+          },
+        };
+      }
       case "quote": {
         const totalPrice = parseMoney(total, currency);
         if (!totalPrice) return { ok: false, problem: "Add the total price, like 89.30." };
-        const valid = localToIso(validThrough);
-        if (!valid) return { ok: false, problem: "Add the date the quote is valid through." };
+        // Left empty, it holds for the hours set in Settings (`negotiation.offerValidHours`).
+        const valid = validThrough ? localToIso(validThrough) : undefined;
+        if (validThrough && !valid) return { ok: false, problem: "Valid through must be a date and time." };
         const kept = lines.filter((l) => l.name.trim());
         const parsed: { name: string; quantity: number; price: Money }[] = [];
         for (const l of kept) {
@@ -127,7 +197,7 @@ export function ActionConfirm({
           ok: true,
           input: {
             totalPrice,
-            validThrough: valid,
+            ...(valid ? { validThrough: valid } : {}),
             lines: parsed,
             ...(notes.trim() ? { notes: notes.trim() } : {}),
             creates,
@@ -229,6 +299,109 @@ export function ActionConfirm({
         </div>
       )}
 
+      {kind === "note_required" && (
+        <div>
+          <label className="label" htmlFor="act-note">
+            {transition.event === "dispute_goods" ? "What came back?" : "Why?"}
+          </label>
+          <textarea
+            id="act-note"
+            className="input"
+            rows={3}
+            required
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <div className="hint">The customer receives this, in your words.</div>
+        </div>
+      )}
+
+      {kind === "return_approve" && (
+        <div className="grid2">
+          <div className="wide">
+            <label className="label" htmlFor="act-keep">
+              <input id="act-keep" type="checkbox" checked={keepItem} onChange={(e) => setKeepItem(e.target.checked)} />{" "}
+              They keep it: refund without it coming back
+            </label>
+          </div>
+          {!keepItem && (
+            <>
+              <div>
+                <label className="label" htmlFor="act-method">
+                  How it comes back
+                </label>
+                <select
+                  id="act-method"
+                  className="input"
+                  value={method}
+                  onChange={(e) =>
+                    setMethod(
+                      e.target.value === "drop_off"
+                        ? "drop_off"
+                        : e.target.value === "collection"
+                          ? "collection"
+                          : "post",
+                    )
+                  }
+                >
+                  <option value="post">By post</option>
+                  <option value="drop_off">They bring it</option>
+                  <option value="collection">You collect it</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="act-address">
+                  Where to <span className="opt">· optional</span>
+                </label>
+                <input
+                  id="act-address"
+                  className="input"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          <div className="hint wide">The customer is told how and by when to send it; the refund follows it.</div>
+        </div>
+      )}
+
+      {kind === "return_open" && (
+        <div className="grid2">
+          <div>
+            <label className="label" htmlFor="act-reason">
+              Why are they sending it back?
+            </label>
+            <select
+              id="act-reason"
+              className="input"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+            >
+              <option value="faulty">It is faulty</option>
+              <option value="not_as_described">Not as described</option>
+              <option value="wrong_item">Wrong item</option>
+              <option value="changed_mind">Changed their mind</option>
+              <option value="other">Something else</option>
+            </select>
+          </div>
+          <div className="wide">
+            <label className="label" htmlFor="act-note">
+              What did they say?
+            </label>
+            <textarea
+              id="act-note"
+              className="input"
+              rows={2}
+              required
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <div className="hint">For your records; the customer does not see it.</div>
+          </div>
+        </div>
+      )}
+
       {kind === "note" && (
         <div>
           <label className="label" htmlFor="act-note">
@@ -297,7 +470,7 @@ export function ActionConfirm({
         </div>
       )}
 
-      {kind === "quote" && (
+      {(kind === "quote" || kind === "order_propose") && (
         <>
           <div className="lines">
             {lines.map((l) => (
@@ -358,97 +531,144 @@ export function ActionConfirm({
                 <Plus className="icon" aria-hidden="true" />
                 Add a line
               </button>
-              {lines.length > 0 && linesTotal.value > 0 && (
+              {kind === "quote" && lines.length > 0 && linesTotal.value > 0 && (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTotal(moneyMajor(linesTotal))}>
                   Lines add up to {formatMoney(linesTotal)} · use it
                 </button>
               )}
+              {kind === "order_propose" && <span className="hint">Total {formatMoney(linesTotal)}</span>}
             </div>
           </div>
-          <div className="grid2">
-            <div>
-              <label className="label" htmlFor="act-total">
-                Total ({currency})
-              </label>
-              <input
-                id="act-total"
-                className="input"
-                inputMode="decimal"
-                value={total}
-                onChange={(e) => setTotal(e.target.value)}
-              />
+          {kind === "order_propose" && (
+            <div className="grid2">
+              <div>
+                <label className="label" htmlFor="act-delivery">
+                  Delivery <span className="opt">· optional</span>
+                </label>
+                <input
+                  id="act-delivery"
+                  className="input"
+                  type="datetime-local"
+                  value={deliveryWhen}
+                  onChange={(e) => setDeliveryWhen(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="act-order-valid">
+                  Valid through <span className="opt">· optional</span>
+                </label>
+                <input
+                  id="act-order-valid"
+                  className="input"
+                  type="datetime-local"
+                  value={validThrough}
+                  onChange={(e) => setValidThrough(e.target.value)}
+                />
+              </div>
+              <div className="wide">
+                <label className="label" htmlFor="act-order-note">
+                  A word for the customer <span className="opt">· optional</span>
+                </label>
+                <textarea
+                  id="act-order-note"
+                  className="input"
+                  rows={2}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </div>
+              <div className="hint wide">
+                The customer accepts the changes, declines them (the order closes) or tells you what they would change.
+                Left empty, it holds for {settings.data?.doc.negotiation?.offerValidHours ?? 48} hours.
+              </div>
             </div>
-            <div>
-              <label className="label" htmlFor="act-valid">
-                Valid through
-              </label>
-              <input
-                id="act-valid"
-                className="input"
-                type="datetime-local"
-                value={validThrough}
-                onChange={(e) => setValidThrough(e.target.value)}
-              />
+          )}
+          {kind === "quote" && (
+            <div className="grid2">
+              <div>
+                <label className="label" htmlFor="act-total">
+                  Total ({currency})
+                </label>
+                <input
+                  id="act-total"
+                  className="input"
+                  inputMode="decimal"
+                  value={total}
+                  onChange={(e) => setTotal(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="act-valid">
+                  Valid through <span className="opt">· optional</span>
+                </label>
+                <input
+                  id="act-valid"
+                  className="input"
+                  type="datetime-local"
+                  value={validThrough}
+                  onChange={(e) => setValidThrough(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="act-creates">
+                  Accepting creates
+                </label>
+                <select
+                  id="act-creates"
+                  className="input"
+                  value={creates}
+                  onChange={(e) => setCreates(e.target.value === "booking" ? "booking" : "order")}
+                >
+                  <option value="order">An order</option>
+                  <option value="booking">A booking</option>
+                </select>
+              </div>
+              {creates === "booking" && (
+                <>
+                  <div>
+                    <label className="label" htmlFor="act-quote-start">
+                      For the time
+                    </label>
+                    <input
+                      id="act-quote-start"
+                      className="input"
+                      type="datetime-local"
+                      value={quoteStart}
+                      onChange={(e) => setQuoteStart(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="act-quote-end">
+                      Until <span className="opt">· optional</span>
+                    </label>
+                    <input
+                      id="act-quote-end"
+                      className="input"
+                      type="datetime-local"
+                      value={quoteEnd}
+                      onChange={(e) => setQuoteEnd(e.target.value)}
+                    />
+                  </div>
+                  <div className="hint wide">
+                    When the customer accepts, this time is booked and confirmed. The end defaults to the service's
+                    length.
+                  </div>
+                </>
+              )}
+              <div className="wide">
+                <label className="label" htmlFor="act-notes">
+                  Notes for the customer <span className="opt">· optional</span>
+                </label>
+                <textarea
+                  id="act-notes"
+                  className="input"
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
             </div>
-            <div>
-              <label className="label" htmlFor="act-creates">
-                Accepting creates
-              </label>
-              <select
-                id="act-creates"
-                className="input"
-                value={creates}
-                onChange={(e) => setCreates(e.target.value === "booking" ? "booking" : "order")}
-              >
-                <option value="order">An order</option>
-                <option value="booking">A booking</option>
-              </select>
-            </div>
-            {creates === "booking" && (
-              <>
-                <div>
-                  <label className="label" htmlFor="act-quote-start">
-                    For the time
-                  </label>
-                  <input
-                    id="act-quote-start"
-                    className="input"
-                    type="datetime-local"
-                    value={quoteStart}
-                    onChange={(e) => setQuoteStart(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="act-quote-end">
-                    Until <span className="opt">· optional</span>
-                  </label>
-                  <input
-                    id="act-quote-end"
-                    className="input"
-                    type="datetime-local"
-                    value={quoteEnd}
-                    onChange={(e) => setQuoteEnd(e.target.value)}
-                  />
-                </div>
-                <div className="hint wide">
-                  When the customer accepts, this time is booked and confirmed. The end defaults to the service's
-                  length.
-                </div>
-              </>
-            )}
-            <div className="wide">
-              <label className="label" htmlFor="act-notes">
-                Notes for the customer <span className="opt">· optional</span>
-              </label>
-              <textarea
-                id="act-notes"
-                className="input"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </div>
-          </div>
+          )}
         </>
       )}
 
@@ -522,4 +742,7 @@ interface LineDraft {
   readonly name: string;
   readonly quantity: string;
   readonly price: string;
+  /** The catalogue product the line is, when it is one: kept as the line changes. */
+  readonly productId?: string;
+  readonly sku?: string;
 }

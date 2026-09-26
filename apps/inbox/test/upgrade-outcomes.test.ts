@@ -215,7 +215,8 @@ describe("upgrading to outcomes", () => {
       sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'receipts' AND name LIKE 'receipts_%' ORDER BY name",
       method: "all",
     });
-    expect(indexes.rows.map((r) => String(r[0]))).toEqual(["receipts_item_kind_outcome", "receipts_sha"]);
+    // …and since rules version 6 also by the agreed change an amended receipt records.
+    expect(indexes.rows.map((r) => String(r[0]))).toEqual(["receipts_item_kind_outcome_offer", "receipts_sha"]);
 
     // Two days after it ended, and weeks after the order's payment was asked for, the sweep leaves
     // both as they are: nothing completed, nothing lapsed, no outcome. It still gives the old

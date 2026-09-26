@@ -1,4 +1,5 @@
 import {
+  AMENDMENT_LIMITS,
   businessCardSchema,
   businessesResponseSchema,
   categoriesResponseSchema,
@@ -10,14 +11,18 @@ import {
   listCategoriesOutputSchema,
   listingSchema,
   MCP_TOOL_NAMES,
+  OUTCOMES,
   parseReceiptClaims,
   personIssuanceRequestSchema,
   pingRequestSchema,
   presentationRequestSchema,
   profileSchema,
   rankingDocumentSchema,
+  rankingV5Schema,
+  rankingV6Schema,
   receiptAckPayloadV2Schema,
   receiptPayloadV2Schema,
+  reportRequestSchema,
   rulesOf,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
@@ -28,12 +33,15 @@ import ordering from "../../spec/vectors/ordering.json";
 import passes from "../../spec/vectors/passes.json";
 import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
+import receiptsV6 from "../../spec/vectors/receipts-v6.json";
 import signatures from "../../spec/vectors/signatures.json";
 import vocabulary from "../../spec/vocab/categories.json";
 import { buildNetworkVectors } from "../scripts/network-vectors";
+import { type OfferForm, type OfferTerms, termsSha } from "../src/customer/offer";
 import type { ActorKind, ItemType } from "../src/domain/types";
 import { outcomeOf } from "../src/machine/outcomes";
-import { bookingMachine, orderMachine } from "../src/machine/tables";
+import { bookingMachine, orderMachine, refundMachine } from "../src/machine/tables";
+import { AMENDMENT_LIMITS as INBOX_AMENDMENT_LIMITS } from "../src/negotiation/changes";
 import {
   asciiLower,
   formatKey,
@@ -79,6 +87,7 @@ describe("the committed vectors and schemas", () => {
     expect(v.signatures).toEqual(signatures);
     expect(v.passes).toEqual(passes);
     expect(v.receiptsV2).toEqual(receiptsV2);
+    expect(v.receiptsV6).toEqual(receiptsV6);
   });
 
   it("include a JSON Schema for every message, as z.toJSONSchema writes it", () => {
@@ -355,6 +364,173 @@ describe("receipts-v2.json", () => {
   }
 });
 
+describe("receipts-v6.json", () => {
+  const keys = [jwk(receiptsV6.issuer.public_jwk)];
+  type V6Receipt = (typeof receiptsV6.receipts)[number] & {
+    payload: Record<string, unknown>;
+    rules_5: Record<string, unknown> | null;
+    agreed?: { form: OfferForm; terms: OfferTerms; terms_sha: string; trm_key: string };
+  };
+  /** HMAC-SHA-256 by hand, as any verifier would: `trm` from the disclosed key and the terms' fingerprint. */
+  const hmac = async (keyB64u: string, message: string) => {
+    const raw = Uint8Array.from(atob(keyB64u.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const k = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message)));
+    return btoa(String.fromCharCode(...mac))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  };
+  const all = receiptsV6.receipts as V6Receipt[];
+
+  for (const r of all) {
+    it(`receipt: ${r.name}`, async () => {
+      expect(await verifyReceipt(r.jws, keys)).toEqual(r.payload);
+      expect(await receiptSha(r.jws)).toBe(r.sha);
+      expect(receiptPayloadV2Schema.safeParse(r.payload).success).toBe(true);
+      expect(parseReceiptClaims(r.payload)).toEqual({ version: 2, claims: r.payload });
+      // A reader on rules 5 refuses what version 6 added, and ignores the claims it does not know.
+      const five = parseReceiptClaims(r.payload, { rules: 5 });
+      expect(five === null ? null : five.claims).toEqual(r.rules_5);
+      expect(r.payload.iat as number).toBeLessThanOrEqual(receiptsV6.now + 300);
+      if (r.agreed) {
+        expect(await termsSha(r.agreed.form, r.agreed.terms)).toBe(r.agreed.terms_sha);
+        expect(await hmac(r.agreed.trm_key, r.agreed.terms_sha)).toBe(r.payload.trm);
+        // Never the bare fingerprint: nobody without the key can test guessed terms against it.
+        expect(r.payload.trm).not.toBe(r.agreed.terms_sha);
+      }
+      // What version 6 adds says nothing more about the person: no presentation on an amendment or a refund's.
+      if (r.payload.knd === "amended" || r.payload.typ === "refund") expect(r.payload.per).toBeUndefined();
+    });
+  }
+
+  it("an amendment and an outcome name the earliest promise, and an outcome reads the latest amendment's dates", () => {
+    const byItem = new Map<string, V6Receipt[]>();
+    for (const r of all) byItem.set(String(r.payload.itm), [...(byItem.get(String(r.payload.itm)) ?? []), r]);
+    const seen = new Set<string>();
+    for (const [, rs] of byItem) {
+      const [promise] = rs as [V6Receipt];
+      expect(["confirmed", "paid", "accepted"]).toContain(promise.payload.knd);
+      const amendments = rs
+        .filter((r) => r.payload.knd === "amended")
+        .sort((a, b) => Number(a.payload.iat) - Number(b.payload.iat));
+      const outcome = rs.find((r) => r.payload.knd === "outcome") as V6Receipt;
+      for (const a of amendments) expect(a.payload.ref).toBe(promise.payload.nonce);
+      expect(outcome.payload.ref).toBe(promise.payload.nonce);
+      const latest = amendments.at(-1) ?? promise;
+      expect(outcome.payload.due).toBe(latest.payload.due);
+      expect(outcome.payload.end).toBe(latest.payload.end);
+      seen.add(String(outcome.payload.out));
+    }
+    // Every refund outcome an inbox records has its receipt.
+    const refunds = receiptsV6.outcomes.filter((o) => o.by === "inbox").map((o) => o.code);
+    for (const code of refunds) expect(seen.has(code), code).toBe(true);
+  });
+
+  it("adds rows to the outcome table, none of them on a customer's side", () => {
+    expect(receiptsV6.outcomes).toEqual(JSON.parse(JSON.stringify(OUTCOMES.filter((o) => "since" in o))));
+    for (const o of receiptsV6.outcomes) {
+      expect(o.since).toBe(6);
+      expect(o.customer, o.code).toBeNull();
+    }
+    expect(receiptsV2.outcomes.some((o) => (o.code as string).startsWith("refund."))).toBe(false);
+    expect(receiptsV6.amendment_limits).toEqual(AMENDMENT_LIMITS);
+    // The inbox never records more than a network honours.
+    expect(INBOX_AMENDMENT_LIMITS.maxPerItem).toBeLessThanOrEqual(AMENDMENT_LIMITS.unverified);
+    expect(INBOX_AMENDMENT_LIMITS.dueShiftDays).toBeLessThanOrEqual(AMENDMENT_LIMITS.dueShiftDays);
+  });
+
+  for (const r of receiptsV6.refused_receipts) {
+    it(`refused (${r.code}): ${r.name}`, async () => {
+      expect(await verifyReceipt(r.jws, keys)).toEqual(r.payload);
+      expect(parseReceiptClaims(r.payload)).toBeNull();
+      // A reader on rules 5 ignores trm and acc however they look (A3.6): refused only for what else it refuses.
+      const five = parseReceiptClaims(r.payload, { rules: 5 });
+      expect(five === null ? null : five.claims).toEqual(r.rules_5);
+    });
+  }
+
+  for (const a of receiptsV6.acknowledgements) {
+    it(`acknowledgement: ${a.name}`, async () => {
+      const v = await verifyAck(a.jws, {
+        receiptId: a.payload.rcp,
+        receiptJws: a.receipt_jws,
+        now: a.verify_at * 1000,
+      });
+      expect(v.payload).toEqual(a.payload);
+      expect(receiptAckPayloadV2Schema.safeParse(a.payload).success).toBe(true);
+      expect(all.find((r) => r.jws === a.receipt_jws)?.payload.knd).toBe("amended");
+    });
+  }
+
+  for (const r of receiptsV6.reports) {
+    it(`report: ${r.name}`, () => {
+      expect(reportRequestSchema.safeParse(r.request).success).toBe(r.ok);
+    });
+  }
+
+  it("every refund path records the outcome the vector names, by how its date stood, and only those queue one", () => {
+    const ms = (s: number) => s * 1000;
+    const due = ms(1_790_000_000);
+    const ctxOf = (when: string | null) =>
+      when === "by_due"
+        ? { due, now: due }
+        : when === "after_due"
+          ? { due, now: due + 1000 }
+          : when === "no_due"
+            ? { due: null, now: due }
+            : when === "due_fixed"
+              ? { due, now: due - 1 }
+              : {};
+    const refundPaths = receiptsV6.transitions.filter((p) => p.typ === "refund");
+    for (const p of refundPaths) {
+      const actor = p.actor as ActorKind;
+      const got = outcomeOf("refund", p.event, p.from, actor, ctxOf(p.when));
+      const want = p.out === null ? null : p.aut ? { code: p.out, aut: 1 } : { code: p.out };
+      expect(got, `refund ${p.event} from ${p.from} by ${p.actor} (${p.when})`).toEqual(want);
+      const entry = refundMachine.transitions.find(
+        (t) => t.event === p.event && t.from.includes(p.from as never) && t.by.includes(actor),
+      );
+      expect(entry?.to, `refund ${p.event} from ${p.from}`).toBe(p.to);
+      // A transition that can close a promise queues its outcome; approving or taking the goods back
+      // queues the promise, which is issued once the date is fixed.
+      const closes = refundPaths.some(
+        (q) => q.event === p.event && q.from === p.from && q.actor === p.actor && q.out !== null,
+      );
+      expect(entry?.effects?.includes("issue_receipt:outcome") ?? false, `refund ${p.event} from ${p.from}`).toBe(
+        closes,
+      );
+      expect(entry?.effects?.includes("issue_receipt:accepted") ?? false).toBe(p.receipt === "accepted");
+    }
+    // The vector names every refund path the machine has, each date variant once.
+    const variants = new Set(refundPaths.map((p) => `${p.event}|${p.from}|${p.actor}`));
+    let paths = 0;
+    for (const t of refundMachine.transitions) paths += t.from.length * t.by.length;
+    expect(variants.size).toBe(paths);
+  });
+
+  it("a change records no outcome, and accepting one issues its amended receipt", () => {
+    const changes = receiptsV6.transitions.filter((p) => p.typ !== "refund");
+    const machinesByType = { booking: bookingMachine, order: orderMachine } as const;
+    let paths = 0;
+    for (const m of [bookingMachine, orderMachine]) {
+      for (const t of m.transitions) if (t.event.endsWith("_change")) paths += t.from.length * t.by.length;
+    }
+    expect(changes).toHaveLength(paths);
+    for (const p of changes) {
+      const actor = p.actor as ActorKind;
+      expect(outcomeOf(p.typ as ItemType, p.event, p.from, actor)).toBeNull();
+      const entry = machinesByType[p.typ as "booking" | "order"].transitions.find(
+        (t) => t.event === p.event && t.from.includes(p.from as never) && t.by.includes(actor),
+      );
+      expect(entry?.to).toBe(p.from);
+      expect(entry?.effects?.includes("issue_receipt:amended") ?? false, `${p.typ} ${p.event}`).toBe(
+        p.receipt === "amended",
+      );
+    }
+  });
+});
+
 describe("ordering.json (the network's, read here as any consumer would)", () => {
   it("reproduces every rank_shuffle: the first 16 hex digits of SHA-256(date:uuid), a string", async () => {
     for (const s of ordering.shuffles) {
@@ -594,5 +770,34 @@ describe("what an inbox reads from a network's answers", () => {
       inForce: 1,
       next: null,
     });
+  });
+
+  it("reads version 6's limits on amendments and refunds, and refuses a version 6 without them", () => {
+    const v4 = {
+      version: 4,
+      rules: "0.1.1",
+      status: "in_force",
+      published_at: "2026-09-23T00:00:00Z",
+      effective_at: "2026-09-23T00:00:00Z",
+      summary: "…",
+    };
+    expect(Object.keys(rankingV6Schema.shape.amendments.shape).sort()).toEqual([
+      "dates_from",
+      "due_shift_days_max",
+      "unverified_max",
+    ]);
+    expect(Object.keys(rankingV6Schema.shape.refunds.shape).sort()).toEqual([
+      "honoured_o",
+      "late_o",
+      "promise",
+      "report_window_days",
+    ]);
+    // Version 6 is version 5 (Amendment 2) with what Amendment 3 adds: nothing version 5 publishes is dropped.
+    for (const k of Object.keys(rankingV5Schema.shape)) expect(Object.keys(rankingV6Schema.shape), k).toContain(k);
+    expect(Object.keys(rankingV6Schema.shape.order.shape)).toContain("member");
+    expect(Object.keys(rankingV6Schema.shape.timing.shape)).toContain("contest_days");
+    expect(Object.keys(rankingV5Schema.shape)).not.toContain("amendments");
+    // A version 6 document missing what version 6 adds is not version 6.
+    expect(rankingDocumentSchema.safeParse({ ...v4, version: 6, rules: "0.1.3" }).success).toBe(false);
   });
 });

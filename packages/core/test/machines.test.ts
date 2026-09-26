@@ -103,9 +103,19 @@ describe("state machines as data", () => {
     expect(availableTransitions(bookingMachine, "confirmed", "owner").map((t) => t.event)).not.toContain(
       "record_cancel_late",
     );
+    // Once paid too: what they paid is then theirs to ask back, as a refund request (ADR-018 §3.2).
     for (const s of orderMachine.states) {
       expect(ok(orderMachine, s, "record_cancel", "staff"), s).toBe(
-        ["received", "needs_info", "accepted", "awaiting_payment", "payment_failed"].includes(s),
+        [
+          "received",
+          "needs_info",
+          "proposed",
+          "accepted",
+          "awaiting_payment",
+          "payment_failed",
+          "paid",
+          "fulfilling",
+        ].includes(s),
       );
     }
     // A new quote replaces the one before.

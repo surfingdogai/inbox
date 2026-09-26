@@ -92,10 +92,36 @@ const sections = {
         .max(10_080)
         .default(60)
         .describe("Minutes before a start time after which customers can no longer book it online."),
-      /** Hold the slot while a proposal is pending. */
-      holdOnPropose: z.boolean().default(false),
-      /** Requests nobody answered expire after this many hours. */
-      autoExpireHours: z.number().int().min(1).default(72),
+      /**
+       * Hold the time we propose until the customer answers (ADR-018 §3.1): nobody else can book it
+       * meanwhile. Off, a proposed time goes out unheld, theirs if it is still free when they say yes.
+       */
+      holdOnPropose: z
+        .boolean()
+        .default(false)
+        .describe("Hold the time you propose until the customer answers, so nobody else books it."),
+      /**
+       * At most this many times held at once for one customer (their party, or the assistant that
+       * made the request), across their bookings; past it a proposed time goes out unheld, so nobody
+       * parks places by asking.
+       */
+      maxHolds: z
+        .number()
+        .int()
+        .min(0)
+        .max(10)
+        .default(2)
+        .describe("Times held at once for one customer, at most; past it a proposed time goes out unheld."),
+      /**
+       * A booking request nobody answered lapses this many hours after it came in, or after the
+       * customer last answered us, and at its start at the latest; the customer is told.
+       */
+      autoExpireHours: z
+        .number()
+        .int()
+        .min(1)
+        .default(72)
+        .describe("Hours after which a booking request nobody answered lapses; the customer is told."),
       /**
        * A customer who cancels a confirmed booking after the window has closed (ADR-017 §3.1):
        * `record` takes the cancellation and records it as late (the network weighs it only when it
@@ -140,6 +166,275 @@ const sections = {
         .max(365)
         .default(30)
         .describe("Days after acceptance by which an order with no delivery time is due."),
+    })
+    .prefault({}),
+  /**
+   * Offers (ADR-018 §1, §10): how long what we propose and what the customer asks stay open, how
+   * many answers a negotiation takes before a person does the rest, and whether we may withdraw
+   * what we proposed. They bound what the owner's AI and rules do, so only the owner in person
+   * changes them (`guard.ts`).
+   */
+  negotiation: z
+    .object({
+      /**
+       * How long what we propose can be accepted when it gives no date of its own: a quote, changes to
+       * an order. What the owner's AI or a rule proposes lasts at most this long, whatever it says. A
+       * time a person proposes lasts until its start less the minimum notice.
+       */
+      offerValidHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(2_160)
+        .default(48)
+        .describe(
+          "Hours a quote or changes you send without a date can be accepted; what your AI or a rule proposes lasts at most this long.",
+        ),
+      /** An order or a quote request the customer sent, or answered, lapses this long after, unanswered. */
+      counterValidHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(2_160)
+        .default(72)
+        .describe("Hours after which an order or quote request nobody answered lapses; the customer is told."),
+      /**
+       * Rounds in a negotiation: its first offer is round 1, each answer that is not a yes one more.
+       * Past it the owner's AI and rules make no further offer, and a customer's further suggestion
+       * goes to a person as their message; never refused.
+       */
+      maxRounds: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .default(3)
+        .describe("Rounds of back-and-forth before a person answers; a customer's suggestion is never refused."),
+      /**
+       * What we propose binds us until it lapses. Off, it says it is subject to our confirmation,
+       * and we may withdraw it (`retract`) before the customer answers.
+       */
+      binding: z
+        .boolean()
+        .default(true)
+        .describe("What you propose binds you until it lapses. Off, you may withdraw it before the customer answers."),
+      /**
+       * Whether a customer's own price is taken as their answer (Q1: off out of the box). Off, a price
+       * they suggest goes to a person as their message, never refused; time, quantities and delivery can
+       * always be suggested. On, it is their counter, for a person to take or answer — or for the owner's
+       * AI and rules to take at or above the owner's floor, never to haggle.
+       */
+      priceCounters: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Customers may suggest a price of their own (a counter you take or answer). Off, a price they suggest goes to a person as their message.",
+        ),
+      /**
+       * How far one customer (their party, the assistant that signs for them, or their device) may haggle:
+       * negotiations open at once, and price counters per product or service in `days`. Past either, what
+       * they suggest goes to a person as their message; never refused.
+       */
+      perCustomer: z
+        .object({
+          open: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .default(3)
+            .describe("Negotiations on price one customer may have open at once."),
+          priceCounters: z
+            .number()
+            .int()
+            .min(0)
+            .max(20)
+            .default(3)
+            .describe("Prices one customer may suggest for the same product or service within the days below."),
+          days: z.number().int().min(1).max(365).default(30).describe("The window the price counters are counted in."),
+        })
+        .prefault({}),
+      /**
+       * Rewards for good customers (Q3): a lower price the inbox gives a customer whose record here, or
+       * whose standing their assistant showed, meets the owner's condition. Keyed by id; each is checked
+       * when written (`negotiation/rewards.ts`) and one that does not check out is never applied. Only
+       * the owner in person reads or changes them.
+       */
+      rewards: z
+        .record(z.string(), z.unknown())
+        .default({})
+        .describe(
+          "Rewards for good customers, keyed by a name of yours: { if: a condition on the customer's record, pct: 1-50 percent off, only: product or service ids (null: all), says?: a line for the customer }.",
+        ),
+      /**
+       * Changes to a confirmed booking or an accepted order (ADR-018 §3.1, §3.2): how many each may
+       * have, and how close to a booking's start a customer's own change still goes through without a
+       * person. A change declined, withdrawn or lapsed leaves the promise as it was.
+       */
+      changes: z
+        .object({
+          maxPerItem: z
+            .number()
+            .int()
+            .min(0)
+            .max(3)
+            .default(3)
+            .describe(
+              "Changes a booking or an order may have once agreed (at most 3). Past it, a customer's request goes to a person as their message.",
+            ),
+          customerCutoffMin: z
+            .number()
+            .int()
+            .min(0)
+            .max(43_200)
+            .nullable()
+            .default(null)
+            .describe(
+              "Minutes before a booking's start after which only a person may accept a customer's change; empty means the cancellation window.",
+            ),
+        })
+        .prefault({}),
+      /**
+       * What the owner's AI and rules may agree to on their own (Q2, time yes, money no). Only the
+       * owner in person changes these.
+       */
+      ai: z
+        .object({
+          maxDiscountPct: z
+            .number()
+            .min(0)
+            .max(50)
+            .default(0)
+            .describe(
+              "Percent below a customer's price your AI and rules may go on a catalogue line, never under your lowest price for it. 0: no discount.",
+            ),
+          mayPriceCustom: z
+            .boolean()
+            .default(false)
+            .describe(
+              "Your AI and rules may put a price on what the catalogue does not price: a quote, a line of their own, a longer booking.",
+            ),
+          maxTimeShiftMin: z
+            .number()
+            .int()
+            .min(0)
+            .max(43_200)
+            .default(10_080)
+            .describe("Minutes from the time the customer asked for that your AI and rules may propose instead."),
+          maxDelayDays: z
+            .number()
+            .int()
+            .min(0)
+            .max(90)
+            .default(0)
+            .describe("Days past the delivery date the customer asked for that your AI and rules may propose."),
+          maxRefundMinor: z
+            .number()
+            .int()
+            .min(0)
+            .default(0)
+            .describe(
+              "Up to this amount (in cents) for an order, your AI and rules may agree refunds with nothing to send back. 0: never.",
+            ),
+          mayAcceptChanges: z
+            .boolean()
+            .default(true)
+            .describe(
+              "Your AI and rules may accept a customer's change to a free time before the cutoff; never one that changes a price.",
+            ),
+          mayProposeChanges: z
+            .boolean()
+            .default(false)
+            .describe("Your AI and rules may ask a customer to change a confirmed booking or an accepted order."),
+          mayAuthorizeReturnsInPolicy: z
+            .boolean()
+            .default(true)
+            .describe(
+              "Your AI and rules may approve a return inside your return policy, with the goods coming back; never pay a refund, refuse a return or settle for less.",
+            ),
+        })
+        .prefault({}),
+    })
+    .prefault({}),
+  /**
+   * Returns (ADR-018 §7): the business's policy, which may be more generous than the law and never
+   * less. Only the owner in person changes it (`guard.ts`): it bounds what the owner's AI approves.
+   */
+  returns: z
+    .object({
+      days: z
+        .number()
+        .int()
+        .min(14)
+        .max(365)
+        .default(14)
+        .describe(
+          "Days after delivery (or after booking, for a service) a customer may withdraw or return; 14 at least.",
+        ),
+      postage: z
+        .enum(["customer", "business"])
+        .default("customer")
+        .describe(
+          "Who pays to send a withdrawn or returned item back: the customer, or you. Faulty goods are always yours.",
+        ),
+      refundDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(14)
+        .default(14)
+        .describe("Days you take to refund once nothing more has to come back; 14 at most."),
+      respondHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(336)
+        .default(48)
+        .describe("Hours within which you answer a return request; the customer is told."),
+      assumedTransitDays: z
+        .number()
+        .int()
+        .min(0)
+        .max(30)
+        .default(7)
+        .describe(
+          "When an order was fulfilled with no delivery date recorded, the days it is taken to have been on its way: the customer's period starts after them.",
+        ),
+    })
+    .prefault({}),
+  /**
+   * Who the business sells to, and who it is (ADR-018 §5, §7): its customers are consumers unless it
+   * sells only to businesses, and its legal identity goes in every confirmation. Only the owner in
+   * person changes it.
+   */
+  commerce: z
+    .object({
+      customers: z
+        .enum(["consumers", "businesses", "both"])
+        .default("both")
+        .describe(
+          "Who you sell to. Unless it is only businesses, a customer is taken for a consumer: they confirm the price before they order, and may withdraw.",
+        ),
+      legal: z
+        .object({
+          legalName: z.string().max(200).default("").describe("Your legal or trading name."),
+          address: z.string().max(500).default("").describe("Your geographical address."),
+          country: z
+            .string()
+            .regex(/^[A-Z]{2}$/, "a two-letter country code, like PT or GB")
+            .or(z.literal(""))
+            .default("")
+            .describe("The country whose consumer law applies to you (PT, GB, …): it picks the words and holidays."),
+          phone: z.string().max(40).default(""),
+          email: z.email().or(z.literal("")).default(""),
+          vatId: z.string().max(40).default("").describe("Your VAT or tax number."),
+          complaintsUrl: z
+            .url()
+            .or(z.literal(""))
+            .default("")
+            .describe("Where a customer can complain (in Portugal, the Livro de Reclamações)."),
+        })
+        .prefault({}),
     })
     .prefault({}),
   notifications: z

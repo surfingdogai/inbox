@@ -9,6 +9,8 @@ export type ButtonTone = "primary" | "secondary" | "danger";
 const DANGER_EVENTS = new Set([
   "decline",
   "reject",
+  "dispute_goods",
+  "record_withdrawal",
   "mark_spam",
   "no_show",
   "payment_failed",
@@ -44,24 +46,45 @@ export type InputKind =
   | "none"
   | "note"
   | "propose"
+  /** Changes to an order: its lines as they would be, a delivery date, until when. */
+  | "order_propose"
   | "quote"
   | "payment"
   | "payment_request"
   /** The customer asked to cancel: what they said, and when. */
   | "customer_cancel"
   /** The customer said yes to the time we proposed: how, for the record. */
-  | "agreed";
+  | "agreed"
+  /** Words the customer reads, which the event needs: why a return is refused, what came back instead. */
+  | "note_required"
+  /** A return the customer asked for by email or phone: why, and what they said. */
+  | "return_open"
+  /** Agreeing to a return: whether the goods come back, and how. */
+  | "return_approve";
 
-/** What an event asks the owner for. `state` is the item's, where it changes the question. */
-export function inputKindFor(event: string, state?: string): InputKind {
+/** What an event asks the owner for. `state` and `type` are the item's, where they change the question. */
+export function inputKindFor(event: string, state?: string, type?: string, change?: string): InputKind {
   switch (event) {
     case "record_cancel":
     case "record_cancel_late":
+    case "record_withdrawal":
       return "customer_cancel";
+    case "open_return":
+      return "return_open";
+    case "approve":
+      return type === "refund" ? "return_approve" : "none";
     case "confirm":
       return state === "proposed" ? "agreed" : "none";
+    case "accept_change":
+      // Our own change, which the customer said yes to by phone or in person: how, for the record.
+      return change === "business" ? "agreed" : "none";
+    case "accept":
+      // The customer said yes to our changes by phone or in person: how, for the record.
+      return type === "order" && state === "proposed" ? "agreed" : "none";
     case "propose":
-      return "propose";
+    case "propose_change":
+      // A change to what was agreed asks for the same as a proposal: the time, or the order's lines.
+      return type === "order" ? "order_propose" : "propose";
     case "quote":
       return "quote";
     case "record_payment":
@@ -69,11 +92,18 @@ export function inputKindFor(event: string, state?: string): InputKind {
       return "payment";
     case "request_payment":
       return "payment_request";
+    case "reject":
+      // A refused return says why; so does goods that came back not as sold.
+      return type === "refund" ? "note_required" : "note";
+    case "dispute_goods":
+      return "note_required";
     case "request_info":
+    case "retract":
+    case "decline_change":
+    case "retract_change":
     case "decline":
     case "cancel":
     case "cancel_by_business":
-    case "reject":
     case "payment_failed":
       return "note";
     default:
@@ -192,8 +222,30 @@ export function actionNote(
     }
     if (soon) return soon.trim();
   }
+  if (event === "accept" && item.type === "order" && item.state === "proposed") {
+    return "This accepts the order with the changes you suggested. Use it when the customer said yes by phone, email or in person.";
+  }
+  if (event === "retract") {
+    return "You said what you proposed was subject to your confirmation, so you can withdraw it. The customer is told, and their request comes back to you.";
+  }
   if (event === "record_cancel" || event === "record_cancel_late") {
     return "It counts as the customer's cancellation, not yours, and we tell them it is cancelled as they asked.";
+  }
+  if (event === "propose_change") {
+    return "The customer is asked. If they say no, or do not answer in time, it stays as agreed.";
+  }
+  if (event === "accept_change" && (item.type === "booking" || item.type === "order") && item.payload.change) {
+    const what =
+      item.type === "booking" && item.payload.change
+        ? `moves the booking to ${formatWhen((item.payload.change as { startTime: string }).startTime)}`
+        : "changes the order";
+    return item.payload.change.by === "business"
+      ? `This ${what}, the change you asked for. Use it when the customer said yes by phone, email or in person.`
+      : `This ${what}, as the customer asked, and tells them.`;
+  }
+  if (event === "decline_change") return "It stays as agreed, and the customer is told.";
+  if (event === "retract_change") {
+    return "You said your change was subject to your confirmation, so you can withdraw it. It stays as agreed, and the customer is told.";
   }
   return null;
 }
@@ -204,14 +256,51 @@ export function actionNote(
  */
 export function waitingLine(item: Item, formatWhen: (iso: string) => string, minNoticeMin = 0): string | null {
   if (item.type === "booking" && item.state === "proposed" && item.payload.proposed) {
-    // The customer answers by the start less the minimum notice, as their email says.
-    const until = new Date(Date.parse(item.payload.proposed.startTime) - minNoticeMin * 60_000).toISOString();
-    return `Waiting for the customer's answer until ${formatWhen(until)}.`;
+    // The customer answers by the start less the minimum notice, as their email says, or sooner
+    // when what was proposed was valid for less.
+    const bound = Date.parse(item.payload.proposed.startTime) - minNoticeMin * 60_000;
+    const offer = item.payload.offer;
+    const valid =
+      offer?.by === "business" && offer.status === "open" && offer.validThrough
+        ? Date.parse(offer.validThrough)
+        : bound;
+    const held = offer?.held ? " The time is held for them." : "";
+    return `Waiting for the customer's answer until ${formatWhen(new Date(Math.min(valid, bound)).toISOString())}.${held}`;
+  }
+  if (item.type === "order" && item.state === "proposed") {
+    const until = item.payload.offer?.by === "business" ? item.payload.offer.validThrough : undefined;
+    return until
+      ? `Waiting for the customer's answer to your changes until ${formatWhen(until)}.`
+      : "Waiting for the customer's answer to your changes.";
   }
   if (item.type === "quote_request" && item.state === "quoted" && item.payload.quote) {
     return `Waiting for the customer's answer until ${formatWhen(item.payload.quote.validThrough)}.`;
   }
   if (item.state === "needs_info") return "Waiting for the customer's details.";
+  // A change to what was agreed, beside what was agreed: the customer's to answer, or ours.
+  const offer = (item.payload as { offer?: { by: string; status: string; validThrough?: string } }).offer;
+  const until =
+    offer?.by === "business" && offer.status === "open" && offer.validThrough
+      ? ` until ${formatWhen(offer.validThrough)}`
+      : "";
+  if (item.type === "booking" && item.payload.change) {
+    const from = formatWhen(item.payload.startTime);
+    const to = formatWhen(item.payload.change.startTime);
+    return item.payload.change.by === "customer"
+      ? `The customer asks to move it from ${from} to ${to}. Until you accept, it stays as agreed.`
+      : `You asked the customer to move it from ${from} to ${to}; waiting for their answer${until}.`;
+  }
+  if (item.type === "order" && item.payload.change) {
+    const was = item.payload.totalPrice;
+    const now = item.payload.change.totalPrice;
+    const total =
+      was.value === now.value
+        ? `total ${moneyMajor(now)} ${now.currency}`
+        : `total ${moneyMajor(now)} ${now.currency}, now ${moneyMajor(was)} ${was.currency}`;
+    return item.payload.change.by === "customer"
+      ? `The customer asks for changes to the order (${total}). Until you accept, it stays as agreed.`
+      : `You asked the customer for changes to the order (${total}); waiting for their answer${until}.`;
+  }
   return null;
 }
 

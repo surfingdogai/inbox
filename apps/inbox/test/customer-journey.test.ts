@@ -5,7 +5,7 @@ import { logMailOut, type MailOut, type OutboundMail } from "@surfingdog/platfor
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { confirmed, confirmedTool, freshDb, futureDay } from "./harness";
 
 /**
  * One customer, end to end, through the whole app as it runs: an assistant books, the business
@@ -223,7 +223,8 @@ describe("a customer, end to end", () => {
     const rita = "rita@example.com";
 
     // 1. The assistant books over REST, for 09:00.
-    const created = await s.app.request(
+    const created = await confirmed(
+      (r) => s.app.request(r),
       json("/v1/bookings", {
         payload: {
           reservationFor: { serviceId: s.svc, name: "Full service" },
@@ -370,7 +371,7 @@ describe("a customer, end to end", () => {
     const s = await setup(["en", "pt"]);
     const ana = "ana@example.pt";
     const mcp = await connect(s);
-    const booked = await mcp.callTool({
+    const booked = await confirmedTool((p) => mcp.callTool(p), {
       name: "create_booking",
       arguments: {
         payload: {
@@ -535,7 +536,8 @@ describe("a customer, end to end", () => {
 
   it("a test booking emails nobody and calls no network, all the way through", async () => {
     const s = await setup(["en"]);
-    const created = await s.app.request(
+    const created = await confirmed(
+      (r) => s.app.request(r),
       json(
         "/v1/bookings",
         {
@@ -622,7 +624,8 @@ describe("a customer's privacy, end to end", () => {
     const s = await setup(["en"], { network: "issuing" });
     const rita = "rita@example.com";
     const book = async (start: string, end: string) => {
-      const res = await s.app.request(
+      const res = await confirmed(
+        (r) => s.app.request(r),
         json("/v1/bookings", {
           payload: {
             reservationFor: { serviceId: s.svc, name: "Full service" },

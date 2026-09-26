@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, real, sqliteTable, sqliteView, text, unique } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  sqliteView,
+  text,
+  unique,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * The one schema, shared by every runtime. Conventions (ADR-011): TEXT ULID ids, INTEGER
@@ -59,6 +69,16 @@ export const services = sqliteTable(
     }>(),
     active: integer("active").notNull().default(1),
     sort: integer("sort").notNull().default(0),
+    /**
+     * What the law lets the service be excepted from withdrawal (0015, ADR-018 §7): `standard`, or
+     * `dated_leisure`, `urgent_repair`, `personalised` …. Shown before the booking; the owner's in person.
+     */
+    withdrawal: text("withdrawal").notNull().default("standard"),
+    /**
+     * Whether a customer may suggest a price of their own for it while price counters are on (0016,
+     * ADR-018 §4, Q1): 1, or 0 for a price that is never haggled. Public; the owner's in person.
+     */
+    negotiable: integer("negotiable").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -87,10 +107,37 @@ export const products = sqliteTable(
     source: text("source").notNull().default("builtin"),
     externalId: text("external_id"),
     active: integer("active").notNull().default(1),
+    /**
+     * What the law lets the product be excepted from withdrawal (0015, ADR-018 §7): `standard`, or
+     * `perishable`, `personalised`, `sealed_hygiene` …. Shown before the order; the owner's in person,
+     * and never written by a feed.
+     */
+    withdrawal: text("withdrawal").notNull().default("standard"),
+    /**
+     * Whether a customer may suggest a price of their own for it while price counters are on (0016,
+     * ADR-018 §4, Q1): 1, or 0. Public; the owner's in person, and never written by a feed.
+     */
+    negotiable: integer("negotiable").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [unique("products_sku").on(t.sku), index("products_source_external").on(t.source, t.externalId)],
+);
+
+/**
+ * The lowest price the owner lets automation go to, per product or service (0016, ADR-018 §4): the
+ * owner's alone, apart from the catalogue rows, which the public doors and the owner's AI read whole.
+ * `kind` is `product` or `service`; `floor_minor` is per unit (a product) or per booking (a service).
+ */
+export const priceFloors = sqliteTable(
+  "price_floors",
+  {
+    kind: text("kind").notNull(),
+    refId: text("ref_id").notNull(),
+    floorMinor: integer("floor_minor").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.refId] })],
 );
 
 export const availabilityRules = sqliteTable("availability_rules", {
@@ -338,6 +385,12 @@ export const items = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     closedAt: integer("closed_at"),
+    /**
+     * When a request waiting on the business, or on the customer's details, lapses (0014): set by
+     * the write path whenever the customer's move hands it over or we ask them something. NULL on the
+     * rows written before, which never lapse on their own.
+     */
+    requestExpiresAt: integer("request_expires_at"),
   },
   (t) => [
     index("items_type_state").on(t.type, t.state, t.updatedAt),
@@ -349,6 +402,9 @@ export const items = sqliteTable(
     index("items_access_token").on(t.accessTokenHash),
     index("items_end").on(t.type, t.state, t.endAt),
     index("items_possible_party").on(t.possiblePartyId),
+    index("items_request_expiry").on(t.requestExpiresAt).where(sql`${t.requestExpiresAt} IS NOT NULL`),
+    /** The returns and refunds of an order or a booking, found by it (0015). */
+    index("items_linked").on(t.linkedItemId).where(sql`${t.linkedItemId} IS NOT NULL`),
   ],
 );
 
@@ -409,9 +465,83 @@ export const slotClaims = sqliteTable(
     bucketStart: integer("bucket_start").notNull(),
     ordinal: integer("ordinal").notNull(),
     itemId: text("item_id").notNull(),
+    /** A hold (0014): the time we proposed, kept for the customer until they answer. '' for an agreed booking's claim. */
+    offerId: text("offer_id").notNull().default(""),
   },
-  (t) => [primaryKey({ columns: [t.resourceKey, t.bucketStart, t.ordinal] }), index("slot_claims_item").on(t.itemId)],
+  (t) => [
+    primaryKey({ columns: [t.resourceKey, t.bucketStart, t.ordinal] }),
+    index("slot_claims_item").on(t.itemId),
+    index("slot_claims_offer").on(t.itemId, t.offerId),
+  ],
 );
+
+/**
+ * Offers (ADR-018 §1, `negotiation/offers.ts`): what one side put to the other, as an immutable
+ * snapshot of the terms and their fingerprint. `by` is `business` or `customer`; `status` one of
+ * draft, open, accepted, declined, countered, retracted, expired, superseded. `form` is the kind the
+ * fingerprint names (time, quote, order, request). At most one open offer per item.
+ */
+export const itemOffers = sqliteTable(
+  "item_offers",
+  {
+    id: id(),
+    itemId: text("item_id").notNull(),
+    rev: integer("rev").notNull(),
+    parentId: text("parent_id"),
+    /** `offer` before a promise; later kinds amend a promise or settle a return. */
+    kind: text("kind").notNull(),
+    form: text("form").notNull(),
+    by: text("by").notNull(),
+    actorKind: text("actor_kind").notNull(),
+    actorId: text("actor_id").notNull(),
+    round: integer("round").notNull().default(1),
+    status: text("status").notNull(),
+    /** Unix ms; checked in the write that accepts it, the sweep only tidies. */
+    validThrough: integer("valid_through"),
+    terms: text("terms", { mode: "json" }).notNull(),
+    termsSha: text("terms_sha").notNull(),
+    /** The terms' paths that differ from the offer this one answers or replaces. */
+    changes: text("changes", { mode: "json" }),
+    /** What the other side was shown: `{lang, human, disclosures}` (the trader's proof). */
+    shown: text("shown", { mode: "json" }),
+    /** `person`, or `automated` (the owner's AI, a rule, another system). */
+    authored: text("authored").notNull(),
+    binding: integer("binding").notNull().default(1),
+    reasonCode: text("reason_code"),
+    note: text("note"),
+    /** The event that opened it, and the one that closed it. */
+    eventId: text("event_id"),
+    closedEventId: text("closed_event_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("item_offers_item_rev").on(t.itemId, t.rev),
+    uniqueIndex("item_offers_one_open").on(t.itemId).where(sql`${t.status} = 'open'`),
+    uniqueIndex("item_offers_one_draft").on(t.itemId).where(sql`${t.status} = 'draft'`),
+    index("item_offers_due").on(t.status, t.validThrough),
+  ],
+);
+
+/**
+ * What the owner's AI, a rule or another system would have offered outside the owner's limits (0016,
+ * ADR-018 §4): kept for a person to send or drop, never sent. One per item, the latest. `event` and
+ * `input` are the transition it would have made; `item_version` the item's version once drafted, so
+ * sending it needs the item as it was; `breaches` the limits it is outside, as codes.
+ */
+export const offerDrafts = sqliteTable("offer_drafts", {
+  itemId: text("item_id").primaryKey(),
+  id: text("id").notNull(),
+  event: text("event").notNull(),
+  input: text("input", { mode: "json" }).notNull(),
+  terms: text("terms", { mode: "json" }).notNull(),
+  breaches: text("breaches", { mode: "json" }).$type<string[]>().notNull(),
+  itemVersion: integer("item_version").notNull(),
+  actorKind: text("actor_kind").notNull(),
+  actorId: text("actor_id").notNull(),
+  actorName: text("actor_name"),
+  createdAt: createdAt(),
+});
 
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -446,8 +576,13 @@ export const receipts = sqliteTable(
     ackAt: integer("ack_at"),
     /** base64url(SHA-256(jws)): how a network names the receipt. Null only until the sweep fills it. */
     sha: text("sha"),
+    /** The agreed change an `amended` receipt records (ADR-017 Amendment 3); '' for every other kind. */
+    offerId: text("offer_id").notNull().default(""),
   },
-  (t) => [unique("receipts_item_kind_outcome").on(t.itemId, t.kind, t.outcome), index("receipts_sha").on(t.sha)],
+  (t) => [
+    unique("receipts_item_kind_outcome_offer").on(t.itemId, t.kind, t.outcome, t.offerId),
+    index("receipts_sha").on(t.sha),
+  ],
 );
 
 /**

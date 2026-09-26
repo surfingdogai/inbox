@@ -125,6 +125,14 @@ export function useReply(id: string) {
   return useMutation({ mutationFn: (body: ReplyBody) => api.reply(id, body), onSuccess: invalidate });
 }
 
+/** Sends or drops an item's draft: what automation would have offered outside the owner's limits. */
+export function useDraft(id: string) {
+  const invalidate = useInvalidateItem(id);
+  const send = useMutation({ mutationFn: (draftId: string) => api.sendDraft(id, draftId), onSuccess: invalidate });
+  const drop = useMutation({ mutationFn: (draftId: string) => api.dropDraft(id, draftId), onSuccess: invalidate });
+  return { send, drop };
+}
+
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
@@ -166,19 +174,45 @@ export function useProducts() {
   return useQuery({ queryKey: qk.products, queryFn: api.products, staleTime: 30_000 });
 }
 
-/** One mutation for add, change and archive; the list is refetched after any of them. */
+/** The owner's lowest prices, by product or service id. */
+export function useFloors() {
+  return useQuery({
+    queryKey: ["floors"],
+    queryFn: async () => {
+      const { floors } = await api.floors();
+      return new Map(floors.map((f) => [`${f.kind}:${f.ref_id}`, f.floor_minor]));
+    },
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * One mutation for add, change and archive; the list is refetched after any of them. A lowest price
+ * the owner changed (`floor`: minor units, or null to clear; undefined leaves it) is written after the
+ * row, since it lives apart from it (ADR-018 §4).
+ */
 export function useServiceWrite() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (op: { id?: string | undefined; body?: ServiceBody | undefined; archive?: boolean | undefined }) =>
-      op.archive && op.id
-        ? api.archiveService(op.id)
-        : op.id
-          ? api.patchService(op.id, op.body ?? {})
-          : api.createService(op.body ?? {}),
+    mutationFn: async (op: {
+      id?: string | undefined;
+      body?: ServiceBody | undefined;
+      archive?: boolean | undefined;
+      floor?: number | null | undefined;
+    }) => {
+      const row =
+        op.archive && op.id
+          ? await api.archiveService(op.id)
+          : op.id
+            ? await api.patchService(op.id, op.body ?? {})
+            : await api.createService(op.body ?? {});
+      if (op.floor !== undefined) await api.putFloor("service", row.id, op.floor);
+      return row;
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.services });
       void qc.invalidateQueries({ queryKey: qk.availability });
+      void qc.invalidateQueries({ queryKey: ["floors"] });
     },
   });
 }
@@ -186,13 +220,25 @@ export function useServiceWrite() {
 export function useProductWrite() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (op: { id?: string | undefined; body?: ProductBody | undefined; archive?: boolean | undefined }) =>
-      op.archive && op.id
-        ? api.archiveProduct(op.id)
-        : op.id
-          ? api.patchProduct(op.id, op.body ?? {})
-          : api.createProduct(op.body ?? {}),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.products }),
+    mutationFn: async (op: {
+      id?: string | undefined;
+      body?: ProductBody | undefined;
+      archive?: boolean | undefined;
+      floor?: number | null | undefined;
+    }) => {
+      const row =
+        op.archive && op.id
+          ? await api.archiveProduct(op.id)
+          : op.id
+            ? await api.patchProduct(op.id, op.body ?? {})
+            : await api.createProduct(op.body ?? {});
+      if (op.floor !== undefined) await api.putFloor("product", row.id, op.floor);
+      return row;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.products });
+      void qc.invalidateQueries({ queryKey: ["floors"] });
+    },
   });
 }
 

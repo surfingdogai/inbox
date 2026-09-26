@@ -22,7 +22,11 @@ import {
   listItemsInput,
   listProductsInput,
   listServicesInput,
+  makeBusinessOfferInput,
+  makeOfferInput,
   type OnceOptions,
+  offerDraftInput,
+  openReturnInput,
   presetKeySchema,
   productInput,
   profileInput,
@@ -30,10 +34,12 @@ import {
   replayMissingInput,
   replyInput,
   requestQuoteInput,
+  requestReturnInput,
   ruleInput,
   sendMessageInput,
   serviceInput,
   setClosuresInput,
+  setFloorsInput,
   setWeeklyInput,
   suggestTimeInput,
   testRuleInput,
@@ -44,6 +50,7 @@ import {
   updateSettingsInput,
   updateWebhookInput,
   verifyCustomerInput,
+  withdrawInput,
   withIdempotencyKey,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
@@ -267,7 +274,7 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
       tags: ["public"],
       summary: "Status of your item",
       description:
-        "For the customer (an access token, or a pass the item recognises): the item in the business's words and language, with offer (what the business proposed and waits for you to answer, and its terms_sha), waiting_on, next, a six-character reference, and thread: the business's replies and the customer's messages, never its internal notes.",
+        "For the customer (an access token, or a pass the item recognises): the item in the business's words and language, with offer (what the business proposed and waits for you to answer, and its terms_sha; kind change for a change it asks for to a confirmed booking or an accepted order), agreed, requested_change (a change your person asked for that the business has not answered), waiting_on, next, a six-character reference, and thread: the business's replies and the customer's messages, never its internal notes.",
       responses: json("Item", R.customerItemViewSchema),
     }),
     async (c) => {
@@ -312,35 +319,90 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     403: { description: "The item is someone else's: send its access token, or a pass it recognises." },
     409: {
       description:
-        "confirm_terms (nothing was written: show your person details.summary and accept again with details.terms_sha), offer_changed (details.offer is the current proposal), no_offer, slot_taken, or guard_failed not_too_soon.",
+        "confirm_terms (nothing was written: show your person details.summary and accept again with details.terms_sha), offer_changed (details.offer is the current proposal: the offer_id you named was replaced, or the terms changed), no_offer, slot_taken, or guard_failed not_too_soon.",
     },
-    410: { description: "offer_expired: the quote is no longer valid." },
+    410: {
+      description: "offer_expired: what the business proposed can no longer be accepted (its date to answer passed).",
+    },
+  };
+  const PASSED_ON = {
+    202: {
+      description:
+        "Kept as your person's message for a person at the business, who answers it: a price of their own, a suggestion past the last round, or a change to what was agreed that it takes in person (past the changes it may have, or once payment was asked for and it changes the total). Never refused; what the business proposed, or what was agreed, still stands (passed_on says so).",
+      content: { "application/json": { schema: resolver(R.passedOnResultSchema) } },
+    },
+  };
+  const ACCEPT_PASSED_ON = {
+    202: {
+      description:
+        "A yes to a change the business asked for that can no longer be made online (payment was asked for since and it changes the total, or it cannot be recorded just now): kept as your person's message for a person at the business, who answers it. Never refused; what was agreed stands until then (passed_on says so).",
+      content: { "application/json": { schema: resolver(R.passedOnResultSchema) } },
+    },
+  };
+  /** A counter, or a suggestion kept for a person (202). */
+  const answeredOrPassedOn = (c: Context<CallerEnv>, r: object) => c.json(r, "passed_on" in r ? 202 : 200);
+
+  const ACCEPT = {
+    tags: ["public"],
+    summary:
+      "Accept what the business proposed: another time, a quote, changes to an order, or a change to what was agreed",
+    description:
+      "Binds your customer, so it takes the confirm step (ADR-018 §5): send terms_sha, the offer.terms_sha from GET /items/{id} that your person said yes to. Without it nothing is written and the answer is 409 confirm_terms with the terms to show them. Name the offer (offer_id, or the path's) and an answer to one the business has since replaced does nothing. An accepted time confirms the booking; accepted changes accept the order on them; an accepted quote creates the booking (confirmed) or the order (accepted) it was for, in linked; an accepted change (offer.kind change) moves the confirmed booking or changes the accepted order.",
+    responses: { ...json("Item", R.customerResultSchema), ...ACCEPT_PASSED_ON, ...ANSWER_ERRORS },
+  };
+  const DECLINE = {
+    tags: ["public"],
+    summary: "Decline what the business proposed",
+    description:
+      "A time or changes the business proposed: the booking request or the order is closed, as your customer chose. A quote: the request is closed. A change the business asks for to a confirmed booking or an accepted order: it stays as agreed. A change your customer asked for (requested_change): it is taken back. Send reason (and reason_code) for anything they want the business to know.",
+    responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
   };
 
+  app.post("/items/:id/accept", describeRoute(ACCEPT), answer(acceptOfferInput), async (c) =>
+    answeredOrPassedOn(c, await caps.customer.acceptOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
   app.post(
-    "/items/:id/accept",
-    describeRoute({
-      tags: ["public"],
-      summary: "Accept what the business proposed: another time, or a quote",
-      description:
-        "Binds your customer, so it takes the confirm step (ADR-018 §5): send terms_sha, the offer.terms_sha from GET /items/{id} that your person said yes to. Without it nothing is written and the answer is 409 confirm_terms with the terms to show them. An accepted time confirms the booking; an accepted quote creates the booking (confirmed) or the order (accepted) it was for, in linked.",
-      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
-    }),
-    answer(acceptOfferInput),
-    async (c) => c.json(await caps.customer.acceptOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+    "/items/:id/offers/:offer/accept",
+    describeRoute({ ...ACCEPT, summary: "Accept this offer of the business's" }),
+    answer(acceptOfferInput.omit({ offer_id: true })),
+    async (c) =>
+      answeredOrPassedOn(
+        c,
+        await caps.customer.acceptOffer(
+          c.get("caller"),
+          withItem(c, { ...c.req.valid("json"), offer_id: c.req.param("offer") }) as never,
+        ),
+      ),
+  );
+
+  app.post("/items/:id/decline", describeRoute(DECLINE), answer(declineOfferInput), async (c) =>
+    c.json(await caps.customer.declineOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
+  app.post(
+    "/items/:id/offers/:offer/decline",
+    describeRoute({ ...DECLINE, summary: "Decline this offer of the business's" }),
+    answer(declineOfferInput.omit({ offer_id: true })),
+    async (c) =>
+      c.json(
+        await caps.customer.declineOffer(
+          c.get("caller"),
+          withItem(c, { ...c.req.valid("json"), offer_id: c.req.param("offer") }) as never,
+        ),
+      ),
   );
 
   app.post(
-    "/items/:id/decline",
+    "/items/:id/offers",
     describeRoute({
       tags: ["public"],
-      summary: "Decline what the business proposed",
+      summary: "Answer what the business proposed with your own terms",
       description:
-        "A time the business proposed: the booking request is closed, as your customer chose. A quote: the request is closed. Send reason for anything they want the business to know.",
-      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
+        "Only what your person would change (terms): another start_time for a booking or a quote (a free time GET /availability lists, for a booking), other quantities for the lines of changes the business suggested to an order (by index; 0 drops one), another delivery_when, or how many (quantity) for a quote request. It goes back to the business as their request (200). On a confirmed booking or an accepted order it asks for a change to what was agreed — another start_time (the end keeps the booking's length), other quantities of the order's lines (by index in orderedItem) or another delivery_when — which stands as agreed until the business says yes (requested_change). A price of their own (total_price, unit_price) is not taken as an answer while the business sets its prices (GET /v1/business price_negotiable: false): it goes to a person there as their message, as do a note alone and a suggestion past the last round (202, passed_on); never refused, and what the business proposed, or what was agreed, still stands.",
+      responses: { ...json("Item", R.customerResultSchema), ...PASSED_ON, ...ANSWER_ERRORS },
     }),
-    answer(declineOfferInput),
-    async (c) => c.json(await caps.customer.declineOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+    answer(makeOfferInput),
+    async (c) =>
+      answeredOrPassedOn(c, await caps.customer.makeOffer(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
   );
 
   app.post(
@@ -349,11 +411,15 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
       tags: ["public"],
       summary: "Ask for another time than the one the business proposed",
       description:
-        "start_time must be one of the free times GET /availability lists; the end follows the service's length. The booking goes back to the business to confirm, with nothing held. 409 slot_taken when that time is not free.",
-      responses: { ...json("Item", R.customerResultSchema), ...ANSWER_ERRORS },
+        "start_time must be one of the free times GET /availability lists; the end follows the service's length. The booking goes back to the business to confirm, with nothing held. On a confirmed booking it asks to move it, and it stays as agreed until the business says yes. 409 slot_taken when that time is not free; 202 passed_on past the last round, when a person answers it. The same as POST /items/{id}/offers with terms.start_time.",
+      responses: { ...json("Item", R.customerResultSchema), ...PASSED_ON, ...ANSWER_ERRORS },
     }),
     answer(suggestTimeInput),
-    async (c) => c.json(await caps.customer.suggestTime(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+    async (c) =>
+      answeredOrPassedOn(
+        c,
+        await caps.customer.suggestTime(c.get("caller"), withItem(c, c.req.valid("json")) as never),
+      ),
   );
 
   app.post(
@@ -377,6 +443,52 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
       const r = await caps.customer.provideDetails(c.get("caller"), withItem(c, c.req.valid("json")) as never);
       return c.json(r, "appended" in r ? 202 : 200);
     },
+  );
+
+  app.post(
+    "/items/:id/withdraw",
+    describeRoute({
+      tags: ["public"],
+      summary: "Withdraw from contract here: your customer withdraws from their booking or order",
+      description:
+        "Two steps (CRD art. 11a). Without confirm_withdrawal nothing is sent: the answer is 409 confirm_withdrawal with details.statement — who, which contract, where the copy goes, until when — to show your person. Send it again with confirm_withdrawal: true once they confirm: a booking paid for, or an order before its goods went out, is cancelled and what was paid is refunded (200, the refund in linked); once the goods reached them, they come back and are refunded (200, the return in linked); the business emails an acknowledgement. Never refused: where the period has ended or what was bought is excepted, it becomes a return under the business's own policy once the goods reached them (200), else your person's message for a person there (202 passed_on, saying why). GET /v1/items/{id} says whether the right runs (withdrawal).",
+      responses: {
+        ...json("Item", R.customerResultSchema),
+        ...PASSED_ON,
+        403: ANSWER_ERRORS[403],
+        409: {
+          description:
+            "confirm_withdrawal (nothing was sent: show your person details.statement and send confirm_withdrawal: true), or wrong_state (nothing is agreed yet: cancel instead).",
+        },
+      },
+    }),
+    answer(withdrawInput),
+    async (c) =>
+      answeredOrPassedOn(c, await caps.customer.withdraw(c.get("caller"), withItem(c, c.req.valid("json")) as never)),
+  );
+
+  app.post(
+    "/items/:id/returns",
+    describeRoute({
+      tags: ["public"],
+      summary: "Send goods back: ask the business for a return",
+      description:
+        "On an order whose goods reached your customer: reason faulty, not_as_described or wrong_item (the legal guarantee: sending it back costs them nothing), or changed_mind (a withdrawal while the period runs, agreed at once; after it, a return under the business's own policy, which it answers). lines names which, by index in orderedItem, and how many; all of them when left out. The return is in linked (201); the business answers within its respondHours, by email and on GET /v1/items/{id} (refunds). 409 wrong_state before the goods went out (cancel instead), or guard_failed when a return of the order is open already.",
+      responses: {
+        201: {
+          description: "The return, in linked",
+          content: { "application/json": { schema: resolver(R.customerResultSchema) } },
+        },
+        403: ANSWER_ERRORS[403],
+        409: {
+          description:
+            "wrong_state: nothing was sent yet; guard_failed no_open_return: one is open already; guard_failed nothing_to_return: what it names came back and was refunded already.",
+        },
+      },
+    }),
+    answer(requestReturnInput),
+    async (c) =>
+      c.json(await caps.customer.requestReturn(c.get("caller"), withItem(c, c.req.valid("json")) as never), 201),
   );
 
   app.post(
@@ -497,20 +609,132 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => c.json(await caps.getItem(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
+  /** A transition answers 200, or 202 when what automation offered was kept as a draft for the owner. */
+  const movedOrDrafted = (c: Context<CallerEnv>, r: { drafted?: unknown }) => c.json(r, r.drafted ? 202 : 200);
+
   app.post(
     "/items/:id/transitions",
     owner({
       tags: ["owner"],
       summary: "Move an item to its next state",
-      responses: json("Item", R.transitionResultSchema),
+      description:
+        "An offer (propose, quote, propose_change) from your AI, a rule or a key without money:write that is outside the limits you set is not sent: it is kept as a draft for you (202, drafted) and the item is marked for a person. An acceptance outside them is refused (422 outside_limits, details.breaches).",
+      responses: {
+        ...json("Item", R.transitionResultSchema),
+        202: {
+          description: "Kept as a draft for the owner, outside the limits they set: nothing was sent.",
+          content: { "application/json": { schema: resolver(R.transitionResultSchema) } },
+        },
+      },
       write: true,
     }),
     validator("json", transitionItemInput.omit({ item_id: true }), hook),
     async (c) =>
-      c.json(
+      movedOrDrafted(
+        c,
         await caps.transitionItem(
           c.get("caller"),
           withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
+        ),
+      ),
+  );
+
+  app.post(
+    "/items/:id/returns",
+    owner({
+      tags: ["owner"],
+      summary: "Open a return a customer asked for by email or phone, on their fulfilled order",
+      description:
+        "reason as the customer gave it, and note: what they asked, in their words (kept for you); entry_id (their message on the order) or asked_at (when they rang) dates it, so it is judged as of when they asked. A faulty item is under the legal guarantee; a change of mind within the period is a withdrawal, agreed at once; anything else is a return you answer (approve; reject only once the period to withdraw had ended when they asked). The return is in linked.",
+      responses: json("Item", R.transitionResultSchema, 201),
+      write: true,
+    }),
+    validator("json", openReturnInput.omit({ item_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.openReturn(
+          c.get("caller"),
+          withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
+        ),
+        201,
+      ),
+  );
+
+  app.get(
+    "/items/:id/offers",
+    owner({
+      tags: ["owner"],
+      summary: "Every offer of an item: the customer's request, what you proposed, each answer, what was agreed",
+      responses: json("Offers", R.offerListSchema),
+    }),
+    async (c) => c.json(await caps.listOffers(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  app.post(
+    "/items/:id/offers",
+    owner({
+      tags: ["owner"],
+      summary: "Make your offer: another time for a booking, changes to an order, a quote, a change to what was agreed",
+      description:
+        "The event the item's state takes (propose for a booking or an order, quote for a quote request, propose_change for a confirmed booking or an accepted order) with input as transition_item takes it, and every check it makes. It replaces what you proposed before, or answers the customer's request or suggestion. Catalogue lines go at the customer's price (the list price, or your reward for them). From your AI, a rule or a key without money:write, an offer outside the limits you set is kept as a draft for you (202, drafted) and nothing is sent.",
+      responses: {
+        ...json("Item", R.transitionResultSchema),
+        202: {
+          description: "Kept as a draft for the owner, outside the limits they set: nothing was sent.",
+          content: { "application/json": { schema: resolver(R.transitionResultSchema) } },
+        },
+      },
+      write: true,
+    }),
+    validator("json", makeBusinessOfferInput.omit({ item_id: true }), hook),
+    async (c) =>
+      movedOrDrafted(
+        c,
+        await caps.makeOffer(
+          c.get("caller"),
+          withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
+        ),
+      ),
+  );
+
+  app.post(
+    "/items/:id/offers/draft/send",
+    owner({
+      tags: ["owner"],
+      summary: "Send the draft your AI, a rule or another system made outside your limits, as it is",
+      description:
+        "The owner in person only (signed in, or a full owner key; never the owner's MCP), so an AI cannot send its own drafts. draft_id pins the draft you read. It is the transition the draft would have made, made now by you. 409 draft_stale when the item moved since the draft was made: make your own offer instead, or drop it.",
+      responses: json("Item", R.transitionResultSchema),
+      write: true,
+    }),
+    validator("json", offerDraftInput.omit({ item_id: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.sendOfferDraft(
+          c.get("caller"),
+          withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
+        ),
+      ),
+  );
+
+  app.delete(
+    "/items/:id/offers/draft",
+    owner({
+      tags: ["owner"],
+      summary: "Drop the item's draft, unsent",
+      description:
+        "The owner in person only, as sending one is (signed in, or a full owner key; never the owner's MCP or another system's key): a draft is how the owner hears what automation would have offered. ?draft_id= drops only that one, so a newer draft is never dropped by mistake.",
+      responses: json("Dropped", z.object({ dropped: z.boolean() })),
+      write: true,
+    }),
+    async (c) =>
+      c.json(
+        await caps.dropOfferDraft(
+          c.get("caller"),
+          offerDraftInput.parse({
+            item_id: c.req.param("id"),
+            ...(c.req.query("draft_id") ? { draft_id: c.req.query("draft_id") } : {}),
+          }),
         ),
       ),
   );
@@ -520,14 +744,20 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     owner({
       tags: ["owner"],
       summary: "Reply to the customer or add a note",
+      description:
+        "From your AI or a key without money:write, a reply that names an amount of money neither the item's terms nor the catalogue hold, or something off a price, is not sent: it is kept as an internal note and the item is marked for you (202, held).",
       responses: json("Item", R.looseSchema),
       write: true,
     }),
     validator("json", replyInput.omit({ item_id: true }), hook),
-    async (c) =>
-      c.json(
-        await caps.reply(c.get("caller"), withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never),
-      ),
+    async (c) => {
+      const r = await caps.reply(
+        c.get("caller"),
+        withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
+      );
+      // A reply from your AI or a key without money:write naming money you have not offered: kept as a note (202).
+      return c.json(r, "held" in r && r.held ? 202 : 200);
+    },
   );
 
   // ---- one customer: what the inbox holds about them, networks off, erasure ---------
@@ -790,6 +1020,34 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => {
       const input = { product_id: String(c.req.param("id")) };
       return once(c, "products.archive", input, (caller) => caps.setup.archiveProduct(caller, input));
+    },
+  );
+
+  app.get(
+    "/catalogue/floors",
+    owner({
+      tags: ["setup"],
+      summary: "Your lowest prices: what your AI, rules and other systems may go down to",
+      description:
+        "The owner in person only (signed in, or a full owner key): never the owner's AI, never an integration key, never a public door. A floor is on the same basis as the price: a product's per unit, a service's per booking, or per person when it is priced per person.",
+      responses: json("Floors", R.floorsSchema),
+    }),
+    async (c) => c.json(await caps.setup.listFloors(c.get("caller"))),
+  );
+  app.put(
+    "/catalogue/floors",
+    owner({
+      tags: ["setup"],
+      summary: "Set or clear lowest prices, for products and services",
+      description:
+        "The owner in person only. Each entry names a product or a service and its floor in minor units; floor_minor null clears it. Automation never offers or accepts a catalogue line below the higher of the floor and the customer's price less negotiation.ai.maxDiscountPct.",
+      responses: json("Floors", R.floorsSchema),
+      write: true,
+    }),
+    validator("json", setFloorsInput, hook),
+    async (c) => {
+      const input = c.req.valid("json");
+      return once(c, "catalogue.floors", input, (caller) => caps.setup.setFloors(caller, input));
     },
   );
 

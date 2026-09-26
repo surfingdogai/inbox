@@ -23,11 +23,14 @@ describe("the General settings save", () => {
     const doc = toSettingsDoc({ ...toSettingsForm(loaded), testMode: true });
     expect(Object.keys(doc).sort()).toEqual([
       "booking",
+      "commerce",
       "customers",
       "email",
       "identity",
+      "negotiation",
       "notifications",
       "orders",
+      "returns",
       "testMode",
     ]);
     const after = parseStoredSettings(mergeSettings(stored, doc)).settings;
@@ -37,6 +40,72 @@ describe("the General settings save", () => {
     expect(after.testMode).toBe(true);
     // Nothing the owner did not choose is written: no defaults for sections this form does not show.
     expect(mergeSettings(stored, doc)).not.toHaveProperty("business");
+  });
+
+  it("sends the return policy and who the business is, as the owner typed them", () => {
+    const loaded = parseStoredSettings({}).settings;
+    const form = toSettingsForm(loaded);
+    expect(form).toMatchObject({
+      returnDays: "14",
+      returnPostage: "customer",
+      sellsTo: "both",
+      aiApprovesReturns: true,
+    });
+    const doc = toSettingsDoc({
+      ...form,
+      returnDays: "30",
+      returnPostage: "business",
+      legalName: " Oficina Maré Lda ",
+      legalCountry: "pt",
+      vatId: "PT500000000",
+      aiApprovesReturns: false,
+    });
+    expect(doc.returns).toEqual({ days: 30, postage: "business", refundDays: 14, respondHours: 48 });
+    expect(doc.commerce).toEqual({
+      customers: "both",
+      legal: {
+        legalName: "Oficina Maré Lda",
+        address: "",
+        country: "PT",
+        email: "",
+        phone: "",
+        vatId: "PT500000000",
+        complaintsUrl: "",
+      },
+    });
+    const after = parseStoredSettings(mergeSettings({}, doc)).settings;
+    expect(after.negotiation.ai.mayAuthorizeReturnsInPolicy).toBe(false);
+    expect(after.commerce.legal.country).toBe("PT");
+  });
+
+  it("sends the limits for the owner's AI as the settings hold them: hours as minutes, an amount in cents", () => {
+    const form = toSettingsForm(parseStoredSettings({}).settings);
+    expect(form).toMatchObject({
+      priceCounters: false,
+      aiDiscountPct: "0",
+      aiPricesCustom: false,
+      aiTimeShiftHours: "168",
+      aiDelayDays: "0",
+      aiRefundMax: "",
+    });
+    const doc = toSettingsDoc({
+      ...form,
+      priceCounters: true,
+      aiDiscountPct: "10",
+      aiTimeShiftHours: "48",
+      aiRefundMax: "25,50",
+    });
+    expect(doc.negotiation).toMatchObject({
+      priceCounters: true,
+      ai: { maxDiscountPct: 10, mayPriceCustom: false, maxTimeShiftMin: 2_880, maxDelayDays: 0, maxRefundMinor: 2_550 },
+    });
+    const after = parseStoredSettings(mergeSettings({}, doc)).settings;
+    expect(after.negotiation.ai.maxTimeShiftMin).toBe(2_880);
+    expect(toSettingsForm(after)).toMatchObject({ aiTimeShiftHours: "48", aiRefundMax: "25.50" });
+    // Not a number: sent as typed, so the API names the field.
+    expect((toSettingsDoc({ ...form, aiRefundMax: "lots" }).negotiation as { ai: object }).ai).toMatchObject({
+      maxRefundMinor: "lots",
+    });
   });
 
   it("clears an emptied field with null instead of leaving it as it was", () => {
@@ -141,7 +210,7 @@ describe("Settings → Networks", () => {
     last_error: null,
     last_error_at: null,
     failing_since: null,
-    rules: { version: null, next: null, next_at: null, v2: false, checked_at: null },
+    rules: { version: null, next: null, next_at: null, v2: false, v6: false, checked_at: null },
     standing: null,
     ping_signature: null,
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
@@ -198,6 +267,7 @@ describe("Settings → Networks", () => {
       next,
       next_at: next ? "2026-10-09T00:00:00.000Z" : null,
       v2,
+      v6: Math.max(version ?? 0, next ?? 0) >= 6,
       checked_at: null,
     });
     expect(rulesWords(rules(null, null, false))).toBeNull();
@@ -208,11 +278,20 @@ describe("Settings → Networks", () => {
       "Rules version 2, version 3 from 9 Oct: it already gets how each booking and order ended.",
     );
     expect(rulesWords(rules(3, null, true))).toBe("Rules version 3: it gets how each booking and order ended.");
+    // Rules version 6 announced: agreed changes and refunds already go; a promise that moved waits.
+    expect(rulesWords(rules(5, 6, true), "en-GB")).toBe(
+      "Rules version 5, version 6 from 9 Oct: it gets how each booking and order ended, and already takes the changes agreed to them and refunds. A booking or order that changed goes to it once version 6 is in force.",
+    );
+    // Rules version 5 with nothing announced: what it gets is what it got before agreed changes and refunds.
+    expect(rulesWords(rules(5, null, true))).toBe("Rules version 5: it gets how each booking and order ended.");
+    expect(rulesWords(rules(6, null, true))).toBe(
+      "Rules version 6: it gets how each booking and order ended, the changes agreed to them, and refunds.",
+    );
   });
 
   it("says your own standing at a network, and why it is not shown when it is not", () => {
     const at = "2026-09-23T14:27:00Z";
-    const v2 = { version: 2, next: 3, next_at: "2026-10-09T00:00:00.000Z", v2: true, checked_at: null };
+    const v2 = { version: 2, next: 3, next_at: "2026-10-09T00:00:00.000Z", v2: true, v6: false, checked_at: null };
     expect(standingWords({ ...base, enabled: false, ping_signature: "verified" }, now)).toBeNull();
     expect(standingWords(base, now)).toBeNull();
     expect(
@@ -258,7 +337,7 @@ describe("Settings → Networks", () => {
     expect(receiptWords({ published: 12, queued: 5, refused: 0, held: 2, withheld: 0 })).toEqual([
       "12 receipts published",
       "3 waiting",
-      "2 outcomes held until the network reads them",
+      "2 held until the network reads them",
     ]);
     expect(agoWords("2026-09-23T14:29:30Z", now)).toBe("just now");
     expect(agoWords("2026-09-23T11:30:00Z", now)).toBe("3 h ago");

@@ -71,7 +71,7 @@ export async function customerHistory(db: Db, partyId: string, currentItemId?: s
             SUM(CASE WHEN i.type = 'booking' AND i.state IN (${OPEN_BOOKING_STATES.map(() => "?").join(", ")}) THEN 1 ELSE 0 END),
             MIN(CASE WHEN i.id <> ? THEN i.created_at END),
             MAX(CASE WHEN i.id <> ? THEN i.created_at END)
-          FROM items i WHERE i.party_id IN (${marks}) AND COALESCE(i.sandbox, 0) = 0`,
+          FROM items i WHERE i.party_id IN (${marks}) AND COALESCE(i.sandbox, 0) = 0 AND i.type <> 'refund'`,
     params: [except, except, except, ...OPEN_BOOKING_STATES, except, except, ...parties],
     method: "all",
   });

@@ -99,6 +99,34 @@
       "when": 1790900000000,
       "tag": "0013_customer_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1791000000000,
+      "tag": "0014_offers",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1791100000000,
+      "tag": "0015_returns",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1791200000000,
+      "tag": "0016_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1791300000000,
+      "tag": "0017_amended_receipts",
+      "breakpoints": true
     }
   ]
 }

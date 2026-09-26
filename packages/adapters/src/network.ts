@@ -1,4 +1,6 @@
 import {
+  amendmentsSendable,
+  appliesV6,
   canonicalNetworkOrigin,
   type Db,
   enabledNetworks,
@@ -6,6 +8,7 @@ import {
   ensureLifecycleSweep,
   type InstanceSigningKey,
   isNetworkDown,
+  isV6Only,
   itemStopped,
   type JobHandler,
   type JobRow,
@@ -31,7 +34,10 @@ import {
   pruneIdempotencyKeys,
   pruneJobs,
   publishKey,
+  RECEIPT_AMENDMENTS_ISSUED_SQL,
+  RECEIPT_NOT_AMENDED_SQL,
   RECEIPT_NOT_STOPPED_SQL,
+  RECEIPT_V6_ONLY_SQL,
   type ReceiptStage,
   type Registration,
   readNetworkStatus,
@@ -41,6 +47,7 @@ import {
   shortError,
   signInstanceRequest,
   takesV2,
+  takesV6,
   V2_ONLY_KINDS,
 } from "@surfingdog/core";
 import type { Statement } from "@surfingdog/platform";
@@ -418,7 +425,7 @@ export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
     const entry = (await readSettings(db)).networks[network];
     if (!entry?.enabled) return { note: `${network} is switched off; the receipt stays queued for it` };
     const { rows } = await db.client.query({
-      sql: `SELECT r.jws, r.ack_jws, r.kind, r.item_id FROM receipts r WHERE r.id = ?`,
+      sql: `SELECT r.jws, r.ack_jws, r.kind, r.item_id, r.payload FROM receipts r WHERE r.id = ?`,
       params: [p.receiptId],
       method: "all",
     });
@@ -439,11 +446,15 @@ export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
       ackJws: row[1] === null ? null : String(row[1]),
       kind: String(row[2]),
       itemId: String(row[3]),
+      payload: row[4],
     };
-    // With receipts switched off, a network still gets the outcome of a promise it holds (§3.2).
+    // With receipts switched off, a network still gets what closes or moves a promise it holds (§3.2).
     if (
       !entry.share.receipts &&
-      !(receipt.kind === "outcome" && (await promisePublished(db, network, receipt.itemId)))
+      !(
+        (receipt.kind === "outcome" || receipt.kind === "amended") &&
+        (await promisePublished(db, network, receipt.itemId))
+      )
     ) {
       return { note: `${network} does not take receipts now; the receipt stays queued for it` };
     }
@@ -456,11 +467,26 @@ export function networkReceiptHandler(deps: NetworkDeps): JobHandler {
       throw new Error(`deferred: ${hostOf(network)} is not answering; the hourly publisher will send it`);
     }
     // Acceptances and outcomes are claims v2: they wait until the network applies rules that read
-    // them, and go then, with the hourly publisher (§2.5).
-    if (V2_ONLY_KINDS.includes(receipt.kind) && !takesV2(await networkRules(deps, db, network, now, status))) {
+    // them, and go then, with the hourly publisher (§2.5). Agreed changes and refunds wait likewise
+    // for rules version 6, in force or announced (ADR-017 Amendment 3).
+    const rules = await networkRules(deps, db, network, now, status);
+    if (V2_ONLY_KINDS.includes(receipt.kind) && !takesV2(rules)) {
       return { note: `${hostOf(network)} does not take claims v2 yet; ${receipt.kind} receipt ${p.receiptId} waits` };
     }
-    const outcome = await publishOne(deps, db, network, receipt, p.stage, now);
+    if (isV6Only(receipt.kind, parsedPayload(receipt.payload)) && !takesV6(rules)) {
+      return { note: `${hostOf(network)} does not take rules 6 yet; ${receipt.kind} receipt ${p.receiptId} waits` };
+    }
+    // A promise both sides changed goes only where rules version 6 is in force, whole: its promise,
+    // each agreed change and its outcome. Anywhere else it would be held to the date first agreed.
+    if (!(await amendmentsSendable(db, receipt.itemId, appliesV6(rules)))) {
+      return {
+        note: `the promise of receipt ${p.receiptId} was changed; it waits for ${hostOf(network)} to apply rules 6`,
+      };
+    }
+    const outcome = await publishOne(deps, db, network, receipt, p.stage, now, {
+      v6: takesV6(rules),
+      applies: appliesV6(rules),
+    });
     if (outcome.kind === "published")
       return { note: `published ${p.stage} receipt ${p.receiptId} to ${hostOf(network)}` };
     if (outcome.kind === "refused")
@@ -485,23 +511,29 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
     if (!entry?.enabled) return { note: `${network} is switched off; its receipts stay queued` };
     const batch = deps.publishBatch ?? PUBLISH_BATCH;
     const perHour = deps.publishPerHour ?? PUBLISH_PER_HOUR;
+    const rules = await networkRules(deps, db, network, now);
+    const applies = appliesV6(rules);
     let queuedNow = 0;
-    if (link === 0 && entry.share.receipts) queuedNow = await backfill(db, network, now, perHour);
-    const v2 = takesV2(await networkRules(deps, db, network, now));
+    if (link === 0 && entry.share.receipts) queuedNow = await backfill(db, network, now, perHour, applies);
+    const v2 = takesV2(rules);
+    const v6 = takesV6(rules);
 
     // What this network is sent: everything it takes (a network below rules version 3 is sent no
-    // acceptance and no outcome, which wait here for it), and with receipts switched off only the
-    // outcomes of promises it already holds.
+    // acceptance and no outcome, below version 6 no agreed change and nothing about a refund, which
+    // wait here for it; a promise that moved goes only where version 6 is in force), and with
+    // receipts switched off only what closes or moves promises it already holds.
     const kinds = v2 ? "" : ` AND r.kind NOT IN (${V2_ONLY_KINDS.map(() => "?").join(", ")})`;
+    const newer = v6 ? "" : ` AND NOT ${RECEIPT_V6_ONLY_SQL("r")}`;
+    const moved = applies ? RECEIPT_AMENDMENTS_ISSUED_SQL("r") : RECEIPT_NOT_AMENDED_SQL("r");
     const owedOnly = entry.share.receipts
       ? ""
-      : ` AND r.kind = 'outcome' AND EXISTS (SELECT 1 FROM network_publications q JOIN receipts pr ON pr.id = q.receipt_id
-             WHERE pr.item_id = r.item_id AND pr.kind <> 'outcome' AND q.network = p.network AND q.stage = 'issued' AND q.state = 'published')`;
+      : ` AND r.kind IN ('outcome', 'amended') AND EXISTS (SELECT 1 FROM network_publications q JOIN receipts pr ON pr.id = q.receipt_id
+             WHERE pr.item_id = r.item_id AND pr.kind NOT IN ('outcome', 'amended') AND q.network = p.network AND q.stage = 'issued' AND q.state = 'published')`;
     const started = Date.now();
     const { rows } = await db.client.query({
-      sql: `SELECT p.receipt_id, p.stage, r.jws, r.ack_jws, r.kind, r.item_id
+      sql: `SELECT p.receipt_id, p.stage, r.jws, r.ack_jws, r.kind, r.item_id, r.payload
               FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-             WHERE p.network = ? AND p.state = 'queued'${kinds}${owedOnly} AND ${RECEIPT_NOT_STOPPED_SQL("r")}
+             WHERE p.network = ? AND p.state = 'queued'${kinds}${newer}${owedOnly} AND ${RECEIPT_NOT_STOPPED_SQL("r")} AND ${moved}
                AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.dedupe_key = ? || ':' || p.network || ':' || p.receipt_id || ':' || p.stage
                                 AND j.status IN ('queued', 'running'))
              ORDER BY p.attempts, p.receipt_id, CASE p.stage WHEN 'issued' THEN 0 ELSE 1 END
@@ -522,11 +554,12 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
         ackJws: r[3] === null ? null : String(r[3]),
         kind: String(r[4]),
         itemId: String(r[5]),
+        payload: r[6],
       };
       const stage = String(r[1]) as ReceiptStage;
       // An acknowledged receipt went out whole, acknowledgement included, with its issued row.
       if (delivered.has(receipt.id) && receipt.ackJws) continue;
-      const outcome = await publishOne(deps, db, network, receipt, stage, now);
+      const outcome = await publishOne(deps, db, network, receipt, stage, now, { v6, applies });
       if (outcome.kind === "retry") {
         const note = `stopped after ${published} published: ${outcome.error}`;
         if (job.attempts < TRIES_PER_HOUR) throw new Error(`${hostOf(network)} ${note}`);
@@ -553,13 +586,18 @@ export function networkPublishHandler(deps: NetworkDeps): JobHandler {
   };
 }
 
-/** Rows for receipts this network has none for yet, oldest first, at most the hour's share. */
-async function backfill(db: Db, network: string, now: number, perHour: number): Promise<number> {
+/**
+ * Rows for receipts this network has none for yet, oldest first, at most the hour's share. A promise
+ * that moved is queued only for a network that applies rules version 6 (`applies`): the rest are
+ * never sent it, and its rows come once the network applies them.
+ */
+async function backfill(db: Db, network: string, now: number, perHour: number, applies: boolean): Promise<number> {
+  const moved = applies ? RECEIPT_AMENDMENTS_ISSUED_SQL("r") : RECEIPT_NOT_AMENDED_SQL("r");
   const issued = await db.client.query({
     sql: `INSERT OR IGNORE INTO network_publications (receipt_id, network, stage, state, attempts, last_error, updated_at)
           SELECT r.id, ?, 'issued', 'queued', 0, NULL, ? FROM receipts r
            WHERE NOT EXISTS (SELECT 1 FROM network_publications p WHERE p.receipt_id = r.id AND p.network = ? AND p.stage = 'issued')
-             AND ${RECEIPT_NOT_STOPPED_SQL("r")}
+             AND ${RECEIPT_NOT_STOPPED_SQL("r")} AND ${moved}
            ORDER BY r.id LIMIT ?`,
     params: [network, now, network, perHour],
     method: "run",
@@ -569,7 +607,7 @@ async function backfill(db: Db, network: string, now: number, perHour: number): 
   const acked = await db.client.query({
     sql: `INSERT OR IGNORE INTO network_publications (receipt_id, network, stage, state, attempts, last_error, updated_at)
           SELECT r.id, ?, 'acknowledged', 'queued', 0, NULL, ? FROM receipts r
-           WHERE r.ack_at IS NOT NULL AND ${RECEIPT_NOT_STOPPED_SQL("r")}
+           WHERE r.ack_at IS NOT NULL AND ${RECEIPT_NOT_STOPPED_SQL("r")} AND ${moved}
              AND NOT EXISTS (SELECT 1 FROM network_publications p WHERE p.receipt_id = r.id AND p.network = ? AND p.stage = 'acknowledged')
            ORDER BY r.id LIMIT ?`,
     params: [network, now, network, left],
@@ -582,7 +620,7 @@ async function backfill(db: Db, network: string, now: number, perHour: number): 
 async function promisePublished(db: Db, network: string, itemId: string): Promise<boolean> {
   const { rows } = await db.client.query({
     sql: `SELECT 1 FROM network_publications p JOIN receipts r ON r.id = p.receipt_id
-           WHERE r.item_id = ? AND r.kind <> 'outcome' AND p.network = ? AND p.stage = 'issued' AND p.state = 'published'
+           WHERE r.item_id = ? AND r.kind NOT IN ('outcome', 'amended') AND p.network = ? AND p.stage = 'issued' AND p.state = 'published'
            LIMIT 1`,
     params: [itemId, network],
     method: "all",
@@ -604,13 +642,29 @@ async function publicationState(
   return rows[0] ? String(rows[0][0]) : null;
 }
 
-/** The item's promises this network has not taken yet, oldest first, each with a queued row. */
-async function promisesOwed(db: Db, network: string, itemId: string, now: number): Promise<PublishedReceipt[]> {
+/**
+ * What must reach this network before an outcome or an amendment of the item, each with a queued
+ * row: the item's promises it has not taken yet, oldest first, and — before an outcome — the agreed
+ * changes, so the outcome's dates are ones it holds (ADR-017 Amendment 3). Amendments go in any
+ * order: a network reads the latest by `iat`, then nonce, never by arrival.
+ */
+async function promisesOwed(
+  db: Db,
+  network: string,
+  receipt: PublishedReceipt,
+  now: number,
+  rules: { readonly v6: boolean; readonly applies: boolean },
+): Promise<PublishedReceipt[]> {
+  const moved = rules.applies ? RECEIPT_AMENDMENTS_ISSUED_SQL("r") : RECEIPT_NOT_AMENDED_SQL("r");
+  // Never reached for what waits for rules 6: the receipt itself would wait with it.
+  const newer = rules.v6 ? "" : ` AND NOT ${RECEIPT_V6_ONLY_SQL("r")}`;
   const { rows } = await db.client.query({
-    sql: `SELECT r.id, r.jws, r.ack_jws, r.kind, p.state FROM receipts r
+    sql: `SELECT r.id, r.jws, r.ack_jws, r.kind, p.state, r.payload FROM receipts r
             LEFT JOIN network_publications p ON p.receipt_id = r.id AND p.network = ? AND p.stage = 'issued'
-           WHERE r.item_id = ? AND r.kind <> 'outcome' AND ${RECEIPT_NOT_STOPPED_SQL("r")} ORDER BY r.id`,
-    params: [network, itemId],
+           WHERE r.item_id = ? AND r.id <> ? AND (r.kind NOT IN ('outcome', 'amended') OR (r.kind = 'amended' AND ? = 'outcome'))
+             AND ${RECEIPT_NOT_STOPPED_SQL("r")} AND ${moved}${newer}
+           ORDER BY CASE r.kind WHEN 'amended' THEN 1 ELSE 0 END, r.id`,
+    params: [network, receipt.itemId, receipt.id, receipt.kind],
     method: "all",
   });
   const owed: PublishedReceipt[] = [];
@@ -624,10 +678,21 @@ async function promisesOwed(db: Db, network: string, itemId: string, now: number
       jws: String(r[1]),
       ackJws: r[2] === null ? null : String(r[2]),
       kind: String(r[3]),
-      itemId,
+      itemId: receipt.itemId,
+      payload: r[5],
     });
   }
   return owed;
+}
+
+/** A receipt's stored claims, from the column's JSON text (or an object, as some drivers return it). */
+function parsedPayload(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -661,7 +726,7 @@ export async function networkRules(
 function rulesNote(status: Awaited<ReturnType<typeof readNetworkStatus>>): string {
   if (status?.rulesVersion == null) return "";
   const next = status.rulesNextVersion ? `, next ${status.rulesNextVersion}` : "";
-  return `; rules ${status.rulesVersion}${next}${takesV2(status) ? ", takes claims v2" : ""}`;
+  return `; rules ${status.rulesVersion}${next}${takesV2(status) ? ", takes claims v2" : ""}${takesV6(status) ? ", takes rules 6" : ""}`;
 }
 
 /**
@@ -721,6 +786,8 @@ interface PublishedReceipt {
   readonly ackJws: string | null;
   readonly kind: string;
   readonly itemId: string;
+  /** Its claims as stored (JSON text), for what only rules version 6 reads. */
+  readonly payload: unknown;
 }
 
 /**
@@ -737,10 +804,11 @@ async function publishOne(
   receipt: PublishedReceipt,
   stage: ReceiptStage,
   now: number,
+  rules: { readonly v6: boolean; readonly applies: boolean },
 ): Promise<Outcome> {
-  if (receipt.kind === "outcome" && stage === "issued") {
-    for (const promise of await promisesOwed(db, network, receipt.itemId, now)) {
-      const first = await publishOne(deps, db, network, promise, "issued", now);
+  if ((receipt.kind === "outcome" || receipt.kind === "amended") && stage === "issued") {
+    for (const before of await promisesOwed(db, network, receipt, now, rules)) {
+      const first = await publishOne(deps, db, network, before, "issued", now, rules);
       if (first.kind === "retry") return first;
     }
   }

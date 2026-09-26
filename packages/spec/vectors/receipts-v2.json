@@ -1499,6 +1499,42 @@
     },
     {
       "typ": "booking",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
       "event": "accept",
       "from": "proposed",
       "to": "confirmed",
@@ -1643,6 +1679,42 @@
     },
     {
       "typ": "booking",
+      "event": "retract",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract",
+      "from": "proposed",
+      "to": "requested",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
       "event": "decline",
       "from": "requested",
       "to": "declined",
@@ -1753,6 +1825,24 @@
       "typ": "booking",
       "event": "expire",
       "from": "requested",
+      "to": "expired",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "expire",
+      "from": "needs_info",
+      "to": "expired",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "expire",
+      "from": "proposed",
       "to": "expired",
       "actor": "rule",
       "out": null,
@@ -1772,25 +1862,7 @@
       "event": "expire",
       "from": "needs_info",
       "to": "expired",
-      "actor": "rule",
-      "out": null,
-      "aut": 0
-    },
-    {
-      "typ": "booking",
-      "event": "expire",
-      "from": "needs_info",
-      "to": "expired",
       "actor": "system",
-      "out": null,
-      "aut": 0
-    },
-    {
-      "typ": "booking",
-      "event": "expire",
-      "from": "proposed",
-      "to": "expired",
-      "actor": "rule",
       "out": null,
       "aut": 0
     },
@@ -2174,6 +2246,303 @@
     },
     {
       "typ": "booking",
+      "event": "record_payment",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_payment",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_payment",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "withdraw",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "customer_agent",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "withdraw",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "customer_human",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_withdrawal",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_withdrawal",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "staff",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "record_withdrawal",
+      "from": "confirmed",
+      "to": "cancelled_by_customer",
+      "actor": "owner_ai",
+      "out": "booking.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "propose_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "accept_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "decline_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "retract_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
+      "event": "expire_change",
+      "from": "confirmed",
+      "to": "confirmed",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "booking",
       "event": "complete",
       "from": "confirmed",
       "to": "completed",
@@ -2309,6 +2678,42 @@
     },
     {
       "typ": "order",
+      "event": "request_info",
+      "from": "proposed",
+      "to": "needs_info",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_info",
+      "from": "proposed",
+      "to": "needs_info",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_info",
+      "from": "proposed",
+      "to": "needs_info",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_info",
+      "from": "proposed",
+      "to": "needs_info",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
       "event": "provide_info",
       "from": "needs_info",
       "to": "received",
@@ -2336,6 +2741,114 @@
     },
     {
       "typ": "order",
+      "event": "propose",
+      "from": "received",
+      "to": "proposed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "received",
+      "to": "proposed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "received",
+      "to": "proposed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "received",
+      "to": "proposed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "needs_info",
+      "to": "proposed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "needs_info",
+      "to": "proposed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "needs_info",
+      "to": "proposed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "needs_info",
+      "to": "proposed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose",
+      "from": "proposed",
+      "to": "proposed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
       "event": "accept",
       "from": "received",
       "to": "accepted",
@@ -2403,6 +2916,141 @@
       "from": "needs_info",
       "to": "accepted",
       "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept",
+      "from": "proposed",
+      "to": "accepted",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "counter",
+      "from": "proposed",
+      "to": "received",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "counter",
+      "from": "proposed",
+      "to": "received",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract",
+      "from": "proposed",
+      "to": "received",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract",
+      "from": "proposed",
+      "to": "received",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract",
+      "from": "proposed",
+      "to": "received",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract",
+      "from": "proposed",
+      "to": "received",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire",
+      "from": "received",
+      "to": "expired",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire",
+      "from": "needs_info",
+      "to": "expired",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire",
+      "from": "proposed",
+      "to": "expired",
+      "actor": "system",
       "out": null,
       "aut": 0
     },
@@ -2813,6 +3461,60 @@
     },
     {
       "typ": "order",
+      "event": "record_delivery",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_delivery",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_delivery",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_delivery",
+      "from": "completed",
+      "to": "completed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_delivery",
+      "from": "completed",
+      "to": "completed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_delivery",
+      "from": "completed",
+      "to": "completed",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
       "event": "complete",
       "from": "fulfilled",
       "to": "completed",
@@ -2930,6 +3632,42 @@
     },
     {
       "typ": "order",
+      "event": "decline",
+      "from": "proposed",
+      "to": "declined",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline",
+      "from": "proposed",
+      "to": "declined",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline",
+      "from": "proposed",
+      "to": "declined",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline",
+      "from": "proposed",
+      "to": "declined",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
       "event": "cancel",
       "from": "received",
       "to": "cancelled",
@@ -3031,6 +3769,60 @@
       "typ": "order",
       "event": "cancel",
       "from": "needs_info",
+      "to": "cancelled",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "proposed",
       "to": "cancelled",
       "actor": "rule",
       "out": null,
@@ -3200,6 +3992,78 @@
     },
     {
       "typ": "order",
+      "event": "cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "rule",
+      "out": "order.not_fulfilled",
+      "aut": 1
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.not_fulfilled",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "rule",
+      "out": "order.not_fulfilled",
+      "aut": 1
+    },
+    {
+      "typ": "order",
       "event": "record_cancel",
       "from": "received",
       "to": "cancelled",
@@ -3247,6 +4111,33 @@
       "typ": "order",
       "event": "record_cancel",
       "from": "needs_info",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "proposed",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "proposed",
       "to": "cancelled",
       "actor": "owner_ai",
       "out": null,
@@ -3331,6 +4222,465 @@
       "to": "cancelled",
       "actor": "owner_ai",
       "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_cancel",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "customer_agent",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "customer_human",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "completed",
+      "to": "completed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "withdraw",
+      "from": "completed",
+      "to": "completed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "accepted",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "awaiting_payment",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "payment_failed",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "paid",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "staff",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilling",
+      "to": "cancelled",
+      "actor": "owner_ai",
+      "out": "order.cancelled_by_customer",
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "completed",
+      "to": "completed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "completed",
+      "to": "completed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "record_withdrawal",
+      "from": "completed",
+      "to": "completed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_return",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_return",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_return",
+      "from": "completed",
+      "to": "completed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_return",
+      "from": "completed",
+      "to": "completed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "fulfilled",
+      "to": "fulfilled",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "completed",
+      "to": "completed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "completed",
+      "to": "completed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "open_return",
+      "from": "completed",
+      "to": "completed",
+      "actor": "owner_ai",
+      "out": null,
       "aut": 0
     },
     {
@@ -3458,6 +4808,1131 @@
       "actor": "system",
       "out": "order.lapsed",
       "aut": 1
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire_change",
+      "from": "accepted",
+      "to": "accepted",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire_change",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire_change",
+      "from": "payment_failed",
+      "to": "payment_failed",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire_change",
+      "from": "paid",
+      "to": "paid",
+      "actor": "system",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "propose_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "accept_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "decline_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_agent",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "customer_human",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "retract_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "expire_change",
+      "from": "fulfilling",
+      "to": "fulfilling",
+      "actor": "system",
+      "out": null,
+      "aut": 0
     }
   ]
 }

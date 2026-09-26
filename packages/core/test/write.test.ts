@@ -7,7 +7,7 @@ import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { itemEvents, items, jobs, parties, services, slotClaims, threadEntries } from "../src/schema/tables";
 import { type Caller, createItem, transitionItem, WriteError } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const clock = { now: T0 };
@@ -157,8 +157,11 @@ describe("transitionItem", () => {
     const created = await createItem(db, form(), booking(svc1));
     const res = await transitionItem(db, owner, { itemId: created.view.item.id, event: "confirm" });
     expect(res.view.item).toMatchObject({ state: "confirmed", version: 2 });
+    // Nothing paid: a payment may be recorded, and the customer's withdrawal is not offered (a reservation).
     expect(res.view.transitions.map((t) => t.label)).toEqual([
+      "Record payment",
       "Mark completed",
+      "Suggest another time",
       "Mark no-show",
       "Cancel booking",
       "Customer cancelled",
@@ -445,7 +448,7 @@ describe("the owner's Confirm and the customer's answers", () => {
   it("records a customer's own cancellation as theirs, judged when they asked, and never by a rule", async () => {
     clock.now = T0;
     const { db, svc1 } = await setup();
-    const caps = new Capabilities(db);
+    const caps = confirming(new Capabilities(db));
     const early = await createItem(db, form(), booking(svc1));
     expect(
       (

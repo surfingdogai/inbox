@@ -8,7 +8,7 @@ import type { RuleDefinition } from "../src/rules/schema";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * The ways round "time yes, money no" (the founder, 23 September 2026) that the owner's AI could take
@@ -72,7 +72,7 @@ async function setup() {
       service(svc.fixed, { model: "fixed", value: 10_000, currency: "EUR" }),
       service(svc.from, { model: "from", value: 2_000, currency: "EUR" }),
     ]);
-  const caps = new Capabilities(db);
+  const caps = confirming(new Capabilities(db));
   const book = (serviceId: string, hour: number, extra: Record<string, unknown> = {}, who: Caller = customer) =>
     caps.createBooking(who, {
       payload: {
@@ -107,13 +107,10 @@ describe("the owner's AI proposing a time", () => {
     const s = await setup();
     // "From €20": the customer wrote €1. No rule and no AI may confirm that (business_priced)…
     const b = await s.book(s.svc.from, 9, { totalPrice: EUR(100) });
-    // …and a time proposed with no price would carry the €1 to the customer's yes.
+    // …and a time proposed with no price would carry the €1 to the customer's yes: a draft for the owner.
     for (const caller of [ai, mcp]) {
-      const e = await refusal(
-        s.caps.transitionItem(caller, { item_id: b.view.item.id, event: "propose", input: later }),
-      );
-      expect(e.code).toBe("not_allowed");
-      expect(e.details).toMatchObject({ reason: "owner_money", draft_for_owner: true });
+      const r = await s.caps.transitionItem(caller, { item_id: b.view.item.id, event: "propose", input: later });
+      expect(r.drafted?.breaches).toEqual(["custom_line"]);
     }
     expect((await rowOf(s.db, b.view.item.id))?.state).toBe("requested");
     // The owner may: it is the owner's price to set, or to keep.
@@ -125,10 +122,10 @@ describe("the owner's AI proposing a time", () => {
     const s = await setup();
     const b = await s.book(s.svc.fixed, 9);
     const twoHours = { startTime: "2026-09-23T10:00:00Z", endTime: "2026-09-23T12:00:00Z" };
-    const e = await refusal(s.caps.transitionItem(ai, { item_id: b.view.item.id, event: "propose", input: twoHours }));
-    expect(e.code).toBe("not_allowed");
-    expect(e.details).toMatchObject({ reason: "owner_money", draft_for_owner: true });
-    expect(e.fields?.[0]?.path).toBe("input.endTime");
+    // Longer than the service is a price the list does not cover: a draft for the owner, never sent.
+    const r = await s.caps.transitionItem(ai, { item_id: b.view.item.id, event: "propose", input: twoHours });
+    expect(r.drafted?.breaches).toEqual(["custom_line"]);
+    expect((await rowOf(s.db, b.view.item.id))?.state).toBe("requested");
     // The service's own length is a time, at the price the catalogue gives it.
     await s.caps.transitionItem(ai, { item_id: b.view.item.id, event: "propose", input: later });
     expect((await rowOf(s.db, b.view.item.id))?.state).toBe("proposed");

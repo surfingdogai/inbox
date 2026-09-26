@@ -9,6 +9,7 @@ import {
   NETWORK_PUBLISH_KIND,
   NETWORK_RECEIPT_KIND,
   networkLane,
+  networkRulesStatement,
   publishKey,
   receiptSha,
   schema,
@@ -464,6 +465,100 @@ describe("publishing receipts to the networks", () => {
     expect(hers?.[0]).toBe("withheld");
     const view = (await caps.getNetworks(owner(on + 2))).networks.find((n) => n.origin === A);
     expect(view?.receipts).toMatchObject({ published: 1, queued: 0, withheld: 1 });
+  });
+
+  it("sends a promise both sides changed only where rules version 6 is in force, and only with its change", async () => {
+    const { db, caps, itemId, token, receipt } = await setup({});
+    // Another booking's receipt, issued while no network was on: it goes as ever.
+    const other = await caps.sendMessage(customer(T0 + 10), { body: "hello", contact: { email: "ana@example.com" } });
+    const otherId = "view" in other ? other.view.item.id : "item" in other ? other.item.id : "";
+    const otherReceipt = await caps.receipts.issue(otherId, "confirmed", T0 + 20);
+    if (otherReceipt.outcome !== "issued") throw new Error(otherReceipt.outcome);
+    // With no network on, the booking moves two hours on, both sides agreeing: its receipt still names
+    // the time first agreed, which a network on older rules would hold the business to (R30).
+    await caps.transitionItem(owner(T0 + 30), {
+      item_id: itemId,
+      event: "propose_change",
+      input: { startTime: "2026-09-23T10:00:00Z" },
+    });
+    const agent = {
+      actor: { kind: "customer_agent" as const, id: "agent:rita", channel: "rest" as const },
+      tier: "anonymous" as const,
+      sandbox: false,
+      now: () => T0 + 40,
+      accessToken: token as string,
+    };
+    const status = await caps.getItemStatus(agent, { item_id: itemId });
+    await caps.customer.acceptOffer(agent, { item_id: itemId, terms_sha: status.offer?.terms_sha as string });
+    // Then a network is switched on, whose rules are not known yet, and backfills.
+    const net = fakeNetworks({ [A]: accepted });
+    const on = T0 + HOUR;
+    await caps.updateSettings(owner(on), { doc: { networks: { [A]: { enabled: true } } } });
+    await drain(runnerWith(net.fetchImpl), db, on);
+    expect(net.calls.map((c) => c.body.receipt)).toEqual([otherReceipt.receipt.jws]);
+    // A job that still names it leaves it waiting instead of sending it.
+    await db.client.query({
+      sql: "INSERT INTO network_publications (receipt_id, network, stage, state, attempts, updated_at) VALUES (?, ?, 'issued', 'queued', 0, ?)",
+      params: [receipt.id, A, on],
+      method: "run",
+    });
+    const job = async (id: string, t: number, tag: string) =>
+      db.client.query({
+        sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, ?, ?, ?, 'queued', 0, 8, ?, ?)",
+        params: [
+          ulid(),
+          NETWORK_RECEIPT_KIND,
+          JSON.stringify({ receiptId: id, stage: "issued", network: A }),
+          t,
+          `${NETWORK_RECEIPT_KIND}:${A}:${id}:issued:${tag}`,
+          t,
+        ],
+        method: "run",
+      });
+    await job(receipt.id, on + 1, "late");
+    await drain(runnerWith(net.fetchImpl), db, on + 1);
+    expect(net.calls).toHaveLength(1);
+    const state = async (id: string) =>
+      String(
+        (
+          await db.client.query({
+            sql: "SELECT state FROM network_publications WHERE receipt_id = ? AND network = ?",
+            params: [id, A],
+            method: "all",
+          })
+        ).rows[0]?.[0],
+      );
+    expect(await state(receipt.id)).toBe("queued");
+    const held = (await caps.getNetworks(owner(on + 2))).networks.find((n) => n.origin === A);
+    expect(held?.receipts).toMatchObject({ published: 1, queued: 1, held: 1 });
+
+    // The network puts rules version 6 in force. The change has no receipt yet (none was signed while
+    // it happened here), so the promise still waits: sent alone, it would name the date first agreed.
+    const v6 = on + 2 * HOUR;
+    await db.client.query(networkRulesStatement(A, v6, { version: 6, next: null, nextAt: null }, v6, []));
+    await job(receipt.id, v6, "v6");
+    await drain(runnerWith(net.fetchImpl), db, v6);
+    expect(net.calls).toHaveLength(1);
+    expect(await state(receipt.id)).toBe("queued");
+
+    // Its receipt signed, the promise and its change go together, the promise first.
+    const [change] = (
+      await db.client.query({
+        sql: "SELECT id, closed_event_id FROM item_offers WHERE item_id = ? AND kind = 'change' AND status = 'accepted'",
+        params: [itemId],
+        method: "all",
+      })
+    ).rows;
+    const amended = await caps.receipts.issue(itemId, "amended", v6 + 1, {
+      offerId: String(change?.[0]),
+      eventId: String(change?.[1]),
+    });
+    if (amended.outcome !== "issued") throw new Error(amended.outcome);
+    expect(amended.receipt.payload).toMatchObject({ knd: "amended", acc: "customer", ref: receipt.payload.nonce });
+    await drain(runnerWith(net.fetchImpl), db, v6 + 1);
+    expect(net.calls.slice(1).map((c) => c.body.receipt)).toEqual([receipt.jws, amended.receipt.jws]);
+    expect(await state(receipt.id)).toBe("published");
+    expect(await state(amended.receipt.id)).toBe("published");
   });
 
   it("hands a job queued before there were several networks to every network that takes receipts", async () => {

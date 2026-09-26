@@ -113,6 +113,7 @@ const EVENT_WORDS: Record<string, string> = {
   refund: "Refunded",
   flags: "Flag changed",
   rule_skipped: "Rule held back",
+  draft_offer: "Drafted for you: outside your limits",
 };
 
 export function eventWord(event: string): string {
@@ -278,10 +279,22 @@ export function snippetFor(item: Item, tz?: string, locale?: string): string {
       return truncate(item.payload.description, 90);
     case "message":
       return truncate(item.payload.text, 90);
-    case "refund":
-      return `${formatMoney(item.payload.amount, locale)} · ${truncate(item.payload.reason, 60)}`;
+    case "refund": {
+      const p = item.payload;
+      const why = p.reason ? truncate(p.reason, 60) : RETURN_KIND[p.kind ?? "policy"];
+      return `${formatMoney(p.amount, locale)} · ${why}`;
+    }
   }
 }
+
+/** What a return or a refund is, in the owner's words (ADR-018 §3.4). */
+export const RETURN_KIND: Readonly<Record<string, string>> = {
+  withdrawal: "Withdrawal",
+  faulty: "Faulty goods",
+  policy: "Return",
+  cancellation: "You cancelled a paid order",
+  price_adjustment: "Price lowered",
+};
 
 export interface Address {
   readonly streetAddress?: string | undefined;
@@ -352,16 +365,26 @@ const OUTCOME_WORDS: Record<string, string> = {
   "booking.cancelled_by_customer": "Cancelled by the customer",
   "order.cancelled_by_customer": "Cancelled by the customer",
   "order.lapsed": "Lapsed unpaid",
+  "refund.honoured": "Refunded on time",
+  "refund.late": "Refunded late",
+  "refund.cancelled_by_customer": "Return dropped by the customer",
 };
 
-const RECEIPT_KIND_WORDS: Record<string, string> = { confirmed: "Confirmed", paid: "Paid", accepted: "Accepted" };
+const RECEIPT_KIND_WORDS: Record<string, string> = {
+  confirmed: "Confirmed",
+  paid: "Paid",
+  accepted: "Accepted",
+  amended: "Change agreed",
+};
 
 /**
- * What a receipt attests, in a word or three: "Confirmed", "Paid", "Accepted" for a promise, and
- * for an outcome how it ended — "Completed", "No-show" — marked "automatically" when the system
- * recorded it (ADR-017 §3).
+ * What a receipt attests, in a word or three: "Confirmed", "Paid", "Accepted" for a promise ("Refund
+ * due" for a refund's), "Change agreed" for a change both sides agreed, and for an outcome how it
+ * ended — "Completed", "No-show", "Refunded on time" — marked "automatically" when the system
+ * recorded it (ADR-017 §3, Amendment 3).
  */
 export function receiptWord(r: Pick<Receipt, "kind" | "outcome" | "payload">): string {
+  if (r.kind === "accepted" && (r.payload as { typ?: unknown }).typ === "refund") return "Refund due";
   if (r.kind !== "outcome") return RECEIPT_KIND_WORDS[r.kind] ?? capitalise(r.kind);
   const word = (r.outcome && OUTCOME_WORDS[r.outcome]) ?? "Outcome";
   return (r.payload as { aut?: unknown }).aut === 1 ? `${word} automatically` : word;

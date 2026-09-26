@@ -12,7 +12,7 @@ import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { readSettings } from "../src/settings/schema";
 import type { Caller } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * A real stop (the founder, 23 September 2026): the page the code email links to lets the customer switch
@@ -102,7 +102,7 @@ async function setup() {
     ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((d) => [d, [["08:00", "20:00"]]]),
   );
   await db.orm.insert(availabilityRules).values({ id: ulid(), kind: "open", weekly: week, createdAt: T0 });
-  const caps = new Capabilities(db, createSecretBox(["stop-test-instance-key-0123456789abcdef"]), BASE);
+  const caps = confirming(new Capabilities(db, createSecretBox(["stop-test-instance-key-0123456789abcdef"]), BASE));
   await caps.updateSettings(owner(), {
     doc: {
       business: { name: "Oficina Maré" },

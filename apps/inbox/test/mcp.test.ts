@@ -3,7 +3,7 @@ import { createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { confirmedTool, freshDb, futureDay } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 
@@ -50,13 +50,16 @@ describe("MCP doors", () => {
       "accept_offer",
       "decline_offer",
       "suggest_time",
+      "make_offer",
       "provide_details",
+      "withdraw_from_contract",
+      "request_return",
       "cancel_item",
       "send_message",
       "acknowledge_receipt",
       "verify_customer",
     ]);
-    const booked = await client.callTool({
+    const booked = await confirmedTool((p) => client.callTool(p), {
       name: "create_booking",
       arguments: {
         payload: {
@@ -79,7 +82,7 @@ describe("MCP doors", () => {
     expect(text).toMatch(/^Your booking "Full service" .* is with us; we will confirm it or suggest another time\./);
     expect(text).toContain(structured.accessToken);
 
-    const bad = await client.callTool({
+    const bad = await confirmedTool((p) => client.callTool(p), {
       name: "create_booking",
       arguments: { payload: { reservationFor: { serviceId: svc } } },
     });
@@ -112,7 +115,7 @@ describe("MCP doors", () => {
     const app = createApp({ db });
     const client = await connect(app, "/mcp");
     expect(client.getServerVersion()?.name).toBe("Oficina Maré");
-    const booked = await client.callTool({
+    const booked = await confirmedTool((p) => client.callTool(p), {
       name: "create_booking",
       arguments: {
         payload: {
@@ -204,7 +207,7 @@ describe("MCP doors", () => {
     const client = await connect(createApp({ db }), "/mcp");
     const tools = await client.listTools();
     expect(tools.tools.find((t) => t.name === "create_order")?.description).toContain("business's price");
-    const ordered = await client.callTool({
+    const ordered = await confirmedTool((p) => client.callTool(p), {
       name: "create_order",
       arguments: {
         payload: {
@@ -281,6 +284,9 @@ describe("MCP doors", () => {
       "list_items",
       "get_item",
       "transition_item",
+      "list_offers",
+      "open_return",
+      "make_offer",
       "get_profile",
       "update_profile",
       "list_services",

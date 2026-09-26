@@ -26,9 +26,10 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `booking.create` | Someone requested a booking; or a customer accepted a quote for one, and it arrives already `confirmed`. |
 | `booking.request_info` | You asked the customer for more details. |
 | `booking.provide_info` | The customer answered with the details. |
-| `booking.propose` | You proposed another time. |
+| `booking.propose` | You proposed another time, or another one in place of the time you proposed before. |
 | `booking.accept` | The customer accepted the time you proposed. |
 | `booking.counter` | The customer asked for another time instead of the one you proposed; the booking is back with you, at that time. |
+| `booking.retract` | You withdrew the time you proposed (it said it was subject to your confirmation); the request is back with you. |
 | `booking.confirm` | You confirmed the booking; the slot is claimed. From `proposed`, at the time you proposed: the customer said yes to a person. |
 | `booking.decline` | You declined the request. |
 | `booking.cancel` | The customer cancelled: before it was confirmed (declining the time you proposed is one), or within your cancellation window. |
@@ -36,48 +37,79 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `booking.cancel_by_business` | You cancelled the booking. |
 | `booking.record_cancel` | You recorded a cancellation the customer asked for, by phone, email or in person: theirs, not yours. |
 | `booking.record_cancel_late` | The same, when they asked after your cancellation window and you record late cancellations. |
-| `booking.expire` | A rule expired a booking nobody answered. |
+| `booking.expire` | The request lapsed: nobody answered it in time (`booking.autoExpireHours`), or the customer did not answer the time you proposed by its deadline (`data.actor.kind` is `system`); or a rule expired it. |
+| `booking.propose_change` | A change to the confirmed booking was asked for: by you (another time, a price of yours), or by the customer (another time); `data.actor` says who. It stays as agreed until the other side accepts. |
+| `booking.accept_change` | The change was accepted: the booking moved to its new time, its places with it. |
+| `booking.decline_change` | The change was not accepted: by you, or by the customer, who keeps what was agreed. The booking stays as it is. |
+| `booking.retract_change` | Whoever asked for the change took it back (yours only when it said it was subject to your confirmation). The booking stays as it is. |
+| `booking.expire_change` | Nobody answered the change by its deadline (`data.actor.kind` is `system`). The booking stays as it is. |
+| `booking.record_payment` | A payment or deposit was recorded for the confirmed booking: it is a paid contract the customer may withdraw from. |
+| `booking.withdraw` | The customer withdrew from a booking they paid for, within the period: cancelled, never late, and what they paid is owed back (a `refund.create` follows). |
+| `booking.record_withdrawal` | You recorded a withdrawal the customer told you of; the same. |
 | `booking.complete` | The booking happened: you marked it, or the system did `booking.autoCompleteHours` after the end (`data.actor.kind` is `system`); also your correction of a no-show. |
 | `booking.no_show` | The customer did not turn up; also your correction of a completion. |
-| `booking.receipt_issued` | The instance signed a receipt: the confirmation, or how the booking ended ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
+| `booking.receipt_issued` | The instance signed a receipt: the confirmation, a change both sides agreed (`kind: amended`), or how the booking ended ([Receipts](/docs/receipts/)). In the full style, `data.receipt` carries it. |
 | `booking.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `order.create` | An order arrived; or a customer accepted a quote for one, and it arrives already `accepted`. |
 | `order.request_info` | You asked the customer for more details. |
 | `order.provide_info` | The customer answered. |
-| `order.accept` | You accepted the order. |
+| `order.propose` | You suggested changes to the order: other quantities, a price of your own, a delivery date. |
+| `order.counter` | The customer answered your changes with quantities or a delivery date of their own; the order is back with you. |
+| `order.retract` | You withdrew the changes you suggested (they said they were subject to your confirmation). |
+| `order.accept` | You accepted the order; or the customer accepted the changes you suggested (`from` `proposed`). |
+| `order.expire` | The order lapsed: nobody answered it in time (`negotiation.counterValidHours`), or the customer did not answer your changes by their deadline. It was never promised. |
 | `order.request_payment` | You asked for payment, optionally with a payment URL. |
+| `order.propose_change` | A change to the accepted order was asked for: by you (its lines, a delivery date), or by the customer (quantities, a delivery date); `data.actor` says who. Once payment was asked for, a change keeps the total. It stays as agreed until the other side accepts. |
+| `order.accept_change` | The change was accepted: the order's lines, total and delivery are the new ones. |
+| `order.decline_change` | The change was not accepted; the order stays as it is. |
+| `order.retract_change` | Whoever asked for the change took it back; the order stays as it is. |
+| `order.expire_change` | Nobody answered the change by its deadline; the order stays as it is. |
 | `order.record_payment` | A payment was recorded against the order. |
 | `order.payment_failed` | The payment failed. The order can still be paid, or cancelled. |
 | `order.lapse` | Payment was requested `orders.payDays` ago and never came: the system closed the promise for the networks; the order itself stays as it was, so a late payment is still taken. |
 | `order.start_fulfilment` | You started putting the order together. |
-| `order.fulfil` | The order went out. |
+| `order.fulfil` | The order went out; `deliveredAt`, when you said when it arrived. |
+| `order.record_delivery` | You recorded when the goods reached the customer: their withdrawal period runs from it. |
+| `order.withdraw` | The customer withdrew from the order: before it went out it is cancelled and what was paid is owed back; after, it stays fulfilled and the goods come back. A `refund.create` follows when anything was paid or has to come back. |
+| `order.record_withdrawal` | You recorded a withdrawal the customer told you of; the same. |
+| `order.request_return` | The customer asked to send goods back; the return is its own `refund.create`. |
+| `order.open_return` | You opened a return the customer asked for by email or phone. |
 | `order.complete` | The order is closed and done. |
 | `order.decline` | You declined the order. |
-| `order.cancel` | The order was cancelled. |
+| `order.cancel` | The order was cancelled. Once paid, only by you in person: what was paid is owed back (a `refund.create` follows). |
 | `order.record_cancel` | You recorded a cancellation the customer asked for: theirs, not yours. |
 | `order.charge_back` | The payment was reversed by the bank, and the order ended there. |
 | `order.record_charge_back` | A charge-back was recorded on an order that was already completed. |
-| `order.receipt_issued` | The instance signed a receipt: the acceptance, the payment, or how the order ended. In the full style, `data.receipt` carries it. |
+| `order.receipt_issued` | The instance signed a receipt: the acceptance, the payment, a change both sides agreed (`kind: amended`), or how the order ended. In the full style, `data.receipt` carries it. |
 | `order.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `quote_request.create` | Someone asked for a price. |
 | `quote_request.request_info` | You asked what exactly they need. |
 | `quote_request.provide_info` | They told you. |
 | `quote_request.quote` | You sent a quote, with a total and a validity date (again: the new one replaces it). |
+| `quote_request.counter` | The customer asked for the quote again, for another quantity or time; the request is back with you. |
+| `quote_request.retract` | You withdrew the quote (it said it was subject to your confirmation). |
 | `quote_request.accept` | The customer accepted the quote; the booking it was for (confirmed) or the order (accepted) is created with it, and has its own `create` event. |
 | `quote_request.decline` | The quote was declined. |
-| `quote_request.expire` | The quote passed its validity date. |
+| `quote_request.expire` | The quote passed its validity date, or the request lapsed with nobody answering it. |
 | `message.create` | A new conversation started. |
 | `message.answer` | You replied. |
 | `message.close` | The conversation was closed. |
 | `message.reopen` | It was reopened. |
 | `message.mark_spam` | It was marked as spam. |
 | `message.unspam` | It was not spam after all. |
-| `refund.create` | A refund was requested. |
-| `refund.approve` | You approved it. |
-| `refund.reject` | You rejected it. |
+| `refund.create` | A return or a refund began, linked to its order or booking (`linkedItemId`): a withdrawal and a paid order you cancelled start `approved`, a return asked for starts `requested`. |
+| `refund.approve` | You agreed to the return: the goods come back by a date, or nothing has to. |
+| `refund.reject` | You refused the return, with the reason the customer reads. Never a withdrawal. |
+| `refund.goods_back` | The goods, or proof they were sent, reached you: the refund is now due by a date. |
+| `refund.dispute_goods` | What came back is not what you sold: the refund waits while you sort it out. |
 | `refund.refund` | The money went back. |
+| `refund.cancel` | The customer dropped the return. |
+| `refund.record_cancel` | You recorded that the customer dropped it. |
+| `refund.receipt_issued` | The instance signed one of the refund's receipts, when the order or booking it refunds was the customer's: its promise once its date was fixed, and whether it was paid by then ([Receipts](/docs/receipts/)). |
+| `refund.receipt_acknowledged` | The customer's agent counter-signed that receipt. |
 | `<type>.message` | An inbound message arrived on an item of that type — `booking.message`, `order.message`, and so on. |
-| `<type>.flags` | A flag changed on an item: `needsHuman` was raised or cleared, or its priority moved. |
+| `<type>.flags` | A flag changed on an item: `needsHuman` was raised or cleared, or its priority moved; also when a reply from your AI naming an amount of money you have not offered was kept for you as a note. |
+| `<type>.draft_offer` | What your AI, a rule or a key without `money:write` would have offered is outside your limits: it waits on the item as a draft for you, and nothing went to the customer. |
 
 One event is not about an item at all: **`inbox.test`**, what `POST /v1/owner/webhooks/{id}/test` sends. It carries `"test": true`, a sentence saying that nothing was created, and a `data.id` with no item behind it. A receiver that matches on the item type ignores it, which is the right behaviour — it is for whoever is checking the endpoint works, not for your integration.
 
@@ -260,7 +292,7 @@ Deliveries are pruned after thirty days. For anything older, use the cursor belo
 
 ## Thin and full
 
-A **thin** event carries a pointer: the ids, the type, the new state, the version, a URL, who caused it, the door and whether it is a sandbox item. A **full** event is the same envelope with more inside `data`: `item`, the whole item with its typed payload and its flags; `transitions`, the events it accepts right now, each with a label; `human`, a sentence describing it; `party`, the customer, with the name, email address and phone number you hold for them; and, on a `<type>.message` event, `message`, the message itself.
+A **thin** event carries a pointer: the ids, the type, the new state, the version, a URL, who caused it, the door and whether it is a sandbox item. A **full** event is the same envelope with more inside `data`: `item`, the whole item with its typed payload and its flags; `transitions`, the events it accepts right now, each with a label; `human`, a sentence describing it; `party`, the customer, with the name, email address and phone number you hold for them; on an event that made or closed an offer (a proposal, a quote, a counter, an acceptance, a decline, a lapse), `offer`: `{id, rev, round, by, kind, form, status, valid_through, terms_sha, terms, shown}`; and, on a `<type>.message` event, `message`, the message itself. In both styles the item's payload says where its negotiation stands in `offer` (`id`, `rev`, `by`, `round`, `status`, `validThrough`).
 
 Thin is the default, for two reasons. A thin transition event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. (A `<type>.message` event is the exception in both styles: a message does not change the item, so its `state` and `version` are the item's as they stand when we send.) And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
 

@@ -79,8 +79,30 @@ export const pingRequestSchema = z.object({
 });
 export type PingRequest = z.infer<typeof pingRequestSchema>;
 
-export const reportOutSchema = z.enum(["booking.no_show_business", "order.not_received"]);
-export const reportWhySchema = z.enum(["closed", "no_one_there", "not_delivered", "other"]);
+/**
+ * What a customer's agent may report (§3.4): the business was not there, the order never came, and
+ * since rules version 6 (ADR-017 Amendment 3, A3.3) a lawful claim the business refused — a
+ * withdrawal in time, a claim under the legal guarantee, or goods disputed with nothing repaid.
+ */
+export const reportOutSchema = z.enum(["booking.no_show_business", "order.not_received", "order.refund_refused"]);
+export const reportWhySchema = z.enum([
+  "closed",
+  "no_one_there",
+  "not_delivered",
+  "other",
+  "withdrawal_refused",
+  "faulty_refused",
+  "goods_disputed_unpaid",
+]);
+
+/** The reasons each report takes: a refused claim says which one; the others keep version 3's. */
+export const REPORT_WHYS: Readonly<
+  Record<z.infer<typeof reportOutSchema>, readonly z.infer<typeof reportWhySchema>[]>
+> = {
+  "booking.no_show_business": ["closed", "no_one_there", "not_delivered", "other"],
+  "order.not_received": ["closed", "no_one_there", "not_delivered", "other"],
+  "order.refund_refused": ["withdrawal_refused", "faulty_refused", "goods_disputed_unpaid"],
+};
 
 /** An open report the business may still dispute (until `respond_by`). */
 export const reportCaseSchema = z.object({
@@ -164,12 +186,18 @@ export type SignedPingResponse = z.infer<typeof signedPingResponseSchema>;
  * `POST /v1/reports`, straight from the customer's agent to the network, signed sdi-agent/1 by a key
  * delegated to the pass `pass_ref` names (else `403 report_requires_signature`).
  */
-export const reportRequestSchema = z.object({
-  receipt: z.string().min(1).max(8192).describe("Any receipt of the item: its compact JWS, or its sha."),
-  out: reportOutSchema,
-  why: reportWhySchema,
-  pass_ref: passRefSchema,
-});
+export const reportRequestSchema = z
+  .object({
+    receipt: z.string().min(1).max(8192).describe("Any receipt of the item: its compact JWS, or its sha."),
+    out: reportOutSchema,
+    why: reportWhySchema.describe("One of the reasons its out takes (REPORT_WHYS)."),
+    pass_ref: passRefSchema,
+  })
+  .superRefine((r, ctx) => {
+    if (!REPORT_WHYS[r.out].includes(r.why)) {
+      ctx.addIssue({ code: "custom", message: `${r.out} is not reported for ${r.why}`, path: ["why"] });
+    }
+  });
 export const reportFiledSchema = z.object({ id: z.string(), status: z.literal("open"), respond_by: timestampSchema });
 
 /** `POST /v1/reports/{id}/response` (sdi-instance/1, the reported business). */

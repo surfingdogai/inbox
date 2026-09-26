@@ -36,6 +36,21 @@ export type WriteErrorCode =
    * longer matches, because the customer has changed since), nothing is erased; the answer says what would be.
    */
   | "confirm_erase"
+  /**
+   * ADR-018 §7, the withdrawal's two steps (CRD art. 11a): a withdrawal sent without
+   * `confirm_withdrawal`. Nothing is sent; the answer carries the statement to show the customer.
+   */
+  | "confirm_withdrawal"
+  /**
+   * ADR-018 §4: what automation would accept is outside the limits the owner set (a price under the
+   * floor, an order above the value the owner takes in person). `details.breaches` names them as codes,
+   * never a number; a person decides.
+   */
+  | "outside_limits"
+  /** The draft was made on the item as it stood, and the item has moved since: the owner offers afresh. */
+  | "draft_stale"
+  /** ADR-018 §4: a rule that reads where a customer lives or comes from may not set a price or terms. */
+  | "geo_terms"
   | "internal";
 
 export interface FieldProblem {
@@ -66,6 +81,10 @@ const STATUS: Record<WriteErrorCode, number> = {
   offer_expired: 410,
   no_offer: 409,
   confirm_erase: 409,
+  confirm_withdrawal: 409,
+  outside_limits: 422,
+  draft_stale: 409,
+  geo_terms: 422,
   internal: 500,
 };
 

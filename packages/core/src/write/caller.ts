@@ -106,6 +106,18 @@ export function isOwnerAssistant(caller: Caller): boolean {
 }
 
 /**
+ * Whether the caller may set prices and record money as the business's own systems do (ADR-018 §4,
+ * C9): anyone but a key handed to another system, which needs `money:write` — its till or shop does,
+ * a workflow tool does not. The owner's AI never does, whatever it holds.
+ */
+export function holdsMoney(caller: Caller): boolean {
+  if (isOwnerAssistant(caller)) return false;
+  const p = caller.principal;
+  if (p?.keyKind !== "integration") return true;
+  return p.scopes.includes("*") || p.scopes.includes("money:write");
+}
+
+/**
  * What goes into an event's `meta` about who made it, beyond the actor kind and id: the name the
  * owner knows a key or an AI app by, the person behind it, and the kind it acted as (`acts_as`,
  * which the rules judge it by, as the state machines do). Never a scope list, never a secret,

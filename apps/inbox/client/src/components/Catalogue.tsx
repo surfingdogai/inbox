@@ -39,9 +39,21 @@ interface ServiceDraft {
   readonly per: "booking" | "person";
   readonly sort: string;
   readonly active: boolean;
+  /** Whether a customer may suggest a price of their own for it, while price counters are on. */
+  readonly negotiable: boolean;
+  /** The lowest price the owner's AI, rules and other systems may go to, in major units; empty for none. */
+  readonly floor: string;
 }
 
-function serviceDraft(s: ServiceRow | undefined): ServiceDraft {
+/** A lowest price as typed: minor units, null for none, undefined when it is not a price. */
+function floorOf(typed: string): number | null | undefined {
+  return typed.trim() === "" ? null : parseMajor(typed);
+}
+
+const majorOf = (minor: number | null | undefined) =>
+  minor === null || minor === undefined ? "" : (minor / 100).toFixed(2);
+
+function serviceDraft(s: ServiceRow | undefined, floor: number | null | undefined): ServiceDraft {
   return {
     name: s?.name ?? "",
     description: s?.description ?? "",
@@ -55,6 +67,8 @@ function serviceDraft(s: ServiceRow | undefined): ServiceDraft {
     per: s?.price?.per === "person" ? "person" : "booking",
     sort: String(s?.sort ?? 0),
     active: s ? s.active === 1 : true,
+    negotiable: s ? s.negotiable !== 0 : true,
+    floor: majorOf(floor),
   };
 }
 
@@ -62,6 +76,7 @@ const int = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
 
 export function ServiceEditor({
   initial,
+  floor,
   currency,
   pending,
   error,
@@ -69,13 +84,16 @@ export function ServiceEditor({
   onCancel,
 }: {
   initial: ServiceRow | undefined;
+  /** Its lowest price now, in minor units. */
+  floor?: number | null | undefined;
   currency: string;
   pending: boolean;
   error: ApiProblem | null;
-  onSubmit: (body: ServiceBody) => void;
+  /** The row's fields, and its lowest price when the owner changed it (null clears it). */
+  onSubmit: (body: ServiceBody, floor?: number | null) => void;
   onCancel: () => void;
 }) {
-  const [f, setF] = useState<ServiceDraft>(() => serviceDraft(initial));
+  const [f, setF] = useState<ServiceDraft>(() => serviceDraft(initial, floor));
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]) => setF((d) => ({ ...d, [key]: value }));
   const submit = (e: FormEvent) => {
@@ -86,22 +104,34 @@ export function ServiceEditor({
     if (f.model !== "quote" && value === undefined) {
       return setLocal("Give a price, like 45,50 or 45.50, or choose priced by quote.");
     }
+    const lowest = floorOf(f.floor);
+    if (lowest === undefined) return setLocal("Give the lowest price like 40,00 or 40.00, or leave it empty.");
     setLocal(null);
-    onSubmit({
-      name: f.name.trim(),
-      description: f.description.trim(),
-      duration_min: int(f.duration),
-      buffer_before_min: int(f.before),
-      buffer_after_min: int(f.after),
-      capacity: int(f.capacity),
-      granularity_min: int(f.granularity),
-      price:
-        f.model === "quote"
-          ? { model: "quote" }
-          : { model: f.model, value: value ?? 0, currency, ...(f.per === "person" ? { per: "person" as const } : {}) },
-      sort: int(f.sort),
-      active: f.active,
-    });
+    const floorChanged = lowest !== (floor ?? null);
+    onSubmit(
+      {
+        name: f.name.trim(),
+        description: f.description.trim(),
+        duration_min: int(f.duration),
+        buffer_before_min: int(f.before),
+        buffer_after_min: int(f.after),
+        capacity: int(f.capacity),
+        granularity_min: int(f.granularity),
+        price:
+          f.model === "quote"
+            ? { model: "quote" }
+            : {
+                model: f.model,
+                value: value ?? 0,
+                currency,
+                ...(f.per === "person" ? { per: "person" as const } : {}),
+              },
+        sort: int(f.sort),
+        active: f.active,
+        negotiable: f.negotiable,
+      },
+      floorChanged ? lowest : undefined,
+    );
   };
   const err = (path: string) => error?.field(path);
   return (
@@ -230,10 +260,33 @@ export function ServiceEditor({
             </select>
           </Field>
         )}
+        {f.model === "fixed" && (
+          <Field
+            id="sv-floor"
+            label={`Lowest price (${currency})`}
+            optional
+            error={err("floors.0.floor_minor")}
+            hint="Your AI and rules never go under it, and never learn it. On the same basis as the price."
+          >
+            <input
+              id="sv-floor"
+              className="input"
+              inputMode="decimal"
+              value={f.floor}
+              onChange={(e) => set("floor", e.target.value)}
+            />
+          </Field>
+        )}
         <div className="wide">
           <Switch checked={f.active} onChange={(v) => set("active", v)}>
             Bookable
           </Switch>
+        </div>
+        <div className="wide">
+          <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
+            Customers may suggest a price for it
+          </Switch>
+          <div className="hint">Only while you take customers' own prices (Settings). Off, one goes to you.</div>
         </div>
       </div>
       {(local || (error && !error.fields?.length)) && (
@@ -261,10 +314,13 @@ interface ProductDraft {
   readonly price: string;
   readonly stock: string;
   readonly active: boolean;
+  readonly negotiable: boolean;
+  readonly floor: string;
 }
 
 export function ProductEditor({
   initial,
+  floor,
   currency,
   pending,
   error,
@@ -272,10 +328,13 @@ export function ProductEditor({
   onCancel,
 }: {
   initial: ProductRow | undefined;
+  /** Its lowest price now, in minor units, per unit. */
+  floor?: number | null | undefined;
   currency: string;
   pending: boolean;
   error: ApiProblem | null;
-  onSubmit: (body: ProductBody) => void;
+  /** The row's fields, and its lowest price when the owner changed it (null clears it). */
+  onSubmit: (body: ProductBody, floor?: number | null) => void;
   onCancel: () => void;
 }) {
   const [f, setF] = useState<ProductDraft>({
@@ -285,6 +344,8 @@ export function ProductEditor({
     price: initial ? (initial.price.value / 100).toFixed(2) : "",
     stock: initial?.stock === null || initial?.stock === undefined ? "" : String(initial.stock),
     active: initial ? initial.active === 1 : true,
+    negotiable: initial ? initial.negotiable !== 0 : true,
+    floor: majorOf(floor),
   });
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) => setF((d) => ({ ...d, [key]: value }));
@@ -297,15 +358,21 @@ export function ProductEditor({
     const stock = f.stock.trim() === "" ? null : Number(f.stock);
     if (stock !== null && (!Number.isInteger(stock) || stock < 0))
       return setLocal("Stock is a whole number, or empty when not tracked.");
+    const lowest = floorOf(f.floor);
+    if (lowest === undefined) return setLocal("Give the lowest price like 30,00 or 30.00, or leave it empty.");
     setLocal(null);
-    onSubmit({
-      ...(f.sku.trim() ? { sku: f.sku.trim() } : {}),
-      name: f.name.trim(),
-      description: f.description.trim(),
-      price: { value, currency: initial?.price.currency ?? currency },
-      stock,
-      active: f.active,
-    });
+    onSubmit(
+      {
+        ...(f.sku.trim() ? { sku: f.sku.trim() } : {}),
+        name: f.name.trim(),
+        description: f.description.trim(),
+        price: { value, currency: initial?.price.currency ?? currency },
+        stock,
+        active: f.active,
+        negotiable: f.negotiable,
+      },
+      lowest !== (floor ?? null) ? lowest : undefined,
+    );
   };
   const err = (path: string) => error?.field(path);
   return (
@@ -351,10 +418,31 @@ export function ProductEditor({
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
+        <Field
+          id="pr-floor"
+          label={`Lowest price (${initial?.price.currency ?? currency})`}
+          optional
+          error={err("floors.0.floor_minor")}
+          hint="Per unit. Your AI and rules never go under it, and never learn it."
+        >
+          <input
+            id="pr-floor"
+            className="input"
+            inputMode="decimal"
+            value={f.floor}
+            onChange={(e) => set("floor", e.target.value)}
+          />
+        </Field>
         <div className="wide">
           <Switch checked={f.active} onChange={(v) => set("active", v)}>
             For sale
           </Switch>
+        </div>
+        <div className="wide">
+          <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
+            Customers may suggest a price for it
+          </Switch>
+          <div className="hint">Only while you take customers' own prices (Settings). Off, one goes to you.</div>
         </div>
       </div>
       {(local || (error && !error.fields?.length)) && (
