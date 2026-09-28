@@ -881,7 +881,7 @@ export async function seedSurfingDog(db: Db, now = Date.now(), _deps: SeedDeps =
     {
       id: ulid(),
       name: "Intro call",
-      description: "Thirty minutes with Tiago about your business and what an inbox for agents would do for it.",
+      description: "Thirty minutes about your business and what an inbox for agents would do for it.",
       durationMin: 30,
       capacity: 1,
       granularityMin: 30,
