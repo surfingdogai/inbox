@@ -48,6 +48,7 @@ function priceText(s: Service, lang: CustomerLang): string {
   const f = frontCopy(lang);
   const p = s.price;
   if (!p || p.model === "quote" || p.value === undefined) return p?.model === "quote" ? f.onRequest : "";
+  if (p.model === "fixed" && p.value === 0) return f.free;
   const money = moneyIn({ value: p.value, currency: p.currency ?? "EUR" }, lang);
   return p.model === "from" ? f.from(money) : money;
 }
