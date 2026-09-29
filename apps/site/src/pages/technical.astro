@@ -36,9 +36,8 @@ const doors: { k: string; v: string; note: string; phase?: string }[] = [
   },
   {
     k: "Web form",
-    v: "channel: form",
-    phase: "Being built",
-    note: "For people with no agent. Reserved in the schema, not built yet.",
+    v: "GET / · /p/book · /p/quote · /p/message",
+    note: "The business's own page, for people with no agent: services, free times, a quote, a message. In its name and the visitor's language, no script. Requests go through the same doors as an agent's (channel form), priced bookings through the confirm step.",
   },
   {
     k: "Idempotency",
@@ -164,7 +163,7 @@ const ways = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">The doors</p>
-          <h2 class="h-section" id="doors-h">Three doors today, a web form next</h2>
+          <h2 class="h-section" id="doors-h">Four doors: REST, MCP, email and a web page</h2>
           <p class="lede">All of this works today unless marked.</p>
         </div>
         <a class="btn btn-secondary" href="/docs/api/">Read the API docs</a>

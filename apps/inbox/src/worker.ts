@@ -50,6 +50,9 @@ function inboxFor(env: Bindings): Inbox {
       secretKey: secretKeyFrom(env.INBOX_SECRET_KEY),
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
+      // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
+      appShell: (request) =>
+        env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers })),
     });
     inboxes.set(env.DB, inbox);
   }

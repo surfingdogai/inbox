@@ -6,6 +6,7 @@ import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
 import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
 import { ingestEmail } from "./email";
+import { frontHomePage, frontPage, hasOwnerSession } from "./front-page";
 import { agentFromRequest } from "./identity";
 import {
   clientAddress,
@@ -32,6 +33,7 @@ export * from "./auth";
 export * from "./customer-page";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./front-page";
 export * from "./identity";
 export * from "./limits";
 export * from "./mcp";
@@ -55,6 +57,11 @@ export interface DoorDeps {
   readonly sandbox?: () => Promise<boolean>;
   readonly mailOut: MailOut;
   readonly businessName: () => Promise<string>;
+  /**
+   * The owner app's page, where the runtime does not serve it after these routes (Workers: the
+   * assets binding). `/` hands a signed-in owner to it; without it, `/` falls through (Node).
+   */
+  readonly appShell?: ((request: Request) => Promise<Response>) | undefined;
   /** Resolves Client ID Metadata Documents; defaults to the SSRF-safe fetcher. */
   readonly fetchClientMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
   readonly now?: (() => number) | undefined;
@@ -391,6 +398,24 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     await next();
   });
   app.route("/c", customerPage({ caps: deps.caps, now: deps.now }));
+  // The business's own page (the web form door, ADR-010): a GET shows, a POST sends a request and
+  // spends from the same `create` limit as the API's creates. At `/`, a visitor gets the page and the
+  // owner, signed in, their app.
+  app.use("/p/*", async (c, next) => {
+    const refused = await limited(c, c.req.method === "POST" ? ["public", "create"] : ["public"]);
+    if (refused) return tooManyPage(c, deps);
+    await next();
+  });
+  app.route("/p", frontPage({ caps: deps.caps, now: deps.now }));
+  app.get("/", async (c, next) => {
+    if (hasOwnerSession(c.req.raw)) {
+      if (deps.appShell) return deps.appShell(c.req.raw);
+      return next();
+    }
+    const refused = await limited(c, ["public"]);
+    if (refused) return tooManyPage(c, deps);
+    return frontHomePage({ caps: deps.caps, now: deps.now }, c);
+  });
 
   app.get(
     "/openapi.json",

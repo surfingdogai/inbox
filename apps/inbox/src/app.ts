@@ -6,6 +6,7 @@ import {
   DEMO_SHARED,
   FEED_IMPORT_KIND,
   feedImportHandler,
+  hasOwnerSession,
   identityIssueHandler,
   mountDoors,
   NETWORK_PING_KIND,
@@ -63,6 +64,8 @@ export interface AppDeps {
   readonly mailOut?: MailOut | undefined;
   /** Public base URL for links in emails; derived from the request when absent. */
   readonly baseUrl?: string | undefined;
+  /** The owner app's page, where the runtime serves it only on request (Workers: the assets binding). */
+  readonly appShell?: ((request: Request) => Promise<Response>) | undefined;
   /** Outbound fetch for the network ping (tests inject a fake). */
   readonly fetchImpl?: typeof fetch | undefined;
   /** Addresses that may create the first account by magic link (INBOX_OWNER_EMAIL). */
@@ -244,8 +247,12 @@ export function createInbox(deps: AppDeps): Inbox {
     },
     referrerPolicy: "no-referrer",
   });
+  // The customer's pages set their own headers: the ones behind an email's links, and the business's
+  // own page (`/p/*`, and `/` for anyone but the owner signed in, who gets their app there).
+  const customerPage = (path: string, request: Request) =>
+    path.startsWith("/c/") || path.startsWith("/p/") || (path === "/" && !hasOwnerSession(request));
   app.use("*", (c, next) =>
-    c.req.path.startsWith("/c/")
+    customerPage(c.req.path, c.req.raw)
       ? pageHeaders(c, next)
       : demo && c.req.path.startsWith("/demo/")
         ? demoHeaders(c, next)
@@ -345,6 +352,7 @@ export function createInbox(deps: AppDeps): Inbox {
     limits: demo ? DEMO_LIMITS : undefined,
     sharedLimits: demo ? DEMO_SHARED : undefined,
     businessName: async () => (await caps.getBusinessProfile()).name,
+    appShell: deps.appShell,
     fetchClientMetadata: deps.fetchClientMetadata,
     fetchImpl: deps.fetchImpl,
     now: deps.now,
