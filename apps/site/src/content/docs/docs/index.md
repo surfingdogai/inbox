@@ -21,7 +21,7 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: passkeys and a web form door (being built), connectors (coming), hosted tenancy, and the network's reviews and reputation (coming). Every page in these docs says whether a feature is live.
+Still to come: passkeys, connectors (coming), hosted tenancy, and the network's reviews and reputation (coming). Every page in these docs says whether a feature is live.
 
 ## Pages
 

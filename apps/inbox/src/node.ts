@@ -122,7 +122,18 @@ if (demo) {
 }
 
 /** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
-const DOOR_PREFIXES = ["/v1", "/mcp", "/auth", "/oauth", "/openapi.json", "/healthz", "/.well-known", "/c", "/demo"];
+const DOOR_PREFIXES = [
+  "/v1",
+  "/mcp",
+  "/auth",
+  "/oauth",
+  "/openapi.json",
+  "/healthz",
+  "/.well-known",
+  "/c",
+  "/p",
+  "/demo",
+];
 const isDoor = (p: string) => DOOR_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
 
 const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");

@@ -48,6 +48,11 @@ export interface PageForm {
   readonly hidden: Readonly<Record<string, string>>;
   readonly fields: readonly PageField[];
   readonly button: string;
+  /**
+   * A field people never see and bots fill in (the front page's forms): a form that comes back with
+   * it filled is thanked and dropped.
+   */
+  readonly trap?: boolean | undefined;
 }
 
 export type PageField =
@@ -57,6 +62,19 @@ export type PageField =
       readonly label: string;
       readonly required: boolean;
       readonly maxLength: number;
+      /** What the person had typed, when the page comes back to them with an error. */
+      readonly value?: string | undefined;
+    }
+  | {
+      /** One line: a name, an email address (the front page's forms). */
+      readonly kind: "text" | "email";
+      readonly name: string;
+      readonly label: string;
+      readonly required: boolean;
+      readonly maxLength: number;
+      readonly value?: string | undefined;
+      /** The browser's autofill hint: `name`, `email`. */
+      readonly autocomplete?: string | undefined;
     }
   | {
       readonly kind: "times";

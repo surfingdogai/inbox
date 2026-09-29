@@ -17,6 +17,7 @@ export {
   MAX_CUSTOMER_ITEMS,
 } from "./customers";
 export * from "./feeds";
+export * from "./front";
 export { type CustomerView, customerSummary, type PersonView } from "./identity";
 export * from "./service";
 export * from "./setup";

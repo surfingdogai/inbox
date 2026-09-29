@@ -193,13 +193,23 @@ function formHtml(form: NonNullable<CustomerPage["form"]>): string {
     .join("");
   const fields = form.fields.map(fieldHtml).join("\n");
   const action = form.action ? ` action="${esc(form.action)}"` : "";
-  return `<form method="post"${action}>${hidden}\n${fields}\n<button type="submit">${esc(form.button)}</button></form>`;
+  // Hidden from people and from screen readers; a bot filling every field fills this one too.
+  const trap = form.trap
+    ? `<div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>`
+    : "";
+  return `<form method="post"${action}>${hidden}\n${fields}\n${trap}<button type="submit">${esc(form.button)}</button></form>`;
 }
 
 function fieldHtml(field: PageField, index: number): string {
   if (field.kind === "textarea") {
     const id = `f${index}`;
-    return `<label for="${id}">${esc(field.label)}</label><textarea id="${id}" name="${esc(field.name)}" rows="4" maxlength="${field.maxLength}"${field.required ? " required" : ""}></textarea>`;
+    return `<label for="${id}">${esc(field.label)}</label><textarea id="${id}" name="${esc(field.name)}" rows="4" maxlength="${field.maxLength}"${field.required ? " required" : ""}>${esc(field.value ?? "")}</textarea>`;
+  }
+  if (field.kind !== "times") {
+    const id = `f${index}`;
+    const value = field.value ? ` value="${esc(field.value)}"` : "";
+    const auto = field.autocomplete ? ` autocomplete="${esc(field.autocomplete)}"` : "";
+    return `<label for="${id}">${esc(field.label)}</label><input id="${id}" type="${field.kind}" name="${esc(field.name)}" maxlength="${field.maxLength}"${value}${auto}${field.required ? " required" : ""}>`;
   }
   if (field.days.length === 0) return `<p class="empty">${esc(field.empty)}</p>`;
   let n = 0;
@@ -238,7 +248,8 @@ dt{color:var(--muted)}dd{margin:0;text-align:right}
 blockquote{margin:1rem 0;padding:.25rem 0 .25rem 1rem;border-left:3px solid var(--rule);white-space:pre-wrap}
 form{margin:1.5rem 0}
 label{display:block;margin:1rem 0 .25rem}
-textarea{width:100%;font:inherit;padding:.5rem;border:1px solid var(--muted);border-radius:4px;background:var(--bg);color:var(--fg)}
+textarea,input[type=text],input[type=email]{width:100%;font:inherit;padding:.5rem;border:1px solid var(--muted);border-radius:4px;background:var(--bg);color:var(--fg)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 fieldset{border:0;border-top:1px solid var(--rule);margin:0;padding:.75rem 0}
 legend{font-weight:600;padding:0}
 .slot{display:inline-block;margin:.25rem .5rem .25rem 0}
