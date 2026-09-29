@@ -30,6 +30,7 @@ import {
   makeOfferInput,
   type OnceOptions,
   openReturnInput,
+  patchOf,
   productIdInput,
   productInput,
   profileInput,
@@ -845,9 +846,10 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         title: "Add or change a service",
         description:
           "Without service_id: creates a service (name required; duration 60 min, capacity 1, slots every 15 min by default). With service_id: changes only the fields you pass. A fixed price is per booking unless price.per is person. Prices are the owner's: a service you add with a price is saved unpublished for the owner to check and publish, and a change to a price, or publishing a priced service, is refused; so is changing withdrawal or negotiable. Send an idempotency_key so a retry does not create it twice.",
-        inputSchema: serviceInput
-          .partial()
-          .extend({ service_id: z.string().optional(), idempotency_key: idempotencyKey }),
+        inputSchema: patchOf(serviceInput).extend({
+          service_id: z.string().optional(),
+          idempotency_key: idempotencyKey,
+        }),
         annotations: writes,
       },
       (args) =>
@@ -912,9 +914,10 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         title: "Add or change a product",
         description:
           "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass. Prices are the owner's: a product you add is saved unpublished for the owner to check and publish, and a change to its price, or publishing it, is refused; so is changing withdrawal or negotiable. Send an idempotency_key so a retry does not create it twice.",
-        inputSchema: productInput
-          .partial()
-          .extend({ product_id: z.string().optional(), idempotency_key: idempotencyKey }),
+        inputSchema: patchOf(productInput).extend({
+          product_id: z.string().optional(),
+          idempotency_key: idempotencyKey,
+        }),
         annotations: writes,
       },
       (args) =>
@@ -1081,7 +1084,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         title: "Add or change a rule",
         description:
           "A rule is JSON: on (triggers such as item.created, thread.inbound, item.transitioned:confirm), if (conditions: all/any/not, {path, op, value} over item.*, party.*, event.*, or fn slot_is_free / within_business_hours / party_verified / text_has_keywords), actions (transition, set_flags, reply, enqueue, stop). Without rule_id it creates; with rule_id it changes the fields you pass. Use test_rule first. A rule that sends a quote, or whose words name an amount or something off a price, is the owner's to write: you may rename one or switch it off, not write, change or switch one on.",
-        inputSchema: ruleInput.partial().extend({
+        inputSchema: patchOf(ruleInput).extend({
           rule_id: z.string().optional(),
           expected_version: z.number().int().min(1).optional(),
           idempotency_key: idempotencyKey,

@@ -3,6 +3,26 @@ import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
 import { ruleDefinitionSchema } from "../rules/schema";
 
 /** Inputs of the owner's setup operations: profile, services, products, opening hours, rules. */
+
+type Patch<T extends z.ZodRawShape> = {
+  [K in keyof T]: T[K] extends z.ZodDefault<infer I> ? z.ZodOptional<I> : z.ZodOptional<T[K]>;
+};
+
+/**
+ * A change to something that exists: every field optional, and none of the create's defaults, so a
+ * field not sent is left as it is. Zod's own `.partial()` keeps the defaults — a change to a
+ * service's description alone came back with its duration, slots and order reset to the create's
+ * defaults — so every update is built with this instead. Each field keeps its description.
+ */
+export function patchOf<T extends z.ZodRawShape>(schema: z.ZodObject<T>): z.ZodObject<Patch<T>> {
+  const shape: Record<string, z.ZodType> = {};
+  for (const [key, field] of Object.entries(schema.shape) as [string, z.ZodType][]) {
+    const inner = field instanceof z.ZodDefault ? (field.unwrap() as z.ZodType) : field;
+    const described = field.description && !inner.description ? inner.describe(field.description) : inner;
+    shape[key] = described.optional();
+  }
+  return z.object(shape) as unknown as z.ZodObject<Patch<T>>;
+}
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 const range = z.tuple([hhmm, hhmm]).refine(([a, b]) => a < b, { message: "closing time must be after opening time" });
 const day = z.array(range).max(6);
@@ -71,7 +91,7 @@ export const serviceInput = z.object({
       "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
     ),
 });
-export const updateServiceInput = serviceInput.partial().extend({ service_id: z.string().min(1) });
+export const updateServiceInput = patchOf(serviceInput).extend({ service_id: z.string().min(1) });
 export const serviceIdInput = z.object({ service_id: z.string().min(1) });
 
 export const productInput = z.object({
@@ -93,7 +113,7 @@ export const productInput = z.object({
       "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
     ),
 });
-export const updateProductInput = productInput.partial().extend({ product_id: z.string().min(1) });
+export const updateProductInput = patchOf(productInput).extend({ product_id: z.string().min(1) });
 export const productIdInput = z.object({ product_id: z.string().min(1) });
 
 /**
@@ -126,9 +146,10 @@ export const ruleInput = z.object({
   enabled: z.boolean().default(true),
   definition: ruleDefinitionSchema,
 });
-export const updateRuleInput = ruleInput
-  .partial()
-  .extend({ rule_id: z.string().min(1), expected_version: z.number().int().min(1).optional() });
+export const updateRuleInput = patchOf(ruleInput).extend({
+  rule_id: z.string().min(1),
+  expected_version: z.number().int().min(1).optional(),
+});
 export const ruleIdInput = z.object({ rule_id: z.string().min(1) });
 export const presetKeySchema = z.enum(["appointments", "trades", "shop"]);
 export const applyPresetInput = z.object({

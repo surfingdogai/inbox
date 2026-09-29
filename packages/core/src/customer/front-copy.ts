@@ -15,6 +15,8 @@ export interface FrontCopy {
   /** A price that starts at this amount. */
   readonly from: (price: string) => string;
   readonly onRequest: string;
+  /** A fixed price of nothing. */
+  readonly free: string;
   readonly quoteLink: string;
   readonly messageLink: string;
   /** Before the quote and message links when there are services too. */
@@ -56,6 +58,7 @@ const EN: FrontCopy = {
   minutes: (n) => (n % 60 === 0 ? `${n / 60} h` : n > 60 ? `${Math.floor(n / 60)} h ${n % 60} min` : `${n} min`),
   from: (price) => `from ${price}`,
   onRequest: "price on request",
+  free: "free",
   quoteLink: "Ask for a quote",
   messageLink: "Send us a message",
   or: "Or:",
@@ -102,6 +105,7 @@ const PT: FrontCopy = {
   minutes: (n) => (n % 60 === 0 ? `${n / 60} h` : n > 60 ? `${Math.floor(n / 60)} h ${n % 60} min` : `${n} min`),
   from: (price) => `desde ${price}`,
   onRequest: "preço sob consulta",
+  free: "grátis",
   quoteLink: "Pedir um orçamento",
   messageLink: "Enviar uma mensagem",
   or: "Ou:",
