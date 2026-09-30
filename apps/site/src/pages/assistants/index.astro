@@ -1,0 +1,110 @@
+---
+// The assistants hub: every AI assistant a business's inbox works with, and what each needs.
+import Layout from "../../layouts/Layout.astro";
+import { ASSISTANTS, CHECKED } from "../../lib/assistants";
+
+const url = new URL(Astro.url.pathname, Astro.site).toString();
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "Your business in every AI assistant",
+  url,
+  hasPart: ASSISTANTS.map((a) => ({
+    "@type": "TechArticle",
+    headline: a.heading,
+    url: new URL(`/assistants/${a.slug}/`, Astro.site).toString(),
+  })),
+};
+---
+
+<Layout
+  title="Your business in Meta Muse, Grok, ChatGPT, Claude and Gemini · Surfing Dog"
+  description="One inbox every AI assistant can book, quote and order through: Meta Muse, Grok and Grok Bot, ChatGPT, Claude, Gemini and Copilot Studio. What each needs, and how to connect your own AI."
+  image="/art/og-assistant-hub-v1.png"
+  ld={ld}
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="hub-h">
+    <p class="eyebrow">Assistants</p>
+    <h1 class="h-page" id="hub-h">Your business in every AI assistant</h1>
+    <p class="lede">
+      People now ask Meta Muse, Grok, ChatGPT, Claude or Gemini to book the service, get the quote, place the order.
+      Each of them speaks MCP, and your inbox answers all of them the same way: in your name, by your rules, with a state
+      you can see.
+    </p>
+  </section>
+
+  <section class="section section-tight" aria-label="Assistants">
+    <div class="wrap">
+      <ul class="grid-cards" data-reveal="stagger">
+        {
+          ASSISTANTS.map((a) => (
+            <li class="glass card">
+              <h2 class="h-card">
+                <a class="link" href={`/assistants/${a.slug}/`}>
+                  {a.name}
+                </a>
+              </h2>
+              <p class="card-text">{a.lede}</p>
+              <p class="card-text muted">{a.plans}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="same-h">
+    <h2 class="h-section" id="same-h">What every assistant gets</h2>
+    <ul>
+      <li>
+        <strong>For a customer's assistant</strong>, your public MCP server at <code>/mcp</code>: your services and free
+        times, a booking, a quote request, an order, a message, and its answers to what you propose. No sign-in.
+      </li>
+      <li>
+        <strong>For your own AI</strong>, the owner MCP server at <code>/mcp/owner</code>, with OAuth 2.1 (the assistant
+        registers itself) or an owner API key in a header.
+      </li>
+      <li>
+        <strong>The same rules for everyone.</strong> A priced booking or order binds nobody until the person confirmed its
+        summary. Your rules decide what is confirmed without you.
+      </li>
+      <li>
+        <strong>Every MCP revision</strong> from March 2025 to 2026-07-28, so older and newer assistants both connect.
+      </li>
+      <li>
+        <strong>Found through the network.</strong> Assistants search <code>https://network.surfingdog.ai/mcp</code> for
+        verified businesses; see <a class="link" href="/network/">the network</a>.
+      </li>
+    </ul>
+    <p class="muted">Checked {CHECKED} against each assistant's own documentation, linked on its page.</p>
+    <p><a class="btn btn-primary" href="/try/">Try it with the demo shop</a></p>
+  </section>
+</Layout>
+
+<style>
+  .copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0 0;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+    overflow-wrap: anywhere;
+  }
+  .muted {
+    color: var(--ink-2);
+  }
+  .prose-steps {
+    display: grid;
+    gap: var(--sp-2);
+    padding-left: 1.25rem;
+  }
+  .wrap-read.section p + p,
+  .wrap-read.section ul + p {
+    margin-top: var(--sp-3);
+  }
+</style>

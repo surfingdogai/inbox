@@ -1,6 +1,6 @@
 ---
 title: Connect your AI
-description: Let Claude, ChatGPT or any MCP client work your inbox on your behalf through the owner MCP.
+description: Let Claude, ChatGPT, Gemini, Grok, Grok Bot, Copilot Studio or any MCP client work your inbox on your behalf through the owner MCP.
 ---
 
 Every instance serves two MCP servers. The public one at `/mcp` is for customers' agents and needs no login. The **owner MCP** at `/mcp/owner` is for you and the AI you trust: it lists what needs a person, shows an item's full story, moves items through their states, replies to customers and edits settings. It is stateless per request (MCP spec 2026-07-28), and its tools are generated from the same schemas as the REST API.
@@ -50,9 +50,25 @@ In Claude, go to Settings, then Connectors, and add a custom connector with your
 
 In ChatGPT, enable developer mode in the connector settings, then create a connector with the same URL and choose OAuth. Sign in on your instance when asked.
 
+### Gemini
+
+On a computer, open gemini.google.com, then Settings, then Connected Apps. Under Custom apps, choose Add a custom app, paste `https://<your-instance>/mcp/owner` and approve it in the browser; it then works in the Gemini mobile app too. On Gemini Enterprise, a team adds it under Manage team, Connected apps, Add MCP Server.
+
+### Grok and Grok Bot
+
+In Grok, go to grok.com/connectors, choose New Connector, then Custom, and paste the owner MCP URL (custom connectors are on xAI's paid plans). In Grok Bot, say "Add a custom MCP server called My shop at `https://<your-instance>/mcp/owner`" and complete the sign-in on the card it shows; its plugins then work in every bot you make. Both take OAuth, or an API key as a header: `Authorization` with the value `Bearer sdi_own_…`.
+
+### Meta Muse
+
+Muse can build a custom connector from what a service publishes: your instance's `/openapi.json` and its public MCP server at `/mcp` are what it reads to book, quote and order for its person. Meta's reviewed directory is a separate submission to Meta, in the US and Canada.
+
+### Copilot Studio
+
+In a Copilot Studio agent, add a tool, choose an existing Model Context Protocol server, and give it the owner MCP URL with OAuth (dynamic client registration) or an API key header. Microsoft 365 Copilot's own federated connectors are read-only for now.
+
 ### Other clients
 
-Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work the same way. Clients that cannot do OAuth use an API key.
+Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work the same way. Clients that cannot do OAuth use an API key. Both MCP servers answer every protocol revision from 2025-03-26 to 2026-07-28. Step by step for each assistant: [Assistants](/assistants/).
 
 ## What the owner tools do
 
