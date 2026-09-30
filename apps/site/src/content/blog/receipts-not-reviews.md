@@ -2,7 +2,7 @@
 title: Receipts, not reviews
 description: Stars are easy to fake. A signed receipt is much harder. Here's what our inbox signs today, and the reputation we're building on top of it.
 date: 2026-09-21
-author: Tiago Pita
+author: Surfing Dog
 cover: /art/tile-receipts.png
 coverAlt: A pixel-art paper receipt with two seals and a signature
 coverAnim: receipts

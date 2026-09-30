@@ -9,11 +9,47 @@ import Run from "../components/Run.astro";
 import UseCases from "../components/UseCases.astro";
 import Why from "../components/Why.astro";
 import Layout from "../layouts/Layout.astro";
+
+/** Who makes this, the site, and the software itself, for search engines and assistants. */
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Surfing Dog",
+    legalName: "Surfing Dog Lda",
+    url: site,
+    logo: new URL("/icon-512.png", site).toString(),
+    email: "hello@surfingdog.ai",
+    sameAs: ["https://github.com/surfingdogai"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Surfing Dog",
+    url: site,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Surfing Dog Inbox",
+    description:
+      "An open-source inbox for the bookings, orders, quote requests and messages that people and AI agents send a business, answered by the business's own rules.",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    url: site,
+    downloadUrl: "https://github.com/surfingdogai/inbox",
+    license: "https://www.gnu.org/licenses/agpl-3.0.html",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+    publisher: { "@type": "Organization", name: "Surfing Dog Lda" },
+  },
+];
 ---
 
 <Layout
   title="Surfing Dog · Get AI bookings, orders and messages."
   description="Surfing Dog is an open-source inbox for the bookings, orders and messages that AI agents send your business. Your rules answer the routine ones, and you see the rest."
+  ld={ld}
 >
   <Hero />
   <Why />

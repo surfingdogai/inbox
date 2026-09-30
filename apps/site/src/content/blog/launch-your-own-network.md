@@ -2,7 +2,7 @@
 title: Run your own network
 description: If you build agents or look after a group of local businesses, you can run a network of your own on the same open protocol as ours, with your own ranking rules.
 date: 2026-09-23
-author: Tiago Pita
+author: Surfing Dog
 cover: /art/cover-networks.png
 coverAlt: A pixel-art dog on a surfboard holding up one envelope, with dotted lines running to four small island lighthouses, each shining a different colour
 coverAnim: networks

@@ -101,6 +101,13 @@ const ld = [
       When it works, <a class="link" href="/install/">install your own inbox</a> with one line to your AI, and see
       <a class="link" href="/docs/connect-your-ai/">Connect your AI</a> for every tool the owner server gives it.
     </p>
+    <p>
+      Read more: {a.post && (
+        <>
+          <a class="link" href={a.post.href}>{a.post.label}</a>, and{" "}
+        </>
+      )}<a class="link" href="/blog/what-ai-assistants-need-from-your-business/">what a personal AI assistant needs from your business</a>.
+    </p>
     <p class="muted">
       The other assistants:
       {others.map((o, i) => (

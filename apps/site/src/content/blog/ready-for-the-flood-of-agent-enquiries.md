@@ -2,7 +2,7 @@
 title: "Ready for the flood of agent enquiries?"
 description: AI assistants have started booking, ordering and asking on people's behalf. An open inbox gives a small business a proper door for them, for little or nothing.
 date: 2026-09-23
-author: Tiago Pita
+author: Surfing Dog
 cover: /art/cover-flood.png
 coverAlt: A pixel-art beach shack with a bell over the counter, where a dog sorts letters into a tray while three small robots surf in on a wave full of envelopes and calendar pages
 coverAnim: flood

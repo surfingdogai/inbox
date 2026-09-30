@@ -2,7 +2,7 @@
 title: Surfing Dog Inbox is open
 description: An open-source inbox that people and AI agents can both write to.
 date: 2026-09-21
-author: Tiago Pita
+author: Surfing Dog
 cover: /art/blog-hello.png
 coverAlt: A pixel-art dog lying on a surfboard on a calm sea, a striped sun setting behind it
 coverAnim: open
