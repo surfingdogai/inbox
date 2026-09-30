@@ -23,6 +23,8 @@ export interface Assistant {
   /** Anything the reader should know that is particular to this assistant. */
   readonly notes: readonly string[];
   readonly source: { readonly label: string; readonly href: string };
+  /** A blog post about this assistant and small businesses, when there is one. */
+  readonly post?: { readonly label: string; readonly href: string };
 }
 
 export const ASSISTANTS: readonly Assistant[] = [
@@ -47,6 +49,7 @@ export const ASSISTANTS: readonly Assistant[] = [
       "Meta does not review custom connectors. Your inbox is built for that: every request goes through your rules, a priced booking or order binds nobody until the person confirmed its summary, and nothing reaches your calendar without a state you can see.",
     ],
     source: { label: "Meta: the Muse developer platform", href: "https://muse.ai/platform" },
+    post: { label: "Muse for Small Business, and your customers' Muse", href: "/blog/muse-for-small-business/" },
   },
   {
     slug: "grok",
@@ -82,10 +85,15 @@ export const ASSISTANTS: readonly Assistant[] = [
       "Create a connector with your inbox's address and choose OAuth: https://inbox.yourdomain.com/mcp/owner to run your inbox, or /mcp for the customer's side.",
       "Sign in on your inbox when ChatGPT sends you there, and approve what it may do.",
     ],
-    signIn: "OAuth 2.1, which your inbox runs itself; ChatGPT registers on its own, so there is nothing to set up by hand.",
+    signIn:
+      "OAuth 2.1, which your inbox runs itself; ChatGPT registers on its own, so there is nothing to set up by hand.",
     plans: "Developer mode is on the plans OpenAI offers it on.",
     notes: [],
     source: { label: "OpenAI Help Center", href: "https://help.openai.com" },
+    post: {
+      label: "OpenAI's dots can book a table. Can it book with you?",
+      href: "/blog/openai-dots-and-your-business/",
+    },
   },
   {
     slug: "claude",
@@ -101,7 +109,8 @@ export const ASSISTANTS: readonly Assistant[] = [
       "Paste https://inbox.yourdomain.com/mcp/owner to run your inbox, or /mcp for the customer's side.",
       "Claude sends you to your inbox to sign in and approve its scopes, then connects.",
     ],
-    signIn: "OAuth 2.1 with a Client ID Metadata Document: Claude identifies itself, so nothing needs registering. An owner API key works too, in Claude Code.",
+    signIn:
+      "OAuth 2.1 with a Client ID Metadata Document: Claude identifies itself, so nothing needs registering. An owner API key works too, in Claude Code.",
     plans: "Custom connectors are on every Claude plan.",
     notes: [],
     source: { label: "Anthropic Help Center", href: "https://support.claude.com" },
@@ -121,10 +130,14 @@ export const ASSISTANTS: readonly Assistant[] = [
       "Approve it in the browser. Once connected on the web, it works in the Gemini mobile app too.",
       "For a team on Gemini Enterprise: Manage team, Connected apps, Add MCP Server.",
     ],
-    signIn: "OAuth 2.0, which your inbox runs itself. Gemini asks for a server with a publicly trusted certificate on a public address, which every inbox has.",
+    signIn:
+      "OAuth 2.0, which your inbox runs itself. Gemini asks for a server with a publicly trusted certificate on a public address, which every inbox has.",
     plans: "Custom apps in the Gemini app; MCP servers in Gemini Enterprise for teams.",
     notes: [],
-    source: { label: "Google: Connect and manage custom apps for Gemini", href: "https://support.google.com/gemini/answer/17209137" },
+    source: {
+      label: "Google: Connect and manage custom apps for Gemini",
+      href: "https://support.google.com/gemini/answer/17209137",
+    },
   },
   {
     slug: "microsoft-copilot",
@@ -140,8 +153,10 @@ export const ASSISTANTS: readonly Assistant[] = [
       "Give it https://inbox.yourdomain.com/mcp/owner (or /mcp for the customer's side) and its sign-in: OAuth, or an API key header.",
       "Publish the agent to the channels your team uses.",
     ],
-    signIn: "OAuth 2.1 with dynamic client registration, which your inbox runs itself, or an owner API key in the Authorization header.",
-    plans: "Copilot Studio. Microsoft 365 Copilot federated connectors are read-only today; Microsoft says writes start rolling out in October 2026.",
+    signIn:
+      "OAuth 2.1 with dynamic client registration, which your inbox runs itself, or an owner API key in the Authorization header.",
+    plans:
+      "Copilot Studio. Microsoft 365 Copilot federated connectors are read-only today; Microsoft says writes start rolling out in October 2026.",
     notes: [],
     source: {
       label: "Microsoft Learn: connect an agent to an existing MCP server",

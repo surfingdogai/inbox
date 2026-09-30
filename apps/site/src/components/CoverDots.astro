@@ -1,0 +1,294 @@
+---
+/**
+ * The cover for "OpenAI's dots can book a table. Can it book with you?": one always-on agent, three
+ * restaurants on the same street, and a table for Friday.
+ *
+ *  1. The dot, breathing because it never sleeps, sets off from its person.
+ *  2. The first place has no prices, only "on request": it has to ask, so it moves on.
+ *  3. The second books by phone and calls back later: no answer tonight, so it moves on.
+ *  4. The third shows its free tables for Friday. The dot picks 20:00, the place confirms, and the
+ *     dot comes home and tells its person it's booked.
+ *
+ * The two places it passed are dimmed, not crossed out: nobody refused anybody, the booking simply
+ * went next door, which is the post's point. Built the way CoverReceipts.astro is: the markup is the
+ * composed frame at t = STILL and the clock starts there, reduced motion is that frame, and it stops
+ * when nobody is looking.
+ */
+---
+
+<figure
+  class="sdt"
+  role="img"
+  aria-label="An always-on agent looks for a table for Friday. The first restaurant only gives prices on request and the second books by phone and calls back later, so it moves on. The third shows its free tables, the agent books 20:00, and it tells its person the table is booked."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="24" y="30" class="sdt-cap">FRIDAY, FOR TWO</text>
+<path d="M80,150 C120,90 200,62 261,62 H545" class="sdt-route"/>
+<path d="M80,150 C120,90 200,62 261,62" class="sdt-guide"/>
+<g class="sdt-shop" style="opacity:.5">
+<rect x="196" y="90" width="130" height="190" rx="12" class="box"/>
+<path d="M208,90 H314 A12,12 0 0 1 326,102 V112 H196 V102 A12,12 0 0 1 208,90 Z" class="awn"/>
+<path d="M222,90 V112 M248,90 V112 M274,90 V112 M300,90 V112" class="stripe"/>
+<text x="210" y="138" class="sdt-name">Osteria</text>
+<rect x="210" y="156" width="70" height="5" rx="2.5" class="bar"/>
+<rect x="210" y="170" width="54" height="5" rx="2.5" class="bar"/>
+<rect x="210" y="184" width="62" height="5" rx="2.5" class="bar"/>
+<text x="210" y="212" class="sdt-note sdt-sm">Prices on request</text>
+<g class="sdt-badge wait">
+<circle cx="261" cy="250" r="13" class="disc"/>
+<text x="261" y="250" dominant-baseline="central" text-anchor="middle" class="sdt-glyph">?</text>
+</g>
+<line x1="261" y1="72" x2="261" y2="100" class="sdt-probe" style="opacity:0"/>
+</g>
+<g class="sdt-shop" style="opacity:.5">
+<rect x="338" y="90" width="130" height="190" rx="12" class="box"/>
+<path d="M350,90 H456 A12,12 0 0 1 468,102 V112 H338 V102 A12,12 0 0 1 350,90 Z" class="awn"/>
+<path d="M364,90 V112 M390,90 V112 M416,90 V112 M442,90 V112" class="stripe"/>
+<text x="352" y="138" class="sdt-name">Brasserie</text>
+<path d="M357,156 H367 A3,3 0 0 1 370,159 V180 A3,3 0 0 1 367,183 H357 A3,3 0 0 1 354,180 V159 A3,3 0 0 1 357,156 Z M360,178.5 H364" class="phone"/>
+<text x="380" y="168" class="sdt-note sdt-sm">Call to book</text>
+<text x="352" y="212" class="sdt-note sdt-sm">We'll call you back</text>
+<g class="sdt-badge wait">
+<circle cx="403" cy="250" r="13" class="disc"/>
+<circle cx="397" cy="250" r="1.7" class="dot3"/><circle cx="403" cy="250" r="1.7" class="dot3"/><circle cx="409" cy="250" r="1.7" class="dot3"/>
+</g>
+<line x1="403" y1="72" x2="403" y2="100" class="sdt-probe" style="opacity:0"/>
+</g>
+<g class="sdt-shop">
+<rect x="480" y="90" width="130" height="190" rx="12" class="box"/>
+<rect x="480" y="90" width="130" height="190" rx="12" class="win"/>
+<path d="M492,90 H598 A12,12 0 0 1 610,102 V112 H480 V102 A12,12 0 0 1 492,90 Z" class="awn"/>
+<path d="M506,90 V112 M532,90 V112 M558,90 V112 M584,90 V112" class="stripe"/>
+<text x="494" y="138" class="sdt-name">Taberna</text>
+<text x="494" y="164" class="sdt-note sdt-sm">Free on Friday</text>
+<g class="sdt-slot"><rect x="492" y="180" width="34" height="21" rx="10.5"/><text x="509" y="190.5" dominant-baseline="central" text-anchor="middle">19:30</text></g>
+<g class="sdt-slot pick"><rect x="528" y="180" width="34" height="21" rx="10.5"/><rect x="528" y="180" width="34" height="21" rx="10.5" class="on"/><text x="545" y="190.5" dominant-baseline="central" text-anchor="middle">20:00</text></g>
+<g class="sdt-slot"><rect x="564" y="180" width="34" height="21" rx="10.5"/><text x="581" y="190.5" dominant-baseline="central" text-anchor="middle">21:15</text></g>
+<g class="sdt-badge ok">
+<circle cx="545" cy="250" r="13" class="disc"/>
+<path d="M539.4,250.2 L543.2,254 L550.6,245.6" class="tick"/>
+</g>
+<line x1="545" y1="72" x2="545" y2="100" class="sdt-probe" style="opacity:0"/>
+</g>
+<g class="sdt-person">
+<circle cx="80" cy="222" r="9" class="head"/>
+<path d="M64,252 C64,240 71,234 80,234 C89,234 96,240 96,252" class="body"/>
+</g>
+<g class="sdt-bub">
+<rect x="22" y="272" width="148" height="40" rx="12" class="bg"/>
+<path d="M37,292.4 L40.2,295.6 L46.2,288.4" class="tick"/>
+<text x="54" y="296.2" class="sdt-lab">Booked · Fri 20:00</text>
+<text x="104" y="298.5" text-anchor="middle" class="sdt-lab sdt-nw">Booked</text>
+</g>
+<g class="sdt-dot">
+<circle cx="80" cy="150" r="17" class="ring"/>
+<circle cx="80" cy="150" r="9" class="core"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sdt and every keyframe is sdt-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.sdt{
+  --sdt-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sdt-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sdt-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sdt-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sdt-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --sdt-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --sdt-palm:var(--palm,#2fd3a5);
+  --sdt-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --sdt-violet:var(--violet,#8a6bff);
+  --sdt-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --sdt-sun:var(--sun,#ffcf5c);
+  --sdt-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --sdt-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.sdt svg{display:block;width:100%;height:auto}
+.sdt text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdt-ink2)}
+.sdt .sdt-cap{font-size:11px;letter-spacing:.11em}
+.sdt .sdt-name{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.sdt .sdt-note{font-size:10.5px;fill:var(--sdt-ink3)}
+.sdt .sdt-lab{font-size:11.5px}
+.sdt .sdt-nw{display:none}   /* the short word a phone-width drawing shows in place of the long one */
+.sdt .sdt-guide{fill:none;stroke:none}   /* geometry: the first leg's length, never ink */
+.sdt .sdt-route{fill:none;stroke:var(--sdt-violet);stroke-opacity:.35;stroke-width:1.3;stroke-dasharray:1.5 6;stroke-linecap:round}
+
+.sdt .sdt-shop .box{fill:var(--sdt-glass);stroke:var(--sdt-glassb);stroke-width:1}
+.sdt .sdt-shop .win{fill:none;stroke:var(--sdt-palm);stroke-opacity:.65;stroke-width:1.2}
+.sdt .sdt-shop .awn{fill:var(--sdt-sun);fill-opacity:.16;stroke:none}
+.sdt .sdt-shop .stripe{stroke:var(--sdt-sun);stroke-opacity:.45;stroke-width:9}
+.sdt .sdt-shop .bar{fill:var(--sdt-ink3);fill-opacity:.17}
+.sdt .sdt-shop .phone{fill:none;stroke:var(--sdt-ink3);stroke-opacity:.7;stroke-width:1.4;stroke-linecap:round}
+.sdt .sdt-probe{stroke:var(--sdt-violet);stroke-width:1.4;stroke-dasharray:2 4;stroke-linecap:round}
+
+.sdt .sdt-slot rect{fill:var(--sdt-row);stroke:var(--sdt-hair);stroke-width:1}
+.sdt .sdt-slot text{font-size:10px;font-variant-numeric:tabular-nums}
+.sdt .sdt-slot .on{fill:var(--sdt-palm);fill-opacity:.18;stroke:var(--sdt-palm);stroke-opacity:.7}
+
+.sdt .sdt-badge .disc{stroke-width:1.1;transform-box:fill-box;transform-origin:50% 50%}
+.sdt .sdt-badge.wait .disc{fill:var(--sdt-sun);fill-opacity:.14;stroke:var(--sdt-sun);stroke-opacity:.6}
+.sdt .sdt-badge.ok .disc{fill:var(--sdt-palm);fill-opacity:.14;stroke:var(--sdt-palm);stroke-opacity:.65}
+.sdt .sdt-glyph{font-size:14px;font-weight:700;fill:var(--sdt-sun-i)}
+.sdt .sdt-badge .dot3{fill:var(--sdt-sun-i)}
+.sdt .tick{fill:none;stroke:var(--sdt-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.sdt .sdt-person .head,.sdt .sdt-person .body{fill:none;stroke:var(--sdt-ink2);stroke-opacity:.6;stroke-width:1.4;stroke-linecap:round}
+.sdt .sdt-bub .bg{fill:var(--sdt-glass);stroke:var(--sdt-palm);stroke-opacity:.6;stroke-width:1.1}
+
+/* The dot never sleeps: its ring breathes whether it is travelling or at home. */
+.sdt .sdt-dot .core{fill:var(--sdt-violet)}
+.sdt .sdt-dot .ring{fill:var(--sdt-violet);fill-opacity:.12;stroke:var(--sdt-violet);stroke-opacity:.5;stroke-width:1.1;transform-box:fill-box;transform-origin:50% 50%;animation:sdt-breathe 2.6s var(--sdt-ease) infinite}
+@keyframes sdt-breathe{0%,100%{transform:scale(.86);opacity:.55}50%{transform:scale(1.06);opacity:1}}
+
+@container (max-width:600px){
+  .sdt .sdt-cap{font-size:15px}
+  .sdt .sdt-name{font-size:16px}
+  .sdt .sdt-lab{font-size:13.5px}
+}
+@container (max-width:400px){
+  .sdt .sdt-cap{font-size:21px}
+  .sdt .sdt-name{font-size:21px}
+  .sdt .sdt-sm,.sdt .sdt-slot text,.sdt .sdt-lab{display:none}
+  .sdt .sdt-lab.sdt-nw{display:inline;font-size:19px}
+}
+
+.sdt.sdt-still,.sdt.sdt-still *{animation:none!important;transition:none!important}
+.sdt.sdt-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdt *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* Where the dot stops: home beside its person, then above each of the three places. It travels
+   the drawn route, so the dotted line is the road it takes, out and back. */
+var HOME=[80,150],STOPS=[[261,62],[403,62],[545,62]];
+/* The timeline, in seconds: a leg to each place, a look inside, and home again. */
+var LEG=.85,
+    AT=[.80,2.95,5.10],   /* each leg sets off */
+    BACK=7.35,            /* the leg home */
+    PICK=6.30,            /* 20:00 is chosen */
+    OK=6.80,              /* the place confirms */
+    BUB=8.75,             /* the dot, home again, tells its person */
+    EXIT=11.80,LOOP=13.00,
+    STILL=10.20;          /* the frame the markup ships and the clock starts from */
+
+function mount(fig){
+  if(fig.getAttribute("data-sdt")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverDots "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverDots "+s);return [].slice.call(l);}
+
+  var route=q(".sdt-route"),guide=q(".sdt-guide"),dot=q(".sdt-dot"),shops=qa(".sdt-shop"),probes=qa(".sdt-probe"),badges=qa(".sdt-badge"),
+      pickOn=q(".sdt-slot.pick .on"),win=q(".sdt-shop .win"),bub=q(".sdt-bub"),
+      okTick=q(".sdt-badge.ok .tick"),bubTick=q(".sdt-bub .tick");
+
+  fig.setAttribute("data-sdt","on");
+
+  var OL=okTick.getTotalLength(),BL=bubTick.getTotalLength(),
+      LC=guide.getTotalLength(),
+      D=[0,LC,LC+(STOPS[1][0]-STOPS[0][0]),LC+(STOPS[2][0]-STOPS[0][0])];   /* distance along the route to home and each stop */
+  okTick.style.strokeDasharray=OL;bubTick.style.strokeDasharray=BL;
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  function where(t){
+    var d=0,k,p;
+    for(k=0;k<3;k++)if(t>=AT[k])d=D[k]+(D[k+1]-D[k])*ramp(t,AT[k],AT[k]+LEG);
+    if(t>=BACK)d=D[3]*(1-ramp(t,BACK,BACK+1.3));
+    p=route.getPointAtLength(d);
+    return [p.x,p.y];
+  }
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),p=where(t),k,look,u;
+    mv(dot,p[0]-HOME[0],p[1]-HOME[1]);
+
+    for(k=0;k<3;k++){
+      look=AT[k]+LEG+.08;
+      /* a look inside: the probe drops in, then lifts */
+      op(probes[k],ramp(t,look,look+.18)*(1-ramp(t,look+.75,look+1.05)));
+      /* what it found there */
+      u=g*ramp(t,look+.35,look+.7);
+      op(badges[k],k<2?u:g*ramp(t,OK,OK+.35));
+      badges[k].style.transform="scale("+(.7+.3*(k<2?u:g*ramp(t,OK,OK+.35)))+")";
+      badges[k].style.transformOrigin=(STOPS[k][0])+"px 250px";
+      /* the two it passed stay, dimmed: the booking simply went next door */
+      if(k<2)op(shops[k],1-.5*g*ramp(t,look+1.0,look+1.5));
+    }
+    op(pickOn,g*ramp(t,PICK,PICK+.3));
+    op(win,g*ramp(t,OK,OK+.4));
+    okTick.style.strokeDashoffset=OL*(1-ramp(t,OK+.15,OK+.5));
+
+    u=ramp(t,BUB,BUB+.45);
+    op(bub,g*u);mv(bub,0,(1-u)*8);
+    bubTick.style.strokeDashoffset=BL*(1-ramp(t,BUB+.3,BUB+.65));
+  }
+
+  render(STILL);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    render(clock%LOOP);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sdt-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("sdt-paused");last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sdt-paused");}
+  }
+  function still(){
+    fig.classList.add("sdt-still");
+    run=false;cancelAnimationFrame(raf);
+    render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("sdt-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sdt").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover dots",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

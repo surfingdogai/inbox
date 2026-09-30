@@ -1,0 +1,342 @@
+---
+/**
+ * The cover for "Muse for Small Business, and your customers' Muse": two assistants, one on each
+ * side of the counter, and the inbox between them.
+ *
+ *  1. Your side: the owner's assistant draws on the tools the business already runs, the shop, the
+ *     books and the posts, each lighting up and sending a pulse along its wire.
+ *  2. Their side: a customer's assistant sends a request ("Haircut, Sat before 11"), which travels
+ *     into the inbox and lands as a typed item, a booking, waiting.
+ *  3. The business's rules check it, slot free and open, and the booking confirms itself.
+ *  4. The answer goes back to the customer's side, and the owner's side sees it too.
+ *
+ * Nothing names a product: the post says which assistants these are, the drawing says how the two
+ * sides meet. Built the way CoverReceipts.astro is. The markup is the composed frame at t = STILL,
+ * and the clock starts there, so the box is never empty, a throw leaves a finished picture, and
+ * reduced motion is the same frame. It stops when nobody is looking.
+ */
+---
+
+<figure
+  class="smu"
+  role="img"
+  aria-label="The owner's assistant draws on the shop, the books and the posts, while a customer's assistant asks for a haircut on Saturday before 11. The request lands in the business's inbox as a booking, the business's rules check that the slot is free and the shop is open, and the confirmation goes back to the customer's side."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="120" y="30" class="smu-cap" text-anchor="middle">YOUR SIDE</text>
+<text x="520" y="30" class="smu-cap" text-anchor="middle">THEIR SIDE</text>
+<path d="M72,158 C72,128 110,114 114,97" class="smu-wire"/>
+<path d="M120,158 V97" class="smu-wire"/>
+<path d="M168,158 C168,128 130,114 126,97" class="smu-wire"/>
+<circle r="3.2" class="smu-pulse" style="opacity:0"/>
+<circle r="3.2" class="smu-pulse" style="opacity:0"/>
+<circle r="3.2" class="smu-pulse" style="opacity:0"/>
+<path d="M232,138 C194,138 176,76 143,76" class="smu-link"/>
+<g class="smu-mark s-biz">
+<rect x="102" y="58" width="36" height="36" rx="10" class="tint"/>
+<rect x="102" y="58" width="36" height="36" rx="10" class="edge"/>
+<rect x="98" y="54" width="44" height="44" rx="13" class="halo"/>
+<path d="M120,66 L122.6,73.4 L130,76 L122.6,78.6 L120,86 L117.4,78.6 L110,76 L117.4,73.4 Z" class="star"/>
+</g>
+<g class="smu-app">
+<rect x="55" y="158" width="34" height="34" rx="9" class="tile"/>
+<path d="M64.5,171 H79.5 L78,184 H66 Z M68.5,171 V168.5 A3.5,3.5 0 0 1 75.5,168.5 V171" class="glyph"/>
+<text x="72" y="211" class="smu-lab smu-sm" text-anchor="middle">Shop</text>
+</g>
+<g class="smu-app">
+<rect x="103" y="158" width="34" height="34" rx="9" class="tile"/>
+<path d="M112,167 H128 V183 H112 Z M115.5,172 H124.5 M115.5,175.5 H124.5 M115.5,179 H121" class="glyph"/>
+<text x="120" y="211" class="smu-lab smu-sm" text-anchor="middle">Books</text>
+</g>
+<g class="smu-app">
+<rect x="151" y="158" width="34" height="34" rx="9" class="tile"/>
+<path d="M163,169 H173 A4,4 0 0 1 177,173 V179 A4,4 0 0 1 173,183 H163 A4,4 0 0 1 159,179 V173 A4,4 0 0 1 163,169 Z" class="glyph"/>
+<circle cx="168" cy="176" r="3.6" class="glyph"/>
+<text x="168" y="211" class="smu-lab smu-sm" text-anchor="middle">Posts</text>
+</g>
+<rect x="232" y="52" width="176" height="222" rx="14" class="smu-card"/>
+<text x="248" y="78" class="smu-h">Your inbox</text>
+<line x1="248" y1="90" x2="392" y2="90" class="smu-hair"/>
+<text x="248" y="108" class="smu-sm smu-url">inbox.yourbarber.com</text>
+<g class="smu-item">
+<rect x="246" y="122" width="148" height="60" rx="9" class="row"/>
+<text x="258" y="146" class="smu-lab smu-strong">Booking</text>
+<text x="258" y="168" class="smu-sm smu-body">Haircut · Sat 10:00</text>
+<g class="smu-pnew" style="opacity:0">
+<rect x="326" y="132" width="60" height="19" rx="9.5"/>
+<text x="356" y="141.5" dominant-baseline="central" text-anchor="middle" class="smu-state">new</text>
+</g>
+<g class="smu-pok">
+<rect x="326" y="132" width="60" height="19" rx="9.5"/>
+<text x="356" y="141.5" dominant-baseline="central" text-anchor="middle" class="smu-state">confirmed</text>
+</g>
+</g>
+<text x="248" y="207" class="smu-rules smu-sm">YOUR RULES</text>
+<g class="smu-chk">
+<circle cx="256" cy="226" r="7.5" class="ring"/>
+<path d="M252.6,226.2 L255.2,228.9 L259.6,223.4" class="tick"/>
+<text x="271" y="230" class="smu-lab">Slot is free</text>
+</g>
+<g class="smu-chk">
+<circle cx="256" cy="251" r="7.5" class="ring"/>
+<path d="M252.6,251.2 L255.2,253.9 L259.6,248.4" class="tick"/>
+<text x="271" y="255" class="smu-lab">You're open</text>
+</g>
+<g class="smu-mark s-cus">
+<rect x="502" y="58" width="36" height="36" rx="10" class="tint"/>
+<rect x="502" y="58" width="36" height="36" rx="10" class="edge"/>
+<rect x="498" y="54" width="44" height="44" rx="13" class="halo"/>
+<line x1="520" y1="58" x2="520" y2="48" class="edge"/>
+<circle cx="520" cy="45.2" r="2.8" class="ant"/>
+<path d="M520,66 L522.6,73.4 L530,76 L522.6,78.6 L520,86 L517.4,78.6 L510,76 L517.4,73.4 Z" class="star"/>
+</g>
+<g class="smu-req s-cus" style="opacity:0">
+<rect x="445" y="120" width="150" height="40" rx="12" class="bub"/>
+<text x="520" y="144.5" text-anchor="middle" class="smu-lab smu-sm">Haircut, Sat before 11</text>
+<text x="520" y="146.5" text-anchor="middle" class="smu-lab smu-nw">Sat, before 11</text>
+</g>
+<g class="smu-rep s-cus">
+<rect x="445" y="222" width="150" height="40" rx="12" class="bub ok"/>
+<path d="M461,242.4 L464.2,245.6 L470.2,238.4" class="tick"/>
+<text x="478" y="246.2" class="smu-lab smu-sm">Booked · Sat 10:00</text>
+<text x="530" y="248.5" text-anchor="middle" class="smu-lab smu-nw">Booked</text>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .smu and every keyframe is smu-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.smu{
+  --smu-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --smu-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --smu-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --smu-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --smu-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --smu-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --smu-palm:var(--palm,#2fd3a5);
+  --smu-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --smu-violet:var(--violet,#8a6bff);
+  --smu-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --smu-flam:var(--flamingo,#ff6fa8);
+  --smu-flam-i:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc));
+  --smu-sun:var(--sun,#ffcf5c);
+  --smu-sun-i:var(--sun-ink,light-dark(#8a5d00,#ffd97a));
+  --smu-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.smu .s-biz{--sc:var(--smu-flam);--si:var(--smu-flam-i)}
+.smu .s-cus{--sc:var(--smu-violet);--si:var(--smu-violet-i)}
+
+.smu svg{display:block;width:100%;height:auto}
+.smu text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--smu-ink2)}
+.smu .smu-cap{font-size:11px;letter-spacing:.11em}
+.smu .smu-rules{font-size:9.5px;letter-spacing:.12em;fill:var(--smu-ink3)}
+.smu .smu-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.smu .smu-lab{font-size:11.5px}
+.smu .smu-strong{font-weight:600}
+.smu .smu-body{font-size:11px}
+.smu .smu-url{font-size:10px;fill:var(--smu-ink3)}
+.smu .smu-hair{stroke:var(--smu-hair);stroke-width:1}
+.smu .smu-nw{display:none}   /* the short words a phone-width drawing shows in place of the long ones */
+
+.smu .smu-mark .tint{fill:var(--sc);fill-opacity:.08;stroke:none}
+.smu .smu-mark .edge{fill:none;stroke:var(--smu-ink2);stroke-opacity:.55;stroke-width:1.3}
+.smu .smu-mark .halo{fill:none;stroke:var(--sc);stroke-opacity:0;stroke-width:1.3;transform-box:fill-box;transform-origin:50% 50%}
+.smu .smu-mark .star{fill:var(--sc);fill-opacity:.85;stroke:none}
+.smu .smu-mark .ant{fill:var(--sc);stroke:none}
+.smu .smu-mark.wake .halo{animation:smu-halo .66s var(--smu-ease)}
+@keyframes smu-halo{0%{stroke-opacity:.5;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.26)}}
+
+.smu .smu-app .tile{fill:var(--smu-row);stroke:var(--smu-hair);stroke-width:1}
+.smu .smu-app .glyph{fill:none;stroke:var(--smu-flam-i);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.smu .smu-wire{fill:none;stroke:var(--smu-flam);stroke-opacity:.6;stroke-width:1.3;stroke-dasharray:1.5 5;stroke-linecap:round}
+.smu .smu-pulse{fill:var(--smu-flam)}
+.smu .smu-link{fill:none;stroke:var(--smu-palm);stroke-width:1.3;stroke-dasharray:1.5 6;stroke-linecap:round;opacity:.6}
+
+.smu .smu-card{fill:var(--smu-glass);stroke:var(--smu-glassb);stroke-width:1}
+.smu .smu-item .row{fill:var(--smu-row);stroke:var(--smu-hair);stroke-width:1}
+.smu .smu-pnew rect{fill:var(--smu-sun);fill-opacity:.14;stroke:var(--smu-sun);stroke-opacity:.6;stroke-width:1}
+.smu .smu-pnew text{fill:var(--smu-sun-i)}
+.smu .smu-pok rect{fill:var(--smu-palm);fill-opacity:.14;stroke:var(--smu-palm);stroke-opacity:.6;stroke-width:1}
+.smu .smu-pok text{fill:var(--smu-palm-i)}
+.smu .smu-state{font-size:10px;font-weight:600}
+.smu .smu-chk .ring{fill:none;stroke:var(--smu-palm);stroke-opacity:.7;stroke-width:1.2}
+.smu .tick{fill:none;stroke:var(--smu-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.smu .bub{fill:var(--smu-glass);stroke:var(--sc);stroke-opacity:.55;stroke-width:1.1}
+.smu .bub.ok{stroke:var(--smu-palm);stroke-opacity:.6}
+
+/* The viewBox is fixed, so reading size falls with the drawn width. Below 600 px the labels step
+   up; below 400 px the long ones step out and the drawing carries the story on its own. */
+@container (max-width:600px){
+  .smu .smu-cap{font-size:15px}
+  .smu .smu-lab{font-size:14px}
+  .smu .smu-h{font-size:17px}
+}
+@container (max-width:400px){
+  .smu .smu-cap{font-size:22px}
+  .smu .smu-lab{font-size:19px}
+  .smu .smu-h{font-size:24px}
+  .smu .smu-sm,.smu .smu-state{display:none}
+  .smu .smu-nw{display:inline}
+  .smu .smu-strong{font-size:15px}   /* "Booking" stays clear of its state pill */
+}
+
+.smu.smu-still,.smu.smu-still *{animation:none!important;transition:none!important}
+.smu.smu-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.smu *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* The timeline, in seconds. The request's trip and the answer's trip are the point. */
+var T={app:.30,req:2.80,item:3.80,c1:4.45,ok:5.55,rep:6.05,link:7.35,exit:11.00},
+    STEP=.50,     /* between one tool lighting and the next */
+    FLY=.90,      /* a bubble's trip across the counter */
+    LOOP=12.00,
+    STILL=9.00,   /* the frame the markup ships and the clock starts from */
+    DX=200,DY=12; /* from the customer's side to the booking in the inbox */
+
+function mount(fig){
+  if(fig.getAttribute("data-smu")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverMuse "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverMuse "+s);return [].slice.call(l);}
+
+  var apps=qa(".smu-app"),wires=qa(".smu-wire"),pulses=qa(".smu-pulse"),marks=qa(".smu-mark"),
+      req=q(".smu-req"),item=q(".smu-item"),pnew=q(".smu-pnew"),pok=q(".smu-pok"),
+      chks=qa(".smu-chk"),ticks=qa(".smu-chk .tick"),rep=q(".smu-rep"),repTick=q(".smu-rep .tick"),
+      link=q(".smu-link");
+
+  fig.setAttribute("data-smu","on");
+
+  var WL=wires.map(function(w){return w.getTotalLength();}),
+      TL=ticks.map(function(k){return k.getTotalLength();}),
+      RL=repTick.getTotalLength();
+  ticks.forEach(function(k,i){k.style.strokeDasharray=TL[i];});
+  repTick.style.strokeDasharray=RL;
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+
+  function render(t){
+    var g=1-ramp(t,T.exit,LOOP),u,v,s,p;
+
+    /* 1. your side: each tool lights and sends a pulse to the owner's assistant */
+    apps.forEach(function(a,k){s=T.app+k*STEP;op(a,.4+.6*g*ramp(t,s,s+.35));});
+    wires.forEach(function(w,k){s=T.app+k*STEP+.2;op(w,g*ramp(t,s,s+.4));});
+    pulses.forEach(function(d,k){
+      s=T.app+k*STEP+.2;u=seg(t,s,s+.75);
+      p=wires[k].getPointAtLength(u*WL[k]);
+      d.setAttribute("cx",p.x);d.setAttribute("cy",p.y);
+      op(d,u>0&&u<1?g:0);
+    });
+
+    /* 2. their side: the request crosses into the inbox and becomes a booking */
+    u=ramp(t,T.req,T.req+FLY);
+    mv(req,-DX*u,DY*u);
+    op(req,g*ramp(t,T.req-.3,T.req)*(1-ramp(t,T.req+FLY-.12,T.req+FLY+.12)));
+    v=ramp(t,T.item,T.item+.45);
+    op(item,g*v);mv(item,0,(1-v)*8);
+
+    /* 3. the rules check it, and it confirms itself */
+    chks.forEach(function(c,k){
+      s=T.c1+k*STEP;
+      op(c,g*ramp(t,s,s+.3));
+      ticks[k].style.strokeDashoffset=TL[k]*(1-ramp(t,s+.15,s+.45));
+    });
+    v=ramp(t,T.ok,T.ok+.35);
+    op(pnew,1-v);op(pok,v);
+
+    /* 4. the answer goes back, and the owner's side sees it */
+    u=ramp(t,T.rep,T.rep+FLY);
+    mv(rep,-DX*(1-u),0);
+    op(rep,g*ramp(t,T.rep,T.rep+.25));
+    repTick.style.strokeDashoffset=RL*(1-ramp(t,T.rep+FLY,T.rep+FLY+.3));
+    op(link,.6*g*ramp(t,T.link,T.link+.45));
+  }
+
+  var timers=[],fired={};
+  function flash(el,c,ms){el.classList.add(c);timers.push(setTimeout(function(){el.classList.remove(c);},ms));}
+  function cue(t,live){
+    function at(k,when,el){if(t<when||fired[k])return;fired[k]=true;if(live)flash(el,"wake",700);}
+    at("o1",T.app+2*STEP+.95,marks[0]);
+    at("c1",T.req-.35,marks[1]);
+    at("c2",T.rep+FLY,marks[1]);
+    at("o2",T.link+.4,marks[0]);
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    marks.forEach(function(m){m.classList.remove("wake");});
+  }
+
+  render(STILL);
+  cue(STILL,false);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,wasP=STILL,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    var ph=clock%LOOP;
+    if(ph<wasP)fired={};
+    wasP=ph;
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("smu-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("smu-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("smu-paused");}
+  }
+  function still(){
+    fig.classList.add("smu-still");
+    run=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("smu-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".smu").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover muse",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

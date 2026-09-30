@@ -50,6 +50,9 @@ const IDEAS = {
   "surfing-dog-inbox-is-open": "One inbox for people\nand AI agents. Open source.",
   "ready-for-the-flood-of-agent-enquiries": "Assistants now book for people.\nYour rules answer them.",
   "launch-your-own-network": "A directory AI agents search,\nranked by your own rules.",
+  "muse-for-small-business": "Their Muse books.\nYour rules answer.",
+  "openai-dots-and-your-business": "An agent books where it gets\na price, a time and a yes.",
+  "what-ai-assistants-need-from-your-business": "Seven things an assistant\nneeds to book with you.",
 };
 
 const CHROME = [

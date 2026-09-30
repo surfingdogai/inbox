@@ -1,0 +1,272 @@
+---
+/**
+ * The cover for "What a personal AI assistant needs from your business": the post's seven points as
+ * one checklist, and an assistant's request walking down it.
+ *
+ *  1. A customer's assistant sends a request, a small violet runner, to the business.
+ *  2. The runner goes down the business's list, and each thing it needs ticks as it passes:
+ *     services and prices, real free times, a door it can use, a clear answer, the person's say on
+ *     the price, a way to be found.
+ *  3. The last line, a person for the rest, lights the owner's own mark: what the list can't answer
+ *     goes to a person.
+ *  4. The runner comes back to its assistant with a booking.
+ *
+ * Built the way CoverReceipts.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking.
+ */
+---
+
+<figure
+  class="sdk"
+  role="img"
+  aria-label="A customer's assistant sends a request down a business's checklist: services and prices, real free times, a door it can use, a clear answer, the person's say on the price, a way to be found, and a person for the rest. Each line ticks as the request passes, the last one reaches the owner, and the assistant comes back with a booking."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="290" y="22" class="sdk-cap" text-anchor="middle">YOUR BUSINESS</text>
+<text x="540" y="22" class="sdk-cap" text-anchor="middle">THEIR ASSISTANT</text>
+<rect x="150" y="34" width="280" height="272" rx="14" class="sdk-card"/>
+<text x="170" y="60" class="sdk-h">What it needs</text>
+<line x1="170" y1="71" x2="410" y2="71" class="sdk-hair"/>
+<line x1="452" y1="92" x2="452" y2="284" class="sdk-rail"/>
+<g class="sdk-row"><circle cx="174" cy="92" r="8" class="ring"/><path d="M170.4,92.2 L173.2,95 L178,89.2" class="tick"/><text x="192" y="96.2" class="sdk-lab">Services and prices</text></g>
+<g class="sdk-row"><circle cx="174" cy="124" r="8" class="ring"/><path d="M170.4,124.2 L173.2,127 L178,121.2" class="tick"/><text x="192" y="128.2" class="sdk-lab">Real free times</text></g>
+<g class="sdk-row"><circle cx="174" cy="156" r="8" class="ring"/><path d="M170.4,156.2 L173.2,159 L178,153.2" class="tick"/><text x="192" y="160.2" class="sdk-lab">A door it can use</text></g>
+<g class="sdk-row"><circle cx="174" cy="188" r="8" class="ring"/><path d="M170.4,188.2 L173.2,191 L178,185.2" class="tick"/><text x="192" y="192.2" class="sdk-lab">A clear answer</text></g>
+<g class="sdk-row"><circle cx="174" cy="220" r="8" class="ring"/><path d="M170.4,220.2 L173.2,223 L178,217.2" class="tick"/><text x="192" y="224.2" class="sdk-lab">Their say on the price</text></g>
+<g class="sdk-row"><circle cx="174" cy="252" r="8" class="ring"/><path d="M170.4,252.2 L173.2,255 L178,249.2" class="tick"/><text x="192" y="256.2" class="sdk-lab">A way to be found</text></g>
+<g class="sdk-row"><circle cx="174" cy="284" r="8" class="ring"/><path d="M170.4,284.2 L173.2,287 L178,281.2" class="tick"/><text x="192" y="288.2" class="sdk-lab">A person for the rest</text></g>
+<path d="M150,284 H108" class="sdk-link"/>
+<g class="sdk-mark s-biz">
+<rect x="68" y="266" width="36" height="36" rx="10" class="tint"/>
+<rect x="68" y="266" width="36" height="36" rx="10" class="edge"/>
+<rect x="64" y="262" width="44" height="44" rx="13" class="halo"/>
+<circle cx="86" cy="279" r="5" class="glyph"/>
+<path d="M78,294 C78,288 82,286 86,286 C90,286 94,288 94,294" class="glyph"/>
+</g>
+<text x="86" y="326" class="sdk-cap" text-anchor="middle">YOU</text>
+<g class="sdk-mark s-cus">
+<rect x="522" y="48" width="36" height="36" rx="10" class="tint"/>
+<rect x="522" y="48" width="36" height="36" rx="10" class="edge"/>
+<rect x="518" y="44" width="44" height="44" rx="13" class="halo"/>
+<line x1="540" y1="48" x2="540" y2="38" class="edge"/>
+<circle cx="540" cy="35.2" r="2.8" class="ant"/>
+<path d="M540,56 L542.6,63.4 L550,66 L542.6,68.6 L540,76 L537.4,68.6 L530,66 L537.4,63.4 Z" class="star"/>
+</g>
+<g class="sdk-chip">
+<rect x="466" y="128" width="148" height="40" rx="12" class="bg"/>
+<path d="M481,148.4 L484.2,151.6 L490.2,144.4" class="tick"/>
+<text x="497" y="152.2" class="sdk-lab sdk-sm">Booked · Sat 10:00</text>
+<text x="548" y="154.5" text-anchor="middle" class="sdk-lab sdk-nw">Booked</text>
+</g>
+<g class="sdk-run" style="opacity:0">
+<circle cx="0" cy="0" r="11" class="glow"/>
+<circle cx="0" cy="0" r="5.5" class="core"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .sdk and every keyframe is sdk-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.sdk{
+  --sdk-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --sdk-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --sdk-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --sdk-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --sdk-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --sdk-palm:var(--palm,#2fd3a5);
+  --sdk-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --sdk-violet:var(--violet,#8a6bff);
+  --sdk-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --sdk-flam:var(--flamingo,#ff6fa8);
+  --sdk-flam-i:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc));
+  --sdk-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.sdk .s-biz{--sc:var(--sdk-flam);--si:var(--sdk-flam-i)}
+.sdk .s-cus{--sc:var(--sdk-violet);--si:var(--sdk-violet-i)}
+
+.sdk svg{display:block;width:100%;height:auto}
+.sdk text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--sdk-ink2)}
+.sdk .sdk-cap{font-size:11px;letter-spacing:.11em}
+.sdk .sdk-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.sdk .sdk-lab{font-size:12.5px}
+.sdk .sdk-hair{stroke:var(--sdk-hair);stroke-width:1}
+.sdk .sdk-nw{display:none}   /* the short word a phone-width drawing shows in place of the long one */
+.sdk .sdk-card{fill:var(--sdk-glass);stroke:var(--sdk-glassb);stroke-width:1}
+.sdk .sdk-rail{stroke:var(--sdk-violet);stroke-opacity:.35;stroke-width:1.3;stroke-dasharray:1.5 6;stroke-linecap:round}
+.sdk .sdk-link{fill:none;stroke:var(--sdk-flam);stroke-opacity:.7;stroke-width:1.3;stroke-dasharray:1.5 5;stroke-linecap:round}
+
+.sdk .sdk-row .ring{fill:none;stroke:var(--sdk-palm);stroke-opacity:.7;stroke-width:1.2}
+.sdk .tick{fill:none;stroke:var(--sdk-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.sdk .sdk-mark .tint{fill:var(--sc);fill-opacity:.08;stroke:none}
+.sdk .sdk-mark .edge{fill:none;stroke:var(--sdk-ink2);stroke-opacity:.55;stroke-width:1.3}
+.sdk .sdk-mark .halo{fill:none;stroke:var(--sc);stroke-opacity:0;stroke-width:1.3;transform-box:fill-box;transform-origin:50% 50%}
+.sdk .sdk-mark .star{fill:var(--sc);fill-opacity:.85;stroke:none}
+.sdk .sdk-mark .ant{fill:var(--sc);stroke:none}
+.sdk .sdk-mark .glyph{fill:none;stroke:var(--si);stroke-width:1.5;stroke-linecap:round}
+.sdk .sdk-mark.wake .halo{animation:sdk-halo .66s var(--sdk-ease)}
+@keyframes sdk-halo{0%{stroke-opacity:.5;transform:scale(.84)}100%{stroke-opacity:0;transform:scale(1.26)}}
+
+.sdk .sdk-chip .bg{fill:var(--sdk-glass);stroke:var(--sdk-palm);stroke-opacity:.6;stroke-width:1.1}
+.sdk .sdk-run .core{fill:var(--sdk-violet)}
+.sdk .sdk-run .glow{fill:var(--sdk-violet);fill-opacity:.16}
+
+@container (max-width:600px){
+  .sdk .sdk-cap{font-size:14px}
+  .sdk .sdk-lab{font-size:15px}
+  .sdk .sdk-h{font-size:17px}
+}
+@container (max-width:400px){
+  .sdk .sdk-cap{font-size:20px}
+  .sdk .sdk-lab{font-size:19px}
+  .sdk .sdk-h{font-size:23px}
+  .sdk .sdk-sm{display:none}
+  .sdk .sdk-nw{display:inline}
+}
+
+.sdk.sdk-still,.sdk.sdk-still *{animation:none!important;transition:none!important}
+.sdk.sdk-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.sdk *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReceipts'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* The runner's road: out of its assistant, onto the rail, down past all seven lines at an even
+   pace (so each line ticks as it passes), and back to its assistant with the answer. */
+var FROM=[540,90],TOP=[452,92],BOTTOM=[452,284],HOME=[540,168],
+    T={out:.60,down:1.35,back:5.95,chip:6.75,exit:10.60},
+    OUT=.65,DOWN=4.20,BACKLEG=.80,
+    LOOP=11.60,
+    STILL=8.60;   /* the frame the markup ships and the clock starts from */
+
+function mount(fig){
+  if(fig.getAttribute("data-sdk")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverReady "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverReady "+s);return [].slice.call(l);}
+
+  var run=q(".sdk-run"),rows=qa(".sdk-row"),ticks=qa(".sdk-row .tick"),marks=qa(".sdk-mark"),
+      link=q(".sdk-link"),chip=q(".sdk-chip"),chipTick=q(".sdk-chip .tick");
+
+  fig.setAttribute("data-sdk","on");
+
+  var TL=ticks.map(function(k){return k.getTotalLength();}),CL=chipTick.getTotalLength(),
+      N=rows.length,
+      PASS=rows.map(function(r,k){return T.down+DOWN*k/(N-1);});   /* when the runner reaches line k */
+  ticks.forEach(function(k,i){k.style.strokeDasharray=TL[i];});
+  chipTick.style.strokeDasharray=CL;
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  function lerp(a,b,u){return [a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];}
+
+  function render(t){
+    var g=1-ramp(t,T.exit,LOOP),p,u;
+
+    /* the runner: out, down at an even pace, and home */
+    p=lerp(FROM,TOP,ramp(t,T.out,T.out+OUT));
+    if(t>=T.down)p=lerp(TOP,BOTTOM,seg(t,T.down,T.down+DOWN));
+    if(t>=T.back)p=lerp(BOTTOM,HOME,ramp(t,T.back,T.back+BACKLEG));
+    mv(run,p[0],p[1]);
+    op(run,g*ramp(t,T.out,T.out+.25)*(1-ramp(t,T.back+BACKLEG-.15,T.back+BACKLEG+.1)));
+
+    /* each line ticks as the runner passes it */
+    rows.forEach(function(r,k){
+      u=ramp(t,PASS[k],PASS[k]+.3);
+      ticks[k].style.strokeDashoffset=TL[k]*(1-u*g);
+      op(r,.55+.45*u*g);
+    });
+
+    /* the last line reaches a person */
+    op(link,.7*g*ramp(t,PASS[N-1]+.1,PASS[N-1]+.5));
+
+    /* and the assistant comes back with a booking */
+    u=ramp(t,T.chip,T.chip+.4);
+    op(chip,g*u);mv(chip,0,(1-u)*8);
+    chipTick.style.strokeDashoffset=CL*(1-ramp(t,T.chip+.25,T.chip+.6));
+  }
+
+  var timers=[],fired={};
+  function flash(el,ms){el.classList.add("wake");timers.push(setTimeout(function(){el.classList.remove("wake");},ms));}
+  function cue(t,live){
+    function at(k,when,el){if(t<when||fired[k])return;fired[k]=true;if(live)flash(el,700);}
+    at("c1",T.out-.2,marks[1]);
+    at("o1",PASS[N-1]+.4,marks[0]);
+    at("c2",T.back+BACKLEG,marks[1]);
+  }
+  function settle(){
+    timers.forEach(clearTimeout);timers.length=0;
+    marks.forEach(function(m){m.classList.remove("wake");});
+  }
+
+  render(STILL);
+  cue(STILL,false);
+
+  var clock=STILL,last=0,raf=0,running=false,seen=true,wasP=STILL,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!running)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    var ph=clock%LOOP;
+    if(ph<wasP)fired={};
+    wasP=ph;
+    render(ph);cue(ph,true);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("sdk-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===running)return;
+    running=want;
+    if(running){fig.classList.remove("sdk-paused");settle();last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("sdk-paused");}
+  }
+  function still(){
+    fig.classList.add("sdk-still");
+    running=false;cancelAnimationFrame(raf);
+    settle();render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("sdk-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".sdk").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover ready",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>
