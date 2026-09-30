@@ -1,0 +1,142 @@
+---
+// One page per AI assistant: how its users' requests reach a business through its inbox, and how the
+// owner connects the same assistant to run the inbox. Every step and status is from lib/assistants.ts,
+// checked against the assistant's own help on the date it gives.
+import Layout from "../../layouts/Layout.astro";
+import { ASSISTANTS, type Assistant, CHECKED } from "../../lib/assistants";
+
+export function getStaticPaths() {
+  return ASSISTANTS.map((a) => ({ params: { slug: a.slug }, props: { a } }));
+}
+
+const { a } = Astro.props as { a: Assistant };
+const others = ASSISTANTS.filter((x) => x.slug !== a.slug);
+const url = new URL(Astro.url.pathname, Astro.site).toString();
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: a.heading,
+    description: a.description,
+    dateModified: "2026-09-30",
+    about: { "@type": "SoftwareApplication", name: a.name, author: { "@type": "Organization", name: a.maker } },
+    author: { "@type": "Organization", name: "Surfing Dog" },
+    publisher: { "@type": "Organization", name: "Surfing Dog Lda" },
+    mainEntityOfPage: url,
+    image: new URL(`/art/og-assistant-${a.slug}-v1.png`, Astro.site).toString(),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Assistants", item: new URL("/assistants/", Astro.site).toString() },
+      { "@type": "ListItem", position: 2, name: a.name, item: url },
+    ],
+  },
+];
+---
+
+<Layout title={a.title} description={a.description} image={`/art/og-assistant-${a.slug}-v1.png`} type="article" ld={ld}>
+  <section class="wrap wrap-read section is-head" aria-labelledby="as-h">
+    <p class="eyebrow"><a class="link" href="/assistants/">Assistants</a> · {a.maker}</p>
+    <h1 class="h-page" id="as-h">{a.heading}</h1>
+    <p class="lede">{a.lede}</p>
+  </section>
+
+  <section class="section section-tight" aria-label="Two ways in">
+    <div class="wrap">
+      <ul class="grid-cards" data-reveal="stagger">
+        <li class="glass card">
+          <h2 class="h-card">A customer's {a.name} books with you</h2>
+          <p class="card-text">
+            Your inbox's public MCP server, at <code>/mcp</code>, lets any assistant see your services and free times,
+            book, ask for a quote, order, and answer what you propose. No sign-in. Each request lands as a booking, quote
+            request, order or message, and your rules answer it.
+          </p>
+          <p class="copy mono"><code>https://inbox.yourdomain.com/mcp</code></p>
+        </li>
+        <li class="glass card">
+          <h2 class="h-card">Your own {a.name} runs your inbox</h2>
+          <p class="card-text">
+            The owner MCP server, at <code>/mcp/owner</code>, shows what needs a person, tells an item's whole story,
+            replies to customers, moves items on and edits your services and hours. {a.signIn}
+          </p>
+          <p class="copy mono"><code>https://inbox.yourdomain.com/mcp/owner</code></p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="add-h">
+    <h2 class="h-section" id="add-h">Add it in {a.name}</h2>
+    <ol class="prose-steps">
+      {a.addSteps.map((s) => <li>{s}</li>)}
+    </ol>
+    <p><strong>Plans.</strong> {a.plans}</p>
+    {a.notes.map((n) => <p>{n}</p>)}
+    <p class="muted">
+      Checked {CHECKED} against <a class="link" href={a.source.href} rel="noopener">{a.source.label}</a>. Your inbox
+      speaks every MCP revision from March 2025 to the current one (2026-07-28), so older and newer clients both connect.
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="found-h">
+    <h2 class="h-section" id="found-h">Being found</h2>
+    <p>
+      A customer's assistant has to know where you are. Put your inbox's address on your website and in your profiles,
+      and join the <a class="link" href="/network/">Surfing Dog network</a>: a directory assistants search through their
+      own MCP connector, <code>https://network.surfingdog.ai/mcp</code>, which answers with verified businesses near a
+      place or by what they do.
+    </p>
+    <p>
+      People with no assistant get <a class="link" href="/docs/your-page/">your page</a> at the same address: book a
+      time, ask for a quote, send a message.
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="next-h">
+    <h2 class="h-section" id="next-h">Try it first</h2>
+    <p>
+      Point {a.name} at the demo bike workshop and ask for a booking: <a class="link" href="/try/">surfingdog.ai/try</a>.
+      When it works, <a class="link" href="/install/">install your own inbox</a> with one line to your AI, and see
+      <a class="link" href="/docs/connect-your-ai/">Connect your AI</a> for every tool the owner server gives it.
+    </p>
+    <p class="muted">
+      The other assistants:
+      {others.map((o, i) => (
+        <>
+          {i > 0 && " · "}
+          <a class="link" href={`/assistants/${o.slug}/`}>{o.name}</a>
+        </>
+      ))}
+    </p>
+  </section>
+</Layout>
+
+<style>
+  .copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0 0;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+    overflow-wrap: anywhere;
+  }
+  .muted {
+    color: var(--ink-2);
+  }
+  .prose-steps {
+    display: grid;
+    gap: var(--sp-2);
+    padding-left: 1.25rem;
+  }
+  .wrap-read.section p + p,
+  .wrap-read.section ul + p {
+    margin-top: var(--sp-3);
+  }
+</style>
