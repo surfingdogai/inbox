@@ -266,4 +266,8 @@ export const api = {
   createKey: (body: CreateKeyBody) => call<CreatedKey>("POST", "/v1/owner/api-keys", { body, idempotent: true }),
   revokeKey: (id: string) =>
     call<KeyView>("DELETE", `/v1/owner/api-keys/${encodeURIComponent(id)}`, { idempotent: true }),
+  disconnectApp: (id: string) =>
+    call<{ disconnected: number }>("DELETE", `/v1/owner/connected-apps/${encodeURIComponent(id)}`, {
+      idempotent: true,
+    }),
 };

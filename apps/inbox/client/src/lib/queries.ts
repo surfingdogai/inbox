@@ -384,6 +384,14 @@ export function useCreateKey() {
   });
 }
 
+export function useDisconnectApp() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.disconnectApp(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.keys }),
+  });
+}
+
 export function useRevokeKey() {
   const qc = useQueryClient();
   return useMutation({

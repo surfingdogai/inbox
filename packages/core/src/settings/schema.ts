@@ -518,7 +518,7 @@ const sections = {
       /**
        * Where someone who finds a security problem in this inbox reports it, as
        * `/.well-known/security.txt` says (RFC 9116): an email address or an https URL. Empty, it is
-       * hello@ at this inbox's own host.
+       * this inbox's own message form, /p/message.
        */
       contact: z
         .union([z.email(), z.url({ protocol: /^https$/ })])

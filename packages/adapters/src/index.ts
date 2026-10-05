@@ -22,7 +22,7 @@ import {
 } from "./limits";
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
-import { publicOrigin } from "./origin";
+import { publicOrigin, sameOrigin } from "./origin";
 import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
@@ -77,15 +77,6 @@ export interface DoorDeps {
   readonly limits?: LimitTable | undefined;
   /** Buckets every caller shares, taken after the caller's own (a public demo sets `DEMO_SHARED`). */
   readonly sharedLimits?: LimitTable | undefined;
-}
-
-/** Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority. */
-function sameOrigin(request: Request, baseUrl: string | undefined): boolean {
-  const site = request.headers.get("sec-fetch-site");
-  if (site === "same-origin" || site === "none") return true;
-  const origin = request.headers.get("origin");
-  if (origin === null) return false;
-  return origin === publicOrigin(request, baseUrl) || origin === new URL(request.url).origin;
 }
 
 /** The longest idempotency key a door accepts, header or field. */
@@ -262,6 +253,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       );
     }
     const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() });
+    // Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority.
     if (
       caller.auth?.via === "session" &&
       !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
@@ -350,6 +342,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     "/oauth",
     oauthRoutes({
       db: deps.db,
+      mailOut: deps.mailOut,
+      businessName: deps.businessName,
       fetchMetadata: deps.fetchClientMetadata ?? ((url) => safeFetchJson<ClientMetadata>(url)),
       now: deps.now,
       baseUrl: deps.baseUrl,

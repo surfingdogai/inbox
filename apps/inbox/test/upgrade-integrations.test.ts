@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 // The published verifier, by path: packages/sdk/src/webhooks/verify.ts is unchanged since sdk-v0.1.1.
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { type App, createInbox } from "../src/app";
-import { freshDb, makeClient } from "./harness";
+import { freshDb, futureDay, makeClient } from "./harness";
 
 /**
  * Keys, scopes, idempotency and attribution, as the live instance meets them on upgrade: the rows,
@@ -30,6 +30,8 @@ const RECEIVER = "https://receiver.example.com/hooks/inbox";
 const SECRET_KEY = "upgrade-keys-instance-key-0123456789";
 const INBOUND = "gateway-inbound-secret-0123456789";
 const T0 = Date.parse("2026-09-20T09:00:00Z");
+/** The day the tests book: a weekday ahead of the real clock, which the inbox checks bookings against. */
+const DAY = futureDay(14);
 const DEFAULT_CONSENT = "inbox:read inbox:write settings:read offline_access";
 
 /** The owner MCP tools the previous release had, with the arguments each required. */
@@ -160,8 +162,8 @@ async function book(request: ReturnType<typeof inboxOn>["request"], serviceId: s
     {
       payload: {
         reservationFor: { serviceId, name: "Intro call" },
-        startTime: `2026-10-05T${String(hour).padStart(2, "0")}:00:00Z`,
-        endTime: `2026-10-05T${String(hour).padStart(2, "0")}:30:00Z`,
+        startTime: `${DAY}T${String(hour).padStart(2, "0")}:00:00Z`,
+        endTime: `${DAY}T${String(hour).padStart(2, "0")}:30:00Z`,
       },
       contact: { name: "Rita", email: "rita@example.com" },
     },

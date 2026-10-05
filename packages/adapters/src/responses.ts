@@ -596,8 +596,19 @@ export const createdKeySchema = keyViewSchema.extend({
   key_note: z.string(),
 });
 
+export const connectedAppSchema = z.object({
+  id: z.string(),
+  name: nullableString,
+  verified: z.boolean().describe("Its details are published at its own address; otherwise it chose its own name."),
+  sends_to: z.array(z.string()).describe("The hosts its sign-in comes back to, which receive its access."),
+  scopes: z.array(z.string()),
+  connected_at: iso,
+  last_used_at: iso.nullable(),
+});
+
 export const keyListSchema = z.object({
   items: z.array(keyViewSchema),
+  apps: z.array(connectedAppSchema).describe("AI apps connected over OAuth that can still act, newest first."),
   ai_clients: z.array(
     z.object({ kind: z.string(), id: z.string(), name: nullableString, refusals: z.array(refusalSchema) }),
   ),

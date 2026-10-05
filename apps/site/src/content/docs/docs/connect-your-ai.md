@@ -5,7 +5,7 @@ description: Let Claude, ChatGPT, Gemini, Grok, Grok Bot, Copilot Studio or any 
 
 Every instance serves two MCP servers. The public one at `/mcp` is for customers' agents and needs no login. The **owner MCP** at `/mcp/owner` is for you and the AI you trust: it lists what needs a person, shows an item's full story, moves items through their states, replies to customers and edits settings. It is stateless per request (MCP spec 2026-07-28), and its tools are generated from the same schemas as the REST API.
 
-Two ways in: an API key, which works today, or OAuth 2.1 with a login, which the server supports and the owner app will complete once its sign-in creates a session.
+Two ways in: an API key, or OAuth 2.1 with a login.
 
 ## Today: an owner API key
 
@@ -35,6 +35,8 @@ GET /.well-known/oauth-authorization-server
 ```
 
 What it supports: authorization code with PKCE (S256, required); public clients only; **Client ID Metadata Documents** first, which means the `client_id` is the `https` URL of a JSON document describing the client, fetched by the instance and cached; dynamic client registration (`POST /oauth/register`) as the fallback for clients that still use it; opaque hashed tokens; access tokens that last an hour and refresh tokens that last thirty days and rotate on every use, with reuse detection; one consent screen listing the scopes in plain words.
+
+Anyone can register an app, because assistants register themselves when they connect, so the consent screen doesn't take an app's word for its name. It shows where the app's access goes (the host its sign-in comes back to), marks a self-registered app's name as not verified, and warns when an app calls itself Claude, ChatGPT, Gemini, Grok, Copilot or Muse but sends access somewhere else. Only that page can answer it: an Allow posted from another site is refused. Each time you allow an app the inbox emails you, and Settings → Keys lists every connected app with a Disconnect button that revokes its tokens at once. Self-registered apps nobody signed in with are forgotten after a week.
 
 Scopes: `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run`, `integrations:write`, `keys:write`, `offline_access`. A client that asks for none gets `inbox:read inbox:write settings:read offline_access`. An AI that will set the business up should ask for the scopes it needs. Today a call outside them still goes through and is recorded under Settings → Keys, where the owner sees it; the owner can switch on refusing them, and a later release refuses them for everyone.
 

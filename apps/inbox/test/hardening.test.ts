@@ -286,12 +286,13 @@ describe("the owner's alerts", () => {
 });
 
 describe("security.txt and health", () => {
-  it("names hello@ the inbox's host until the owner sets a contact, and expires within a year", async () => {
+  it("points to the inbox's own message form until the owner sets a contact, and expires within a year", async () => {
     const { app, owner, db } = await setup();
     const res = await app.request(`${INBOX}/.well-known/security.txt`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("Contact: mailto:hello@inbox.example.com");
+    expect(body).toContain(`Contact: ${INBOX}/p/message`);
+    expect(body).not.toContain("mailto:hello@");
     expect(body).toContain(`Canonical: ${INBOX}/.well-known/security.txt`);
     const expires = Date.parse(/Expires: (\S+)/.exec(body)?.[1] ?? "");
     expect(expires).toBeGreaterThan(Date.now());

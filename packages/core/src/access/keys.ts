@@ -1,8 +1,8 @@
 import { sha256Hex } from "@surfingdog/platform";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../db";
 import { randomToken, ulid } from "../ids";
-import { apiKeys, scopeRefusals } from "../schema/tables";
+import { apiKeys, oauthClients, oauthTokens, scopeRefusals } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, isOwnerInPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -108,8 +108,26 @@ export interface PrincipalRefusals {
   readonly refusals: readonly RefusalView[];
 }
 
+/**
+ * An AI app the owner let in over OAuth (Claude, ChatGPT, …), while it can still act: its refresh
+ * token is alive. `verified` is true when its details are published at its own address (a Client ID
+ * Metadata Document); a self-registered app chose its own name.
+ */
+export interface ConnectedAppView {
+  readonly id: string;
+  readonly name: string | null;
+  readonly verified: boolean;
+  /** Where its sign-in comes back to: the hosts that receive its access. */
+  readonly sends_to: readonly string[];
+  readonly scopes: readonly string[];
+  readonly connected_at: string;
+  readonly last_used_at: string | null;
+}
+
 export interface KeyList {
   readonly items: readonly KeyView[];
+  /** The AI apps connected over OAuth, newest first. The owner disconnects one with `disconnectApp`. */
+  readonly apps: readonly ConnectedAppView[];
   /** The owner's AI apps (OAuth clients) that called outside the scopes they were granted. */
   readonly ai_clients: readonly PrincipalRefusals[];
   readonly scopes: readonly { scope: string; label: string }[];
@@ -203,6 +221,7 @@ export class AccessCapabilities {
     const security = (await readSettings(this.db)).security;
     return {
       items,
+      apps: await this.connectedApps(now),
       ai_clients: aiClients,
       scopes: Object.entries(SCOPES).map(([scope, label]) => ({ scope, label })),
       presets: KEY_PRESETS,
@@ -269,22 +288,87 @@ export class AccessCapabilities {
   }
 
   /**
+   * Every token an app holds, revoked at once: it has to be connected again, through the consent page,
+   * to work the inbox. The owner in person only, like keys: an AI that reads customers' messages is
+   * not the one to decide which apps stay.
+   */
+  async disconnectApp(caller: Caller, input: { readonly app_id: string }): Promise<{ disconnected: number }> {
+    requireBusiness(caller);
+    this.assertMayManageKeys(caller, "revoke", "disconnect an app");
+    const now = nowOf(caller);
+    const [client] = await this.db.orm.select().from(oauthClients).where(eq(oauthClients.id, input.app_id));
+    if (!client) {
+      throw new WriteError("invalid_input", "unknown app", {
+        fields: [{ path: "app_id", problem: "invalid", message: "no app with this id is connected" }],
+      });
+    }
+    const live = await this.db.orm
+      .select({ hash: oauthTokens.tokenHash })
+      .from(oauthTokens)
+      .where(and(eq(oauthTokens.clientId, client.id), isNull(oauthTokens.revokedAt)));
+    await this.db.client.query({
+      sql: "UPDATE oauth_tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL",
+      params: [now, client.id],
+      method: "run",
+    });
+    return { disconnected: live.length };
+  }
+
+  private async connectedApps(now: number): Promise<ConnectedAppView[]> {
+    const tokens = await this.db.orm
+      .select()
+      .from(oauthTokens)
+      .where(and(eq(oauthTokens.kind, "refresh"), isNull(oauthTokens.revokedAt), gt(oauthTokens.expiresAt, now)));
+    if (tokens.length === 0) return [];
+    const ids = [...new Set(tokens.map((t) => t.clientId))];
+    const clients = await this.db.orm.select().from(oauthClients).where(inArray(oauthClients.id, ids));
+    const used = await this.db.orm
+      .select({ clientId: oauthTokens.clientId, createdAt: oauthTokens.createdAt, lastUsedAt: oauthTokens.lastUsedAt })
+      .from(oauthTokens)
+      .where(inArray(oauthTokens.clientId, ids));
+    const iso = (ms: number | null | undefined) => (ms ? new Date(ms).toISOString() : null);
+    return clients
+      .map((c) => {
+        const mine = tokens.filter((t) => t.clientId === c.id);
+        const all = used.filter((u) => u.clientId === c.id);
+        const hosts = c.redirectUris.map((u) => {
+          try {
+            return new URL(u).host;
+          } catch {
+            return u;
+          }
+        });
+        const last = Math.max(0, ...all.map((u) => u.lastUsedAt ?? 0), c.lastUsedAt ?? 0);
+        return {
+          id: c.id,
+          name: c.name,
+          verified: c.kind === "cimd",
+          sends_to: [...new Set(hosts)],
+          scopes: [...new Set(mine.flatMap((t) => t.scope.split(" ").filter(Boolean)))],
+          connected_at: iso(Math.min(...all.map((u) => u.createdAt))) ?? new Date(now).toISOString(),
+          last_used_at: iso(last),
+        };
+      })
+      .sort((a, b) => b.connected_at.localeCompare(a.connected_at));
+  }
+
+  /**
    * Keys are the owner's alone (`outbound.ts`): a key is standing access to every customer, and an
    * AI that reads customers' messages can be talked into minting one and handing it on. So the
    * owner's AI never creates or revokes one — over OAuth, or through the owner's MCP whatever it
    * signed in with — and `security.aiMayCreateKeys` no longer lets it (it is kept only so that a
    * stored document still reads); an integration key never manages keys either.
    */
-  private assertMayManageKeys(caller: Caller, what: "create" | "revoke"): void {
+  private assertMayManageKeys(caller: Caller, what: "create" | "revoke", task?: string): void {
     if (caller.actor.kind === "integration" || caller.principal?.keyKind === "integration") {
       throw new WriteError(
         "not_allowed",
-        `an integration key cannot ${what} keys; the owner does that in Settings → Keys`,
+        `an integration key cannot ${task ?? `${what} keys`}; the owner does that in Settings → Keys`,
       );
     }
     // Everything that comes through the owner MCP is an AI working for the owner, whatever it signed in with.
     if (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner") {
-      throw ownerOnlyError(`${what} a key`, "Settings → Keys");
+      throw ownerOnlyError(task ?? `${what} a key`, "Settings → Keys");
     }
   }
 

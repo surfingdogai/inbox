@@ -30,6 +30,7 @@ import {
   createSecretBox,
   type Db,
   enabledNetworks,
+  FRONT_PATHS,
   IDENTITY_ISSUE_KIND,
   type JobRunner,
   MANIFEST_PATH,
@@ -393,15 +394,16 @@ function tooLarge(c: Context, max: number, who: string): Response {
 
 /**
  * `/.well-known/security.txt` (RFC 9116): a contact — an email address becomes a `mailto:` — the
- * canonical address of the file itself, and an expiry a year out, as the RFC asks.
+ * canonical address of the file itself, and an expiry a year out, as the RFC asks. With no contact
+ * set, it is this inbox's own message form: an address made up from the host (hello@inbox.…) has
+ * nobody behind it on most instances, and a report sent there bounces.
  */
 export function securityTxt(o: { origin: string; contact?: string | undefined; now: number }): string {
-  const host = new URL(o.origin).hostname;
   const contact = o.contact
     ? o.contact.startsWith("https://")
       ? o.contact
       : `mailto:${o.contact}`
-    : `mailto:hello@${host}`;
+    : `${o.origin}${FRONT_PATHS.message}`;
   const expires = new Date(o.now + 365 * 86_400_000);
   expires.setUTCHours(0, 0, 0, 0);
   return [

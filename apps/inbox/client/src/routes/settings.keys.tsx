@@ -7,8 +7,16 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { relativeTime } from "../lib/format";
-import { qk, useCreateKey, useKeys, useRevokeKey, useSaveSettings, useSettings } from "../lib/queries";
-import type { CreatedKey, CreateKeyBody, KeyList, KeyView, RefusalView } from "../lib/types";
+import {
+  qk,
+  useCreateKey,
+  useDisconnectApp,
+  useKeys,
+  useRevokeKey,
+  useSaveSettings,
+  useSettings,
+} from "../lib/queries";
+import type { ConnectedAppView, CreatedKey, CreateKeyBody, KeyList, KeyView, RefusalView } from "../lib/types";
 
 export const Route = createFileRoute("/settings/keys")({
   component: KeysPage,
@@ -30,6 +38,7 @@ function KeysPage() {
   return (
     <>
       <SecurityCard list={keys.data} />
+      {keys.data && <ConnectedAppsCard list={keys.data} />}
       <KeysCard />
       {keys.data && keys.data.ai_clients.length > 0 && <AiAppsCard list={keys.data} />}
     </>
@@ -439,6 +448,83 @@ function KeyForm({
 }
 
 /* --- AI apps --------------------------------------------------------------- */
+
+/**
+ * Every AI app the owner let in with a sign-in, and where its access goes. An app picks its own name
+ * when it registers, so the address it sends access to is the line to read; one the owner doesn't
+ * recognise is disconnected here, at once.
+ */
+function ConnectedAppsCard({ list }: { list: KeyList }) {
+  const disconnect = useDisconnectApp();
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  return (
+    <section className="card glass stack">
+      <SectionHead title="Connected AI apps" />
+      <p className="lede small">
+        The apps you let work your inbox by signing in: Claude, ChatGPT and the like. If you don’t recognise one, or
+        where its access goes, disconnect it.
+      </p>
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
+      {list.apps.length === 0 && (
+        <div className="state">
+          <h3>No apps connected</h3>
+          <p>When you connect your AI to this inbox with a sign-in, it appears here.</p>
+        </div>
+      )}
+      <div className="stack">
+        {list.apps.map((a: ConnectedAppView) => (
+          <div key={a.id} className="catalogue-row row-glass">
+            <div className="catalogue-main">
+              <div className="t">
+                <b>{a.name ?? "An unnamed app"}</b>
+                {!a.verified && <span className="pill pill-xs">Name not verified</span>}
+              </div>
+              <div className="s">
+                Access goes to <span className="mono">{a.sends_to.join(", ")}</span>
+              </div>
+              <div className="s">
+                {[
+                  `connected ${relativeTime(a.connected_at)}`,
+                  a.last_used_at ? `used ${relativeTime(a.last_used_at)}` : "not used yet",
+                  a.scopes.join(" · "),
+                ].join(" · ")}
+              </div>
+              {acting === a.id && disconnect.error && (
+                <div className="hint error" role="alert">
+                  {problemOf(disconnect.error).detail}
+                </div>
+              )}
+            </div>
+            <div className="rowx">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={disconnect.isPending}
+                onClick={() => {
+                  disconnect.reset();
+                  setNotice(null);
+                  setActing(a.id);
+                  disconnect.mutate(a.id, {
+                    onSuccess: () => {
+                      setActing(null);
+                      setNotice({
+                        tone: "success",
+                        text: `“${a.name ?? "The app"}” disconnected. It has to be connected again to work your inbox.`,
+                      });
+                    },
+                  });
+                }}
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function AiAppsCard({ list }: { list: KeyList }) {
   return (

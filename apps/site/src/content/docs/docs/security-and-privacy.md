@@ -49,6 +49,7 @@ An assistant may sign its requests (`sdi-agent/1`, HTTP Message Signatures, Web 
 
 - Owner API keys (`sdi_own_…`) and agent keys (`sdi_agent_…`) are stored as SHA-256 hashes with a short prefix for identification. The key is shown once, when it is created.
 - OAuth access tokens (`sdi_at_…`, one hour) and refresh tokens (`sdi_rt_…`, thirty days) are opaque, hashed, and rotate on every refresh. A refresh token presented twice revokes the whole token family.
+- An AI app gets in only through the consent screen, with the owner signed in. The screen shows where the app's access goes, says when its name is self-chosen, and warns when a name claims a known assistant that the destination doesn't belong to. An Allow posted from another site is refused. The owner is emailed each time an app is allowed, and disconnects any app in Settings → Keys, which revokes its tokens at once.
 - Magic-link tokens are hashed, single-use and expire in fifteen minutes. Sessions are hashed and expire after thirty days.
 - Receipts are signed with an Ed25519 key generated on the instance; the private half is sealed by `INBOX_SECRET_KEY` before it is stored, and the public half is published in the manifest and at `/.well-known/jwks.json`. A retired key stays published so old receipts still verify. Without `INBOX_SECRET_KEY` no key is created and no receipt is issued, rather than storing a signing key in the clear.
 
@@ -64,4 +65,4 @@ One business is one database. Every write is a single batch of precomputed state
 
 Security issues in the Inbox itself: email hello@surfingdog.ai, as [surfingdog.ai/.well-known/security.txt](https://surfingdog.ai/.well-known/security.txt) says, rather than opening a public issue.
 
-Every inbox publishes its own `/.well-known/security.txt` too, for a problem with that one business's inbox. It names the contact the owner sets in Settings → Keys, or hello@ at the inbox's own address when none is set.
+Every inbox publishes its own `/.well-known/security.txt` too, for a problem with that one business's inbox. It names the contact the owner sets in Settings → Keys, or the inbox's own message form (`/p/message`) when none is set.

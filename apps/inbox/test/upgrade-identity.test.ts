@@ -2,7 +2,7 @@ import { createDb, MIGRATIONS, readSettings, schema, ulid } from "@surfingdog/co
 import { runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { makeClient } from "./harness";
+import { futureDay, makeClient } from "./harness";
 
 /**
  * People and customers (ADR-017 §8), as a live instance meets them on upgrade: its parties become
@@ -125,8 +125,8 @@ describe("upgrading to people and customers", () => {
       {
         payload: {
           reservationFor: { serviceId: svc, name: "Massage" },
-          startTime: "2026-10-01T10:00:00Z",
-          endTime: "2026-10-01T11:00:00Z",
+          startTime: `${futureDay(14)}T10:00:00Z`,
+          endTime: `${futureDay(14)}T11:00:00Z`,
         },
         contact: { email: "ana@example.pt" },
       },

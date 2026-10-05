@@ -1,9 +1,18 @@
-import { type Db, NOT_FOR_AI_SCOPES, randomToken, SCOPE_NAMES, SCOPES, schema, ulid } from "@surfingdog/core";
-import { sha256Hex } from "@surfingdog/platform";
+import {
+  type Db,
+  NOT_FOR_AI_SCOPES,
+  randomToken,
+  readSettings,
+  SCOPE_NAMES,
+  SCOPES,
+  schema,
+  ulid,
+} from "@surfingdog/core";
+import { type MailOut, sha256Hex } from "@surfingdog/platform";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { hashKey } from "./auth";
-import { publicOrigin } from "./origin";
+import { publicOrigin, sameOrigin } from "./origin";
 import type { CallerEnv } from "./rest";
 import { userFromCookie } from "./session";
 
@@ -23,12 +32,17 @@ export const OWNER_SCOPES: readonly string[] = SCOPE_NAMES.filter(
 export const ACCESS_TTL_MS = 3_600_000;
 export const REFRESH_TTL_MS = 30 * 86_400_000;
 export const CODE_TTL_MS = 10 * 60_000;
+/** A self-registered app nobody has signed in with is forgotten after this long. */
+export const UNUSED_CLIENT_TTL_MS = 7 * 86_400_000;
 export const ACCESS_PREFIX = "sdi_at_";
 export const REFRESH_PREFIX = "sdi_rt_";
 
 export interface OAuthDeps {
   readonly baseUrl?: string | undefined;
   readonly db: Db;
+  /** Tells the owner by email each time they let an app in, so one they didn't mean to is noticed. */
+  readonly mailOut?: MailOut | undefined;
+  readonly businessName?: (() => Promise<string>) | undefined;
   /** Resolves a Client ID Metadata Document; must refuse private hosts. */
   readonly fetchMetadata?: ((url: string) => Promise<ClientMetadata | null>) | undefined;
   readonly now?: (() => number) | undefined;
@@ -125,6 +139,14 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
         "invalid_redirect_uri",
         "Send 1 to 5 https redirect_uris (http://127.0.0.1 or http://localhost allowed).",
       );
+    // Registration is open by design (assistants register themselves), so registrations nobody ever
+    // signed in with are cleared after a week rather than kept for ever.
+    await deps.db.client.query({
+      sql: `DELETE FROM oauth_clients WHERE kind = 'dcr' AND created_at < ?
+        AND id NOT IN (SELECT client_id FROM oauth_codes) AND id NOT IN (SELECT client_id FROM oauth_tokens)`,
+      params: [now() - UNUSED_CLIENT_TTL_MS],
+      method: "run",
+    });
     const id = ulid();
     await deps.db.orm.insert(schema.oauthClients).values({
       id,
@@ -160,10 +182,12 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
       const back = `/oauth/authorize?${new URLSearchParams(q).toString()}`;
       return c.redirect(`/login?redirect=${encodeURIComponent(back)}`);
     }
-    return c.html(consentPage(check.client, check.scopes, q));
+    return c.html(consentPage(check.client, check.scopes, q, check.redirectUri));
   });
 
   app.post("/authorize/decision", async (c) => {
+    // Only our own consent page may answer it: another site can't post an Allow for a signed-in owner.
+    if (!sameOrigin(c.req.raw, deps.baseUrl)) return err(c, 403, "access_denied", "Answer from the consent page.");
     const form = await c.req.parseBody();
     const q = Object.fromEntries(Object.entries(form).filter(([, v]) => typeof v === "string")) as Record<
       string,
@@ -193,7 +217,9 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
     });
     redirect.searchParams.set("code", code);
     if (q.state) redirect.searchParams.set("state", q.state);
-    redirect.searchParams.set("iss", publicOrigin(c.req.raw, deps.baseUrl));
+    const origin = publicOrigin(c.req.raw, deps.baseUrl);
+    redirect.searchParams.set("iss", origin);
+    await tellOwner(deps, user.email, check.client, check.redirectUri, origin, now());
     return c.redirect(redirect.toString());
   });
 
@@ -307,7 +333,7 @@ async function validateAuthorize(
 ): Promise<
   | {
       ok: true;
-      client: { id: string; name: string | null; redirectUris: string[] };
+      client: OAuthClientView;
       redirectUri: string;
       scopes: string[];
     }
@@ -336,14 +362,21 @@ async function validateAuthorize(
   return { ok: true, client, redirectUri, scopes };
 }
 
-async function resolveClient(
-  deps: OAuthDeps,
-  clientId: string,
-  now: number,
-): Promise<{ id: string; name: string | null; redirectUris: string[] } | null> {
+/**
+ * A client as the consent page shows it. `kind` says how much its name can be trusted: a "cimd"
+ * client's details are published at its own URL, a "dcr" one chose its name when it registered.
+ */
+export interface OAuthClientView {
+  readonly id: string;
+  readonly name: string | null;
+  readonly redirectUris: string[];
+  readonly kind: string;
+}
+
+async function resolveClient(deps: OAuthDeps, clientId: string, now: number): Promise<OAuthClientView | null> {
   if (!clientId) return null;
   const [row] = await deps.db.orm.select().from(schema.oauthClients).where(eq(schema.oauthClients.id, clientId));
-  if (row) return { id: row.id, name: row.name, redirectUris: row.redirectUris };
+  if (row) return { id: row.id, name: row.name, redirectUris: row.redirectUris, kind: row.kind };
   if (/^https:\/\//.test(clientId) && deps.fetchMetadata) {
     const meta = await deps.fetchMetadata(clientId);
     if (!meta || (meta.client_id && meta.client_id !== clientId)) return null;
@@ -359,7 +392,7 @@ async function resolveClient(
       metadata: meta,
       createdAt: now,
     });
-    return { id: clientId, name: meta.client_name ?? null, redirectUris: uris };
+    return { id: clientId, name: meta.client_name ?? null, redirectUris: uris, kind: "cimd" };
   }
   return null;
 }
@@ -439,7 +472,93 @@ export async function pkceChallenge(verifier: string): Promise<string> {
     .replace(/=+$/, "");
 }
 
-function consentPage(client: { id: string; name: string | null }, scopes: string[], q: Record<string, string>): string {
+/**
+ * Assistants people are likely to connect, and the hosts their sign-in comes back to. An app that
+ * calls itself one of them but sends access elsewhere is the consent-phishing case: anyone can
+ * register an app with any name, so the page says so, and says where access really goes.
+ */
+const KNOWN_APPS: readonly { name: string; pattern: RegExp; hosts: readonly string[] }[] = [
+  { name: "Claude", pattern: /\bclaude\b|anthropic/i, hosts: ["claude.ai", "claude.com", "anthropic.com"] },
+  { name: "ChatGPT", pattern: /chat\s*gpt|openai/i, hosts: ["chatgpt.com", "openai.com"] },
+  { name: "Gemini", pattern: /gemini/i, hosts: ["google.com"] },
+  { name: "Grok", pattern: /\bgrok\b|\bxai\b/i, hosts: ["x.ai", "grok.com", "x.com"] },
+  { name: "Copilot", pattern: /copilot/i, hosts: ["microsoft.com", "microsoftonline.com", "azure-apim.net"] },
+  { name: "Meta Muse", pattern: /\bmuse\b|meta ai/i, hosts: ["muse.ai", "meta.ai", "meta.com"] },
+];
+
+/**
+ * An email to the owner each time they let an app in: what it is, where its access goes, and where to
+ * take it back. A consent they were tricked into is then noticed the same day. Never blocks the
+ * sign-in: when there is nobody to send as, or the send fails, the app is still connected.
+ */
+async function tellOwner(
+  deps: OAuthDeps,
+  to: string,
+  client: OAuthClientView,
+  redirectUri: string,
+  origin: string,
+  now: number,
+): Promise<void> {
+  if (!deps.mailOut || !to) return;
+  try {
+    const address = deps.mailOut.sender?.address ?? (await readSettings(deps.db)).email.fromAddress;
+    if (!address) return;
+    const business = (await deps.businessName?.()) ?? "";
+    const dest = destinationOf(redirectUri);
+    const app = client.name ? `"${client.name}"` : "An app";
+    const when = new Date(now).toISOString().replace("T", " ").slice(0, 16);
+    const trust =
+      client.kind === "cimd"
+        ? `Its details are published at ${(() => {
+            try {
+              return new URL(client.id).host;
+            } catch {
+              return client.id;
+            }
+          })()}.`
+        : "Its name is the one it gave itself when it registered.";
+    await deps.mailOut.send({
+      from: { address, name: business || deps.mailOut.sender?.name || "Surfing Dog Inbox" },
+      to: [to],
+      subject: `An app was connected to ${business || "your inbox"}`,
+      text: `${app} can now work your inbox. You allowed it at ${when} UTC.\n\nAccess goes to: ${dest.local ? "an app on your own computer" : dest.host}\n${trust}\n\nIf this wasn't you, disconnect it now in Settings → Keys:\n${origin}/settings/keys\n`,
+    });
+  } catch {
+    // The owner sees every connected app in Settings → Keys whether or not this arrives.
+  }
+}
+
+function isLoopback(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+/** Where a sign-in goes back to, as a person reads it. */
+export function destinationOf(redirectUri: string): { host: string; local: boolean } {
+  try {
+    const u = new URL(redirectUri);
+    return { host: u.host, local: isLoopback(u.hostname) };
+  } catch {
+    return { host: redirectUri, local: false };
+  }
+}
+
+/** The assistant an app's name claims to be, when its sign-in goes somewhere that assistant isn't. */
+export function impersonates(name: string | null, redirectUri: string): string | null {
+  if (!name) return null;
+  const { host, local } = destinationOf(redirectUri);
+  if (local) return null; // an app on the owner's own computer: nobody else receives the code
+  const hostname = host.replace(/:\d+$/, "").toLowerCase();
+  const claim = KNOWN_APPS.find((a) => a.pattern.test(name));
+  if (!claim) return null;
+  return claim.hosts.some((h) => hostname === h || hostname.endsWith(`.${h}`)) ? null : claim.name;
+}
+
+function consentPage(
+  client: OAuthClientView,
+  scopes: string[],
+  q: Record<string, string>,
+  redirectUri: string,
+): string {
   const esc = (s: string) =>
     s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch);
   const hidden = Object.entries(q)
@@ -457,21 +576,37 @@ function consentPage(client: { id: string; name: string | null }, scopes: string
     )
     .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
     .join("");
-  const host = (() => {
+  const dest = destinationOf(redirectUri);
+  const claim = impersonates(client.name, redirectUri);
+  const name = client.name ? `“${esc(client.name)}”` : "this app";
+  const published = (() => {
     try {
-      return new URL(q.redirect_uri ?? client.id).host;
+      return client.kind === "cimd" ? new URL(client.id).host : null;
     } catch {
-      return client.id;
+      return null;
     }
   })();
+  const trust = published
+    ? `<p class="note">Its details are published at <b>${esc(published)}</b>.</p>`
+    : `<p class="note">Name not verified: the app chose it when it registered.</p>`;
+  const warn = claim
+    ? `<p class="warn">This app calls itself ${esc(claim)}, but access would go to ${esc(dest.host)}, which isn’t ${esc(claim)}’s. Don’t allow it unless you are sure.</p>`
+    : "";
+  const where = dest.local ? "an app on this computer" : esc(dest.host);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Allow access</title>
 <style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Manrope,ui-sans-serif,system-ui,sans-serif;background:#f6f5ff;color:#14163c}@media(prefers-color-scheme:dark){body{background:#0d0e26;color:#f2f1ff}}
-.card{width:min(440px,92vw);padding:28px 24px;border-radius:20px;background:rgba(255,255,255,.44);border:1px solid rgba(255,255,255,.6);backdrop-filter:blur(26px) saturate(150%);box-shadow:0 8px 24px -16px rgba(20,90,140,.22)}@media(prefers-color-scheme:dark){.card{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14)}}
-h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px;opacity:.8}ul{margin:0 0 18px;padding-left:18px}li{margin:4px 0}.row{display:flex;gap:8px}button{flex:1;height:44px;border-radius:9999px;border:1px solid transparent;font:600 15px Manrope,system-ui,sans-serif;cursor:pointer}.allow{background:#14163c;color:#fff}.deny{background:rgba(255,255,255,.34);border-color:rgba(255,255,255,.62);color:inherit}@media(prefers-color-scheme:dark){.allow{background:#f2f1ff;color:#0d0e26}}</style></head>
+.card{width:min(460px,92vw);padding:28px 24px;border-radius:20px;background:rgba(255,255,255,.44);border:1px solid rgba(255,255,255,.6);backdrop-filter:blur(26px) saturate(150%);box-shadow:0 8px 24px -16px rgba(20,90,140,.22)}@media(prefers-color-scheme:dark){.card{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14)}}
+h1{font-size:20px;margin:0 0 6px;overflow-wrap:anywhere}p{margin:0 0 14px;opacity:.8}ul{margin:0 0 18px;padding-left:18px}li{margin:4px 0}.note{font-size:13px;opacity:.7}
+.dest{opacity:1;margin:0 0 14px;padding:12px 14px;border-radius:14px;border:1px solid rgba(20,22,60,.12);font-size:13px}.dest b{display:block;margin-top:4px;font:600 17px ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}@media(prefers-color-scheme:dark){.dest{border-color:rgba(255,255,255,.16)}}
+.warn{opacity:1;padding:12px 14px;border-radius:14px;background:rgba(255,207,92,.18);border:1px solid rgba(255,207,92,.7);font-size:14px}
+.row{display:flex;gap:8px}button{flex:1;height:44px;border-radius:9999px;border:1px solid transparent;font:600 15px Manrope,system-ui,sans-serif;cursor:pointer}.primary{background:#14163c;color:#fff}.quiet{background:rgba(255,255,255,.34);border-color:rgba(255,255,255,.62);color:inherit}@media(prefers-color-scheme:dark){.primary{background:#f2f1ff;color:#0d0e26}}</style></head>
 <body><form class="card" method="post" action="/oauth/authorize/decision">${hidden}
-<h1>Allow ${esc(client.name ?? "this app")} to work your inbox?</h1><p>It will connect from ${esc(host)} and may:</p>
+<h1>Allow ${name} to work your inbox?</h1>${trust}
+<p class="dest">Access goes to<b>${where}</b></p>${warn}
+<p>It may:</p>
 <ul>${scopes.map((s) => `<li>${esc(scopeLabel(s))}</li>`).join("")}</ul>
-<div class="row"><button class="deny" name="decision" value="deny">Don't allow</button><button class="allow" name="decision" value="allow">Allow</button></div></form></body></html>`;
+<p class="note">Allow only an app you are connecting yourself, right now. You can disconnect it at any time in Settings → Keys.</p>
+<div class="row"><button class="${claim ? "primary" : "quiet"}" name="decision" value="deny">Don't allow</button><button class="${claim ? "quiet" : "primary"}" name="decision" value="allow">Allow</button></div></form></body></html>`;
 }
 
 function scopeLabel(scope: string): string {

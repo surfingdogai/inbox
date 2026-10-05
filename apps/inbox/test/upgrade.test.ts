@@ -26,7 +26,9 @@ import { freshDb } from "./harness";
 const INBOX = "https://inbox.surfingdog.ai";
 const NET = "https://network.surfingdog.ai";
 const B = "https://directory.example.com";
-const T0 = Date.parse("2026-09-23T09:00:00Z");
+// The previous version's rows are a few days old, whatever day the test runs: dead network jobs are
+// cleared after a week, so a fixed date here would stop meaning "before the upgrade" one day.
+const T0 = Date.now() - 3 * 86_400_000;
 const HOUR = 3_600_000;
 
 /** Exactly what the previous version stored after `seed-surfingdog` and the owner's own edits. */

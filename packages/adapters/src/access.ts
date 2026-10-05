@@ -76,6 +76,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /api-keys": [READ_SETUP, "keys:write"],
   "POST /api-keys": ["keys:write"],
   "DELETE /api-keys/:id": ["keys:write"],
+  "DELETE /connected-apps/:id": ["keys:write"],
 };
 
 export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {

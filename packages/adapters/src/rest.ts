@@ -1424,6 +1424,21 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     },
   );
   app.delete(
+    "/connected-apps/:id",
+    owner({
+      tags: ["keys"],
+      summary: "Disconnect an AI app",
+      description:
+        "Every token the app holds is revoked at once; to work the inbox again it must be connected again, through the consent page. Only the owner in person disconnects an app: the owner's AI and integration keys get 403 not_allowed.",
+      responses: json("How many tokens were revoked", z.object({ disconnected: z.number().int() })),
+      write: true,
+    }),
+    async (c) => {
+      const input = { app_id: String(c.req.param("id")) };
+      return once(c, "apps.disconnect", input, (caller) => caps.access.disconnectApp(caller, input));
+    },
+  );
+  app.delete(
     "/api-keys/:id",
     owner({
       tags: ["keys"],

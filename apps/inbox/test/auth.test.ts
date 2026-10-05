@@ -276,12 +276,16 @@ describe("OAuth 2.1 for the owner MCP", () => {
     expect(anon.headers.get("location")).toContain("/login?redirect=");
     const consent = await app.request(`${ORIGIN}/oauth/authorize?${params}`, { headers: { cookie } });
     expect(consent.status).toBe(200);
-    expect(await consent.text()).toContain("Allow Claude to work your inbox?");
+    const page = await consent.text();
+    expect(page).toContain("Allow “Claude” to work your inbox?");
+    expect(page).toContain("Access goes to<b>claude.ai</b>");
+    expect(page).toContain("Name not verified");
+    expect(page).not.toContain('class="warn"'); // Claude's own callback: nothing to warn about
 
     const form = new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" });
     const decided = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
       method: "POST",
-      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin" },
       body: form.toString(),
     });
     expect(decided.status).toBe(302);
@@ -348,6 +352,151 @@ describe("OAuth 2.1 for the owner MCP", () => {
     expect(afterReuse.status).toBe(401); // the family was revoked on reuse
   });
 
+  it("tells the owner what a self-registered app really is, and refuses an Allow from another site", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: ["owner@oficinamare.pt"] });
+    const cookie = await signIn(app, mail, "owner@oficinamare.pt");
+    const reg = await app.request(`${ORIGIN}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://attacker-alpha.example.com/cb"] }),
+    });
+    const { client_id } = (await reg.json()) as { client_id: string };
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id,
+      redirect_uri: "https://attacker-alpha.example.com/cb",
+      code_challenge: await pkceChallenge("v".repeat(43)),
+      code_challenge_method: "S256",
+    });
+    const page = await (await app.request(`${ORIGIN}/oauth/authorize?${params}`, { headers: { cookie } })).text();
+    expect(page).toContain("Access goes to<b>attacker-alpha.example.com</b>");
+    expect(page).toContain("This app calls itself Claude, but access would go to attacker-alpha.example.com");
+    expect(page).toContain('<button class="primary" name="decision" value="deny">'); // refusing is the obvious button
+
+    // Another site posting the owner's Allow: refused, and no code goes anywhere.
+    const forged = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://attacker-alpha.example.com",
+      },
+      body: new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" }).toString(),
+    });
+    expect(forged.status).toBe(403);
+    const noHeaders = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" }).toString(),
+    });
+    expect(noHeaders.status).toBe(403);
+    expect(mail.sent.filter((m) => m.subject.startsWith("An app was connected"))).toHaveLength(0);
+  });
+
+  it("emails the owner when an app is connected, lists it, and lets only the owner in person disconnect it", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: ["owner@oficinamare.pt"] });
+    const cookie = await signIn(app, mail, "owner@oficinamare.pt");
+    const reg = await app.request(`${ORIGIN}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"] }),
+    });
+    const { client_id } = (await reg.json()) as { client_id: string };
+    const verifier = "v".repeat(43);
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id,
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+      scope: "inbox:read offline_access",
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: "S256",
+    });
+    const decided = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+      body: new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" }).toString(),
+    });
+    expect(decided.status).toBe(302);
+    const told = mail.sent.find((m) => m.subject.startsWith("An app was connected"));
+    expect(told?.to).toEqual(["owner@oficinamare.pt"]);
+    expect(told?.text).toContain("Access goes to: claude.ai");
+    expect(told?.text).toContain(`${ORIGIN}/settings/keys`);
+    const code = new URL(decided.headers.get("location") ?? "").searchParams.get("code") ?? "";
+    const tokens = (await (
+      await app.request(`${ORIGIN}/oauth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          client_id,
+          redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+          code_verifier: verifier,
+        }).toString(),
+      })
+    ).json()) as { access_token: string };
+
+    const list = (await (await app.request(`${ORIGIN}/v1/owner/api-keys`, { headers: { cookie } })).json()) as {
+      apps: { id: string; name: string; verified: boolean; sends_to: string[]; scopes: string[] }[];
+    };
+    expect(list.apps).toEqual([
+      expect.objectContaining({ id: client_id, name: "Claude", verified: false, sends_to: ["claude.ai"] }),
+    ]);
+
+    // The app itself can't disconnect apps (nor keep others from being disconnected).
+    const byTheApp = await app.request(`${ORIGIN}/v1/owner/connected-apps/${client_id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    });
+    expect(byTheApp.status).toBe(403);
+    const byOwner = await app.request(`${ORIGIN}/v1/owner/connected-apps/${client_id}`, {
+      method: "DELETE",
+      headers: { cookie, origin: ORIGIN },
+    });
+    expect(byOwner.status).toBe(200);
+    expect(((await byOwner.json()) as { disconnected: number }).disconnected).toBe(2);
+    const after = await app.request(`${ORIGIN}/mcp/owner`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    });
+    expect(after.status).toBe(401);
+    const empty = (await (await app.request(`${ORIGIN}/v1/owner/api-keys`, { headers: { cookie } })).json()) as {
+      apps: unknown[];
+    };
+    expect(empty.apps).toEqual([]);
+  });
+
+  it("forgets self-registered apps nobody signed in with after a week", async () => {
+    const db = await freshDb();
+    const app = createApp({ db, mailOut: logMailOut(), ownerEmails: ["owner@oficinamare.pt"] });
+    const register = async (name: string) =>
+      (await (
+        await app.request(`${ORIGIN}/oauth/register`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ client_name: name, redirect_uris: ["https://probe.example/cb"] }),
+        })
+      ).json()) as { client_id: string };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-01T00:00:00Z"));
+      const old = await register("ProbeAlpha");
+      vi.setSystemTime(new Date("2026-10-09T00:00:00Z"));
+      await register("ProbeBeta");
+      const ids = (await db.client.query({ sql: "SELECT id FROM oauth_clients", params: [], method: "all" })).rows.map(
+        (r) => (r as unknown[])[0],
+      );
+      expect(ids).not.toContain(old.client_id);
+      expect(ids).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("accepts a Client ID Metadata Document as the client", async () => {
     const db = await freshDb();
     const mail = logMailOut();
@@ -370,7 +519,42 @@ describe("OAuth 2.1 for the owner MCP", () => {
     });
     const consent = await app.request(`${ORIGIN}/oauth/authorize?${params}`, { headers: { cookie } });
     expect(consent.status).toBe(200);
-    expect(await consent.text()).toContain("Claude Code");
+    const page = await consent.text();
+    expect(page).toContain("Claude Code");
+    expect(page).toContain("Its details are published at <b>claude.ai</b>.");
+    expect(page).toContain("Access goes to<b>an app on this computer</b>");
+    expect(page).not.toContain('class="warn"');
+
+    // An app whose id is its document's URL is listed and disconnected by that id.
+    const decided = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin" },
+      body: new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" }).toString(),
+    });
+    const code = new URL(decided.headers.get("location") ?? "").searchParams.get("code") ?? "";
+    const token = await app.request(`${ORIGIN}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        client_id: "https://claude.ai/oauth/claude-code-client-metadata",
+        redirect_uri: "http://localhost/callback",
+        code_verifier: "v".repeat(43),
+      }).toString(),
+    });
+    expect(token.status).toBe(200);
+    const listed = (await (await app.request(`${ORIGIN}/v1/owner/api-keys`, { headers: { cookie } })).json()) as {
+      apps: { id: string; verified: boolean }[];
+    };
+    expect(listed.apps).toEqual([
+      expect.objectContaining({ id: "https://claude.ai/oauth/claude-code-client-metadata", verified: true }),
+    ]);
+    const gone = await app.request(
+      `${ORIGIN}/v1/owner/connected-apps/${encodeURIComponent("https://claude.ai/oauth/claude-code-client-metadata")}`,
+      { method: "DELETE", headers: { cookie, origin: ORIGIN } },
+    );
+    expect(gone.status, await gone.clone().text()).toBe(200);
     const unknown = await app.request(
       `${ORIGIN}/oauth/authorize?${new URLSearchParams({ ...Object.fromEntries(params), client_id: "https://nobody.example/meta" })}`,
       { headers: { cookie } },
