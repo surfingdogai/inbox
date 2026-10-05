@@ -209,8 +209,14 @@ function NetworkLine({
           </div>
         )}
         {rules && <div className="hint">{rules}</div>}
-        {emails && <div className="hint">{emails}</div>}
-        {n.enabled && (
+        {n.enabled && n.level === "directory" && (
+          <div className="hint">
+            A directory: it lists your business and keeps your receipts, but gives customers no keys, so your inbox
+            never asks it for one.
+          </div>
+        )}
+        {emails && n.level !== "directory" && <div className="hint">{emails}</div>}
+        {n.enabled && n.level !== "directory" && (
           <div className="net-issue">
             <Switch checked={n.issue} onChange={onIssue} disabled={pending}>
               Give first-time customers a key

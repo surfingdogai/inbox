@@ -211,6 +211,7 @@ describe("Settings → Networks", () => {
     last_error_at: null,
     failing_since: null,
     rules: { version: null, next: null, next_at: null, v2: false, v6: false, checked_at: null },
+    level: "full",
     standing: null,
     ping_signature: null,
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },

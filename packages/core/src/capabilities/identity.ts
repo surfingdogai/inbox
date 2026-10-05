@@ -23,7 +23,7 @@ import {
 } from "../identity/types";
 import { ulid } from "../ids";
 import { autoHeaders, senderOf } from "../jobs/mail-log";
-import { mayReceiveEmails, verifiedNetworks } from "../network";
+import { directoryNetworks, mayReceiveEmails, verifiedNetworks } from "../network";
 import { secretHash } from "../protocol/credentials";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
@@ -583,8 +583,10 @@ function audienceOf(caller: Caller): PassAudience {
  */
 export async function issuingNetworks(db: Db, settings: Settings): Promise<string[]> {
   const verified = await verifiedNetworks(db);
+  // A network at the directory level gives customers no keys (protocol §10): it is never asked.
+  const directoryOnly = await directoryNetworks(db);
   return Object.entries(settings.networks)
-    .filter(([origin, n]) => n.enabled && n.issue && mayReceiveEmails(origin, verified))
+    .filter(([origin, n]) => n.enabled && n.issue && mayReceiveEmails(origin, verified) && !directoryOnly.has(origin))
     .map(([origin]) => origin)
     .sort();
 }

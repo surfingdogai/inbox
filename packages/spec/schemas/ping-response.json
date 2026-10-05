@@ -126,6 +126,7 @@
       }
     },
     "standing": {
+      "description": "The business's standing in the last nightly snapshot; absent from a directory-level network (§10), which keeps none.",
       "type": "object",
       "properties": {
         "score": {
@@ -181,5 +182,5 @@
       "required": ["listed", "delisted_at", "dormant_since"]
     }
   },
-  "required": ["ok", "rules", "next_rules", "reports", "contests", "standing"]
+  "required": ["ok", "rules", "next_rules", "reports", "contests"]
 }

@@ -306,6 +306,67 @@ export const rankingDocumentSchema = z.discriminatedUnion("version", [
 ]);
 export type RankingDocument = z.infer<typeof rankingDocumentSchema>;
 
+/* --- levels (protocol §10) ------------------------------------------------------------------ */
+
+/**
+ * What a network offers. `directory`: it lists businesses and keeps their receipts, and offers none
+ * of §5 (persons, passes, reports, contests, unlinks), which it answers `404`; `full`: all of it.
+ */
+export const networkLevelSchema = z.enum(["directory", "full"]);
+export type NetworkLevel = z.infer<typeof networkLevelSchema>;
+
+/**
+ * The receipt claims a network takes (§4.4, §6): `1`, the promises `confirmed` and `paid` as
+ * ADR-016 wrote them; `2`, every promise, acceptance and outcome (§6); `6`, also agreed changes and
+ * refunds (§6.1).
+ */
+export const receiptClaimsSchema = z.union([z.literal(1), z.literal(2), z.literal(6)]);
+export type ReceiptClaimsVersion = z.infer<typeof receiptClaimsSchema>;
+
+/** `protocol` in a rules document (§10): what the network offers, said outright. */
+export const networkProtocolSchema = z.object({
+  level: networkLevelSchema,
+  claims: receiptClaimsSchema,
+});
+export type NetworkProtocol = z.infer<typeof networkProtocolSchema>;
+
+/**
+ * The rules document of a network that publishes its own rules rather than ADR-017's (§10): the
+ * members every rules document has, and `protocol`. Its order is its own, said in `summary`; a
+ * version is announced in `next` before it takes effect, as §4.4 says. Unknown members are allowed.
+ */
+export const directoryRulesSchema = z.looseObject({
+  version: z.int().min(1),
+  status: z.enum(["announced", "in_force", "retired"]),
+  effective_at: timestampSchema,
+  summary: z.string().min(1).describe("How this network orders its directory, in plain words."),
+  next: nextRulesSchema.nullable(),
+  protocol: networkProtocolSchema,
+});
+export type DirectoryRules = z.infer<typeof directoryRulesSchema>;
+
+/**
+ * The claims a network that says nothing of them takes, from its rules version alone: how every
+ * network was read before levels existed (§4.4). The Surfing Dog network's versions 3 to 5 take
+ * claims 2, and from version 6 claims 6.
+ */
+export function claimsFromVersion(version: number): ReceiptClaimsVersion {
+  return version >= 6 ? 6 : version >= 3 ? 2 : 1;
+}
+
+/**
+ * What a rules document says the network offers, read leniently: its `protocol` when it has a good
+ * one; otherwise `full`, with the claims its version implies. Null when it is not a rules document.
+ */
+export function protocolOf(doc: unknown): NetworkProtocol | null {
+  const d = doc as { version?: unknown; protocol?: unknown } | null;
+  if (typeof d !== "object" || d === null) return null;
+  const said = networkProtocolSchema.safeParse(d.protocol);
+  if (said.success) return said.data;
+  if (typeof d.version !== "number" || !Number.isInteger(d.version) || d.version < 1) return null;
+  return { level: "full", claims: claimsFromVersion(d.version) };
+}
+
 /**
  * The rules a network applies now, and the next ones it has announced: what an inbox reads daily
  * to decide what to send (v2 receipts go to networks at version 3 or later, §2.5; agreed changes

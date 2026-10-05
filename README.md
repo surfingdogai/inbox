@@ -68,7 +68,9 @@ pnpm test              # every test, on Node and on Workers
 - `packages/spec`: the discovery manifest and receipt formats, with test vectors
 - `packages/sdk`: verify webhooks; sign requests and check receipts from a customer's agent
 - `packages/ui`: design tokens and components
+- `packages/network-check`: checks a network against the [network protocol](docs/protocol/network.md)
+- `examples/network`: a small network of your own, at the protocol's directory level
 
 ## Licence
 
-AGPL-3.0 for the server and the app. MIT for `packages/spec` and `packages/sdk`.
+AGPL-3.0 for the server and the app. MIT for `packages/spec`, `packages/sdk`, `packages/network-check` and `examples/network`.

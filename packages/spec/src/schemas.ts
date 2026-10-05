@@ -15,6 +15,7 @@ import {
   contestRequestSchema,
   delegationRequestSchema,
   delegationResponseSchema,
+  directoryRulesSchema,
   getBusinessInputSchema,
   getBusinessOutputSchema,
   instanceRegistrationRequestSchema,
@@ -139,6 +140,10 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   categories: { schema: categoriesResponseSchema, title: "GET /v1/categories" },
   business: { schema: listingDetailSchema, title: "GET /v1/businesses/{domain}" },
   ranking: { schema: rankingDocumentSchema, title: "GET /v1/ranking" },
+  "ranking-directory": {
+    schema: directoryRulesSchema,
+    title: "GET /v1/ranking, from a network that publishes its own rules (protocol §10)",
+  },
   "mcp-search-businesses-input": { schema: searchBusinessesInputSchema, title: "MCP search_businesses: arguments" },
   "mcp-search-businesses-output": {
     schema: searchBusinessesOutputSchema,

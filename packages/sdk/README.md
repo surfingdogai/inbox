@@ -182,6 +182,35 @@ const counter_signature = await signAck({ receipt: receipt.jws, receiptId: recei
 `not_yet`. Every helper here is checked against the protocol's published vectors
 (`packages/spec/vectors`), the same ones the inbox and the network are held to.
 
+## For a network
+
+A network checks that each call from an inbox is signed by that inbox (the
+[network protocol](https://github.com/surfingdogai/inbox/blob/main/docs/protocol/network.md), §3):
+
+```ts
+import { InstanceSignatureError, verifyInstanceRequest } from "@surfingdog/sdk";
+
+try {
+  const v = await verifyInstanceRequest({
+    method: request.method,
+    url: request.url,
+    headers: request.headers,
+    body: await request.text(),
+    authorities: ["network.example.org"],      // your own host, never the request's Host header
+    keysFor: async (domain) => keysFromTheManifestYouLastRead(domain), // null: not a member
+  });
+  // v.domain signed it. Keep v.replayKey until v.replayUntil and refuse it if it comes again.
+} catch (e) {
+  if (e instanceof InstanceSignatureError) return problem(401, e.code); // bad_signature, expired, unknown_instance
+  throw e;
+}
+```
+
+The other half, for an inbox or a test that plays one, is `signInstanceRequest`; and
+`signReceipt` with `generateReceiptKey` sign receipts the way an inbox does. The
+[example network](https://github.com/surfingdogai/inbox/tree/main/examples/network) is built on
+these.
+
 ## Documentation
 
 - Webhooks: <https://surfingdog.ai/docs/webhooks/>

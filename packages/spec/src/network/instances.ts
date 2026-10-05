@@ -159,7 +159,11 @@ export const signedPingResponseSchema = z.object({
   next_rules: nextRulesSchema.nullable().describe("Rules announced and not yet in force, or null."),
   reports: z.array(reportCaseSchema).max(200),
   contests: z.array(contestCaseSchema).max(200),
-  standing: businessStandingSchema,
+  standing: businessStandingSchema
+    .optional()
+    .describe(
+      "The business's standing in the last nightly snapshot; absent from a directory-level network (§10), which keeps none.",
+    ),
   listing: listingStateSchema.optional().describe("Whether the business is in the directory (A2.3–A2.4)."),
 });
 

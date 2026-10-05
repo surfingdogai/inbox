@@ -1,6 +1,6 @@
 {
   "name": "@surfingdog/sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Verify Surfing Dog Inbox webhooks and type their events; for a customer's agent, carry a person's pass, sign requests (sdi-agent/1, Web Bot Auth compatible), verify receipts and counter-sign them. WebCrypto only: no dependencies, runs unchanged on Node, Workers, Deno, Bun and in the browser.",

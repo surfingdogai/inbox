@@ -4,7 +4,9 @@
  * Two halves, both WebCrypto only:
  * - for a business's own systems: the webhook verifier and the event types (ADR-015);
  * - for a customer's agent (ADR-017 §8.4): hold a person's pass or key, sign requests
- *   (`sdi-agent/1`), delegate the agent's key at setup, verify receipts and counter-sign them.
+ *   (`sdi-agent/1`), delegate the agent's key at setup, verify receipts and counter-sign them;
+ * - for anyone building an inbox or a network (the network protocol): sign a call to a network
+ *   (`sdi-instance/1`) and check one, and issue receipts.
  *
  * The typed REST client will be generated from the OpenAPI document and land beside them.
  */
@@ -40,6 +42,24 @@ export {
 } from "./agent/receipts.js";
 export type { SignedRequest, SigningErrorCode, SignRequestInput } from "./agent/sign.js";
 export { contentDigest, MAX_WINDOW_SECONDS, SIGNATURE_LABEL, SigningError, signRequest } from "./agent/sign.js";
+export type {
+  InstancePublicJwk,
+  InstanceSignatureCode,
+  InstanceSigningKey,
+  SignedInstanceRequest,
+  SignInstanceInput,
+  VerifiedInstanceRequest,
+  VerifyInstanceInput,
+} from "./network/instance.js";
+export {
+  InstanceSignatureError,
+  instanceDomainOf,
+  isEd25519PublicJwk,
+  signInstanceRequest,
+  TAG_INSTANCE,
+  verifyInstanceRequest,
+} from "./network/instance.js";
+export { generateReceiptKey, signReceipt } from "./network/receipts.js";
 
 export type {
   EventMessage,
@@ -66,4 +86,4 @@ export {
   WebhookVerificationError,
 } from "./webhooks/verify.js";
 
-export const SDK_VERSION = "0.1.2";
+export const SDK_VERSION = "0.2.0";

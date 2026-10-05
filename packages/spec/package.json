@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, reviews — schemas and test vectors.",
+  "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, reviews \u2014 schemas and test vectors.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./vocab/*": "./vocab/*",
+    "./schemas/*": "./schemas/*",
+    "./vectors/*": "./vectors/*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

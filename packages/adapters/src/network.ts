@@ -355,15 +355,18 @@ const signedPingAnswerSchema = z.looseObject({
     .looseObject({ version: z.int().min(1), effective_at: z.string().optional() })
     .nullable()
     .optional(),
-  standing: z.looseObject({
-    score: z.number().min(0).max(1),
-    tier: z.enum(["new", "building", "trusted"]),
-    ranked: z.boolean().catch(false),
-  }),
+  // A directory-level network (§10) keeps no standing and sends none: the signature still verified.
+  standing: z
+    .looseObject({
+      score: z.number().min(0).max(1),
+      tier: z.enum(["new", "building", "trusted"]),
+      ranked: z.boolean().catch(false),
+    })
+    .optional(),
 });
 
 function signedPingAnswer(text: string): {
-  standing: { tier: "new" | "building" | "trusted"; score: number; ranked: boolean };
+  standing: { tier: "new" | "building" | "trusted"; score: number; ranked: boolean } | null;
   rules: { version: number; next: number | null; nextAt: number | null };
 } | null {
   let parsed: unknown;
@@ -375,9 +378,9 @@ function signedPingAnswer(text: string): {
   const doc = signedPingAnswerSchema.safeParse(parsed);
   if (!doc.success) return null;
   const at = doc.data.next_rules?.effective_at ? Date.parse(doc.data.next_rules.effective_at) : Number.NaN;
-  const { tier, score, ranked } = doc.data.standing;
+  const s = doc.data.standing;
   return {
-    standing: { tier, score, ranked },
+    standing: s ? { tier: s.tier, score: s.score, ranked: s.ranked } : null,
     rules: {
       version: doc.data.rules.version,
       next: doc.data.next_rules?.version ?? null,
@@ -729,6 +732,12 @@ function rulesNote(status: Awaited<ReturnType<typeof readNetworkStatus>>): strin
   return `; rules ${status.rulesVersion}${next}${takesV2(status) ? ", takes claims v2" : ""}${takesV6(status) ? ", takes rules 6" : ""}`;
 }
 
+/** `protocol` in a rules document (§10), as `@surfingdog/spec`'s `networkProtocolSchema` has it. */
+const networkProtocolSchema = z.object({
+  level: z.enum(["directory", "full"]),
+  claims: z.union([z.literal(1), z.literal(2), z.literal(6)]),
+});
+
 /**
  * The two numbers read from a ranking document, leniently: a version this inbox has never heard
  * of is still a version, so no other member is required.
@@ -744,11 +753,17 @@ const rankingVersionSchema = z.looseObject({
     .looseObject({ recognised_platforms: z.array(z.unknown()).max(1_000).catch([]) })
     .optional()
     .catch(undefined),
+  // What the network says it offers (§10). One that does not parse is as if it said nothing: full.
+  protocol: networkProtocolSchema.optional().catch(undefined),
 });
 
-function rulesFrom(
-  text: string,
-): { version: number; next: number | null; nextAt: number | null; platforms: string[] } | null {
+function rulesFrom(text: string): {
+  version: number;
+  next: number | null;
+  nextAt: number | null;
+  platforms: string[];
+  protocol: { level: "directory" | "full"; claims: number } | null;
+} | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -771,6 +786,7 @@ function rulesFrom(
     next: doc.data.next?.version ?? null,
     nextAt: Number.isFinite(at) ? at : null,
     platforms,
+    protocol: doc.data.protocol ?? null,
   };
 }
 

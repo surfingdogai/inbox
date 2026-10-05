@@ -52,7 +52,10 @@ const principles = [
 
 const visibility = [
   { k: "A business's record", v: "Public, in the directory, with the version of the rules it was scored under." },
-  { k: "A customer's record", v: "Not scored yet. Once it is, a business sees it only when the customer's agent shows it." },
+  {
+    k: "A customer's record",
+    v: "Not scored yet. Once it is, a business sees it only when the customer's agent shows it.",
+  },
 ];
 
 const shared = [
@@ -239,6 +242,13 @@ const shared = [
         <p>
           The protocol is open, and the reputation rules are published with it, so any network can rank the same way
           or its own way.
+        </p>
+        <p>
+          To start one, the
+          <a class="link" href="https://github.com/surfingdogai/inbox/tree/main/examples/network" rel="noopener">example network</a>
+          is Node and one SQLite file: it verifies inboxes, lists them and keeps their receipts.
+          <a class="link" href="https://github.com/surfingdogai/inbox/tree/main/packages/network-check" rel="noopener">network-check</a>
+          tells you whether yours follows the protocol before anyone joins it.
         </p>
         <p>
           An inbox can join several networks at once, in Settings → Networks: it reports to each, and shows your record

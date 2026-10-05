@@ -291,4 +291,12 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE UNIQUE INDEX IF NOT EXISTS `receipts_item_kind_outcome_offer` ON `receipts` (`item_id`,`kind`,`outcome`,`offer_id`);",
     ],
   },
+  {
+    version: 19,
+    name: "0018_network_levels",
+    statements: [
+      "-- Network levels (protocol §10): what a network says it offers in its rules' `protocol`, read daily\n-- with the rules. `level` is `directory` or `full`; `claims` the receipt claims it takes (1, 2 or 6).\n-- Both null for a network that says nothing, which is read as before: full, claims by rules version.\nALTER TABLE `network_status` ADD `level` text;",
+      "ALTER TABLE `network_status` ADD `claims` integer;",
+    ],
+  },
 ];

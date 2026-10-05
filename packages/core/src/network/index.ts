@@ -251,6 +251,10 @@ export interface NetworkStatusRow {
   readonly rulesNextVersion: number | null;
   readonly rulesNextAt: number | null;
   readonly rulesCheckedAt: number | null;
+  /** What its rules' `protocol` said (§10): null when they said nothing, which is `full`. */
+  readonly level: "directory" | "full" | null;
+  /** The receipt claims it said it takes (1, 2 or 6); null: from its rules version. */
+  readonly claims: number | null;
   /** The business's own standing there, as the network's answer to a signed ping last said it. */
   readonly standing: BusinessStanding | null;
   readonly standingAt: number | null;
@@ -281,7 +285,7 @@ export interface BusinessStanding {
 export type PingSignature = "verified" | "unsigned" | "ignored" | "refused" | `invalid: ${string}`;
 
 const STATUS_COLUMNS =
-  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at";
+  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims";
 
 export async function readNetworkStatus(db: Db, network: string): Promise<NetworkStatusRow | undefined> {
   const { rows } = await db.client.query({
@@ -294,6 +298,15 @@ export async function readNetworkStatus(db: Db, network: string): Promise<Networ
 }
 
 // ---- which networks get a customer's email address -----------------------------------------
+
+/** The networks whose rules say they offer only the directory (§10): no customer is ever asked for there. */
+export async function directoryNetworks(db: Db): Promise<Set<string>> {
+  const { rows } = await db.client.query({
+    sql: "SELECT network FROM network_status WHERE level = 'directory'",
+    method: "all",
+  });
+  return new Set(rows.map((r) => String(r[0])));
+}
 
 /**
  * The networks that have verified this inbox: they fetched its manifest and took its ping, so the
@@ -322,6 +335,14 @@ export function mayReceiveEmails(origin: string, verified: ReadonlySet<string>):
 /** The first rules version that scores receipt claims v2 (ADR-017 §2.5, §7.3). */
 export const V2_RULES_VERSION = 3;
 
+/**
+ * What decides which receipts a network takes: the claims it said it takes (§10) when it said, and
+ * otherwise its rules version, in force or announced.
+ */
+export type NetworkRulesView = Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion"> & {
+  readonly claims?: number | null;
+};
+
 /** Receipt kinds only claims v2 have: a network below `V2_RULES_VERSION` is sent none of them. */
 export const V2_ONLY_KINDS: readonly string[] = ["accepted", "outcome"];
 
@@ -332,7 +353,8 @@ export const V2_ONLY_KINDS: readonly string[] = ["accepted", "outcome"];
  * every promise made during the notice without its outcome. Unknown (never asked, or it never
  * answered) is no: such a network gets v1 promises, as every network always has.
  */
-export function takesV2(status: Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion"> | undefined): boolean {
+export function takesV2(status: NetworkRulesView | undefined): boolean {
+  if (status?.claims != null) return status.claims >= 2;
   return Math.max(status?.rulesVersion ?? 0, status?.rulesNextVersion ?? 0) >= V2_RULES_VERSION;
 }
 
@@ -347,7 +369,8 @@ export const V6_RULES_VERSION = 6;
  * is sent claims v2: its rules in force, or the ones it has announced, are version 6 or later. A
  * network stores what announced rules add from the day it announces them (§11).
  */
-export function takesV6(status: Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion"> | undefined): boolean {
+export function takesV6(status: NetworkRulesView | undefined): boolean {
+  if (status?.claims != null) return status.claims >= 6;
   return Math.max(status?.rulesVersion ?? 0, status?.rulesNextVersion ?? 0) >= V6_RULES_VERSION;
 }
 
@@ -357,7 +380,11 @@ export function takesV6(status: Pick<NetworkStatusRow, "rulesVersion" | "rulesNe
  * holds, and send it a promise that moved: under version 5 it would hold the business to the date
  * first agreed and count a booking moved later as a promise never closed (R30).
  */
-export function appliesV6(status: Pick<NetworkStatusRow, "rulesVersion"> | undefined): boolean {
+export function appliesV6(
+  status: (Pick<NetworkStatusRow, "rulesVersion"> & { readonly claims?: number | null }) | undefined,
+): boolean {
+  // A network that says it takes claims 6 applies them now: its own rules say so outright.
+  if (status?.claims != null) return status.claims >= 6;
   return (status?.rulesVersion ?? 0) >= V6_RULES_VERSION;
 }
 
@@ -371,16 +398,13 @@ export const RECEIPT_V6_ONLY_SQL = (alias: string): string =>
   `(${alias}.kind = 'amended' OR json_extract(${alias}.payload, '$.typ') = 'refund')`;
 
 /** The rules each of these networks applies and has announced, as their status rows last said. */
-export async function networkRulesOf(
-  db: Db,
-  networks: readonly string[],
-): Promise<Map<string, Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion">>> {
-  const out = new Map<string, Pick<NetworkStatusRow, "rulesVersion" | "rulesNextVersion">>();
+export async function networkRulesOf(db: Db, networks: readonly string[]): Promise<Map<string, NetworkRulesView>> {
+  const out = new Map<string, NetworkRulesView>();
   const unique = [...new Set(networks)];
   for (let i = 0; i < unique.length; i += 90) {
     const chunk = unique.slice(i, i + 90);
     const { rows } = await db.client.query({
-      sql: `SELECT network, rules_version, rules_next_version FROM network_status WHERE network IN (${chunk.map(() => "?").join(", ")})`,
+      sql: `SELECT network, rules_version, rules_next_version, claims FROM network_status WHERE network IN (${chunk.map(() => "?").join(", ")})`,
       params: chunk,
       method: "all",
     });
@@ -388,6 +412,7 @@ export async function networkRulesOf(
       out.set(String(r[0]), {
         rulesVersion: r[1] === null ? null : Number(r[1]),
         rulesNextVersion: r[2] === null ? null : Number(r[2]),
+        claims: r[3] === null || r[3] === undefined ? null : Number(r[3]),
       });
     }
   }
@@ -403,7 +428,16 @@ export async function networkRulesOf(
 export function networkRulesStatement(
   network: string,
   now: number,
-  rules: { version: number; next: number | null; nextAt: number | null } | null,
+  rules: {
+    version: number;
+    next: number | null;
+    nextAt: number | null;
+    /**
+     * What the rules document said in `protocol` (§10): null when it said nothing (so `full`, claims
+     * from the version). Absent — a ping's answer, which carries no protocol — leaves what was stored.
+     */
+    protocol?: { level: "directory" | "full"; claims: number } | null;
+  } | null,
   checkedAt: number = now,
   platforms?: readonly string[],
 ): Statement {
@@ -418,15 +452,30 @@ export function networkRulesStatement(
     };
   }
   if (platforms !== undefined) {
+    // The whole document was read, so what it says of its level (or that it says nothing) is stored.
+    const level = rules.protocol?.level ?? null;
+    const claims = rules.protocol?.claims ?? null;
     return {
       sql: `INSERT INTO network_status (network, registration, rules_version, rules_next_version, rules_next_at, rules_checked_at,
-              recognised_platforms, platforms_checked_at, failures, updated_at)
-            VALUES (?, 'unregistered', ?, ?, ?, ?, ?, ?, 0, ?)
+              recognised_platforms, platforms_checked_at, level, claims, failures, updated_at)
+            VALUES (?, 'unregistered', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             ON CONFLICT (network) DO UPDATE SET
               rules_version = excluded.rules_version, rules_next_version = excluded.rules_next_version,
               rules_next_at = excluded.rules_next_at, rules_checked_at = excluded.rules_checked_at,
-              recognised_platforms = excluded.recognised_platforms, platforms_checked_at = excluded.platforms_checked_at`,
-      params: [network, rules.version, rules.next, rules.nextAt, checkedAt, JSON.stringify(platforms), checkedAt, now],
+              recognised_platforms = excluded.recognised_platforms, platforms_checked_at = excluded.platforms_checked_at,
+              level = excluded.level, claims = excluded.claims`,
+      params: [
+        network,
+        rules.version,
+        rules.next,
+        rules.nextAt,
+        checkedAt,
+        JSON.stringify(platforms),
+        checkedAt,
+        level,
+        claims,
+        now,
+      ],
       method: "run",
     };
   }
@@ -554,6 +603,8 @@ function statusOf(r: readonly unknown[]): NetworkStatusRow {
     pingSignature: r[13] === null || r[13] === undefined ? null : String(r[13]),
     recognisedPlatforms: platformsOf(r[14]),
     platformsCheckedAt: n(r[15]),
+    level: r[16] === "directory" || r[16] === "full" ? r[16] : null,
+    claims: n(r[17]),
   };
 }
 
@@ -595,6 +646,11 @@ export interface NetworkView {
     readonly v6: boolean;
     readonly checked_at: string | null;
   };
+  /**
+   * What the network offers (protocol §10): `full`, or `directory` — it lists the business and keeps
+   * its receipts, but gives customers no keys, so none of them is asked for there.
+   */
+  readonly level: "directory" | "full";
   /**
    * The business's own standing at the network (ADR-017 §7.3), as its answer to the last signed
    * ping said it, and when: null until a signed ping has been answered.
@@ -682,6 +738,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
         v6: takesV6(s),
         checked_at: iso(s?.rulesCheckedAt ?? null),
       },
+      level: s?.level ?? "full",
       standing:
         s?.standing && s.standingAt !== null ? { ...s.standing, at: new Date(s.standingAt).toISOString() } : null,
       ping_signature: s?.pingSignature ?? null,

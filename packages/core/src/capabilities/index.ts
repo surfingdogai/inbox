@@ -18,7 +18,7 @@ export {
 } from "./customers";
 export * from "./feeds";
 export * from "./front";
-export { type CustomerView, customerSummary, type PersonView } from "./identity";
+export { type CustomerView, customerSummary, issuingNetworks, type PersonView } from "./identity";
 export * from "./service";
 export * from "./setup";
 export * from "./setup-types";

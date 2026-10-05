@@ -646,6 +646,13 @@ export const networkStatus = sqliteTable("network_status", {
   rulesNextAt: integer("rules_next_at"),
   /** When `/v1/ranking` was last asked, answered or not; asked again a day later. */
   rulesCheckedAt: integer("rules_checked_at"),
+  /**
+   * What the network says it offers in its rules' `protocol` (protocol §10): `directory` or `full`,
+   * and the receipt claims it takes (1, 2 or 6). Null when it says nothing: then it is `full`, and
+   * the claims follow its rules version, as for every network before levels existed.
+   */
+  level: text("level"),
+  claims: integer("claims"),
   /** The business's own standing there, as its answer to a signed ping last said (JSON), and when. */
   standing: text("standing"),
   standingAt: integer("standing_at"),

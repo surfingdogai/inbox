@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@surfingdog/sdk": ["../../packages/sdk/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

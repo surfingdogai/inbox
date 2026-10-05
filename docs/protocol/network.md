@@ -9,6 +9,12 @@ It restates [ADR-017](../adr/017-reputation-and-ranking.md) §2–§7 as a proto
 reputation and order (what counts, the formula, tiers) are in the ADR and, machine-readable, at a
 network's own `GET /v1/ranking`. When this text and the vectors disagree, **the vectors decide**.
 
+A network need not do all of it. At the **directory** level (§10) it lists businesses and keeps
+their receipts, eight calls, and orders its directory by rules of its own; at the **full** level it
+also gives customers keys and passes, scores, and hears reports and contests. Its rules say which.
+[`examples/network`](../../examples/network/) is a small directory-level network, and
+[`packages/network-check`](../../packages/network-check/) tests any network against either level.
+
 | What | Where |
 |---|---|
 | Schemas (Zod, MIT) | [`packages/spec/src/network/`](../../packages/spec/src/network/) |
@@ -22,6 +28,7 @@ network's own `GET /v1/ranking`. When this text and the vectors disagree, **the 
 | Order, shuffle, cursors | [`vectors/ordering.json`](../../packages/spec/vectors/ordering.json) |
 | What a network keeps from a profile | [`vectors/profile.json`](../../packages/spec/vectors/profile.json) |
 | What an assistant reads from the tools | [`vectors/mcp.json`](../../packages/spec/vectors/mcp.json) |
+| A directory-level network's rules | [`schemas/ranking-directory.json`](../../packages/spec/schemas/ranking-directory.json) (§10) |
 | The categories list | [`vocab/categories.json`](../../packages/spec/vocab/categories.json) |
 
 ## 1. Conventions
@@ -353,7 +360,9 @@ Amendment 3) adds `amendments` and `refunds` (§6.1) and takes effect the same w
 a network scores no customer (§5.2), every version from 3 that it serves also carries
 `customer_scoring`, a sentence saying so.
 
-An inbox reads it daily: it sends every receipt (§6) to a network whose rules, in force or
+A network that publishes rules of its own (any network but one following ADR-017) says what it
+offers in `protocol` (§10), and that decides what it is sent, whatever its version. For the rest:
+an inbox reads it daily: it sends every receipt (§6) to a network whose rules, in force or
 announced in `next`, are version 3 or later. To the others it sends only the promises v1 already
 knew, `confirmed` and `paid`, whose v1 claims are unchanged (a v1 reader ignores the members it
 does not know); acceptances and outcomes wait for the network to move to version 3. What version 6
@@ -748,6 +757,7 @@ the refund machine.
   returns, and says plainly when a network set the business aside and why.
 - Asks for a person (`/v1/persons`) only on a customer's first booking or order that carries an
   email and no pass or key; nothing about the booking waits on it. It caches a `409` for 24 hours.
+  It never asks a directory-level network (§10), nor sends one an unlink.
 - Presents what an agent carries (`/v1/presentations`) with a 3-second limit, in parallel across
   networks, and never refuses a customer because a network is slow or down.
 - Keeps what a network answered only by hash: a pass's presentation for an hour (or a shorter
@@ -794,3 +804,75 @@ the inbox asks each network only about its own. No network ever sees another's s
 
 An inbox also answers its own callers with `409 nothing_to_verify`, `409 already_verified` and
 `422 positive_only` (ADR-017 §8).
+
+## 10. Levels
+
+A network offers one of two levels, and says which in its rules (`GET /v1/ranking`, §4.4) as
+`protocol`:
+
+```json
+"protocol": { "level": "directory", "claims": 2 }
+```
+
+- `level`: `"directory"` or `"full"`.
+- `claims`: the receipt claims it takes. `1` is the promises `confirmed` and `paid` as ADR-016 wrote
+  them; `2` is every promise, acceptance and outcome (§6); `6` adds agreed changes and refunds
+  (§6.1). An inbox sends it those, whatever the rules' version, and treats `6` as in force.
+
+A rules document without `protocol` is read as `full`, with its claims from its version: `6` from
+version 6, `2` from version 3, otherwise `1`. That is how every network published before levels
+existed is read, the Surfing Dog network among them.
+
+### 10.1 The directory level
+
+A directory-level network answers these, as this document says:
+
+| Call | Section |
+|---|---|
+| `POST /v1/instances` | §4.1 |
+| `GET /v1/instances/{domain}/status` | §4.1 |
+| `POST /v1/instances/{domain}/ping` | §4.1 |
+| `POST /v1/instances/{domain}/listing` | §4.5 |
+| `POST /v1/receipts` | §4.2 |
+| `GET /v1/businesses` | §4.3 |
+| `GET /v1/businesses/{domain}` | §4.3 |
+| `GET /v1/ranking` | §4.4, and below |
+
+and should answer `GET /v1/categories` (§4.3), `POST /mcp`, `GET /openapi.json` and `GET /llms.txt`
+(§4.7), so assistants can search it. Every other call of §4 and §5 is `404 not_found`. An inbox never
+makes them to a directory-level network: it asks it for no person, presents it no pass and sends it
+no unlink. Its answer to a signed ping is `200` with `ok`, `rules`, `next_rules`, `listing` and
+empty `reports` and `contests`, and no `standing`, since it keeps none.
+
+What it still does, as the full level does:
+
+- verifies a business by fetching its manifest (§4.1), and checks every sdi-instance/1 signature
+  (§3) on a listing change and on a signed ping, refusing a replayed one;
+- verifies every receipt against the issuer's manifest and keeps it (§4.2), with the answers and
+  codes §4.2 lists, for the claims it said it takes;
+- keeps the profile field by field (§4.6) and returns listings in the shape of §4.3. A listing
+  carries `receipts`, `answering` and `not_answering_since`; it leaves out `reputation`,
+  `rank_pos` and `rank_shuffle`, which belong to ADR-017's order.
+
+It orders its directory by rules of its own, so a trade body, a city or a marketplace can run one
+without adopting ADR-017. Its rules document needs only `version`, `status`, `effective_at`,
+`summary` (how it orders, in plain words), `next` and `protocol`
+([`schemas/ranking-directory.json`](../../packages/spec/schemas/ranking-directory.json)); `next`
+announces a change before it takes effect, as §4.4 says. Filters on `GET /v1/businesses` are a
+should: one it does not support it ignores, and `limit` and `cursor` it must honour.
+
+### 10.2 Checking a network
+
+`packages/network-check` runs against any network's origin:
+
+```
+npx tsx packages/network-check/src/cli.ts https://network.example.org
+```
+
+By default it only reads, and sends requests a correct network refuses without storing anything:
+unsigned and wrongly signed calls, a forged receipt, a listing change for nobody. With `--flow` it
+also plays an inbox from start to finish: it serves a manifest, registers, pings signed, lists and
+delists itself, and publishes receipts. A network has to be able to fetch that manifest, so `--flow`
+is for a network running in a test mode that reads manifests from a URL it is given (the example
+network's `NETWORK_TEST_MANIFESTS`), never for one in production.
+

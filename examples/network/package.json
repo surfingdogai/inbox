@@ -1,0 +1,31 @@
+{
+  "name": "@surfingdog/example-network",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "A small network at the directory level of the Surfing Dog network protocol: it verifies inboxes, keeps their receipts and lists them. Node and SQLite, nothing else to run.",
+  "exports": {
+    ".": "./src/app.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": "^22.16 || ^24 || >=26"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@surfingdog/sdk": "workspace:*",
+    "@surfingdog/spec": "workspace:*",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "^4.20.6",
+    "typescript": "catalog:"
+  }
+}

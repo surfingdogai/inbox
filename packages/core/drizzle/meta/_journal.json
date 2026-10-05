@@ -127,6 +127,13 @@
       "when": 1791300000000,
       "tag": "0017_amended_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791400000000,
+      "tag": "0018_network_levels",
+      "breakpoints": true
     }
   ]
 }
