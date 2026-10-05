@@ -31,28 +31,28 @@ const steps = [
   },
   {
     title: "Build a record",
-    text: "When a booking is confirmed or an order is paid, your inbox makes a receipt: a signed note of that promise. Each one goes to the network and is counted on your listing. Reputation will be built on them.",
+    text: "When a booking is confirmed or an order is paid, your inbox makes a receipt: a signed note of that promise. Each one goes to the network and is counted on your listing. Your record is built from them.",
   },
 ];
 
 const principles = [
   {
     title: "For businesses",
-    text: "A promise will count when it's kept (the booking happened, the order arrived), and a broken one will count too. Businesses will be ranked by how reliably they keep them. A small shop that always delivers can rank above a big one that sometimes doesn't.",
+    text: "A promise counts when it closes: the booking happened, the order arrived, or it didn't. Your inbox reports each outcome for you, signed. Businesses are ranked by how reliably they keep their promises, estimated cautiously, so a small shop that always delivers can rank above a big one that sometimes doesn't.",
   },
   {
     title: "For customers",
-    text: "Each person will have one reputation, and it goes with them whichever agent they use. No sign-up: the first time they book, the inbox will get their key (a secret that proves it's them) from the network and pass it to their agent. Each business will reward good customers its own way, like instant confirmation or no deposit.",
+    text: "Each person will have one record, and it goes with them whichever agent they use. No sign-up: the first time they book, the inbox gets their key (a secret that proves it's them) from the network and passes it to their agent. Keys are issued today, but scoring is paused until its privacy safeguards are finished, so nobody has a record yet. Then each business will reward good customers its own way, like instant confirmation or no deposit.",
   },
   {
     title: "Both ways",
-    text: "A good customer's word will count more when judging a business. A good business's word will count more when judging a customer. Recent months will weigh most, and nothing will ever be forgotten.",
+    text: "What a verified customer's agent signs already counts more than a business's own word. Recent months weigh most, and nothing is ever forgotten. Once customer records start, a good customer's word will count more when judging a business, and a good business's when judging a customer.",
   },
 ];
 
 const visibility = [
-  { k: "A business's reputation", v: "Public, in the directory." },
-  { k: "A customer's reputation", v: "Seen by a business only when the customer's agent shows it." },
+  { k: "A business's record", v: "Public, in the directory, with the version of the rules it was scored under." },
+  { k: "A customer's record", v: "Not scored yet. Once it is, a business sees it only when the customer's agent shows it." },
 ];
 
 const shared = [
@@ -131,9 +131,12 @@ const shared = [
         <div>
           <p class="eyebrow">Reputation</p>
           <h2 class="h-section" id="reputation-h">Earned by keeping promises</h2>
-          <p class="lede">We're building it now. This is how it will work.</p>
+          <p class="lede">
+            In force for businesses since 29 September 2026. Customer records are paused until their privacy safeguards
+            are finished.
+          </p>
         </div>
-        <span class="pill">Being built</span>
+        <span class="pill">Live for businesses</span>
       </div>
 
       <ul class="grid-cards cards three" data-reveal="stagger">
@@ -147,7 +150,7 @@ const shared = [
         }
       </ul>
 
-      <dl class="glass spec" aria-label="Who will see reputation">
+      <dl class="glass spec" aria-label="Who sees a record">
         {
           visibility.map((n) => (
             <div class="row-spec">
@@ -164,15 +167,15 @@ const shared = [
           Not now, and not later.
         </p>
         <p class="card-text">
-          <b>The rules are in force since 23 September 2026.</b> Businesses whose inbox is online come first. Among
-          them, those with a good record of kept promises are ranked by it, and the rest are shuffled once a day.
-          Near a place, the same order applies inside the distance the agent asks for. Records will count once
-          inboxes report kept and broken promises, and we're still building that.
+          <b>The rules in force are version 6, since 29 September 2026.</b> Businesses whose inbox is online come first.
+          Among them, those with a good record of kept promises are ranked by it, and the rest are shuffled once a day.
+          Near a place, the same order applies inside the distance the agent asks for. Inboxes report kept and broken
+          promises as they close, and the network scores every record each night.
           <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md" rel="noopener">Read the full rules</a>.
         </p>
         <p class="card-text">
-          Every rule will be published on this page and at network.surfingdog.ai/v1/ranking, with a version number,
-          before it counts.
+          Every rule is published on this page and at network.surfingdog.ai/v1/ranking, with a version number, before
+          it counts.
         </p>
         <p class="more">
           <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">Today's rules, as agents read them</a>
@@ -234,12 +237,12 @@ const shared = [
           first one.
         </p>
         <p>
-          The protocol is open, and the reputation rules will be published with it, so any network can rank the same
-          way or its own way.
+          The protocol is open, and the reputation rules are published with it, so any network can rank the same way
+          or its own way.
         </p>
         <p>
-          Soon an inbox will join several networks at once: it will report to each, and show what each one says about a
-          customer.
+          An inbox can join several networks at once, in Settings → Networks: it reports to each, and shows your record
+          at each one.
         </p>
       </div>
 

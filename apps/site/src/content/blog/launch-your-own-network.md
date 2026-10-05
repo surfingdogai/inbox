@@ -27,7 +27,7 @@ The bakery's customers never see any of this. They ask their assistant for a loa
 
 You decide who you list and in what order. You can copy ours or write your own.
 
-[Our rules](/network/) put businesses whose inbox is online first. Among them, those with a good record of kept promises are ranked by it, and the rest are shuffled once a day. Nobody can buy a place. These rules have been in force since 23 September 2026, and agents can read them at [network.surfingdog.ai/v1/ranking](https://network.surfingdog.ai/v1/ranking). A record will only start to count once inboxes report kept and broken promises, and we're still building that part on the inbox side.
+[Our rules](/network/) put businesses whose inbox is online first. Among them, those with a good record of kept promises are ranked by it, and the rest are shuffled once a day. Nobody can buy a place. These rules have been in force since 23 September 2026, and agents can read them at [network.surfingdog.ai/v1/ranking](https://network.surfingdog.ai/v1/ranking). Inboxes report kept and broken promises as they close, and the network scores each record every night.
 
 A trade body might list only members who passed its checks. A council might list only businesses inside its borders. You can weigh things differently from us too. Just publish your rules, at `/v1/ranking` where agents look and on a page a person can read. Say what counts and what doesn't. Once other businesses are listed with us, we'll announce every change to our rules 15 days ahead. I'd ask you to give the same notice.
 
