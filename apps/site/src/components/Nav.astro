@@ -2,34 +2,52 @@
 import Mark from "./Mark.astro";
 
 /**
- * The main navigation is about the business. Docs and GitHub are developer material,
- * so they sit at the end of the menu rather than in the bar.
+ * The bar is about the network: where to search, how a business gets in, how an agent reaches it,
+ * the inbox, and the rules. The rest of the map sits in the menu, with developer material last.
+ * `match` is the page a link belongs to when its own href points at an anchor.
  */
-const links = [
-  { href: "/try/", label: "Try it" },
-  { href: "/how-it-works/", label: "How it works" },
-  { href: "/assistants/", label: "Assistants" },
-  { href: "/network/", label: "Network" },
-  { href: "/requests/", label: "Requests" },
+interface Link {
+  href: string;
+  label: string;
+  match?: string;
+  external?: boolean;
+}
+
+const links: Link[] = [
+  { href: "/directory/", label: "Directory" },
+  { href: "/#businesses", label: "For businesses" },
+  { href: "/#agents", label: "For agents" },
+  { href: "/inbox/", label: "Inbox" },
+  { href: "/network/#ranking", label: "Rules", match: "/network/" },
   { href: "/blog/", label: "Blog" },
-  { href: "/technical/", label: "Technical" },
+];
+
+const extras: Link[] = [
+  { href: "/how-it-works/", label: "How it works" },
+  { href: "/try/", label: "Try it" },
+  { href: "/assistants/", label: "Assistants" },
+  { href: "/requests/", label: "Requests" },
   { href: "/sponsors/", label: "Sponsors" },
 ];
 
-const more = [
+const more: Link[] = [
   { href: "/docs/", label: "Docs" },
+  { href: "/technical/", label: "Technical" },
   { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
 ];
 
 const trim = (path: string) => path.replace(/\/+$/, "") || "/";
 const here = trim(Astro.url.pathname);
-/** A blog post is still the blog, so a section matches its children too. */
-const current = (href: string) => {
-  const target = trim(href);
+/** A blog post is still the blog, so a section matches its children too. A link to an anchor on
+ *  the home page is never "current": the home page is the brand, not a section. */
+const current = (l: Link) => {
+  if (l.external) return false;
+  const target = trim(l.match ?? l.href);
+  if (target.includes("#")) return false;
   return here === target || here.startsWith(`${target}/`);
 };
 /** Shown beside the wordmark once the link strip has folded into the menu. */
-const section = links.find((l) => current(l.href))?.label ?? "";
+const section = [...links, ...extras, ...more].find((l) => current(l))?.label ?? "";
 ---
 
 <div id="nav-top" aria-hidden="true"></div>
@@ -57,7 +75,7 @@ const section = links.find((l) => current(l.href))?.label ?? "";
         {
           links.map((l) => (
             <li>
-              <a href={l.href} aria-current={current(l.href) ? "page" : undefined}>
+              <a href={l.href} aria-current={current(l) ? "page" : undefined}>
                 <span class="lbl">{l.label}</span>
               </a>
             </li>
@@ -75,9 +93,9 @@ const section = links.find((l) => current(l.href))?.label ?? "";
             <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"></path>
           </svg>
         </button>
-        <a class="btn btn-primary btn-sm cta" href="/#run">
-          <span class="cta-long">Get your inbox</span>
-          <span class="cta-short">Get it</span>
+        <a class="btn btn-primary btn-sm cta" href="/#businesses">
+          <span class="cta-long">Get listed</span>
+          <span class="cta-short">Get listed</span>
         </a>
         <button
           class="menu"
@@ -98,7 +116,18 @@ const section = links.find((l) => current(l.href))?.label ?? "";
           {
             links.map((l) => (
               <li>
-                <a href={l.href} aria-current={current(l.href) ? "page" : undefined}>
+                <a href={l.href} aria-current={current(l) ? "page" : undefined}>
+                  <span class="tick" aria-hidden="true" />
+                  {l.label}
+                </a>
+              </li>
+            ))
+          }
+          <li class="rule" role="presentation"></li>
+          {
+            extras.map((l) => (
+              <li>
+                <a href={l.href} aria-current={current(l) ? "page" : undefined}>
                   <span class="tick" aria-hidden="true" />
                   {l.label}
                 </a>
@@ -112,7 +141,7 @@ const section = links.find((l) => current(l.href))?.label ?? "";
                 <a
                   href={l.href}
                   rel={l.external ? "noopener" : undefined}
-                  aria-current={!l.external && current(l.href) ? "page" : undefined}
+                  aria-current={current(l) ? "page" : undefined}
                 >
                   <span class="tick" aria-hidden="true" />
                   {l.label}
@@ -418,6 +447,10 @@ const section = links.find((l) => current(l.href))?.label ?? "";
     left: 24px;
     margin-top: 8px;
     padding: 6px;
+    /* Fourteen entries outgrow a short phone; the sheet scrolls inside itself. */
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border-radius: var(--radius-panel);
     /* A menu covers the page, so it owns its area: the card veil is for a card
        sitting in the page, and through it the headline behind stayed readable. */
