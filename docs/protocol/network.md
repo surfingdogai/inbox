@@ -1,5 +1,7 @@
 # The network protocol
 
+Protocol 0.2 (October 2026). Everything in 0.2 is additive: a 0.1 network and a 0.1 inbox keep working.
+
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
 can run one (ADR-017, R24), and an inbox can use several at once. This document is everything a
@@ -30,6 +32,10 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | What an assistant reads from the tools | [`vectors/mcp.json`](../../packages/spec/vectors/mcp.json) |
 | A directory-level network's rules | [`schemas/ranking-directory.json`](../../packages/spec/schemas/ranking-directory.json) (§10) |
 | The categories list | [`vocab/categories.json`](../../packages/spec/vocab/categories.json) |
+| Door types, and what is never a door | [`vocab/doors.json`](../../packages/spec/vocab/doors.json) (§4.8) |
+| Attributes a listing may carry | [`vocab/attributes.json`](../../packages/spec/vocab/attributes.json) (§4.10) |
+| Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
+| A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
 
 ## 1. Conventions
 
@@ -201,7 +207,9 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `POST /v1/receipts` | the JWS itself | `{receipt, ack?}` → `{ok, state, duplicate}` | `receipts-*`, `receipt-*` |
 | `GET /v1/businesses` | none | query → `{businesses, next_cursor}` | `businesses` |
 | `GET /v1/businesses/{domain}` | none | → listing + `outcomes` | `business` |
-| `GET /v1/categories` | none | → `{version, categories: [{slug, labels}]}` | `categories` |
+| `GET /v1/categories` | none | `?group=` → `{version, categories: [{slug, labels}], place_categories?, taxonomy?}` | `categories` |
+| `GET /c/{id}` (0.2, SHOULD) | none | → one place category | `place-category` |
+| `GET /v1/attributes` (0.2, SHOULD) | none | → `{version, keys, payments}` | `attributes` |
 | `GET /v1/ranking` | none | `?version=N` → the rules | `ranking` |
 | `POST /mcp` | none | one JSON-RPC message → its answer (§4.7) | `mcp-*` |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
@@ -236,8 +244,9 @@ manifest_url, message}` and queues verification: the network fetches
 `surfingdog-inbox/` and `instance` equal to `https://<domain>` (port 443, no path). It keeps the
 manifest's `profile` (checked field by field, §4.6), `item_types`, `protocols` (a door only as an
 `https` address written as RFC 3986 writes a URI, on a host name, never an IP address or a name a
-URL parser reads as one, and with no user; or as a `mailto` address; either with no space, control
-character or hidden character in it: a listing holds only the doors a card may hand on, §4.7) and
+URL parser reads as one, and with no user, and with no space, control character or hidden character
+in it: a listing holds only the doors a card may hand on, §4.7. From protocol 0.2 a network keeps no
+`mailto` address, or any other human channel, among them: those are never doors, §4.8) and
 `receipt_keys`,
 and fetches it again every six hours (weekly, once it has failed for 30 days, for as long as the
 business is a member), and at once when a signed ping says it changed (below). A business
@@ -344,6 +353,33 @@ with `open_now=true`, a few minutes otherwise) may be that old, and `hours` has 
 `GET /v1/categories` is the categories list, `{version, categories: [{slug, labels: {en, pt}}]}`,
 the same for a day; the full list, with synonyms, is `vocab/categories.json`.
 
+**Protocol 0.2.** A listing may carry what §4.10 lists: `source`, `claimed`, `proof`, `level`,
+`has_inbox`, `doors`, `requestable`, `accepts`, `category`, `attributes`, `place`, `why` and `found`,
+each optional. A network lists entries that are not members (§4.11), so `manifest_url` and
+`verified_at` are optional; a member's listing always has both. The detail of such an entry adds
+`facts` (§4.10) and has `outcomes: {}`, `receipts: {issued: 0, acknowledged: 0}`, `answering: false`,
+`online: false` and `not_answering_since: null`. `GET /v1/businesses` takes more filters, and every one
+of them only leaves businesses out:
+
+| Parameter | Keeps |
+|---|---|
+| `attributes` | comma-separated keys of `GET /v1/attributes`, or `key=value` for one with values, at most 10: all hold |
+| `country` | ISO 3166-1 alpha-2: a business located there, serving it, or shipping there |
+| `price_band` | `2`, or a range `1-2`: its price band, 1 the cheapest, 4 the dearest |
+| `accepts` | comma-separated kinds (`ask`, `quote`, `book`, `order`, `pay`) and payment tokens, at most 8: its live doors take every kind and it accepts every payment |
+| `requestable` | `ask` or `quote`: a live door that declared that kind |
+| `door_type` | comma-separated door types (§4.8), `platform` for any platform, at most 5: a live door of any of them |
+| `level` | at that level or above (§4.9); `orderable` is `bookable`; below `askable` nothing is listed yet |
+| `has_inbox` | `true`: with an inbox door; `false`: without one |
+| `source` | comma-separated `member`, `registered`, `found`: any of them |
+| `order` | `rank`, the published order (the default), or `nearest`, by distance, which needs `near` |
+
+From rules version 7, `category` also takes a place category id (§4.10) and keeps every category
+below it; a category the network does not know is `400 category_unresolved`, whose problem names up to
+5 `candidates`. A version 7 page is at most 1000 places deep; past that is `400 page_too_deep`.
+`GET /v1/categories?group=<slug>` adds `place_categories: [{id, label, parent}]` (that group's place
+categories, `parent` null at the taxonomy's top) and `taxonomy: {name, release, licence, url}`.
+
 ### 4.4 The rules
 
 `GET /v1/ranking` is the version in force; `?version=N` any version ever published, for ever
@@ -359,6 +395,25 @@ the moment it publishes it when no more than one business is a member of it then
 Amendment 3) adds `amendments` and `refunds` (§6.1) and takes effect the same way. While
 a network scores no customer (§5.2), every version from 3 that it serves also carries
 `customer_scoring`, a sentence saying so.
+
+Version 7 (network rules 0.2.0, protocol 0.2) keeps every member of version 6 and lists agent-ready
+businesses with their doors. Its `order` adds `rule`, `bands`, `reach`, `within_reach`, `newcomers`,
+`one_place`, `nearest`, `found_tier`, `sources` and a `filters` every version 7 has. In short: every
+filter narrows the list and never reorders it; among the businesses left, those whose name,
+categories or services match the words or the category asked for come before those that match in
+their description alone; then comes reach, an inbox that answers (ours or any compatible inbox), then
+other live agent doors by level (payable, then bookable or orderable, then askable), then the rest;
+within each, kept promises (a score of 0.40 or more) and the daily shuffle as before; every 5th place
+goes to an answering newcomer; a business has one place. Until version 7 takes effect, entries the
+network found and businesses registered without an inbox appear in a separate tier after every
+member, so no member's position changes. Version 7 is always announced 15 days ahead, whatever the
+number of members. The schema is `ranking`; `vectors/ordering-v7.json` holds the order, the
+newcomers' places and pages.
+
+**A reader accepts a version newer than it knows.** It reads `version`, `status`, `effective_at`,
+`summary` and `next`, which every version has, ignores the rest, and takes the receipt claims as
+`claimsFromVersion` says (`6` from version 6 on). `readRankingDocument` in `@surfingdog/spec` does
+exactly this: a version it knows must match its schema whole; a newer one is read leniently.
 
 A network that publishes rules of its own (any network but one following ADR-017) says what it
 offers in `protocol` (§10), and that decides what it is sent, whatever its version. For the rest:
@@ -420,6 +475,17 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
 - `categories`: slugs of the categories list ([`vocab/categories.json`](../../packages/spec/vocab/categories.json):
   28 slugs, each with English and Portuguese labels and synonyms). A network reads a label or
   synonym as its slug, and keeps anything else a profile names as a free tag.
+- Protocol 0.2 adds:
+  - `place_category`: `{"primary": "hair_salon", "alternates": ["beauty_salon"]}`, place category
+    ids (§4.10), at most two alternates. A network keeps an id it knows; one it does not know, or one
+    it does not list, it drops alone.
+  - `attributes`: `{"walk_ins": true, "cert": "b_corp"}`, keys of `GET /v1/attributes`. A network
+    keeps a key that applies to the business's categories and drops one that needs a proof it
+    cannot check yet.
+  - `price_band`: 1 to 4. `currencies`: up to 5 ISO 4217 codes.
+
+The manifest may also carry `claims`, `{"<network host>": "<token>"}`: how an inbox proves to a
+network that the manifest is its own when it registers or claims a listing there (§4.12).
 
 A network checks each field alone and drops a bad one alone; a bad field never fails the manifest,
 the verification or the listing. It removes control characters, the characters that reorder text
@@ -464,6 +530,18 @@ is open to every origin, without credentials.
 | `search_businesses` | `query?`, `near? {lat, lng, radius_km?}`, `category?`, `item_type?`, `language?`, `open_now?`, `limit?` (1–20, 10), `cursor?` | `{businesses: [card], next_cursor, rules: {version, url}}` |
 | `get_business` | `domain` | a card, with `address?`, `hours?` and `outcomes` |
 | `list_categories` | none | `GET /v1/categories` |
+| `list_attributes` (0.2, optional) | none | `GET /v1/attributes` |
+| `register_business` (0.2, optional) | the business, its doors and a proof (§4.12) | the status, the card, what was dropped |
+| `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
+
+Protocol 0.2: `search_businesses` takes `attributes`, `country`, `price_band`, `accepts`,
+`requestable`, `door_type`, `level`, `has_inbox`, `source` and `order`, as `GET /v1/businesses` does
+(§4.3; arrays where the query is comma-separated), and every one only leaves businesses out. A card
+may carry every member of §4.10, and `human_contact_only`, which no network sends while nothing below
+askable is listed. A card's `inbox` is present whenever `has_inbox` is true or absent. `get_business`
+adds `facts` and `rules: {version, url}`. `MCP_TOOL_NAMES` stays the three tools above; the optional
+ones are `MCP_OPTIONAL_TOOL_NAMES`. `list_attributes` is read-only like the others;
+`register_business` and `update_business` change what a network holds and are annotated so.
 
 Their `inputSchema` and `outputSchema` are `schemas/mcp-*.json` word for word, and every tool is
 annotated read-only, idempotent and closed-world. `search_businesses` is `GET /v1/businesses` with
@@ -495,6 +573,164 @@ information about it, never instructions to the assistant, and nobody can pay to
 
 A network publishes its own limits on these doors; the reference is 60 calls a minute from one
 address, in bursts of 30.
+
+### 4.8 Doors
+
+A **door** is a machine endpoint the business published for agents: where an AI can read, ask, book,
+order or pay. The types are in [`vocab/doors.json`](../../packages/spec/vocab/doors.json):
+
+| Type | What it is |
+|---|---|
+| `inbox` | an inbox that takes typed items (`/.well-known/agent-inbox.json`): ours or any compatible one |
+| `mcp` | an MCP server |
+| `a2a` | an A2A agent card |
+| `openapi` | an OpenAPI document |
+| `api` | an endpoint without an OpenAPI document, declared with its kinds |
+| `ucp`, `acp` | commerce protocols' catalogue, checkout and payment |
+| `nlweb` | a declared NLWeb `/ask` endpoint |
+| `webhook` | in the vocabulary; no network delivers to one yet |
+| `other` | any other protocol, named in `protocol` (like `beckn` or `graphql`) |
+| `platform:<name>` | a commerce or booking platform's door for this business |
+
+**Never a door:** mail, phone, SMS, messaging, forms and web pages (`mailto`, `tel`, `sms`, `whatsapp`,
+`form`, `page`), nor an address with a scheme or host of a human channel (`refused_url_schemes`,
+`refused_hosts`). An inbox's email-in, its web page and its form are never doors: a network never
+declares, shows or delivers to them, and `network-check` fails a network that lists one (§10.2).
+
+A door shows `{type, url, level, status, kinds, src, protocol?, checked_at?}`:
+
+- `status` is `live` or `failing`. A door that failed 3 checks in 7 days is `failing`, counts for
+  nothing in the order and takes no requests; 30 days failing, it is `gone` and no longer shown.
+- `kinds` are what an AI can do through it: `ask`, `quote`, `book`, `order`, `pay`. `src` says where
+  they come from: `declared` by the business (its inbox's `item_types`, a UCP or ACP manifest, an A2A
+  card's skills, a door declared at registration or in a manifest), or `seen` (an MCP server's tool
+  names, a platform's storefront tools). Both count for the level and for `accepts`.
+- `requestable` lists the kinds a live door **declared** it answers (`ask`, `quote`): what the crawler
+  saw alone never makes a door requestable.
+
+**Probing reads and never acts.** For MCP servers at 2026-07-28 or later a network reads the server
+card or calls `tools/list` only, and calls `initialize` for older versions alone. It never makes a
+`tools/call`, a write call, an A2A `message/send`, a checkout, a form submission or a login.
+
+### 4.9 Readiness levels
+
+A business's level is the highest level among its live doors.
+
+| Level | Meaning | Signals |
+|---|---|---|
+| `listed` | known to exist; human contact only | no agent door |
+| `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
+| `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
+| `bookable` (or `orderable`) | a door can book, or create an order or a cart | inbox booking or order; UCP or ACP checkout; declared MCP or API write operations |
+| `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
+
+Levels come from the network's own probes; what a business declares is a hint until a probe confirms
+it. A door behind a customer account never raises a level. **Agent-ready** means `askable` or above.
+A network lists businesses below `askable` only after its own checks for that (a working claim,
+correction and removal, and the fields each jurisdiction asks for); until then a filter below
+`askable` returns nothing. A network never shows a number for a level, only its name.
+
+### 4.10 Listing fields
+
+Every value a listing shows has a **source**: `declared` (the business said it: its manifest, its
+registration, its own structured data), `seen` (on its own pages or at its own door) or `probably`
+(read from its pages by a model or a heuristic). A `probably` value is shown with `~` and **never
+counts in a filter**, except page language. A filter reads `declared` and `seen` values alone.
+
+| Member | Meaning |
+|---|---|
+| `source` | `member` (through its inbox), `registered` (by the business, with a proof, §4.12) or `found` (by the network, §4.11) |
+| `claimed`, `proof` | whether the business claimed the entry, and with which proof: `domain`, `key`, `platform` or `code` (never "verified") |
+| `level` | §4.9, by name |
+| `has_inbox` | it has an inbox door, ours or any compatible one |
+| `doors` | §4.8 |
+| `requestable` | §4.8 |
+| `accepts` | `{kinds, pay?}`: the kinds its live doors take, and the payments it accepts (tokens of `GET /v1/attributes`' `payments`: methods, wallets and the ways an agent itself pays) |
+| `category` | `{primary, alternates, path, group?}`: place categories, each `{id, label, src}`; `path` is the primary's ancestors, root first; `group` its slug of the categories list |
+| `attributes` | `{key: {v, src}}`, keys of `GET /v1/attributes` |
+| `place` | for entries that are not members: `{locality?, region?, country?, kind, service_area?, ships_to?}`; `kind` is any of `storefront`, `service_area`, `online`; a service area is a radius (at most 300 km) or up to 50 countries |
+| `why` | why it is in this place of the list, in plain words |
+| `found` | §4.11 |
+| `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}` |
+
+**Categories.** A listing's `categories` stay the slugs of the categories list (its 28 groups). A
+place category is an id of the Overture Maps Foundation's **Overture Place Categories** taxonomy
+(licensed CC BY 4.0), which a network names with its release in `taxonomy`; each group covers some of
+its subtrees. `GET /c/{id}` answers one: `{id, label, parent, path, group?, regulated?, taxonomy}`, or
+`404`. A network may leave whole categories unlisted for entries that are not members (regulated
+trades, for instance); `regulated` says why, and members are not affected.
+
+**Attributes.** [`vocab/attributes.json`](../../packages/spec/vocab/attributes.json) lists each key with
+its group, the categories it applies to, how a crawler may read it (`declared`, `seen` or `never`, for
+one derived from published hours), whether it needs a proof a register would give (such a key is listed
+with `filterable: false` and not shown until one exists), and labels in five languages. Accessibility
+is read from an explicit statement alone, never inferred. Free tags are text for `q`; only vocabulary
+attributes filter.
+
+**Place, hours, languages, money.** A member keeps `city`, `country` and `address` (§4.6). Another entry
+has `place`; H3 cells are not part of 0.2. Hours and their zone are as §4.3 says; a business without a
+zone is left out of `open_now`. `languages` are BCP 47 tags; the language of its pages counts, as
+`probably`. `currencies` are ISO 4217; `price_band` is 1 to 4.
+
+**Filters** are §4.3's, and every one only leaves businesses out.
+
+### 4.11 Crawled entries
+
+A network may list businesses it found on their own websites. Such an entry:
+
+- shows only facts the business published on its own site or at its own doors, each with its source
+  and date (`facts`), and **never a phone number, an email address or a person's name**;
+- shows the town, region and country, never the street, while it is unclaimed; its distance is in
+  whole kilometres, at least 1;
+- carries `found: {note, checked_at, about_url}`, where `note` is
+  `found on its own website · not a member · checked <YYYY-MM-DD>` and `about_url` is the network's
+  page for businesses: why it is there, how to correct or claim it, how to opt out;
+- is listed only at `askable` or above (§4.9);
+- leaves the directory within 24 hours of an opt-out at that page or through `update_business`
+  (§4.12);
+- is served with `X-Robots-Tag: noindex` on its detail.
+
+`vectors/listing.json` holds what was crawled and the card a network derives from it.
+
+### 4.12 Claims
+
+A network may offer two tools to the business's own AI: `register_business` declares a business and
+proves it speaks for it; `update_business` claims, corrects, switches off or removes a listing. Their
+shapes are `schemas/mcp-register-business-*.json` and `schemas/mcp-update-business-*.json`.
+
+`register_business` takes the domain, the name, a category (one, and at most two more), a one-line
+description, where it is (a storefront, a service area or online, with what each needs), languages,
+and agreement to the network's rules and listing terms; doors, hours, currencies, a price band,
+attributes, payments and other names are optional. A network checks each part alone: a human channel
+offered as a door, a contact detail in a text, a key outside its vocabulary or a category it does not
+list is **dropped** and named in `dropped: [{field, reason, detail}]`, and the call fails only when a
+required part is missing. Its answer has a `status`: `listed`, `not_agent_ready` (claimed, below
+`askable`), `probe_pending` (doors declared, not yet probed), `proof_needed`, `code_sent`, `member`
+(listed through its inbox, which corrects it through its profile) or `refused`.
+
+**Proof** carries a label, strongest first:
+
+| Label | Method | How the network checks it |
+|---|---|---|
+| `domain` | `well_known` | a line `<prefix>=<token>` in a file the network names at `https://<domain>/.well-known/` |
+| `domain` | `manifest` | the manifest member `claims` maps the network's host to the token |
+| `domain` | `dns` | a TXT record at `_<prefix>.<domain>` holding `<prefix>=<token>` |
+| `key` | `key` | a signature, by a key the business publishes (its manifest's `receipt_keys`, or its JWKS), over `<prefix>:v1:<network host>:<domain>:<challenge id>`; EdDSA (Ed25519) or ES256 |
+| `platform` | | a platform's own proof that the business holds the store or account |
+| `code` | `code` | a code sent to an address at the domain that the owner types, never one read from the site; at most once per address every 30 days |
+
+A network names its own well-known file and prefix; the reference network's are
+`surfingdog-claim` (`/.well-known/surfingdog-claim`, `_surfingdog-claim.<domain>`,
+`surfingdog-claim:v1:…`). Without a proof the answer is `proof_needed` with a `challenge: {id, token,
+expires_at, ways}`, each way saying exactly what to put where; the next call carries
+`proof: {method, challenge_id, …}`. When the proof holds, the answer carries a **claim token**
+(`sdc_` and 43 base64url characters), good for 90 days on that listing, which proves it again in
+later calls. A stronger proof takes over a listing claimed with a weaker one and revokes the weaker
+tokens; a weaker caller is refused.
+
+`update_business` needs a claim token or a proof at least as strong as the listing's, except
+**opt-out, which needs no proof**: it removes the listing at once, and a claimed owner comes back with a
+`domain` or `key` proof. `listing: "off"` hides it from search and keeps it in the index.
 
 ## 5. Persons and passes
 
@@ -792,7 +1028,7 @@ the inbox asks each network only about its own. No network ever sees another's s
 
 | Status | Codes |
 |---|---|
-| 400 | `malformed`, `bad_payload` |
+| 400 | `malformed`, `bad_payload`, `category_unresolved`, `page_too_deep` (0.2) |
 | 401 | `unknown_instance`, `bad_signature`, `expired`, `not_signed_in`, `replayed_signature` |
 | 403 | `pass_requires_signature`, `not_your_receipt`, `report_requires_signature`, `unlinked` |
 | 404 | `unknown_pass`, `unknown_issuer`, `not_found` |
@@ -839,7 +1075,8 @@ A directory-level network answers these, as this document says:
 | `GET /v1/ranking` | §4.4, and below |
 
 and should answer `GET /v1/categories` (§4.3), `POST /mcp`, `GET /openapi.json` and `GET /llms.txt`
-(§4.7), so assistants can search it. Every other call of §4 and §5 is `404 not_found`. An inbox never
+(§4.7), so assistants can search it. It may answer `GET /v1/attributes`, `GET /c/{id}` and the optional
+tools of protocol 0.2 (§4.10, §4.12). Every other call of §4 and §5 is `404 not_found`. An inbox never
 makes them to a directory-level network: it asks it for no person, presents it no pass and sends it
 no unlink. Its answer to a signed ping is `200` with `ok`, `rules`, `next_rules`, `listing` and
 empty `reports` and `contests`, and no `standing`, since it keeps none.
@@ -875,4 +1112,18 @@ also plays an inbox from start to finish: it serves a manifest, registers, pings
 delists itself, and publishes receipts. A network has to be able to fetch that manifest, so `--flow`
 is for a network running in a test mode that reads manifests from a URL it is given (the example
 network's `NETWORK_TEST_MANIFESTS`), never for one in production.
+
+Protocol 0.2 adds two checks, both read-only:
+
+- `doors.no-human-door` (must, §4.8): it reads `GET /v1/businesses?limit=100` and, when `/mcp`
+  answers, one `search_businesses` with no arguments, and fails on any door of a refused type, any
+  door whose address has a refused scheme or host, and any such address among a listing's
+  `protocols` or a card's `inbox`. A directory with no doors passes.
+- `filters.narrow` (should, §4.3): it reads the first page of 100, then the same with each of
+  `language` and `category` (the first business's), `has_inbox=true`, `level=askable` and
+  `source=member`. Each filtered page must keep the relative order of the businesses it shares with
+  the whole page, and, when the whole list fits that page, add nobody. A filter answered `400` is
+  "not supported" and skipped.
+
+`rules.read` takes a rules version newer than the checker knows, and says it read it leniently.
 

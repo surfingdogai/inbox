@@ -9,7 +9,9 @@ or network:
 - every message an inbox exchanges with a network (ADR-017 §7): registration and the ping,
   persons, presentations, passes, delegations, recovery, reports and contests, the directory and
   the published rules — described for people in [`docs/protocol/network.md`](../../docs/protocol/network.md),
-- the tools a network offers assistants at `/mcp` (ADR-017 A2.7): what each takes and answers.
+- the tools a network offers assistants at `/mcp` (ADR-017 A2.7): what each takes and answers,
+- protocol 0.2: doors, readiness levels, listing fields, entries a network found on businesses'
+  own websites, claims (`register_business`, `update_business`) and rules version 7.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -27,7 +29,10 @@ implementations:
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
-its English and Portuguese labels and synonyms.
+its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door
+types, and the human channels that are never doors) and `vocab/attributes.json` (the attributes a
+listing may carry, with the categories each applies to and labels in five languages); the network
+serves the same files.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by
