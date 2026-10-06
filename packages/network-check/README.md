@@ -11,7 +11,9 @@ Two ways to run it:
   door it lists is a human channel (mail, phone, messaging, forms, web pages) and that each
   filter only leaves businesses out, keeping the order; and sends only requests a correct network
   refuses without keeping anything: a listing change with no signature or the wrong one, a
-  forged receipt, a ping for a domain nobody registered.
+  forged receipt, a ping for a domain nobody registered. Those about an instance (its status, its
+  listing switch, its receipts) are asked of a listed member, never of an entry the network found
+  or one registered without an inbox; with no member listed they are skipped.
 - **`--flow`**, against a network in a test mode. It plays an inbox from start to finish: it
   publishes a manifest, registers, pings unsigned and signed, replays a signature, leaves the
   directory and comes back, signs receipts and an outcome, and tries the forgeries a network
