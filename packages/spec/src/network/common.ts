@@ -88,6 +88,8 @@ export const networkErrorCodeSchema = z.enum([
   // 400
   "malformed",
   "bad_payload",
+  "category_unresolved",
+  "page_too_deep",
   // 401
   "unknown_instance",
   "bad_signature",

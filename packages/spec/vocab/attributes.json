@@ -1,0 +1,663 @@
+{
+  "description": "Attributes a listing may carry, in groups, each with the categories it applies to (group slugs of vocab/categories.json, or * for all), how a crawler may read it (declared: the business's own structured data; seen: also an explicit statement on its own pages; never: derived, like open_24h from published hours), whether it needs a proof from a register (never filterable or shown until one exists), and its labels. Accessibility is read only from an explicit statement, never inferred. New keys come by a change to this file, which raises version.",
+  "version": 1,
+  "keys": [
+    {
+      "key": "on_site",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": { "en": "On site", "pt": "No local", "es": "En el local", "fr": "Sur place", "de": "Vor Ort" }
+    },
+    {
+      "key": "delivery",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Delivery",
+        "pt": "Entrega ao domicílio",
+        "es": "Entrega a domicilio",
+        "fr": "Livraison",
+        "de": "Lieferung"
+      },
+      "osm": "delivery"
+    },
+    {
+      "key": "takeaway",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Takeaway",
+        "pt": "Para levar",
+        "es": "Para llevar",
+        "fr": "À emporter",
+        "de": "Zum Mitnehmen"
+      },
+      "osm": "takeaway"
+    },
+    {
+      "key": "pickup",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Pickup",
+        "pt": "Levantamento no local",
+        "es": "Recogida en tienda",
+        "fr": "Retrait sur place",
+        "de": "Abholung"
+      }
+    },
+    {
+      "key": "curbside_pickup",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "grocery", "shop", "florist", "pets", "crafts"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Curbside pickup",
+        "pt": "Levantamento à porta",
+        "es": "Recogida en la acera",
+        "fr": "Retrait devant le magasin",
+        "de": "Abholung am Straßenrand"
+      }
+    },
+    {
+      "key": "remote",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Remote service",
+        "pt": "Serviço à distância",
+        "es": "Servicio a distancia",
+        "fr": "Service à distance",
+        "de": "Aus der Ferne"
+      }
+    },
+    {
+      "key": "home_visits",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Home visits",
+        "pt": "Ao domicílio",
+        "es": "A domicilio",
+        "fr": "À domicile",
+        "de": "Hausbesuche"
+      }
+    },
+    {
+      "key": "drive_through",
+      "group": "service",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Drive-through",
+        "pt": "Drive-thru",
+        "es": "Autoservicio",
+        "fr": "Service au volant",
+        "de": "Drive-in"
+      },
+      "schemaorg": "hasDriveThroughService",
+      "osm": "drive_through"
+    },
+    {
+      "key": "booking_required",
+      "group": "booking",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Booking required",
+        "pt": "Marcação obrigatória",
+        "es": "Reserva obligatoria",
+        "fr": "Sur réservation",
+        "de": "Reservierung erforderlich"
+      }
+    },
+    {
+      "key": "walk_ins",
+      "group": "booking",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Walk-ins welcome",
+        "pt": "Sem marcação",
+        "es": "Sin cita previa",
+        "fr": "Sans rendez-vous",
+        "de": "Ohne Termin"
+      }
+    },
+    {
+      "key": "same_day",
+      "group": "booking",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Same-day service",
+        "pt": "No próprio dia",
+        "es": "En el mismo día",
+        "fr": "Le jour même",
+        "de": "Am selben Tag"
+      }
+    },
+    {
+      "key": "appointments_only",
+      "group": "booking",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "By appointment",
+        "pt": "Por marcação",
+        "es": "Con cita previa",
+        "fr": "Sur rendez-vous",
+        "de": "Nach Vereinbarung"
+      }
+    },
+    {
+      "key": "open_24h",
+      "group": "hours",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "never",
+      "needs_proof": false,
+      "labels": {
+        "en": "Open 24 hours",
+        "pt": "Aberto 24 horas",
+        "es": "Abierto 24 horas",
+        "fr": "Ouvert 24 h/24",
+        "de": "24 Stunden geöffnet"
+      }
+    },
+    {
+      "key": "open_late",
+      "group": "hours",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "never",
+      "needs_proof": false,
+      "labels": {
+        "en": "Open late",
+        "pt": "Aberto até tarde",
+        "es": "Abierto hasta tarde",
+        "fr": "Ouvert tard",
+        "de": "Spät geöffnet"
+      }
+    },
+    {
+      "key": "step_free_entrance",
+      "group": "accessibility",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Step-free entrance",
+        "pt": "Entrada sem degraus",
+        "es": "Entrada sin escalones",
+        "fr": "Entrée de plain-pied",
+        "de": "Stufenloser Eingang"
+      },
+      "osm": "wheelchair"
+    },
+    {
+      "key": "accessible_toilet",
+      "group": "accessibility",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Accessible toilet",
+        "pt": "Casa de banho acessível",
+        "es": "Aseo accesible",
+        "fr": "Toilettes accessibles",
+        "de": "Barrierefreie Toilette"
+      },
+      "osm": "toilets:wheelchair"
+    },
+    {
+      "key": "accessible_parking",
+      "group": "accessibility",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Accessible parking",
+        "pt": "Estacionamento acessível",
+        "es": "Aparcamiento accesible",
+        "fr": "Stationnement accessible",
+        "de": "Behindertenparkplatz"
+      }
+    },
+    {
+      "key": "hearing_loop",
+      "group": "accessibility",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Hearing loop",
+        "pt": "Anel de indução magnética",
+        "es": "Bucle magnético",
+        "fr": "Boucle magnétique",
+        "de": "Induktionsschleife"
+      },
+      "osm": "hearing_loop"
+    },
+    {
+      "key": "assistance_dogs",
+      "group": "accessibility",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Assistance dogs welcome",
+        "pt": "Cães de assistência bem-vindos",
+        "es": "Perros de asistencia bienvenidos",
+        "fr": "Chiens d'assistance bienvenus",
+        "de": "Assistenzhunde willkommen"
+      }
+    },
+    {
+      "key": "vegan_options",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Vegan options",
+        "pt": "Opções vegan",
+        "es": "Opciones veganas",
+        "fr": "Options véganes",
+        "de": "Vegane Optionen"
+      },
+      "osm": "diet:vegan"
+    },
+    {
+      "key": "vegetarian_options",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Vegetarian options",
+        "pt": "Opções vegetarianas",
+        "es": "Opciones vegetarianas",
+        "fr": "Options végétariennes",
+        "de": "Vegetarische Optionen"
+      },
+      "osm": "diet:vegetarian"
+    },
+    {
+      "key": "gluten_free_options",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Gluten-free options",
+        "pt": "Opções sem glúten",
+        "es": "Opciones sin gluten",
+        "fr": "Options sans gluten",
+        "de": "Glutenfreie Optionen"
+      },
+      "osm": "diet:gluten_free"
+    },
+    {
+      "key": "organic_options",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Organic options",
+        "pt": "Opções biológicas",
+        "es": "Opciones ecológicas",
+        "fr": "Options bio",
+        "de": "Bio-Optionen"
+      },
+      "osm": "organic"
+    },
+    {
+      "key": "halal",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": true,
+      "labels": { "en": "Halal", "pt": "Halal", "es": "Halal", "fr": "Halal", "de": "Halal" },
+      "osm": "diet:halal"
+    },
+    {
+      "key": "kosher",
+      "group": "diet",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar", "grocery"],
+      "crawlable": "declared",
+      "needs_proof": true,
+      "labels": { "en": "Kosher", "pt": "Kosher", "es": "Kosher", "fr": "Casher", "de": "Koscher" },
+      "osm": "diet:kosher"
+    },
+    {
+      "key": "family_friendly",
+      "group": "audience",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Family friendly",
+        "pt": "Para famílias",
+        "es": "Para familias",
+        "fr": "Adapté aux familles",
+        "de": "Familienfreundlich"
+      }
+    },
+    {
+      "key": "pets_welcome",
+      "group": "audience",
+      "type": "bool",
+      "applies_to": [
+        "restaurant",
+        "cafe",
+        "bakery",
+        "bar",
+        "grocery",
+        "shop",
+        "stay",
+        "tours",
+        "pets",
+        "florist",
+        "crafts",
+        "events"
+      ],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": {
+        "en": "Pets welcome",
+        "pt": "Animais bem-vindos",
+        "es": "Se admiten mascotas",
+        "fr": "Animaux acceptés",
+        "de": "Haustiere willkommen"
+      },
+      "schemaorg": "petsAllowed",
+      "osm": "dog"
+    },
+    {
+      "key": "kids_area",
+      "group": "audience",
+      "type": "bool",
+      "applies_to": [
+        "restaurant",
+        "cafe",
+        "bakery",
+        "grocery",
+        "shop",
+        "hair-beauty",
+        "fitness",
+        "events",
+        "stay",
+        "tours"
+      ],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Kids' area",
+        "pt": "Espaço para crianças",
+        "es": "Zona infantil",
+        "fr": "Espace enfants",
+        "de": "Kinderbereich"
+      }
+    },
+    {
+      "key": "women_owned",
+      "group": "identity",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Women-owned",
+        "pt": "Propriedade de mulheres",
+        "es": "Propiedad de mujeres",
+        "fr": "Détenue par des femmes",
+        "de": "In Frauenhand"
+      }
+    },
+    {
+      "key": "lgbtq_friendly",
+      "group": "identity",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "LGBTQ+ friendly",
+        "pt": "Acolhedor LGBTQ+",
+        "es": "Acogedor LGBTQ+",
+        "fr": "Accueillant LGBTQ+",
+        "de": "LGBTQ+-freundlich"
+      }
+    },
+    {
+      "key": "veteran_owned",
+      "group": "identity",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Veteran-owned",
+        "pt": "Propriedade de veteranos",
+        "es": "Propiedad de veteranos",
+        "fr": "Détenue par des anciens combattants",
+        "de": "Im Besitz von Veteranen"
+      }
+    },
+    {
+      "key": "minority_owned",
+      "group": "identity",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Minority-owned",
+        "pt": "Propriedade de minorias",
+        "es": "Propiedad de minorías",
+        "fr": "Détenue par des minorités",
+        "de": "Im Besitz von Minderheiten"
+      }
+    },
+    {
+      "key": "cert",
+      "group": "certification",
+      "type": "enum",
+      "values": ["eu_organic", "b_corp", "iso_9001", "iso_14001", "fairtrade"],
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": true,
+      "labels": {
+        "en": "Certification",
+        "pt": "Certificação",
+        "es": "Certificación",
+        "fr": "Certification",
+        "de": "Zertifizierung"
+      }
+    },
+    {
+      "key": "wifi",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": { "en": "Wi-Fi", "pt": "Wi-Fi", "es": "Wi-Fi", "fr": "Wi-Fi", "de": "WLAN" },
+      "osm": "internet_access"
+    },
+    {
+      "key": "parking",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "seen",
+      "needs_proof": false,
+      "labels": { "en": "Parking", "pt": "Estacionamento", "es": "Aparcamiento", "fr": "Parking", "de": "Parkplätze" }
+    },
+    {
+      "key": "outdoor_seating",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["restaurant", "cafe", "bakery", "bar"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": { "en": "Outdoor seating", "pt": "Esplanada", "es": "Terraza", "fr": "Terrasse", "de": "Außenbereich" },
+      "osm": "outdoor_seating"
+    },
+    {
+      "key": "card_only",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Cashless",
+        "pt": "Sem numerário",
+        "es": "Sin efectivo",
+        "fr": "Sans espèces",
+        "de": "Bargeldlos"
+      }
+    },
+    {
+      "key": "cash_only",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Cash, no cards",
+        "pt": "Numerário, sem cartões",
+        "es": "Efectivo, sin tarjetas",
+        "fr": "Espèces, sans carte",
+        "de": "Bar, keine Karten"
+      }
+    },
+    {
+      "key": "ev_charging",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "EV charging",
+        "pt": "Carregamento de veículos elétricos",
+        "es": "Carga de vehículos eléctricos",
+        "fr": "Recharge de véhicules électriques",
+        "de": "E-Ladestation"
+      }
+    },
+    {
+      "key": "air_conditioning",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Air conditioning",
+        "pt": "Ar condicionado",
+        "es": "Aire acondicionado",
+        "fr": "Climatisation",
+        "de": "Klimaanlage"
+      },
+      "osm": "air_conditioning"
+    },
+    {
+      "key": "restroom",
+      "group": "facilities",
+      "type": "bool",
+      "applies_to": ["*"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": { "en": "Toilets", "pt": "Casa de banho", "es": "Aseos", "fr": "Toilettes", "de": "Toiletten" },
+      "osm": "toilets"
+    },
+    {
+      "key": "free_estimates",
+      "group": "extra",
+      "type": "bool",
+      "applies_to": [
+        "trades",
+        "cleaning",
+        "auto",
+        "repair",
+        "it-services",
+        "photography",
+        "events",
+        "consulting",
+        "crafts"
+      ],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Free estimates",
+        "pt": "Orçamentos gratuitos",
+        "es": "Presupuestos gratuitos",
+        "fr": "Devis gratuits",
+        "de": "Kostenlose Kostenvoranschläge"
+      }
+    },
+    {
+      "key": "emergency_service",
+      "group": "extra",
+      "type": "bool",
+      "applies_to": ["trades", "cleaning", "auto", "repair", "it-services", "pets"],
+      "crawlable": "declared",
+      "needs_proof": false,
+      "labels": {
+        "en": "Emergency service",
+        "pt": "Serviço de urgência",
+        "es": "Servicio de urgencias",
+        "fr": "Service d'urgence",
+        "de": "Notdienst"
+      }
+    }
+  ]
+}

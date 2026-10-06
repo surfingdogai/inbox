@@ -7,6 +7,7 @@ import {
   receiptPublishSchema,
 } from "./base";
 import {
+  attributesResponseSchema,
   businessesResponseSchema,
   caseAnsweredSchema,
   categoriesResponseSchema,
@@ -21,6 +22,8 @@ import {
   instanceRegistrationRequestSchema,
   instanceRegistrationResponseSchema,
   instanceStatusSchema,
+  listAttributesInputSchema,
+  listAttributesOutputSchema,
   listCategoriesInputSchema,
   listCategoriesOutputSchema,
   listingDetailSchema,
@@ -38,6 +41,7 @@ import {
   personUnlinkResponseSchema,
   personViewSchema,
   pingRequestSchema,
+  placeCategoryResponseSchema,
   presentationRequestSchema,
   presentationResponseSchema,
   problemSchema,
@@ -49,6 +53,8 @@ import {
   recoverySessionSchema,
   recoveryStartRequestSchema,
   recoveryStartResponseSchema,
+  registerBusinessInputSchema,
+  registerBusinessOutputSchema,
   reportAnswerSchema,
   reportFiledSchema,
   reportRequestSchema,
@@ -57,6 +63,8 @@ import {
   signedPingResponseSchema,
   unlinkRequestSchema,
   unlinkResponseSchema,
+  updateBusinessInputSchema,
+  updateBusinessOutputSchema,
 } from "./network/index";
 
 /**
@@ -139,6 +147,8 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   businesses: { schema: businessesResponseSchema, title: "GET /v1/businesses" },
   categories: { schema: categoriesResponseSchema, title: "GET /v1/categories" },
   business: { schema: listingDetailSchema, title: "GET /v1/businesses/{domain}" },
+  attributes: { schema: attributesResponseSchema, title: "GET /v1/attributes" },
+  "place-category": { schema: placeCategoryResponseSchema, title: "GET /c/{id}" },
   ranking: { schema: rankingDocumentSchema, title: "GET /v1/ranking" },
   "ranking-directory": {
     schema: directoryRulesSchema,
@@ -155,6 +165,21 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "mcp-list-categories-output": {
     schema: listCategoriesOutputSchema,
     title: "MCP list_categories: structuredContent",
+  },
+  "mcp-list-attributes-input": { schema: listAttributesInputSchema, title: "MCP list_attributes: arguments" },
+  "mcp-list-attributes-output": {
+    schema: listAttributesOutputSchema,
+    title: "MCP list_attributes: structuredContent",
+  },
+  "mcp-register-business-input": { schema: registerBusinessInputSchema, title: "MCP register_business: arguments" },
+  "mcp-register-business-output": {
+    schema: registerBusinessOutputSchema,
+    title: "MCP register_business: structuredContent",
+  },
+  "mcp-update-business-input": { schema: updateBusinessInputSchema, title: "MCP update_business: arguments" },
+  "mcp-update-business-output": {
+    schema: updateBusinessOutputSchema,
+    title: "MCP update_business: structuredContent",
   },
 };
 

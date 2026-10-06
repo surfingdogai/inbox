@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /v1/attributes",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "keys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "group": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["bool", "enum"]
+          },
+          "values": {
+            "description": "The values of an \"enum\" key; a filter names one as key=value.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Language → label."
+          },
+          "filterable": {
+            "description": "false: shown in the list, never filterable or shown yet.",
+            "type": "boolean"
+          }
+        },
+        "required": ["key", "group", "type", "labels"]
+      }
+    },
+    "payments": {
+      "type": "object",
+      "properties": {
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "wallets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ways an agent itself pays: AP2, ACP delegated payment, x402, UCP handlers."
+        }
+      },
+      "required": ["methods", "wallets", "agent"]
+    }
+  },
+  "required": ["version", "keys", "payments"]
+}

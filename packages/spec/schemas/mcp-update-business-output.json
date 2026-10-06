@@ -1,0 +1,620 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP update_business: structuredContent",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "listed",
+        "not_agent_ready",
+        "probe_pending",
+        "proof_needed",
+        "code_sent",
+        "member",
+        "refused",
+        "off",
+        "removed"
+      ],
+      "description": "As register_business's, and: off, hidden from search; removed, after an opt-out."
+    },
+    "domain": {
+      "type": "string"
+    },
+    "claimed": {
+      "type": "boolean"
+    },
+    "proof": {
+      "type": "string",
+      "enum": ["domain", "key", "platform", "code"]
+    },
+    "level": {
+      "type": "string",
+      "enum": ["listed", "readable", "askable", "bookable", "payable"]
+    },
+    "listed": {
+      "description": "Whether search shows it now.",
+      "type": "boolean"
+    },
+    "next_level": {
+      "description": "What it takes to reach the next level, in plain words.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["listed", "readable", "askable", "bookable", "payable"]
+        },
+        "how": {
+          "type": "string"
+        }
+      },
+      "required": ["level", "how"]
+    },
+    "card": {
+      "description": "The card search_businesses gives, as it stands now.",
+      "type": "object",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "The business's own domain, where its inbox is."
+        },
+        "name": {
+          "type": "string",
+          "description": "As the business wrote it."
+        },
+        "description": {
+          "description": "As the business wrote it.",
+          "type": "string"
+        },
+        "website": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "country": {
+          "description": "ISO 3166-1 alpha-2.",
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "distance_km": {
+          "description": "Searches near a point only.",
+          "type": "number",
+          "minimum": 0
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Slugs of the categories list."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Other words the business gave for what it does."
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "takes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What its inbox takes: booking, order, quote_request, message, refund."
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "type": {
+                "type": "string",
+                "enum": ["booking", "order", "quote_request"]
+              }
+            },
+            "required": ["name", "type"]
+          },
+          "description": "Names and how each is taken; prices, durations and free times are at its inbox."
+        },
+        "open_now": {
+          "description": "Open at the moment of the answer by the hours it published, in its own time zone; null when it published none.",
+          "type": ["boolean", "null"]
+        },
+        "hours_today": {
+          "description": "Today's hours in its own time zone, like \"09:00–13:00, 14:00–19:00\", or \"closed today\"; null when it published none.",
+          "type": ["string", "null"]
+        },
+        "answering": {
+          "type": "boolean",
+          "description": "Its inbox answered this network within the last day."
+        },
+        "inbox": {
+          "description": "The business's own inbox: go there to book, order or ask. This directory takes nothing. Present whenever has_inbox is true or absent.",
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "mcp": {
+              "description": "Where an assistant books, orders or asks.",
+              "type": "string",
+              "format": "uri"
+            },
+            "rest": {
+              "type": "string",
+              "format": "uri"
+            },
+            "openapi": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": ["url"]
+        },
+        "standing": {
+          "description": "From the last nightly count of the promises it kept; absent while the directory's order is neutral.",
+          "type": "object",
+          "properties": {
+            "tier": {
+              "type": "string",
+              "enum": ["new", "building", "trusted"]
+            },
+            "ranked": {
+              "type": "boolean",
+              "description": "Its record puts it before the daily shuffle."
+            },
+            "in_words": {
+              "type": "string",
+              "description": "The tier in one plain sentence; never a mark against the business."
+            }
+          },
+          "required": ["tier", "ranked", "in_words"]
+        },
+        "listing_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Its full listing on this network (GET /v1/businesses/{domain})."
+        },
+        "source": {
+          "description": "member: through its inbox; registered: by the business, with a proof; found: by the network's crawler.",
+          "type": "string",
+          "enum": ["member", "registered", "found"]
+        },
+        "claimed": {
+          "type": "boolean"
+        },
+        "proof": {
+          "type": "string",
+          "enum": ["domain", "key", "platform", "code"]
+        },
+        "level": {
+          "description": "The highest level of its live doors (§4.9).",
+          "type": "string",
+          "enum": ["listed", "readable", "askable", "bookable", "payable"]
+        },
+        "has_inbox": {
+          "description": "It has an inbox door: ours or any compatible inbox.",
+          "type": "boolean"
+        },
+        "doors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(inbox|mcp|a2a|openapi|api|ucp|acp|nlweb|webhook|other|platform:[a-z0-9-]{1,40})$"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "level": {
+                "type": "string",
+                "enum": ["listed", "readable", "askable", "bookable", "payable"],
+                "description": "What this door alone reaches, from the network's own probe."
+              },
+              "status": {
+                "type": "string",
+                "enum": ["live", "failing"],
+                "description": "failing: 3 failures in 7 days; it counts for nothing until it works."
+              },
+              "kinds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["ask", "quote", "book", "order", "pay"]
+                }
+              },
+              "src": {
+                "type": "string",
+                "enum": ["declared", "seen"],
+                "description": "declared: the business said so; seen: read from the door's own tools."
+              },
+              "protocol": {
+                "description": "The protocol it speaks, for type \"other\" only.",
+                "type": "string",
+                "maxLength": 40
+              },
+              "checked_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": ["type", "url", "level", "status", "kinds", "src"]
+          }
+        },
+        "requestable": {
+          "description": "The kinds a live door declared it answers; never from what the crawler saw alone.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ask", "quote"]
+          }
+        },
+        "accepts": {
+          "type": "object",
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["ask", "quote", "book", "order", "pay"]
+              }
+            },
+            "pay": {
+              "description": "Payment tokens of GET /v1/attributes' payments.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["kinds"]
+        },
+        "category": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "src": {
+                  "type": "string",
+                  "enum": ["declared", "seen", "probably"]
+                }
+              },
+              "required": ["id", "label", "src"]
+            },
+            "alternates": {
+              "maxItems": 2,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "src": {
+                    "type": "string",
+                    "enum": ["declared", "seen", "probably"]
+                  }
+                },
+                "required": ["id", "label", "src"]
+              }
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Ancestor ids of the primary, root first, the primary last."
+            },
+            "group": {
+              "description": "Its group: a slug of GET /v1/categories.",
+              "type": "string"
+            }
+          },
+          "required": ["primary", "alternates", "path"]
+        },
+        "attributes": {
+          "description": "Keys of GET /v1/attributes.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "v": {
+                "type": ["boolean", "string", "number"]
+              },
+              "src": {
+                "type": "string",
+                "enum": ["declared", "seen", "probably"]
+              }
+            },
+            "required": ["v", "src"]
+          }
+        },
+        "place": {
+          "description": "For entries that are not members; a member keeps city, country and address.",
+          "type": "object",
+          "properties": {
+            "locality": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "country": {
+              "description": "ISO 3166-1 alpha-2.",
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2
+            },
+            "kind": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["storefront", "service_area", "online"]
+              }
+            },
+            "service_area": {
+              "type": "object",
+              "properties": {
+                "radius_km": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300
+                },
+                "countries": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
+                }
+              }
+            },
+            "ships_to": {
+              "description": "ISO 3166-1 alpha-2 codes, or [\"*\"] for anywhere.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["kind"]
+        },
+        "why": {
+          "description": "Why it is in this place of the list, in plain words.",
+          "type": "string"
+        },
+        "found": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "string",
+              "description": "\"found on its own website · not a member · checked <YYYY-MM-DD>\""
+            },
+            "checked_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "about_url": {
+              "type": "string",
+              "format": "uri",
+              "description": "The network's page for businesses: why it is here, and how to correct it or opt out."
+            }
+          },
+          "required": ["note", "checked_at", "about_url"]
+        },
+        "human_contact_only": {
+          "description": "It publishes only human channels; never served while nothing below askable is listed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "domain",
+        "name",
+        "categories",
+        "tags",
+        "languages",
+        "takes",
+        "services",
+        "open_now",
+        "hours_today",
+        "answering",
+        "listing_url"
+      ]
+    },
+    "dropped": {
+      "description": "Each part not taken and why: refused_kind, category_not_listed, contact_detail, not_in_vocabulary, and the like.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["field", "reason", "detail"]
+      }
+    },
+    "challenge": {
+      "description": "Put the token in place one of these ways, then call again with proof.method and challenge_id.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "ways": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "well_known"
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
+                },
+                "required": ["method", "url", "content"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "manifest"
+                  },
+                  "member": {
+                    "type": "string",
+                    "const": "claims"
+                  },
+                  "value": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["method", "member", "value"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "dns"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "TXT"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": ["method", "name", "type", "value"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "key"
+                  },
+                  "sign": {
+                    "type": "string"
+                  },
+                  "algs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": ["EdDSA", "ES256"]
+                    }
+                  }
+                },
+                "required": ["method", "sign", "algs"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "const": "code"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": ["method", "note"]
+              }
+            ]
+          }
+        }
+      },
+      "required": ["id", "token", "expires_at", "ways"]
+    },
+    "claim_token": {
+      "type": "string",
+      "pattern": "^sdc_[A-Za-z0-9_-]{43}$",
+      "description": "Given by a successful register_business: proof again for 90 days, for this listing only."
+    },
+    "claim_token_expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "want_inbox": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "detail": {
+      "description": "The answer in one plain sentence.",
+      "type": "string"
+    }
+  },
+  "required": ["status", "domain"]
+}

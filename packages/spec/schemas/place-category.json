@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /c/{id}",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "parent": {
+      "type": ["string", "null"]
+    },
+    "path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Ancestor ids, root first, this one last."
+    },
+    "group": {
+      "description": "Its group's slug, when one covers it.",
+      "type": "string"
+    },
+    "regulated": {
+      "description": "Why entries that are not members are not listed in it, when they are not (§4.11).",
+      "type": "string"
+    },
+    "taxonomy": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "\"Overture Place Categories\""
+        },
+        "release": {
+          "type": "string"
+        },
+        "licence": {
+          "type": "string",
+          "description": "\"CC BY 4.0\""
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["name", "release", "licence", "url"]
+    }
+  },
+  "required": ["id", "label", "parent", "path", "taxonomy"]
+}

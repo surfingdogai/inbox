@@ -84,6 +84,24 @@ export const profileSchema = z.object({
   contact_email: z.email().optional(),
   hours: profileHoursSchema.optional(),
   services: z.array(profileServiceSchema).max(30).optional(),
+  // Protocol 0.2 (network.md §4.6). A network checks each alone and drops a bad one alone.
+  place_category: z
+    .object({
+      primary: z.string().max(80),
+      alternates: z.array(z.string().max(80)).max(2).optional(),
+    })
+    .optional()
+    .describe("Overture Place Categories ids (GET /v1/categories?group=…): what the business is, most specific first."),
+  attributes: z
+    .record(z.string().max(60), z.union([z.boolean(), z.string().max(60)]))
+    .optional()
+    .describe("Keys of a network's GET /v1/attributes: true, or one of the key's values."),
+  price_band: z.int().min(1).max(4).optional().describe("1 (cheapest) to 4."),
+  currencies: z
+    .array(z.string().regex(/^[A-Z]{3}$/))
+    .max(5)
+    .optional()
+    .describe("ISO 4217."),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -207,5 +225,10 @@ export const manifestSchema = z.object({
    * and it never undoes a signed `POST /v1/instances/{domain}/listing`.
    */
   directory: z.object({ listed: z.boolean() }).optional(),
+  /**
+   * Claim tokens, by network host (network.md §4.12): how a business proves to a network that its manifest is its own
+   * when it registers or claims a listing there. Protocol 0.2.
+   */
+  claims: z.record(z.string().max(253), z.string().max(200)).optional(),
 });
 export type Manifest = z.infer<typeof manifestSchema>;

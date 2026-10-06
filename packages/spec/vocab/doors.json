@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "types": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "nlweb", "webhook", "other"],
+  "platform_prefix": "platform:",
+  "refused": ["mailto", "tel", "sms", "whatsapp", "form", "page"],
+  "refused_url_schemes": ["mailto", "tel", "sms", "whatsapp", "fax", "callto", "skype"],
+  "refused_hosts": ["wa.me", "api.whatsapp.com", "web.whatsapp.com", "m.me", "t.me"],
+  "kinds": ["ask", "quote", "book", "order", "pay"],
+  "delivery_kinds": ["ask", "quote"]
+}

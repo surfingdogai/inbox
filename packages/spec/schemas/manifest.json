@@ -285,6 +285,59 @@
             },
             "required": ["name", "type"]
           }
+        },
+        "place_category": {
+          "description": "Overture Place Categories ids (GET /v1/categories?group=…): what the business is, most specific first.",
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "alternates": {
+              "maxItems": 2,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              }
+            }
+          },
+          "required": ["primary"]
+        },
+        "attributes": {
+          "description": "Keys of a network's GET /v1/attributes: true, or one of the key's values.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "maxLength": 60
+              }
+            ]
+          }
+        },
+        "price_band": {
+          "description": "1 (cheapest) to 4.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "currencies": {
+          "description": "ISO 4217.",
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
         }
       },
       "required": ["name"]
@@ -374,6 +427,17 @@
         }
       },
       "required": ["listed"]
+    },
+    "claims": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 253
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 200
+      }
     }
   },
   "required": ["spec", "instance", "item_types", "protocols", "agent_policy", "receipt_keys", "review_services"]

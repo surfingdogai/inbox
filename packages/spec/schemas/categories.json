@@ -30,6 +30,46 @@
         },
         "required": ["slug", "labels"]
       }
+    },
+    "place_categories": {
+      "description": "With ?group: every place category of that group; parent is null at the taxonomy's top.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "parent": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["id", "label", "parent"]
+      }
+    },
+    "taxonomy": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "\"Overture Place Categories\""
+        },
+        "release": {
+          "type": "string"
+        },
+        "licence": {
+          "type": "string",
+          "description": "\"CC BY 4.0\""
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["name", "release", "licence", "url"]
     }
   },
   "required": ["version", "categories"]

@@ -281,6 +281,34 @@ export const rankingV6Schema = rankingV5Schema.extend({
 });
 export type RankingV6 = z.infer<typeof rankingV6Schema>;
 
+/**
+ * Version 7: network rules 0.2.0 (protocol 0.2, October 2026). Version 6's shape and numbers, with an order that lists
+ * agent-ready businesses with their doors (§4.8, §4.9): `order.rule` (the rule in one paragraph), `order.bands` (a
+ * search's words or category put name, categories and services before description), `order.reach` (an inbox that
+ * answers, then other live doors by level, then the rest), `order.within_reach`, `order.newcomers` (every 5th place),
+ * `order.one_place`, `order.nearest`, `order.found_tier` (entries the network found, and how they stand until version 7
+ * takes effect), `order.sources` (which values count in a filter) and `order.filters`. Published with 15 days' notice.
+ */
+export const rankingOrderV7Schema = rankingV6Schema.shape.order.extend({
+  rule: z.string(),
+  bands: z.object({ "1": z.string(), "2": z.string(), computed: z.string() }),
+  reach: z.object({ "1": z.string(), "2": z.string(), "3": z.string() }),
+  within_reach: z.string(),
+  newcomers: z.object({ every: z.literal(5), who: z.string(), how: z.string(), days: z.int() }),
+  one_place: z.string(),
+  nearest: z.string(),
+  found_tier: z.string(),
+  filters: z.string(),
+  sources: z.string(),
+});
+
+export const rankingV7Schema = rankingV6Schema.extend({
+  version: z.literal(7),
+  rules: z.literal("0.2.0").describe('The rules name, "0.2.0".'),
+  order: rankingOrderV7Schema,
+});
+export type RankingV7 = z.infer<typeof rankingV7Schema>;
+
 /** Version 2: the neutral order during the redesign (22 September 2026). */
 export const rankingV2Schema = z.object({
   version: z.literal(2),
@@ -297,6 +325,7 @@ export type RankingV2 = z.infer<typeof rankingV2Schema>;
 export const rankingV1Schema = z.looseObject({ version: z.literal(1), status: z.literal("withdrawn") });
 
 export const rankingDocumentSchema = z.discriminatedUnion("version", [
+  rankingV7Schema,
   rankingV6Schema,
   rankingV5Schema,
   rankingV4Schema,
@@ -305,6 +334,37 @@ export const rankingDocumentSchema = z.discriminatedUnion("version", [
   rankingV1Schema,
 ]);
 export type RankingDocument = z.infer<typeof rankingDocumentSchema>;
+
+/**
+ * A version newer than any this package knows (§4.4): a reader takes what every version has, `version`, `status`,
+ * `effective_at`, `summary` and `next`, and reads the receipt claims as `claimsFromVersion` says.
+ */
+export const rankingFutureSchema = z.looseObject({
+  version: z.int().min(8),
+  status: z.enum(["announced", "in_force", "retired"]),
+  effective_at: timestampSchema,
+  summary: z.string(),
+  next: nextRulesSchema.nullable(),
+});
+export type RankingFuture = z.infer<typeof rankingFutureSchema>;
+
+/** A rules document as a reader takes it: a version it knows, whole, or a newer one, leniently. */
+export type RankingRead =
+  | { readonly ok: true; readonly known: true; readonly document: RankingDocument }
+  | { readonly ok: true; readonly known: false; readonly document: RankingFuture }
+  | { readonly ok: false; readonly error: z.ZodError };
+
+/**
+ * Reads a rules document (§4.4): a version this package knows must match its schema whole; a newer one is read by
+ * what every version has, so a reader never breaks when a network moves on.
+ */
+export function readRankingDocument(doc: unknown): RankingRead {
+  const known = rankingDocumentSchema.safeParse(doc);
+  if (known.success) return { ok: true, known: true, document: known.data };
+  const future = rankingFutureSchema.safeParse(doc);
+  if (future.success) return { ok: true, known: false, document: future.data };
+  return { ok: false, error: known.error };
+}
 
 /* --- levels (protocol §10) ------------------------------------------------------------------ */
 
@@ -372,7 +432,10 @@ export function protocolOf(doc: unknown): NetworkProtocol | null {
  * to decide what to send (v2 receipts go to networks at version 3 or later, §2.5; agreed changes
  * and refunds to those at version 6 or later, Amendment 3).
  */
-export function rulesOf(doc: RankingDocument): { inForce: number; next: z.infer<typeof nextRulesSchema> | null } {
+export function rulesOf(doc: RankingDocument | RankingFuture): {
+  inForce: number;
+  next: z.infer<typeof nextRulesSchema> | null;
+} {
   if (doc.version === 1) return { inForce: 1, next: null };
-  return { inForce: doc.version, next: doc.next };
+  return { inForce: doc.version, next: (doc as { next: z.infer<typeof nextRulesSchema> | null }).next };
 }

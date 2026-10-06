@@ -32,7 +32,7 @@
       "required": ["lat", "lng"]
     },
     "category": {
-      "description": "A slug from list_categories, like hair-beauty. Its English or Portuguese label or a synonym works too; any other word matches the tags businesses gave themselves.",
+      "description": "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Under rules before version 7 any other word matches the tags businesses gave themselves; from version 7 it is an error that names up to 5 categories to try.",
       "type": "string",
       "maxLength": 60
     },
@@ -61,6 +61,79 @@
       "description": "next_cursor from the previous answer, for the next page of the same search.",
       "type": "string",
       "maxLength": 512
+    },
+    "attributes": {
+      "description": "Keys from list_attributes, like \"delivery\" or \"walk_ins\", or key=value for one with values; every one must hold. This only leaves businesses out.",
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 60
+      }
+    },
+    "country": {
+      "description": "A country code like PT or BR: a business located there, serving it or shipping there. This only leaves businesses out.",
+      "type": "string",
+      "pattern": "^[A-Za-z]{2}$"
+    },
+    "price_band": {
+      "description": "1 (cheapest) to 4, as \"2\" or a range \"1-2\". This only leaves businesses out.",
+      "type": "string",
+      "pattern": "^[1-4](-[1-4])?$"
+    },
+    "accepts": {
+      "description": "What its live doors take and what it accepts as payment, all of them: ask, quote, book, order, pay, or a payment from list_attributes like card or pix. This only leaves businesses out.",
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 40
+      }
+    },
+    "requestable": {
+      "description": "A live door that declared it answers this kind. This only leaves businesses out.",
+      "type": "string",
+      "enum": ["ask", "quote"]
+    },
+    "door_type": {
+      "description": "A live door of any of these types: inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, other, \"platform\" for any platform, or platform:<name>. This only leaves businesses out.",
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^(inbox|mcp|a2a|openapi|api|ucp|acp|nlweb|webhook|other|platform:[a-z0-9-]{1,40})$"
+          },
+          {
+            "type": "string",
+            "const": "platform"
+          }
+        ]
+      }
+    },
+    "level": {
+      "description": "At this readiness level or above: askable (an AI can ask), bookable or orderable, payable. Nothing below askable is listed yet. This only leaves businesses out.",
+      "type": "string",
+      "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
+    },
+    "has_inbox": {
+      "description": "true: with an inbox door; false: without one. This only leaves businesses out.",
+      "type": "boolean"
+    },
+    "source": {
+      "description": "member (through its inbox), registered (by the business), found (by this network on the business's own website); any of them. This only leaves businesses out.",
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["member", "registered", "found"]
+      }
+    },
+    "order": {
+      "description": "rank: the published order (the default); nearest: by distance, and it needs near.",
+      "type": "string",
+      "enum": ["rank", "nearest"]
     }
   }
 }

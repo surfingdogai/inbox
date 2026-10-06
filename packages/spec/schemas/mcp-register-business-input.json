@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP register_business: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's own website domain. A business without a website is not supported yet."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "As the business writes it."
+    },
+    "category": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "A place category id (GET /v1/categories?group=…) or a group slug."
+        },
+        "alternates": {
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          }
+        }
+      },
+      "required": ["primary"],
+      "description": "What the business is: one category, and at most two more."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "One line on what it does; the first line is at most 160."
+    },
+    "where": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["storefront", "service_area", "online"]
+          }
+        },
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "locality": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "region": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "postal_code": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "country": {
+              "type": "string",
+              "maxLength": 2
+            }
+          }
+        },
+        "geo": {
+          "type": "object",
+          "properties": {
+            "lat": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "lng": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "required": ["lat", "lng"]
+        },
+        "service_area": {
+          "type": "object",
+          "properties": {
+            "radius_km": {
+              "description": "At most 300.",
+              "type": "number"
+            },
+            "countries": {
+              "description": "At most 50.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 2
+              }
+            }
+          }
+        },
+        "ships_to": {
+          "maxItems": 250,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2
+          }
+        }
+      },
+      "required": ["kind"],
+      "description": "A storefront needs an address or geo, a service area its radius or countries, online its ships_to."
+    },
+    "languages": {
+      "minItems": 1,
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 35
+      },
+      "description": "Language tags, like pt or fr-CA."
+    },
+    "doors": {
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, webhook, other, or platform:<name>. Mail, phone, messaging, forms and web pages are human channels and never doors."
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "https, with no user in it."
+          },
+          "kinds": {
+            "description": "Of ask, quote, book, order: what it answers.",
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 20
+            }
+          },
+          "protocol": {
+            "description": "What it speaks, for type \"other\": like beckn or graphql.",
+            "type": "string",
+            "maxLength": 40
+          },
+          "rate_limit": {
+            "description": "Requests a day this door takes, 1 to 20; it only lowers the network's own.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "terms_url": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": ["type", "url"]
+      }
+    },
+    "want_inbox": {
+      "type": "boolean"
+    },
+    "hours": {
+      "description": "As a profile's hours: {\"timezone\": \"Europe/Paris\", \"weekly\": {\"tue\": [[\"09:00\", \"19:00\"]]}}.",
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "weekly": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 5
+              }
+            }
+          }
+        },
+        "closures": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "maxLength": 10
+              },
+              "to": {
+                "type": "string",
+                "maxLength": 10
+              }
+            },
+            "required": ["from", "to"]
+          }
+        }
+      },
+      "required": ["timezone", "weekly"]
+    },
+    "currencies": {
+      "description": "ISO 4217.",
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 3
+      }
+    },
+    "price_band": {
+      "description": "1 (cheapest) to 4.",
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "attributes": {
+      "description": "Keys of list_attributes.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 60
+      },
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string",
+            "maxLength": 60
+          }
+        ]
+      }
+    },
+    "pay": {
+      "description": "Payment tokens of list_attributes.",
+      "maxItems": 30,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 40
+      }
+    },
+    "alternate_names": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    },
+    "locale": {
+      "description": "The language to answer in.",
+      "type": "string",
+      "maxLength": 35
+    },
+    "agree": {
+      "type": "boolean",
+      "const": true,
+      "description": "The business agrees to be listed by the network's published rules (GET /v1/ranking) and listing terms."
+    },
+    "proof": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["well_known", "manifest", "dns", "key", "code"]
+        },
+        "challenge_id": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "kid": {
+          "description": "key: the key that signed.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "signature": {
+          "description": "key: base64url of the signature.",
+          "type": "string",
+          "maxLength": 1024
+        },
+        "email": {
+          "description": "code: an address at the business's own domain, typed by the owner.",
+          "type": "string",
+          "maxLength": 254
+        },
+        "code": {
+          "description": "code: the 8 digits sent to that address.",
+          "type": "string",
+          "pattern": "^[0-9]{8}$"
+        }
+      },
+      "required": ["method"]
+    },
+    "claim_token": {
+      "type": "string",
+      "pattern": "^sdc_[A-Za-z0-9_-]{43}$",
+      "description": "Given by a successful register_business: proof again for 90 days, for this listing only."
+    }
+  },
+  "required": ["domain", "name", "category", "description", "where", "languages", "agree"]
+}
