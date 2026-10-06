@@ -12,7 +12,7 @@ copy it, change it. MIT.
 
 | | |
 |---|---|
-| **Joining** | `POST /v1/instances` reads the domain's manifest at `/.well-known/agent-inbox.json` (public address only, 5 s, 256 KB, no redirects) and lists the business once the manifest names itself. |
+| **Joining** | `POST /v1/instances` reads the domain's manifest at `/.well-known/agent-inbox.json` (public address only, checked as the connection is made; 5 s, 256 KB, no redirects) and lists the business once the manifest names itself. |
 | **Staying** | Pings are recorded, and a signed one is answered with the rules. Every member's manifest is read again every six hours; registering again reads it at once. |
 | **Leaving** | `POST /v1/instances/{domain}/listing`, signed with that domain's own key. Ten changes a day. |
 | **Receipts** | `POST /v1/receipts` checks the signature against the issuer's published keys, the claims, the nonce and, for an outcome, the receipt it answers. A receipt it cannot check is refused, never kept. |

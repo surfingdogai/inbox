@@ -15,6 +15,7 @@ import {
 } from "@surfingdog/spec";
 import categories from "@surfingdog/spec/vocab/categories.json" with { type: "json" };
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { fold, httpManifestFetcher, type ManifestFetcher, shownOf, validDomain } from "./manifest.js";
 import { type Business, Store } from "./store.js";
@@ -78,6 +79,14 @@ export function createNetwork(options: NetworkOptions): { app: Hono; store: Stor
         "Content-Type": "application/problem+json",
       },
     );
+
+  // Every body is cut at 64 KB as it arrives, before anything reads it: a declared length over that
+  // is refused at once, and a body with no length is counted while it streams. Reading it whole and
+  // measuring afterwards would let one unauthenticated POST fill the process's memory.
+  app.use(
+    "*",
+    bodyLimit({ maxSize: MAX_BODY, onError: (c) => problem(c, 413, "too_large", "A body is at most 64 KB.") }),
+  );
 
   /** Reads a body of at most 64 KB as JSON; a problem answer when it is too large or not JSON. */
   const bodyOf = async (c: Context): Promise<{ text: string; json: unknown } | Response> => {
