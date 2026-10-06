@@ -94,8 +94,7 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
           </svg>
         </button>
         <a class="btn btn-primary btn-sm cta" href="/#businesses">
-          <span class="cta-long">Get listed</span>
-          <span class="cta-short">Get listed</span>
+          Get listed
         </a>
         <button
           class="menu"
@@ -384,9 +383,6 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
   .cta {
     flex: none;
   }
-  .cta-short {
-    display: none;
-  }
 
   /* The menu button only exists where the strip does not. */
   .menu {
@@ -621,12 +617,6 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
     /* The choice does not disappear on a phone, it moves into the sheet. */
     .navbar .tt {
       display: none;
-    }
-    .cta-long {
-      display: none;
-    }
-    .cta-short {
-      display: inline;
     }
   }
   /* On a narrow phone the bar says one of two things: the brand, or where you are.
