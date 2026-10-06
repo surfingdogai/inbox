@@ -263,15 +263,14 @@ export function shownOf(domain: string, manifest: Record<string, unknown> | null
   const itemTypes = (Array.isArray(manifest?.item_types) ? manifest.item_types : []).filter(
     (t): t is string => typeof t === "string",
   );
+  // Doors for machines only (protocol §4.8): an https address on a host name. A mail address, a phone number, a form
+  // or a web page is a human channel and never a door, so it is never listed.
   const protocols: Record<string, string> = {};
   for (const [k, v] of Object.entries((manifest?.protocols ?? {}) as Record<string, unknown>)) {
     if (typeof v !== "string" || /[\s\p{Cc}]/u.test(v)) continue;
     try {
       const u = new URL(v);
-      if (
-        (u.protocol === "https:" && !isIP(u.hostname.replace(/^\[|\]$/g, "")) && !u.username) ||
-        u.protocol === "mailto:"
-      ) {
+      if (u.protocol === "https:" && !isIP(u.hostname.replace(/^\[|\]$/g, "")) && !u.username) {
         protocols[k] = v;
       }
     } catch {

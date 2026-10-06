@@ -10,10 +10,12 @@ import {
   type NetworkProtocol,
   protocolOf,
   rankingDocumentSchema,
+  readRankingDocument,
   receiptPublishResultSchema,
   searchBusinessesOutputSchema,
   signedPingResponseSchema,
 } from "@surfingdog/spec";
+import doorVocabulary from "@surfingdog/spec/vocab/doors.json" with { type: "json" };
 import type { z } from "zod";
 
 /**
@@ -151,9 +153,15 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
     if (!protocol) throw new Error("the rules are not a rules document: no version, no protocol");
     said = typeof a.json === "object" && a.json !== null && "protocol" in a.json;
     rulesVersion = (a.json as { version: number }).version;
+    let newer = "";
     if (said) shape(directoryRulesSchema, a.json, "rules");
-    else shape(rankingDocumentSchema, a.json, "ADR-017 rules");
-    return `${protocol.level} level, claims ${protocol.claims}${said ? "" : `, read from version ${rulesVersion}`}`;
+    else {
+      // A version this checker knows must match its schema whole; a newer one is read by what every version has.
+      const read = readRankingDocument(a.json);
+      if (!read.ok) shape(rankingDocumentSchema, a.json, "ADR-017 rules");
+      else if (!read.known) newer = `; version ${rulesVersion} is newer than this checker; read leniently`;
+    }
+    return `${protocol.level} level, claims ${protocol.claims}${said ? "" : `, read from version ${rulesVersion}`}${newer}`;
   });
   const level = (protocol as NetworkProtocol | null)?.level ?? "directory";
   const claims = (protocol as NetworkProtocol | null)?.claims ?? 1;
@@ -201,23 +209,26 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
     if (!a.text.trim()) throw new Error("llms.txt is empty");
     return "served";
   });
-  await check("assistants.mcp", "§4.7", "should", async () => {
-    const rpc = async (id: number, method: string, params: Record<string, unknown>) => {
-      const a = await call("POST", "/mcp", {
-        body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-        headers: { Accept: "application/json, text/event-stream", "Mcp-Protocol-Version": "2025-06-18" },
-      });
-      expectStatus(a, 200);
-      const json = a.json ?? sseJson(a.text);
-      const result = (json as { result?: Record<string, unknown> } | undefined)?.result;
-      if (!result) throw new Error(`${method} did not answer a result`);
-      return result;
-    };
-    await rpc(1, "initialize", {
+  /** One JSON-RPC call to the network's MCP server, at a revision every server negotiates. */
+  const rpc = async (id: number, method: string, params: Record<string, unknown>) => {
+    const a = await call("POST", "/mcp", {
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      headers: { Accept: "application/json, text/event-stream", "Mcp-Protocol-Version": "2025-06-18" },
+    });
+    expectStatus(a, 200);
+    const json = a.json ?? sseJson(a.text);
+    const result = (json as { result?: Record<string, unknown> } | undefined)?.result;
+    if (!result) throw new Error(`${method} did not answer a result`);
+    return result;
+  };
+  const initialize = () =>
+    rpc(1, "initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
-      clientInfo: { name: "network-check", version: "0.1.0" },
+      clientInfo: { name: "network-check", version: "0.2.0" },
     });
+  await check("assistants.mcp", "§4.7", "should", async () => {
+    await initialize();
     const tools = ((await rpc(2, "tools/list", {})).tools ?? []) as { name?: unknown }[];
     const names = tools.map((t) => t.name);
     for (const name of ["search_businesses", "get_business", "list_categories"]) {
@@ -226,6 +237,67 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
     const found = await rpc(3, "tools/call", { name: "search_businesses", arguments: {} });
     shape(searchBusinessesOutputSchema, found.structuredContent, "search_businesses' structuredContent");
     return "initialize, the three tools, and a search that matches the schema";
+  });
+
+  /* --- doors and filters (protocol 0.2) ----------------------------------------------------------- */
+
+  await check("doors.no-human-door", "§4.8", "must", async () => {
+    const a = await call("GET", "/v1/businesses?limit=100");
+    expectStatus(a, 200);
+    const listed = entriesOf(a.json);
+    let cards: unknown[] = [];
+    try {
+      await initialize();
+      const found = await rpc(3, "tools/call", { name: "search_businesses", arguments: {} });
+      cards = entriesOf(found.structuredContent);
+    } catch {
+      // A network without the MCP door is read through GET /v1/businesses alone.
+    }
+    const human = [...humanDoors(listed, "GET /v1/businesses"), ...humanDoors(cards, "search_businesses")];
+    if (human.length > 0) throw new Error(human.slice(0, 3).join("; "));
+    const doors = [...listed, ...cards].reduce<number>((n, e) => n + doorsOf(e).length, 0);
+    return doors === 0 ? "no doors listed" : `${doors} doors, none of them a human channel`;
+  });
+
+  await check("filters.narrow", "§4.3", "should", async () => {
+    const a = await call("GET", "/v1/businesses?limit=100");
+    expectStatus(a, 200);
+    const base = domainsOf(a.json);
+    const whole = (a.json as { next_cursor?: unknown } | undefined)?.next_cursor == null;
+    const first = entriesOf(a.json)[0] as { languages?: unknown; categories?: unknown } | undefined;
+    const firstOf = (v: unknown) => (Array.isArray(v) && typeof v[0] === "string" ? v[0] : undefined);
+    const filters: [string, string][] = [];
+    const language = firstOf(first?.languages);
+    const category = firstOf(first?.categories);
+    if (language) filters.push(["language", language]);
+    if (category) filters.push(["category", category]);
+    filters.push(["has_inbox", "true"], ["level", "askable"], ["source", "member"]);
+    const where = new Map(base.map((d, i) => [d, i]));
+    const notes: string[] = [];
+    let ran = 0;
+    for (const [name, value] of filters) {
+      const f = await call("GET", `/v1/businesses?limit=100&${name}=${encodeURIComponent(value)}`);
+      if (f.status === 400) {
+        notes.push(`${name}: not supported`);
+        continue;
+      }
+      expectStatus(f, 200);
+      const kept = domainsOf(f.json);
+      let last = -1;
+      for (const d of kept) {
+        const at = where.get(d);
+        if (at === undefined) {
+          if (whole) throw new Error(`${name}=${value} added ${d}, which the whole list does not have`);
+          continue;
+        }
+        if (at < last) throw new Error(`${name}=${value} moved ${d} before a business it follows without the filter`);
+        last = at;
+      }
+      ran++;
+      notes.push(`${name}=${value}: ${kept.length} of ${base.length}`);
+    }
+    if (ran === 0) return new Skip(`no filter supported (${notes.join(", ")})`);
+    return `each kept the order: ${notes.join(", ")}`;
   });
 
   /* --- instances -------------------------------------------------------------------------------- */
@@ -601,6 +673,67 @@ function b64u(bytes: number): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes)).buffer as ArrayBuffer)
     .toString("base64url")
     .padEnd(22, "A");
+}
+
+/* --- doors ------------------------------------------------------------------------------------- */
+
+/** The businesses of a page (`businesses`), read without a schema: a door a schema would refuse is what is looked for. */
+function entriesOf(page: unknown): unknown[] {
+  const list = (page as { businesses?: unknown } | null | undefined)?.businesses;
+  return Array.isArray(list) ? list : [];
+}
+
+function domainsOf(page: unknown): string[] {
+  return entriesOf(page).flatMap((e) => {
+    const d = (e as { domain?: unknown } | null)?.domain;
+    return typeof d === "string" ? [d] : [];
+  });
+}
+
+function doorsOf(entry: unknown): unknown[] {
+  const doors = (entry as { doors?: unknown } | null)?.doors;
+  return Array.isArray(doors) ? doors : [];
+}
+
+/** Why a URL is a human channel (§4.8): a refused scheme, or a messaging host; null when it is not one. */
+function humanUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(url.trim())?.[1]?.toLowerCase();
+  if (scheme && doorVocabulary.refused_url_schemes.includes(scheme)) return `a ${scheme}: address`;
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const refused = doorVocabulary.refused_hosts.find((h) => host === h || host.endsWith(`.${h}`));
+  return refused ? `a ${refused} link` : null;
+}
+
+/** Every human channel offered as a way in: a door of a refused type or address, or an inbox or protocol entry. */
+function humanDoors(entries: readonly unknown[], where: string): string[] {
+  const found: string[] = [];
+  for (const e of entries) {
+    const domain = String((e as { domain?: unknown } | null)?.domain ?? "?");
+    for (const door of doorsOf(e)) {
+      const { type, url } = (door ?? {}) as { type?: unknown; url?: unknown };
+      if (typeof type === "string" && doorVocabulary.refused.includes(type.toLowerCase())) {
+        found.push(`${where}: ${domain} lists a ${type} door, a human channel`);
+        continue;
+      }
+      const why = humanUrl(url);
+      if (why) found.push(`${where}: ${domain} lists ${why} as a door`);
+    }
+    for (const member of ["inbox", "protocols"] as const) {
+      const value = (e as Record<string, unknown> | null)?.[member];
+      if (typeof value !== "object" || value === null) continue;
+      for (const [name, url] of Object.entries(value)) {
+        const why = humanUrl(url);
+        if (why) found.push(`${where}: ${domain} lists ${why} as ${member}.${name}`);
+      }
+    }
+  }
+  return found;
 }
 
 /* --- answers ----------------------------------------------------------------------------------- */

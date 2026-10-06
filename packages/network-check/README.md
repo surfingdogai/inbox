@@ -6,10 +6,12 @@ the section that asks for it, and whether it is a `must` or a `should`. MIT.
 
 Two ways to run it:
 
-- **Read-only**, against any network, a production one included. It reads the rules, the
-  directory, `/llms.txt` and the MCP door, and sends only requests a correct network refuses
-  without keeping anything: a listing change with no signature or the wrong one, a forged
-  receipt, a ping for a domain nobody registered.
+- **Read-only**, against any network, a production one included. It reads the rules (a version
+  newer than it knows, leniently), the directory, `/llms.txt` and the MCP door; checks that no
+  door it lists is a human channel (mail, phone, messaging, forms, web pages) and that each
+  filter only leaves businesses out, keeping the order; and sends only requests a correct network
+  refuses without keeping anything: a listing change with no signature or the wrong one, a
+  forged receipt, a ping for a domain nobody registered.
 - **`--flow`**, against a network in a test mode. It plays an inbox from start to finish: it
   publishes a manifest, registers, pings unsigned and signed, replays a signature, leaves the
   directory and comes back, signs receipts and an outcome, and tries the forgeries a network
@@ -28,6 +30,8 @@ pnpm check https://network.surfingdog.ai
 ```
 ✓ rules.read                   must   §4.4, §10    full level, claims 6, read from version 6
 ✓ directory.list               must   §4.3         1 listed
+✓ doors.no-human-door          must   §4.8         no doors listed
+✓ filters.narrow               should §4.3         each kept the order: language=pt: 1 of 1, …
 ✓ listing.unsigned             must   §3, §4.5     401 bad_signature
 ✓ receipts.forged              must   §4.2         422 unknown_key
 …
