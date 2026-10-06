@@ -65,15 +65,15 @@ export default defineConfig({
           description:
             "Open doors to the agentic internet. An open directory AI assistants can search to find businesses and reach them directly, and an open-source inbox that gives a business a door agents can use.",
           details: [
-            "Today the directory lists businesses that run a verified inbox. Search it over MCP at https://network.surfingdog.ai/mcp, over REST at https://network.surfingdog.ai/v1/businesses, or read https://network.surfingdog.ai/llms.txt.",
-            "Order: businesses whose inbox answered in the last day first; among them, those with a record of kept promises from signed receipts, then everyone else in a daily shuffle anyone can reproduce. Nobody can pay to move. Rules, versioned: https://network.surfingdog.ai/v1/ranking (version 6).",
-            "Being built, not listed yet: a crawler that finds businesses with other agent doors (MCP, A2A, UCP, ACP, OpenAPI). How it behaves: https://network.surfingdog.ai/bot.",
+            "Today the directory lists businesses that run a verified inbox. Search it over MCP at https://surfingdog.ai/mcp or over REST at https://surfingdog.ai/v1/businesses.",
+            "Order: businesses whose inbox answered in the last day first; among them, those with a record of kept promises from signed receipts, then everyone else in a daily shuffle anyone can reproduce. Nobody can pay to move. Rules, versioned: https://surfingdog.ai/v1/ranking (version 6).",
+            "Being built, not listed yet: a crawler that finds businesses with other agent doors (MCP, A2A, UCP, ACP, OpenAPI). How it behaves: https://surfingdog.ai/bot.",
             "The protocol is open: anyone can run a network. MIT example network, network-check, and @surfingdog/sdk on npm. The inbox server is AGPL-3.0: self-host it today; a hosted inbox is not open yet.",
             "Every inbox publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. A live instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
           ].join("\n\n"),
           optionalLinks: [
-            { label: "Network MCP", url: "https://network.surfingdog.ai/mcp" },
-            { label: "Network llms.txt", url: "https://network.surfingdog.ai/llms.txt" },
+            { label: "Directory MCP", url: "https://surfingdog.ai/mcp" },
+            { label: "Directory API", url: "https://surfingdog.ai/v1/businesses" },
             { label: "Live demo manifest", url: "https://inbox.surfingdog.ai/.well-known/agent-inbox.json" },
             { label: "Live OpenAPI document", url: "https://inbox.surfingdog.ai/openapi.json" },
             { label: "Source on GitHub", url: GITHUB },

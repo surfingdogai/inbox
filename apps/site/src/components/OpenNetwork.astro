@@ -6,12 +6,14 @@
  * solid and marked "ours", two hollow ones marked "yours"; the line draws itself once, with the shared reveal.
  */
 const NET = "https://network.surfingdog.ai";
+// The directory's public doors are served on surfingdog.ai itself (the network keeps its own host as its identity).
+const PUBLIC = "https://surfingdog.ai";
 const REPO = "https://github.com/surfingdogai/inbox";
 
 const addresses = [
-  { door: "MCP", url: `${NET}/mcp` },
-  { door: "REST", url: `${NET}/v1/businesses` },
-  { door: "llms.txt", url: `${NET}/llms.txt` },
+  { door: "MCP", url: `${PUBLIC}/mcp` },
+  { door: "REST", url: `${PUBLIC}/v1/businesses` },
+  { door: "llms.txt", url: `${PUBLIC}/llms.txt` },
 ];
 const build = [
   { label: "Protocol", href: `${REPO}/tree/main/packages/spec` },
@@ -40,7 +42,7 @@ const build = [
               <li class="url">
                 <span class="addr">
                   <span class="door-tag mono">{a.door}</span>
-                  <span class="mono u">network.surfingdog.ai<wbr />{a.url.replace(NET, "")}</span>
+                  <span class="mono u">surfingdog.ai<wbr />{a.url.replace(PUBLIC, "")}</span>
                 </span>
                 <button
                   class="btn btn-secondary btn-sm"
