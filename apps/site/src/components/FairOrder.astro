@@ -45,7 +45,7 @@ const live = stateOf("ranking");
         <p class="eyebrow">The order</p>
         <h2 class="h-section" id="order-h">Ranked by receipts, never by payment.</h2>
         <p class="lede">
-          When a business keeps a booking or delivers an order, its inbox signs a receipt. The order is built from those.
+          When a business keeps a booking or delivers an order, its inbox signs a receipt. Receipts build its record.
         </p>
       </div>
     </div>
@@ -55,10 +55,7 @@ const live = stateOf("ranking");
         {
           lines.map((l) => (
             <li class="fo-rule">
-              <div class="fo-rule-head">
-                <h3 class="h-card">{l.title}</h3>
-                <StatusPill state={live} />
-              </div>
+              <h3 class="h-card fo-rule-head">{l.title}</h3>
               <p class="card-text">{l.text}</p>
             </li>
           ))
@@ -83,11 +80,13 @@ const live = stateOf("ranking");
             </div>
           </div>
         </div>
-        <p class="mono version">{rulesLine}</p>
+        <p class="version"><StatusPill state={live} /> <span class="mono">{rulesLine}</span></p>
         <p class="more">
-          <a class="link" href={RANKING} rel="noopener">Read the rules</a>
+          <a class="link" href="/network/#ranking">Read the rules</a>
+          <span class="sep" aria-hidden="true">·</span>
+          <a class="link" href={RANKING} rel="noopener">as JSON</a>
         </p>
-        <p class="fine">Changes are announced 15 days before they count.</p>
+        <p class="fine">Listed businesses get 15 days' notice of a rule change.</p>
       </div>
     </div>
   </div>
@@ -117,15 +116,19 @@ const live = stateOf("ranking");
     border-top: 0;
   }
   .fo-rule-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--sp-2);
     margin-bottom: var(--sp-1);
   }
   .version {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
     margin: var(--sp-4) 0 0;
     color: var(--ink-2);
+  }
+  .sep {
+    margin-inline: var(--sp-1);
+    color: var(--ink-3);
   }
   .more {
     margin: var(--sp-2) 0 0;
