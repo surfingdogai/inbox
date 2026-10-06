@@ -157,9 +157,11 @@ describe("protocol 0.2 checks", () => {
     expect(result(report, "doors.no-human-door")).toMatchObject({ outcome: "pass", requirement: "must" });
     expect(result(report, "doors.no-human-door")?.detail).toBe("no doors listed");
     expect(result(report, "filters.narrow")).toMatchObject({ outcome: "pass", requirement: "should" });
-    // The newest is first: its language and category really narrow; the rest it ignores, which keeps the order.
-    expect(result(report, "filters.narrow")?.detail).toContain(
-      "language=es: 1 of 2, category=hair-beauty: 1 of 2, has_inbox=true: 2 of 2",
+    // The checker filters by the top business's language and category: those really narrow; the rest
+    // it ignores, which keeps the order. Which of the two is on top depends on whether both were
+    // verified within the same moment (then by domain), so either is right.
+    expect(result(report, "filters.narrow")?.detail).toMatch(
+      /language=es: 1 of 2, category=hair-beauty: 1 of 2, has_inbox=true: 2 of 2|language=pt: 1 of 2, category=bakery: 1 of 2, has_inbox=true: 2 of 2/,
     );
   });
 
