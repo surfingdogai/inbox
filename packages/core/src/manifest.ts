@@ -11,6 +11,12 @@ export function buildManifest(input: {
   receiptKeys?: readonly Record<string, unknown>[] | undefined;
   /** ADR-017 §8.4: the networks whose people it recognises, and whether it can present passes at all. */
   identity?: { readonly passes: boolean; readonly networks: readonly string[] } | undefined;
+  /**
+   * Whether to be in the networks' directories (ADR-017 A2.3): `{listed: false}` leaves them all,
+   * and absent means listed. It is the one switch for every network at once, for the networks this
+   * inbox cannot sign a `POST /v1/instances/{domain}/listing` to; the signed call says it per network.
+   */
+  directory?: { readonly listed: boolean } | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   return manifestSchema.parse({
@@ -33,5 +39,6 @@ export function buildManifest(input: {
     },
     receipt_keys: { keys: input.receiptKeys ?? [] },
     review_services: input.reviewServices ?? [],
+    ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
   });
 }

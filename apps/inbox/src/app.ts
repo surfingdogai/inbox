@@ -9,10 +9,12 @@ import {
   hasOwnerSession,
   identityIssueHandler,
   mountDoors,
+  NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
   NETWORK_PUBLISH_KIND,
   NETWORK_RECEIPT_KIND,
+  networkListingHandler,
   networkPingHandler,
   networkPingOneHandler,
   networkPublishHandler,
@@ -147,6 +149,7 @@ export function createInbox(deps: AppDeps): Inbox {
     // call to a network runs in that network's own lane, so a slow one never delays another.
     .register(NETWORK_PING_KIND, networkPingHandler(network))
     .register(NETWORK_PING_ONE_KIND, networkPingOneHandler(network), { lane: networkLane })
+    .register(NETWORK_LISTING_KIND, networkListingHandler(network), { lane: networkLane })
     .register(NETWORK_PUBLISH_KIND, networkPublishHandler(network), { lane: networkLane })
     .register(NETWORK_RECEIPT_KIND, networkReceiptHandler(network), { lane: networkLane })
     // A first contact the request could not finish is asked again, in that network's lane.
@@ -166,7 +169,13 @@ export function createInbox(deps: AppDeps): Inbox {
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
     .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }));
   if (demo) {
-    for (const kind of [NETWORK_PING_ONE_KIND, NETWORK_PUBLISH_KIND, NETWORK_RECEIPT_KIND, IDENTITY_ISSUE_KIND]) {
+    for (const kind of [
+      NETWORK_PING_ONE_KIND,
+      NETWORK_LISTING_KIND,
+      NETWORK_PUBLISH_KIND,
+      NETWORK_RECEIPT_KIND,
+      IDENTITY_ISSUE_KIND,
+    ]) {
       runner.register(kind, noNetworkHandler);
     }
     // Nor does anything a tester typed leave by a webhook, whoever set one up.
@@ -323,6 +332,12 @@ export function createInbox(deps: AppDeps): Inbox {
       caps.receipts.jwks(),
       readSettings(deps.db),
     ]);
+    // Out of every directory when the owner says so, or when every network it reports to is kept
+    // from the listing. With one network sharing it and another not, the manifest cannot say both:
+    // it says listed, and the signed `POST /v1/instances/{domain}/listing` tells the other (that is
+    // the one way to say it per network, and an inbox that cannot sign cannot say it at all).
+    const on = Object.values(settings.networks).filter((n) => n.enabled);
+    const unlisted = !settings.directory.listed || (on.length > 0 && on.every((n) => !n.share.listing));
     const manifest = buildManifest({
       instanceUrl: origin,
       itemTypes: profile.item_types,
@@ -332,6 +347,7 @@ export function createInbox(deps: AppDeps): Inbox {
       reviewServices: enabledNetworks(settings, "receipts"),
       // Whose people it recognises (ADR-017 §8.4): every network switched on, when it can sign.
       identity: { passes: await port.canSign(), networks: enabledNetworks(settings) },
+      ...(unlisted ? { directory: { listed: false } } : {}),
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

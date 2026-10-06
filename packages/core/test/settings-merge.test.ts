@@ -301,12 +301,14 @@ describe("networks in settings writes", () => {
     expect(await jobs()).toEqual([]);
     await caps.updateSettings(owner, { doc: { networks: { [A]: { enabled: true } } } });
     const hour = Math.floor(Date.parse("2026-09-22T10:37:13Z") / 3_600_000);
+    // And the listing job, since the answer to "is the business in your directory" changed.
     expect(await jobs()).toEqual([
+      `network.listing network.listing:${A}:${Date.parse("2026-09-22T10:37:13Z")}`,
       `network_ping_one network_ping:${A}:${hour}`,
       `network_publish network_publish:${A}:${hour}`,
     ]);
     // Changing something else does not queue them again.
     await caps.updateSettings(owner, { doc: { networks: { [A]: { issue: false } } } });
-    expect(await jobs()).toHaveLength(2);
+    expect(await jobs()).toHaveLength(3);
   });
 });

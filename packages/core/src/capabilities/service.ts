@@ -14,7 +14,13 @@ import { mailForItem, senderOf } from "../jobs/mail-log";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
 import { rewardProblems } from "../negotiation/rewards";
-import { type NetworkView, networkStartStatements, networkViews } from "../network/index";
+import {
+  listingJobStatement,
+  type NetworkView,
+  networkStartStatements,
+  networkViews,
+  wantsListed,
+} from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import {
   business,
@@ -1274,6 +1280,16 @@ export class Capabilities {
     if (after.business.name !== before.business.name) {
       await assertNoLeak(this.db, caller, PUBLISHED, [after.business.name]);
     }
+    // The directory profile is as public: every network this inbox reports to shows it.
+    const words = (s: Settings) => [
+      s.directory.description,
+      ...s.directory.categories,
+      ...Object.values(s.directory.address),
+      s.directory.url,
+    ];
+    if (JSON.stringify(words(after)) !== JSON.stringify(words(before))) {
+      await assertNoLeak(this.db, caller, PUBLISHED, words(after));
+    }
     // A network switched on is sent customers' email addresses once it answers this inbox's ping
     // (The founder, 23 September 2026): which networks may have them, and what each is sent, is for a
     // person at the business to decide. The owner's AI, or a key handed to another system, may
@@ -1283,13 +1299,16 @@ export class Capabilities {
       if (opened.length) {
         throw new WriteError(
           "not_allowed",
-          "Only the owner can switch a network on or let it have more, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses. Nothing was changed; tell the owner what you suggest.",
+          "Only the owner can switch a network on, let it have more, or put the business back in the directories, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses. Nothing was changed; tell the owner what you suggest.",
           {
             details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" },
             fields: opened.map((path) => ({
               path: `doc.${path}`,
               problem: "invalid" as const,
-              message: "only the owner in person can switch a network on or share more with it",
+              message:
+                path === "directory.listed"
+                  ? "only the owner in person can put the business back in the directories"
+                  : "only the owner in person can switch a network on or share more with it",
             })),
           },
         );
@@ -1322,9 +1341,18 @@ export class Capabilities {
     const started = Object.entries(after.networks).filter(
       ([origin, entry]) => reportsTo(entry) && !reportsTo(before.networks[origin]),
     );
-    if (started.length) {
-      await this.db.batch(started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)));
-    }
+    // Every network whose answer to "is the business in your directory" this write changed is told
+    // (ADR-017 A2.3): one switched off, one no longer shared the listing, or every one at once when
+    // `directory.listed` moved. A network the write removed is in `before` only, and is told too.
+    // Losing this insert costs only time: the hourly tick queues it again while a network differs.
+    const listing = [...new Set([...Object.keys(before.networks), ...Object.keys(after.networks)])].filter(
+      (origin) => wantsListed(before, origin) !== wantsListed(after, origin),
+    );
+    const statements = [
+      ...started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)),
+      ...listing.map((origin) => listingJobStatement(origin, now)),
+    ];
+    if (statements.length) await this.db.batch(statements);
     return redact(after, version, caller);
   }
 

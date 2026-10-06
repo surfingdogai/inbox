@@ -665,6 +665,13 @@ export const networkStatus = sqliteTable("network_status", {
    */
   recognisedPlatforms: text("recognised_platforms"),
   platformsCheckedAt: integer("platforms_checked_at"),
+  /**
+   * Whether the business is in the network's directory, as this inbox last told it with the signed
+   * `POST /v1/instances/{domain}/listing` (ADR-017 A2.3): 1 or 0, the value the network last answered
+   * 200 to, and when. Null while it has never been told, which a network reads as listed.
+   */
+  listed: integer("listed"),
+  listedAt: integer("listed_at"),
   updatedAt: updatedAt(),
 });
 

@@ -299,4 +299,12 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `network_status` ADD `claims` integer;",
     ],
   },
+  {
+    version: 20,
+    name: "0019_network_listing",
+    statements: [
+      "-- Being in a network's directory (ADR-017 A2.3): what this inbox last told each network, by the\n-- signed `POST /v1/instances/{domain}/listing`. `listed` is the value the network last answered 200\n-- to (1 or 0), null while it has never been told; `listed_at` is when. The manifest's\n-- `directory.listed` says the same to every network at once, for an inbox that cannot sign.\nALTER TABLE `network_status` ADD `listed` integer;",
+      "ALTER TABLE `network_status` ADD `listed_at` integer;",
+    ],
+  },
 ];

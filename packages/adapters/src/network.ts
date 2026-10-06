@@ -12,6 +12,9 @@ import {
   itemStopped,
   type JobHandler,
   type JobRow,
+  listingJobStatement,
+  listingOwed,
+  NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
   NETWORK_PUBLISH_KIND,
@@ -19,6 +22,7 @@ import {
   type NetworkJobPayload,
   type NetworkReceiptPayload,
   networkFailureStatement,
+  networkListedStatement,
   networkPingSignatureStatement,
   networkPublicationStatement,
   networkReceiptStatements,
@@ -49,6 +53,7 @@ import {
   takesV2,
   takesV6,
   V2_ONLY_KINDS,
+  wantsListed,
 } from "@surfingdog/core";
 import type { Statement } from "@surfingdog/platform";
 import { z } from "zod";
@@ -71,6 +76,7 @@ import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
  * ever thrown into a request.
  */
 export {
+  NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
   NETWORK_PUBLISH_KIND,
@@ -205,6 +211,17 @@ export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
     // The lifecycle sweep queues its own successor; this re-queues it should a chain ever break.
     await ensureLifecycleSweep(db, now);
     const force = (job.payload as { force?: unknown } | null)?.force === true;
+    // Every network that verified this inbox and was last told something other than what the
+    // settings want now is told again: an insert lost after a settings write, a 429, or a network
+    // switched off entirely, which has to hear it is no longer listed. Done before the early return
+    // below, which is exactly the case of every network switched off.
+    const owedListing: string[] = [];
+    for (const origin of Object.keys(settings.networks)) {
+      const status = await readNetworkStatus(db, origin);
+      if (status?.registration !== "registered") continue;
+      if (listingOwed(status.listed, wantsListed(settings, origin))) owedListing.push(origin);
+    }
+    if (owedListing.length) await db.batch(owedListing.map((origin) => listingJobStatement(origin, now)));
     const on = Object.entries(settings.networks).filter(([, entry]) => reportsTo(entry));
     if (on.length === 0) return { note: "no network is switched on; add or switch one on in Settings → Networks" };
     // A network that no longer takes receipts may still be owed the outcomes of promises it has.
@@ -284,6 +301,9 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
       await db.batch([
         networkSuccessStatement(network, now, { registration: "registered", registeredAt: now, pinged: true }),
         ...pingAnswerStatements(network, now, second),
+        // A network lists what registers with it: one this inbox reports to without its listing is
+        // told at once, not at the next hourly tick.
+        ...(wantsListed(settings, network) ? [] : [listingJobStatement(network, now)]),
       ]);
       return { note: `registered ${domain} at ${host} and pinged${signatureNote(second.signature)}` };
     }
@@ -292,6 +312,52 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
     return {
       note: `registered ${domain} at ${host}; verification pending (ping ${"status" in res ? `HTTP ${res.status}` : res.error})`,
     };
+  };
+}
+
+// ---- one network's directory ---------------------------------------------------------------
+
+/**
+ * Tells one network whether the business is in its directory (ADR-017 A2.3): the signed
+ * `POST /v1/instances/{domain}/listing` with `{"listed": …}`, as `wantsListed` says when the job
+ * runs. Only a network that verified this inbox can be told, and only by an inbox that can sign;
+ * for the rest the manifest's `directory.listed` says it, which a network reads when it fetches it.
+ * A 200 is recorded, so nothing is sent again until the answer changes; a 429 waits for the next
+ * hourly tick, which queues the job again while the network has not been told.
+ */
+export function networkListingHandler(deps: NetworkDeps): JobHandler {
+  return async (job, { db, now }) => {
+    const { network } = job.payload as NetworkJobPayload;
+    if (canonicalNetworkOrigin(network) !== network) return { note: `${network} is not a network origin` };
+    const host = hostOf(network);
+    const settings = await readSettings(db);
+    const want = wantsListed(settings, network);
+    const status = await readNetworkStatus(db, network);
+    const word = want ? "listed" : "not listed";
+    if (!listingOwed(status?.listed, want)) return { note: `${host} already has the business ${word}` };
+    if (status?.registration !== "registered") return { note: `${host}: not registered; the manifest says it` };
+    let key: InstanceSigningKey | null = null;
+    try {
+      key = deps.instanceKey ? await deps.instanceKey() : null;
+    } catch {
+      key = null;
+    }
+    if (!key) return { note: `${host}: cannot sign; the manifest carries directory.listed` };
+    const instance = instanceDomain(deps, settings);
+    if ("problem" in instance) return { note: instance.problem };
+    const domain = instance.domain;
+    const url = `${network}/v1/instances/${encodeURIComponent(domain)}/listing`;
+    const body = JSON.stringify({ listed: want });
+    const signed = await signInstanceRequest({ method: "POST", url, body, instance: `https://${domain}`, key });
+    const res = await call(deps, url, body, MAX_BODY, signed.headers);
+    if ("status" in res && res.status === 200) {
+      await db.client.query(networkListedStatement(network, now, want));
+      return { note: `told ${host} the business is ${word}` };
+    }
+    if ("status" in res && res.status === 429) {
+      return { note: `${host} asked to wait (HTTP 429); the hourly tick asks again` };
+    }
+    return fail(db, job, network, now, "listing", res);
   };
 }
 
@@ -949,7 +1015,7 @@ async function call(
 }
 
 /**
- * Records a failed ping or registration. A network that is down is retried with the job's backoff
+ * Records a failed ping, registration or listing call. A network that is down is retried with the job's backoff
  * a couple of times within the hour, then left for the next hour's ping; an answer that says no
  * is recorded for the owner and not retried, since asking again would get the same answer.
  */
@@ -958,7 +1024,7 @@ async function fail(
   job: JobRow,
   network: string,
   now: number,
-  what: "ping" | "register",
+  what: "ping" | "register" | "listing",
   res: CallResult,
 ): Promise<{ note: string }> {
   const down =

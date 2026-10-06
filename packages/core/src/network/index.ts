@@ -20,6 +20,12 @@ export const NETWORK_PING_KIND = "network_ping";
 export const NETWORK_PING_ONE_KIND = "network_ping_one";
 export const NETWORK_PUBLISH_KIND = "network_publish";
 export const NETWORK_RECEIPT_KIND = "network_receipt";
+/**
+ * Telling one network whether the business is in its directory (ADR-017 A2.3): the signed
+ * `POST /v1/instances/{domain}/listing`. Queued when the answer changes, and by the hourly tick
+ * whenever what the network was last told is not what the settings want.
+ */
+export const NETWORK_LISTING_KIND = "network.listing";
 
 export const PING_PERIOD_MS = 60 * 60_000;
 
@@ -59,6 +65,46 @@ export interface NetworkReceiptPayload {
 export function networkLane(payload: unknown): string | undefined {
   const network = (payload as { network?: unknown } | null)?.network;
   return typeof network === "string" ? `network:${network}` : undefined;
+}
+
+/**
+ * Whether the business wants to be in one network's directory: listed in Settings, the network
+ * switched on, and sharing its listing with it. Anything else is no, so a network switched off
+ * entirely is told to delist too, rather than left showing a business that stopped talking to it.
+ */
+export function wantsListed(settings: Settings, origin: string): boolean {
+  const entry = settings.networks[origin];
+  return settings.directory.listed && !!entry?.enabled && entry.share.listing;
+}
+
+/**
+ * The job that tells one network what `wantsListed` says now. It reads the settings when it runs,
+ * not when it was queued, so two quick changes send the last one; the key carries the time so a
+ * change after a job already ran queues a new one. It runs in the network's own lane.
+ */
+export function listingJobStatement(origin: string, now: number): Statement {
+  return jobStatement(NETWORK_LISTING_KIND, { network: origin } satisfies NetworkJobPayload, now, {
+    dedupeKey: `${NETWORK_LISTING_KIND}:${origin}:${now}`,
+  });
+}
+
+/**
+ * Whether what a network was last told (`listed`: 1, 0, or null for never) differs from what is
+ * wanted. Never told and wanted listed needs nothing: a network lists a registered instance unless
+ * told otherwise.
+ */
+export function listingOwed(listed: number | null | undefined, want: boolean): boolean {
+  if (listed === null || listed === undefined) return !want;
+  return listed !== (want ? 1 : 0);
+}
+
+/** A listing call the network answered 200 to: what it was told, and when. */
+export function networkListedStatement(network: string, now: number, listed: boolean): Statement {
+  return {
+    sql: "UPDATE network_status SET listed = ?, listed_at = ?, updated_at = ? WHERE network = ?",
+    params: [listed ? 1 : 0, now, now, network],
+    method: "run",
+  };
 }
 
 /**
@@ -263,6 +309,9 @@ export interface NetworkStatusRow {
   /** The hosts of the platforms the network recognises, as `/v1/ranking` last said; null before it did. */
   readonly recognisedPlatforms: readonly string[] | null;
   readonly platformsCheckedAt: number | null;
+  /** What the network was last told of the directory (1 listed, 0 not), or null when never; and when. */
+  readonly listed: number | null;
+  readonly listedAt: number | null;
 }
 
 /**
@@ -285,7 +334,7 @@ export interface BusinessStanding {
 export type PingSignature = "verified" | "unsigned" | "ignored" | "refused" | `invalid: ${string}`;
 
 const STATUS_COLUMNS =
-  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims";
+  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims, listed, listed_at";
 
 export async function readNetworkStatus(db: Db, network: string): Promise<NetworkStatusRow | undefined> {
   const { rows } = await db.client.query({
@@ -605,6 +654,8 @@ function statusOf(r: readonly unknown[]): NetworkStatusRow {
     platformsCheckedAt: n(r[15]),
     level: r[16] === "directory" || r[16] === "full" ? r[16] : null,
     claims: n(r[17]),
+    listed: n(r[18]),
+    listedAt: n(r[19]),
   };
 }
 

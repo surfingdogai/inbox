@@ -79,9 +79,12 @@ export function changedSettings(before: Settings, after: Settings, watched: read
 /**
  * Networks a write opens: switched on, allowed to issue keys, or given something more to share
  * (listing, counts, receipts). Each is sent something about this inbox's customers once it is.
+ * Coming back into the directories (`directory.listed` false to true) opens every network at once,
+ * so it counts too: an owner who left them decides in person whether to return.
  */
 export function openedNetworks(before: Settings, after: Settings): string[] {
   const out: string[] = [];
+  if (after.directory.listed && !before.directory.listed) out.push("directory.listed");
   for (const [origin, entry] of Object.entries(after.networks)) {
     if (!entry.enabled) continue;
     const was = before.networks[origin];

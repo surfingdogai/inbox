@@ -593,6 +593,47 @@ const sections = {
         ),
     })
     .prefault({}),
+  /**
+   * The business in the networks' directories (ADR-017 A2.3, A2.5): whether to be there at all, and
+   * the public profile a directory shows. Every field here is published as it is written, to every
+   * network this inbox reports to, so it holds only what the business says about itself in public:
+   * never a person's email or phone. Off, the inbox tells each network it can sign for to delist it,
+   * and its manifest says `directory.listed: false` to the rest.
+   */
+  directory: z
+    .object({
+      listed: z.boolean().default(true).describe("Be in the directories of the networks you report to."),
+      description: z.string().max(500).default("").describe("A sentence or two about the business, in public."),
+      categories: z
+        .array(z.string().max(60))
+        .max(10)
+        .default([])
+        .describe("What the business is, as category slugs (vocab/categories.json) or free tags."),
+      address: z
+        .object({
+          streetAddress: z.string().max(200).default(""),
+          addressLocality: z.string().max(100).default(""),
+          postalCode: z.string().max(20).default(""),
+          addressCountry: z
+            .string()
+            .regex(/^([A-Z]{2})?$/, "a two-letter country code in capitals, like PT, or nothing")
+            .default(""),
+        })
+        .prefault({})
+        .describe("Where customers find the business; leave it empty for a business with no premises."),
+      geo: z
+        .object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) })
+        .nullable()
+        .default(null)
+        .describe("The premises on a map, so a directory can say how far away it is."),
+      url: z
+        .url({ protocol: /^https?$/ })
+        .max(2048)
+        .or(z.literal(""))
+        .default("")
+        .describe("The business's own website, if it has one."),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 };
 
