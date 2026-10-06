@@ -1,15 +1,21 @@
 import {
   AMENDMENT_LIMITS,
+  attributesResponseSchema,
+  attributeVocabularySchema,
   businessCardSchema,
   businessesResponseSchema,
   categoriesResponseSchema,
   categoryVocabularySchema,
+  doorTypeSchema,
+  doorVocabularySchema,
   getBusinessOutputSchema,
   isRetriedPublication,
   JSON_SCHEMAS,
   jsonSchemaOf,
   listCategoriesOutputSchema,
+  listingDetailSchema,
   listingSchema,
+  MCP_OPTIONAL_TOOL_NAMES,
   MCP_TOOL_NAMES,
   OUTCOMES,
   parseReceiptClaims,
@@ -20,12 +26,18 @@ import {
   rankingDocumentSchema,
   rankingV5Schema,
   rankingV6Schema,
+  rankingV7Schema,
+  readRankingDocument,
   receiptAckPayloadV2Schema,
   receiptPayloadV2Schema,
+  registerBusinessInputSchema,
+  registerBusinessOutputSchema,
   reportRequestSchema,
   rulesOf,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
+  updateBusinessInputSchema,
+  updateBusinessOutputSchema,
 } from "@surfingdog/spec";
 import { describe, expect, it } from "vitest";
 import mcpVectors from "../../spec/vectors/mcp.json";
@@ -35,7 +47,9 @@ import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
 import receiptsV6 from "../../spec/vectors/receipts-v6.json";
 import signatures from "../../spec/vectors/signatures.json";
+import attributeVocabulary from "../../spec/vocab/attributes.json";
 import vocabulary from "../../spec/vocab/categories.json";
+import doorVocabulary from "../../spec/vocab/doors.json";
 import { buildNetworkVectors } from "../scripts/network-vectors";
 import { type OfferForm, type OfferTerms, termsSha } from "../src/customer/offer";
 import type { ActorKind, ItemType } from "../src/domain/types";
@@ -799,5 +813,552 @@ describe("what an inbox reads from a network's answers", () => {
     expect(Object.keys(rankingV5Schema.shape)).not.toContain("amendments");
     // A version 6 document missing what version 6 adds is not version 6.
     expect(rankingDocumentSchema.safeParse({ ...v4, version: 6, rules: "0.1.3" }).success).toBe(false);
+  });
+});
+
+/* --- protocol 0.2 ------------------------------------------------------------------------------------------------- */
+
+type Door = { type: string; url: string; level: string; status: string; kinds: readonly string[]; protocol?: string };
+type Kind = "b" | "l";
+
+const LEVELS = ["listed", "readable", "askable", "bookable", "payable"];
+const DOOR_LABELS: Record<string, string> = {
+  inbox: "inbox",
+  mcp: "MCP",
+  a2a: "A2A",
+  openapi: "OpenAPI",
+  api: "API",
+  ucp: "UCP",
+  acp: "ACP",
+  nlweb: "NLWeb",
+};
+
+/**
+ * A card's `why` line as network.md §4.10 says a network writes it, re-derived here as any consumer would: the parts
+ * that apply, in this order, joined with " · ".
+ */
+function whyOf(
+  card: {
+    source?: "member" | "registered" | "found";
+    answering?: boolean;
+    doors?: Door[];
+    proof?: string;
+    found?: { checked_at: string };
+  },
+  ctx: { category?: string; band?: 1 | 2; openNow?: boolean; kept?: number; slot?: boolean } = {},
+): string {
+  const parts: string[] = [];
+  if (ctx.category) parts.push(`category ${ctx.category}`);
+  else if (ctx.band === 1) parts.push("matches its name, categories or services");
+  else if (ctx.band === 2) parts.push("matches its description");
+  if (ctx.openNow) parts.push("open now");
+  if (card.source === "member") {
+    parts.push(card.answering ? "answers its inbox" : "its inbox has not answered in the last day");
+  } else {
+    const best = (card.doors ?? [])
+      .filter((d) => d.status === "live" && LEVELS.indexOf(d.level) >= 2)
+      .reduce<Door | undefined>((b, d) => (!b || LEVELS.indexOf(d.level) > LEVELS.indexOf(b.level) ? d : b), undefined);
+    if (best) {
+      const label = best.type.startsWith("platform:")
+        ? `${best.type.slice("platform:".length)} (platform)`
+        : best.type === "other"
+          ? (best.protocol ?? "other")
+          : (DOOR_LABELS[best.type] ?? best.type);
+      const level = best.kinds.includes("order") && !best.kinds.includes("book") ? "orderable" : best.level;
+      parts.push(`${label} door, ${level}`);
+    }
+  }
+  if (ctx.kept !== undefined) parts.push(`${ctx.kept} promises kept`);
+  if (ctx.slot) parts.push("newcomer's turn");
+  if (card.source === "found" && card.found)
+    parts.push(`found on its own website · not a member · checked ${card.found.checked_at.slice(0, 10)}`);
+  if (card.source === "registered") parts.push(`registered by the business · proof: ${card.proof}`);
+  return parts.length ? parts.join(" · ") : "in the directory's published order";
+}
+
+/** An entry of the hour's order (rules version 7, §4.4) as the network's snapshot holds it. */
+interface OrderEntry {
+  kind: Kind;
+  ref: string;
+  domain: string;
+  reach: 1 | 2 | 3;
+  level: number;
+  ranked: boolean;
+  score_int: number;
+  shuffle: string;
+  newcomer?: boolean;
+}
+
+/** Reach 1; then reach 2 by its best door's level, payable, bookable or orderable, askable; then the rest. */
+const tierOf = (e: OrderEntry) =>
+  e.reach === 1 ? 0 : e.reach === 2 && e.level >= 3 ? 1 + (5 - Math.min(e.level, 5)) : 4;
+
+/**
+ * The hour's order: tier, the ranked by their record, the daily shuffle, a member before an entry that is not, the id;
+ * then one place per domain (a member's, else the better one). Domains here are already registrable.
+ */
+function orderV7(entries: OrderEntry[]): OrderEntry[] {
+  const sorted = [...entries].sort(
+    (a, b) =>
+      tierOf(a) - tierOf(b) ||
+      Number(b.ranked) - Number(a.ranked) ||
+      (a.ranked && b.ranked ? b.score_int - a.score_int : 0) ||
+      (a.shuffle < b.shuffle ? -1 : a.shuffle > b.shuffle ? 1 : 0) ||
+      (a.kind === b.kind ? 0 : a.kind === "b" ? -1 : 1) ||
+      (a.ref.toLowerCase() < b.ref.toLowerCase() ? -1 : a.ref.toLowerCase() > b.ref.toLowerCase() ? 1 : 0),
+  );
+  const keep = new Map<string, OrderEntry>();
+  for (const e of sorted) {
+    const held = keep.get(e.domain);
+    if (!held || (held.kind === "l" && e.kind === "b")) keep.set(e.domain, e);
+  }
+  const kept = new Set(keep.values());
+  return sorted.filter((e) => kept.has(e));
+}
+
+/**
+ * Every 5th place to the next answering newcomer not yet placed; every other place to the next of the list not yet
+ * placed. `list` is the filtered order (band, then position), `newcomers` its newcomers in the same order; the page is
+ * places o+1 to o+n.
+ */
+function newcomerMerge<T extends { ref: string }>(
+  list: readonly T[],
+  newcomers: readonly T[],
+  o: number,
+  n: number,
+): { page: { entry: T; slot: boolean }[]; more: boolean } {
+  const placed = new Set<string>();
+  const out: { entry: T; slot: boolean }[] = [];
+  let li = 0;
+  let ni = 0;
+  while (out.length < o + n + 1) {
+    let entry: T | undefined;
+    let slot = false;
+    if ((out.length + 1) % 5 === 0) {
+      while (ni < newcomers.length && placed.has((newcomers[ni] as T).ref)) ni++;
+      if (ni < newcomers.length) {
+        entry = newcomers[ni++];
+        slot = true;
+      }
+    }
+    if (!entry) {
+      while (li < list.length && placed.has((list[li] as T).ref)) li++;
+      if (li < list.length) entry = list[li++];
+    }
+    if (!entry) break;
+    placed.add(entry.ref);
+    out.push({ entry, slot });
+  }
+  return { page: out.slice(o, o + n), more: out.length > o + n };
+}
+
+describe("protocol 0.2: vocab/doors.json and vocab/attributes.json", () => {
+  it("the door vocabulary is well formed, and no refused kind is a door type", () => {
+    const v = doorVocabularySchema.parse(doorVocabulary);
+    for (const t of v.types) expect(doorTypeSchema.safeParse(t).success, t).toBe(true);
+    for (const t of v.refused) expect(doorTypeSchema.safeParse(t).success, t).toBe(false);
+    expect(doorTypeSchema.safeParse("platform:shopify").success).toBe(true);
+    expect(doorTypeSchema.safeParse("platform:").success).toBe(false);
+    expect(v.refused).toEqual(expect.arrayContaining(["mailto", "tel", "sms", "whatsapp", "form", "page"]));
+    for (const k of v.delivery_kinds) expect(v.kinds).toContain(k);
+    expect(v.delivery_kinds).toEqual(["ask", "quote"]);
+  });
+
+  it("every attribute applies to known groups, has five labels, and needs a proof where a register would give one", () => {
+    const v = attributeVocabularySchema.parse(attributeVocabulary);
+    const slugs = new Set(vocabulary.categories.map((c) => c.slug));
+    const keys = v.keys.map((k) => k.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const k of v.keys) {
+      for (const g of k.applies_to) expect(g === "*" || slugs.has(g), `${k.key}: ${g}`).toBe(true);
+      expect(Object.keys(k.labels).sort(), k.key).toEqual(["de", "en", "es", "fr", "pt"]);
+      expect(k.type === "enum", k.key).toBe(Boolean(k.values?.length));
+    }
+    expect(v.keys.filter((k) => k.needs_proof).map((k) => k.key)).toEqual(["halal", "kosher", "cert"]);
+    expect(v.keys.filter((k) => k.group === "identity").every((k) => k.crawlable === "declared")).toBe(true);
+    // What GET /v1/attributes answers from it.
+    const answer = {
+      version: v.version,
+      keys: v.keys.map(({ key, group, type, values, labels, needs_proof }) => ({
+        key,
+        group,
+        type,
+        ...(values ? { values } : {}),
+        labels,
+        ...(needs_proof ? { filterable: false } : {}),
+      })),
+      payments: { methods: ["card", "pix"], wallets: ["apple_pay"], agent: ["x402"] },
+    };
+    expect(attributesResponseSchema.safeParse(answer).success).toBe(true);
+  });
+});
+
+/** A business the network found on its own website, as a card shows it: fictional, and no street, phone or email. */
+const foundCard = {
+  domain: "taller-norte.example",
+  name: "Taller Norte",
+  description: "Bicycle repairs and parts.",
+  website: "https://taller-norte.example/",
+  city: "Valparaíso",
+  country: "CL",
+  distance_km: 3,
+  categories: ["repair"],
+  tags: [],
+  languages: ["es"],
+  takes: [],
+  services: [],
+  open_now: null,
+  hours_today: null,
+  answering: false,
+  listing_url: "https://network.example.org/v1/businesses/taller-norte.example",
+  source: "found",
+  claimed: false,
+  level: "bookable",
+  has_inbox: false,
+  doors: [
+    {
+      type: "mcp",
+      url: "https://taller-norte.example/mcp",
+      level: "bookable",
+      status: "live",
+      kinds: ["ask", "order"],
+      src: "seen",
+      checked_at: "2026-10-06T08:00:00Z",
+    },
+    {
+      type: "acp",
+      url: "https://taller-norte.example/acp",
+      level: "payable",
+      status: "failing",
+      kinds: ["order", "pay"],
+      src: "declared",
+    },
+  ],
+  accepts: { kinds: ["ask", "order"], pay: ["card"] },
+  category: {
+    primary: { id: "bicycle_shop", label: "Bicycle shop", src: "declared" },
+    alternates: [],
+    path: ["retail", "bicycle_shop"],
+    group: "repair",
+  },
+  attributes: { walk_ins: { v: true, src: "seen" } },
+  place: { locality: "Valparaíso", region: "Valparaíso", country: "CL", kind: ["storefront"] },
+  why: "MCP door, orderable · found on its own website · not a member · checked 2026-10-06",
+  found: {
+    note: "found on its own website · not a member · checked 2026-10-06",
+    checked_at: "2026-10-06T08:00:00Z",
+    about_url: "https://network.example.org/bot",
+  },
+} as const;
+
+describe("protocol 0.2: cards, listings and the why line", () => {
+  it("a found card holds to the card's schema without an inbox, and never offers a human channel as a door", () => {
+    expect(businessCardSchema.safeParse(foundCard).success).toBe(true);
+    const withTel = { ...foundCard, doors: [{ ...foundCard.doors[0], type: "tel", url: "tel:+56912345678" }] };
+    expect(businessCardSchema.safeParse(withTel).success).toBe(false);
+    const listing = {
+      domain: foundCard.domain,
+      name: foundCard.name,
+      city: foundCard.city,
+      country: foundCard.country,
+      categories: ["repair"],
+      languages: ["es"],
+      item_types: [],
+      protocols: {},
+      receipts: { issued: 0, acknowledged: 0 },
+      answering: false,
+      online: false,
+      not_answering_since: null,
+      source: "found",
+      doors: foundCard.doors,
+      found: foundCard.found,
+      outcomes: {},
+      facts: [
+        {
+          field: "name",
+          v: "Taller Norte",
+          src: "declared",
+          url: "https://taller-norte.example/",
+          at: "2026-10-06T08:00:00Z",
+        },
+      ],
+    };
+    expect(listingDetailSchema.safeParse(listing).success).toBe(true);
+    expect(getBusinessOutputSchema.safeParse({ ...foundCard, outcomes: {}, facts: listing.facts }).success).toBe(true);
+  });
+
+  it("derives why in the order the protocol gives", () => {
+    const member = { source: "member" as const, answering: true };
+    expect(whyOf(member)).toBe("answers its inbox");
+    expect(whyOf(member, { category: "Hair & beauty", openNow: true, kept: 12 })).toBe(
+      "category Hair & beauty · open now · answers its inbox · 12 promises kept",
+    );
+    expect(whyOf({ source: "member", answering: false }, { band: 2 })).toBe(
+      "matches its description · its inbox has not answered in the last day",
+    );
+    expect(whyOf(member, { band: 1, slot: true })).toBe(
+      "matches its name, categories or services · answers its inbox · newcomer's turn",
+    );
+    // The best live door counts; a failing one, however high, does not. Orders and no booking: orderable.
+    expect(whyOf({ ...foundCard, doors: [...foundCard.doors] })).toBe(foundCard.why);
+    expect(
+      whyOf({
+        source: "registered",
+        proof: "domain",
+        doors: [
+          {
+            type: "platform:shopify",
+            url: "https://s.example/mcp",
+            level: "bookable",
+            status: "live",
+            kinds: ["order"],
+          },
+          { type: "a2a", url: "https://s.example/a2a", level: "askable", status: "live", kinds: ["ask"] },
+        ],
+      }),
+    ).toBe("shopify (platform) door, orderable · registered by the business · proof: domain");
+    expect(
+      whyOf({
+        source: "registered",
+        proof: "code",
+        doors: [
+          { type: "mcp", url: "https://s.example/mcp", level: "bookable", status: "live", kinds: ["ask", "book"] },
+        ],
+      }),
+    ).toBe("MCP door, bookable · registered by the business · proof: code");
+    expect(whyOf({})).toBe("in the directory's published order");
+  });
+
+  it("the tools: three, as before, and three more a network may offer", () => {
+    expect([...MCP_TOOL_NAMES]).toEqual(["search_businesses", "get_business", "list_categories"]);
+    expect([...MCP_OPTIONAL_TOOL_NAMES]).toEqual(["list_attributes", "register_business", "update_business"]);
+    const input = searchBusinessesInputSchema.parse({
+      category: "hair_salon",
+      attributes: ["walk_ins", "cert=b_corp"],
+      country: "BR",
+      price_band: "1-2",
+      accepts: ["book", "pix"],
+      requestable: "quote",
+      door_type: ["mcp", "platform", "platform:shopify"],
+      level: "orderable",
+      has_inbox: false,
+      source: ["found", "registered"],
+      order: "nearest",
+      near: { lat: -22.9, lng: -43.2 },
+    });
+    expect(input.door_type).toEqual(["mcp", "platform", "platform:shopify"]);
+    for (const bad of [{ door_type: ["tel"] }, { price_band: "5" }, { country: "BRA" }, { requestable: "book" }]) {
+      expect(searchBusinessesInputSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+  });
+});
+
+describe("protocol 0.2: register_business and update_business", () => {
+  const register = {
+    domain: "salon.example",
+    name: "Salon Exemple",
+    category: { primary: "hair_salon", alternates: ["beauty_salon"] },
+    description: "Cuts, colour and styling.",
+    where: {
+      kind: ["storefront"],
+      address: { locality: "Marseille", country: "FR" },
+      geo: { lat: 43.29, lng: 5.37 },
+      service_area: { radius_km: 20 },
+    },
+    languages: ["fr", "en"],
+    doors: [
+      { type: "mcp", url: "https://salon.example/mcp", kinds: ["ask", "book"], rate_limit: 10 },
+      { type: "tel", url: "tel:+33491000000" },
+    ],
+    hours: { timezone: "Europe/Paris", weekly: { tue: [["09:00", "19:00"]] }, closures: [] },
+    currencies: ["EUR"],
+    price_band: 2,
+    attributes: { walk_ins: true },
+    pay: ["card", "apple_pay"],
+    agree: true,
+    locale: "fr",
+    proof: { method: "dns", challenge_id: "0192c6a4-7b1e-7d3a-9f00-000000000001" },
+  };
+
+  it("takes a registration whole, refusals included, so a network answers each part it dropped", () => {
+    expect(registerBusinessInputSchema.safeParse(register).success).toBe(true);
+    expect(registerBusinessInputSchema.safeParse({ ...register, agree: false }).success).toBe(false);
+    const { languages: _l, ...noLanguages } = register;
+    expect(registerBusinessInputSchema.safeParse(noLanguages).success).toBe(false);
+    expect(registerBusinessInputSchema.safeParse({ ...register, claim_token: "sdc_short" }).success).toBe(false);
+    expect(registerBusinessInputSchema.safeParse({ ...register, claim_token: `sdc_${"A".repeat(43)}` }).success).toBe(
+      true,
+    );
+  });
+
+  it("answers with the challenge, its ways and what it dropped", () => {
+    const answer = {
+      status: "proof_needed",
+      domain: "salon.example",
+      claimed: false,
+      dropped: [{ field: "doors[1]", reason: "refused_kind", detail: "tel is a human channel, never a door" }],
+      challenge: {
+        id: "0192c6a4-7b1e-7d3a-9f00-000000000001",
+        token: "c2FsdC1hbmQtcGVwcGVy",
+        expires_at: "2026-10-09T10:00:00Z",
+        ways: [
+          {
+            method: "well_known",
+            url: "https://salon.example/.well-known/surfingdog-claim",
+            content: "surfingdog-claim=c2FsdC1hbmQtcGVwcGVy",
+          },
+          { method: "manifest", member: "claims", value: { "network.example.org": "c2FsdC1hbmQtcGVwcGVy" } },
+          {
+            method: "dns",
+            name: "_surfingdog-claim.salon.example",
+            type: "TXT",
+            value: "surfingdog-claim=c2FsdC1hbmQtcGVwcGVy",
+          },
+          {
+            method: "key",
+            sign: "surfingdog-claim:v1:network.example.org:salon.example:0192c6a4-7b1e-7d3a-9f00-000000000001",
+            algs: ["EdDSA", "ES256"],
+          },
+          { method: "code", note: "a code sent to an address at salon.example that you type" },
+        ],
+      },
+    };
+    expect(registerBusinessOutputSchema.safeParse(answer).success).toBe(true);
+    const listed = {
+      status: "listed",
+      domain: "salon.example",
+      claimed: true,
+      proof: "domain",
+      level: "bookable",
+      listed: true,
+      next_level: { level: "payable", how: "declare a door where an agent can also pay" },
+      card: { ...foundCard, domain: "salon.example", source: "registered", claimed: true, proof: "domain" },
+      claim_token: `sdc_${"b".repeat(43)}`,
+      claim_token_expires_at: "2027-01-04T10:00:00Z",
+    };
+    expect(registerBusinessOutputSchema.safeParse(listed).success).toBe(true);
+    expect(registerBusinessOutputSchema.safeParse({ ...listed, proof: "verified" }).success).toBe(false);
+  });
+
+  it("takes an update, a listing switched off, and an opt-out that needs no proof", () => {
+    expect(
+      updateBusinessInputSchema.safeParse({
+        domain: "salon.example",
+        claim_token: `sdc_${"A".repeat(43)}`,
+        set: { description: "Cuts and colour.", price_band: 3 },
+        doors: { add: [{ type: "a2a", url: "https://salon.example/a2a" }], remove: ["https://salon.example/mcp"] },
+      }).success,
+    ).toBe(true);
+    expect(updateBusinessInputSchema.safeParse({ domain: "salon.example", listing: "off" }).success).toBe(true);
+    expect(updateBusinessInputSchema.safeParse({ domain: "salon.example", opt_out: { scopes: ["all"] } }).success).toBe(
+      true,
+    );
+    expect(updateBusinessInputSchema.safeParse({ domain: "salon.example", opt_out: { scopes: [] } }).success).toBe(
+      false,
+    );
+    expect(updateBusinessOutputSchema.safeParse({ status: "removed", domain: "salon.example" }).success).toBe(true);
+  });
+});
+
+describe("protocol 0.2: rules version 7 and the order", () => {
+  it("version 7 keeps every member of version 6 and adds the order's rule, bands, reach and the rest", () => {
+    for (const k of Object.keys(rankingV6Schema.shape)) expect(Object.keys(rankingV7Schema.shape), k).toContain(k);
+    for (const k of Object.keys(rankingV6Schema.shape.order.shape))
+      expect(Object.keys(rankingV7Schema.shape.order.shape), k).toContain(k);
+    expect(Object.keys(rankingV7Schema.shape.order.shape)).toEqual(
+      expect.arrayContaining([
+        "rule",
+        "bands",
+        "reach",
+        "within_reach",
+        "newcomers",
+        "one_place",
+        "nearest",
+        "found_tier",
+        "filters",
+        "sources",
+      ]),
+    );
+  });
+
+  it("reads a version newer than it knows by what every version has, and a known version only whole", () => {
+    const v9 = {
+      version: 9,
+      status: "announced",
+      effective_at: "2027-04-01T00:00:00Z",
+      summary: "…",
+      next: null,
+      anything: { new: true },
+    };
+    const read = readRankingDocument(v9);
+    expect(read.ok && !read.known).toBe(true);
+    if (read.ok) expect(rulesOf(read.document)).toEqual({ inForce: 9, next: null });
+    expect(readRankingDocument({ ...v9, version: 7 }).ok).toBe(false);
+    expect(readRankingDocument({ ...v9, summary: undefined }).ok).toBe(false);
+    expect(readRankingDocument({ version: 2, status: "retired", effective_at: "2026-09-22T00:00:00Z" }).ok).toBe(false);
+  });
+
+  it("orders by reach and level, then record, shuffle, members first; one place per domain", () => {
+    const e = (ref: string, over: Partial<OrderEntry>): OrderEntry => ({
+      kind: "b",
+      ref,
+      domain: `${ref}.example`,
+      reach: 2,
+      level: 3,
+      ranked: false,
+      score_int: 0,
+      shuffle: "8000000000000000",
+      ...over,
+    });
+    const order = orderV7([
+      e("askable", { kind: "l", level: 3, shuffle: "0000000000000001" }),
+      e("payable", { kind: "l", level: 5 }),
+      e("bookable", { kind: "l", level: 4 }),
+      e("readable", { reach: 3, level: 2 }),
+      e("answers", { reach: 1, level: 3, shuffle: "ffffffffffffffff" }),
+      e("ranked-low", { reach: 1, ranked: true, score_int: 4100 }),
+      e("ranked-high", { reach: 1, ranked: true, score_int: 9000 }),
+      e("tie-l", { kind: "l", reach: 1, shuffle: "0000000000000000" }),
+      e("tie-b", { kind: "b", reach: 1, shuffle: "0000000000000000" }),
+      e("found-on-member", { kind: "l", reach: 2, level: 5, domain: "member.example" }),
+      e("member", { reach: 3, level: 2, domain: "member.example" }),
+    ]).map((x) => x.ref);
+    expect(order).toEqual([
+      "ranked-high",
+      "ranked-low",
+      "tie-b",
+      "tie-l",
+      "answers",
+      "payable",
+      "bookable",
+      "askable",
+      "member",
+      "readable",
+    ]);
+  });
+
+  it("gives every 5th place to the next newcomer, never twice, and pages the same at any offset", () => {
+    const list = "abcdefghijkl".split("").map((ref) => ({ ref }));
+    const newcomers = [{ ref: "c" }, { ref: "j" }, { ref: "k" }];
+    const full = newcomerMerge(list, newcomers, 0, 10);
+    expect(full.page.map((p) => `${p.entry.ref}${p.slot ? "*" : ""}`).join(" ")).toBe("a b c d j* e f g h k*");
+    expect(full.more).toBe(true);
+    // c took its own place early (3), so place 5 goes to the next newcomer, j.
+    expect(newcomerMerge(list, newcomers, 5, 5).page).toEqual(full.page.slice(5, 10));
+    expect(newcomerMerge(list, newcomers, 10, 5).page.map((p) => p.entry.ref)).toEqual(["i", "l"]);
+    expect(newcomerMerge(list, newcomers, 10, 5).more).toBe(false);
+    // No newcomer left: the list goes on.
+    expect(newcomerMerge(list, [{ ref: "c" }], 0, 6).page.map((p) => p.entry.ref)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+    ]);
+    // The list runs out: so does the page.
+    const short = newcomerMerge(list.slice(0, 3), [{ ref: "c" }], 0, 10);
+    expect(short.page.map((p) => p.entry.ref)).toEqual(["a", "b", "c"]);
+    expect(short.more).toBe(false);
   });
 });
