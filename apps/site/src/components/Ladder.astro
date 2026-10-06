@@ -28,7 +28,11 @@ const AT = 3;
   <ol class="rungs">
     {
       levels.map((l, i) => (
-        <li class:list={["rung", { reached: i <= AT, here: i === AT, above: i > AT }]} style={`--i:${i}`}>
+        <li
+          class:list={["rung", { reached: i <= AT, here: i === AT, above: i > AT }]}
+          style={`--i:${i}`}
+          aria-current={i === AT ? "step" : undefined}
+        >
           <span class="mark" aria-hidden="true" />
           <span class="words">
             <b>{l.name}</b>
@@ -73,13 +77,10 @@ const AT = 3;
   .rung.above {
     border-bottom: 1px dotted var(--hairline-strong);
   }
-  .rungs .rung:last-child {
-    border-bottom-style: dotted;
-  }
+  /* Name above its line on every rung, so no rung wraps differently from the next. */
   .words {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px var(--sp-2);
+    display: grid;
+    gap: 2px;
     font-size: var(--fs-card);
     line-height: var(--lh-ui);
     color: var(--ink-2);

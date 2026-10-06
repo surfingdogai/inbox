@@ -107,7 +107,7 @@ const notches = Array.from({ length: record.of }, (_, i) => i < record.kept);
     <div class="lc-row">
       <dt>Record</dt>
       <dd>
-        <span class="lc-meter" role="img" aria-label="Its record of kept promises">
+        <span class="lc-meter" role="img" aria-label={`Record: ${record.kept} of ${record.of} promises kept`}>
           {notches.map((on) => <i class:list={{ on }} />)}
         </span>
       </dd>
@@ -156,7 +156,7 @@ const notches = Array.from({ length: record.of }, (_, i) => i < record.kept);
     display: grid;
     grid-template-columns: 64px minmax(0, 1fr);
     gap: var(--sp-3);
-    align-items: center;
+    align-items: start;
     padding: var(--sp-2) 0;
     border-top: 1px solid var(--hairline);
   }
@@ -164,6 +164,7 @@ const notches = Array.from({ length: record.of }, (_, i) => i < record.kept);
     border-top: 0;
   }
   .lc-row dt {
+    padding-top: 4px;
     font-size: var(--fs-micro);
     font-weight: 700;
     letter-spacing: 0.09em;
@@ -189,8 +190,10 @@ const notches = Array.from({ length: record.of }, (_, i) => i < record.kept);
     padding: 0 9px;
     font-size: var(--fs-fine);
   }
-  .lc-door {
+  /* .lc qualifies the rule so it outranks the global .pill, which loads later. */
+  .lc .lc-door {
     color: var(--ink);
+    border-color: var(--hairline-strong);
   }
   .lc-door.coming {
     background: transparent;
