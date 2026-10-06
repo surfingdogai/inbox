@@ -36,8 +36,7 @@ export const capabilities: readonly Capability[] = [
   { id: "bot", label: "A public page on how our crawler behaves", state: "live" },
   {
     id: "crawler",
-    label:
-      "A crawler that finds businesses with other agent doors: MCP, A2A, UCP, ACP, OpenAPI; nothing it finds is listed yet",
+    label: "A crawler for other agent doors (MCP, A2A, UCP, ACP, OpenAPI); nothing it finds is listed yet",
     state: "building",
   },
   {

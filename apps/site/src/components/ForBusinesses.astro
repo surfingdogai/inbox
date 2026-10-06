@@ -18,7 +18,7 @@ const BOT = "https://network.surfingdog.ai/bot";
       <div>
         <p class="eyebrow">For businesses</p>
         <h2 class="h-section" id="businesses-h">Easy to be found.</h2>
-        <p class="lede">Your customers never see us. Their AI talks to you.</p>
+        <p class="lede">Your customers deal with you, not us. Their AI talks to you.</p>
       </div>
     </div>
 
@@ -35,8 +35,8 @@ const BOT = "https://network.surfingdog.ai/bot";
         </div>
         <h3 class="h-card">Have our inbox?</h3>
         <p class="card-text">
-          Switch on the network in Settings. You're listed once we check the address is yours. It needs a public https
-          address.
+          Switch on Join the directory in Settings. You're listed once we confirm the address is yours (it needs a public
+          https address).
         </p>
         <p class="foot"><a class="link" href="/network/#join">How joining works</a></p>
       </article>
@@ -53,7 +53,8 @@ const BOT = "https://network.surfingdog.ai/bot";
         </div>
         <h3 class="h-card">Already have an agent door?</h3>
         <p class="card-text">
-          MCP, A2A, UCP, ACP or an API. We're building a crawler to find them, with the source and date of every fact.
+          Your own MCP server, A2A, UCP, ACP or an API. We're building a crawler to find them, with the source and date of
+          every fact.
         </p>
         <p class="foot"><a class="link" href={BOT} rel="noopener">How our crawler behaves</a></p>
       </article>
@@ -79,10 +80,6 @@ const BOT = "https://network.surfingdog.ai/bot";
       </article>
     </div>
 
-    <p class="soon">
-      <StatusPill state={stateOf("self-serve")} />
-      <span>Add, correct or remove your listing from your own AI, in one step.</span>
-    </p>
     <p class="mono price">Listing: free · Rank: never for sale · Inbox: free to self-host · Hosted: coming</p>
   </div>
 </section>
@@ -116,17 +113,8 @@ const BOT = "https://network.surfingdog.ai/bot";
     padding-top: var(--sp-3);
     font-size: var(--fs-card);
   }
-  .soon {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--sp-2);
-    margin: var(--sp-6) 0 0;
-    font-size: var(--fs-card);
-    color: var(--ink-2);
-  }
   .mono.price {
-    margin: var(--sp-3) 0 0;
+    margin: var(--sp-6) 0 0;
     color: var(--ink-3);
     font-size: var(--fs-fine);
   }
@@ -206,7 +194,7 @@ const BOT = "https://network.surfingdog.ai/bot";
       stroke-opacity: 0.6;
     }
     100% {
-      transform: scale(1.1);
+      transform: none;
       stroke-opacity: 0.35;
     }
   }
