@@ -236,6 +236,33 @@ describe("protocol 0.2 checks", () => {
     expect(result(report, "doors.no-human-door")?.detail).toMatch(/a mailto: address as protocols\.email/);
   });
 
+  it("asks a member, never a found entry, about what belongs to an instance", async () => {
+    const { fetchImpl } = await exampleNetwork();
+    // A found entry at the top, as a 0.2 network may list one: it has a detail, but no instance.
+    const found = around(fetchImpl, async (url, pass) => {
+      if (url.pathname === "/v1/businesses" && !url.searchParams.has("source")) {
+        const page = (await (await pass()).json()) as { businesses: Record<string, unknown>[] };
+        const [first] = page.businesses;
+        return Response.json({
+          ...page,
+          businesses: [{ ...first, domain: "found.example.net", source: "found", claimed: false }, ...page.businesses],
+        });
+      }
+      if (url.pathname === "/v1/businesses/found.example.net") {
+        const detail = (await (await fetchImpl(`${ORIGIN}/v1/businesses/bakery.example.com`)).json()) as object;
+        return Response.json({ ...detail, domain: "found.example.net", source: "found", claimed: false });
+      }
+      return undefined;
+    });
+    const report = await checkNetwork({ network: ORIGIN, fetch: found });
+    expect(failures(report)).toEqual([]);
+    expect(result(report, "directory.detail")?.detail).toBe("found.example.net");
+    for (const id of ["instances.status", "listing.unsigned", "listing.wrong-key", "receipts.forged"]) {
+      expect(result(report, id), id).toMatchObject({ outcome: "pass" });
+    }
+    expect(result(report, "instances.status")?.detail).toBe("bakery.example.com");
+  });
+
   it("the example network keeps no mail address among a business's protocols", async () => {
     const { fetchImpl } = await twoListed();
     const salon = (await (await fetchImpl(`${ORIGIN}/v1/businesses/salon.example.net`)).json()) as {

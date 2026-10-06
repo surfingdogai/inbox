@@ -176,12 +176,25 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
 
   /* --- the directory ------------------------------------------------------------------------- */
 
+  // Any listed business, for its detail; and a listed member, for what belongs to an instance (its
+  // status, its listing switch, its receipts). From protocol 0.2 a directory also lists entries
+  // that are not instances (source registered or found, §4.11); before it every entry is a member.
   let listed: string | null = null;
+  let member: string | null = null;
+  const isMember = (b: { source?: string | undefined }) => b.source === undefined || b.source === "member";
   await check("directory.list", "§4.3", "must", async () => {
     const a = await call("GET", "/v1/businesses?limit=2");
     expectStatus(a, 200);
     const page = shape(businessesResponseSchema, a.json, "the directory");
     listed = page.businesses[0]?.domain ?? null;
+    member = page.businesses.find(isMember)?.domain ?? null;
+    if (listed && !member) {
+      // Members may sit further down: ask for one. A network that does not know the filter is
+      // left without a member to try, which skips those checks rather than failing them.
+      const m = await call("GET", "/v1/businesses?source=member&limit=1");
+      const parsed = m.status === 200 ? businessesResponseSchema.safeParse(m.json) : undefined;
+      member = parsed?.success ? (parsed.data.businesses.find(isMember)?.domain ?? null) : null;
+    }
     if (page.businesses.length > 2) throw new Error(`limit=2 answered ${page.businesses.length} businesses`);
     if (page.next_cursor) {
       const b = await call("GET", `/v1/businesses?limit=2&cursor=${encodeURIComponent(page.next_cursor)}`);
@@ -328,25 +341,26 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
 
   /**
    * The checks that need a listed business: one the directory already lists, or, on an empty
-   * network, the checker's own inbox once the flow has listed it.
+   * network, the checker's own inbox once the flow has listed it. Those about an instance take a
+   * listed member: detail is any listed business, domain a listed member (or null).
    */
-  const aboutListed = async (domain: string | null) => {
+  const aboutListed = async (detail: string | null, domain: string | null) => {
     await check("directory.detail", "§4.3", "must", async () => {
-      if (!domain) return new Skip("no business is listed to read");
-      const a = await call("GET", `/v1/businesses/${domain}`);
+      if (!detail) return new Skip("no business is listed to read");
+      const a = await call("GET", `/v1/businesses/${detail}`);
       expectStatus(a, 200);
       shape(listingDetailSchema, a.json, "a business");
-      return domain;
+      return detail;
     });
     await check("instances.status", "§4.1", "must", async () => {
-      if (!domain) return new Skip("no business is listed to ask about");
+      if (!domain) return new Skip("no member is listed to ask about");
       const a = await call("GET", `/v1/instances/${domain}/status`);
       expectStatus(a, 200);
       shape(instanceStatusSchema, a.json, "an instance's status");
       return domain;
     });
     await check("listing.unsigned", "§3, §4.5", "must", async () => {
-      if (!domain) return new Skip("no business is listed to try");
+      if (!domain) return new Skip("no member is listed to try");
       // `listed: true` for a listed business: if a network wrongly took it, nothing would change.
       expectProblem(
         await call("POST", `/v1/instances/${domain}/listing`, { body: JSON.stringify({ listed: true }) }),
@@ -356,7 +370,7 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
       return "401 bad_signature";
     });
     await check("listing.wrong-key", "§3, §4.5", "must", async () => {
-      if (!domain) return new Skip("no business is listed to try");
+      if (!domain) return new Skip("no member is listed to try");
       const a = await call("POST", `/v1/instances/${domain}/listing`, {
         body: JSON.stringify({ listed: true }),
         sign: { domain, key: stranger },
@@ -365,7 +379,7 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
       return `401 ${problemCode(a)}`;
     });
     await check("receipts.forged", "§4.2", "must", async () => {
-      if (!domain) return new Skip("no business is listed to forge a receipt for");
+      if (!domain) return new Skip("no member is listed to forge a receipt for");
       const jws = await signReceipt(promiseClaims(`https://${domain}`, claims, now()), stranger);
       expectProblem(await call("POST", "/v1/receipts", { body: JSON.stringify({ receipt: jws }) }), 422, [
         "unknown_key",
@@ -410,7 +424,7 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
 
   /* --- the flow: an inbox's whole life --------------------------------------------------------- */
 
-  if (listed || !options.flow) await aboutListed(listed);
+  if (member || !options.flow) await aboutListed(listed, member);
   if (options.flow) {
     const registered = await runFlow(options.flow, {
       origin,
@@ -422,7 +436,7 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
       level,
       listedOther: listed,
     });
-    if (!listed && registered) await aboutListed(options.flow.domain);
+    if (!member && registered) await aboutListed(listed ?? options.flow.domain, options.flow.domain);
   }
 
   const passed = results.every((r) => r.requirement !== "must" || r.outcome !== "fail");
