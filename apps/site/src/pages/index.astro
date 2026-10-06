@@ -12,7 +12,7 @@ import Layout from "../layouts/Layout.astro";
  * page at /inbox. Live counts stay off this page until the directory lists more than our own
  * inbox; they live on /network.
  */
-const TAGLINE = "Supporting businesses on the agentic internet.";
+const TAGLINE = "Open doors to the agentic internet.";
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const org = `${site}#org`;
 const ld = [
@@ -74,7 +74,7 @@ const ld = [
 ---
 
 <Layout
-  title="Surfing Dog · Supporting businesses on the agentic internet"
+  title="Surfing Dog · Open doors to the agentic internet"
   description={`${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly. Ranked by receipts, never by payment. Open protocol, open-source inbox.`}
   image="/art/og-network-v1.png"
   ld={ld}

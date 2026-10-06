@@ -77,7 +77,7 @@ if (!mark) throw new Error("the built home page has no brand mark in its nav");
 
 /** The card's words: the home page's own. */
 const EYEBROW = "Surfing Dog · open network";
-const TITLE = "Supporting businesses on the agentic internet.";
+const TITLE = "Open doors to the agentic internet.";
 const SUB = "An open directory your AI can search.";
 
 const html = `<!doctype html>

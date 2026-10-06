@@ -63,7 +63,7 @@ export default defineConfig({
         starlightLlmsTxt({
           projectName: "Surfing Dog",
           description:
-            "Supporting businesses on the agentic internet. An open directory AI assistants can search to find businesses and reach them directly, and an open-source inbox that gives a business a door agents can use.",
+            "Open doors to the agentic internet. An open directory AI assistants can search to find businesses and reach them directly, and an open-source inbox that gives a business a door agents can use.",
           details: [
             "Today the directory lists businesses that run a verified inbox. Search it over MCP at https://network.surfingdog.ai/mcp, over REST at https://network.surfingdog.ai/v1/businesses, or read https://network.surfingdog.ai/llms.txt.",
             "Order: businesses whose inbox answered in the last day first; among them, those with a record of kept promises from signed receipts, then everyone else in a daily shuffle anyone can reproduce. Nobody can pay to move. Rules, versioned: https://network.surfingdog.ai/v1/ranking (version 6).",
