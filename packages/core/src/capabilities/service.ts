@@ -74,6 +74,7 @@ import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from 
 import { findSlots, type Slot } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
+import { offeredItemTypes } from "./directory";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { SetupCapabilities } from "./setup";
@@ -355,15 +356,18 @@ export class Capabilities {
   // ---- public ----------------------------------------------------------------
 
   async getBusinessProfile(): Promise<BusinessProfile> {
-    const [row] = await this.db.orm.select().from(business).limit(1);
-    const s = await readSettings(this.db);
+    const [[row], s, itemTypes] = await Promise.all([
+      this.db.orm.select().from(business).limit(1),
+      readSettings(this.db),
+      offeredItemTypes(this.db),
+    ]);
     return {
       name: row?.name || s.business.name,
       domain: row?.domain ?? null,
       timezone: row?.timezone ?? s.business.timezone,
       currency: row?.currency ?? s.business.currency,
       languages: row?.languages?.length ? row.languages : s.business.languages,
-      item_types: ["message", "quote_request", "booking", "order", "refund"],
+      item_types: itemTypes,
       // Price counters (ADR-018 Q1): off out of the box, and a price of the customer's own goes to a person.
       price_negotiable: s.negotiation.priceCounters,
       return_policy: {

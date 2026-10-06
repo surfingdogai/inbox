@@ -11,17 +11,17 @@ describe("app", () => {
     expect(await res.json()).toMatchObject({ ok: true });
   });
 
-  it("publishes the discovery manifest with every door", async () => {
+  it("publishes the discovery manifest with every public door, and only what it really takes", async () => {
     const res = await createApp({ db: await freshDb() }).request(`https://inbox.example.com${MANIFEST_PATH}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { instance: string; item_types: string[]; protocols: Record<string, string> };
     expect(body.instance).toBe("https://inbox.example.com");
-    expect(body.item_types).toEqual(["message", "quote_request", "booking", "order", "refund"]);
+    // A fresh inbox has nothing to book, order or refund yet: it takes messages.
+    expect(body.item_types).toEqual(["message"]);
     expect(body.protocols).toEqual({
       openapi: "https://inbox.example.com/openapi.json",
       rest: "https://inbox.example.com/v1",
       mcp: "https://inbox.example.com/mcp",
-      mcp_owner: "https://inbox.example.com/mcp/owner",
     });
   });
 

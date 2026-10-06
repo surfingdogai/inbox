@@ -28,11 +28,14 @@ export function buildManifest(input: {
       openapi: `${origin}/openapi.json`,
       rest: `${origin}/v1`,
       mcp: `${origin}/mcp`,
-      mcp_owner: `${origin}/mcp/owner`,
+      // The owner's door (`/mcp/owner`) is still served, for the owner's own AI; it is not a door
+      // for anyone the manifest is for, so it is not advertised.
     },
     agent_policy: {
       tiers: ["anonymous", "signed_agent", "verified_principal", "reputed_principal"],
-      signatures: ["sdi-agent/1"],
+      // Both are verified on every public door (`protocol/httpsig.ts`): the agent's own key, or a
+      // platform's directory named by Signature-Agent (Web Bot Auth).
+      signatures: ["sdi-agent/1", "web-bot-auth"],
       passes: input.identity?.passes ?? false,
       networks: [...(input.identity?.networks ?? [])],
       guide: AGENT_GUIDE_URL,

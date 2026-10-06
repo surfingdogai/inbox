@@ -31,6 +31,7 @@ import {
   createRunner,
   createSecretBox,
   type Db,
+  directoryProfile,
   enabledNetworks,
   FRONT_PATHS,
   IDENTITY_ISSUE_KIND,
@@ -341,7 +342,13 @@ export function createInbox(deps: AppDeps): Inbox {
     const manifest = buildManifest({
       instanceUrl: origin,
       itemTypes: profile.item_types,
-      profile: profile.name ? { name: profile.name, languages: [...profile.languages], categories: [] } : undefined,
+      profile: await directoryProfile(deps.db, {
+        name: profile.name,
+        languages: profile.languages,
+        timezone: profile.timezone,
+        directory: settings.directory,
+        now: deps.now ? deps.now() : Date.now(),
+      }),
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
       // The services this instance publishes receipts to: every network switched on that takes them.
       reviewServices: enabledNetworks(settings, "receipts"),

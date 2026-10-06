@@ -16,6 +16,7 @@ export {
   eraseStatements,
   MAX_CUSTOMER_ITEMS,
 } from "./customers";
+export { directoryProfile, offeredItemTypes } from "./directory";
 export * from "./feeds";
 export * from "./front";
 export { type CustomerView, customerSummary, issuingNetworks, type PersonView } from "./identity";

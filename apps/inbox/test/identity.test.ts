@@ -134,7 +134,7 @@ describe("people at the doors", () => {
     };
     expect(manifest.agent_policy).toEqual({
       tiers: ["anonymous", "signed_agent", "verified_principal", "reputed_principal"],
-      signatures: ["sdi-agent/1"],
+      signatures: ["sdi-agent/1", "web-bot-auth"],
       passes: true,
       networks: [NET],
       guide: "https://surfingdog.ai/for-agents.md",
