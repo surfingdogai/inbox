@@ -26,7 +26,7 @@ const build = [
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <p class="eyebrow">Open</p>
+        <p class="eyebrow">For agents</p>
         <h2 class="h-section" id="agents-h">Your AI can search it. Anyone can run one.</h2>
       </div>
     </div>
@@ -42,7 +42,13 @@ const build = [
                   <span class="door-tag mono">{a.door}</span>
                   <span class="mono u">network.surfingdog.ai<wbr />{a.url.replace(NET, "")}</span>
                 </span>
-                <button class="btn btn-secondary btn-sm" type="button" data-copy={a.url} hidden>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  type="button"
+                  data-copy={a.url}
+                  aria-label={`Copy the ${a.door} address`}
+                  hidden
+                >
                   Copy
                 </button>
               </li>
@@ -215,25 +221,6 @@ const build = [
 </style>
 
 <script>
-  // Progressive enhancement, as on the technical page: the addresses are already readable and
-  // selectable, so the copy button only appears where the clipboard is actually available.
-  if (navigator.clipboard) {
-    for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("#agents [data-copy]"))) {
-      button.hidden = false;
-      button.addEventListener("click", async () => {
-        const value = button.dataset.copy;
-        if (!value) return;
-        const label = button.textContent ?? "Copy";
-        try {
-          await navigator.clipboard.writeText(value);
-          button.textContent = "Copied";
-        } catch {
-          button.textContent = "Press to select";
-        }
-        window.setTimeout(() => {
-          button.textContent = label;
-        }, 1600);
-      });
-    }
-  }
+  import { wireCopyButtons } from "../lib/copy";
+  wireCopyButtons("#agents [data-copy]");
 </script>

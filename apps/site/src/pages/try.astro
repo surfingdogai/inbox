@@ -56,7 +56,7 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           </p>
           <p class="copy mono">
             <code>{DEMO_MCP}</code>
-            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_MCP} hidden>Copy</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_MCP} aria-label="Copy the connector address" hidden>Copy</button>
           </p>
         </li>
         <li class="glass card step">
@@ -65,7 +65,7 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           <p class="card-text">Paste this, or say it your own way. Any name will do.</p>
           <p class="copy prompt">
             <span>{DEMO_PROMPT}</span>
-            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_PROMPT} hidden>Copy</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-copy={DEMO_PROMPT} aria-label="Copy the request" hidden>Copy</button>
           </p>
         </li>
         <li class="glass card step">
@@ -375,23 +375,10 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
 </style>
 
 <script>
+  import { wireCopyButtons } from "../lib/copy";
+
   // Copy buttons appear only where the clipboard is there to use.
-  for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("[data-copy]"))) {
-    if (!navigator.clipboard) break;
-    button.hidden = false;
-    button.addEventListener("click", async () => {
-      const label = button.textContent ?? "Copy";
-      try {
-        await navigator.clipboard.writeText(button.dataset.copy ?? "");
-        button.textContent = "Copied";
-      } catch {
-        button.textContent = "Select it instead";
-      }
-      window.setTimeout(() => {
-        button.textContent = label;
-      }, 1600);
-    });
-  }
+  wireCopyButtons();
 
   // The curl example books the coming Saturday, whenever the page was built.
   const code = document.querySelector<HTMLElement>("[data-saturday]");

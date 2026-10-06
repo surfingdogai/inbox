@@ -214,7 +214,7 @@ const ways = [
                 ) : (
                   <span class="mono u">{u.href}</span>
                 )}
-                <button class="btn btn-secondary btn-sm" type="button" data-copy={u.href} hidden>
+                <button class="btn btn-secondary btn-sm" type="button" data-copy={u.href} aria-label={`Copy ${u.href}`} hidden>
                   Copy
                 </button>
               </span>
@@ -230,6 +230,7 @@ const ways = [
             class="btn btn-secondary btn-sm"
             type="button"
             data-copy={`curl ${INSTANCE}/v1/business`}
+            aria-label="Copy the command"
             hidden>Copy</button></pre>
         <p class="card-text">
           Returns the business name, domain, timezone, currency, languages and item types. No key needed, cached for
@@ -511,26 +512,6 @@ const ways = [
 </style>
 
 <script>
-  // Progressive enhancement: the URLs are already readable and selectable, so the copy button only
-  // appears where the clipboard is actually available.
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-copy]"));
-  if (navigator.clipboard) {
-    for (const button of buttons) {
-      button.hidden = false;
-      button.addEventListener("click", async () => {
-        const value = button.dataset.copy;
-        if (!value) return;
-        const label = button.textContent ?? "Copy";
-        try {
-          await navigator.clipboard.writeText(value);
-          button.textContent = "Copied";
-        } catch {
-          button.textContent = "Press to select";
-        }
-        window.setTimeout(() => {
-          button.textContent = label;
-        }, 1600);
-      });
-    }
-  }
+  import { wireCopyButtons } from "../lib/copy";
+  wireCopyButtons();
 </script>
