@@ -1,0 +1,219 @@
+---
+/**
+ * Three ways in for a business: it has our inbox, it already has another agent door, or it has no
+ * door yet. Each card carries its state from src/lib/status.ts. The three door marks are thin line
+ * icons that each do one small thing once, when the cards scroll in: the open door swings, the
+ * scanned door's ring goes out twice, the third door is drawn in by a dashed line. The resting
+ * frame is the finished drawing, and nothing loops.
+ */
+import { stateOf } from "../lib/status";
+import StatusPill from "./StatusPill.astro";
+
+const BOT = "https://network.surfingdog.ai/bot";
+---
+
+<section class="section" id="businesses" aria-labelledby="businesses-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">For businesses</p>
+        <h2 class="h-section" id="businesses-h">Easy to be found.</h2>
+        <p class="lede">Your customers never see us. Their AI talks to you.</p>
+      </div>
+    </div>
+
+    <div class="grid-cards ways" data-reveal="stagger">
+      <article class="glass card lift way">
+        <div class="way-top">
+          <svg class="door d-open" viewBox="0 0 28 28" aria-hidden="true">
+            <path class="frame" d="M7 25V4h14v21"></path>
+            <path class="leaf" d="M7 4l9 2.5v19L7 25z"></path>
+            <circle class="knob" cx="14" cy="15.5" r=".9"></circle>
+            <path class="floor" d="M4 25h20"></path>
+          </svg>
+          <StatusPill state={stateOf("directory")} />
+        </div>
+        <h3 class="h-card">Have our inbox?</h3>
+        <p class="card-text">
+          Switch on the network in Settings. You're listed once we check the address is yours. It needs a public https
+          address.
+        </p>
+        <p class="foot"><a class="link" href="/network/#join">How joining works</a></p>
+      </article>
+
+      <article class="glass card lift way">
+        <div class="way-top">
+          <svg class="door d-scan" viewBox="0 0 28 28" aria-hidden="true">
+            <circle class="ring" cx="14" cy="14.5" r="11"></circle>
+            <path class="frame" d="M9 23V7h10v16"></path>
+            <circle class="knob" cx="16.6" cy="15.5" r=".9"></circle>
+            <path class="floor" d="M6 23h16"></path>
+          </svg>
+          <StatusPill state={stateOf("crawler")} />
+        </div>
+        <h3 class="h-card">Already have an agent door?</h3>
+        <p class="card-text">
+          MCP, A2A, UCP, ACP or an API. We're building a crawler to find them, with the source and date of every fact.
+        </p>
+        <p class="foot"><a class="link" href={BOT} rel="noopener">How our crawler behaves</a></p>
+      </article>
+
+      <article class="glass card lift way">
+        <div class="way-top">
+          <svg class="door d-draw" viewBox="0 0 28 28" aria-hidden="true">
+            <mask id="fb-draw" maskUnits="userSpaceOnUse" x="0" y="0" width="28" height="28">
+              <path class="pen" pathLength="1" d="M7 25V4h14v21"></path>
+            </mask>
+            <path class="frame" d="M7 25V4h14v21" mask="url(#fb-draw)"></path>
+            <circle class="knob" cx="18" cy="15.5" r=".9"></circle>
+            <path class="floor" d="M4 25h20"></path>
+          </svg>
+          <span class="pills">
+            <StatusPill state={stateOf("inbox")} text="Live: self-host" />
+            <StatusPill state={stateOf("hosted")} text="Coming: hosted" />
+          </span>
+        </div>
+        <h3 class="h-card">No door yet?</h3>
+        <p class="card-text">Get the open-source inbox. Your AI can set it up from one line.</p>
+        <p class="foot"><a class="btn btn-secondary btn-sm" href="/install/">Tell your AI to set it up</a></p>
+      </article>
+    </div>
+
+    <p class="soon">
+      <StatusPill state={stateOf("self-serve")} />
+      <span>Add, correct or remove your listing from your own AI, in one step.</span>
+    </p>
+    <p class="mono price">Listing: free · Rank: never for sale · Inbox: free to self-host · Hosted: coming</p>
+  </div>
+</section>
+
+<style>
+  @media (min-width: 900px) {
+    .ways {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .way {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  .way-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+  .pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .foot {
+    margin: auto 0 0;
+    padding-top: var(--sp-3);
+    font-size: var(--fs-card);
+  }
+  .soon {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-6) 0 0;
+    font-size: var(--fs-card);
+    color: var(--ink-2);
+  }
+  .mono.price {
+    margin: var(--sp-3) 0 0;
+    color: var(--ink-3);
+    font-size: var(--fs-fine);
+  }
+
+  /* Door marks: ink hairlines, one accent each. */
+  .door {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    overflow: visible;
+  }
+  .door .frame,
+  .door .leaf,
+  .door .floor {
+    fill: none;
+    stroke: var(--ink-2);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .door .floor {
+    stroke-opacity: 0.4;
+  }
+  .door .knob {
+    fill: var(--ink-2);
+  }
+  .d-open .leaf {
+    fill: color-mix(in srgb, var(--c-success) 14%, transparent);
+    stroke: var(--c-success-ink);
+    transform-origin: 7px 14px;
+    transform-box: view-box;
+  }
+  .d-scan .ring {
+    fill: none;
+    stroke: var(--lagoon);
+    stroke-width: 1;
+    stroke-opacity: 0.35;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  /* No door yet: the frame is dashed, and on arrival a pen draws it in through a mask. */
+  .d-draw .frame {
+    stroke-dasharray: 2 2;
+  }
+  .d-draw .pen {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 4;
+    stroke-dasharray: 1 1;
+  }
+
+  /* One gesture each, once, when the cards arrive. */
+  .way.reveal-armed.reveal-in .d-open .leaf {
+    animation: fb-swing 0.9s var(--ease) 0.3s both;
+  }
+  .way.reveal-armed.reveal-in .d-scan .ring {
+    animation: fb-scan 1.4s var(--ease) 0.3s 2 both;
+  }
+  .way.reveal-armed .d-draw .pen {
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1.1s var(--ease) 0.3s;
+  }
+  .way.reveal-armed.reveal-in .d-draw .pen {
+    stroke-dashoffset: 0;
+  }
+  @keyframes fb-swing {
+    0% {
+      transform: scaleX(1.45);
+    }
+    100% {
+      transform: none;
+    }
+  }
+  @keyframes fb-scan {
+    0% {
+      transform: scale(0.6);
+      stroke-opacity: 0.6;
+    }
+    100% {
+      transform: scale(1.1);
+      stroke-opacity: 0.35;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .door * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>

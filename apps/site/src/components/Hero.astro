@@ -1,30 +1,55 @@
 ---
-import HeroFlow from "./HeroFlow.astro";
+/**
+ * The home hero: what Surfing Dog is in one line, the two next steps, and what is live versus
+ * being built. The small pill above the drawing reads the network itself: the API's own status and
+ * the rules version in force, once at build time and again in the browser. If either cannot be
+ * read it says "warming up" rather than guessing.
+ */
+import { stateOf } from "../lib/status";
+import HeroSearch from "./HeroSearch.astro";
+import StatusPill from "./StatusPill.astro";
 
-const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
+const NETWORK = "https://network.surfingdog.ai";
+
+async function readJson(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(4000) });
+    return res.ok ? ((await res.json()) as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+const [stats, ranking] = await Promise.all([readJson(`${NETWORK}/v1/stats`), readJson(`${NETWORK}/v1/ranking`)]);
+const apiOk = (stats?.status as { api?: unknown } | undefined)?.api === "ok";
+const version = typeof ranking?.version === "number" ? ranking.version : null;
+const live = apiOk && version !== null ? `network ok · rules v${version}` : "warming up";
 ---
 
 <section class="hero wrap" aria-labelledby="hero-h">
   <div class="copy">
-    <p class="eyebrow">Surfing Dog Inbox · open source</p>
-    <h1 id="hero-h">
-      Get AI bookings, orders and messages.
-    </h1>
-    <p class="sub">
-      Soon your customers' AI agents will book and order for them. Surfing Dog is an open-source inbox that takes
-      those requests and answers the routine ones by your rules.
-    </p>
+    <p class="eyebrow">Surfing Dog · open network</p>
+    <h1 id="hero-h">Be found by people's AIs.</h1>
+    <p class="sub">An open directory that AI assistants search to find a business, then reach it directly.</p>
     <div class="actions">
-      <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
-      <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>
+      <a class="btn btn-primary btn-lg" href="/#businesses">Get listed</a>
+      <a class="btn btn-secondary btn-lg" href="/directory/">Search the directory</a>
     </div>
+    <ul class="now">
+      <li><StatusPill state={stateOf("directory")} /> <span>Businesses with a verified inbox</span></li>
+      <li><StatusPill state={stateOf("crawler")} /> <span>A crawler for other agent doors</span></li>
+    </ul>
     <p class="position">
       <span class="u-line" aria-hidden="true"></span>
-      <span>Automated AI relations, with your own AI answering.</span>
+      <span>Supporting businesses on the agentic internet.</span>
     </p>
   </div>
   <div class="art-box">
-    <HeroFlow />
+    <p class="live-row">
+      <span class:list={["pill", "live", { ok: live !== "warming up" }]} data-live>
+        <i aria-hidden="true"></i><span data-live-text>{live}</span>
+      </span>
+    </p>
+    <HeroSearch />
   </div>
 </section>
 
@@ -32,17 +57,11 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
   .hero {
     display: grid;
     gap: var(--sp-7);
-    /* Both columns start together. The drawing carries its own sky above its first
-       label, which is what brings its top edge level with the headline. */
     align-items: start;
-    /* The art already fills the bottom of the first screen, so the hero closes on
-       its own token rather than a full section. */
     padding-block: var(--sp-8) var(--sp-5);
   }
   @media (min-width: 900px) {
     .hero {
-      /* 1.15fr / 1fr lands near 573 / 499 inside the 1120 pill: the drawing is the
-         other half of the composition, not a margin note. */
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
       gap: var(--sp-8);
       padding-block: var(--sp-9) var(--hero-pb);
@@ -53,13 +72,6 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
     font-size: var(--fs-hero);
     line-height: var(--lh-hero);
     letter-spacing: -0.024em;
-  }
-  /* On a phone the rag is left to chance and breaks mid-phrase, so the second
-     sentence takes its own line. Above that the balancer handles it. */
-  @media (max-width: 480px) {
-    .l2 {
-      display: block;
-    }
   }
   .sub {
     max-width: var(--measure-lede);
@@ -74,6 +86,21 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
     gap: var(--sp-2) var(--sp-3);
     margin-top: var(--sp-6);
   }
+  .now {
+    display: grid;
+    gap: var(--sp-2);
+    margin: var(--sp-5) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
+  }
+  .now li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
   .position {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
@@ -86,4 +113,57 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
     line-height: var(--lh-ui);
     color: var(--ink);
   }
+  .live-row {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 var(--sp-2);
+  }
+  .live-row .live {
+    height: 20px;
+    padding: 0 8px;
+    gap: 6px;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+  }
+  .live i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-3);
+    opacity: 0.5;
+  }
+  .live.ok i {
+    background: var(--c-success);
+    opacity: 1;
+  }
 </style>
+
+<script>
+  // Keep the pill honest after the build: read the same two addresses again, and fall back to
+  // "warming up" when either does not answer.
+  const NETWORK = "https://network.surfingdog.ai";
+  const pill = document.querySelector<HTMLElement>("[data-live]");
+  const text = document.querySelector<HTMLElement>("[data-live-text]");
+  const get = async (path: string): Promise<Record<string, unknown> | null> => {
+    try {
+      const res = await fetch(`${NETWORK}${path}`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(6000),
+      });
+      return res.ok ? ((await res.json()) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  if (pill && text) {
+    void Promise.all([get("/v1/stats"), get("/v1/ranking")]).then(([stats, ranking]) => {
+      const ok = (stats?.status as { api?: unknown } | undefined)?.api === "ok";
+      const v = typeof ranking?.version === "number" ? ranking.version : null;
+      const good = ok && v !== null;
+      text.textContent = good ? `network ok · rules v${v}` : "warming up";
+      pill.classList.toggle("ok", good);
+    });
+  }
+</script>

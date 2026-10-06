@@ -15,7 +15,7 @@ interface Props {
   ld?: Record<string, unknown> | readonly Record<string, unknown>[];
 }
 
-const { title, description, image = "/art/og-flow.png", type = "website", ld } = Astro.props;
+const { title, description, image = "/art/og-network-v1.png", type = "website", ld } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL(image, Astro.site);
 ---

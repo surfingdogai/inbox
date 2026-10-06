@@ -1,0 +1,627 @@
+---
+/**
+ * The home hero, "the ask". One AI assistant sends a short request into the directory, three
+ * listings rise in, the top one lifts and its MCP door lights, and then the request goes straight
+ * to that business's own door, not through the directory. The answer flies home along a trail that
+ * is inked only while it travels. Three requests take turns, one per pass.
+ *
+ * Timings (LOOP 10.4 s): the ask lands at 1.4 s, rows rise at 1.9 / 2.05 / 2.2 s, the top row lifts
+ * at 3.0 s, the hop runs 4.0 to 5.3 s, the answer comes home 5.9 to 7.3 s, and the scene clears at
+ * 9.0 s, so the last moment is rest.
+ *
+ * The SVG below is the scene itself, server-rendered at its composed still frame (STILL = 6.6 s:
+ * the first request answered, the tick halfway home). The script does not redraw anything; it
+ * animates these same nodes, and it starts the clock at STILL, so the first animated frame is the
+ * frame that was already painted. With JavaScript off, under reduced motion, or if the script
+ * throws, the still frame is what stays.
+ *
+ * Every frame is derived from the clock alone (no timers), so pausing off screen or in a hidden tab
+ * and resuming can never leave a half-lit piece behind. Styles are global because the script
+ * toggles classes on these nodes; every selector starts with .sdh and every keyframe is sdh-*.
+ * Colours are the site's tokens: ink for structure, palm for "answered", violet for the request.
+ */
+---
+
+<figure
+  class="sdh"
+  role="img"
+  aria-label="An AI assistant asks the directory for a business. Three listings come back, the top one is picked, and the assistant then reaches that business directly through its own door. The answer comes straight back."
+>
+  <svg viewBox="0 44 520 290" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="sdh-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--sh-tangerine)"></stop>
+        <stop offset="58%" stop-color="var(--sh-flamingo)"></stop>
+        <stop offset="100%" stop-color="var(--sh-violet)"></stop>
+      </linearGradient>
+      <clipPath id="sdh-c"><path d="M432,182 A11,11 0 0 1 454,182 Z"></path></clipPath>
+    </defs>
+
+    <!-- the ask: a faint wire from the assistant into the search field -->
+    <path class="sdh-wire" data-ask d="M56,196 C104,196 116,123 166,123"></path>
+    <!-- the hop and the way home: never inked at rest -->
+    <path class="sdh-guide" data-arc d="M56,188 C110,10 400,10 386,192"></path>
+    <path class="sdh-trail on" data-trail d="M386,192 C400,10 110,10 56,188"></path>
+
+    <!-- the assistant -->
+    <g class="sdh-agent" data-agent>
+      <rect x="30" y="184" width="24" height="24" rx="7" class="bodyfill"></rect>
+      <rect x="30" y="184" width="24" height="24" rx="7"></rect>
+      <rect x="26" y="180" width="32" height="32" rx="10" class="halo"></rect>
+      <circle cx="37.6" cy="195" r="1.7" class="eye"></circle>
+      <circle cx="46.4" cy="195" r="1.7" class="eye"></circle>
+      <line x1="42" y1="184" x2="42" y2="177"></line>
+      <circle cx="42" cy="174.4" r="2.6" class="ant"></circle>
+    </g>
+    <text x="42" y="228" font-size="8.2" text-anchor="middle" class="sdh-cap">YOUR AI</text>
+
+    <!-- the directory -->
+    <rect x="140" y="96" width="230" height="204" rx="14" class="sdh-glass"></rect>
+    <rect x="152" y="110" width="206" height="26" rx="13" class="sdh-field"></rect>
+    <circle cx="166" cy="122" r="4.2" class="sdh-lens"></circle>
+    <line x1="169.2" y1="125.2" x2="172.4" y2="128.4" class="sdh-lens"></line>
+    <text x="178" y="126.6" font-size="9.4" class="sdh-q on" data-q>a haircut, Saturday 10:00</text>
+
+    <g transform="translate(152,150)">
+      <g class="sdh-row on top" data-row>
+        <g class="in">
+          <rect class="bg" width="206" height="32" rx="8"></rect>
+          <circle class="av" cx="16" cy="16" r="6.5"></circle>
+          <text class="nm" x="30" y="14.5" font-size="9.4" data-name>A barber</text>
+          <rect class="n f" x="30" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n f" x="37" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n f" x="44" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n f" x="51" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="58" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <g class="sdh-door lit">
+            <rect x="156" y="8" width="40" height="16" rx="8"></rect>
+            <text x="176" y="19.2" font-size="8" text-anchor="middle">MCP</text>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g transform="translate(152,190)">
+      <g class="sdh-row on" data-row>
+        <g class="in">
+          <rect class="bg" width="206" height="32" rx="8"></rect>
+          <circle class="av" cx="16" cy="16" r="6.5"></circle>
+          <rect class="bar" x="30" y="9" width="52" height="5" rx="2.5"></rect>
+          <rect class="n f" x="30" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n f" x="37" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="44" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="51" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="58" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <g class="sdh-door">
+            <rect x="156" y="8" width="40" height="16" rx="8"></rect>
+            <text x="176" y="19.2" font-size="8" text-anchor="middle">REST</text>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g transform="translate(152,230)">
+      <g class="sdh-row on" data-row>
+        <g class="in">
+          <rect class="bg" width="206" height="32" rx="8"></rect>
+          <circle class="av" cx="16" cy="16" r="6.5"></circle>
+          <rect class="bar" x="30" y="9" width="40" height="5" rx="2.5"></rect>
+          <rect class="n" x="30" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="37" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="44" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="51" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <rect class="n" x="58" y="19.5" width="4.5" height="4.5" rx="1"></rect>
+          <g class="sdh-door">
+            <rect x="156" y="8" width="40" height="16" rx="8"></rect>
+            <text x="176" y="19.2" font-size="8" text-anchor="middle">MCP</text>
+          </g>
+        </g>
+      </g>
+    </g>
+    <text x="152" y="284" font-size="7.6" class="sdh-foot">ordered by receipts, never by payment</text>
+
+    <!-- the business, with its own door on its wall -->
+    <rect x="404" y="156" width="106" height="80" rx="12" class="sdh-glass"></rect>
+    <path d="M432,182 A11,11 0 0 1 454,182 Z" fill="url(#sdh-g)"></path>
+    <g clip-path="url(#sdh-c)">
+      <rect x="431" y="173.4" width="24" height=".9" class="sdh-cut"></rect>
+      <rect x="431" y="175.7" width="24" height=".9" class="sdh-cut"></rect>
+      <rect x="431" y="177.8" width="24" height=".9" class="sdh-cut"></rect>
+    </g>
+    <text x="432" y="204" font-size="10" class="sdh-bname on" data-bname>A barber</text>
+    <circle cx="435" cy="218.4" r="2.4" class="sdh-ok"></circle>
+    <text x="441" y="221" font-size="7.6" class="sdh-sub">answering</text>
+    <g class="sdh-bdoor lit" data-bdoor>
+      <rect x="386" y="187" width="36" height="18" rx="9" class="pill"></rect>
+      <rect x="386" y="187" width="36" height="18" rx="9" class="ring"></rect>
+      <text x="404" y="199.2" font-size="8" text-anchor="middle">MCP</text>
+    </g>
+
+    <!-- the pieces that travel -->
+    <g class="sdh-chip" data-chip transform="translate(56,196)" opacity="0">
+      <rect class="bg" x="-10" y="-10" width="120" height="20" rx="10" data-chip-bg></rect>
+      <circle class="dot" cx="0" cy="0" r="3"></circle>
+      <text class="lb" x="8" y="3.2" font-size="9.4" data-chip-lb>a haircut, Saturday 10:00</text>
+    </g>
+    <g class="sdh-hop" data-hop transform="translate(56,188)" opacity="0">
+      <circle r="7" class="halo"></circle>
+      <circle r="3.6" class="core"></circle>
+    </g>
+    <g class="sdh-reply" data-reply transform="translate(246.5,55)">
+      <circle r="7.6" class="disc"></circle>
+      <path d="M-3.1,.2 L-.9,2.5 L3.3,-2.7" class="mark"></path>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .sdh {
+    --sh-ground: var(--ground);
+    --sh-ink: var(--ink);
+    --sh-ink2: var(--ink-2);
+    --sh-ink3: var(--ink-3);
+    --sh-palm: var(--c-success);
+    --sh-palm-i: var(--c-success-ink);
+    --sh-violet: var(--violet);
+    --sh-flamingo: var(--flamingo);
+    --sh-tangerine: var(--tangerine);
+    --sh-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 520 / 290;
+    container-type: inline-size;
+  }
+  .sdh svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .sdh text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    fill: var(--sh-ink2);
+  }
+  .sdh .sdh-cap {
+    letter-spacing: 0.11em;
+  }
+  .sdh .sdh-wire {
+    fill: none;
+    stroke: var(--sh-ink3);
+    stroke-opacity: 0.34;
+    stroke-width: 1.1;
+  }
+  .sdh .sdh-guide {
+    fill: none;
+    stroke: none;
+  }
+  .sdh .sdh-trail {
+    fill: none;
+    stroke: var(--sh-palm);
+    stroke-width: 1.1;
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+    opacity: 0;
+  }
+  .sdh .sdh-trail.on {
+    opacity: 0.55;
+  }
+  .sdh .sdh-glass {
+    fill: var(--glass-bg);
+    stroke: var(--glass-border);
+    stroke-width: 1;
+  }
+  .sdh .sdh-field {
+    fill: var(--row-bg);
+    stroke: var(--hairline-strong);
+    stroke-width: 1;
+  }
+  .sdh .sdh-lens {
+    fill: none;
+    stroke: var(--sh-ink3);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+  }
+  .sdh .sdh-q {
+    fill: var(--sh-ink);
+    opacity: 0;
+    transition: opacity 0.36s var(--sh-ease);
+  }
+  .sdh .sdh-q.on {
+    opacity: 1;
+  }
+  .sdh .sdh-foot,
+  .sdh .sdh-sub {
+    fill: var(--sh-ink3);
+  }
+  .sdh .sdh-cut {
+    fill: var(--sh-ground);
+  }
+
+  /* the assistant: ink, with its identity in one small tinted dot */
+  .sdh .sdh-agent rect,
+  .sdh .sdh-agent line {
+    fill: none;
+    stroke: var(--sh-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.2;
+  }
+  .sdh .sdh-agent .bodyfill {
+    fill: var(--sh-violet);
+    fill-opacity: 0.07;
+    stroke: none;
+  }
+  .sdh .sdh-agent .eye {
+    fill: var(--sh-ink2);
+    fill-opacity: 0.5;
+  }
+  .sdh .sdh-agent .ant {
+    fill: var(--sh-violet);
+  }
+  .sdh .sdh-agent .halo {
+    stroke: var(--sh-violet);
+    stroke-opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .sdh .sdh-agent.wake .halo {
+    animation: sdh-halo 0.62s var(--sh-ease);
+  }
+  @keyframes sdh-halo {
+    0% {
+      stroke-opacity: 0.5;
+      transform: scale(0.82);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.28);
+    }
+  }
+
+  /* listings */
+  .sdh .sdh-row .in {
+    opacity: 0;
+    transform: translateY(6px);
+    transition:
+      opacity 0.42s var(--sh-ease),
+      transform 0.42s var(--sh-ease);
+  }
+  .sdh .sdh-row.on .in {
+    opacity: 1;
+    transform: none;
+  }
+  .sdh .sdh-row.on.top .in {
+    transform: translateY(-2px);
+  }
+  .sdh .sdh-row .bg {
+    fill: var(--row-bg);
+    stroke: transparent;
+    stroke-width: 1;
+    transition: stroke 0.4s var(--sh-ease);
+  }
+  .sdh .sdh-row.top .bg {
+    stroke: color-mix(in srgb, var(--sh-palm) 45%, transparent);
+  }
+  .sdh .sdh-row .av {
+    fill: var(--sh-ink3);
+    fill-opacity: 0.14;
+  }
+  .sdh .sdh-row .bar {
+    fill: var(--sh-ink3);
+    fill-opacity: 0.22;
+  }
+  .sdh .sdh-row .nm {
+    fill: var(--sh-ink);
+    font-weight: 600;
+  }
+  .sdh .sdh-row .n {
+    fill: var(--sh-ink3);
+    fill-opacity: 0.16;
+  }
+  .sdh .sdh-row .n.f {
+    fill-opacity: 0.6;
+  }
+  .sdh .sdh-door rect,
+  .sdh .sdh-bdoor .pill {
+    fill: var(--glass-bg);
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+    transition:
+      stroke 0.4s var(--sh-ease),
+      fill 0.4s var(--sh-ease);
+  }
+  .sdh .sdh-door text,
+  .sdh .sdh-bdoor text {
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: fill 0.4s var(--sh-ease);
+  }
+  .sdh .sdh-door.lit rect,
+  .sdh .sdh-bdoor.lit .pill {
+    fill: color-mix(in srgb, var(--sh-palm) 14%, var(--sh-ground));
+    stroke: var(--sh-palm);
+  }
+  .sdh .sdh-door.lit text,
+  .sdh .sdh-bdoor.lit text {
+    fill: var(--sh-palm-i);
+  }
+  .sdh .sdh-bdoor .ring {
+    fill: none;
+    stroke: var(--sh-palm);
+    stroke-width: 1.2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .sdh .sdh-bdoor.ping .ring {
+    animation: sdh-ping 0.72s var(--sh-ease);
+  }
+  @keyframes sdh-ping {
+    0% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.14);
+    }
+  }
+  .sdh .sdh-bname {
+    fill: var(--sh-ink);
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.36s var(--sh-ease);
+  }
+  .sdh .sdh-bname.on {
+    opacity: 1;
+  }
+  .sdh .sdh-ok {
+    fill: var(--sh-palm);
+  }
+
+  /* travelling pieces */
+  .sdh .sdh-chip .bg {
+    fill: color-mix(in srgb, var(--sh-violet) 12%, var(--sh-ground));
+    stroke: color-mix(in srgb, var(--sh-violet) 40%, transparent);
+    stroke-width: 1;
+  }
+  .sdh .sdh-chip .dot,
+  .sdh .sdh-hop .core {
+    fill: var(--sh-violet);
+  }
+  .sdh .sdh-chip .lb {
+    fill: var(--sh-ink);
+    font-weight: 600;
+  }
+  .sdh .sdh-hop .halo {
+    fill: color-mix(in srgb, var(--sh-violet) 16%, transparent);
+  }
+  .sdh .sdh-reply .disc {
+    fill: var(--sh-ground);
+    stroke: var(--sh-palm);
+    stroke-opacity: 0.65;
+    stroke-width: 1.1;
+  }
+  .sdh .sdh-reply .mark {
+    fill: none;
+    stroke: var(--sh-palm-i);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* On a phone the viewBox shrinks the type past reading size, so the words that carry meaning
+     grow in user units together. */
+  @container (max-width: 460px) {
+    .sdh .sdh-cap {
+      font-size: 11.5px;
+    }
+    .sdh .sdh-q,
+    .sdh .sdh-row .nm,
+    .sdh .sdh-chip .lb {
+      font-size: 12px;
+    }
+    .sdh .sdh-door text,
+    .sdh .sdh-bdoor text {
+      font-size: 10px;
+    }
+    .sdh .sdh-bname {
+      font-size: 12.5px;
+    }
+    .sdh .sdh-sub {
+      font-size: 10px;
+    }
+    .sdh .sdh-foot {
+      font-size: 9.5px;
+    }
+  }
+
+  /* Paused off screen or in a hidden tab; still under reduced motion. */
+  .sdh.sdh-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sdh * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  /* The clock drives everything: render(t) sets every class and position from t alone. */
+  const LOOP = 10.4;
+  const STILL = 6.6;
+  const ASKS = [
+    { q: "a haircut, Saturday 10:00", who: "A barber" },
+    { q: "two dozen bagels, Friday", who: "A bakery" },
+    { q: "a quote to fix a leak", who: "A plumber" },
+  ];
+
+  const easeSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+  const clamp = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const within = (t: number, a: number, b: number) => t >= a && t < b;
+
+  function mount(fig: HTMLElement): void {
+    if (fig.dataset.sdh === "on") return;
+    /* A missing piece throws, and the caller leaves the server-rendered still frame standing. */
+    const q = <T extends Element>(sel: string): T => {
+      const el = fig.querySelector<T>(sel);
+      if (!el) throw new Error(`hero search: no ${sel}`);
+      return el;
+    };
+    const ask = q<SVGPathElement>("[data-ask]");
+    const arc = q<SVGPathElement>("[data-arc]");
+    const trail = q<SVGPathElement>("[data-trail]");
+    const agent = q<SVGGElement>("[data-agent]");
+    const field = q<SVGTextElement>("[data-q]");
+    const name = q<SVGTextElement>("[data-name]");
+    const bname = q<SVGTextElement>("[data-bname]");
+    const bdoor = q<SVGGElement>("[data-bdoor]");
+    const chip = q<SVGGElement>("[data-chip]");
+    const chipBg = q<SVGRectElement>("[data-chip-bg]");
+    const chipLb = q<SVGTextElement>("[data-chip-lb]");
+    const hop = q<SVGGElement>("[data-hop]");
+    const reply = q<SVGGElement>("[data-reply]");
+    const rows = Array.from(fig.querySelectorAll<SVGGElement>("[data-row]"));
+    if (rows.length !== 3) throw new Error("hero search: rows");
+    const top = rows[0] as SVGGElement;
+    const door = (() => {
+      const d = top.querySelector<SVGGElement>(".sdh-door");
+      if (!d) throw new Error("hero search: door");
+      return d;
+    })();
+    fig.dataset.sdh = "on";
+
+    const LASK = ask.getTotalLength();
+    const LARC = arc.getTotalLength();
+    let shown = -1;
+
+    const put = (el: SVGGElement, x: number, y: number, o: number) => {
+      el.setAttribute("transform", `translate(${x},${y})`);
+      el.setAttribute("opacity", String(o));
+    };
+    const set = (el: Element, cls: string, on: boolean) => el.classList.toggle(cls, on);
+
+    /* The chip is measured, never guessed, so a wider font gets a wider chip. */
+    const fitChip = () => {
+      try {
+        const w = chipLb.getBBox().width;
+        if (w > 0) chipBg.setAttribute("width", String(Math.ceil(w + 26)));
+      } catch {
+        // Not laid out yet: the drawn width stands.
+      }
+    };
+
+    function render(clock: number): void {
+      const t = ((clock % LOOP) + LOOP) % LOOP;
+      const k = Math.floor(clock / LOOP) % ASKS.length;
+      const a = ASKS[k] ?? ASKS[0];
+      if (a && k !== shown) {
+        shown = k;
+        field.textContent = a.q;
+        chipLb.textContent = a.q;
+        name.textContent = a.who;
+        bname.textContent = a.who;
+        fitChip();
+      }
+
+      set(agent, "wake", within(t, 0.3, 0.92) || within(t, 3.9, 4.52) || within(t, 7.3, 7.92));
+
+      // 1. the ask travels the wire and becomes the query in the field
+      if (within(t, 0.4, 1.65)) {
+        const u = clamp((t - 0.4) / 1.0);
+        const p = ask.getPointAtLength(easeSine(u) * LASK);
+        const o = t < 0.55 ? (t - 0.4) / 0.15 : t > 1.4 ? clamp((1.65 - t) / 0.25) : 1;
+        put(chip, p.x, p.y, o);
+      } else chip.setAttribute("opacity", "0");
+      set(field, "on", within(t, 1.45, 9.0));
+
+      // 2. three listings rise in; the top one lifts and its door lights
+      rows.forEach((r, i) => {
+        set(r, "on", within(t, 1.9 + i * 0.15, 9.0));
+      });
+      set(top, "top", within(t, 3.0, 9.0));
+      set(door, "lit", within(t, 3.0, 9.0));
+
+      // 3. the request hops straight to the business's own door
+      if (within(t, 4.0, 5.3)) {
+        const u = clamp((t - 4.0) / 1.3);
+        const p = arc.getPointAtLength(easeSine(u) * LARC);
+        const o = u < 0.12 ? u / 0.12 : u > 0.9 ? clamp((1 - u) / 0.1) : 1;
+        put(hop, p.x, p.y, o);
+      } else hop.setAttribute("opacity", "0");
+      set(bdoor, "lit", within(t, 5.3, 9.0));
+      set(bdoor, "ping", within(t, 5.3, 6.02));
+      set(bname, "on", within(t, 0.3, 9.0));
+
+      // 4. the answer comes home on a trail inked only for the journey
+      if (within(t, 5.9, 7.3)) {
+        const v = (t - 5.9) / 1.4;
+        const p = trail.getPointAtLength(easeSine(v) * LARC);
+        put(reply, p.x, p.y, v < 0.14 ? v / 0.14 : v > 0.88 ? clamp((1 - v) / 0.12) : 1);
+        trail.style.opacity = String((v < 0.2 ? v / 0.2 : v > 0.7 ? clamp((1 - v) / 0.3) : 1) * 0.55);
+      } else {
+        reply.setAttribute("opacity", "0");
+        trail.style.opacity = "0";
+      }
+      trail.classList.remove("on");
+    }
+
+    const mq = matchMedia("(prefers-reduced-motion: reduce)");
+    let clock = STILL;
+    let last = 0;
+    let raf = 0;
+    let run = false;
+    let seen = true;
+
+    const frame = (now: number) => {
+      if (!run) return;
+      // Clamped: a long stall slows the piece rather than teleporting it.
+      clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+      last = now;
+      render(clock);
+      raf = requestAnimationFrame(frame);
+    };
+    const sync = () => {
+      const want = seen && !document.hidden && !mq.matches;
+      if (want === run) return;
+      run = want;
+      fig.classList.toggle("sdh-paused", !run);
+      if (run) {
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else cancelAnimationFrame(raf);
+    };
+
+    if (mq.matches) return; // the server-rendered still frame stays as it is
+    fitChip();
+    render(clock);
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(
+        (es) => {
+          seen = es[0]?.isIntersecting ?? true;
+          sync();
+        },
+        { threshold: 0.01 },
+      ).observe(fig);
+    }
+    document.addEventListener("visibilitychange", sync);
+    // Turned on later: stop, and settle on the same still frame the page shipped with.
+    mq.addEventListener("change", () => {
+      sync();
+      if (mq.matches) {
+        clock = STILL;
+        render(clock);
+      }
+    });
+    sync();
+  }
+
+  for (const f of Array.from(document.querySelectorAll<HTMLElement>(".sdh"))) {
+    try {
+      mount(f);
+    } catch (err) {
+      console.warn("hero search", err);
+    }
+  }
+</script>
