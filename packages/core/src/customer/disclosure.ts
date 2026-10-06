@@ -7,7 +7,7 @@ import type { CustomerPage, PageSection } from "./page";
 
 /**
  * The two places the business tells a customer about the booking network it uses (ADR-017 §2.1, as
- * The founder decided on 23 September 2026): the short email that carries a first-time customer's code,
+ * the founder decided on 23 September 2026): the short email that carries a first-time customer's code,
  * alone and a day after they first booked or ordered, with one line and a link; and the page that
  * link opens, served by the inbox in the business's name, which says which networks, what they keep
  * and how to stop. Only here may a network be named; everything else a customer reads names nobody

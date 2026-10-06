@@ -16,7 +16,7 @@ receipts of network rules version 6 (§8,
 [Amendment 6](#amendment-6-26-sep-2026-the-receipts-of-rules-version-6)), which ADR-017's Amendment 3
 proposes (rules version 5 went to ADR-017's Amendment 2, accepted on 26 September 2026); the rest is
 not built yet. A number marked \* is a *default*
-The founder may change without a new ADR. The legal points are research, not advice, and need
+the founder may change without a new ADR. The legal points are research, not advice, and need
 a lawyer before they become Terms or public copy.
 
 The founder, 23 September 2026: *"negotiation, quotes, negotiating time, prices, returns... we need to
@@ -698,7 +698,7 @@ up. B2B-only terms; legal strings beyond EN and PT.
 
 ## Amendment 1 (23 Sep 2026): the first build of the customer's answers
 
-**Status: proposed.** the founder decided on 23 Sep 2026 that customers accept or decline a proposed time
+**Status: proposed.** The founder decided on 23 Sep 2026 that customers accept or decline a proposed time
 or a quote, and send details asked for, through three doors — their assistant, links in the
 business's email, and a small page those links open — and that the owner's **Confirm** on a proposed
 booking books the proposed time. The first build does that on today's tables, so it differs from the

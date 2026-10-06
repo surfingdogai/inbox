@@ -7,7 +7,7 @@ the business profile and searching near a place, A2.5; searching by words and la
 assistants, A2.7; a page for a person, A2.8; a customer's contest, A2.9; customers not scored for
 now, A2.10), accepted, rules version 5 (§15); Amendment 3 (changes both sides agreed, and
 refunds, from ADR-018), accepted, rules version 6 (§15). The decisions are
-The founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
+the founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
 nearest first). This ADR is the public rules and the contract for the inbox and any network,
@@ -69,7 +69,7 @@ Numbers marked \* are defaults, changed only with 15 days' notice (§11).
 | R13 | Two-sided weights: evidence weighted by the reputation of whoever it came from. Businesses are related only by what they proved, never by a profile's contact email (A1.3). | "the more a customer ranks in confidence, payment etc the more weight their rank has, the same in reverse"; "Stop linking businesses by contact email." |
 | R14 | Recency weights, never zero. | "the last 6 months ranks or last 1 month has different weight than older ranks, let's have a weight system" |
 | R15 | Customers have their own reputation; businesses reward good ones; newcomers get neutral treatment. A customer's broken promises count only once their email is proven (A1.7). | "customers are the most important"; "Someone using your email can't hurt you." |
-| R16 | Identity is **a key per person**, across agents and businesses, on the network that issued it (R28). Legal paperwork is a task list (§12). | "Me the founder can have an unique key that I can use with multiple agents … It's attributed once and I keep it."; "don't care, this is how we go" |
+| R16 | Identity is **a key per person**, across agents and businesses, on the network that issued it (R28). Legal paperwork is a task list (§12). | "Me [the founder] can have an unique key that I can use with multiple agents … It's attributed once and I keep it."; "don't care, this is how we go" |
 | R17 | Publish everything: human rules, machine rules with changelog, Terms, notice before changes. | "the rank is core … publish them"; "I want human, short explanations" |
 | R18 | Unsigned or unknown agents, and instances without the new receipts, keep working. | |
 | R19 | Networks issue keys automatically on a first contact, through the inbox. | "Most users don't know about the network." |
@@ -847,24 +847,24 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
 
 | Number | Value | Source | Does |
 |---|---|---|---|
-| Ranked | score ≥ 0.40 (`building`) | the founder (R32) | Sorts before the newcomers' shuffle |
-| Unclosed promise | broken, `o` 1.0, 9 days after due | the founder (R30) | Silence never beats an honest outcome |
-| Hold; release | 30 days; then ≤ 30 units a month to day 90 | the founder (R31); release default | New businesses |
-| Repeat | cap 3; +0.25 a return; a customer's broken pieces per business ≤ 1 | the founder (R7) cap; rest default | Returning customers |
-| `radius_km` | 10; max 1000 | the founder (R11); max default | Near mode |
-| Keys | one per network | the founder (R28) | Identity |
-| Networks per inbox | up to 8 | the founder (R23) "multiple"; limit default | Bounds background work per inbox; raise when needed |
-| Time | 1.0 ≤ 30 d; 0.75 ≤ 182 d; 0.5 ≤ 365 d; 0.25 older; weight and confidence | the founder (R14, R29); values default | Quiet records slide, never to zero |
+| Ranked | score ≥ 0.40 (`building`) | The founder (R32) | Sorts before the newcomers' shuffle |
+| Unclosed promise | broken, `o` 1.0, 9 days after due | The founder (R30) | Silence never beats an honest outcome |
+| Hold; release | 30 days; then ≤ 30 units a month to day 90 | The founder (R31); release default | New businesses |
+| Repeat | cap 3; +0.25 a return; a customer's broken pieces per business ≤ 1 | The founder (R7) cap; rest default | Returning customers |
+| `radius_km` | 10; max 1000 | The founder (R11); max default | Near mode |
+| Keys | one per network | The founder (R28) | Identity |
+| Networks per inbox | up to 8 | The founder (R23) "multiple"; limit default | Bounds background work per inbox; raise when needed |
+| Time | 1.0 ≤ 30 d; 0.75 ≤ 182 d; 0.5 ≤ 365 d; 0.25 older; weight and confidence | The founder (R14, R29); values default | Quiet records slide, never to zero |
 | Outcomes | kept 1; business cancel 0.5 with ≥ 24 h notice, else 1; no-show 1; late customer cancel 0.5; payment failed 0.5; charge-back 1; presumed kept × 0.5 | default | Share moved by each outcome |
-| A customer's broken outcomes | count only when their email was proven by the outcome's date: network-proven, for every business; or at the business that recorded them (`email_proof`, or their key presented there), for its own; kept ones always count | the founder (A1.7) | Someone using your email can't hurt you |
+| A customer's broken outcomes | count only when their email was proven by the outcome's date: network-proven, for every business; or at the business that recorded them (`email_proof`, or their key presented there), for its own; kept ones always count | The founder (A1.7) | Someone using your email can't hurt you |
 | Word cap; verified; disputed | 50 fresh units, ageing (0.9682); 2.5; × 0.5 | default | The word alone; R3; both sides stand |
 | Counterparty; `z` | 1 + score × min(1, unrelated / 5); 1.2816 | R13's proposed ratio, scaled; default | The other side's record; caution |
 | Established; platforms | trusted, 3 unrelated trusted businesses, 60 days, proven email; seeded at launch (https directory, named operator) | default | When a key verifies |
-| Related | same /24 or /48 within 30 d, from signed pings; overlap ≥ 50%, grouping by mailbox or domain only customers with a network-proven email; no contact-email relation; one non-free-mail domain = one customer; one mailbox = one customer (`+` and Gmail dots folded) | the founder (A1.3, A1.4) contact email, mailbox; rest default | "Unrelated"; distinct customers |
+| Related | same /24 or /48 within 30 d, from signed pings; overlap ≥ 50%, grouping by mailbox or domain only customers with a network-proven email; no contact-email relation; one non-free-mail domain = one customer; one mailbox = one customer (`+` and Gmail dots folded) | The founder (A1.3, A1.4) contact email, mailbox; rest default | "Unrelated"; distinct customers |
 | Tiers | trusted ≥ 0.75 (+ 3 businesses or 10 customers); building ≥ 0.40; `person.tier` best across networks | default; building R32 | Rules and presets |
 | Order; timing | answering 24 h; hourly snapshot; daily shuffle; notice 24 h; late customer 48 h; late promise 24 h; auto-complete 48 h after the end; rules change notice 15 d | default | R10, R12, R17, §3 |
-| Silence; leaving | set aside after 90 d with no ping that counts and no good manifest fetch, warned ≥ 30 d before; one notice a day to any one address; ≤ 10 listing changes a day (A2.3, A2.4) | the founder (N3); rest default | A closed inbox is not listed for ever; a business leaves when it likes |
-| Contests | an open contest's outcome counts nothing; disputed within 14 d of filing, half; not disputed by then, never (A2.9) | the founder (Q2); 14 d default | A customer's word that a record is wrong holds while it is checked |
+| Silence; leaving | set aside after 90 d with no ping that counts and no good manifest fetch, warned ≥ 30 d before; one notice a day to any one address; ≤ 10 listing changes a day (A2.3, A2.4) | The founder (N3); rest default | A closed inbox is not listed for ever; a business leaves when it likes |
+| Contests | an open contest's outcome counts nothing; disputed within 14 d of filing, half; not disputed by then, never (A2.9) | The founder (Q2); 14 d default | A customer's word that a record is wrong holds while it is checked |
 | Orders; reports | lapse 14 d after a payment request; due 30 d; reports `due` + 1 h to + 90 d, disputed within 14 d | default | §3 |
 | Presets | known: ≥ 2 completed, no no-shows; trusted ≤ 2 open, ≤ 20000; shop ≤ 2× paid; `person.limit_minor` 40000 when trusted | default | Rewards, never credit |
 | Calls and codes | signatures ≤ 300 s, 60 s skew; network 3 s, cache 3600 s, breaker 3 → 60 s, `409` cached 24 h; codes 6 digits, 10 min, 5 tries, 3/h per address; session 24 h | default | Never block a booking; recovery |
@@ -1010,7 +1010,7 @@ customers; it never refuses a person or touches their key.
 **Still open.** Alias services such as Apple's Hide My Email or DuckDuckGo's addresses give one
 person many addresses that no fold can join. Counting each such domain as one customer, like a
 company domain, would close this, and would also count all their honest users as one. That is
-The founder's call.
+the founder's call.
 
 **The founder's decisions.** R7 holds again for the free way to multiply addresses: one mailbox counts as
 one customer, whatever `+` or dots it adds. R16 and R19 are untouched: one key per person, issued by

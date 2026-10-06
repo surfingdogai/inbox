@@ -1295,7 +1295,7 @@ export class Capabilities {
       await assertNoLeak(this.db, caller, PUBLISHED, words(after));
     }
     // A network switched on is sent customers' email addresses once it answers this inbox's ping
-    // (The founder, 23 September 2026): which networks may have them, and what each is sent, is for a
+    // (the founder, 23 September 2026): which networks may have them, and what each is sent, is for a
     // person at the business to decide. The owner's AI, or a key handed to another system, may
     // switch one off or share less with it, never switch one on, let it issue keys, or share more.
     if (isOwnerAssistant(caller) || caller.principal?.keyKind === "integration") {
