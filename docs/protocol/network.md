@@ -401,8 +401,8 @@ businesses with their doors. Its `order` adds `rule`, `bands`, `reach`, `within_
 `one_place`, `nearest`, `found_tier`, `sources` and a `filters` every version 7 has. In short: every
 filter narrows the list and never reorders it; among the businesses left, those whose name,
 categories or services match the words or the category asked for come before those that match in
-their description alone; then comes reach, an inbox that answers (ours or any compatible inbox), then
-other live agent doors by level (payable, then bookable or orderable, then askable), then the rest;
+their description alone; then comes reach, a member's inbox that answers (ours or any compatible
+inbox), then other live agent doors by level (payable, then bookable or orderable, then askable), then the rest;
 within each, kept promises (a score of 0.40 or more) and the daily shuffle as before; every 5th place
 goes to an answering newcomer; a business has one place. Until version 7 takes effect, entries the
 network found and businesses registered without an inbox appear in a separate tier after every
@@ -608,6 +608,13 @@ A door shows `{type, url, level, status, kinds, src, protocol?, checked_at?}`:
 - `requestable` lists the kinds a live door **declared** it answers (`ask`, `quote`): what the crawler
   saw alone never makes a door requestable.
 
+**A door on another host.** A door whose host is not the business's domain or one of its subdomains
+(a platform's door included) counts for the level and is shown only when its own document names the
+business's domain: the MCP server card's or the A2A card's URL, the UCP profile, an OpenAPI `servers`
+entry, an inbox manifest whose `instance` is `https://<domain>`, or a file the network names at the
+door host's `/.well-known/` that lists the domain. Until then the network keeps it as declared, at no
+level, and does not show it. A claim proved by `code` (§4.12) declares no door on another host.
+
 **Probing reads and never acts.** For MCP servers at 2026-07-28 or later a network reads the server
 card or calls `tools/list` only, and calls `initialize` for older versions alone. It never makes a
 `tools/call`, a write call, an A2A `message/send`, a checkout, a form submission or a login.
@@ -679,15 +686,20 @@ zone is left out of `open_now`. `languages` are BCP 47 tags; the language of its
 A network may list businesses it found on their own websites. Such an entry:
 
 - shows only facts the business published on its own site or at its own doors, each with its source
-  and date (`facts`), and **never a phone number, an email address or a person's name**;
+  and date (`facts`), and **never a phone number, an email address, or the name of a person other
+  than the business's own name**;
 - shows the town, region and country, never the street, while it is unclaimed; its distance is in
-  whole kilometres, at least 1;
+  whole kilometres, at least 1. While it is unclaimed, a network searches and sorts it by a coarse
+  point (a cell a few kilometres wide, or its town's centre), never its exact one; a search radius
+  under 5 km counts as 5 km for it; and its service area shows a radius, never a centre;
 - carries `found: {note, checked_at, about_url}`, where `note` is
   `found on its own website · not a member · checked <YYYY-MM-DD>` and `about_url` is the network's
   page for businesses: why it is there, how to correct or claim it, how to opt out;
 - is listed only at `askable` or above (§4.9);
 - leaves the directory within 24 hours of an opt-out at that page or through `update_business`
-  (§4.12);
+  (§4.12), and is not stored again while the opt-out stands;
+- loses a fact the network has not seen for 180 days, and leaves the directory, and the network's
+  store, once the network has not checked it for 180 days;
 - is served with `X-Robots-Tag: noindex` on its detail.
 
 `vectors/listing.json` holds what was crawled and the card a network derives from it.
@@ -717,7 +729,7 @@ required part is missing. Its answer has a `status`: `listed`, `not_agent_ready`
 | `domain` | `dns` | a TXT record at `_<prefix>.<domain>` holding `<prefix>=<token>` |
 | `key` | `key` | a signature, by a key the business publishes (its manifest's `receipt_keys`, or its JWKS), over `<prefix>:v1:<network host>:<domain>:<challenge id>`; EdDSA (Ed25519) or ES256 |
 | `platform` | | a platform's own proof that the business holds the store or account |
-| `code` | `code` | a code sent to an address at the domain that the owner types, never one read from the site; at most once per address every 30 days |
+| `code` | `code` | a code sent to an address at exactly the domain (not a subdomain) that the owner types, never one read from the site; never for a domain whose addresses a public mail or internet provider gives out |
 
 A network names its own well-known file and prefix; the reference network's are
 `surfingdog-claim` (`/.well-known/surfingdog-claim`, `_surfingdog-claim.<domain>`,
@@ -725,12 +737,25 @@ A network names its own well-known file and prefix; the reference network's are
 expires_at, ways}`, each way saying exactly what to put where; the next call carries
 `proof: {method, challenge_id, …}`. When the proof holds, the answer carries a **claim token**
 (`sdc_` and 43 base64url characters), good for 90 days on that listing, which proves it again in
-later calls. A stronger proof takes over a listing claimed with a weaker one and revokes the weaker
-tokens; a weaker caller is refused.
+later calls. A proof at least as strong as the listing's takes it over; a weaker caller is refused.
+Every fresh proof (a token is not one) revokes every other live token on the listing whose label is
+as strong or weaker. When a different claimant takes a listing over, what the earlier one declared,
+doors included, is dropped. A `code` claim is held by its address: a code sent to another address
+does not take it over.
 
-`update_business` needs a claim token or a proof at least as strong as the listing's, except
-**opt-out, which needs no proof**: it removes the listing at once, and a claimed owner comes back with a
-`domain` or `key` proof. `listing: "off"` hides it from search and keeps it in the index.
+A claim proved by `code` declares no door on another host (§4.8) and cannot switch off or remove an
+entry the network found.
+
+A network counts challenges, checks and codes per caller as well as per domain, so a stranger's calls
+never use up what the business needs to prove its domain, and it does not say whether an address was
+sent a code before.
+
+`update_business` needs a claim token or a proof at least as strong as the listing's, **opt-out
+included**, for a listing that is claimed or registered. An opt-out without a proof, through the tool
+or at the network's page for businesses, stops the crawling and removes an unclaimed entry the network
+found, at once; it never removes a claimed or registered listing. A business that opted out comes back
+with a `domain` or `key` proof; a removal the network made itself (for abuse, or on a legal request)
+stays, and the answer is `refused`. `listing: "off"` hides it from search and keeps it in the index.
 
 ## 5. Persons and passes
 

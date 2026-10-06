@@ -284,8 +284,8 @@ export type RankingV6 = z.infer<typeof rankingV6Schema>;
 /**
  * Version 7: network rules 0.2.0 (protocol 0.2, October 2026). Version 6's shape and numbers, with an order that lists
  * agent-ready businesses with their doors (§4.8, §4.9): `order.rule` (the rule in one paragraph), `order.bands` (a
- * search's words or category put name, categories and services before description), `order.reach` (an inbox that
- * answers, then other live doors by level, then the rest), `order.within_reach`, `order.newcomers` (every 5th place),
+ * search's words or category put name, categories and services before description), `order.reach` (a member's
+ * inbox that answers, then other live doors by level, then the rest), `order.within_reach`, `order.newcomers` (every 5th place),
  * `order.one_place`, `order.nearest`, `order.found_tier` (entries the network found, and how they stand until version 7
  * takes effect), `order.sources` (which values count in a filter) and `order.filters`. Published with 15 days' notice.
  */

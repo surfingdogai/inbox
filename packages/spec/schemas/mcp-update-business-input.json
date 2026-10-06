@@ -35,7 +35,7 @@
           "maxLength": 1024
         },
         "email": {
-          "description": "code: an address at the business's own domain, typed by the owner.",
+          "description": "code: an address at exactly the business's own domain (not a subdomain), typed by the owner; never a public mail or internet provider's domain.",
           "type": "string",
           "maxLength": 254
         },
@@ -388,7 +388,7 @@
       "enum": ["on", "off"]
     },
     "opt_out": {
-      "description": "Removes the listing; needs no proof. A claimed owner comes back with a domain or key proof.",
+      "description": "With a claim token or a proof: removes the listing. Without one: stops the crawling and removes only an unclaimed entry the network found. A business that opted out comes back with a domain or key proof.",
       "type": "object",
       "properties": {
         "scopes": {

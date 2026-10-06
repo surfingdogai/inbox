@@ -1240,7 +1240,7 @@ describe("protocol 0.2: register_business and update_business", () => {
     expect(registerBusinessOutputSchema.safeParse({ ...listed, proof: "verified" }).success).toBe(false);
   });
 
-  it("takes an update, a listing switched off, and an opt-out that needs no proof", () => {
+  it("takes an update, a listing switched off, and an opt-out (without a proof it only stops the crawling)", () => {
     expect(
       updateBusinessInputSchema.safeParse({
         domain: "salon.example",

@@ -307,7 +307,7 @@
           "maxLength": 1024
         },
         "email": {
-          "description": "code: an address at the business's own domain, typed by the owner.",
+          "description": "code: an address at exactly the business's own domain (not a subdomain), typed by the owner; never a public mail or internet provider's domain.",
           "type": "string",
           "maxLength": 254
         },

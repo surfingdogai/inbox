@@ -326,7 +326,13 @@ export const claimProofSchema = z.object({
   challenge_id: z.string().max(64).optional(),
   kid: z.string().max(200).optional().describe("key: the key that signed."),
   signature: z.string().max(1024).optional().describe("key: base64url of the signature."),
-  email: z.string().max(254).optional().describe("code: an address at the business's own domain, typed by the owner."),
+  email: z
+    .string()
+    .max(254)
+    .optional()
+    .describe(
+      "code: an address at exactly the business's own domain (not a subdomain), typed by the owner; never a public mail or internet provider's domain.",
+    ),
   code: z
     .string()
     .regex(/^[0-9]{8}$/)
@@ -428,7 +434,9 @@ export const updateBusinessInputSchema = z.object({
         .max(3),
     })
     .optional()
-    .describe("Removes the listing; needs no proof. A claimed owner comes back with a domain or key proof."),
+    .describe(
+      "With a claim token or a proof: removes the listing. Without one: stops the crawling and removes only an unclaimed entry the network found. A business that opted out comes back with a domain or key proof.",
+    ),
 });
 export type UpdateBusinessInput = z.infer<typeof updateBusinessInputSchema>;
 
