@@ -1,15 +1,16 @@
 /**
- * Builds the social card at public/art/og-flow.png — the picture Slack,
- * WhatsApp, LinkedIn and X show when someone shares a link to the site.
+ * Builds the inbox page's social card at public/art/og-inbox-v1.png — the
+ * picture Slack, WhatsApp, LinkedIn and X show when someone shares a link to
+ * /inbox or to the docs. (The home page has its own: scripts/og-network.mjs.)
  *
  *   node scripts/og-card.mjs
  *
  * The drawing is not redrawn here. It is the hero's own still frame: the
  * server-rendered SVG inside HeroFlow.astro, with that component's own style
- * block, rendered in the night theme. So the card shows exactly what the home
+ * block, rendered in the night theme. So the card shows exactly what the inbox
  * page shows — several AI agents sending one business typed work, the rules
- * and the owner's AI answering, the connected systems kept in step — and it
- * cannot drift away from the hero, because it is the hero.
+ * and the owner's AI answering — and it cannot drift away from the hero,
+ * because it is the hero.
  *
  * Fonts are inlined as data URIs: Chrome will not load a font across file://.
  *
@@ -26,7 +27,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const site = path.resolve(here, "..");
 const repo = path.resolve(site, "../..");
-const out = path.join(site, "public/art/og-flow.png");
+const out = path.join(site, "public/art/og-inbox-v1.png");
 
 const CHROME = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -66,7 +67,7 @@ if (!svg.startsWith("<svg") || sdfCss.length < 1000 || sdfJs.length < 1000) {
   throw new Error("HeroFlow.astro no longer has a still frame, a style block and its script");
 }
 
-/** The card's words. The headline is the one on the home page, deliberately. */
+/** The card's words. The headline is the one on the inbox page, deliberately. */
 const EYEBROW = "Surfing Dog Inbox · open source";
 const TITLE = "Get AI bookings, orders and messages.";
 const SUB = "One inbox that takes them in, applies your rules and answers for you.";
@@ -104,10 +105,9 @@ const html = `<!doctype html>
   .dot { width: 5px; height: 5px; border-radius: 50%; background: #9a9dc4; opacity: 0.6; }
   .tag { font-size: 16px; font-weight: 600; color: #9a9dc4; }
   /* The whole drawing, never cropped: clipping it takes the bottom off the
-     business card, which is the one thing the picture is about. Sized so the
-     YOUR SYSTEMS caption — the widest thing in it — keeps a margin from the
-     card's right edge. */
-  .art { width: 656px; height: 492px; justify-self: center; }
+     business card, which is the one thing the picture is about. The drawing is
+     374 by 390, so 500 wide is 521 tall inside the 630 card. */
+  .art { width: 500px; height: 521px; justify-self: center; }
   .sdf { width: 100%; }
   .sdf svg { width: 100%; height: auto; display: block; }
 ${sdfCss}
@@ -118,7 +118,7 @@ ${sdfCss}
     <h1>${TITLE}</h1>
     <p class="sub">${SUB}</p>
     <div class="foot">
-      <span class="url">surfingdog.ai</span><i class="dot"></i><span class="tag">${TAG}</span>
+      <span class="url">surfingdog.ai/inbox</span><i class="dot"></i><span class="tag">${TAG}</span>
     </div>
   </div>
   <div class="art"><figure class="sdf">${svg}</figure></div>
@@ -149,4 +149,4 @@ const bytes = readFileSync(out);
 if (bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
   throw new Error("the card is not a PNG; something rendered it as another format");
 }
-console.log(`og-flow.png — 1200×630, ${Math.round(bytes.length / 1024)} KB`);
+console.log(`og-inbox-v1.png — 1200×630, ${Math.round(bytes.length / 1024)} KB`);

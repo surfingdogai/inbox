@@ -35,7 +35,7 @@ We're building reputation now, earned by keeping promises on both sides of the c
 
 Anyone can launch a network of their own. A trade body could run one for its members.
 
-We don't host inboxes for anyone else yet. That's coming, and the waitlist is on the [home page](/#run).
+We don't host inboxes for anyone else yet. That's coming, and the waitlist is on the [inbox page](/inbox/#run).
 
 If you build agents, point one at our inbox and tell us what's missing.
 
