@@ -8,18 +8,18 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
 <section class="hero wrap" aria-labelledby="hero-h">
   <div class="copy">
     <p class="eyebrow">Surfing Dog Inbox · open source</p>
-    <h1 id="hero-h">
+    <h1 class="hero-title" id="hero-h">
       Get AI bookings, orders and messages.
     </h1>
-    <p class="sub">
+    <p class="hero-sub">
       Soon your customers' AI agents will book and order for them. Surfing Dog Inbox is open source: it takes
       those requests and answers the routine ones by your rules.
     </p>
-    <div class="actions">
+    <div class="hero-actions">
       <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
       <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>
     </div>
-    <p class="position">
+    <p class="hero-position">
       <span class="u-line" aria-hidden="true"></span>
       <span>Automated AI relations, with your own AI answering.</span>
     </p>
@@ -35,62 +35,5 @@ const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/su
   .art-box :global(.sdf) {
     max-width: 440px;
     margin-inline: auto;
-  }
-  .hero {
-    display: grid;
-    gap: var(--sp-7);
-    /* Both columns start together. The drawing carries its own sky above its first
-       label, which is what brings its top edge level with the headline. */
-    align-items: start;
-    /* The art already fills the bottom of the first screen, so the hero closes on
-       its own token rather than a full section. */
-    padding-block: var(--sp-8) var(--sp-5);
-  }
-  @media (min-width: 900px) {
-    .hero {
-      /* 1.15fr / 1fr lands near 573 / 499 inside the 1120 pill: the drawing is the
-         other half of the composition, not a margin note. */
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      gap: var(--sp-8);
-      padding-block: var(--sp-9) var(--hero-pb);
-    }
-  }
-  h1 {
-    margin: var(--sp-2) 0 0;
-    font-size: var(--fs-hero);
-    line-height: var(--lh-hero);
-    letter-spacing: -0.024em;
-  }
-  /* On a phone the rag is left to chance and breaks mid-phrase, so the second
-     sentence takes its own line. Above that the balancer handles it. */
-  @media (max-width: 480px) {
-    .l2 {
-      display: block;
-    }
-  }
-  .sub {
-    max-width: var(--measure-lede);
-    margin: var(--sp-4) 0 0;
-    font-size: var(--fs-lede);
-    line-height: 1.5;
-    color: var(--ink-2);
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2) var(--sp-3);
-    margin-top: var(--sp-6);
-  }
-  .position {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: var(--sp-4);
-    align-items: center;
-    max-width: 54ch;
-    margin: var(--sp-6) 0 0;
-    font-size: var(--fs-body);
-    font-weight: 600;
-    line-height: var(--lh-ui);
-    color: var(--ink);
   }
 </style>

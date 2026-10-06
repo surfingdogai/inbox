@@ -28,9 +28,9 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
 <section class="hero wrap" aria-labelledby="hero-h">
   <div class="copy">
     <p class="eyebrow">Surfing Dog · open network</p>
-    <h1 id="hero-h">Be found by people's AIs.</h1>
-    <p class="sub">An open directory that AI assistants search to find a business, then reach it directly.</p>
-    <div class="actions">
+    <h1 class="hero-title" id="hero-h">Supporting businesses on the agentic internet.</h1>
+    <p class="hero-sub">An open directory your AI can search to find a business, then reach it directly.</p>
+    <div class="hero-actions">
       <a class="btn btn-primary btn-lg" href="/#businesses">Get listed</a>
       <a class="btn btn-secondary btn-lg" href="/directory/">Search the directory</a>
     </div>
@@ -38,10 +38,6 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
       <li><StatusPill state={stateOf("directory")} /> <span>Businesses with a verified inbox</span></li>
       <li><StatusPill state={stateOf("crawler")} /> <span>A crawler for other agent doors</span></li>
     </ul>
-    <p class="position">
-      <span class="u-line" aria-hidden="true"></span>
-      <span>Supporting businesses on the agentic internet.</span>
-    </p>
   </div>
   <div class="art-box">
     <p class="live-row">
@@ -54,38 +50,6 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
 </section>
 
 <style>
-  .hero {
-    display: grid;
-    gap: var(--sp-7);
-    align-items: start;
-    padding-block: var(--sp-8) var(--sp-5);
-  }
-  @media (min-width: 900px) {
-    .hero {
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      gap: var(--sp-8);
-      padding-block: var(--sp-9) var(--hero-pb);
-    }
-  }
-  h1 {
-    margin: var(--sp-2) 0 0;
-    font-size: var(--fs-hero);
-    line-height: var(--lh-hero);
-    letter-spacing: -0.024em;
-  }
-  .sub {
-    max-width: var(--measure-lede);
-    margin: var(--sp-4) 0 0;
-    font-size: var(--fs-lede);
-    line-height: 1.5;
-    color: var(--ink-2);
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2) var(--sp-3);
-    margin-top: var(--sp-6);
-  }
   .now {
     display: grid;
     gap: var(--sp-2);
@@ -100,18 +64,6 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
     flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-2);
-  }
-  .position {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: var(--sp-4);
-    align-items: center;
-    max-width: 54ch;
-    margin: var(--sp-6) 0 0;
-    font-size: var(--fs-body);
-    font-weight: 600;
-    line-height: var(--lh-ui);
-    color: var(--ink);
   }
   .live-row {
     display: flex;
@@ -141,8 +93,8 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
 </style>
 
 <script>
-  // Keep the pill honest after the build: read the same two addresses again, and fall back to
-  // "warming up" when either does not answer.
+  // Keep the pill honest after the build: read the same two addresses again. A real answer
+  // replaces the build-time text; no answer at all leaves it as built.
   const NETWORK = "https://network.surfingdog.ai";
   const pill = document.querySelector<HTMLElement>("[data-live]");
   const text = document.querySelector<HTMLElement>("[data-live-text]");
@@ -159,6 +111,8 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
   };
   if (pill && text) {
     void Promise.all([get("/v1/stats"), get("/v1/ranking")]).then(([stats, ranking]) => {
+      // No answer at all (a preview host, a blocked request): keep what the build wrote.
+      if (!stats && !ranking) return;
       const ok = (stats?.status as { api?: unknown } | undefined)?.api === "ok";
       const v = typeof ranking?.version === "number" ? ranking.version : null;
       const good = ok && v !== null;

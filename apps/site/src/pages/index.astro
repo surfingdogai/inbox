@@ -8,7 +8,7 @@ import WhatAiSees from "../components/WhatAiSees.astro";
 import Layout from "../layouts/Layout.astro";
 
 /**
- * The home page is the network: an open directory that AI assistants search. The inbox has its own
+ * The home page is the network: an open directory AI assistants can search. The inbox has its own
  * page at /inbox. Live counts stay off this page until the directory lists more than our own
  * inbox; they live on /network.
  */
@@ -32,7 +32,7 @@ const ld = [
     "@type": "WebSite",
     name: "Surfing Dog",
     url: site,
-    description: `${TAGLINE} An open directory AI assistants search to find businesses and reach them directly.`,
+    description: `${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly.`,
     publisher: { "@id": org },
   },
   {
@@ -43,7 +43,7 @@ const ld = [
     url: "https://network.surfingdog.ai",
     serviceType: "Directory of businesses that AI agents can reach",
     description:
-      "An open directory AI assistants search over MCP, REST or llms.txt. Today it lists businesses that run a verified inbox. The order comes from signed receipts of kept promises and cannot be bought.",
+      "An open directory AI assistants can search over MCP, REST or llms.txt. Today it lists businesses that run a verified inbox. Businesses that are answering come first, signed receipts of kept promises build each record, and no place can be bought.",
     provider: { "@id": org },
     offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", description: "Listing is free" },
   },
@@ -74,11 +74,24 @@ const ld = [
 ---
 
 <Layout
-  title="Surfing Dog · Be found by people's AIs"
-  description={`${TAGLINE} An open directory AI assistants search to find businesses and reach them directly. Ranked by kept promises, never by payment. Open protocol, open-source inbox.`}
+  title="Surfing Dog · Supporting businesses on the agentic internet"
+  description={`${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly. Ranked by receipts, never by payment. Open protocol, open-source inbox.`}
   image="/art/og-network-v1.png"
   ld={ld}
 >
+  <script is:inline>
+    // The inbox's sections used to live on this page. Links shared before the move still carry
+    // their old anchors, so send those to the same anchor on /inbox (and the old ranking anchor
+    // to the order section here).
+    (function () {
+      var h = location.hash.slice(1);
+      if (["why-h", "rules", "use-cases", "inbox", "run", "wait-email"].indexOf(h) !== -1) {
+        location.replace("/inbox/#" + h);
+      } else if (h === "reputation") {
+        location.replace("#order");
+      }
+    })();
+  </script>
   <Hero />
   <WhatAiSees />
   <FairOrder />

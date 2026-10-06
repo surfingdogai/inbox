@@ -77,8 +77,8 @@ if (!mark) throw new Error("the built home page has no brand mark in its nav");
 
 /** The card's words: the home page's own. */
 const EYEBROW = "Surfing Dog · open network";
-const TITLE = "Be found by people's AIs.";
-const SUB = "Supporting businesses on the agentic internet.";
+const TITLE = "Supporting businesses on the agentic internet.";
+const SUB = "An open directory your AI can search.";
 
 const html = `<!doctype html>
 <html data-theme="dark" lang="en"><head><meta charset="utf-8">
@@ -105,7 +105,7 @@ ${TOKENS}
   .brand { display: flex; align-items: center; gap: 12px; font-family: var(--font-display); font-weight: 600; font-size: 24px; }
   .brand svg { width: 44px; height: 22px; display: block; flex: none; }
   .eyebrow { margin-top: 44px; font-size: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
-  h1 { margin-top: 14px; font-family: var(--font-display); font-weight: 600; font-size: 56px; line-height: 1.08; letter-spacing: -0.022em; }
+  h1 { margin-top: 14px; font-family: var(--font-display); font-weight: 600; font-size: 48px; line-height: 1.1; letter-spacing: -0.022em; }
   .line { display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: center; margin-top: 30px; font-size: 22px; line-height: 1.35; font-weight: 600; }
   .line i { display: block; height: 2px; border-radius: 9px; background: linear-gradient(90deg, var(--flamingo), var(--tangerine) 34%, var(--lagoon) 68%, var(--violet)); }
   .art { width: 642px; }
