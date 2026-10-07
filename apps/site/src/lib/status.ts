@@ -26,7 +26,22 @@ export const UPDATED = "7 Oct 2026";
 export const capabilities: readonly Capability[] = [
   { id: "directory", label: "Directory of businesses with an inbox that answers", state: "live" },
   { id: "search", label: "Search it from your AI: MCP, REST or llms.txt", state: "live" },
-  { id: "ranking", label: "Ranked by signed receipts under rules version 7; nobody can pay to rank", state: "live" },
+  {
+    id: "ranking",
+    label: "Ordered by kept promises under published, versioned rules; nobody can pay to rank",
+    state: "live",
+  },
+  { id: "pings", label: "Signed hourly pings: an inbox that checks in is answering", state: "live" },
+  {
+    id: "receipts",
+    label: "Signed receipts for bookings, orders and refunds, counter-signed by the agent",
+    state: "live",
+  },
+  {
+    id: "reliability",
+    label: "Each business's record of kept promises shown on its listing, once receipts accumulate",
+    state: "building",
+  },
   {
     id: "protocol",
     label: "Open protocol, MIT example network, network-check and SDK 0.2.0",

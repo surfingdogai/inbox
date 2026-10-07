@@ -1,0 +1,234 @@
+---
+import StatusPill from "../components/StatusPill.astro";
+import Layout from "../layouts/Layout.astro";
+import { type RulesLine, rulesFallback, rulesLine } from "../lib/rules";
+import { capabilities, stateOf } from "../lib/status";
+
+/**
+ * The Trust network, the product: what it is (inboxes check in with signed pings, both sides sign
+ * receipts, the order reads kept promises, nobody can pay for a place, the rules are public), which
+ * rules are in force, and what is live today against what is being built. The rules line is read
+ * from the network when the site is built and again in the browser; a build that cannot read it says
+ * what was published when this was written (src/lib/rules.ts).
+ */
+const RANKING = "https://surfingdog.ai/v1/ranking";
+
+let rules: RulesLine = rulesFallback();
+try {
+  const res = await fetch("https://network.surfingdog.ai/v1/ranking", {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (res.ok) rules = rulesLine(await res.json()) ?? rules;
+} catch {
+  // Keep the fallback.
+}
+
+const steps = [
+  {
+    h: "Inboxes check in",
+    p: "Each inbox on the network checks in every hour with a ping it signs. An inbox that checked in within the last day, with its manifest reachable, is answering, and answering businesses come before the rest.",
+  },
+  {
+    h: "Both sides sign the promise",
+    p: "When a business confirms a booking, accepts an order or owes a refund, its inbox signs a receipt, and the customer's agent can counter-sign it. When the promise closes, kept, late or broken, another receipt says so. A customer is named by a code nobody can trace back to them.",
+  },
+  {
+    h: "The order reads the record",
+    p: "Among answering businesses, a record of kept promises sets the order once it reaches 0.40; the less evidence, the more cautious the record. Everyone else takes turns in a shuffle that changes once a day and that anyone can reproduce.",
+  },
+  {
+    h: "Nobody can pay for a place",
+    p: "Not now, and not later. A free self-hosted inbox ranks the same as ours, and every rule is published, with a version number, before it counts.",
+  },
+];
+
+const ids = ["pings", "receipts", "ranking", "reliability"];
+const now = capabilities.filter((c) => ids.includes(c.id));
+---
+
+<Layout
+  title="Trust network: ranked by kept promises · Surfing Dog"
+  description="The directory's order is made of kept promises: inboxes check in with signed pings, businesses and agents sign receipts, and the rules are public and versioned. Nobody can pay for a place."
+  image="/art/og-receipts-v1.png"
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="trust-h">
+    <p class="eyebrow">Trust network <StatusPill state={stateOf("ranking")} /></p>
+    <h1 class="h-page" id="trust-h">An order made of kept promises</h1>
+    <p class="lede">
+      The directory puts businesses in order by what they did, never by what they paid. Inboxes check in, both sides
+      sign what was promised, and the rules that read it are public.
+    </p>
+  </section>
+
+  <section class="section section-tight" aria-labelledby="how-h">
+    <div class="wrap wrap-read">
+      <h2 class="h-section" id="how-h">How it works</h2>
+      <ol class="steps" data-reveal="stagger">
+        {
+          steps.map((s, i) => (
+            <li class="step">
+              <span class="n tabular" aria-hidden="true">
+                {i + 1}
+              </span>
+              <div>
+                <h3 class="h-card">{s.h}</h3>
+                <p class="card-text">{s.p}</p>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="section section-tight" id="rules" aria-labelledby="rules-h">
+    <div class="wrap wrap-read">
+      <h2 class="h-section" id="rules-h">The rules</h2>
+      <p class="rules-now" data-rules-now>{rules.now}</p>
+      <p class="rules-next" data-rules-next hidden={!rules.next}>{rules.next}</p>
+      <p class="hint">
+        Listed businesses get 15 days' notice of a change. Agents read the rules at
+        <a class="link" href={RANKING}>/v1/ranking</a>, any earlier version at
+        <code>/v1/ranking?version=N</code>, and people in words on
+        <a class="link" href="/network/#ranking">how the network works</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="section section-tight" aria-labelledby="now-h">
+    <div class="wrap wrap-read">
+      <h2 class="h-section" id="now-h">Today</h2>
+      <ul class="now">
+        {
+          now.map((c) => (
+            <li>
+              <StatusPill state={c.state} />
+              <span>{c.label}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="hint" data-record>
+        Records fill in as receipts arrive. The more promises close, the more each listing, and this page, can show.
+      </p>
+      <p class="more">
+        <a class="link" href="/docs/receipts/">Receipts, in detail</a>
+        <span aria-hidden="true">·</span>
+        <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md" rel="noopener">The full rules</a>
+        <span aria-hidden="true">·</span>
+        <a class="link" href="/search/">Search the directory</a>
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .eyebrow :global(.pill) {
+    margin-left: var(--sp-2);
+    text-transform: none;
+  }
+  .steps {
+    display: grid;
+    margin: var(--sp-5) 0 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--hairline);
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: var(--sp-3);
+    padding: var(--sp-4) 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .step .card-text {
+    margin-top: var(--sp-1);
+  }
+  .n {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-top: 1px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: 50%;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .rules-now {
+    margin: var(--sp-4) 0 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .rules-next {
+    margin: var(--sp-1) 0 0;
+    font-size: var(--fs-card);
+    color: var(--ink-2);
+  }
+  .now {
+    display: grid;
+    gap: var(--sp-3);
+    margin: var(--sp-4) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+  .now li {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: var(--sp-3);
+    align-items: baseline;
+  }
+  .now li :global(.pill) {
+    justify-self: start;
+  }
+  .more {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-2);
+    margin-top: var(--sp-4);
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+</style>
+
+<script>
+  import { rulesLine } from "../lib/rules";
+
+  // Keep the rules line true after the build: the same endpoint, read on this address.
+  const nowEl = document.querySelector<HTMLElement>("[data-rules-now]");
+  const nextEl = document.querySelector<HTMLElement>("[data-rules-next]");
+  const record = document.querySelector<HTMLElement>("[data-record]");
+  const get = async (path: string): Promise<unknown> => {
+    try {
+      const res = await fetch(path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(6000) });
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  void get("/v1/ranking").then((r) => {
+    const line = rulesLine(r);
+    if (!line || !nowEl || !nextEl) return;
+    nowEl.textContent = line.now;
+    nextEl.textContent = line.next;
+    nextEl.hidden = !line.next;
+  });
+  // Once receipts exist, say how many; until then the sentence about records filling in stands.
+  void get("/v1/stats").then((s) => {
+    if (!record || !s || typeof s !== "object") return;
+    const o = s as Record<string, unknown>;
+    const issued = typeof o.receipts_issued === "number" ? o.receipts_issued : 0;
+    const acked = typeof o.receipts_acknowledged === "number" ? o.receipts_acknowledged : 0;
+    if (issued <= 0) return;
+    const fmt = new Intl.NumberFormat("en");
+    record.textContent = `So far: ${fmt.format(issued)} receipt${issued === 1 ? "" : "s"} signed, ${fmt.format(acked)} counter-signed by the customer's agent. Records fill in as more promises close.`;
+  });
+</script>
