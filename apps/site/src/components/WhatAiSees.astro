@@ -1,39 +1,34 @@
 ---
 /**
- * The product, shown rather than told: one listing card with example data, and the ladder of how
- * far an AI can go. Live and coming parts are marked on the card itself (dashed doors) and on the
- * ladder (its pill), both from src/lib/status.ts.
+ * The product, shown rather than told: what an AI agent can do with one business, as a check reads
+ * it (an example on a .example domain), beside the ladder of how far an AI can go. The example's
+ * numbers are the spec's vector, so the card shows what the published rules give.
  */
+import { exampleCard } from "../lib/agent-example";
+import AgentCard from "./AgentCard.astro";
 import Ladder from "./Ladder.astro";
-import ListingCard from "./ListingCard.astro";
+
+const card = exampleCard();
 ---
 
 <section class="section" id="listing" aria-labelledby="listing-h" data-reveal>
   <div class="wrap">
     <div class="sec-head">
       <div>
-        <p class="eyebrow">The listing</p>
-        <h2 class="h-section" id="listing-h">What an AI sees.</h2>
-        <p class="lede">One card per business: how to reach it, what it takes, and when we checked.</p>
+        <p class="eyebrow">The check</p>
+        <h2 class="h-section" id="listing-h">What an AI can do, at a glance.</h2>
+        <p class="lede">
+          Can an agent message, book, order, cancel or negotiate here? Through which door? Each answer, and a score
+          by published rules.
+        </p>
       </div>
     </div>
     <div class="cols">
-      <ListingCard
-        example
-        showComing
-        name="A bakery"
-        protocols={["mcp", "rest", "openapi"]}
-        item_types={["order", "quote_request", "message"]}
-        languages={["en", "fr", "ja"]}
-        answering
-        verified_at="2026-09-21"
-        record={{ kept: 6, of: 8 }}
-      />
+      <AgentCard example {...card} />
       <Ladder />
     </div>
     <p class="fine">
-      Today every listing is a verified inbox. Other doors, levels, and a source and date on every fact will come with
-      the crawler.
+      An example. Every answer names the door and the date it was checked, from the business's own site.
     </p>
   </div>
 </section>

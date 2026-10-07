@@ -21,7 +21,7 @@ export const STATE_LABEL: Record<State, string> = {
 };
 
 /** The date this list was last checked against the running network. */
-export const UPDATED = "6 Oct 2026";
+export const UPDATED = "7 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
   { id: "directory", label: "Directory of businesses with a verified inbox", state: "live" },
@@ -34,6 +34,11 @@ export const capabilities: readonly Capability[] = [
   },
   { id: "inbox", label: "Open-source inbox, self-hosted", state: "live" },
   { id: "bot", label: "A public page on how our crawler behaves", state: "live" },
+  {
+    id: "checker",
+    label: "Check any business's website: what an AI agent can do there, and its agentic score by published rules",
+    state: "live",
+  },
   {
     id: "crawler",
     label: "A crawler for other agent doors (MCP, A2A, UCP, ACP, OpenAPI); nothing it finds is listed yet",

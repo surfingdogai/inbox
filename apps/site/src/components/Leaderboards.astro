@@ -1,0 +1,95 @@
+---
+/**
+ * The leaderboards, in a few links: everyone checked, and four kinds of business. They live on the
+ * network (/leaderboard), ordered by agentic score, and they are a separate list from the
+ * directory, whose order nobody can buy. A business is named there when it is agent-ready or has
+ * claimed its page; everyone else is counted, not named.
+ */
+const boards = [
+  { href: "/leaderboard", label: "Every business checked" },
+  { href: "/leaderboard?category=hair-beauty", label: "Hair & beauty" },
+  { href: "/leaderboard?category=restaurant", label: "Restaurants" },
+  { href: "/leaderboard?category=shop", label: "Shops" },
+  { href: "/leaderboard?category=trades", label: "Trades" },
+];
+---
+
+<section class="section" id="leaderboards" aria-labelledby="leaderboards-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Leaderboards</p>
+        <h2 class="h-section" id="leaderboards-h">Who agents can do the most with.</h2>
+        <p class="lede">
+          Ordered by agentic score. Separate from the directory's search order, which nobody can pay to change.
+        </p>
+      </div>
+    </div>
+    <ul class="lb" data-reveal="stagger">
+      {
+        boards.map((b) => (
+          <li>
+            <a class="glass lb-link lift" href={b.href}>
+              <span>{b.label}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="fine">
+      Businesses that are agent-ready or have claimed their page are named; the rest are counted. Each business can
+      hide its own result. Scoring rules: <a class="link" href="/v1/score-rules">/v1/score-rules</a>.
+    </p>
+  </div>
+</section>
+
+<style>
+  .lb {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 560px) {
+    .lb {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 900px) {
+    .lb {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  .lb-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    min-height: 48px;
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .lb-link svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    color: var(--ink-3);
+    transition: transform 0.2s var(--ease-out-soft);
+  }
+  .lb-link:hover svg,
+  .lb-link:focus-visible svg {
+    transform: translateX(2px);
+  }
+  .lb-link:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+  }
+</style>

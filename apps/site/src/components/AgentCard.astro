@@ -1,0 +1,286 @@
+---
+/**
+ * What an AI can do with one business, at a glance: the five lead answers (message, book, order,
+ * cancel, negotiate), each with the door it was found at and the date, then a couple more, and the
+ * agentic score the published rules give. It is the top of a result page (/b/<domain>), drawn small.
+ *
+ * "Not applicable" is drawn dashed and quiet: a capability that does not apply to this kind of
+ * business is left out of the score, never counted against it. The score's track is a thin line,
+ * not a gauge; the number and grade carry it.
+ */
+import { shortDate } from "../lib/status";
+
+type Answer = "Yes" | "Partly" | "No" | "Not applicable";
+
+interface Props {
+  name: string;
+  domain: string;
+  profileLabel: string;
+  score: number;
+  grade: string;
+  answers: { label: string; answer: Answer; door: string; checked: string }[];
+  extra: { label: string; answer: Answer }[];
+  /** ISO date the site was read. */
+  checked: string;
+  example?: boolean;
+}
+
+const { name, domain, profileLabel, score, grade, answers, extra, checked, example = false } = Astro.props;
+
+const tone = (a: Answer) => (a === "Yes" ? "yes" : a === "Partly" ? "partly" : a === "No" ? "no" : "na");
+const when = shortDate(`${checked}T12:00:00Z`);
+---
+
+<article class="glass card ac" aria-label={example ? `Example check: ${name}` : `Check: ${name}`}>
+  <header class="ac-head">
+    <div class="ac-id">
+      <h3 class="h-card">{name}</h3>
+      <p class="mono ac-domain">{domain} · {profileLabel}</p>
+    </div>
+    {example && <span class="pill ac-ex">Example</span>}
+  </header>
+
+  <div class="ac-score">
+    <p class="ac-num"><span class="tabular">{score}</span><span class="ac-of">/100</span></p>
+    <p class="ac-grade" aria-label={`Grade ${grade}`}>{grade}</p>
+    <p class="ac-what">Agentic score</p>
+    <span class="ac-track" aria-hidden="true"><i style={`--w:${Math.max(0, Math.min(100, score))}%`}></i></span>
+  </div>
+
+  <p class="ac-ask">Can an AI agent…</p>
+  <dl class="ac-rows">
+    {
+      answers.map((a) => (
+        <div class="ac-row">
+          <dt>{a.label}</dt>
+          <dd>
+            <span class:list={["pill", "ac-ans", `ac-${tone(a.answer)}`]}>
+              {a.answer === "Yes" && <i class="dot" aria-hidden="true" />}
+              {a.answer}
+            </span>
+            {a.door && (
+              <span class="ac-door">
+                via {a.door}
+                {a.checked && ` · ${shortDate(`${a.checked}T12:00:00Z`)}`}
+              </span>
+            )}
+          </dd>
+        </div>
+      ))
+    }
+  </dl>
+
+  {
+    extra.length > 0 && (
+      <ul class="ac-extra">
+        {extra.map((x) => (
+          <li>
+            <span>{x.label}</span>
+            <span class:list={["ac-mini", `ac-${tone(x.answer)}`]}>{x.answer.toLowerCase()}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  <p class="mono ac-foot">checked {when} · declared on its own site and doors</p>
+</article>
+
+<style>
+  .ac {
+    display: grid;
+    gap: var(--sp-4);
+    align-content: start;
+  }
+  .ac-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+  .ac-id {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .ac-domain {
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+  .ac .ac-ex {
+    flex: none;
+    height: 20px;
+    padding: 0 8px;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* The score: a number, its grade, and a hairline track under both. */
+  .ac-score {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0 var(--sp-3);
+  }
+  .ac-num {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 2.25rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+  .ac-of {
+    margin-left: 2px;
+    font-size: var(--fs-fine);
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--ink-3);
+  }
+  .ac-grade {
+    margin: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: 8px;
+    font-size: var(--fs-fine);
+    font-weight: 700;
+    color: var(--ink-2);
+    align-self: center;
+  }
+  .ac-what {
+    margin: 0;
+    justify-self: end;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .ac-track {
+    grid-column: 1 / -1;
+    position: relative;
+    height: 2px;
+    margin-top: var(--sp-3);
+    border-radius: 2px;
+    background: var(--hairline-strong);
+    overflow: hidden;
+  }
+  .ac-track i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--w);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--tangerine), var(--flamingo), var(--violet));
+  }
+
+  .ac-ask {
+    margin: 0;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .ac-rows {
+    display: grid;
+    margin: calc(-1 * var(--sp-2)) 0 0;
+  }
+  .ac-row {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: var(--sp-3);
+    align-items: center;
+    padding: var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .ac-row:first-child {
+    border-top: 0;
+  }
+  .ac-row dt {
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .ac-row dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px var(--sp-2);
+    margin: 0;
+    min-width: 0;
+  }
+  .ac .ac-ans {
+    height: 22px;
+    padding: 0 9px;
+    gap: 5px;
+    font-size: var(--fs-fine);
+  }
+  .ac .ac-yes {
+    background: color-mix(in srgb, var(--c-success) 10%, transparent);
+    border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+    color: var(--c-success-ink);
+  }
+  .ac .ac-yes .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c-success);
+  }
+  .ac .ac-partly {
+    color: var(--ink);
+    border-color: var(--hairline-strong);
+  }
+  .ac .ac-no {
+    background: transparent;
+    border-color: var(--hairline-strong);
+    color: var(--ink-2);
+  }
+  .ac .ac-na {
+    background: transparent;
+    border: 1px dashed var(--hairline-strong);
+    color: var(--ink-3);
+  }
+  .ac-door {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+
+  .ac-extra {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-5);
+    margin: 0;
+    padding: var(--sp-3) 0 0;
+    border-top: 1px solid var(--hairline);
+    list-style: none;
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
+  }
+  .ac-extra li {
+    display: inline-flex;
+    gap: 6px;
+  }
+  .ac-mini {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ac-mini.ac-no,
+  .ac-mini.ac-na {
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+  .ac .ac-foot {
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+</style>
