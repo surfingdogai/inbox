@@ -34,6 +34,8 @@ pnpm check https://network.surfingdog.ai
 ✓ directory.list               must   §4.3         1 listed
 ✓ doors.no-human-door          must   §4.8         no doors listed
 ✓ filters.narrow               should §4.3         each kept the order: language=pt: 1 of 1, …
+✓ score.rules                  should §4.13        version 1, 7 profiles, 19 capabilities
+✓ discovery.catalog            should §4.14        6 entries, every one at an https address
 ✓ listing.unsigned             must   §3, §4.5     401 bad_signature
 ✓ receipts.forged              must   §4.2         422 unknown_key
 …

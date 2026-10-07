@@ -2,6 +2,7 @@ import { createNetwork } from "@surfingdog/example-network";
 import { checkManifest } from "@surfingdog/example-network/manifest";
 import { generateReceiptKey } from "@surfingdog/sdk";
 import { describe, expect, it } from "vitest";
+import scoreRulesV1 from "../../spec/vocab/score-rules-v1.json" with { type: "json" };
 import { checkNetwork, type Report } from "../src/index";
 import rulesV7 from "./rules-v7.json" with { type: "json" };
 
@@ -312,5 +313,92 @@ describe("protocol 0.2 checks", () => {
     expect(result(await checkNetwork({ network: ORIGIN, fetch: refuses }), "filters.narrow")).toMatchObject({
       outcome: "skip",
     });
+  });
+});
+
+describe("0.3 checks: the score's rules and the AI catalog", () => {
+  it("the example network offers neither, and passes both as not offered", async () => {
+    const { fetchImpl } = await exampleNetwork();
+    const report = await checkNetwork({ network: ORIGIN, fetch: fetchImpl });
+    expect(failures(report)).toEqual([]);
+    expect(result(report, "score.rules")).toMatchObject({
+      outcome: "pass",
+      requirement: "should",
+      detail: "not offered",
+    });
+    expect(result(report, "discovery.catalog")).toMatchObject({ outcome: "pass", detail: "not offered" });
+  });
+
+  it("reads published score rules, and fails rules that name a capability nobody knows", async () => {
+    const { fetchImpl } = await exampleNetwork();
+    const serving = (doc: unknown) =>
+      around(fetchImpl, async (url) => (url.pathname === "/v1/score-rules" ? Response.json(doc) : undefined));
+    const good = await checkNetwork({ network: ORIGIN, fetch: serving(scoreRulesV1) });
+    expect(result(good, "score.rules")).toMatchObject({
+      outcome: "pass",
+      detail: "version 1, 7 profiles, 19 capabilities",
+    });
+    const groups = scoreRulesV1.groups.map((g) =>
+      g.id === "core" ? { ...g, members: [...g.members, "teleport"] } : g,
+    );
+    const bad = await checkNetwork({ network: ORIGIN, fetch: serving({ ...scoreRulesV1, groups }) });
+    expect(result(bad, "score.rules")).toMatchObject({ outcome: "fail", requirement: "should" });
+    expect(bad.passed).toBe(true); // a should: reported, not failing the network
+    const broken = await checkNetwork({ network: ORIGIN, fetch: serving({ version: 1 }) });
+    expect(result(broken, "score.rules")).toMatchObject({ outcome: "fail" });
+    const down = around(fetchImpl, async (url) =>
+      url.pathname === "/v1/score-rules" ? new Response("no", { status: 500 }) : undefined,
+    );
+    expect(result(await checkNetwork({ network: ORIGIN, fetch: down }), "score.rules")).toMatchObject({
+      outcome: "fail",
+    });
+  });
+
+  it("reads an AI catalog, and fails one that points an agent at a plain http address", async () => {
+    const { fetchImpl } = await exampleNetwork();
+    const catalog = {
+      specVersion: "1.0",
+      host: {
+        displayName: "A network",
+        identifier: "did:web:network.example.org",
+        documentationUrl: `${ORIGIN}/about`,
+      },
+      entries: [
+        {
+          identifier: "urn:air:network.example.org:mcp:directory",
+          displayName: "Directory (MCP)",
+          type: "application/mcp-server-card+json",
+          url: `${ORIGIN}/.well-known/mcp/server-card.json`,
+        },
+        {
+          identifier: "urn:air:network.example.org:llms",
+          displayName: "llms.txt",
+          type: "text/markdown",
+          url: `${ORIGIN}/llms.txt`,
+        },
+      ],
+    };
+    const serving = (doc: unknown) =>
+      around(fetchImpl, async (url) =>
+        url.pathname === "/.well-known/ai-catalog.json" ? Response.json(doc) : undefined,
+      );
+    expect(result(await checkNetwork({ network: ORIGIN, fetch: serving(catalog) }), "discovery.catalog")).toMatchObject(
+      {
+        outcome: "pass",
+        detail: "2 entries, every one at an https address",
+      },
+    );
+    const plain = { ...catalog, entries: [{ ...catalog.entries[0], url: "http://network.example.org/card.json" }] };
+    const bad = await checkNetwork({ network: ORIGIN, fetch: serving(plain) });
+    expect(result(bad, "discovery.catalog")).toMatchObject({ outcome: "fail" });
+    expect(result(bad, "discovery.catalog")?.detail).toContain("http://network.example.org/card.json");
+    const plainHost = { ...catalog, host: { ...catalog.host, documentationUrl: "http://network.example.org/about" } };
+    expect(
+      result(await checkNetwork({ network: ORIGIN, fetch: serving(plainHost) }), "discovery.catalog"),
+    ).toMatchObject({
+      outcome: "fail",
+    });
+    const shapeless = await checkNetwork({ network: ORIGIN, fetch: serving({ entries: "none" }) });
+    expect(result(shapeless, "discovery.catalog")).toMatchObject({ outcome: "fail" });
   });
 });

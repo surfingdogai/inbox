@@ -1,6 +1,8 @@
 import { generateReceiptKey, type InstanceSigningKey, signInstanceRequest, signReceipt } from "@surfingdog/sdk";
 import {
+  aiCatalogSchema,
   businessesResponseSchema,
+  capabilityIdSchema,
   categoriesResponseSchema,
   directoryRulesSchema,
   instanceRegistrationResponseSchema,
@@ -12,6 +14,7 @@ import {
   rankingDocumentSchema,
   readRankingDocument,
   receiptPublishResultSchema,
+  scoreRulesSchema,
   searchBusinessesOutputSchema,
   signedPingResponseSchema,
 } from "@surfingdog/spec";
@@ -311,6 +314,37 @@ export async function checkNetwork(options: CheckOptions): Promise<Report> {
     }
     if (ran === 0) return new Skip(`no filter supported (${notes.join(", ")})`);
     return `each kept the order: ${notes.join(", ")}`;
+  });
+
+  /* --- the agentic score and discovery (0.3, both optional) ----------------------------------------- */
+
+  await check("score.rules", "§4.13", "should", async () => {
+    const a = await call("GET", "/v1/score-rules");
+    if (a.status === 404) return "not offered";
+    expectStatus(a, 200);
+    const rules = shape(scoreRulesSchema, a.json, "the score rules");
+    // Every capability the rules count must be one the vocabulary knows: a reader cannot weigh what it cannot name.
+    const named = [
+      ...rules.capabilities.map((c) => c.id),
+      ...rules.groups.flatMap((g) => g.members),
+      ...rules.profiles.flatMap((p) => p.applicable),
+    ];
+    const unknown = named.filter((id) => !capabilityIdSchema.safeParse(id).success);
+    if (unknown.length > 0) throw new Error(`unknown capabilities: ${[...new Set(unknown)].join(", ")}`);
+    return `version ${rules.version}, ${rules.profiles.length} profiles, ${rules.capabilities.length} capabilities`;
+  });
+  await check("discovery.catalog", "§4.14", "should", async () => {
+    const a = await call("GET", "/.well-known/ai-catalog.json");
+    if (a.status === 404) return "not offered";
+    expectStatus(a, 200);
+    const catalog = shape(aiCatalogSchema, a.json, "the AI catalog");
+    const urls = [
+      ...catalog.entries.map((e) => e.url),
+      ...["documentationUrl", "url"].map((k) => catalog.host[k]).filter((v): v is string => typeof v === "string"),
+    ];
+    const plain = urls.filter((u) => !u.startsWith("https://"));
+    if (plain.length > 0) throw new Error(`not https: ${plain.slice(0, 3).join(", ")}`);
+    return `${catalog.entries.length} entries, every one at an https address`;
   });
 
   /* --- instances -------------------------------------------------------------------------------- */
