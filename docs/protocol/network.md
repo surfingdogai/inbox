@@ -725,6 +725,9 @@ A network may list businesses it found on their own websites. Such an entry:
   `found on its own website · not a member · checked <YYYY-MM-DD>` and `about_url` is the network's
   page for businesses: why it is there, how to correct or claim it, how to opt out;
 - is listed only at `askable` or above (§4.9);
+- is not listed while it is unclaimed and its own site tells AI systems not to use or train on its
+  content (`ai-input=no` or `ai-train=no` in its robots.txt `Content-Signal`, or the same wish in
+  `Content-Usage`), from the crawl that reads that wish;
 - leaves the directory within 24 hours of an opt-out at that page or through `update_business`
   (§4.12), and is not stored again while the opt-out stands;
 - loses a fact the network has not seen for 180 days, and leaves the directory, and the network's
@@ -870,11 +873,14 @@ by score, then the most recent check, then domain, by category group, country an
 every business checked that its owner has not hidden and that is of a kind the directory lists. It
 is a separate list from the directory, and it says so.
 
-**Naming and indexing.** A business is **named** on a leaderboard, and its result page may be indexed
-by search engines, when it is agent-ready (`askable` or above, §4.9), has claimed its listing with a
-proof (§4.12), or links to its own result page or badge from its own site. Every other business is
-counted and not named, and its page carries `noindex`: no unrequested public grades. A kind of
-business the directory does not list gets a result page, never indexed and never ranked.
+**Naming and indexing.** A business is **named** on leaderboards, and its result page may be
+indexed, when it is agent-ready (`askable` or above, §4.9); others are counted, not named, and their
+result pages carry `noindex`: no unrequested public grades. Claiming a listing, or showing the badge,
+does not name a business that is not agent-ready. A business whose own site tells AI systems not to
+use or train on its content (`ai-input=no` or `ai-train=no` in a `Content-Signal` line of its
+robots.txt, or the same wish in `Content-Usage`) is never named or indexed, and its badge carries no
+number; the network applies a new crawl's `no` at once. A member of the network is not affected. A
+kind of business the directory does not list gets a result page, never indexed and never ranked.
 
 **The owner decides.** Checking is not claiming. The owner, with a claim token or a proof, can claim
 and correct the listing, hide the result (`update_business` with `score_page: "hidden"`, which takes

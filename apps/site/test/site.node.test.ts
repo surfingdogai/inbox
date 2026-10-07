@@ -95,6 +95,20 @@ describe("the checker's pages and components", () => {
     expect(card.checked).toBe("2026-10-07");
   });
 
+  it("who is named is said in the score rules' own words, in the FAQ and beside the leaderboards", () => {
+    const rules = scoreRulesSchema.parse(scoreRulesV1);
+    expect(rules.named).toContain("when it is agent-ready (askable or above); others are counted, not named.");
+    expect(rules.named).toContain(
+      "If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
+    );
+    expect(rules.named).not.toMatch(/claim|badge/i);
+    for (const path of ["src/pages/faq.astro", "src/components/Leaderboards.astro"]) {
+      const text = visible(read(path)).replace(/\s+/g, " ");
+      expect(text, path).toContain(rules.named);
+      expect(text, path).not.toMatch(/own badge|claimed (its|their) listing/i);
+    }
+  });
+
   it("robots.txt allows search and AI use and names both sitemaps; the AI catalog comes from the network", () => {
     const robots = read("public/robots.txt");
     expect(robots).toContain("Content-Signal: search=yes, ai-input=yes, ai-train=yes");

@@ -286,7 +286,7 @@
     }
   ],
   "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists",
-  "named": "a business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above), has claimed its listing with a proof, or shows its own badge on its own site (a link to its result page); others are counted, not named",
+  "named": "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
   "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
   "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
   "fixes": {

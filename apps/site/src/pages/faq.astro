@@ -35,7 +35,11 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Someone checked my business. How do I hide the result?",
-    a: "Anyone can check any site, and checking is not claiming. To hide your result, claim your listing from your own AI with <code>register_business</code>, then call <code>update_business</code> with <code>score_page</code> set to <code>hidden</code>; that takes it off the ranks and leaderboards too. A result page is indexed by search engines, and the business named on leaderboards, when it is agent-ready, has claimed its listing, or shows its own badge on its own site; otherwise neither.",
+    a: "Anyone can check any site, and checking is not claiming. To hide your result, claim your listing from your own AI with <code>register_business</code>, then call <code>update_business</code> with <code>score_page</code> set to <code>hidden</code>; that takes it off the ranks and leaderboards too.",
+  },
+  {
+    q: "Who is named on the leaderboards?",
+    a: "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
   },
   {
     q: "How do I stop the crawler and remove everything?",

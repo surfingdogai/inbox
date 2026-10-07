@@ -1470,6 +1470,12 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(copy).not.toMatch(/\b(first|only|verified|certified|people free)\b/i);
     expect(rules.not_certification).toMatch(/not a certification/);
     expect(rules.directory).toMatch(/never changes/);
+    // Who is named: agent-ready, and never a site that tells AI systems no; a claim or a badge alone names nobody.
+    expect(rules.named).toBe(
+      "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); " +
+        "others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you " +
+        "or list you publicly.",
+    );
   });
 
   it("re-derives every case of score.json: score, grade, numerator, possible weight and fixes in order", () => {

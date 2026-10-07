@@ -2,8 +2,9 @@
 /**
  * The leaderboards, in a few links: everyone checked, and four kinds of business. They live on the
  * network (/leaderboard), ordered by agentic score, and they are a separate list from the
- * directory, whose order nobody can buy. A business is named there when it is agent-ready or has
- * claimed its page; everyone else is counted, not named.
+ * directory, whose order nobody can buy. A business is named there when it is agent-ready (askable
+ * or above), unless its own site tells AI systems not to use or train on its content; everyone else
+ * is counted, not named.
  */
 const boards = [
   { href: "/leaderboard", label: "Every business checked" },
@@ -40,8 +41,10 @@ const boards = [
       }
     </ul>
     <p class="fine">
-      Businesses that are agent-ready, have claimed their listing, or show their own badge on their own site are named;
-      the rest are counted. Each business can hide its own result. Scoring rules: <a class="link" href="/v1/score-rules">/v1/score-rules</a>.
+      A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above);
+      others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or
+      list you publicly. Each business can hide its own result. Scoring rules:
+      <a class="link" href="/v1/score-rules">/v1/score-rules</a>.
     </p>
   </div>
 </section>
