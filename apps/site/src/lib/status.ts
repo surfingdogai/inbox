@@ -42,12 +42,12 @@ export const capabilities: readonly Capability[] = [
   { id: "pings", label: "Signed hourly pings: an inbox that checks in is answering", state: "live" },
   {
     id: "receipts",
-    label: "Signed receipts for bookings, orders and refunds, counter-signed by the agent",
+    label: "Receipts: a business's inbox signs every booking, order or refund, and the customer's AI can sign it too",
     state: "live",
   },
   {
     id: "reliability",
-    label: "Each business's record of kept promises shown on its listing, once receipts accumulate",
+    label: "A track record on each listing (promises kept, late or broken), once enough receipts come in",
     state: "building",
   },
   {

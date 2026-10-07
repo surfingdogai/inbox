@@ -2,8 +2,8 @@
 import Mark from "./Mark.astro";
 
 /**
- * The bar is the three products, checking a business and the blog. The rest of the map sits in the
- * menu: the directory and the leaderboards, how a business gets in and how an agent searches, the
+ * The bar is the three products and checking a business. The rest of the map sits in the
+ * menu, the blog included: the directory and the leaderboards, how a business gets in and how an agent searches, the
  * rules, then the pages about us, with developer material last.
  * `match` is the page a link belongs to when its own href points at an anchor.
  */
@@ -19,10 +19,10 @@ const links: Link[] = [
   { href: "/inbox/", label: "Inbox" },
   { href: "/trust/", label: "Trust network" },
   { href: "/check", label: "Check a business" },
-  { href: "/blog/", label: "Blog" },
 ];
 
 const extras: Link[] = [
+  { href: "/blog/", label: "Blog" },
   { href: "/directory/", label: "Directory" },
   { href: "/leaderboard", label: "Leaderboards" },
   { href: "/search/#businesses", label: "For businesses" },
