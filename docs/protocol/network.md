@@ -376,7 +376,10 @@ of them only leaves businesses out:
 
 From rules version 7, `category` also takes a place category id (§4.10) and keeps every category
 below it; a category the network does not know is `400 category_unresolved`, whose problem names up to
-5 `candidates`. A version 7 page is at most 1000 places deep; past that is `400 page_too_deep`.
+5 `candidates`. `q` also sets the band (§4.4): of the businesses it keeps, those whose name, categories
+or services hold every word come before the rest, each band in the published order; every other
+parameter leaves the order as it is. A version 7 page is at most 1000 places deep; past that is
+`400 page_too_deep`, and the page that reaches it has no `next_cursor`.
 `GET /v1/categories?group=<slug>` adds `place_categories: [{id, label, parent}]` (that group's place
 categories, `parent` null at the taxonomy's top) and `taxonomy: {name, release, licence, url}`.
 
@@ -404,7 +407,8 @@ categories or services match the words or the category asked for come before tho
 their description alone; then comes reach, a member's inbox that answers (ours or any compatible
 inbox), then other live agent doors by level (payable, then bookable or orderable, then askable), then the rest;
 within each, kept promises (a score of 0.40 or more) and the daily shuffle as before; every 5th place
-goes to an answering newcomer; a business has one place. Until version 7 takes effect, entries the
+of the whole order goes to an answering newcomer, placed once when the hour's order is frozen, so no
+filter and no page moves anyone; a business has one place. Until version 7 takes effect, entries the
 network found and businesses registered without an inbox appear in a separate tier after every
 member, so no member's position changes. Version 7 is always announced 15 days ahead, whatever the
 number of members. The schema is `ranking`; `vectors/ordering-v7.json` holds the order, the

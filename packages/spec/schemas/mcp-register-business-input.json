@@ -268,6 +268,7 @@
       }
     },
     "alternate_names": {
+      "description": "Other names the business goes by; a name longer than the network keeps is dropped (the reference network keeps 60 characters and 4 words at most).",
       "maxItems": 5,
       "type": "array",
       "items": {

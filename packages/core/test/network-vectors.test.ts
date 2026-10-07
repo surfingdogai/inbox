@@ -42,6 +42,7 @@ import {
 import { describe, expect, it } from "vitest";
 import mcpVectors from "../../spec/vectors/mcp.json";
 import ordering from "../../spec/vectors/ordering.json";
+import orderingV7 from "../../spec/vectors/ordering-v7.json";
 import passes from "../../spec/vectors/passes.json";
 import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
@@ -545,6 +546,35 @@ describe("receipts-v6.json", () => {
   });
 });
 
+describe("ordering-v7.json (the network's, read here as any consumer would)", () => {
+  // Every domain in the file ends in .example, whose registrable domain is its last two labels.
+  const registrable = (d: string) => d.split(".").slice(-2).join(".");
+  for (const c of orderingV7.cases) {
+    it(`${c.name}: the order, its newcomers' places, and pages of it narrowed`, async () => {
+      for (const e of c.entries) {
+        const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${c.at.slice(0, 10)}:${e.ref}`));
+        const hex = [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+        expect(hex.slice(0, 16), e.ref).toBe(e.shuffle);
+      }
+      const placed = placeNewcomers(
+        orderV7(c.entries.map((e) => ({ ...e, domain: registrable(e.domain) }) as unknown as OrderEntry)),
+      );
+      const positions = c.positions as Record<string, number>;
+      expect(placed.map((p) => p.entry.ref)).toEqual(c.order);
+      expect(placed.filter((p) => p.slot).map((p) => p.entry.ref)).toEqual(c.slots);
+      placed.forEach((p, i) => {
+        expect(positions[p.entry.ref], p.entry.ref).toBe(i + 1);
+      });
+      for (const pg of c.pages) {
+        const kept = placed.filter((p) => pg.keep.includes(p.entry.ref));
+        expect(kept.map((p) => p.entry.ref)).toEqual(pg.keep);
+        expect(kept.slice(pg.o, pg.o + pg.limit).map((p) => `${p.entry.ref}${p.slot ? "*" : ""}`)).toEqual(pg.page);
+        expect(kept.length > pg.o + pg.limit).toBe(pg.more);
+      }
+    });
+  }
+});
+
 describe("ordering.json (the network's, read here as any consumer would)", () => {
   it("reproduces every rank_shuffle: the first 16 hex digits of SHA-256(date:uuid), a string", async () => {
     for (const s of ordering.shuffles) {
@@ -917,21 +947,19 @@ function orderV7(entries: OrderEntry[]): OrderEntry[] {
 }
 
 /**
- * Every 5th place to the next answering newcomer not yet placed; every other place to the next of the list not yet
- * placed. `list` is the filtered order (band, then position), `newcomers` its newcomers in the same order; the page is
- * places o+1 to o+n.
+ * The hour's places (rules version 7, §4.4), given once to the whole order: walking places 1, 2, …, every 5th goes to
+ * the next newcomer not yet placed (a slot), every other to the next entry not yet placed. A search narrows the result
+ * and never places anyone again, so a filter moves nobody and a page is a cut of what the filter keeps.
  */
-function newcomerMerge<T extends { ref: string }>(
-  list: readonly T[],
-  newcomers: readonly T[],
-  o: number,
-  n: number,
-): { page: { entry: T; slot: boolean }[]; more: boolean } {
+function placeNewcomers<T extends { ref: string; newcomer?: boolean }>(
+  order: readonly T[],
+): { entry: T; slot: boolean }[] {
+  const newcomers = order.filter((e) => e.newcomer);
   const placed = new Set<string>();
   const out: { entry: T; slot: boolean }[] = [];
   let li = 0;
   let ni = 0;
-  while (out.length < o + n + 1) {
+  while (out.length < order.length) {
     let entry: T | undefined;
     let slot = false;
     if ((out.length + 1) % 5 === 0) {
@@ -942,14 +970,13 @@ function newcomerMerge<T extends { ref: string }>(
       }
     }
     if (!entry) {
-      while (li < list.length && placed.has((list[li] as T).ref)) li++;
-      if (li < list.length) entry = list[li++];
+      while (placed.has((order[li] as T).ref)) li++;
+      entry = order[li++] as T;
     }
-    if (!entry) break;
     placed.add(entry.ref);
     out.push({ entry, slot });
   }
-  return { page: out.slice(o, o + n), more: out.length > o + n };
+  return out;
 }
 
 describe("protocol 0.2: vocab/doors.json and vocab/attributes.json", () => {
@@ -1337,28 +1364,20 @@ describe("protocol 0.2: rules version 7 and the order", () => {
     ]);
   });
 
-  it("gives every 5th place to the next newcomer, never twice, and pages the same at any offset", () => {
-    const list = "abcdefghijkl".split("").map((ref) => ({ ref }));
-    const newcomers = [{ ref: "c" }, { ref: "j" }, { ref: "k" }];
-    const full = newcomerMerge(list, newcomers, 0, 10);
-    expect(full.page.map((p) => `${p.entry.ref}${p.slot ? "*" : ""}`).join(" ")).toBe("a b c d j* e f g h k*");
-    expect(full.more).toBe(true);
+  it("gives every 5th place of the whole order to the next newcomer, never twice; a filter moves nobody", () => {
+    const order = "abcdefghijkl".split("").map((ref) => ({ ref, newcomer: ["c", "j", "k"].includes(ref) }));
+    const placed = placeNewcomers(order);
     // c took its own place early (3), so place 5 goes to the next newcomer, j.
-    expect(newcomerMerge(list, newcomers, 5, 5).page).toEqual(full.page.slice(5, 10));
-    expect(newcomerMerge(list, newcomers, 10, 5).page.map((p) => p.entry.ref)).toEqual(["i", "l"]);
-    expect(newcomerMerge(list, newcomers, 10, 5).more).toBe(false);
-    // No newcomer left: the list goes on.
-    expect(newcomerMerge(list, [{ ref: "c" }], 0, 6).page.map((p) => p.entry.ref)).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-      "e",
-      "f",
-    ]);
-    // The list runs out: so does the page.
-    const short = newcomerMerge(list.slice(0, 3), [{ ref: "c" }], 0, 10);
-    expect(short.page.map((p) => p.entry.ref)).toEqual(["a", "b", "c"]);
-    expect(short.more).toBe(false);
+    expect(placed.map((p) => `${p.entry.ref}${p.slot ? "*" : ""}`).join(" ")).toBe("a b c d j* e f g h k* i l");
+    // Leaving b out keeps everyone else in that order: j stays before e (merged after filtering, it would not).
+    expect(
+      placed
+        .filter((p) => p.entry.ref !== "b")
+        .map((p) => p.entry.ref)
+        .join(" "),
+    ).toBe("a c d j e f g h k i l");
+    // No newcomer left: the order goes on.
+    const one = placeNewcomers(order.map((e) => ({ ...e, newcomer: e.ref === "c" })));
+    expect(one.map((p) => p.entry.ref).join("")).toBe("abcdefghijkl");
   });
 });

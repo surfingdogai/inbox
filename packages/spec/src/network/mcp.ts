@@ -316,7 +316,13 @@ const registerFields = {
     .optional()
     .describe("Keys of list_attributes."),
   pay: z.array(z.string().max(40)).max(30).optional().describe("Payment tokens of list_attributes."),
-  alternate_names: z.array(z.string().max(200)).max(5).optional(),
+  alternate_names: z
+    .array(z.string().max(200))
+    .max(5)
+    .optional()
+    .describe(
+      "Other names the business goes by; a name longer than the network keeps is dropped (the reference network keeps 60 characters and 4 words at most).",
+    ),
   locale: z.string().max(35).optional().describe("The language to answer in."),
 };
 
@@ -435,7 +441,7 @@ export const updateBusinessInputSchema = z.object({
     })
     .optional()
     .describe(
-      "With a claim token or a proof: removes the listing. Without one: stops the crawling and removes only an unclaimed entry the network found. A business that opted out comes back with a domain or key proof.",
+      "Stops the listing (list), the crawl (crawl) or both (all). Without a claim token or a proof it removes an entry the network found that nobody claimed, and never a claimed or registered listing, which needs its claim_token or a proof as strong as its claim. A business that opted out comes back with a domain or key proof.",
     ),
 });
 export type UpdateBusinessInput = z.infer<typeof updateBusinessInputSchema>;
