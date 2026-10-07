@@ -5,6 +5,9 @@ import { fixesOf, scoreOf, scoreRulesSchema } from "../../../packages/spec/src/i
 import scoreVectors from "../../../packages/spec/vectors/score.json";
 import scoreRulesV1 from "../../../packages/spec/vocab/score-rules-v1.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
+import { ago, countRows, looksLikeAddress, readDirectory } from "../src/lib/ask";
+import { resultView } from "../src/lib/results";
+import { rulesFallback, rulesLine } from "../src/lib/rules";
 
 /**
  * The site's words and its example, checked without a build: the pages and components the checker
@@ -37,6 +40,16 @@ const NEW_OR_CHANGED = [
   "src/lib/agent-example.ts",
   "src/lib/status.ts",
   "public/robots.txt",
+  "src/pages/index.astro",
+  "src/pages/search.astro",
+  "src/pages/trust.astro",
+  "src/components/AskBox.astro",
+  "src/components/CopyBlock.astro",
+  "src/components/DirectoryCounts.astro",
+  "src/components/Products.astro",
+  "src/lib/ask.ts",
+  "src/lib/results.ts",
+  "src/lib/rules.ts",
 ];
 
 describe("the checker's pages and components", () => {
@@ -147,5 +160,162 @@ describe("the checker's pages and components", () => {
     const footer = read("src/components/Footer.astro");
     expect(footer).toContain('href: "/about/"');
     expect(footer).toContain('href: "/faq/"');
+  });
+});
+
+describe("the home page and the three products", () => {
+  it("the home page is the line, the box, the counts, two things to copy and the three products, and nothing else", () => {
+    const home = read("src/pages/index.astro");
+    for (const part of ["<AskBox", "<DirectoryCounts", "<CopyBlock", "<Products", "minimalFooter"]) {
+      expect(home, part).toContain(part);
+    }
+    // The explainer moved to /search; none of its sections stay on the home page.
+    for (const moved of [
+      "<Hero",
+      "<WhatAiSees",
+      "<Leaderboards",
+      "<FairOrder",
+      "<ForBusinesses",
+      "<OpenNetwork",
+      "<Status",
+    ]) {
+      expect(home, moved).not.toContain(moved);
+      expect(read("src/pages/search.astro"), moved).toContain(moved);
+    }
+    expect(home).toContain("https://surfingdog.ai/mcp");
+    expect(home).toContain("Open doors to the agentic internet.");
+    // The install line is the install page's, word for word, and points at the real guide.
+    const line = (path: string) => read(path).match(/"(Install Surfing Dog Inbox for my business\.[^"]+)"/)?.[1];
+    expect(line("src/pages/index.astro")).toBeDefined();
+    expect(line("src/pages/index.astro")).toBe(line("src/pages/install.astro"));
+    expect(line("src/pages/index.astro")).toContain("https://surfingdog.ai/install.md");
+    expect(existsSync(site("public/install.md"))).toBe(true);
+  });
+
+  it("the box searches words and checks addresses", () => {
+    for (const a of ["salon.example", "https://shop.example/menu", "www.café.example", "bike-repair.co.example:8443"]) {
+      expect(looksLikeAddress(a), a).toBe(true);
+    }
+    for (const w of ["bakery", "hair salon", "bakery.", "dentist near me", "", "  ", "e.g", "1.5"]) {
+      expect(looksLikeAddress(w), w).toBe(false);
+    }
+    const box = read("src/components/AskBox.astro");
+    expect(box).toMatch(/action="\/search" method="get"/);
+    expect(box).toMatch(/method="post" action="\/check"/);
+  });
+
+  it("the counts read the directory block, say nothing they did not read, and hide empty optional rows", () => {
+    expect(readDirectory(null)).toBeNull();
+    expect(readDirectory({ instances_online: 1 })).toBeNull();
+    expect(readDirectory({ directory: { checked: 3, agent_ready: 1 } })).toBeNull();
+    const d = readDirectory({
+      directory: {
+        checked: 1200,
+        agent_ready: 300,
+        capabilities: { message: 200, book: 0, order: 5, catalogue: 9, pay: 1, cancel: 0, negotiate: 4, x: "no" },
+        doors: { mcp: 2 },
+        as_of: "2026-10-07T12:00:00Z",
+      },
+    });
+    expect(d).not.toBeNull();
+    if (!d) return;
+    expect(countRows(d).map((r) => `${r.n} ${r.label}`)).toEqual([
+      "200 take messages",
+      "0 take bookings",
+      "5 take orders",
+      "9 have a catalogue",
+      "1 take payment",
+      "4 negotiate",
+    ]);
+    const at = Date.parse("2026-10-07T12:00:00Z");
+    expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
+    expect(ago("2026-10-07T12:00:00Z", at + 6 * 60_000)).toBe("6 minutes ago");
+    expect(ago("2026-10-07T12:00:00Z", at + 3_600_000)).toBe("1 hour ago");
+  });
+
+  it("a result says what the entry says, links to the business's own site, and invents nothing", () => {
+    expect(resultView(null)).toBeNull();
+    expect(resultView({ name: "No site" })).toBeNull();
+    const found = resultView({
+      domain: "crumb.example",
+      name: "Crumb",
+      level: "bookable",
+      category: { primary: { label: "Bakery" } },
+      place: { locality: "Porto", country: "PT" },
+      accepts: { kinds: ["ask", "book"] },
+      doors: [
+        { type: "mcp", status: "live" },
+        { type: "a2a", status: "down" },
+      ],
+      found: { checked_at: "2026-10-05T10:00:00Z" },
+    });
+    expect(found).toEqual({
+      name: "Crumb",
+      href: "https://crumb.example",
+      where: "Bakery · Porto, PT",
+      takes: "Takes messages, bookings",
+      found: "Found on its own website, checked 5 Oct 2026.",
+      tags: [
+        { text: "Bookable", on: false },
+        { text: "MCP", on: false },
+      ],
+    });
+    const member = resultView({ domain: "inbox.example", name: "", answering: true, item_types: ["booking"] });
+    expect(member?.name).toBe("inbox.example");
+    expect(member?.tags[0]).toEqual({ text: "Answering", on: true });
+    expect(member?.found).toBe("");
+    expect(resultView({ domain: "x.example", url: "javascript:alert(1)" })?.href).toBe("https://x.example");
+  });
+
+  it("the trust page states the rules in force from /v1/ranking, and its fallback never names an old version", () => {
+    expect(
+      rulesLine({
+        version: 6,
+        rules: "0.1.3",
+        status: "in_force",
+        effective_at: "2026-09-29T13:16:48Z",
+        next: { version: 7, effective_at: "2026-10-23T00:00:00Z" },
+      }),
+    ).toEqual({
+      now: "Version 6 (0.1.3), in force since 29 Sep 2026.",
+      next: "Version 7 is announced, and takes effect on 23 Oct 2026.",
+    });
+    expect(rulesLine({ version: 7, status: "announced" })).toBeNull();
+    expect(rulesFallback(Date.parse("2026-10-07T00:00:00Z")).now).toContain("Version 6");
+    expect(rulesFallback(Date.parse("2026-10-23T00:00:00Z"))).toEqual({
+      now: "Version 7 (0.2.0), in force since 23 Oct 2026.",
+      next: "",
+    });
+  });
+
+  it("every internal link in the bar, the footer and the product pages goes somewhere", () => {
+    // Paths the network answers on this address (the proxy's list), and files in public/.
+    const proxied = [/^\/check$/, /^\/leaderboard/, /^\/v1\//, /^\/mcp$/, /^\/b\//];
+    const pages = [
+      "src/components/Nav.astro",
+      "src/components/Footer.astro",
+      "src/components/Hero.astro",
+      "src/components/FairOrder.astro",
+      "src/components/Products.astro",
+      "src/pages/index.astro",
+      "src/pages/search.astro",
+      "src/pages/trust.astro",
+    ];
+    const exists = (path: string) => {
+      const p = path.replace(/[?#].*$/, "").replace(/\/+$/, "");
+      if (p === "") return existsSync(site("src/pages/index.astro"));
+      if (proxied.some((r) => r.test(p))) return true;
+      if (p.startsWith("/docs")) return existsSync(site(`src/content/docs${p}.md`)) || p === "/docs";
+      if (p.startsWith("/blog")) return true;
+      return (
+        existsSync(site(`src/pages${p}.astro`)) ||
+        existsSync(site(`src/pages${p}/index.astro`)) ||
+        existsSync(site(`public${p}`))
+      );
+    };
+    for (const path of pages) {
+      const hrefs = [...read(path).matchAll(/href(?:=|: )["'`](\/[^"'`{]*)["'`]/g)].map((m) => m[1] ?? "");
+      for (const h of hrefs) expect(exists(h), `${path}: ${h}`).toBe(true);
+    }
   });
 });
