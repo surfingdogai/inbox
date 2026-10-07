@@ -1,8 +1,8 @@
 ---
 /**
- * The home hero: what Surfing Dog is in one line, the two next steps (check your business, search
- * the directory), a plain form that checks a site with no script, and what is live versus being
- * built. The small pill above the drawing reads the network itself: the API's own status and
+ * The Search product's opening, on /search under the page's own search box: what the directory is
+ * in one line, the two next steps (check your business, get listed), a plain form that checks a site
+ * with no script, and what is live versus being built. The small pill above the drawing reads the network itself: the API's own status and
  * the rules version in force, once at build time and again in the browser. If either cannot be
  * read it says "warming up" rather than guessing.
  */
@@ -26,14 +26,14 @@ const version = typeof ranking?.version === "number" ? ranking.version : null;
 const live = apiOk && version !== null ? `network ok · rules v${version}` : "warming up";
 ---
 
-<section class="hero wrap" aria-labelledby="hero-h">
+<section class="hero wrap" id="about-search" aria-labelledby="hero-h">
   <div class="copy">
-    <p class="eyebrow">Surfing Dog · open network</p>
-    <h1 class="hero-title" id="hero-h">Open doors to the agentic internet.</h1>
+    <p class="eyebrow">Search · open network</p>
+    <h2 class="hero-title" id="hero-h">Open doors to the agentic internet.</h2>
     <p class="hero-sub">An open directory your AI can search to find a business, then reach it directly.</p>
     <div class="hero-actions">
       <a class="btn btn-primary btn-lg" href="/check">Check your business</a>
-      <a class="btn btn-secondary btn-lg" href="/directory/">Search the directory</a>
+      <a class="btn btn-secondary btn-lg" href="#businesses">Get listed</a>
     </div>
     <form class="hero-check" method="post" action="/check">
       <label class="sr" for="hero-check-url">Your business's website</label>
@@ -53,8 +53,7 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
       <button class="btn btn-secondary check-go" type="submit">Check</button>
     </form>
     <p class="check-note">
-      See what an AI agent can do on your site, with a score by published rules. Or
-      <a class="link" href="/#businesses">get listed</a>.
+      See what an AI agent can do on your site, with a score by published rules.
     </p>
     <ul class="now">
       <li><StatusPill state={stateOf("checker")} /> <span>Check any business's website</span></li>
@@ -73,6 +72,11 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
 </section>
 
 <style>
+  /* Under the search page's own title, the display line steps down to a page title's size. */
+  .hero .hero-title {
+    font-size: var(--fs-page-title);
+    line-height: var(--lh-title);
+  }
   /* One line: the address and its button. It is plain HTML, so it works with no script at all. */
   .hero-check {
     display: flex;

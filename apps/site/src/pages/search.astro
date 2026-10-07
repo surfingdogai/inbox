@@ -1,0 +1,348 @@
+---
+import AskBox from "../components/AskBox.astro";
+import FairOrder from "../components/FairOrder.astro";
+import ForBusinesses from "../components/ForBusinesses.astro";
+import Hero from "../components/Hero.astro";
+import Leaderboards from "../components/Leaderboards.astro";
+import OpenNetwork from "../components/OpenNetwork.astro";
+import Status from "../components/Status.astro";
+import WhatAiSees from "../components/WhatAiSees.astro";
+import Layout from "../layouts/Layout.astro";
+
+/**
+ * Search, the product: the box at the top, the directory's answer for ?q= read in the browser from
+ * GET /v1/businesses on this same address, and below it what the directory is (what used to be the
+ * home page): the check, the leaderboards, the order, joining, searching from an AI, and where it
+ * stands. Results come in the directory's own order and are never invented; an empty answer says so.
+ */
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "@id": `${site}#search`,
+    name: "Surfing Dog Search",
+    url: new URL("/search/", site).toString(),
+    serviceType: "Directory of businesses that AI agents can reach",
+    description:
+      "An open directory AI assistants can search over MCP, REST or llms.txt, to find agent-ready businesses and reach them directly. Businesses that are answering come before the rest, signed receipts of kept promises build each record, and no place can be bought.",
+    provider: { "@id": `${site}#org` },
+    offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", description: "Listing is free" },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    name: "Surfing Dog network protocol and SDK",
+    codeRepository: "https://github.com/surfingdogai/inbox",
+    license: "https://opensource.org/licenses/MIT",
+    programmingLanguage: "TypeScript",
+    publisher: { "@id": `${site}#org` },
+  },
+];
+const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
+---
+
+<Layout
+  title="Search agent-ready businesses · Surfing Dog"
+  description="Find businesses AI agents can message, book and buy from, and check what an agent can do on any website. An open directory, ranked by kept promises, never by payment."
+  image="/art/og-network-v1.png"
+  ld={ld}
+>
+  <section class="wrap section is-head s-head" id="search" aria-labelledby="search-h">
+    <p class="eyebrow">Search</p>
+    <h1 class="h-page" id="search-h">Search agent-ready businesses</h1>
+    <p class="lede">Businesses AI agents can message, book and buy from, each with the doors an agent can use.</p>
+    <div class="s-box">
+      <AskBox id="search-ask" size="md" />
+    </div>
+
+    <div class="results" data-results aria-live="polite">
+      <p class="s-try">
+        Try
+        {
+          TRY.map((t, i) => (
+            <>
+              {i > 0 && <span aria-hidden="true">·</span>}
+              <a class="link" href={`/search/?q=${encodeURIComponent(t)}`}>
+                {t}
+              </a>
+            </>
+          ))
+        }
+      </p>
+      <noscript>
+        <p class="hint">Results need JavaScript. Your AI can search without it: <code>https://surfingdog.ai/mcp</code>.</p>
+      </noscript>
+    </div>
+
+    <template data-row>
+      <li class="r">
+        <div class="r-main">
+          <a class="r-name" data-name rel="noopener"></a>
+          <span class="r-where" data-where></span>
+        </div>
+        <div class="r-tags" data-tags></div>
+        <p class="r-takes" data-takes></p>
+        <p class="r-found" data-found></p>
+      </li>
+    </template>
+  </section>
+
+  <Hero />
+  <WhatAiSees />
+  <Leaderboards />
+  <FairOrder />
+  <ForBusinesses />
+  <OpenNetwork />
+  <Status />
+</Layout>
+
+<style>
+  .s-head {
+    max-width: 820px;
+  }
+  .s-box {
+    max-width: 640px;
+    margin-top: var(--sp-5);
+  }
+  .results {
+    margin-top: var(--sp-5);
+  }
+  .s-try {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-2);
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  :global(.r-count),
+  :global(.r-empty),
+  :global(.r-note) {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  :global(.r-empty b) {
+    display: block;
+    margin-bottom: var(--sp-1);
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  :global(.r-check) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-3);
+    margin: 0 0 var(--sp-4);
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
+  }
+  :global(.r-list) {
+    display: grid;
+    margin: var(--sp-3) 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--hairline);
+  }
+  :global(.r) {
+    display: grid;
+    gap: 6px;
+    padding: var(--sp-4) 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  :global(.r-main) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-1) var(--sp-3);
+  }
+  :global(.r-name) {
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  :global(.r-name:hover),
+  :global(.r-name:focus-visible) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  :global(.r-where),
+  :global(.r-takes),
+  :global(.r-found) {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  :global(.r-takes) {
+    color: var(--ink-2);
+  }
+  :global(.r-takes:empty),
+  :global(.r-found:empty),
+  :global(.r-tags:empty) {
+    display: none;
+  }
+  :global(.r-tags) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  :global(.r-tag) {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 8px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+  }
+  :global(.r-tag.is-on) {
+    border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+    background: color-mix(in srgb, var(--c-success) 10%, transparent);
+    color: var(--c-success-ink);
+  }
+  :global(.r-skel) {
+    height: 14px;
+    max-width: 320px;
+    border-radius: var(--radius-pill);
+    background: var(--hairline);
+    animation: r-breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes r-breathe {
+    50% {
+      opacity: 0.5;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.r-skel) {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import { looksLikeAddress } from "../lib/ask";
+  import { resultView } from "../lib/results";
+
+  const host = document.querySelector<HTMLElement>("[data-results]");
+  const row = document.querySelector<HTMLTemplateElement>("[data-row]");
+  const params = new URLSearchParams(location.search);
+  const q = (params.get("q") ?? "").trim().slice(0, 200);
+
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
+    const n = document.createElement(tag);
+    n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+
+  /** An address typed into the box with no script lands here; offer the check the box would have run. */
+  const checkOffer = (value: string) => {
+    const p = el("p", "r-check");
+    p.append("That looks like a website. ");
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = "/check";
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "url";
+    input.value = value;
+    const btn = el("button", "btn btn-secondary btn-sm", "Check what an AI can do there");
+    btn.type = "submit";
+    form.append(input, btn);
+    p.append(form);
+    return p;
+  };
+
+  async function search(): Promise<void> {
+    if (!host || !row || !q) return;
+    const input = document.querySelector<HTMLInputElement>("#search-ask");
+    if (input) input.value = q;
+    document.title = `${q} · Search · Surfing Dog`;
+    host.replaceChildren(el("div", "r-skel"));
+
+    const out: Node[] = [];
+    if (looksLikeAddress(q)) out.push(checkOffer(q));
+
+    try {
+      const res = await fetch(`/v1/businesses?q=${encodeURIComponent(q)}&limit=20`, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(10000),
+      });
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!res.ok || !body) {
+        const detail = typeof body?.detail === "string" && res.status === 400 ? body.detail : "";
+        out.push(
+          el(
+            "p",
+            "r-note",
+            detail
+              ? `The directory could not search for that: ${detail}`
+              : "The directory is not answering just now. Try again in a minute.",
+          ),
+        );
+        host.replaceChildren(...out);
+        return;
+      }
+      const list = Array.isArray(body.businesses) ? (body.businesses as unknown[]) : [];
+      if (list.length === 0) {
+        const p = el("p", "r-empty");
+        p.append(el("b", "", "No agent-ready business matches yet."));
+        p.append("Try fewer or different words, or paste a business's website to check what an AI can do there.");
+        out.push(p);
+        host.replaceChildren(...out);
+        return;
+      }
+      const more = typeof body.next_cursor === "string" && body.next_cursor !== "";
+      out.push(
+        el(
+          "p",
+          "r-count",
+          `${list.length}${more ? "+" : ""} ${list.length === 1 && !more ? "business" : "businesses"}, in the directory's order.`,
+        ),
+      );
+      const ul = el("ul", "r-list");
+      for (const raw of list) {
+        const v = resultView(raw);
+        if (!v) continue;
+        const node = row.content.cloneNode(true) as DocumentFragment;
+        const name = node.querySelector<HTMLAnchorElement>("[data-name]");
+        if (name) {
+          name.textContent = v.name;
+          name.href = v.href;
+        }
+        const set = (sel: string, text: string) => {
+          const n = node.querySelector<HTMLElement>(sel);
+          if (n) n.textContent = text;
+        };
+        set("[data-where]", v.where);
+        set("[data-takes]", v.takes);
+        set("[data-found]", v.found);
+        const tags = node.querySelector<HTMLElement>("[data-tags]");
+        if (tags) for (const t of v.tags) tags.append(el("span", t.on ? "r-tag is-on" : "r-tag", t.text));
+        ul.append(node);
+      }
+      out.push(ul);
+      const note = el("p", "r-note");
+      const how = el("a", "link", "How the order is made");
+      (how as HTMLAnchorElement).href = "/trust/";
+      note.append("Filters narrow the list and never reorder it. Nobody can pay for a place. ", how, ".");
+      out.push(note);
+      host.replaceChildren(...out);
+    } catch {
+      out.push(el("p", "r-note", "The directory is not answering just now. Try again in a minute."));
+      host.replaceChildren(...out);
+    }
+  }
+  void search();
+</script>
