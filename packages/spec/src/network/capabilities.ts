@@ -94,9 +94,15 @@ const fixTextSchema = z.object({
   title: z.string(),
   how: fixHowSchema,
   by_profile: z
-    .partialRecord(profileIdSchema, z.object({ how: fixHowSchema }))
+    .partialRecord(
+      profileIdSchema,
+      z.object({
+        title: z.string().optional().describe("Another title for a kind of business."),
+        how: fixHowSchema,
+      }),
+    )
     .optional()
-    .describe("Another how for a kind of business."),
+    .describe("Another how, and title, for a kind of business."),
   protocol: fixHowSchema
     .optional()
     .describe("The how when the business's preferred door is an agent commerce protocol (UCP, ACP)."),
@@ -275,9 +281,9 @@ export function scoreOf(
 }
 
 /**
- * What would raise the score most: each applicable, weighted capability that is not yet "yes", scored again as "yes"
- * (each member of an either set on its own). Fixes worth nothing are left out. By points, then group order, then
- * vocabulary order.
+ * What would raise the score most: each applicable, weighted capability that is not yet "yes", scored again as "yes".
+ * An either set is one fix, under its first capability (book for book or order), and none is due once one of its
+ * capabilities is "yes". Fixes worth nothing are left out. By points, then group order, then vocabulary order.
  */
 export function fixesOf(
   profile: ScoreProfile,
@@ -290,8 +296,9 @@ export function fixesOf(
   const vocabAt = new Map(rules.capabilities.map((c, i) => [c.id, i]));
   const fixes: (Fix & { g: number; v: number })[] = [];
   for (const g of groups) {
-    for (const c of g.slots.flat()) {
-      if ((states[c] ?? "no") === "yes") continue;
+    for (const slot of g.slots) {
+      const c = slot[0];
+      if (c === undefined || slot.some((x) => (states[x] ?? "no") === "yes")) continue;
       const points = scoreOf(profile, { ...states, [c]: "yes" }, rules).score - base;
       if (points > 0) fixes.push({ capability: c, points, g: groupAt.get(g.id) ?? 99, v: vocabAt.get(c) ?? 99 });
     }

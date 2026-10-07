@@ -823,21 +823,31 @@ that kind leaves the denominator: a plumber is not marked down for having no cat
 | `shop` | find, catalogue, availability, order, pay, change, cancel, track, return, receipt |
 | `stay` (places to stay) | availability, book, change, cancel, pay, message, policies |
 | `memberships` (gyms and memberships) | find, catalogue, order, book, subscription, cancel, pay |
-| `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book, pay, change, cancel, policies |
-| `general` (type unknown) | find, catalogue, message, book or order (one capability, version 2), pay, policies |
+| `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book or order (one capability), pay, change, cancel, policies |
+| `general` (type unknown; also bars, health, dental, therapy, legal, and software, API and AI companies) | find, catalogue, message, book or order (one capability, version 2), pay, policies |
 
 Each profile names the category groups it covers; a business without a category the network can
 read from the business itself is scored by its doors' signals, or as `general`. **Version 2** (in
-force from 7 October 2026) changed two things. A business of a kind not known is scored on whether
-an agent can book or order there: its profile's **either set** `book`/`order` counts as one member
-of the core group, met by the better of the two states, never `na`; under version 1 neither
-applied, and a site that took messages and nothing else scored as high as one that also sold. And
-**venues** (the category group `venues`: music venues, jazz clubs and nightclubs, theatres, cinemas,
-concert halls, comedy clubs, museums and galleries, event spaces) are a profile where booking
-(tickets, tables, entries) applies. A network recognises a venue from what it publishes: a venue's
-schema.org place type (`MusicVenue`, `EventVenue`, `PerformingArtsTheater`, `MovieTheater`,
-`Museum`, `ComedyClub`, `NightClub`), its own name and description in any of several languages, or
-the events it publishes at an address it gives; a language model's reading stays a hint.
+force from 7 October 2026) changed two things. The `general` profile is scored on whether an agent
+can book or order there: its **either set** `book`/`order` counts as one member of the core group,
+met by the better of the two states, never `na`; under version 1 neither applied, and a site that
+took messages and nothing else scored as high as one that also sold. That profile covers a business
+of a kind not known and the groups `bar`, `health`, `dental`, `therapy`, `legal` and `software-ai`,
+so a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking or
+order through an agent scores lower under version 2 than under version 1. And **venues** (the
+category group `venues`: music venues, jazz clubs and nightclubs, theatres, cinemas, concert halls,
+comedy clubs, museums and galleries, event spaces) are a profile where booking tickets, a table or
+an entry, or ordering them, counts the same way (the same either set). A network recognises a venue
+from what it publishes, in this order: a venue's schema.org place type (`MusicVenue`, `EventVenue`,
+`PerformingArtsTheater`, `MovieTheater`, `Museum`, `ComedyClub`, `NightClub`) decides; then a site
+that is an online shop, or a software company by the software type it declares, is that (one read as
+a software company from its doors alone gives way to a venue its own words name); then a phrase that names a venue ("jazz
+club", "concert hall", "opera house", in several languages; never one generic word such as
+"concerts", "theatre", "cinema" or "museum") in its own name and description, for a site that says
+where it is (an office's address on a plain `Organization` does not count) or whose own name holds
+such a phrase of two words or more; then the events it publishes at an address it gives. Such words
+never replace a language model's reading of the site as another kind (a bar, a restaurant): the
+venue is then a probable alternate. A language model's reading stays a hint.
 
 **Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
@@ -856,7 +866,8 @@ grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20
 
 That is version 2's formula; version 1's is the same without the either clause. A capability's
 displayed weight is `W_g / |A_g|` to one decimal place (each member of an either set shows the set's). **Fixes** are each applicable,
-weighted capability that is not `yes`, scored again as `yes`: the points it would add, by points,
+weighted capability that is not `yes`, scored again as `yes`, an either set being one fix under its
+first capability (`book` for book or order), due while none of its capabilities is `yes`: the points it would add, by points,
 then group order, then vocabulary order; a fix worth nothing is left out. A fix's text in the rules
 may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
 business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
@@ -869,7 +880,7 @@ version 2 a business of no known kind that takes messages and nothing else at 42
 version in force and `?version=N` any version ever published (`404` for one that never was), shaped
 as `schemas/score-rules.json` ([`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json)
 is version 2, in force; [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) is
-version 1, served with its `status` `retired`). Each version's `changelog` says what changed and why.
+version 1, its `status` `retired`). Each version's `changelog` says what changed and why.
 A new version is applied to every score the network keeps: each is worked out again.
 
 **The score never changes the directory's search order** (§4.4), and nobody can pay for a score or a

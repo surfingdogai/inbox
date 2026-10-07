@@ -316,7 +316,7 @@
             "description": "\"<door>\" stands for \" on your <door label> door at <url>\" when the business has a live agent door."
           },
           "by_profile": {
-            "description": "Another how for a kind of business.",
+            "description": "Another how, and title, for a kind of business.",
             "type": "object",
             "propertyNames": {
               "type": "string",
@@ -325,6 +325,10 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
+                "title": {
+                  "description": "Another title for a kind of business.",
+                  "type": "string"
+                },
                 "how": {
                   "type": "string",
                   "description": "\"<door>\" stands for \" on your <door label> door at <url>\" when the business has a live agent door."

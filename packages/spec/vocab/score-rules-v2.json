@@ -247,7 +247,19 @@
       "id": "venues",
       "label": "Venues and events (live music, clubs, theatre, cinema, museums)",
       "noun": "a venue (live music, a club, a theatre, a cinema, a museum or an event space)",
-      "applicable": ["find", "catalogue", "availability", "message", "book", "pay", "change", "cancel", "policies"],
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "order",
+        "pay",
+        "change",
+        "cancel",
+        "policies"
+      ],
+      "either": [["book", "order"]],
       "groups": ["venues"]
     },
     {
@@ -330,7 +342,12 @@
       "how": "Add a tool or operation that creates a booking, such as create_booking or POST /bookings<door>; if you use a booking platform, ask it whether it offers an agent door and declare it.",
       "by_profile": {
         "venues": {
-          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>; if you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
+          "title": "Let agents book or buy tickets",
+          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>, or sell tickets through UCP or ACP checkout; if you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
+        },
+        "general": {
+          "title": "Let agents book or order",
+          "how": "Add a tool or operation that creates a booking or an order, such as create_booking or create_order<door>, or publish UCP or ACP checkout; either one counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
         }
       }
     },
@@ -432,7 +449,7 @@
     {
       "version": 2,
       "published": "2026-10-07",
-      "summary": "Version 2. A business whose kind is not known (the general profile) is now scored on whether an agent can book or order there: book and order count together as one capability of the core group (yes when either is yes, partly when either is partly), so its core group is message, book or order, and pay, still weighing 40. Under version 1 neither applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking (tickets, tables, entries) applies. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1."
+      "summary": "Version 2. The general profile (a business whose kind is not known, and the groups it covers: bars, health, dental, therapy, legal, and software, API and AI companies) is now scored on whether an agent can book or order there: book and order count together as one capability of the core group (yes when either is yes, partly when either is partly), so its core group is message, book or order, and pay, still weighing 40. Under version 1 neither applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy; a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking or order through an agent now scores lower than before. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking tickets, a table or an entry, or ordering them, counts the same way. A fix for book or order is one fix. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1."
     }
   ]
 }

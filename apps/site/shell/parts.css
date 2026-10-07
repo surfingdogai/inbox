@@ -874,7 +874,7 @@
 /* A capability chip: one of the five lead answers (message, book, order, cancel, negotiate) in a
    leaderboard row, and the answer on a result page. Its state shows three ways, never by colour
    alone: yes is filled, with a tick; partly is half filled, with a half disc; no is outlined; not
-   applicable is faint and dashed. The words are its aria-label (or its text). */
+   applicable has no outline, a dash and faint words. The words are its aria-label (or its text). */
 .sd-capset {
   display: flex;
   flex-wrap: wrap;
@@ -932,21 +932,25 @@
   stroke: none;
 }
 .sd-cap.is-no {
+  border-color: color-mix(in srgb, var(--ink-2) 50%, transparent);
   color: var(--ink-2);
 }
 .sd-cap.is-na {
-  border-style: dashed;
-  border-color: var(--hairline);
+  border-color: transparent;
   color: var(--ink-3);
   font-weight: 500;
+  opacity: 0.75;
 }
-/* The one line that says what the chips mean, above a leaderboard's table. */
-.sd-legend {
+/* The one line that says what the chips mean, above a leaderboard's table: as wide as the table,
+   one line on a desktop. */
+.sd-legend,
+.sd-col .sd-legend {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 0;
+  max-width: none;
+  margin-bottom: 0;
   font-size: var(--fs-fine);
   line-height: 1.5;
   color: var(--ink-3);

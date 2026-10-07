@@ -1548,6 +1548,15 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(g({ book: "partial", order: "yes" })).toBe(g({ order: "yes" }));
     expect(capabilityWeightOf("general", "book", rules)).toBe(13.3);
     expect(capabilityWeightOf("general", "order", rules)).toBe(13.3);
+    // Book or order is one fix, under book, and none once either is met; a venue counts a ticket order the same way.
+    const fixed = (p: "general" | "venues", x: Partial<Record<CapabilityId, CapabilityState>>) =>
+      fixesOf(p, x, rules).map((f) => f.capability);
+    expect(fixed("general", { message: "yes" })).toContain("book");
+    expect(fixed("general", { message: "yes" })).not.toContain("order");
+    expect(fixed("general", { order: "partial" })).toContain("book");
+    expect(fixed("general", { order: "yes" })).not.toContain("book");
+    expect(fixed("venues", { order: "yes" })).not.toContain("book");
+    expect(rules.profiles.find((p) => p.id === "venues")?.either).toEqual([["book", "order"]]);
   });
 
   it("the worked examples: a salon 51 C, a restaurant 74 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
