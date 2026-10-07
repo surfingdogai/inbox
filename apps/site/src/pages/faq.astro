@@ -1,0 +1,116 @@
+---
+// The questions owners and agents ask, answered in plain words. Each answer is written once, as
+// HTML for the page; the FAQPage structured data takes the same text with the tags removed, so the
+// two can never say different things. Examples use .example domains.
+import Layout from "../layouts/Layout.astro";
+
+const faqs: { q: string; a: string }[] = [
+  {
+    q: "What is Surfing Dog?",
+    a: 'A public directory of businesses that AI agents can reach through doors the businesses published (an agent inbox, MCP, A2A, an API, UCP or ACP), and a checker that shows how far an agent can go with any business\'s website. More on the <a href="/about/">about page</a>.',
+  },
+  {
+    q: "How do I check my business?",
+    a: 'Paste your website at <a href="/check">surfingdog.ai/check</a>, or ask your AI to call the <code>check_business</code> tool with your address. A new check usually takes a few minutes. The result is at surfingdog.ai/b/ followed by your domain, for example surfingdog.ai/b/salon.example.',
+  },
+  {
+    q: "What is the agentic score?",
+    a: 'A number from 0 to 100, with a grade from A to E, that says how far an AI agent can go with a business through the doors it published: message, book, order, cancel and negotiate, and the steps around them, like paying, changing a booking or tracking an order. The weights and the formula are published at <a href="/v1/score-rules">/v1/score-rules</a>.',
+  },
+  {
+    q: "Why does a capability say “not applicable”?",
+    a: "Because it does not apply to that kind of business: a plumber needs no catalogue, and a shop takes no table bookings. A capability that does not apply is left out of the score's total, so it never counts against anyone.",
+  },
+  {
+    q: "Does a higher score move a business up in the directory?",
+    a: 'No. The directory\'s search order follows its own published rules (<a href="/v1/ranking">/v1/ranking</a>), and the score never changes it. The leaderboards are a separate list, ordered by score.',
+  },
+  {
+    q: "Is the score a certification?",
+    a: "No. It is what our crawler read on the business's own site and doors on the date shown. Every answer names its door, its source and its date.",
+  },
+  {
+    q: "How do I raise my score?",
+    a: "Each result lists the changes worth the most points, and a message you can copy for whoever runs your website. Most often that means publishing a door agents can use (an MCP server, an A2A agent, an API, UCP or ACP checkout, or an agent inbox) and marking up your hours, prices and policies.",
+  },
+  {
+    q: "Someone checked my business. How do I hide the result?",
+    a: "Anyone can check any site, and checking is not claiming. To hide your result, claim your listing from your own AI with <code>register_business</code>, then call <code>update_business</code> with <code>score_page</code> set to <code>hidden</code>; that takes it off the ranks and leaderboards too. A result page is indexed by search engines when the business is agent-ready or has claimed it, and not otherwise.",
+  },
+  {
+    q: "How do I stop the crawler and remove everything?",
+    a: 'Opt out at <a href="/bot">surfingdog.ai/bot</a>, or ask your AI to call <code>update_business</code> with an opt-out. The crawling stops, and what we hold about your site (a listing we found, a check, a score) is removed; a listing you claimed is removed with its claim token or a proof. You can also block our crawler in your robots.txt.',
+  },
+  {
+    q: "Which doors count?",
+    a: "Doors a business published for agents: an agent inbox, an MCP server, an A2A agent card, an OpenAPI document or a declared API, UCP or ACP commerce, NLWeb, and a commerce or booking platform's own agent door. Mail, phone, messaging apps, forms and web pages are for people and never count. WebMCP tools in a page are read as experimental: they count toward the score, not toward the directory.",
+  },
+  {
+    q: "What does “declared” mean?",
+    a: "That the business's own site or door says so: a tool it lists, a skill on its agent card, an operation in its API document, or its own structured data. We read it; we did not try it. The next steps of the same ladder are “tested” (a probe tried it) and “proven” (agents reported using it).",
+  },
+  {
+    q: "How often is a business checked?",
+    a: "Our crawler reads a site on its ordinary schedule. A check you ask for runs within a daily budget, usually in minutes, and the same site can be checked again after a day.",
+  },
+  {
+    q: "When should an AI call check_business?",
+    a: "When a person asks how far an agent can go with a particular business's website, or wants to improve their own. To find businesses, an AI uses <code>search_businesses</code> instead.",
+  },
+  {
+    q: "How does an AI find Surfing Dog?",
+    a: 'From the catalog at <a href="/.well-known/ai-catalog.json">/.well-known/ai-catalog.json</a>, the MCP server card at <a href="/.well-known/mcp/server-card.json">/.well-known/mcp/server-card.json</a>, the A2A agent card at <a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a>, and <a href="/llms.txt">llms.txt</a>. The MCP server itself is at surfingdog.ai/mcp.',
+  },
+  {
+    q: "Can anyone pay for a place or a score?",
+    a: "No. Nobody can pay for a place in the directory's order, for a score, or for a place on a leaderboard.",
+  },
+];
+
+/** The answer as plain text, for structured data: tags dropped, entities left as they are. */
+const plain = (html: string) => html.replace(/<[^>]+>/g, "");
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  url: new URL("/faq/", site).toString(),
+  publisher: { "@id": `${site}#org` },
+  mainEntity: faqs.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: plain(f.a) },
+  })),
+};
+---
+
+<Layout
+  title="FAQ · Surfing Dog"
+  description="Questions owners and AI agents ask about Surfing Dog: checking a business, the agentic score, hiding a result, opting out, and which doors count."
+  ld={ld}
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="faq-h">
+    <p class="eyebrow">FAQ</p>
+    <h1 class="h-page" id="faq-h">Questions, answered</h1>
+    <p class="lede">What owners and AI agents ask about the directory, the checker and the agentic score.</p>
+  </section>
+
+  <section class="section section-tight" aria-label="Questions">
+    <div class="wrap wrap-read prose faq">
+      {
+        faqs.map((f) => (
+          <>
+            <h2>{f.q}</h2>
+            <p set:html={f.a} />
+          </>
+        ))
+      }
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .faq h2 {
+    font-size: 1.25rem;
+  }
+</style>

@@ -1,0 +1,79 @@
+---
+// What Surfing Dog is, in about a minute: the directory, the checker and its score, how agents
+// connect, what is free, and that nobody can pay for order or score. Kept short on purpose; the
+// FAQ and the docs carry the detail. The Organization node reuses the home page's @id, so search
+// engines read one organisation, not two.
+import Layout from "../layouts/Layout.astro";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const org = `${site}#org`;
+const ld = [
+  { "@context": "https://schema.org", "@type": "Organization", "@id": org, name: "Surfing Dog", url: site },
+  {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: "What is Surfing Dog",
+    url: new URL("/about/", site).toString(),
+    about: { "@id": org },
+    publisher: { "@id": org },
+  },
+];
+
+const doors = [
+  { name: "MCP", at: "/mcp", doc: "/.well-known/mcp/server-card.json", docLabel: "server card" },
+  { name: "A2A", at: "/a2a", doc: "/.well-known/agent-card.json", docLabel: "agent card" },
+  { name: "REST", at: "/v1/businesses", doc: "https://network.surfingdog.ai/openapi.json", docLabel: "OpenAPI" },
+];
+---
+
+<Layout
+  title="What is Surfing Dog"
+  description="A public directory of businesses AI agents can reach through their own doors, and a checker that shows how far an agent can go with any business's website."
+  ld={ld}
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="about-h">
+    <p class="eyebrow">About</p>
+    <h1 class="h-page" id="about-h">What is Surfing Dog</h1>
+    <p class="lede">
+      A public directory of businesses that AI agents can reach through doors the businesses published, and a checker
+      that shows how far an agent can go with any business's website.
+    </p>
+  </section>
+
+  <section class="section section-tight" aria-label="In short">
+    <div class="wrap wrap-read prose">
+      <h2>The directory</h2>
+      <p>
+        Each business is listed with its agent doors (an agent inbox, MCP, A2A, an API, UCP or ACP), what each door
+        takes, and a source and date on every fact. A person's AI finds a business here, then talks to it at its own
+        doors. The directory takes nothing in between.
+      </p>
+      <h2>The checker and the agentic score</h2>
+      <p>
+        Paste a website at <a href="/check">/check</a>, or ask an AI to call <code>check_business</code>. We read what
+        the site publishes for agents and answer: can an agent message, book, order, cancel or negotiate there, and
+        through which door? The <a href="/v1/score-rules">agentic score</a> sums it up by published rules, counting
+        what applies to that kind of business. It is not a certification.
+      </p>
+      <h2>How agents connect</h2>
+      <ul>
+        {
+          doors.map((d) => (
+            <li>
+              <b>{d.name}</b> at <code>{d.at}</code> (<a href={d.doc}>{d.docLabel}</a>)
+            </li>
+          ))
+        }
+        <li>
+          All of them, listed for agents: <a href="/.well-known/ai-catalog.json">/.well-known/ai-catalog.json</a>, and
+          <a href="/llms.txt">llms.txt</a>
+        </li>
+      </ul>
+      <h2>Free, and not for sale</h2>
+      <p>
+        Being listed, found, searched and checked is free, and the protocol is open source. Nobody can pay for a place
+        in the directory's order, or for a score. Questions? Read the <a href="/faq/">FAQ</a>.
+      </p>
+    </div>
+  </section>
+</Layout>
