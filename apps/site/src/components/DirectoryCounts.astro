@@ -8,15 +8,23 @@
  * At rest, before the answer or without one, the page shows dashes and says where the numbers come
  * from; it never prints a number it did not read (nor zeros the network says it could not take).
  * The numbers count up once, gently, and not at all under reduced motion. The counting is hidden
- * from screen readers: a separate live region says the final numbers once.
+ * from screen readers: a separate live region says the final numbers once, and each link is named by
+ * its final number.
+ *
+ * Every count is a link to the list of the businesses it counts, on the network: "businesses
+ * checked" to the board of every kind, "agent-ready" to every agent-ready business, and each
+ * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
+ * the same businesses its count counts: it names them, or says how many more it counts and does not
+ * name.
  */
+import { CHECKED_HREF, READY_HREF } from "../lib/ask";
 ---
 
 <div class="counts" data-counts>
   <p class="c-main">
-    <span class="c-pair"><b class="c-n tabular" data-n="checked">–</b> businesses checked</span>
+    <a class="c-pair c-link" href={CHECKED_HREF} data-label="businesses checked"><b class="c-n tabular" data-n="checked" aria-hidden="true">–</b> businesses checked</a>
     <span class="c-dot" aria-hidden="true">·</span>
-    <span class="c-pair"><b class="c-n tabular" data-n="agent_ready">–</b> agent-ready</span>
+    <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready</a>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
@@ -41,6 +49,22 @@
   }
   .c-pair {
     white-space: nowrap;
+  }
+  /* A count is a link to its list: quiet at rest, its underline drawn in on hover and focus. */
+  .c-link,
+  .c-caps :global(a) {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: text-decoration-color var(--dur-fast, 0.15s) var(--ease, ease);
+  }
+  .c-link:hover,
+  .c-link:focus-visible,
+  .c-caps :global(a:hover),
+  .c-caps :global(a:focus-visible) {
+    text-decoration-color: currentColor;
   }
   .c-n {
     font-family: var(--font-display);
@@ -114,7 +138,7 @@
 </style>
 
 <script>
-  import { ago, countRows, readDirectory } from "../lib/ask";
+  import { ago, countHref, countRows, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
   const fmt = new Intl.NumberFormat("en");
@@ -156,9 +180,8 @@
       if (note) note.textContent = noBlock ? "Counts appear here once the crawler publishes them." : "The counts are not answering just now.";
       return;
     }
-    // The animated numbers are for the eye; a screen reader hears the final ones, once.
-    root.querySelector(".c-main")?.setAttribute("aria-hidden", "true");
-    root.querySelector("[data-caps]")?.setAttribute("aria-hidden", "true");
+    // The animated numbers are for the eye; a screen reader hears the final ones, once, and each
+    // link by its final number.
     if (said) {
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
@@ -166,14 +189,22 @@
         (rows.length ? ` Of those, ${rows.join(", ")}.` : "");
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
-      count(el, el.dataset.n === "checked" ? d.checked : d.agent_ready);
+      const n = el.dataset.n === "checked" ? d.checked : d.agent_ready;
+      count(el, n);
+      const link = el.closest<HTMLAnchorElement>("a");
+      link?.setAttribute("aria-label", `${fmt.format(n)} ${link.dataset.label ?? ""}`.trim());
     }
     if (caps) {
       caps.replaceChildren(
         ...countRows(d).map((r) => {
           const li = document.createElement("li");
+          const a = document.createElement("a");
           const b = document.createElement("b");
-          li.append(b, ` ${r.label}`);
+          a.href = countHref(r.key);
+          a.setAttribute("aria-label", `${fmt.format(r.n)} ${r.label}`);
+          b.setAttribute("aria-hidden", "true");
+          a.append(b, ` ${r.label}`);
+          li.append(a);
           count(b, r.n);
           return li;
         }),

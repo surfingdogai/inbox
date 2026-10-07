@@ -82,7 +82,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
+          "enum": ["appointments", "classes", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
         },
         "label": {
           "type": "string"
@@ -114,14 +114,14 @@
       "enum": ["listed", "readable", "askable", "bookable", "payable"]
     },
     "answers": {
-      "description": "Message, book, order, cancel and negotiate, in that order.",
+      "description": "Message, book, order, sign up, cancel and negotiate, in that order.",
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "capability": {
             "type": "string",
-            "enum": ["message", "book", "order", "cancel", "negotiate"]
+            "enum": ["message", "book", "order", "signup", "cancel", "negotiate"]
           },
           "answer": {
             "type": "string",
@@ -183,6 +183,7 @@
               "negotiate",
               "book",
               "order",
+              "signup",
               "pay",
               "change",
               "cancel",
@@ -311,6 +312,7 @@
               "negotiate",
               "book",
               "order",
+              "signup",
               "pay",
               "change",
               "cancel",

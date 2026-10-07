@@ -5,7 +5,16 @@ import { fixesOf, scoreOf, scoreRulesSchema } from "../../../packages/spec/src/i
 import scoreVectors from "../../../packages/spec/vectors/score.json";
 import scoreRulesV1 from "../../../packages/spec/vocab/score-rules-v1.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
-import { ago, countRows, looksLikeAddress, readDirectory } from "../src/lib/ask";
+import {
+  ago,
+  CHECKED_HREF,
+  COUNTED,
+  countHref,
+  countRows,
+  looksLikeAddress,
+  READY_HREF,
+  readDirectory,
+} from "../src/lib/ask";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
 import { capabilities, leastOf, stateOf } from "../src/lib/status";
@@ -99,6 +108,7 @@ describe("the checker's pages and components", () => {
       "Message: Yes · A2A",
       "Book: Yes · MCP",
       "Order: Not applicable",
+      "Sign up: Not applicable",
       "Cancel: Yes · MCP",
       "Negotiate: Not applicable",
     ]);
@@ -274,6 +284,31 @@ describe("the home page and the three products", () => {
       "1 take payment",
       "4 negotiate",
     ]);
+    // Sign up shows once a business does it, after orders.
+    const withSignup = readDirectory({
+      directory: {
+        checked: 9,
+        agent_ready: 4,
+        capabilities: { message: 3, order: 1, signup: 2 },
+        as_of: "2026-10-07T12:00:00Z",
+      },
+    });
+    expect(withSignup && countRows(withSignup).map((r) => `${r.n} ${r.label}`)).toEqual([
+      "3 take messages",
+      "0 take bookings",
+      "1 take orders",
+      "2 sign up",
+      "0 have a catalogue",
+      "0 take payment",
+    ]);
+    // Every count links to the list of the businesses it counts.
+    expect(CHECKED_HREF).toBe("/leaderboard");
+    expect(READY_HREF).toBe("/leaderboard?ready=1");
+    for (const c of COUNTED) expect(countHref(c.key)).toBe(`/leaderboard?can=${c.key}`);
+    const counts = read("src/components/DirectoryCounts.astro");
+    expect(counts).toMatch(/href=\{CHECKED_HREF\}/);
+    expect(counts).toMatch(/href=\{READY_HREF\}/);
+    expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
     expect(ago("2026-10-07T12:00:00Z", at + 6 * 60_000)).toBe("6 minutes ago");

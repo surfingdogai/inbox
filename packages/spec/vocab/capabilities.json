@@ -4,7 +4,7 @@
   "states": ["yes", "partial", "no", "na"],
   "evidence": ["declared", "tested", "proven"],
   "produced": ["declared"],
-  "lead": ["message", "book", "order", "cancel", "negotiate"],
+  "lead": ["message", "book", "order", "signup", "cancel", "negotiate"],
   "journeys": ["before", "doing", "after", "ongoing", "policies"],
   "capabilities": [
     {
@@ -37,7 +37,12 @@
       "label": "Negotiate",
       "question": "Can an agent ask for a quote, make an offer or get a counter-offer?"
     },
-    { "id": "book", "journey": "doing", "label": "Book", "question": "Can an agent make a booking, with its details?" },
+    {
+      "id": "book",
+      "journey": "doing",
+      "label": "Book",
+      "question": "Can an agent make a booking, with its details?"
+    },
     {
       "id": "order",
       "journey": "doing",
@@ -45,13 +50,29 @@
       "question": "Can an agent place an order, with its options?"
     },
     {
+      "id": "signup",
+      "journey": "doing",
+      "label": "Sign up",
+      "question": "Can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?"
+    },
+    {
       "id": "pay",
       "journey": "doing",
       "label": "Pay",
       "question": "Can an agent pay, and is it clear how payment happens?"
     },
-    { "id": "change", "journey": "after", "label": "Change", "question": "Can an agent change a booking or an order?" },
-    { "id": "cancel", "journey": "after", "label": "Cancel", "question": "Can an agent cancel a booking or an order?" },
+    {
+      "id": "change",
+      "journey": "after",
+      "label": "Change",
+      "question": "Can an agent change a booking or an order?"
+    },
+    {
+      "id": "cancel",
+      "journey": "after",
+      "label": "Cancel",
+      "question": "Can an agent cancel a booking or an order?"
+    },
     {
       "id": "track",
       "journey": "after",
@@ -88,7 +109,12 @@
       "label": "Vouchers",
       "question": "Can an agent use a gift card, a voucher or loyalty points?"
     },
-    { "id": "waitlist", "journey": "ongoing", "label": "Waitlist", "question": "Can an agent join a waitlist?" },
+    {
+      "id": "waitlist",
+      "journey": "ongoing",
+      "label": "Waitlist",
+      "question": "Can an agent join a waitlist?"
+    },
     {
       "id": "support",
       "journey": "ongoing",

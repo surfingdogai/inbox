@@ -871,7 +871,7 @@
   color: var(--ink-3);
 }
 
-/* A capability chip: one of the five lead answers (message, book, order, cancel, negotiate) in a
+/* A capability chip: one of the six lead answers (message, book, order, sign up, cancel, negotiate) in a
    leaderboard row, and the answer on a result page. Its state shows three ways, never by colour
    alone: yes is filled, with a tick; partly is half filled, with a half disc; no is outlined; not
    applicable has no outline, a dash and faint words. The words are its aria-label (or its text). */

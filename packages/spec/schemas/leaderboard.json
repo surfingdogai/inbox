@@ -14,6 +14,28 @@
         },
         "place": {
           "type": "string"
+        },
+        "can": {
+          "description": "A home-page list: the agent-ready businesses that can do this.",
+          "type": "string",
+          "enum": [
+            "message",
+            "book",
+            "order",
+            "signup",
+            "cancel",
+            "change",
+            "negotiate",
+            "catalogue",
+            "availability",
+            "pay",
+            "track",
+            "return"
+          ]
+        },
+        "ready": {
+          "description": "A home-page list: the agent-ready businesses.",
+          "type": "boolean"
         }
       }
     },
@@ -33,7 +55,16 @@
       "required": ["version", "url"]
     },
     "order": {
-      "type": "string"
+      "type": "string",
+      "description": "The order in words."
+    },
+    "order_by": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["can_book_order_or_sign_up", "score", "checked_at", "domain"]
+      },
+      "description": "The order, field by field."
     },
     "not_search_order": {
       "type": "string"
@@ -81,6 +112,11 @@
           "name": {
             "type": "string"
           },
+          "can_book_order_or_sign_up": {
+            "type": "string",
+            "enum": ["yes", "partly", "no"],
+            "description": "Whether an agent can book, order or sign up here; no when none of them applies to its kind."
+          },
           "score": {
             "type": "integer",
             "minimum": 0,
@@ -94,7 +130,7 @@
             "type": "object",
             "propertyNames": {
               "type": "string",
-              "enum": ["message", "book", "order", "cancel", "negotiate"]
+              "enum": ["message", "book", "order", "signup", "cancel", "negotiate"]
             },
             "additionalProperties": {
               "type": "string",
@@ -111,9 +147,36 @@
             "format": "uri"
           }
         },
-        "required": ["position", "domain", "name", "score", "grade", "answers", "checked_at", "result_url"]
+        "required": [
+          "position",
+          "domain",
+          "name",
+          "can_book_order_or_sign_up",
+          "score",
+          "grade",
+          "answers",
+          "checked_at",
+          "result_url"
+        ]
       }
+    },
+    "software_and_ai": {
+      "description": "On a board of every kind: the software, API and AI companies it leaves out, ranked on their own board.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
     }
   },
-  "required": ["scope", "rules", "order", "not_search_order", "total", "unnamed", "page", "next_page", "named"]
+  "required": [
+    "scope",
+    "rules",
+    "order",
+    "order_by",
+    "not_search_order",
+    "total",
+    "unnamed",
+    "page",
+    "next_page",
+    "named"
+  ]
 }

@@ -108,6 +108,64 @@
       "alone": ["checkout", "buy", "purchase"]
     },
     {
+      "cap": "signup",
+      "all": [["signup", "register", "registration", "enrol", "enroll", "enrolment", "enrollment", "join", "onboard"]],
+      "none": [
+        "login",
+        "logon",
+        "signin",
+        "logout",
+        "signout",
+        "authenticate",
+        "password",
+        "session",
+        "token",
+        "oauth",
+        "webhook",
+        "webhooks",
+        "device",
+        "devices",
+        "domain",
+        "domains",
+        "key",
+        "keys",
+        "apikey",
+        "callback",
+        "client",
+        "clients",
+        "app",
+        "apps",
+        "waitlist",
+        "waitinglist",
+        "meeting",
+        "call",
+        "room",
+        "channel",
+        "agent",
+        "agents",
+        "bot",
+        "bots"
+      ]
+    },
+    {
+      "cap": "signup",
+      "all": [["sign"], ["up"]],
+      "none": ["login", "logon", "signin", "logout", "signout", "authenticate", "password", "session", "token", "oauth"]
+    },
+    {
+      "cap": "signup",
+      "all": [
+        ["create", "new", "open", "add"],
+        ["account", "accounts", "member", "members", "membership", "memberships"]
+      ],
+      "none": ["login", "logon", "signin", "logout", "signout", "authenticate", "password", "session", "token", "oauth"]
+    },
+    {
+      "cap": "signup",
+      "all": [["subscribe"], ["newsletter", "newsletters", "mailing", "member", "members", "membership"]],
+      "none": ["login", "logon", "signin", "logout", "signout", "authenticate", "password", "session", "token", "oauth"]
+    },
+    {
       "cap": "pay",
       "all": [
         ["pay", "payment", "payments", "checkout"],

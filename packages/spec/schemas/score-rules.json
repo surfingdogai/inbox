@@ -46,6 +46,7 @@
               "negotiate",
               "book",
               "order",
+              "signup",
               "pay",
               "change",
               "cancel",
@@ -104,6 +105,7 @@
                 "negotiate",
                 "book",
                 "order",
+                "signup",
                 "pay",
                 "change",
                 "cancel",
@@ -130,7 +132,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
+            "enum": ["appointments", "classes", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
           },
           "label": {
             "type": "string"
@@ -151,6 +153,7 @@
                 "negotiate",
                 "book",
                 "order",
+                "signup",
                 "pay",
                 "change",
                 "cancel",
@@ -167,7 +170,7 @@
             }
           },
           "either": {
-            "description": "Version 2: sets of applicable capabilities of one group that count as one member of it, met by the best state any of them has (book or order, for a business of a kind not known).",
+            "description": "Version 2: sets of applicable capabilities of one group that count as one member of it, met by the best state any of them has (book, order or sign up, for a business of a kind not known).",
             "type": "array",
             "items": {
               "minItems": 2,
@@ -182,6 +185,7 @@
                   "negotiate",
                   "book",
                   "order",
+                  "signup",
                   "pay",
                   "change",
                   "cancel",
@@ -291,6 +295,7 @@
           "negotiate",
           "book",
           "order",
+          "signup",
           "pay",
           "change",
           "cancel",
@@ -320,7 +325,7 @@
             "type": "object",
             "propertyNames": {
               "type": "string",
-              "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
+              "enum": ["appointments", "classes", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
             },
             "additionalProperties": {
               "type": "object",

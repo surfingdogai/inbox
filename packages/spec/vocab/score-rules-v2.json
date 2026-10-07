@@ -4,7 +4,7 @@
   "status": "in_force",
   "published_at": "2026-10-07T00:00:00Z",
   "effective_at": "2026-10-07T00:00:00Z",
-  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, cancel and negotiate, and the journey around them. It counts what applies to that kind of business and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
+  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, sign up, cancel and negotiate, and the journey around them. It counts what applies to that kind of business and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
   "vocabulary": "https://surfingdog.ai/v1/score-rules#capabilities",
   "capabilities": [
     {
@@ -54,6 +54,13 @@
       "journey": "doing",
       "label": "Order",
       "question": "Can an agent place an order, with its options?",
+      "group": "core"
+    },
+    {
+      "id": "signup",
+      "journey": "doing",
+      "label": "Sign up",
+      "question": "Can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?",
       "group": "core"
     },
     {
@@ -145,7 +152,7 @@
     {
       "id": "core",
       "weight": 40,
-      "members": ["message", "book", "order", "pay"]
+      "members": ["message", "book", "order", "signup", "pay"]
     },
     {
       "id": "after",
@@ -181,8 +188,8 @@
   "profiles": [
     {
       "id": "appointments",
-      "label": "Appointments (salons, wellness, classes, tours)",
-      "noun": "a business taking appointments (a salon, wellness, a class or a tour)",
+      "label": "Appointments (salons, wellness, tours)",
+      "noun": "a business taking appointments (a salon, wellness or a tour)",
       "applicable": [
         "find",
         "catalogue",
@@ -195,7 +202,27 @@
         "feedback",
         "policies"
       ],
-      "groups": ["hair-beauty", "wellness", "photography", "tours", "education", "auto"]
+      "groups": ["hair-beauty", "wellness", "photography", "tours", "auto"]
+    },
+    {
+      "id": "classes",
+      "label": "Classes, lessons and tutoring",
+      "noun": "a school, a class or a tutor (lessons, courses and tutoring)",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "signup",
+        "pay",
+        "change",
+        "cancel",
+        "feedback",
+        "policies"
+      ],
+      "either": [["book", "signup"]],
+      "groups": ["education"]
     },
     {
       "id": "food",
@@ -240,7 +267,8 @@
       "id": "memberships",
       "label": "Gyms and memberships",
       "noun": "a gym or membership business",
-      "applicable": ["find", "catalogue", "book", "order", "pay", "cancel", "subscription"],
+      "applicable": ["find", "catalogue", "book", "order", "signup", "pay", "cancel", "subscription"],
+      "either": [["order", "signup"]],
       "groups": ["fitness"]
     },
     {
@@ -254,20 +282,21 @@
         "message",
         "book",
         "order",
+        "signup",
         "pay",
         "change",
         "cancel",
         "policies"
       ],
-      "either": [["book", "order"]],
+      "either": [["book", "order", "signup"]],
       "groups": ["venues"]
     },
     {
       "id": "general",
       "label": "Business (type unknown)",
       "noun": "a business of a kind not known",
-      "applicable": ["find", "catalogue", "message", "book", "order", "pay", "policies"],
-      "either": [["book", "order"]],
+      "applicable": ["find", "catalogue", "message", "book", "order", "signup", "pay", "policies"],
+      "either": [["book", "order", "signup"]],
       "groups": ["bar", "health", "dental", "therapy", "legal", "software-ai"]
     }
   ],
@@ -305,7 +334,7 @@
       "min": 0
     }
   ],
-  "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists, software, API and AI companies among themselves. A leaderboard numbers the businesses it names 1, 2, 3 and so on; a result page's rank counts every business checked, named or not.",
+  "rank": "whether an agent can book, order or sign up there (yes, then partly, then no or not applicable), then score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists, software, API and AI companies among themselves. A leaderboard numbers the businesses it names 1, 2, 3 and so on; a result page's rank counts every business checked, named or not, in the same order.",
   "named": "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
   "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
   "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
@@ -343,18 +372,32 @@
       "by_profile": {
         "venues": {
           "title": "Let agents book or buy tickets",
-          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>, or sell tickets through UCP or ACP checkout; if you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
+          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>, or sell tickets through UCP or ACP checkout; signing a person up as a member counts too. If you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
         },
         "general": {
-          "title": "Let agents book or order",
-          "how": "Add a tool or operation that creates a booking or an order, such as create_booking or create_order<door>, or publish UCP or ACP checkout; either one counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
+          "title": "Let agents book, order or sign up",
+          "how": "Add a tool or operation that creates a booking, an order or a sign-up, such as create_booking, create_order or sign_up<door>, or publish UCP or ACP checkout; any one of them counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
+        },
+        "classes": {
+          "title": "Let agents book or enrol",
+          "how": "Add a tool or operation that books a lesson or enrols a person in a class or a course, such as create_booking, enrol or POST /enrolments<door>; either one counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
         }
       }
     },
     "order": {
       "title": "Let agents order",
       "how": "Publish UCP or ACP checkout, or add a tool or operation that creates an order, such as create_order<door>.",
+      "by_profile": {
+        "memberships": {
+          "title": "Let agents sign people up",
+          "how": "Add a tool or operation that signs a person up or sells a membership, such as sign_up, create_membership or POST /members<door>, or publish UCP or ACP checkout for memberships; either one counts."
+        }
+      },
       "protocol": "Publish checkout<door>."
+    },
+    "signup": {
+      "title": "Let agents sign people up",
+      "how": "Add a tool or operation that signs a person up for an account, a membership, a class or a newsletter list, such as sign_up, create_account or POST /members<door>. Logging in is not signing up."
     },
     "pay": {
       "title": "Let agents pay",
@@ -449,7 +492,7 @@
     {
       "version": 2,
       "published": "2026-10-07",
-      "summary": "Version 2. The general profile (a business whose kind is not known, and the groups it covers: bars, health, dental, therapy, legal, and software, API and AI companies) is now scored on whether an agent can book or order there: book and order count together as one capability of the core group (yes when either is yes, partly when either is partly), so its core group is message, book or order, and pay, still weighing 40. Under version 1 neither applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy; a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking or order through an agent now scores lower than before. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking tickets, a table or an entry, or ordering them, counts the same way. A fix for book or order is one fix. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1."
+      "summary": "Version 2. The general profile (a business whose kind is not known, and the groups it covers: bars, health, dental, therapy, legal, and software, API and AI companies) is now scored on whether an agent can book, order or sign up there: book and order count together as one capability of the core group, and sign up with them (yes when any of them is yes, partly when any is partly), so its core group is message, book or order or sign up, and pay, still weighing 40. Under version 1 none applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy; a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking, order or sign-up through an agent now scores lower than before. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking tickets, a table or an entry, ordering them, or signing up, counts the same way. Sign up is a capability of its own (can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?), in the core group, met by a tool, skill or operation that signs a person up (sign_up, register, create_account, join, enrol, a schema.org RegisterAction or JoinAction), never by one that logs a person in and nothing more. It applies where it is natural: for a business of a kind not known and for venues it counts with book and order as one; for gyms and memberships it counts with order as one (joining is buying the membership); and classes, lessons and tutoring are now a kind of business of their own, the profile classes (before, scored as appointments, with the same weights), where booking a lesson or enrolling counts as one. No group's weight changed, and a business that signs nobody up scores as it did. A fix for book, order or sign up is one fix. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1."
     }
   ]
 }

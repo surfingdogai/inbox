@@ -31,11 +31,12 @@ export const AGENT_EXAMPLE = {
   doors: { message: "A2A", book: "MCP", cancel: "MCP" } as Record<string, string>,
 } as const;
 
-/** The five lead capabilities, in the order every result shows them. */
+/** The six lead capabilities, in the order every result shows them. */
 export const LEAD = [
   { id: "message", label: "Message" },
   { id: "book", label: "Book" },
   { id: "order", label: "Order" },
+  { id: "signup", label: "Sign up" },
   { id: "cancel", label: "Cancel" },
   { id: "negotiate", label: "Negotiate" },
 ] as const;
@@ -48,7 +49,7 @@ export function answerOf(state: ExampleState | undefined): "Yes" | "Partly" | "N
   return "Not applicable";
 }
 
-/** The card's props, derived from the example: the five answers, then pay and change. */
+/** The card's props, derived from the example: the six answers, then pay and change. */
 export function exampleCard() {
   const e = AGENT_EXAMPLE;
   return {

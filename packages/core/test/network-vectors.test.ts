@@ -26,6 +26,8 @@ import {
   JSON_SCHEMAS,
   jsonSchemaOf,
   LEAD_CAPABILITIES,
+  LEADERBOARD_CAN,
+  LEADERBOARD_ORDER_BY,
   leaderboardSchema,
   listCategoriesOutputSchema,
   listingDetailSchema,
@@ -1436,9 +1438,13 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(rules.version).toBe(2);
     expect(rulesV1.version).toBe(1);
     expect(rulesV1.formula).toBe(SCORE_FORMULA_V1);
-    // Version 2 keeps version 1's groups, weights and capabilities.
-    expect(rules.groups).toEqual(rulesV1.groups);
-    expect(rules.capabilities).toEqual(rulesV1.capabilities);
+    // Version 2 keeps version 1's groups and weights, and adds sign up to the core group (it adds no weight).
+    expect(rules.groups.map((g) => ({ ...g, members: g.members.filter((m) => m !== "signup") }))).toEqual(
+      rulesV1.groups,
+    );
+    expect(rules.groups.find((g) => g.id === "core")?.members).toEqual(["message", "book", "order", "signup", "pay"]);
+    expect(rules.capabilities.filter((c) => c.id !== "signup")).toEqual(rulesV1.capabilities);
+    expect(rules.capabilities.map((c) => c.id)).toEqual([...CAPABILITY_IDS]);
     expect(rules.name).toBe("Agentic score");
     expect(rules.groups.reduce((n, g) => n + g.weight, 0)).toBe(100);
     const members = rules.groups.flatMap((g) => g.members);
@@ -1449,6 +1455,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(rules.formula).toBe(SCORE_FORMULA_V2);
     expect(rules.profiles.map((p) => p.id)).toEqual([
       "appointments",
+      "classes",
       "food",
       "trades",
       "shop",
@@ -1457,16 +1464,22 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       "venues",
       "general",
     ]);
-    // A business of a kind not known: book or order is one capability of the core group, never not applicable.
+    // A business of a kind not known: book, order or sign up is one capability of the core group, never not applicable.
     const general = rules.profiles.find((p) => p.id === "general");
-    expect(general?.either).toEqual([["book", "order"]]);
-    expect(general?.applicable).toEqual(expect.arrayContaining(["message", "book", "order", "pay"]));
+    expect(general?.either).toEqual([["book", "order", "signup"]]);
+    expect(general?.applicable).toEqual(expect.arrayContaining(["message", "book", "order", "signup", "pay"]));
+    // Sign up where it is natural: with order for a gym, with book for a school; never for a salon.
+    expect(rules.profiles.find((p) => p.id === "memberships")?.either).toEqual([["order", "signup"]]);
+    expect(rules.profiles.find((p) => p.id === "classes")?.either).toEqual([["book", "signup"]]);
+    expect(rules.profiles.find((p) => p.id === "classes")?.groups).toEqual(["education"]);
+    expect(rules.profiles.find((p) => p.id === "appointments")?.applicable).not.toContain("signup");
     // A venue books (tickets, tables, entries).
     expect(rules.profiles.find((p) => p.id === "venues")?.applicable).toContain("book");
     // The changelog says what changed in version 2, on what day, and why.
     const last = rules.changelog.at(-1);
     expect(last).toMatchObject({ version: 2, published: "2026-10-07" });
     expect(last?.summary).toMatch(/book and order count together as one capability/);
+    expect(last?.summary).toMatch(/Sign up is a capability of its own/);
     expect(last?.summary).not.toMatch(/\b(first|only)\b/i);
     // A category group belongs to one profile at most.
     const groups = rules.profiles.flatMap((p) => p.groups);
@@ -1510,8 +1523,8 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
         const states = c.states as Record<CapabilityId, CapabilityState>;
         const profile = r.profiles.find((p) => p.id === c.profile);
         expect(profile, c.name).toBeDefined();
-        // A state is given for every capability, and "na" exactly where it does not apply.
-        for (const id of CAPABILITY_IDS) {
+        // A state is given for every capability of that version, and "na" exactly where it does not apply.
+        for (const { id } of r.capabilities) {
           expect(states[id] === "na", `${c.name} ${id}`).toBe(!profile?.applicable.includes(id));
         }
         const got = scoreOf(c.profile as "appointments", states, r);
@@ -1535,7 +1548,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(by.get("venue-jazz-club")?.expect).toMatchObject({ score: 34, grade: "D" });
     // Under version 1 (book and order not applicable) the first two scored 55 alike.
     const v1 = (name: string) => {
-      const s = { ...states(name), book: "na", order: "na" } as Record<CapabilityId, CapabilityState>;
+      const s = { ...states(name), book: "na", order: "na", signup: "na" } as Record<CapabilityId, CapabilityState>;
       return scoreOf("general", s, rulesV1).score;
     };
     expect([v1("general-message-only"), v1("general-book-and-pay"), v1("general-message-book-pay")]).toEqual([
@@ -1556,7 +1569,19 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(fixed("general", { order: "partial" })).toContain("book");
     expect(fixed("general", { order: "yes" })).not.toContain("book");
     expect(fixed("venues", { order: "yes" })).not.toContain("book");
-    expect(rules.profiles.find((p) => p.id === "venues")?.either).toEqual([["book", "order"]]);
+    expect(rules.profiles.find((p) => p.id === "venues")?.either).toEqual([["book", "order", "signup"]]);
+    // Sign up counts with book and order: alone it meets the set, beside a yes it adds nothing; a gym's
+    // sign-up meets its order slot and a school's its book slot.
+    expect(g({ signup: "yes" })).toBe(g({ book: "yes" }));
+    expect(g({ signup: "yes", order: "yes" })).toBe(g({ order: "yes" }));
+    expect(fixed("general", { signup: "yes" })).not.toContain("book");
+    expect(scoreOf("memberships", { signup: "yes" }, rules).score).toBe(
+      scoreOf("memberships", { order: "yes" }, rules).score,
+    );
+    expect(scoreOf("classes", { signup: "yes" }, rules).score).toBe(scoreOf("classes", { book: "yes" }, rules).score);
+    expect(by.get("general-message-signup")?.expect).toMatchObject({ score: 67, grade: "B" });
+    expect(by.get("gym-signup-book")?.expect).toMatchObject({ score: 57, grade: "C" });
+    expect(by.get("school-enrol")?.expect).toMatchObject({ score: 49, grade: "C" });
   });
 
   it("the worked examples: a salon 51 C, a restaurant 74 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
@@ -1635,6 +1660,26 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       ["Book a table", ["book"]],
     ];
     for (const [name, caps] of table) expect(capsOfName(registryRules, name), name).toEqual(caps);
+    // Sign up: a name that signs a person up, never one that logs in.
+    for (const [name, caps] of [
+      ["sign_up", ["signup"]],
+      ["signUp", ["signup"]],
+      ["register", ["signup"]],
+      ["create_account", ["signup"]],
+      ["enrol_in_course", ["signup"]],
+      ["membership_signup", ["signup"]],
+      ["subscribe_newsletter", ["signup", "subscription"]],
+      ["JoinAction", ["signup"]],
+      ["login", []],
+      ["sign_in", []],
+      ["register_or_login", []],
+      ["get_signup_form", []],
+      ["register_webhook", []],
+      ["join_waitlist", ["waitlist"]],
+    ] as const) {
+      expect(capsOfName(registryRules, name), name).toEqual(caps);
+    }
+    expect(capsOfOperation(registryRules, "POST /accounts createAccount")).toEqual(["signup"]);
     expect(capsOfName(registryRules, "create_booking", undefined, true)).toEqual([]);
     expect(capsOfOperation(registryRules, "POST /orders/search")).toEqual([]);
     expect(capsOfOperation(registryRules, "DELETE /cart/items/{id}")).toEqual([]);
@@ -1731,9 +1776,12 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(
       leaderboardSchema.safeParse({
         scope: { category: "hair-beauty", country: "PT" },
-        rules: { version: 1, url: `${site}/v1/score-rules?version=1` },
-        order: "agentic score, then the most recent check, then domain",
-        not_search_order: "This list is ordered by agentic score. It is not the directory's search order.",
+        rules: { version: 2, url: `${site}/v1/score-rules?version=2` },
+        order:
+          "whether an agent can book, order or sign up here (yes, then partly, then no or not applicable), then agentic score, then the most recent check, then domain",
+        order_by: [...LEADERBOARD_ORDER_BY],
+        not_search_order:
+          "This list puts the businesses where an agent can book, order or sign up above the rest, then orders them by agentic score. It is not the directory's search order.",
         total: 61,
         unnamed: 40,
         page: 1,
@@ -1743,15 +1791,33 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
             position: 1,
             domain: "salon.example",
             name: "A salon",
+            can_book_order_or_sign_up: "yes",
             score: 72,
             grade: "B",
-            answers: { message: "yes", order: "not_applicable" },
+            answers: { message: "yes", order: "not_applicable", signup: "not_applicable" },
             checked_at: at,
             result_url: `${site}/b/salon.example`,
           },
         ],
       }).success,
     ).toBe(true);
+    // A home-page list: the agent-ready businesses that can sign people up, software companies too.
+    const list = {
+      scope: { can: "signup" },
+      rules: { version: 2, url: `${site}/v1/score-rules?version=2` },
+      order: "…",
+      order_by: [...LEADERBOARD_ORDER_BY],
+      not_search_order: "…",
+      total: 3,
+      unnamed: 1,
+      page: 1,
+      next_page: null,
+      named: [],
+    };
+    expect(leaderboardSchema.safeParse(list).success).toBe(true);
+    expect(leaderboardSchema.safeParse({ ...list, scope: { can: "fly" } }).success).toBe(false);
+    expect(leaderboardSchema.safeParse({ ...list, order_by: undefined }).success).toBe(false);
+    expect(LEADERBOARD_CAN).toContain("signup");
     const catalog = {
       specVersion: "1.0",
       host: { displayName: "A network", identifier: "did:web:network.example" },

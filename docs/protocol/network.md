@@ -219,7 +219,7 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `POST /mcp` | none | one JSON-RPC message → its answer (§4.7) | `mcp-*` |
 | `GET /v1/score-rules` (0.3, MAY) | none | `?version=N` → the agentic score's rules (§4.13) | `score-rules` |
 | `GET /b/{domain}`, `GET /b/{domain}.json` (0.3, MAY) | none | → a check's result page, or its JSON (§4.13) | `check-result` |
-| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&page=` → businesses by agentic score (§4.13) | `leaderboard` |
+| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&page=` → businesses where an agent can book, order or sign up above the rest, then by agentic score (§4.13) | `leaderboard` |
 | `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
 | `POST /v1/persons` | sdi-instance/1 | `{request_id, email, agent?}` → `201` | `persons-*` |
@@ -794,13 +794,18 @@ stays, and the answer is `refused`. `listing: "off"` hides it from search and ke
 A network MAY say, business by business, how far an AI agent can go with it through the doors it
 published, and sum that up as an **agentic score** from 0 to 100. It is about capabilities, not
 standards: whatever the door (an inbox, MCP, A2A, an API, UCP or ACP), can an agent message, book,
-order, cancel or negotiate here, and the journey around those.
+order, sign up, cancel or negotiate here, and the journey around those.
 
-**The vocabulary** ([`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json)) lists 19
+**The vocabulary** ([`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json)) lists 20
 capabilities in a fixed order, which breaks every tie: `find`, `catalogue`, `availability`,
-`message`, `negotiate`, `book`, `order`, `pay`, `change`, `cancel`, `track`, `return`, `receipt`,
-`feedback`, `subscription`, `vouchers`, `waitlist`, `support`, `policies`. Five lead every result:
-`message`, `book`, `order`, `cancel` and `negotiate`. A capability is `yes`, `partial` (met through a
+`message`, `negotiate`, `book`, `order`, `signup`, `pay`, `change`, `cancel`, `track`, `return`,
+`receipt`, `feedback`, `subscription`, `vouchers`, `waitlist`, `support`, `policies`. Six lead every
+result: `message`, `book`, `order`, `signup`, `cancel` and `negotiate`. **Sign up** (`signup`) asks
+whether an agent can sign the person up: an account, a membership, a class, a course or a newsletter
+list for the business's own service. A network reads it from a tool, skill or operation that signs a
+person up (`sign_up`, `register`, `create_account`, `join`, `enrol`, a membership sign-up, a
+newsletter subscription, a schema.org `RegisterAction` or `JoinAction`), through its door registry's
+capability rules, never from one that logs a person in. A capability is `yes`, `partial` (met through a
 door behind a customer account, or payment described but not done by the agent), `no`, or `na`
 when it does not apply to that kind of business.
 
@@ -817,27 +822,33 @@ that kind leaves the denominator: a plumber is not marked down for having no cat
 
 | Profile | Applies |
 |---|---|
-| `appointments` (salons, wellness, classes, tours) | find, catalogue, availability, message, book, change, cancel, pay, policies, feedback |
+| `appointments` (salons, wellness, tours) | find, catalogue, availability, message, book, change, cancel, pay, policies, feedback |
+| `classes` (classes, lessons and tutoring; version 2) | find, catalogue, availability, message, book or sign up (one capability), change, cancel, pay, policies, feedback |
 | `food` (restaurants and food) | find, catalogue, availability, message, book, order, change, cancel, pay |
 | `trades` (trades and quote-led services) | message, negotiate, book, change, cancel, pay, receipt |
 | `shop` | find, catalogue, availability, order, pay, change, cancel, track, return, receipt |
 | `stay` (places to stay) | availability, book, change, cancel, pay, message, policies |
-| `memberships` (gyms and memberships) | find, catalogue, order, book, subscription, cancel, pay |
-| `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book or order (one capability), pay, change, cancel, policies |
-| `general` (type unknown; also bars, health, dental, therapy, legal, and software, API and AI companies) | find, catalogue, message, book or order (one capability, version 2), pay, policies |
+| `memberships` (gyms and memberships) | find, catalogue, order or sign up (one capability, version 2), book, subscription, cancel, pay |
+| `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book or order or sign up (one capability), pay, change, cancel, policies |
+| `general` (type unknown; also bars, health, dental, therapy, legal, and software, API and AI companies) | find, catalogue, message, book or order or sign up (one capability, version 2), pay, policies |
 
 Each profile names the category groups it covers; a business without a category the network can
 read from the business itself is scored by its doors' signals, or as `general`. **Version 2** (in
-force from 7 October 2026) changed two things. The `general` profile is scored on whether an agent
-can book or order there: its **either set** `book`/`order` counts as one member of the core group,
-met by the better of the two states, never `na`; under version 1 neither applied, and a site that
-took messages and nothing else scored as high as one that also sold. That profile covers a business
+force from 7 October 2026) changed three things. The `general` profile is scored on whether an agent
+can book, order or sign up there: its **either set** `book`/`order`/`signup` counts as one member of
+the core group, met by the best of the states, never `na`; under version 1 none applied, and a site
+that took messages and nothing else scored as high as one that also sold. That profile covers a business
 of a kind not known and the groups `bar`, `health`, `dental`, `therapy`, `legal` and `software-ai`,
 so a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking or
 order through an agent scores lower under version 2 than under version 1. And **venues** (the
 category group `venues`: music venues, jazz clubs and nightclubs, theatres, cinemas, concert halls,
 comedy clubs, museums and galleries, event spaces) are a profile where booking tickets, a table or
-an entry, or ordering them, counts the same way (the same either set). A network recognises a venue
+an entry, ordering them, or signing up, counts the same way (the same either set). And sign up is a
+capability of the core group where it is natural: with book and order as one for `general` and
+`venues`; with order as one for `memberships` (joining is buying the membership); and with book as
+one for `classes`, the category group `education` (classes, lessons and tutoring), scored before as
+`appointments` with the same weights. No group's weight changed, and a business that signs nobody up
+scores as it did. A network recognises a venue
 from what it publishes, in this order: a venue's schema.org place type (`MusicVenue`, `EventVenue`,
 `PerformingArtsTheater`, `MovieTheater`, `Museum`, `ComedyClub`, `NightClub`) decides; then a site
 that is an online shop, or a software company by the software type it declares, is that (one read as
@@ -849,7 +860,8 @@ such a phrase of two words or more; then the events it publishes at an address i
 never replace a language model's reading of the site as another kind (a bar, a restaurant): the
 venue is then a probable alternate. A language model's reading stays a hint.
 
-**Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay), `after` 30 (change,
+**Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay; sign up too
+from version 2), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
 10 (catalogue, policies), `find` 5; feedback, vouchers, waitlist and support are shown and not
 counted. `yes` earns two halves, `partial` one, `no` none. The arithmetic is integer, the same in
@@ -867,14 +879,16 @@ grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20
 That is version 2's formula; version 1's is the same without the either clause. A capability's
 displayed weight is `W_g / |A_g|` to one decimal place (each member of an either set shows the set's). **Fixes** are each applicable,
 weighted capability that is not `yes`, scored again as `yes`, an either set being one fix under its
-first capability (`book` for book or order), due while none of its capabilities is `yes`: the points it would add, by points,
+first capability (`book` for book, order or sign up; `order` for a gym's order or sign up), due while none of its capabilities is `yes`: the points it would add, by points,
 then group order, then vocabulary order; a fix worth nothing is left out. A fix's text in the rules
 may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
 business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
 `capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
 cases, a salon at 51 (C), a restaurant at 74 (B), a plumber at 33 (D), a shop at 53 (C), and under
 version 2 a business of no known kind that takes messages and nothing else at 42 (C, 55 under version
-1), one that books and takes payment at 67 (B), among them; `vectors/score-v1.json` holds version 1's.
+1), one that books and takes payment at 67 (B), a software company that takes messages and signs
+people up at 67 (B), a gym that signs people up and books classes at 57 (C; 41 without the sign-up)
+and a school that enrols at 49 (C, as one that books), among them; `vectors/score-v1.json` holds version 1's.
 
 **The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
 version in force and `?version=N` any version ever published (`404` for one that never was), shaped
@@ -892,16 +906,32 @@ form at the network's `/check`); a check is read within the network's daily budg
 lists or changes a listing. Its result is `GET /b/{domain}` (a page) and `GET /b/{domain}.json`
 (`schemas/check-result.json`): the state (`not_checked`, `queued`, `checking`, `scoring`, `done`,
 `blocked`, `failed`, `hidden`, `not_checkable`), and when done the score, the grade, the profile,
-the five lead answers each with its door and date, every capability, the fixes, a plain message the
+the six lead answers each with its door and date, every capability, the fixes, a plain message the
 owner can hand to whoever runs the site, and the rank.
 
-**Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`) orders
-by score, then the most recent check, then domain, by category group, country and place; it counts
-every business checked that its owner has not hidden and that is of a kind the directory lists.
+**Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`)
+orders, on every board: **whether an agent can book, order or sign up here (yes, then partly, then no
+or not applicable), then agentic score, then the most recent check, then domain**, by category group,
+country and place. It says that order in words (`order`) and field by field (`order_by`), and each
+row carries `can_book_order_or_sign_up` (`yes`, `partly` or `no`). The score itself is unchanged by
+the order: a business that can be booked scores what its rules give it, and comes above one that
+cannot be booked, ordered from or signed up with, whatever that one scores. It counts every business
+checked that its owner has not hidden and that is of a kind the directory lists.
 Software, API and AI companies (the group `software-ai`) are ranked among themselves, on their
 group's board, and on no board of every kind, of a country or of a place. A leaderboard's
 `position`s run 1, 2, 3… among the businesses it names; a result page's rank ("#4 of 61 … checked")
-counts every business checked, named or not. It is a separate list from the directory, and it says so.
+counts every business checked, named or not, in the same order. A board of every kind says how many
+software companies it leaves out (`software_and_ai`). It is a separate list from the directory, and it
+says so.
+
+**Lists behind the counts.** `?can=<capability>` (one of `message`, `book`, `order`, `signup`,
+`cancel`, `change`, `negotiate`, `catalogue`, `availability`, `pay`, `track`, `return`) lists the
+agent-ready businesses where an agent can do that, and `?ready=1` every agent-ready business, of
+every kind, software and AI companies too, in the same order: the same businesses a network's
+`/v1/stats` counts in its `directory` block (whose `capabilities` count `signup` too), so a count
+links to its list. A list names those it may name and says how many more it counts and does not name;
+the count is always the sum. A chip for a category group counts the businesses that group's board
+names, and a group nobody is named in has no chip.
 
 **Naming and indexing.** A business is **named** on leaderboards, and its result page may be
 indexed, when it is agent-ready (`askable` or above, §4.9); others are counted, not named, and their

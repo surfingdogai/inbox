@@ -20,6 +20,7 @@ export const CAPABILITY_IDS = [
   "negotiate",
   "book",
   "order",
+  "signup",
   "pay",
   "change",
   "cancel",
@@ -36,8 +37,8 @@ export const CAPABILITY_IDS = [
 export const capabilityIdSchema = z.enum(CAPABILITY_IDS);
 export type CapabilityId = z.infer<typeof capabilityIdSchema>;
 
-/** The five a result leads with: can an agent message, book, order, cancel or negotiate here? */
-export const LEAD_CAPABILITIES = ["message", "book", "order", "cancel", "negotiate"] as const;
+/** The six a result leads with: can an agent message, book, order, sign up, cancel or negotiate here? */
+export const LEAD_CAPABILITIES = ["message", "book", "order", "signup", "cancel", "negotiate"] as const;
 export const leadCapabilitySchema = z.enum(LEAD_CAPABILITIES);
 
 /** yes; partial (behind a customer account, or payment only described); no; na (does not apply to this kind). */
@@ -71,6 +72,7 @@ export type CapabilitiesVocab = z.infer<typeof capabilitiesVocabSchema>;
 /** The kind of business a score is computed for: only the capabilities that apply to it count. */
 export const profileIdSchema = z.enum([
   "appointments",
+  "classes",
   "food",
   "trades",
   "shop",
@@ -140,7 +142,7 @@ export const scoreRulesSchema = z.object({
         .optional()
         .describe(
           "Version 2: sets of applicable capabilities of one group that count as one member of it, met by the best " +
-            "state any of them has (book or order, for a business of a kind not known).",
+            "state any of them has (book, order or sign up, for a business of a kind not known).",
         ),
       groups: z.array(z.string()).describe("The directory's category groups this profile covers."),
     }),
@@ -462,7 +464,7 @@ export const checkResultSchema = z.object({
       }),
     )
     .optional()
-    .describe("Message, book, order, cancel and negotiate, in that order."),
+    .describe("Message, book, order, sign up, cancel and negotiate, in that order."),
   capabilities: z
     .array(
       z.object({
@@ -505,10 +507,42 @@ export const checkResultSchema = z.object({
 export type CheckResult = z.infer<typeof checkResultSchema>;
 
 /** `GET /leaderboard.json`: ordered by agentic score, and separate from the directory's search order. */
+/**
+ * What a home-page list of a leaderboard can be of (`?can=`): the agent-ready businesses where an agent can do one of
+ * these, of every kind, software and AI companies too, the same businesses the network's `/v1/stats` counts.
+ */
+export const LEADERBOARD_CAN = [
+  "message",
+  "book",
+  "order",
+  "signup",
+  "cancel",
+  "change",
+  "negotiate",
+  "catalogue",
+  "availability",
+  "pay",
+  "track",
+  "return",
+] as const;
+
+/**
+ * A board's order, field by field: whether an agent can book, order or sign up at a business (yes, then partly, then
+ * no or not applicable), then its agentic score, then the most recent check, then its domain.
+ */
+export const LEADERBOARD_ORDER_BY = ["can_book_order_or_sign_up", "score", "checked_at", "domain"] as const;
+
 export const leaderboardSchema = z.object({
-  scope: z.object({ category: z.string().optional(), country: z.string().optional(), place: z.string().optional() }),
+  scope: z.object({
+    category: z.string().optional(),
+    country: z.string().optional(),
+    place: z.string().optional(),
+    can: z.enum(LEADERBOARD_CAN).optional().describe("A home-page list: the agent-ready businesses that can do this."),
+    ready: z.boolean().optional().describe("A home-page list: the agent-ready businesses."),
+  }),
   rules: rulesRef,
-  order: z.string(),
+  order: z.string().describe("The order in words."),
+  order_by: z.array(z.enum(LEADERBOARD_ORDER_BY)).describe("The order, field by field."),
   not_search_order: z.string(),
   total: z.int().min(0),
   unnamed: z.int().min(0),
@@ -519,6 +553,9 @@ export const leaderboardSchema = z.object({
       position: z.int().min(1),
       domain: z.string(),
       name: z.string(),
+      can_book_order_or_sign_up: z
+        .enum(["yes", "partly", "no"])
+        .describe("Whether an agent can book, order or sign up here; no when none of them applies to its kind."),
       score: z.int().min(0).max(100),
       grade: gradeSchema,
       answers: z.partialRecord(leadCapabilitySchema, leadAnswerSchema),
@@ -526,6 +563,11 @@ export const leaderboardSchema = z.object({
       result_url: z.url(),
     }),
   ),
+  software_and_ai: z
+    .int()
+    .min(1)
+    .optional()
+    .describe("On a board of every kind: the software, API and AI companies it leaves out, ranked on their own board."),
 });
 export type Leaderboard = z.infer<typeof leaderboardSchema>;
 

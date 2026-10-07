@@ -32,6 +32,7 @@ export type CapabilityKey =
   | "message"
   | "book"
   | "order"
+  | "signup"
   | "cancel"
   | "change"
   | "negotiate"
@@ -47,11 +48,24 @@ export const COUNTED: readonly { key: CapabilityKey; label: string; always: bool
   { key: "message", label: "take messages", always: true },
   { key: "book", label: "take bookings", always: true },
   { key: "order", label: "take orders", always: true },
+  { key: "signup", label: "sign up", always: false },
   { key: "catalogue", label: "have a catalogue", always: true },
   { key: "pay", label: "take payment", always: true },
   { key: "cancel", label: "let an agent cancel", always: false },
   { key: "negotiate", label: "negotiate", always: false },
 ];
+
+/**
+ * Where each count leads: the network's list of the businesses it counts (GET /leaderboard on this same address).
+ * "businesses checked" is the board of every kind, "agent-ready" the list of every agent-ready business, and each
+ * capability the agent-ready businesses that can do it, of every kind: the same businesses the count counts, so the
+ * list names them, or says how many more it counts and does not name.
+ */
+export const CHECKED_HREF = "/leaderboard";
+export const READY_HREF = "/leaderboard?ready=1";
+export function countHref(key: CapabilityKey): string {
+  return `/leaderboard?can=${key}`;
+}
 
 /** Counts taken before this are no counts: the network sends the zero time when it has none yet. */
 const EARLIEST = Date.parse("2026-01-01T00:00:00Z");
