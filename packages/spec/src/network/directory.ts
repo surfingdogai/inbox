@@ -328,6 +328,10 @@ export const categoriesResponseSchema = z.object({
   categories: z.array(
     z.object({
       slug: z.string().regex(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/),
+      kind: z
+        .enum(["local_and_retail", "software_and_ai"])
+        .optional()
+        .describe("software_and_ai: software, API and AI companies, kept apart from local and retail businesses."),
       labels: z.record(z.string(), z.string()).describe("Language → label."),
     }),
   ),

@@ -545,6 +545,7 @@ export const leaderboardSchema = z.object({
   order_by: z.array(z.enum(LEADERBOARD_ORDER_BY)).describe("The order, field by field."),
   not_search_order: z.string(),
   total: z.int().min(0),
+  named_total: z.int().min(0).describe("How many of total the board names, over all its pages; unnamed is the rest."),
   unnamed: z.int().min(0),
   page: z.int().min(1),
   next_page: z.int().min(2).nullable(),

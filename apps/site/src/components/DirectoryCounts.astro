@@ -50,12 +50,13 @@ import { CHECKED_HREF, READY_HREF } from "../lib/ask";
   .c-pair {
     white-space: nowrap;
   }
-  /* A count is a link to its list: quiet at rest, its underline drawn in on hover and focus. */
+  /* A count is a link to its list: a faint underline at rest says so, drawn in full on hover and
+     focus (a link told from text by more than colour, WCAG 1.4.1). */
   .c-link,
   .c-caps :global(a) {
     color: inherit;
     text-decoration: underline;
-    text-decoration-color: transparent;
+    text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
     text-decoration-thickness: 1px;
     text-underline-offset: 3px;
     transition: text-decoration-color var(--dur-fast, 0.15s) var(--ease, ease);

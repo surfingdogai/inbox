@@ -74,6 +74,12 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "named_total": {
+      "description": "How many of total the board names, over all its pages; unnamed is the rest.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
     "unnamed": {
       "type": "integer",
       "minimum": 0,
@@ -174,6 +180,7 @@
     "order_by",
     "not_search_order",
     "total",
+    "named_total",
     "unnamed",
     "page",
     "next_page",

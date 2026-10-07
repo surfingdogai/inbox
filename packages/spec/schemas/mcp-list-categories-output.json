@@ -17,6 +17,11 @@
             "type": "string",
             "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
           },
+          "kind": {
+            "type": "string",
+            "enum": ["local_and_retail", "software_and_ai"],
+            "description": "software_and_ai: software, API and AI companies, kept apart from local and retail businesses."
+          },
           "labels": {
             "type": "object",
             "propertyNames": {

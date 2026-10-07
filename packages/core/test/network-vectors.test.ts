@@ -1783,6 +1783,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
         not_search_order:
           "This list puts the businesses where an agent can book, order or sign up above the rest, then orders them by agentic score. It is not the directory's search order.",
         total: 61,
+        named_total: 21,
         unnamed: 40,
         page: 1,
         next_page: null,
@@ -1809,6 +1810,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       order_by: [...LEADERBOARD_ORDER_BY],
       not_search_order: "…",
       total: 3,
+      named_total: 2,
       unnamed: 1,
       page: 1,
       next_page: null,
@@ -1817,6 +1819,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(leaderboardSchema.safeParse(list).success).toBe(true);
     expect(leaderboardSchema.safeParse({ ...list, scope: { can: "fly" } }).success).toBe(false);
     expect(leaderboardSchema.safeParse({ ...list, order_by: undefined }).success).toBe(false);
+    expect(leaderboardSchema.safeParse({ ...list, named_total: undefined }).success).toBe(false);
     expect(LEADERBOARD_CAN).toContain("signup");
     const catalog = {
       specVersion: "1.0",
