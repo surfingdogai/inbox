@@ -1,0 +1,1058 @@
+/* ================================================================== */
+/*  shell/parts.css: the pieces of the site that live in .astro files, */
+/*  for pages that are not rendered here (the network's checker,       */
+/*  result pages, leaderboards and crawler page). Compiled after       */
+/*  site.css into /shell.css (src/lib/shell.ts).                       */
+/*                                                                     */
+/*  Those pages carry no script, so the bar's menu is a <details> and  */
+/*  there is no theme button: the theme follows the system, or the     */
+/*  visitor's choice on the site, which the site keeps in a cookie the  */
+/*  network reads. Every class here starts with sd- so nothing in the  */
+/*  design system's own names (.rule, .check, .row) is overridden.     */
+/*  The values follow Nav.astro, Footer.astro, AskBox.astro and        */
+/*  AgentCard.astro; keep them in step when those change.              */
+/* ================================================================== */
+
+/* --- The bar (Nav.astro) ----------------------------------------- */
+.sd-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding-top: 10px;
+}
+.sd-nav::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  pointer-events: none;
+}
+.sd-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 52px;
+  padding: 0 6px 0 8px;
+  border-radius: var(--radius-pill);
+}
+.sd-side {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sd-actions {
+  justify-content: flex-end;
+}
+.sd-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 6px 4px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-ui);
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.sd-mark {
+  display: block;
+  flex: none;
+  transition: transform 0.35s var(--ease);
+}
+.sd-brand:hover .sd-mark,
+.sd-brand:focus-visible .sd-mark,
+.sd-fbrand:hover .sd-mark,
+.sd-fbrand:focus-visible .sd-mark {
+  transform: translateY(-1px);
+}
+.sd-word {
+  white-space: nowrap;
+}
+.sd-where {
+  display: none;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sd-where-slash {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+.sd-links {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-links a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+.sd-links a::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--pill-bg-hover);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.15s var(--ease);
+}
+.sd-links a:hover,
+.sd-links a:focus-visible,
+.sd-links a[aria-current="page"] {
+  color: var(--ink);
+}
+.sd-links a:hover::before,
+.sd-links a:focus-visible::before {
+  transform: scaleX(1);
+}
+.sd-lbl {
+  position: relative;
+}
+.sd-links a[aria-current="page"] .sd-lbl::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -7px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--tangerine), var(--flamingo), var(--violet));
+}
+
+/* The menu: a <details>, so it opens without a script. It sits beside the bar rather than in it
+   (a sheet inside the bar's glass could not blur the page), its button laid over the bar's end. */
+.sd-nav > .wrap {
+  position: relative;
+}
+.sd-menu {
+  display: none;
+}
+.sd-menu > summary {
+  position: absolute;
+  top: 6px;
+  right: calc(var(--gutter) + 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 0.15s var(--ease);
+}
+.sd-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.sd-menu > summary:hover,
+.sd-menu > summary:focus-visible,
+.sd-menu[open] > summary {
+  background: var(--pill-bg-hover);
+}
+.sd-bars {
+  display: block;
+  position: relative;
+  width: 17px;
+  height: 11px;
+}
+.sd-bars i {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: currentColor;
+  transition:
+    transform 0.22s var(--ease),
+    width 0.22s var(--ease);
+}
+.sd-bars i:first-child {
+  top: 1px;
+}
+.sd-bars i:last-child {
+  top: 8px;
+  width: 72%;
+}
+.sd-menu[open] .sd-bars i:first-child {
+  transform: translateY(3.5px) rotate(45deg);
+}
+.sd-menu[open] .sd-bars i:last-child {
+  width: 100%;
+  transform: translateY(-3.5px) rotate(-45deg);
+}
+.sd-sheet {
+  position: absolute;
+  top: 56px;
+  right: var(--gutter);
+  left: var(--gutter);
+  margin-top: 8px;
+  padding: 6px;
+  max-height: calc(100dvh - 84px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-card);
+  background-color: var(--veil-sheet);
+  box-shadow: var(--glass-shadow-hover);
+}
+.sd-sheet ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-sheet a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition:
+    background-color 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.sd-sheet a:hover,
+.sd-sheet a:focus-visible,
+.sd-sheet a[aria-current="page"] {
+  background: var(--pill-bg-hover);
+  color: var(--ink);
+}
+.sd-tick {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: transparent;
+  flex: none;
+}
+.sd-sheet a[aria-current="page"] .sd-tick {
+  background: linear-gradient(180deg, var(--tangerine), var(--flamingo), var(--violet));
+}
+.sd-out {
+  width: 13px;
+  height: 13px;
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.sd-sheet .sd-sep {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--hairline);
+}
+.sd-bar a:focus-visible,
+.sd-menu > summary:focus-visible,
+.sd-sheet a:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+@media (max-width: 899px) {
+  .sd-links {
+    display: none;
+  }
+  .sd-menu {
+    display: block;
+  }
+  .sd-where {
+    display: flex;
+  }
+  .sd-bar {
+    height: 56px;
+    gap: 6px;
+  }
+}
+@media (max-width: 430px) {
+  .sd-lead:has(.sd-where) .sd-word {
+    display: none;
+  }
+  .sd-lead:has(.sd-where) .sd-brand {
+    padding-right: 2px;
+  }
+}
+
+/* --- The footer (Footer.astro) ----------------------------------- */
+.sd-foot {
+  margin-top: var(--sp-6);
+  padding-block: 0 var(--sp-8);
+  font-size: var(--fs-ui);
+  color: var(--ink-2);
+}
+.sd-foot .u-line {
+  margin-bottom: var(--sp-7);
+}
+.sd-foot-top {
+  display: grid;
+  gap: var(--sp-7) var(--sp-6);
+}
+.sd-identity {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.sd-fbrand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: fit-content;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-ui);
+  color: var(--ink);
+  text-decoration: none;
+}
+.sd-say {
+  max-width: 30ch;
+  margin: 0;
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.sd-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-7) var(--sp-6);
+}
+.sd-group {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+}
+.sd-ghead {
+  margin: 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sd-flinks {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-flinks a {
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+.sd-flinks a span {
+  position: relative;
+}
+.sd-flinks a span::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -3px;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.2s var(--ease);
+}
+.sd-flinks a:hover,
+.sd-flinks a:focus-visible {
+  color: var(--ink);
+}
+.sd-flinks a:hover span::after,
+.sd-flinks a:focus-visible span::after {
+  transform: scaleX(1);
+}
+.sd-foot a:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.sd-foot-base {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-6);
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--hairline);
+}
+.sd-who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-fine);
+  color: var(--ink-3);
+}
+/* The site's logo, drawn from the stylesheet (src/lib/shell.ts puts it in --sd-logo), so a page on
+   another host needs no image from this one. */
+.sd-who::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--sd-logo) center / cover no-repeat;
+  flex: none;
+}
+.sd-licence {
+  margin: 0;
+  font-size: var(--fs-fine);
+  color: var(--ink-3);
+}
+@media (min-width: 560px) {
+  .sd-groups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 900px) {
+  .sd-foot {
+    padding-bottom: var(--sp-9);
+  }
+  .sd-foot-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: var(--sp-8);
+  }
+  .sd-groups {
+    gap: var(--sp-6) var(--sp-7);
+  }
+}
+
+/* --- Columns ----------------------------------------------------- */
+/* A page with a table or a card is a little wider than a reading column. */
+.sd-col {
+  max-width: 860px;
+}
+.sd-col :is(p, .lede, .card-text, .fine, .hint) {
+  max-width: var(--measure);
+}
+/* Blocks down a page section: one gap between them, whatever they are. */
+.sd-stack > * + * {
+  margin-top: var(--sp-4);
+}
+.sd-stack > .h-section + * {
+  margin-top: var(--sp-3);
+}
+.sd-head-actions {
+  margin-top: var(--sp-6);
+}
+
+/* --- The box (AskBox.astro) -------------------------------------- */
+.sd-ask {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 52px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-pill);
+  background: var(--input-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 10px 28px -22px color-mix(in srgb, var(--ink) 55%, transparent);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+.sd-ask:hover {
+  background: var(--input-bg-hover);
+}
+.sd-ask:focus-within {
+  border-color: var(--violet-ink);
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  box-shadow: 0 12px 30px -22px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+.sd-ask-lens {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-left: 18px;
+  color: var(--ink-3);
+}
+.sd-ask-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  outline: none;
+  caret-color: var(--violet-ink);
+}
+.sd-ask-input::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+.sd-ask-input:focus-visible {
+  outline: none;
+  border-radius: 0;
+}
+/* The words stay ("Check", "Stop crawling this site"), so the button is a quiet pill inside the
+   box, with the home page's arrow after them. */
+.sd-ask-go {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  margin-right: 6px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--pill-bg);
+  font: inherit;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.sd-ask-go svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-2);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.sd-ask-go:hover,
+.sd-ask-go:focus-visible {
+  background: var(--pill-bg-hover);
+}
+.sd-ask-go:hover svg {
+  transform: translateX(1px);
+}
+.sd-ask-go:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-pill);
+}
+@media (min-width: 768px) {
+  .sd-ask-input {
+    font-size: var(--fs-body);
+  }
+}
+@media (max-width: 420px) {
+  .sd-ask-lens {
+    margin-left: 14px;
+  }
+  .sd-ask-go {
+    padding: 0 12px;
+  }
+  .sd-ask-go svg {
+    display: none;
+  }
+}
+
+/* --- Notes ------------------------------------------------------- */
+.sd-note {
+  max-width: var(--measure);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--row-bg);
+  font-size: var(--fs-card);
+  line-height: var(--lh-ui);
+  color: var(--ink);
+}
+.sd-note-warn {
+  border-color: color-mix(in srgb, var(--c-warning) 46%, transparent);
+  background: color-mix(in srgb, var(--c-warning) 12%, transparent);
+}
+
+/* --- The score card (AgentCard.astro) ---------------------------- */
+.sd-card {
+  display: grid;
+  gap: var(--sp-4);
+  align-content: start;
+}
+.sd-score {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 var(--sp-3);
+}
+.sd-num {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.sd-of {
+  margin-left: 2px;
+  font-size: var(--fs-fine);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+.sd-grade {
+  display: inline-grid;
+  place-items: center;
+  align-self: center;
+  min-width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  font-size: var(--fs-fine);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.sd-what {
+  margin: 0;
+  justify-self: end;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sd-track {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 2px;
+  margin-top: var(--sp-3);
+  border-radius: 2px;
+  background: var(--hairline-strong);
+  overflow: hidden;
+}
+.sd-track i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--w, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tangerine), var(--flamingo), var(--violet));
+}
+.sd-meta {
+  margin: 0;
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.sd-meta a {
+  color: inherit;
+}
+.sd-q {
+  margin: 0;
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.sd-rows {
+  display: grid;
+  margin: calc(-1 * var(--sp-2)) 0 0;
+}
+.sd-row {
+  display: grid;
+  grid-template-columns: minmax(0, 15em) minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-4);
+  align-items: baseline;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--hairline);
+}
+.sd-row:first-child {
+  border-top: 0;
+}
+.sd-row dt {
+  font-size: var(--fs-card);
+  font-weight: 600;
+  color: var(--ink);
+}
+.sd-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--sp-2);
+  margin: 0;
+  min-width: 0;
+}
+.sd-door {
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.sd-door a {
+  color: var(--ink-2);
+}
+@media (max-width: 560px) {
+  .sd-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* An answer: a pill with the state's tone; "not applicable" dashed and quiet. */
+.sd-ans {
+  height: 22px;
+  padding: 0 9px;
+  gap: 5px;
+  font-size: var(--fs-fine);
+  white-space: normal;
+}
+.sd-yes {
+  background: color-mix(in srgb, var(--c-success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+  color: var(--c-success-ink);
+}
+.sd-yes .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--c-success);
+}
+.sd-partly {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+.sd-no {
+  background: transparent;
+  border-color: var(--hairline-strong);
+  color: var(--ink-2);
+}
+.sd-na {
+  height: auto;
+  min-height: 22px;
+  background: transparent;
+  border: 1px dashed var(--hairline-strong);
+  color: var(--ink-3);
+}
+
+/* --- Tables ------------------------------------------------------ */
+.sd-table-card {
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--radius-card);
+  overflow-x: auto;
+}
+.sd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-card);
+  line-height: var(--lh-ui);
+  color: var(--ink-2);
+}
+.sd-table th {
+  padding: var(--sp-3) var(--sp-2);
+  text-align: left;
+  vertical-align: bottom;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sd-table td {
+  padding: var(--sp-3) var(--sp-2);
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--hairline);
+  overflow-wrap: anywhere;
+}
+.sd-table td:first-child {
+  font-weight: 600;
+  color: var(--ink);
+}
+.sd-table .n {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sd-table tr.na td {
+  color: var(--ink-3);
+}
+.sd-table a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+.sd-table a:hover {
+  text-decoration-color: var(--violet);
+}
+.sd-table .sd-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-fine);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+/* The leaderboard: position, business, score, the five answers, the date. */
+.sd-lb td:first-child {
+  width: 2.5em;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.sd-lb td:nth-child(2) {
+  font-weight: 600;
+}
+.sd-lb .sd-answers {
+  font-size: var(--fs-fine);
+  color: var(--ink-2);
+}
+@media (max-width: 560px) {
+  .sd-caps thead {
+    display: none;
+  }
+  .sd-caps,
+  .sd-caps tbody,
+  .sd-caps tr,
+  .sd-caps td {
+    display: block;
+    width: auto;
+  }
+  .sd-caps tr {
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .sd-caps tr:first-child {
+    border-top: 0;
+  }
+  .sd-caps td {
+    padding: 2px 0;
+    border: 0;
+  }
+  .sd-caps td.n {
+    white-space: normal;
+  }
+  .sd-caps td:empty {
+    display: none;
+  }
+  .sd-caps td[data-l]::before {
+    content: attr(data-l) ": ";
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .sd-lb th:nth-child(4),
+  .sd-lb th:nth-child(5) {
+    display: none;
+  }
+  .sd-lb tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0 var(--sp-2);
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .sd-lb thead tr {
+    display: none;
+  }
+  .sd-lb tbody tr:first-child {
+    border-top: 0;
+  }
+  .sd-lb td {
+    padding: 2px 0;
+    border: 0;
+  }
+  .sd-lb td.sd-answers {
+    display: block;
+    grid-column: 1 / -1;
+  }
+  .sd-lb td.sd-when {
+    display: none;
+  }
+}
+
+/* --- Chips: a row of links, the current one marked ---------------- */
+.sd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-chips a {
+  text-decoration: none;
+  color: var(--ink-2);
+}
+.sd-chips a:hover,
+.sd-chips a:focus-visible {
+  background: var(--pill-bg-hover);
+  color: var(--ink);
+}
+.sd-chips a[aria-current="page"] {
+  border-color: var(--edge-strong);
+  background: var(--pill-bg-hover);
+  color: var(--ink);
+}
+.sd-chips .sd-count {
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.sd-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* --- Long text on the network's pages ---------------------------- */
+/* .prose is the site's; these pages list rules and rights, so their lists keep their markers. */
+.sd-prose :is(ul, ol) {
+  padding-left: 1.3em;
+}
+.sd-prose ul {
+  list-style: disc;
+}
+.sd-prose ol {
+  list-style: decimal;
+}
+.sd-prose li::marker {
+  color: var(--ink-3);
+}
+.sd-prose dl {
+  margin-top: 1.15em;
+}
+.sd-prose dt {
+  margin-top: 1em;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sd-prose dt:first-child {
+  margin-top: 0;
+}
+.sd-prose dd {
+  margin: 0.25em 0 0;
+  color: var(--ink-2);
+}
+.sd-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.sd-prose .sd-ask {
+  margin-top: 1.15em;
+}
+.sd-steps {
+  display: grid;
+  gap: var(--sp-2);
+}
+.sd-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+  line-height: 1.55;
+}
+textarea.sd-code {
+  min-height: 0;
+}
+.sd-url {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-control);
+  overflow-wrap: anywhere;
+}
+.sd-hub {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-hub a {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  text-decoration: none;
+}
+.sd-hub b {
+  font-family: var(--font-display);
+  font-size: var(--fs-h-card);
+  font-weight: 600;
+}
+.sd-hub a span {
+  font-size: var(--fs-card);
+  color: var(--ink-2);
+}
+.sd-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-crumbs li + li::before {
+  content: "/";
+  margin-right: 6px;
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+.sd-crumbs a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.sd-crumbs a:hover {
+  color: var(--ink);
+}
+.sd-stats {
+  width: auto;
+  min-width: min(100%, 360px);
+}
+.sd-stats th {
+  padding-left: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--fs-card);
+  font-weight: 500;
+  color: var(--ink-2);
+  border-top: 1px solid var(--hairline);
+  vertical-align: top;
+}
+.sd-stats tr:first-child th,
+.sd-stats tr:first-child td {
+  border-top: 0;
+}
+.sd-table.sd-stats tr td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sd-field {
+  display: grid;
+  gap: var(--sp-2);
+  max-width: 420px;
+}
+.sd-field .label {
+  margin: 0;
+}

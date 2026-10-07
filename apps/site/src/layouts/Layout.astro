@@ -71,10 +71,20 @@ const ogImage = new URL(image, Astro.site);
     {ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}
     <script is:inline>
       // Apply a saved theme before first paint. Same key as the docs (Starlight).
+      // The choice is also kept in the sd_theme cookie, for the pages this domain serves from the
+      // network (the checker, results, leaderboards), which carry no script and read it instead.
+      // Nav.astro writes both when the theme is switched; this catches a choice made in the docs.
       (() => {
         try {
           const t = localStorage.getItem("starlight-theme");
-          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+          const want = t === "light" || t === "dark" ? t : "";
+          if (want) document.documentElement.setAttribute("data-theme", want);
+          const has = (document.cookie.match(/(?:^|; )sd_theme=([^;]*)/) || [])[1] || "";
+          if (has !== want) {
+            const h = location.hostname;
+            const rest = `; Path=/; SameSite=Lax${h === "surfingdog.ai" || h.endsWith(".surfingdog.ai") ? "; Domain=surfingdog.ai" : ""}${location.protocol === "https:" ? "; Secure" : ""}`;
+            document.cookie = want ? `sd_theme=${want}; Max-Age=31536000${rest}` : `sd_theme=; Max-Age=0${rest}`;
+          }
         } catch {}
       })();
     </script>

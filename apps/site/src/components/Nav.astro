@@ -653,7 +653,17 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
     const now = stored();
     for (const b of segments) b.setAttribute("aria-pressed", String(b.dataset.themeSet === now));
   };
+  /* The network's pages under this domain (the checker, results, leaderboards) carry no script, so
+     they read the choice from a cookie: sd_theme=light|dark for a year, on every host of the domain,
+     and gone again on Auto. Layout.astro keeps it in step with the stored choice on every page. */
+  const remember = (choice: "light" | "dark" | "auto") => {
+    const h = location.hostname;
+    const rest = `; Path=/; SameSite=Lax${h === "surfingdog.ai" || h.endsWith(".surfingdog.ai") ? "; Domain=surfingdog.ai" : ""}${location.protocol === "https:" ? "; Secure" : ""}`;
+    // biome-ignore lint/suspicious/noDocumentCookie: a cookie is the one thing a page with no script can read.
+    document.cookie = choice === "auto" ? `sd_theme=; Max-Age=0${rest}` : `sd_theme=${choice}; Max-Age=31536000${rest}`;
+  };
   const apply = (choice: "light" | "dark" | "auto") => {
+    remember(choice);
     if (choice === "auto") {
       root.removeAttribute("data-theme");
       try {
