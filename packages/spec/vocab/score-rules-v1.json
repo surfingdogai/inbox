@@ -4,7 +4,7 @@
   "status": "in_force",
   "published_at": "2026-10-07T00:00:00Z",
   "effective_at": "2026-10-07T00:00:00Z",
-  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, cancel and negotiate, and the journey around them. It counts what applies to that kind of business, and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
+  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, cancel and negotiate, and the journey around them. It counts what applies to that kind of business and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
   "vocabulary": "https://surfingdog.ai/v1/score-rules#capabilities",
   "capabilities": [
     {

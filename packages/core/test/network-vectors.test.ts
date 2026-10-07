@@ -1498,7 +1498,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     const by = new Map(scoreVectors.cases.map((c) => [c.name, c.expect]));
     expect(by.get("hair-salon")).toMatchObject({ score: 51, grade: "C", n: 5800, possible: 95 });
     expect(by.get("restaurant")).toMatchObject({ score: 74, grade: "B", n: 8400, possible: 95 });
-    expect(by.get("trades")).toMatchObject({ score: 33, grade: "D", n: 3000, possible: 75 });
+    expect(by.get("trades-plumber")).toMatchObject({ score: 33, grade: "D", n: 3000, possible: 75 });
     expect(by.get("shop")).toMatchObject({ score: 53, grade: "C", n: 6000, possible: 95 });
     expect(by.get("homepage-example")).toEqual({
       score: 72,
@@ -1511,7 +1511,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
         { capability: "policies", points: 5 },
       ],
     });
-    expect(by.get("trades")?.fixes.map((f) => `${f.capability}+${f.points}`)).toEqual([
+    expect(by.get("trades-plumber")?.fixes.map((f) => `${f.capability}+${f.points}`)).toEqual([
       "book+18",
       "change+14",
       "cancel+14",
