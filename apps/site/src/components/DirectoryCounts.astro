@@ -6,19 +6,21 @@
  * minutes by the network). Aggregates only: the block never names a business.
  *
  * At rest, before the answer or without one, the page shows dashes and says where the numbers come
- * from; it never prints a number it did not read. The numbers count up once, gently, and not at all
- * under reduced motion.
+ * from; it never prints a number it did not read (nor zeros the network says it could not take).
+ * The numbers count up once, gently, and not at all under reduced motion. The counting is hidden
+ * from screen readers: a separate live region says the final numbers once.
  */
 ---
 
 <div class="counts" data-counts>
-  <p class="c-main" aria-live="polite">
+  <p class="c-main">
     <span class="c-pair"><b class="c-n tabular" data-n="checked">–</b> businesses checked</span>
     <span class="c-dot" aria-hidden="true">·</span>
     <span class="c-pair"><b class="c-n tabular" data-n="agent_ready">–</b> agent-ready</span>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
+  <p class="sr" aria-live="polite" data-said></p>
 </div>
 
 <style>
@@ -49,6 +51,12 @@
   .c-dot {
     color: var(--ink-3);
   }
+  /* On a phone the two counts stack, so the dot between them would hang at a line's end. */
+  @media (max-width: 420px) {
+    .c-dot {
+      display: none;
+    }
+  }
   .c-caps {
     display: flex;
     flex-wrap: wrap;
@@ -69,9 +77,20 @@
     color: var(--ink-2);
     font-variant-numeric: tabular-nums;
   }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .c-note {
     margin: 0;
-    font-size: var(--fs-micro);
+    font-size: var(--fs-fine);
     letter-spacing: 0.02em;
     color: var(--ink-3);
   }
@@ -120,6 +139,7 @@
   async function paint(): Promise<void> {
     if (!root) return;
     const note = root.querySelector<HTMLElement>("[data-note]");
+    const said = root.querySelector<HTMLElement>("[data-said]");
     const caps = root.querySelector<HTMLElement>("[data-caps]");
     let stats: unknown = null;
     try {
@@ -131,8 +151,19 @@
     const d = readDirectory(stats);
     if (!d) {
       // Nothing to show is said plainly; the dashes stay dashes.
-      if (note) note.textContent = stats ? "Counts appear here once the crawler publishes them." : "The counts are not answering just now.";
+      // No block yet: the network has not published counts. A block it could not fill is no answer.
+      const noBlock = !!stats && typeof stats === "object" && !("directory" in stats);
+      if (note) note.textContent = noBlock ? "Counts appear here once the crawler publishes them." : "The counts are not answering just now.";
       return;
+    }
+    // The animated numbers are for the eye; a screen reader hears the final ones, once.
+    root.querySelector(".c-main")?.setAttribute("aria-hidden", "true");
+    root.querySelector("[data-caps]")?.setAttribute("aria-hidden", "true");
+    if (said) {
+      const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
+      said.textContent =
+        `${fmt.format(d.checked)} businesses checked, ${fmt.format(d.agent_ready)} agent-ready.` +
+        (rows.length ? ` Of those, ${rows.join(", ")}.` : "");
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
       count(el, el.dataset.n === "checked" ? d.checked : d.agent_ready);

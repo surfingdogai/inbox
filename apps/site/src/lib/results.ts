@@ -30,6 +30,7 @@ const TAKES: Record<string, string> = {
 const LEVELS: Record<string, string> = {
   payable: "Payable",
   bookable: "Bookable",
+  orderable: "Orderable",
   askable: "Askable",
   readable: "Readable",
   listed: "Listed",
@@ -38,6 +39,7 @@ const LEVELS: Record<string, string> = {
 /** Door types as people write them. */
 const DOORS: Record<string, string> = {
   inbox: "Inbox",
+  agent_inbox: "Inbox",
   mcp: "MCP",
   a2a: "A2A",
   openapi: "OpenAPI",
@@ -51,6 +53,23 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : []);
 const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : null);
+
+/**
+ * A door's name for a tag: a known type as people write it; a platform's door by the platform's
+ * name ("platform:shopify" is "Shopify"); an "other" door by the protocol it names, or nothing; any
+ * other short type in capitals; anything else, nothing.
+ */
+function doorName(type: string, protocol: string): string {
+  const t = type.toLowerCase();
+  const known = DOORS[t];
+  if (known) return known;
+  if (t.startsWith("platform:")) {
+    const slug = t.slice("platform:".length).replace(/[-_]+/g, " ").trim();
+    return /^[a-z0-9 ]{1,24}$/.test(slug) ? slug.replace(/\b[a-z]/g, (c) => c.toUpperCase()) : "";
+  }
+  if (t === "other") return /^[\p{L}\p{N} .-]{1,24}$/u.test(protocol) ? protocol : "";
+  return /^[a-z0-9]{2,8}$/.test(t) ? t.toUpperCase() : "";
+}
 
 /** A link to the business's own site: its http(s) url, else its domain, else nothing to link. */
 function siteOf(url: string, domain: string): string {
@@ -93,7 +112,8 @@ export function resultView(raw: unknown): ResultView | null {
     const door = obj(d);
     const type = str(door?.type);
     const status = str(door?.status).toLowerCase();
-    if (type && (status === "" || status === "live")) doors.add(DOORS[type.toLowerCase()] ?? type.toUpperCase());
+    const name = type && (status === "" || status === "live") ? doorName(type, str(door?.protocol)) : "";
+    if (name) doors.add(name);
   }
   for (const d of doors) tags.push({ text: d, on: false });
 

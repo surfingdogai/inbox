@@ -175,12 +175,16 @@ const year = new Date().getFullYear();
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: var(--sp-2) var(--sp-4);
+    gap: 0 var(--sp-4);
     margin: 0;
     padding: 0;
     list-style: none;
   }
+  /* At least 24 px tall, so a finger finds each one. */
   .min-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
     font-size: var(--fs-fine);
     color: var(--ink-3);
     text-decoration: none;

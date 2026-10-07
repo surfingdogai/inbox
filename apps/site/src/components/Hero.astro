@@ -1,10 +1,10 @@
 ---
 /**
- * The Search product's opening, on /search under the page's own search box: what the directory is
- * in one line, the two next steps (check your business, get listed), a plain form that checks a site
- * with no script, and what is live versus being built. The small pill above the drawing reads the network itself: the API's own status and
- * the rules version in force, once at build time and again in the browser. If either cannot be
- * read it says "warming up" rather than guessing.
+ * The Search product's opening, on /search under the page's own search box (which already searches
+ * and checks): what the directory is in one line, how to get listed, and what is live. No form and
+ * no second check of its own. The small pill above the drawing reads the network itself: the API's
+ * own status and the rules version in force, once at build time and again in the browser. If either
+ * cannot be read it says "warming up" rather than guessing.
  */
 import { stateOf } from "../lib/status";
 import HeroSearch from "./HeroSearch.astro";
@@ -29,36 +29,13 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
 <section class="hero wrap" id="about-search" aria-labelledby="hero-h">
   <div class="copy">
     <p class="eyebrow">Search · open network</p>
-    <h2 class="hero-title" id="hero-h">Open doors to the agentic internet.</h2>
-    <p class="hero-sub">An open directory your AI can search to find a business, then reach it directly.</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="/check">Check your business</a>
-      <a class="btn btn-secondary btn-lg" href="#businesses">Get listed</a>
-    </div>
-    <form class="hero-check" method="post" action="/check">
-      <label class="sr" for="hero-check-url">Your business's website</label>
-      <input
-        class="input check-url"
-        id="hero-check-url"
-        name="url"
-        type="text"
-        inputmode="url"
-        autocomplete="url"
-        autocapitalize="off"
-        spellcheck="false"
-        maxlength="2048"
-        placeholder="yoursite.example"
-        required
-      />
-      <button class="btn btn-secondary check-go" type="submit">Check</button>
-    </form>
-    <p class="check-note">
-      See what an AI agent can do on your site, with a score by published rules.
-    </p>
+    <h2 class="hero-title" id="hero-h">A directory your AI can search.</h2>
+    <p class="hero-sub">Find a business, then reach it directly, through its own doors.</p>
+    <p class="hero-more"><a class="link" href="#businesses">Get your business listed</a></p>
     <ul class="now">
       <li><StatusPill state={stateOf("checker")} /> <span>Check any business's website</span></li>
-      <li><StatusPill state={stateOf("directory")} /> <span>Businesses with an inbox, ours or compatible</span></li>
-      <li><StatusPill state={stateOf("crawler")} /> <span>A crawler for other agent doors</span></li>
+      <li><StatusPill state={stateOf("directory")} /> <span>Members, with an inbox that answers</span></li>
+      <li><StatusPill state={stateOf("crawled")} /> <span>Businesses found on their own websites</span></li>
     </ul>
   </div>
   <div class="art-box">
@@ -77,37 +54,9 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
     font-size: var(--fs-page-title);
     line-height: var(--lh-title);
   }
-  /* One line: the address and its button. It is plain HTML, so it works with no script at all. */
-  .hero-check {
-    display: flex;
-    gap: var(--sp-2);
-    max-width: 440px;
-    margin: var(--sp-5) 0 0;
-  }
-  .check-url {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .check-go {
-    flex: none;
-  }
-  .check-note {
-    max-width: 440px;
-    margin: var(--sp-2) 0 0;
+  .hero-more {
+    margin: var(--sp-4) 0 0;
     font-size: var(--fs-fine);
-    line-height: 1.5;
-    color: var(--ink-3);
-  }
-  .sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-    border: 0;
   }
   .now {
     display: grid;

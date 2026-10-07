@@ -8,6 +8,7 @@ import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
 import { ago, countRows, looksLikeAddress, readDirectory } from "../src/lib/ask";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
+import { capabilities, leastOf, stateOf } from "../src/lib/status";
 
 /**
  * The site's words and its example, checked without a build: the pages and components the checker
@@ -146,12 +147,16 @@ describe("the checker's pages and components", () => {
     expect(config).not.toMatch(/version 6\)/);
   });
 
-  it("the hero checks a site with a plain form, and the bar and the footer link the checker and the leaderboards", () => {
+  it("/search checks a site without script, its hero adds no second check, and the bar and the footer link the checker and the leaderboards", () => {
     const hero = read("src/components/Hero.astro");
-    expect(hero).toMatch(/<form class="hero-check" method="post" action="\/check">/);
-    expect(hero).toMatch(/name="url"/);
-    expect(hero).toContain('placeholder="yoursite.example"');
-    expect(hero).toContain(">Check your business</a>");
+    expect(hero).not.toMatch(/<form/);
+    expect(hero).not.toContain("btn-primary");
+    expect(visible(hero)).not.toContain("Open doors to the agentic internet.");
+    const search = read("src/pages/search.astro");
+    expect(search).toMatch(
+      /<noscript>[\s\S]*<form class="ns-check" method="post" action="\/check">[\s\S]*name="url"[\s\S]*<\/noscript>/,
+    );
+    expect(visible(search)).not.toMatch(/Filters narrow/);
     for (const path of ["src/components/Nav.astro", "src/components/Footer.astro"]) {
       const text = read(path);
       expect(text, path).toContain('href: "/check"');
@@ -183,6 +188,14 @@ describe("the home page and the three products", () => {
       expect(read("src/pages/search.astro"), moved).toContain(moved);
     }
     expect(home).toContain("https://surfingdog.ai/mcp");
+    // Each copy is a heading, each button is named for what it copies, and only the address is monospace.
+    const block = read("src/components/CopyBlock.astro");
+    expect(block).toContain('<h2 class="cb-title">');
+    expect(block).toMatch(/aria-label=\{`Copy: \$\{title\}`\}/);
+    expect(block).toMatch(/aria-label=\{`Copy: \$\{title\}, in plain words`\}/);
+    expect(block).toMatch(/<details class="cb-alt">/);
+    expect(home.match(/\baddress\b\s*\n/g)?.length).toBe(1);
+    expect(read("src/components/Products.astro")).toContain('<h3 class="p-name">');
     expect(home).toContain("Open doors to the agentic internet.");
     // The install line is the install page's, word for word, and points at the real guide.
     const line = (path: string) => read(path).match(/"(Install Surfing Dog Inbox for my business\.[^"]+)"/)?.[1];
@@ -204,10 +217,44 @@ describe("the home page and the three products", () => {
     expect(box).toMatch(/method="post" action="\/check"/);
   });
 
+  it("what the home page says matches the status pills", () => {
+    const home = visible(read("src/pages/index.astro"));
+    const counts = visible(read("src/components/DirectoryCounts.astro"));
+    // It lists and tracks agent-ready businesses, counts what the crawler checked, and its box
+    // checks any address: the directory, the crawler, the businesses it finds and the checker are live.
+    expect(home).toMatch(/lists and tracks agent-ready businesses/);
+    expect(counts).toMatch(/businesses checked/);
+    expect(read("src/components/AskBox.astro")).toMatch(/action="\/check"/);
+    for (const id of ["directory", "crawler", "crawled", "checker", "search"]) expect(stateOf(id), id).toBe("live");
+    // The Search product finds and checks: its pill is the least live of the parts it names.
+    const products = read("src/components/Products.astro");
+    expect(products).toContain('state: leastOf("search", "directory", "checker")');
+    expect(leastOf("search", "directory", "checker")).toBe("live");
+    expect(leastOf("search", "hosted")).toBe("coming");
+    expect(leastOf("search", "reliability", "hosted")).toBe("coming");
+    // Nothing live says it is not yet.
+    for (const c of capabilities) {
+      if (c.state === "live") expect(c.label, c.id).not.toMatch(/\b(yet|coming|being built|will)\b/i);
+    }
+  });
+
   it("the counts read the directory block, say nothing they did not read, and hide empty optional rows", () => {
     expect(readDirectory(null)).toBeNull();
     expect(readDirectory({ instances_online: 1 })).toBeNull();
     expect(readDirectory({ directory: { checked: 3, agent_ready: 1 } })).toBeNull();
+    // Zeros the network could not take are no counts: the zero time, or a degraded API with nothing checked.
+    const zeros = { checked: 0, agent_ready: 0, capabilities: {}, doors: {} };
+    expect(readDirectory({ directory: { ...zeros, as_of: "0001-01-01T00:00:00Z" } })).toBeNull();
+    expect(
+      readDirectory({ status: { api: "degraded" }, directory: { ...zeros, as_of: "2026-10-07T12:00:00Z" } }),
+    ).toBeNull();
+    expect(
+      readDirectory({ status: { api: "ok" }, directory: { ...zeros, as_of: "2026-10-07T12:00:00Z" } })?.checked,
+    ).toBe(0);
+    expect(
+      readDirectory({ status: { api: "degraded" }, directory: { ...zeros, checked: 9, as_of: "2026-10-07T12:00:00Z" } })
+        ?.checked,
+    ).toBe(9);
     const d = readDirectory({
       directory: {
         checked: 1200,
@@ -265,6 +312,18 @@ describe("the home page and the three products", () => {
     expect(member?.tags[0]).toEqual({ text: "Answering", on: true });
     expect(member?.found).toBe("");
     expect(resultView({ domain: "x.example", url: "javascript:alert(1)" })?.href).toBe("https://x.example");
+    // Door types as people say them: a platform by its name, "other" by its protocol or not at all.
+    const tagsOf = (doors: unknown[]) => resultView({ domain: "d.example", doors })?.tags.map((t) => t.text);
+    expect(
+      tagsOf([
+        { type: "platform:shopify", status: "live" },
+        { type: "platform:square-online", status: "live" },
+        { type: "other", status: "live" },
+        { type: "other", status: "live", protocol: "ARP" },
+        { type: "agent_inbox", status: "live" },
+        { type: "some_long_unknown_type", status: "live" },
+      ]),
+    ).toEqual(["Shopify", "Square Online", "ARP", "Inbox"]);
   });
 
   it("the trust page states the rules in force from /v1/ranking, and its fallback never names an old version", () => {

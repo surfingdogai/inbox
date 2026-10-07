@@ -53,15 +53,25 @@ export const COUNTED: readonly { key: CapabilityKey; label: string; always: bool
   { key: "negotiate", label: "negotiate", always: false },
 ];
 
-/** The block, when it is there and whole; anything else is null, so the page says so rather than guess. */
+/** Counts taken before this are no counts: the network sends the zero time when it has none yet. */
+const EARLIEST = Date.parse("2026-01-01T00:00:00Z");
+
+/**
+ * The block, when it is there, whole and real; anything else is null, so the page says so rather
+ * than guess. A degraded API with nothing checked, or counts from before 2026 (the zero time), are
+ * zeros the network could not take, not a count of zero.
+ */
 export function readDirectory(stats: unknown): DirectoryStats | null {
   if (!stats || typeof stats !== "object") return null;
   const d = (stats as { directory?: unknown }).directory;
+  const api = (stats as { status?: { api?: unknown } }).status?.api;
   if (!d || typeof d !== "object") return null;
   const o = d as Record<string, unknown>;
   const n = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 0;
   if (!n(o.checked) || !n(o.agent_ready) || typeof o.as_of !== "string") return null;
-  if (Number.isNaN(Date.parse(o.as_of))) return null;
+  const at = Date.parse(o.as_of);
+  if (Number.isNaN(at) || at < EARLIEST) return null;
+  if (api === "degraded" && o.checked === 0) return null;
   const caps: Partial<Record<CapabilityKey, number>> = {};
   if (o.capabilities && typeof o.capabilities === "object") {
     for (const [k, v] of Object.entries(o.capabilities as Record<string, unknown>)) {

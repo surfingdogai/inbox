@@ -23,7 +23,10 @@ const AT = 3;
 <div class="glass card ladder" data-reveal>
   <div class="ladder-head">
     <h3 class="h-card">How far an AI can go</h3>
-    <StatusPill state={stateOf("crawled")} text="Coming: levels on every listing" />
+    <StatusPill
+      state={stateOf("crawled")}
+      text={stateOf("crawled") === "live" ? "Live: levels on found listings" : "Coming: levels on every listing"}
+    />
   </div>
   <ol class="rungs">
     {

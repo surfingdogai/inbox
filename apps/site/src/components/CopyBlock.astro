@@ -1,39 +1,43 @@
 ---
 /**
- * One thing to copy into your AI: a title, one line of what it does, the text itself (plain and
+ * One thing to copy into your AI: a heading, one line of what it does, the text itself (plain and
  * selectable, so it works with no script), and a copy button that appears only where the clipboard
- * is there to use (src/lib/copy.ts). An optional second, quieter line can be copied too.
+ * is there to use (src/lib/copy.ts). An address is set in monospace; words to say to an AI are set
+ * in the body font, as words. An optional second way to say it waits behind a small disclosure.
+ * Every button is named for what it copies, so three "Copy" buttons never sound the same.
  */
 interface Props {
   title: string;
   what: string;
   value: string;
-  /** A second way to say it, copied on its own. */
+  /** true when the value is an address (monospace); words to say to an AI are not. */
+  address?: boolean;
+  /** A second way to say it, copied on its own, behind a disclosure. */
   alt?: { label: string; value: string };
   more?: { href: string; label: string };
 }
 
-const { title, what, value, alt, more } = Astro.props;
+const { title, what, value, address = false, alt, more } = Astro.props;
 ---
 
 <div class="cb">
-  <p class="cb-title">{title}</p>
+  <h2 class="cb-title">{title}</h2>
   <p class="cb-what">{what}</p>
   <div class="cb-row">
-    <code class="cb-text">{value}</code>
-    <button class="cb-copy" type="button" data-copy={value} hidden>Copy</button>
+    {address ? <code class="cb-text cb-addr">{value}</code> : <p class="cb-text cb-words">{value}</p>}
+    <button class="cb-copy" type="button" data-copy={value} aria-label={`Copy: ${title}`} hidden>Copy</button>
   </div>
   {
     alt && (
-      <>
-        <p class="cb-alt-label">{alt.label}</p>
+      <details class="cb-alt">
+        <summary>{alt.label}</summary>
         <div class="cb-row cb-row-alt">
-          <code class="cb-text">{alt.value}</code>
-          <button class="cb-copy" type="button" data-copy={alt.value} hidden>
+          <p class="cb-text cb-words">{alt.value}</p>
+          <button class="cb-copy" type="button" data-copy={alt.value} aria-label={`Copy: ${title}, in plain words`} hidden>
             Copy
           </button>
         </div>
-      </>
+      </details>
     )
   }
   {
@@ -57,20 +61,31 @@ const { title, what, value, alt, more } = Astro.props;
   }
   .cb-title {
     margin: 0;
+    line-height: 1.3;
     font-family: var(--font-display);
     font-size: var(--fs-ui);
     font-weight: 600;
     color: var(--ink);
   }
-  .cb-what,
-  .cb-alt-label {
+  .cb-what {
     margin: 0;
     font-size: var(--fs-fine);
     line-height: 1.5;
     color: var(--ink-3);
   }
-  .cb-alt-label {
-    margin-top: var(--sp-1);
+  .cb-alt summary {
+    width: fit-content;
+    min-height: 24px;
+    font-size: var(--fs-fine);
+    line-height: 24px;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .cb-alt summary:hover {
+    color: var(--ink-2);
+  }
+  .cb-alt[open] summary {
+    margin-bottom: var(--sp-2);
   }
   .cb-row {
     display: flex;
@@ -84,13 +99,20 @@ const { title, what, value, alt, more } = Astro.props;
   .cb-text {
     flex: 1 1 auto;
     min-width: 0;
+    margin: 0;
     padding-top: 3px;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-    font-size: var(--fs-mono);
     line-height: 1.55;
     color: var(--ink);
     overflow-wrap: anywhere;
     user-select: all;
+  }
+  .cb-addr {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: var(--fs-mono);
+  }
+  .cb-words {
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
   }
   .cb-copy {
     flex: none;

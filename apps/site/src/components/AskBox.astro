@@ -2,8 +2,8 @@
 /**
  * The one box. Words search the directory (/search?q=…); a web address goes to the checker, which
  * reads the site and shows what an AI agent can do there (POST /check, the same form the checker's
- * own page posts). With no script the box is a plain GET form to /search, and the search page offers
- * the check when what was typed looks like an address.
+ * own page posts). With no script the box is a plain GET form to /search: the results need script,
+ * so /search shows, in <noscript>, a plain POST /check form to type the address into.
  */
 interface Props {
   /** Unique per page, so two boxes never share an id. */
@@ -69,11 +69,12 @@ const { id, value = "", size = "md", autofocus = false } = Astro.props;
   .ask:hover {
     background: var(--input-bg-hover);
   }
+  /* The site's own focus ring, solid and clear against the page in both themes. */
   .ask:focus-within {
-    border-color: color-mix(in srgb, var(--violet) 45%, transparent);
-    box-shadow:
-      0 0 0 3px color-mix(in srgb, var(--violet) 14%, transparent),
-      0 12px 30px -22px color-mix(in srgb, var(--ink) 55%, transparent);
+    border-color: var(--violet-ink);
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: var(--focus-offset);
+    box-shadow: 0 12px 30px -22px color-mix(in srgb, var(--ink) 55%, transparent);
   }
   .ask-lg {
     height: 52px;

@@ -66,6 +66,9 @@ export default defineConfig({
           projectName: "Surfing Dog",
           description:
             "Surfing Dog lists and tracks agent-ready businesses: the ones AI agents can message, book and buy from. Three products: Search (find and check agent-ready businesses), Inbox (an open-source typed inbox a business runs so agents can write to it) and the Trust network (the directory's order, made of kept promises: signed pings and signed receipts, never bought).",
+          // Release order: this line names the "directory" block of /v1/stats, so the site ships only
+          // after the network that serves it (wave 1.5, then the directory counts) is deployed and
+          // `curl https://surfingdog.ai/v1/stats | jq .directory` is not null (see src/lib/status.ts).
           details: [
             "Search: find businesses an AI agent can reach, with the doors each one opens. Over MCP at https://surfingdog.ai/mcp, over REST at https://surfingdog.ai/v1/businesses?q=<words>, or in a browser at https://surfingdog.ai/search?q=<words>. Live counts (businesses checked, agent-ready, and how many take messages, bookings, orders and payment or have a catalogue) are in the directory block of https://surfingdog.ai/v1/stats.",
             "Inbox: an open-source inbox for a business, with bookings, orders, quote requests and messages over REST, MCP and email. To install it, an AI follows https://surfingdog.ai/install.md. About it: https://surfingdog.ai/inbox.",

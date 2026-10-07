@@ -72,6 +72,12 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
       </p>
       <noscript>
         <p class="hint">Results need JavaScript. Your AI can search without it: <code>https://surfingdog.ai/mcp</code>.</p>
+        <form class="ns-check" method="post" action="/check">
+          <label for="ns-check-url">Or check a website:</label>
+          <input class="input" id="ns-check-url" name="url" type="text" inputmode="url" autocomplete="url"
+            autocapitalize="off" spellcheck="false" maxlength="2048" placeholder="yoursite.example" required />
+          <button class="btn btn-secondary btn-sm" type="submit">Check</button>
+        </form>
       </noscript>
     </div>
 
@@ -115,6 +121,22 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
     margin: 0;
     font-size: var(--fs-fine);
     color: var(--ink-3);
+  }
+  .ns-check {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .ns-check .input {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  :global(.r-more) {
+    margin: 0;
   }
   :global(.r-count),
   :global(.r-empty),
@@ -246,7 +268,7 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
     return n;
   };
 
-  /** An address typed into the box with no script lands here; offer the check the box would have run. */
+  /** An address that reached the search (a link, or the box before its script ran): offer the check. */
   const checkOffer = (value: string) => {
     const p = el("p", "r-check");
     p.append("That looks like a website. ");
@@ -303,40 +325,85 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
         host.replaceChildren(...out);
         return;
       }
-      const more = typeof body.next_cursor === "string" && body.next_cursor !== "";
-      out.push(
-        el(
-          "p",
-          "r-count",
-          `${list.length}${more ? "+" : ""} ${list.length === 1 && !more ? "business" : "businesses"}, in the directory's order.`,
-        ),
-      );
+      let shown = 0;
+      const count = el("p", "r-count");
       const ul = el("ul", "r-list");
-      for (const raw of list) {
-        const v = resultView(raw);
-        if (!v) continue;
-        const node = row.content.cloneNode(true) as DocumentFragment;
-        const name = node.querySelector<HTMLAnchorElement>("[data-name]");
-        if (name) {
-          name.textContent = v.name;
-          name.href = v.href;
+      const addRows = (items: unknown[]) => {
+        for (const raw of items) {
+          const v = resultView(raw);
+          if (!v) continue;
+          const node = row.content.cloneNode(true) as DocumentFragment;
+          const name = node.querySelector<HTMLAnchorElement>("[data-name]");
+          if (name) {
+            name.textContent = v.name;
+            name.href = v.href;
+          }
+          const set = (sel: string, text: string) => {
+            const n = node.querySelector<HTMLElement>(sel);
+            if (n) n.textContent = text;
+          };
+          set("[data-where]", v.where);
+          set("[data-takes]", v.takes);
+          set("[data-found]", v.found);
+          const tags = node.querySelector<HTMLElement>("[data-tags]");
+          if (tags) for (const t of v.tags) tags.append(el("span", t.on ? "r-tag is-on" : "r-tag", t.text));
+          ul.append(node);
+          shown++;
         }
-        const set = (sel: string, text: string) => {
-          const n = node.querySelector<HTMLElement>(sel);
-          if (n) n.textContent = text;
-        };
-        set("[data-where]", v.where);
-        set("[data-takes]", v.takes);
-        set("[data-found]", v.found);
-        const tags = node.querySelector<HTMLElement>("[data-tags]");
-        if (tags) for (const t of v.tags) tags.append(el("span", t.on ? "r-tag is-on" : "r-tag", t.text));
-        ul.append(node);
-      }
-      out.push(ul);
+      };
+      const setCount = (more: boolean) => {
+        count.textContent = `${shown}${more ? "+" : ""} ${shown === 1 && !more ? "business" : "businesses"}, in the directory's order.`;
+      };
+      const cursorOf = (b: Record<string, unknown> | null) =>
+        typeof b?.next_cursor === "string" && b.next_cursor !== "" ? b.next_cursor : "";
+
+      addRows(list);
+      let cursor = cursorOf(body);
+      setCount(cursor !== "");
+      out.push(count, ul);
+
+      // The next page of the same search, in the same order, on request.
+      const moreP = el("p", "r-more");
+      const moreBtn = el("button", "btn btn-secondary btn-sm", "More") as HTMLButtonElement;
+      moreBtn.type = "button";
+      moreP.append(moreBtn);
+      moreP.hidden = cursor === "";
+      moreBtn.addEventListener("click", async () => {
+        if (!cursor) return;
+        moreBtn.disabled = true;
+        try {
+          const r = await fetch(`/v1/businesses?q=${encodeURIComponent(q)}&limit=20&cursor=${encodeURIComponent(cursor)}`, {
+            headers: { accept: "application/json" },
+            signal: AbortSignal.timeout(10000),
+          });
+          const b = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+          if (!r.ok || !b) {
+            // A cursor from an earlier hour's order has expired: start the search again.
+            if (r.status === 410) {
+              cursor = "";
+              moreBtn.textContent = "The order changed: search again";
+              moreBtn.addEventListener("click", () => location.reload(), { once: true });
+            } else {
+              moreBtn.textContent = "Not answering: try again";
+            }
+            return;
+          }
+          addRows(Array.isArray(b.businesses) ? (b.businesses as unknown[]) : []);
+          cursor = cursorOf(b);
+          setCount(cursor !== "");
+          moreP.hidden = cursor === "";
+        } catch {
+          moreBtn.textContent = "Not answering: try again";
+        } finally {
+          moreBtn.disabled = false;
+        }
+      });
+      out.push(moreP);
+
       const note = el("p", "r-note");
       const how = el("a", "link", "How the order is made");
       (how as HTMLAnchorElement).href = "/trust/";
-      note.append("Filters narrow the list and never reorder it. Nobody can pay for a place. ", how, ".");
+      note.append("Nobody can pay for a place. ", how, ".");
       out.push(note);
       host.replaceChildren(...out);
     } catch {

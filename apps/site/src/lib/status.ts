@@ -5,6 +5,10 @@
  *
  * Wording: anything not live is a noun phrase or the future tense. "Agent to agent" appears only
  * as a coming item until delivery ships.
+ *
+ * Release order: checker, crawler and crawled are live from the network's wave 1.5 (POST /check,
+ * found listings in search, and the "directory" block of GET /v1/stats). The site that says so ships
+ * only after that network is deployed, and after `GET /v1/stats` answers with a "directory" block.
  */
 export type State = "live" | "building" | "coming";
 
@@ -24,7 +28,11 @@ export const STATE_LABEL: Record<State, string> = {
 export const UPDATED = "7 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
-  { id: "directory", label: "Directory of businesses with an inbox that answers", state: "live" },
+  {
+    id: "directory",
+    label: "Directory of agent-ready businesses: members, and businesses found on their own websites",
+    state: "live",
+  },
   { id: "search", label: "Search it from your AI: MCP, REST or llms.txt", state: "live" },
   {
     id: "ranking",
@@ -52,18 +60,18 @@ export const capabilities: readonly Capability[] = [
   {
     id: "checker",
     label: "Check any business's website: what an AI agent can do there, and its agentic score by published rules",
-    state: "building",
+    state: "live",
   },
   {
     id: "crawler",
-    label: "A crawler for other agent doors (MCP, A2A, UCP, ACP, OpenAPI); nothing it finds is listed yet",
-    state: "building",
+    label: "A crawler that reads businesses' own websites for agent doors (MCP, A2A, UCP, ACP, OpenAPI)",
+    state: "live",
   },
   {
     id: "crawled",
     label:
-      "Crawled businesses in the directory, with doors, levels, what they accept and a source and date on every fact",
-    state: "coming",
+      "Businesses found on their own websites in the directory, with doors, levels, what they accept and a source and date on every fact",
+    state: "live",
   },
   { id: "self-serve", label: "Add, correct or remove your listing from your own AI", state: "coming" },
   { id: "fan-out", label: "One request to up to three businesses, agent to agent", state: "coming" },
@@ -76,6 +84,12 @@ export function stateOf(id: string): State {
   const found = capabilities.find((c) => c.id === id);
   if (!found) throw new Error(`status.ts has no capability "${id}"`);
   return found.state;
+}
+
+const ORDER: readonly State[] = ["live", "building", "coming"];
+/** The least ready of several: a product made of parts is only as live as its least live part. */
+export function leastOf(...ids: string[]): State {
+  return ids.map(stateOf).reduce((a, b) => (ORDER.indexOf(b) > ORDER.indexOf(a) ? b : a), "live" as State);
 }
 
 /** Doors an agent can use to reach a business, and whether the directory lists each one today. */
