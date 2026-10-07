@@ -82,7 +82,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+          "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
         },
         "label": {
           "type": "string"

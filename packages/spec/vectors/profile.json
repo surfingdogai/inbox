@@ -1,6 +1,6 @@
 {
   "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window; closures that ended before now in that zone are dropped. From the network.",
-  "vocabulary_version": 1,
+  "vocabulary_version": 3,
   "cases": [
     {
       "name": "the inbox's own shape, every field",

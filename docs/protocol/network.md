@@ -39,8 +39,8 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
 | The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
-| The agentic score's rules, version 1 | [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
-| The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (§4.13), from the network |
+| The agentic score's rules, version 2 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
+| The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 
 ## 1. Conventions
 
@@ -805,7 +805,7 @@ door behind a customer account, or payment described but not done by the agent),
 when it does not apply to that kind of business.
 
 **Evidence** is a ladder: `declared` (the business's own site or door says so), `tested` (a probe
-tried it) and `proven` (agents reported using it). Version 1 of the rules produces `declared` alone.
+tried it) and `proven` (agents reported using it). Versions 1 and 2 of the rules produce `declared` alone.
 A capability read from a tool's name, a page's words or a page's marker is still `declared`, with a
 `basis` saying which (`tool_name`, `skill`, `operation`, `item_types`, `protocol`,
 `structured_data`, `page`, `manifest`): the business published that name. A `probably` value never
@@ -823,19 +823,30 @@ that kind leaves the denominator: a plumber is not marked down for having no cat
 | `shop` | find, catalogue, availability, order, pay, change, cancel, track, return, receipt |
 | `stay` (places to stay) | availability, book, change, cancel, pay, message, policies |
 | `memberships` (gyms and memberships) | find, catalogue, order, book, subscription, cancel, pay |
-| `general` (type unknown) | find, catalogue, message, pay, cancel, policies |
+| `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book, pay, change, cancel, policies |
+| `general` (type unknown) | find, catalogue, message, book or order (one capability, version 2), pay, policies |
 
 Each profile names the category groups it covers; a business without a category the network can
-read from the business itself is scored by its doors' signals, or as `general`.
+read from the business itself is scored by its doors' signals, or as `general`. **Version 2** (in
+force from 7 October 2026) changed two things. A business of a kind not known is scored on whether
+an agent can book or order there: its profile's **either set** `book`/`order` counts as one member
+of the core group, met by the better of the two states, never `na`; under version 1 neither
+applied, and a site that took messages and nothing else scored as high as one that also sold. And
+**venues** (the category group `venues`: music venues, jazz clubs and nightclubs, theatres, cinemas,
+concert halls, comedy clubs, museums and galleries, event spaces) are a profile where booking
+(tickets, tables, entries) applies. A network recognises a venue from what it publishes: a venue's
+schema.org place type (`MusicVenue`, `EventVenue`, `PerformingArtsTheater`, `MovieTheater`,
+`Museum`, `ComedyClub`, `NightClub`), its own name and description in any of several languages, or
+the events it publishes at an address it gives; a language model's reading stays a hint.
 
-**Groups and weights** (rules version 1): `core` 40 (message, book, order, pay), `after` 30 (change,
+**Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
 10 (catalogue, policies), `find` 5; feedback, vouchers, waitlist and support are shown and not
 counted. `yes` earns two halves, `partial` one, `no` none. The arithmetic is integer, the same in
 every language:
 
 ```
-For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0. A group with A_g = ∅ is dropped.
+For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.
 possible = Σ_{g: A_g≠∅} W_g
 N        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))
 D        = 120 × possible
@@ -843,18 +854,23 @@ score    = (100 × N + D/2) div D                       (round half up; 0..100)
 grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20
 ```
 
-A capability's displayed weight is `W_g / |A_g|` to one decimal place. **Fixes** are each applicable,
+That is version 2's formula; version 1's is the same without the either clause. A capability's
+displayed weight is `W_g / |A_g|` to one decimal place (each member of an either set shows the set's). **Fixes** are each applicable,
 weighted capability that is not `yes`, scored again as `yes`: the points it would add, by points,
 then group order, then vocabulary order; a fix worth nothing is left out. A fix's text in the rules
 may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
 business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
 `capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
-cases, a salon at 51 (C), a restaurant at 74 (B), a plumber at 33 (D), a shop at 53 (C), among them.
+cases, a salon at 51 (C), a restaurant at 74 (B), a plumber at 33 (D), a shop at 53 (C), and under
+version 2 a business of no known kind that takes messages and nothing else at 42 (C, 55 under version
+1), one that books and takes payment at 67 (B), among them; `vectors/score-v1.json` holds version 1's.
 
 **The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
 version in force and `?version=N` any version ever published (`404` for one that never was), shaped
-as `schemas/score-rules.json` ([`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json)
-is version 1).
+as `schemas/score-rules.json` ([`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json)
+is version 2, in force; [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) is
+version 1, served with its `status` `retired`). Each version's `changelog` says what changed and why.
+A new version is applied to every score the network keeps: each is worked out again.
 
 **The score never changes the directory's search order** (§4.4), and nobody can pay for a score or a
 place. It is not a certification: it is what was read on the business's own site and doors on the
@@ -870,8 +886,11 @@ owner can hand to whoever runs the site, and the rank.
 
 **Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`) orders
 by score, then the most recent check, then domain, by category group, country and place; it counts
-every business checked that its owner has not hidden and that is of a kind the directory lists. It
-is a separate list from the directory, and it says so.
+every business checked that its owner has not hidden and that is of a kind the directory lists.
+Software, API and AI companies (the group `software-ai`) are ranked among themselves, on their
+group's board, and on no board of every kind, of a country or of a place. A leaderboard's
+`position`s run 1, 2, 3… among the businesses it names; a result page's rank ("#4 of 61 … checked")
+counts every business checked, named or not. It is a separate list from the directory, and it says so.
 
 **Naming and indexing.** A business is **named** on leaderboards, and its result page may be
 indexed, when it is agent-ready (`askable` or above, §4.9); others are counted, not named, and their

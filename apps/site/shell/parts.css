@@ -871,6 +871,90 @@
   color: var(--ink-3);
 }
 
+/* A capability chip: one of the five lead answers (message, book, order, cancel, negotiate) in a
+   leaderboard row, and the answer on a result page. Its state shows three ways, never by colour
+   alone: yes is filled, with a tick; partly is half filled, with a half disc; no is outlined; not
+   applicable is faint and dashed. The words are its aria-label (or its text). */
+.sd-capset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sd-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 1px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: transparent;
+}
+.sd-cap-lg {
+  min-height: 22px;
+  padding: 1px 10px;
+  font-size: var(--fs-fine);
+  white-space: normal;
+}
+.sd-cap-g {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sd-cap.is-yes {
+  background: color-mix(in srgb, var(--c-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--c-success) 45%, transparent);
+  color: var(--c-success-ink);
+}
+.sd-cap.is-partly {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c-success) 14%, transparent) 50%, transparent 50%);
+  border-color: color-mix(in srgb, var(--c-success) 45%, transparent);
+  color: var(--ink);
+}
+.sd-cap.is-partly .sd-cap-g {
+  stroke-width: 1.4;
+}
+.sd-cap.is-partly .sd-cap-g .h {
+  fill: currentColor;
+  stroke: none;
+}
+.sd-cap.is-no {
+  color: var(--ink-2);
+}
+.sd-cap.is-na {
+  border-style: dashed;
+  border-color: var(--hairline);
+  color: var(--ink-3);
+  font-weight: 500;
+}
+/* The one line that says what the chips mean, above a leaderboard's table. */
+.sd-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.sd-legend > span:first-child {
+  margin-right: 4px;
+}
+
 /* --- Tables ------------------------------------------------------ */
 .sd-table-card {
   padding: var(--sp-1) var(--sp-4);
@@ -941,6 +1025,7 @@
 .sd-lb .sd-answers {
   font-size: var(--fs-fine);
   color: var(--ink-2);
+  overflow-wrap: normal;
 }
 @media (max-width: 560px) {
   .sd-caps thead {

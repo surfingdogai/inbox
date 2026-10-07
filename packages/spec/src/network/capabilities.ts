@@ -6,8 +6,9 @@ import { doorTypeSchema, levelNameSchema } from "./directory";
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
  * do with a business through doors the business published, capability by capability, and one score over the
  * capabilities that apply to its kind of business. The vocabulary is `vocab/capabilities.json`, the rules
- * `vocab/score-rules-v1.json` (a network serves its own at `GET /v1/score-rules`), and `vectors/score.json` pins the
- * arithmetic. The score never changes a business's place in the directory's search order.
+ * `vocab/score-rules-v2.json` (in force from 7 October 2026; version 1, `vocab/score-rules-v1.json`, is retired, and a
+ * network serves its own at `GET /v1/score-rules`), and `vectors/score.json` (`vectors/score-v1.json` for version 1)
+ * pins the arithmetic. The score never changes a business's place in the directory's search order.
  */
 
 /** The capabilities, in vocabulary order: that order breaks every tie. */
@@ -68,7 +69,16 @@ export const capabilitiesVocabSchema = z.object({
 export type CapabilitiesVocab = z.infer<typeof capabilitiesVocabSchema>;
 
 /** The kind of business a score is computed for: only the capabilities that apply to it count. */
-export const profileIdSchema = z.enum(["appointments", "food", "trades", "shop", "stay", "memberships", "general"]);
+export const profileIdSchema = z.enum([
+  "appointments",
+  "food",
+  "trades",
+  "shop",
+  "stay",
+  "memberships",
+  "venues",
+  "general",
+]);
 export type ProfileId = z.infer<typeof profileIdSchema>;
 
 export const scoreGroupIdSchema = z.enum(["core", "after", "state", "negotiate", "readable", "find", "unscored"]);
@@ -119,6 +129,13 @@ export const scoreRulesSchema = z.object({
       label: z.string(),
       noun: z.string().describe('What "scored as" says: "a shop".'),
       applicable: z.array(capabilityIdSchema),
+      either: z
+        .array(z.array(capabilityIdSchema).min(2))
+        .optional()
+        .describe(
+          "Version 2: sets of applicable capabilities of one group that count as one member of it, met by the best " +
+            "state any of them has (book or order, for a business of a kind not known).",
+        ),
       groups: z.array(z.string()).describe("The directory's category groups this profile covers."),
     }),
   ),
@@ -136,7 +153,14 @@ export const scoreRulesSchema = z.object({
   directory: z.string(),
   not_certification: z.string(),
   fixes: z.partialRecord(capabilityIdSchema, fixTextSchema),
-  changelog: z.array(z.object({ version: z.int().min(1), summary: z.string() })),
+  changelog: z.array(
+    z.object({
+      version: z.int().min(1),
+      published: z.iso.date().optional().describe("The day a version was published."),
+      amended: z.iso.date().optional().describe("The day a version was amended without a new number."),
+      summary: z.string(),
+    }),
+  ),
 });
 export type ScoreRules = z.infer<typeof scoreRulesSchema>;
 
@@ -150,10 +174,22 @@ export const SCORE_FORMULA_V1 = [
   "grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
 ].join("\n");
 
+/** The formula of rules version 2, word for word: version 1's, and either sets counted as one member. */
+export const SCORE_FORMULA_V2 = [
+  "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.",
+  "possible = Σ_{g: A_g≠∅} W_g",
+  "N        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))",
+  "D        = 120 × possible",
+  "score    = (100 × N + D/2) div D                       (round half up; 0..100)",
+  "grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
+].join("\n");
+
 /* --- the arithmetic (pure; the network's Go does the same, and vectors/score.json holds both to it) --------------- */
 
-/** A profile by id, or any set of applicable capabilities. */
-export type ScoreProfile = ProfileId | { readonly applicable: readonly CapabilityId[] };
+/** A profile by id, or any set of applicable capabilities (with either sets, version 2). */
+export type ScoreProfile =
+  | ProfileId
+  | { readonly applicable: readonly CapabilityId[]; readonly either?: readonly (readonly CapabilityId[])[] };
 export type CapabilityStates = Partial<Record<CapabilityId, CapabilityState>>;
 
 export interface Score {
@@ -172,19 +208,38 @@ export interface Fix {
 
 const HALVES: Record<CapabilityState, number> = { yes: 2, partial: 1, no: 0, na: 0 };
 
-function applicableOf(profile: ScoreProfile, rules: Pick<ScoreRules, "profiles">): ReadonlySet<CapabilityId> {
-  if (typeof profile !== "string") return new Set(profile.applicable);
-  const p = rules.profiles.find((x) => x.id === profile);
-  if (!p) throw new Error(`the rules have no profile ${profile}`);
-  return new Set(p.applicable);
+interface Applying {
+  readonly applicable: ReadonlySet<CapabilityId>;
+  readonly either: readonly (readonly CapabilityId[])[];
 }
 
-/** Each scored group's applicable members, in the rules' group order; a group nothing applies to is dropped. */
-function groupsOf(applicable: ReadonlySet<CapabilityId>, rules: Pick<ScoreRules, "groups">) {
+function applyingOf(profile: ScoreProfile, rules: Pick<ScoreRules, "profiles">): Applying {
+  if (typeof profile !== "string") return { applicable: new Set(profile.applicable), either: profile.either ?? [] };
+  const p = rules.profiles.find((x) => x.id === profile);
+  if (!p) throw new Error(`the rules have no profile ${profile}`);
+  return { applicable: new Set(p.applicable), either: p.either ?? [] };
+}
+
+/**
+ * Each scored group's slots, in the rules' group order: a slot is one applicable member, or the applicable members of
+ * one either set together. A group nothing applies to is dropped.
+ */
+function groupsOf(a: Applying, rules: Pick<ScoreRules, "groups">) {
   return rules.groups
     .filter((g) => g.weight > 0)
-    .map((g) => ({ id: g.id, weight: g.weight, members: g.members.filter((c) => applicable.has(c)) }))
-    .filter((g) => g.members.length > 0);
+    .map((g) => {
+      const slots: CapabilityId[][] = [];
+      const counted = new Set<CapabilityId>();
+      for (const c of g.members) {
+        if (!a.applicable.has(c) || counted.has(c)) continue;
+        const set = a.either.find((s) => s.includes(c)) ?? [c];
+        const slot = set.filter((x) => a.applicable.has(x));
+        for (const x of slot) counted.add(x);
+        slots.push(slot);
+      }
+      return { id: g.id, weight: g.weight, slots };
+    })
+    .filter((g) => g.slots.length > 0);
 }
 
 export function gradeOf(score: number, rules?: Pick<ScoreRules, "grades">): Grade {
@@ -205,13 +260,13 @@ export function scoreOf(
   states: CapabilityStates,
   rules: Pick<ScoreRules, "groups" | "profiles" | "grades">,
 ): Score {
-  const groups = groupsOf(applicableOf(profile, rules), rules);
+  const groups = groupsOf(applyingOf(profile, rules), rules);
   let possible = 0;
   let n = 0;
   for (const g of groups) {
-    const s = g.members.reduce((sum, c) => sum + HALVES[states[c] ?? "no"], 0);
+    const s = g.slots.reduce((sum, slot) => sum + Math.max(...slot.map((c) => HALVES[states[c] ?? "no"])), 0);
     possible += g.weight;
-    n += g.weight * s * (60 / g.members.length);
+    n += g.weight * s * (60 / g.slots.length);
   }
   if (possible === 0) return { score: 0, grade: gradeOf(0, rules), n: 0, possible: 0 };
   const d = 120 * possible;
@@ -220,21 +275,22 @@ export function scoreOf(
 }
 
 /**
- * What would raise the score most: each applicable, weighted capability that is not yet "yes", scored again as "yes".
- * Fixes worth nothing are left out. By points, then group order, then vocabulary order.
+ * What would raise the score most: each applicable, weighted capability that is not yet "yes", scored again as "yes"
+ * (each member of an either set on its own). Fixes worth nothing are left out. By points, then group order, then
+ * vocabulary order.
  */
 export function fixesOf(
   profile: ScoreProfile,
   states: CapabilityStates,
   rules: Pick<ScoreRules, "groups" | "profiles" | "grades" | "capabilities">,
 ): Fix[] {
-  const groups = groupsOf(applicableOf(profile, rules), rules);
+  const groups = groupsOf(applyingOf(profile, rules), rules);
   const base = scoreOf(profile, states, rules).score;
   const groupAt = new Map(rules.groups.map((g, i) => [g.id, i]));
   const vocabAt = new Map(rules.capabilities.map((c, i) => [c.id, i]));
   const fixes: (Fix & { g: number; v: number })[] = [];
   for (const g of groups) {
-    for (const c of g.members) {
+    for (const c of g.slots.flat()) {
       if ((states[c] ?? "no") === "yes") continue;
       const points = scoreOf(profile, { ...states, [c]: "yes" }, rules).score - base;
       if (points > 0) fixes.push({ capability: c, points, g: groupAt.get(g.id) ?? 99, v: vocabAt.get(c) ?? 99 });
@@ -244,14 +300,17 @@ export function fixesOf(
   return fixes.map(({ capability, points }) => ({ capability, points }));
 }
 
-/** A capability's displayed weight, W_g / |A_g| to one decimal place; 0 when it is not scored or does not apply. */
+/**
+ * A capability's displayed weight, W_g / |A_g| to one decimal place (an either set counted once, each of its members
+ * showing the set's weight); 0 when it is not scored or does not apply.
+ */
 export function capabilityWeightOf(
   profile: ScoreProfile,
   capability: CapabilityId,
   rules: Pick<ScoreRules, "groups" | "profiles">,
 ): number {
-  const g = groupsOf(applicableOf(profile, rules), rules).find((x) => x.members.includes(capability));
-  return g ? Math.round((g.weight / g.members.length) * 10) / 10 : 0;
+  const g = groupsOf(applyingOf(profile, rules), rules).find((x) => x.slots.some((slot) => slot.includes(capability)));
+  return g ? Math.round((g.weight / g.slots.length) * 10) / 10 : 0;
 }
 
 /* --- names to capabilities (the door registry's capability_rules) ---------------------------------------------------- */

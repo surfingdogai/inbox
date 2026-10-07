@@ -1,6 +1,6 @@
 {
-  "description": "The directory's categories: a small, open list. A business's profile names its categories by slug, label or synonym, in English or Portuguese (Portugal), with any capitals and accents; a network keeps the slug, and keeps anything else a profile names as a free tag. New slugs come by a change to this file, which raises version.",
-  "version": 1,
+  "description": "The directory's categories: a small, open list, in two kinds: local_and_retail (every category without a kind) and software_and_ai (software, API and AI companies, kept apart: a search for one kind never reaches the other). A business's profile names its categories by slug, label or synonym, in English or Portuguese (Portugal), with any capitals and accents; a network keeps the slug, and keeps anything else a profile names as a free tag. New slugs come by a change to this file, which raises version.",
+  "version": 3,
   "languages": ["en", "pt"],
   "categories": [
     {
@@ -571,28 +571,68 @@
       "slug": "events",
       "labels": { "en": "Events & catering", "pt": "Eventos e catering" },
       "synonyms": {
+        "en": ["event", "event planning", "catering", "caterer", "wedding", "weddings", "party", "parties", "dj"],
+        "pt": ["evento", "eventos", "organização de eventos", "casamento", "casamentos", "festa", "festas"]
+      }
+    },
+    {
+      "slug": "venues",
+      "labels": { "en": "Venues & events", "pt": "Espaços e espetáculos" },
+      "synonyms": {
         "en": [
-          "event",
-          "event planning",
-          "catering",
-          "caterer",
-          "wedding",
-          "weddings",
-          "party",
-          "parties",
           "venue",
+          "venues",
           "event venue",
-          "dj"
+          "event space",
+          "music venue",
+          "live music",
+          "live music venue",
+          "concert venue",
+          "concert hall",
+          "concerts",
+          "gig venue",
+          "jazz club",
+          "jazz bar",
+          "blues club",
+          "nightclub",
+          "night club",
+          "nightclubs",
+          "dance club",
+          "comedy club",
+          "stand-up comedy",
+          "theatre",
+          "theater",
+          "theatres",
+          "cinema",
+          "cinemas",
+          "movie theater",
+          "opera house",
+          "museum",
+          "museums",
+          "art gallery",
+          "gallery",
+          "exhibition",
+          "tickets"
         ],
         "pt": [
-          "evento",
-          "eventos",
-          "organização de eventos",
-          "casamento",
-          "casamentos",
-          "festa",
-          "festas",
-          "espaço para eventos"
+          "espaço para eventos",
+          "sala de espetáculos",
+          "sala de concertos",
+          "música ao vivo",
+          "concertos",
+          "clube de jazz",
+          "bar de jazz",
+          "discoteca",
+          "clube noturno",
+          "teatro",
+          "teatros",
+          "cinema",
+          "cinemas",
+          "museu",
+          "museus",
+          "galeria de arte",
+          "exposição",
+          "bilhetes"
         ]
       }
     },
@@ -746,6 +786,35 @@
           "marcenaria",
           "couro",
           "têxteis"
+        ]
+      }
+    },
+    {
+      "slug": "software-ai",
+      "kind": "software_and_ai",
+      "labels": { "en": "Software & AI services", "pt": "Software e serviços de IA" },
+      "synonyms": {
+        "en": [
+          "saas",
+          "software company",
+          "software companies",
+          "ai",
+          "ai tools",
+          "ai agents",
+          "ai services",
+          "developer api",
+          "developer apis",
+          "apis",
+          "data and analytics",
+          "analytics"
+        ],
+        "pt": [
+          "empresa de software",
+          "inteligência artificial",
+          "ferramentas de ia",
+          "agentes de ia",
+          "serviços de ia",
+          "dados e análise"
         ]
       }
     }

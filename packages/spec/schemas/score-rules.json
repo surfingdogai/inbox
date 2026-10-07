@@ -130,7 +130,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+            "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
           },
           "label": {
             "type": "string"
@@ -164,6 +164,38 @@
                 "support",
                 "policies"
               ]
+            }
+          },
+          "either": {
+            "description": "Version 2: sets of applicable capabilities of one group that count as one member of it, met by the best state any of them has (book or order, for a business of a kind not known).",
+            "type": "array",
+            "items": {
+              "minItems": 2,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "find",
+                  "catalogue",
+                  "availability",
+                  "message",
+                  "negotiate",
+                  "book",
+                  "order",
+                  "pay",
+                  "change",
+                  "cancel",
+                  "track",
+                  "return",
+                  "receipt",
+                  "feedback",
+                  "subscription",
+                  "vouchers",
+                  "waitlist",
+                  "support",
+                  "policies"
+                ]
+              }
             }
           },
           "groups": {
@@ -288,7 +320,7 @@
             "type": "object",
             "propertyNames": {
               "type": "string",
-              "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+              "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
             },
             "additionalProperties": {
               "type": "object",
@@ -318,6 +350,18 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "published": {
+            "description": "The day a version was published.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "amended": {
+            "description": "The day a version was amended without a new number.",
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
           },
           "summary": {
             "type": "string"

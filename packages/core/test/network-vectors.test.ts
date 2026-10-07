@@ -50,6 +50,7 @@ import {
   reportRequestSchema,
   rulesOf,
   SCORE_FORMULA_V1,
+  SCORE_FORMULA_V2,
   scoreOf,
   scoreRulesSchema,
   searchBusinessesInputSchema,
@@ -66,12 +67,14 @@ import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
 import receiptsV6 from "../../spec/vectors/receipts-v6.json";
 import scoreVectors from "../../spec/vectors/score.json";
+import scoreVectorsV1 from "../../spec/vectors/score-v1.json";
 import signatures from "../../spec/vectors/signatures.json";
 import attributeVocabulary from "../../spec/vocab/attributes.json";
 import capabilityVocabulary from "../../spec/vocab/capabilities.json";
 import vocabulary from "../../spec/vocab/categories.json";
 import doorVocabulary from "../../spec/vocab/doors.json";
 import scoreRulesV1 from "../../spec/vocab/score-rules-v1.json";
+import scoreRulesV2 from "../../spec/vocab/score-rules-v2.json";
 import { buildNetworkVectors } from "../scripts/network-vectors";
 import { type OfferForm, type OfferTerms, termsSha } from "../src/customer/offer";
 import type { ActorKind, ItemType } from "../src/domain/types";
@@ -1416,8 +1419,9 @@ describe("protocol 0.2: rules version 7 and the order", () => {
   });
 });
 
-describe("capabilities and the agentic score: vocab/capabilities.json, score-rules-v1.json, score.json", () => {
-  const rules = scoreRulesSchema.parse(scoreRulesV1);
+describe("capabilities and the agentic score: vocab/capabilities.json, score-rules-v2.json, score.json", () => {
+  const rules = scoreRulesSchema.parse(scoreRulesV2);
+  const rulesV1 = scoreRulesSchema.parse(scoreRulesV1);
 
   it("the vocabulary: 19 capabilities in order, the five lead ones among them", () => {
     const v = capabilitiesVocabSchema.parse(capabilityVocabulary);
@@ -1429,7 +1433,12 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
   });
 
   it("the rules: weights sum to 100, every capability in one group, the formula word for word", () => {
-    expect(rules.version).toBe(1);
+    expect(rules.version).toBe(2);
+    expect(rulesV1.version).toBe(1);
+    expect(rulesV1.formula).toBe(SCORE_FORMULA_V1);
+    // Version 2 keeps version 1's groups, weights and capabilities.
+    expect(rules.groups).toEqual(rulesV1.groups);
+    expect(rules.capabilities).toEqual(rulesV1.capabilities);
     expect(rules.name).toBe("Agentic score");
     expect(rules.groups.reduce((n, g) => n + g.weight, 0)).toBe(100);
     const members = rules.groups.flatMap((g) => g.members);
@@ -1437,7 +1446,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     for (const c of rules.capabilities) {
       expect(rules.groups.find((g) => g.members.includes(c.id))?.id, c.id).toBe(c.group);
     }
-    expect(rules.formula).toBe(SCORE_FORMULA_V1);
+    expect(rules.formula).toBe(SCORE_FORMULA_V2);
     expect(rules.profiles.map((p) => p.id)).toEqual([
       "appointments",
       "food",
@@ -1445,8 +1454,20 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       "shop",
       "stay",
       "memberships",
+      "venues",
       "general",
     ]);
+    // A business of a kind not known: book or order is one capability of the core group, never not applicable.
+    const general = rules.profiles.find((p) => p.id === "general");
+    expect(general?.either).toEqual([["book", "order"]]);
+    expect(general?.applicable).toEqual(expect.arrayContaining(["message", "book", "order", "pay"]));
+    // A venue books (tickets, tables, entries).
+    expect(rules.profiles.find((p) => p.id === "venues")?.applicable).toContain("book");
+    // The changelog says what changed in version 2, on what day, and why.
+    const last = rules.changelog.at(-1);
+    expect(last).toMatchObject({ version: 2, published: "2026-10-07" });
+    expect(last?.summary).toMatch(/book and order count together as one capability/);
+    expect(last?.summary).not.toMatch(/\b(first|only)\b/i);
     // A category group belongs to one profile at most.
     const groups = rules.profiles.flatMap((p) => p.groups);
     expect(new Set(groups).size).toBe(groups.length);
@@ -1458,7 +1479,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
   });
 
   it("the rules' words: the name, never a certification, no claims of being first or only", () => {
-    const text = JSON.stringify(scoreRulesV1);
+    const text = JSON.stringify(scoreRulesV2);
     expect(text).not.toMatch(/Agent ?Readiness|AgentReady/i);
     const copy = [
       rules.summary,
@@ -1478,26 +1499,55 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     );
   });
 
-  it("re-derives every case of score.json: score, grade, numerator, possible weight and fixes in order", () => {
-    expect(scoreVectors.rules_version).toBe(rules.version);
-    expect(scoreVectors.cases.length).toBeGreaterThanOrEqual(25);
-    for (const c of scoreVectors.cases) {
-      const states = c.states as Record<CapabilityId, CapabilityState>;
-      const profile = rules.profiles.find((p) => p.id === c.profile);
-      expect(profile, c.name).toBeDefined();
-      // A state is given for every capability, and "na" exactly where it does not apply.
-      for (const id of CAPABILITY_IDS) {
-        expect(states[id] === "na", `${c.name} ${id}`).toBe(!profile?.applicable.includes(id));
+  it("re-derives every case of score.json (version 2) and score-v1.json (version 1): score, grade, numerator, possible weight and fixes in order", () => {
+    for (const [vectors, r] of [
+      [scoreVectors, rules],
+      [scoreVectorsV1, rulesV1],
+    ] as const) {
+      expect(vectors.rules_version).toBe(r.version);
+      expect(vectors.cases.length).toBeGreaterThanOrEqual(25);
+      for (const c of vectors.cases) {
+        const states = c.states as Record<CapabilityId, CapabilityState>;
+        const profile = r.profiles.find((p) => p.id === c.profile);
+        expect(profile, c.name).toBeDefined();
+        // A state is given for every capability, and "na" exactly where it does not apply.
+        for (const id of CAPABILITY_IDS) {
+          expect(states[id] === "na", `${c.name} ${id}`).toBe(!profile?.applicable.includes(id));
+        }
+        const got = scoreOf(c.profile as "appointments", states, r);
+        expect({ score: got.score, grade: got.grade, n: got.n, possible: got.possible }, c.name).toEqual({
+          score: c.expect.score,
+          grade: c.expect.grade,
+          n: c.expect.n,
+          possible: c.expect.possible,
+        });
+        expect(fixesOf(c.profile as "appointments", states, r), c.name).toEqual(c.expect.fixes);
       }
-      const r = scoreOf(c.profile as "appointments", states, rules);
-      expect({ score: r.score, grade: r.grade, n: r.n, possible: r.possible }, c.name).toEqual({
-        score: c.expect.score,
-        grade: c.expect.grade,
-        n: c.expect.n,
-        possible: c.expect.possible,
-      });
-      expect(fixesOf(c.profile as "appointments", states, rules), c.name).toEqual(c.expect.fixes);
     }
+  });
+
+  it("version 2: a general business that takes messages and nothing else falls to the low 40s; one that books and pays rises", () => {
+    const by = new Map(scoreVectors.cases.map((c) => [c.name, c]));
+    const states = (name: string) => by.get(name)?.states as Record<CapabilityId, CapabilityState>;
+    expect(by.get("general-message-only")?.expect).toMatchObject({ score: 42, grade: "C" });
+    expect(by.get("general-book-and-pay")?.expect).toMatchObject({ score: 67, grade: "B" });
+    expect(by.get("general-message-book-pay")?.expect).toMatchObject({ score: 91, grade: "A" });
+    expect(by.get("venue-jazz-club")?.expect).toMatchObject({ score: 34, grade: "D" });
+    // Under version 1 (book and order not applicable) the first two scored 55 alike.
+    const v1 = (name: string) => {
+      const s = { ...states(name), book: "na", order: "na" } as Record<CapabilityId, CapabilityState>;
+      return scoreOf("general", s, rulesV1).score;
+    };
+    expect([v1("general-message-only"), v1("general-book-and-pay"), v1("general-message-book-pay")]).toEqual([
+      55, 55, 91,
+    ]);
+    // Book or order: either one meets the set, and both count no more than one.
+    const g = (x: Partial<Record<CapabilityId, CapabilityState>>) => scoreOf("general", x, rules).score;
+    expect(g({ book: "yes" })).toBe(g({ order: "yes" }));
+    expect(g({ book: "yes", order: "yes" })).toBe(g({ book: "yes" }));
+    expect(g({ book: "partial", order: "yes" })).toBe(g({ order: "yes" }));
+    expect(capabilityWeightOf("general", "book", rules)).toBe(13.3);
+    expect(capabilityWeightOf("general", "order", rules)).toBe(13.3);
   });
 
   it("the worked examples: a salon 51 C, a restaurant 74 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {

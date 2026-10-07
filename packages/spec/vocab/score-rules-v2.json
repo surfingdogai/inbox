@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "name": "Agentic score",
   "status": "in_force",
   "published_at": "2026-10-07T00:00:00Z",
@@ -244,10 +244,18 @@
       "groups": ["fitness"]
     },
     {
+      "id": "venues",
+      "label": "Venues and events (live music, clubs, theatre, cinema, museums)",
+      "noun": "a venue (live music, a club, a theatre, a cinema, a museum or an event space)",
+      "applicable": ["find", "catalogue", "availability", "message", "book", "pay", "change", "cancel", "policies"],
+      "groups": ["venues"]
+    },
+    {
       "id": "general",
       "label": "Business (type unknown)",
       "noun": "a business of a kind not known",
-      "applicable": ["find", "catalogue", "message", "pay", "policies"],
+      "applicable": ["find", "catalogue", "message", "book", "order", "pay", "policies"],
+      "either": [["book", "order"]],
       "groups": ["bar", "health", "dental", "therapy", "legal", "software-ai"]
     }
   ],
@@ -262,7 +270,7 @@
     "proven": 1,
     "produced": ["declared"]
   },
-  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
+  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
   "grades": [
     {
       "grade": "A",
@@ -285,7 +293,7 @@
       "min": 0
     }
   ],
-  "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists",
+  "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists, software, API and AI companies among themselves. A leaderboard numbers the businesses it names 1, 2, 3 and so on; a result page's rank counts every business checked, named or not.",
   "named": "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
   "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
   "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
@@ -302,7 +310,12 @@
     "availability": {
       "title": "Let agents check availability",
       "how": "Add a tool or operation such as check_availability<door>, or publish stock with your catalogue.",
-      "protocol": "Publish stock with your catalogue<door>."
+      "protocol": "Publish stock with your catalogue<door>.",
+      "by_profile": {
+        "venues": {
+          "how": "Add a tool or operation such as check_availability<door> that says which dates, seats or tables are free."
+        }
+      }
     },
     "message": {
       "title": "Let agents send you a message",
@@ -314,7 +327,12 @@
     },
     "book": {
       "title": "Let agents book",
-      "how": "Add a tool or operation that creates a booking, such as create_booking or POST /bookings<door>; if you use a booking platform, ask it whether it offers an agent door and declare it."
+      "how": "Add a tool or operation that creates a booking, such as create_booking or POST /bookings<door>; if you use a booking platform, ask it whether it offers an agent door and declare it.",
+      "by_profile": {
+        "venues": {
+          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>; if you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
+        }
+      }
     },
     "order": {
       "title": "Let agents order",
@@ -338,6 +356,9 @@
         },
         "stay": {
           "how": "Add a tool or operation such as change_reservation or PATCH /reservations/{id}<door>."
+        },
+        "venues": {
+          "how": "Add a tool or operation such as change_booking or PATCH /bookings/{id}<door>, for a date, a seat or the number of tickets."
         }
       },
       "protocol": "Publish order management with changes to an order<door>, or add a tool or operation such as update_order."
@@ -348,6 +369,9 @@
       "by_profile": {
         "shop": {
           "how": "Add a tool or operation such as cancel_order or DELETE /orders/{id}<door>, and publish your cancellation policy."
+        },
+        "venues": {
+          "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your refund and exchange policy for tickets."
         }
       },
       "protocol": "Publish order management with cancelling an order<door>, and publish your cancellation policy."
@@ -386,6 +410,9 @@
         "memberships": {
           "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
         },
+        "venues": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
         "general": {
           "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
         }
@@ -401,6 +428,11 @@
       "version": 1,
       "amended": "2026-10-07",
       "summary": "The category group software-ai (software, API and AI companies), new on this day, is scored under the general profile. Before it, such a business had no group and took its profile from its signals (a shop's door or catalogue, a door that books), else general. No other rule changed."
+    },
+    {
+      "version": 2,
+      "published": "2026-10-07",
+      "summary": "Version 2. A business whose kind is not known (the general profile) is now scored on whether an agent can book or order there: book and order count together as one capability of the core group (yes when either is yes, partly when either is partly), so its core group is message, book or order, and pay, still weighing 40. Under version 1 neither applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking (tickets, tables, entries) applies. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1."
     }
   ]
 }
