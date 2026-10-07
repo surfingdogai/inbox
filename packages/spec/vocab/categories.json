@@ -1,6 +1,6 @@
 {
   "description": "The directory's categories: a small, open list, in two kinds: local_and_retail (every category without a kind) and software_and_ai (software, API and AI companies, kept apart: a search for one kind never reaches the other). A business's profile names its categories by slug, label or synonym, in English or Portuguese (Portugal), with any capitals and accents; a network keeps the slug, and keeps anything else a profile names as a free tag. New slugs come by a change to this file, which raises version.",
-  "version": 3,
+  "version": 4,
   "languages": ["en", "pt"],
   "categories": [
     {
@@ -46,8 +46,22 @@
       "slug": "bar",
       "labels": { "en": "Bar", "pt": "Bar" },
       "synonyms": {
-        "en": ["bars", "pub", "pubs", "wine bar", "cocktail bar", "cocktails", "brewery", "taproom"],
-        "pt": ["bares", "taberna", "bar de vinhos"]
+        "en": [
+          "bars",
+          "pub",
+          "pubs",
+          "wine bar",
+          "cocktail bar",
+          "cocktails",
+          "brewery",
+          "taproom",
+          "winery",
+          "wineries",
+          "distillery",
+          "distilleries",
+          "tasting room"
+        ],
+        "pt": ["bares", "taberna", "bar de vinhos", "adega", "adegas", "destilaria"]
       }
     },
     {
@@ -102,7 +116,12 @@
           "homeware",
           "toys",
           "second hand",
-          "vintage"
+          "vintage",
+          "pharmacy",
+          "pharmacies",
+          "chemist",
+          "drugstore",
+          "hearing aids"
         ],
         "pt": [
           "lojas",
@@ -116,7 +135,11 @@
           "mobiliário",
           "decoração",
           "brinquedos",
-          "segunda mão"
+          "segunda mão",
+          "farmácia",
+          "farmácias",
+          "parafarmácia",
+          "aparelhos auditivos"
         ]
       }
     },
@@ -234,8 +257,6 @@
           "chiropractor",
           "nutritionist",
           "dietitian",
-          "pharmacy",
-          "chemist",
           "optician",
           "podiatrist",
           "podiatry",
@@ -255,7 +276,6 @@
           "osteopata",
           "quiroprático",
           "nutricionista",
-          "farmácia",
           "ótica",
           "óptica",
           "podologia",
@@ -462,7 +482,20 @@
       "slug": "legal",
       "labels": { "en": "Legal", "pt": "Advocacia" },
       "synonyms": {
-        "en": ["lawyer", "lawyers", "solicitor", "solicitors", "attorney", "law firm", "notary", "legal advice"],
+        "en": [
+          "lawyer",
+          "lawyers",
+          "solicitor",
+          "solicitors",
+          "attorney",
+          "law firm",
+          "notary",
+          "legal advice",
+          "immigration",
+          "immigration lawyer",
+          "immigration advice",
+          "visa services"
+        ],
         "pt": [
           "advogado",
           "advogada",
@@ -471,7 +504,10 @@
           "solicitador",
           "notário",
           "jurídico",
-          "apoio jurídico"
+          "apoio jurídico",
+          "imigração",
+          "vistos",
+          "serviços de imigração"
         ]
       }
     },
@@ -481,6 +517,76 @@
       "synonyms": {
         "en": ["accountant", "accountants", "bookkeeping", "bookkeeper", "tax", "tax advisor", "tax return", "payroll"],
         "pt": ["contabilista", "contabilistas", "contas", "impostos", "fiscalidade", "declaração de irs"]
+      }
+    },
+    {
+      "slug": "finance",
+      "labels": { "en": "Finance & insurance", "pt": "Finanças e seguros" },
+      "synonyms": {
+        "en": [
+          "finance",
+          "financial services",
+          "bank",
+          "banks",
+          "credit union",
+          "insurance",
+          "insurance agent",
+          "insurance broker",
+          "financial adviser",
+          "financial advisor",
+          "financial advice",
+          "investments",
+          "wealth management",
+          "mortgage",
+          "mortgages",
+          "mortgage broker",
+          "loans",
+          "money transfer",
+          "currency exchange"
+        ],
+        "pt": [
+          "finanças",
+          "serviços financeiros",
+          "banco",
+          "bancos",
+          "seguros",
+          "seguradora",
+          "mediador de seguros",
+          "consultor financeiro",
+          "consultoria financeira",
+          "investimentos",
+          "crédito",
+          "crédito habitação",
+          "câmbio",
+          "transferências de dinheiro"
+        ]
+      }
+    },
+    {
+      "slug": "property",
+      "labels": { "en": "Property", "pt": "Imobiliário" },
+      "synonyms": {
+        "en": [
+          "real estate",
+          "estate agent",
+          "estate agents",
+          "realtor",
+          "realtors",
+          "letting agent",
+          "letting agents",
+          "lettings",
+          "property management",
+          "homes for sale"
+        ],
+        "pt": [
+          "imobiliária",
+          "imobiliárias",
+          "agente imobiliário",
+          "mediação imobiliária",
+          "casas à venda",
+          "arrendamento",
+          "gestão de imóveis"
+        ]
       }
     },
     {
@@ -497,6 +603,32 @@
           "strategy"
         ],
         "pt": ["consultor", "consultora", "assessoria", "consultoria de gestão"]
+      }
+    },
+    {
+      "slug": "recruitment",
+      "labels": { "en": "Recruitment", "pt": "Recrutamento" },
+      "synonyms": {
+        "en": [
+          "recruiter",
+          "recruiters",
+          "recruitment agency",
+          "employment agency",
+          "staffing",
+          "staffing agency",
+          "temp agency",
+          "headhunter",
+          "headhunters",
+          "talent agency"
+        ],
+        "pt": [
+          "recrutamento e seleção",
+          "agência de emprego",
+          "agência de recrutamento",
+          "trabalho temporário",
+          "empresa de trabalho temporário",
+          "agência de talentos"
+        ]
       }
     },
     {
@@ -565,6 +697,24 @@
           "professor",
           "professora"
         ]
+      }
+    },
+    {
+      "slug": "childcare",
+      "labels": { "en": "Childcare", "pt": "Creches e amas" },
+      "synonyms": {
+        "en": [
+          "child care",
+          "daycare",
+          "day care",
+          "creche",
+          "nanny",
+          "nannies",
+          "babysitter",
+          "babysitting",
+          "childminder"
+        ],
+        "pt": ["creches", "ama", "amas", "cuidado de crianças", "baby-sitter"]
       }
     },
     {
@@ -674,6 +824,46 @@
           "casa de férias",
           "parque de campismo",
           "campismo"
+        ]
+      }
+    },
+    {
+      "slug": "transport",
+      "labels": { "en": "Transport", "pt": "Transportes" },
+      "synonyms": {
+        "en": [
+          "transportation",
+          "airline",
+          "airlines",
+          "ferry",
+          "ferries",
+          "bus",
+          "coach hire",
+          "coach company",
+          "minibus",
+          "party bus",
+          "taxi",
+          "taxis",
+          "cab",
+          "chauffeur",
+          "limousine",
+          "airport transfer",
+          "airport shuttle",
+          "trains"
+        ],
+        "pt": [
+          "transporte",
+          "companhia aérea",
+          "companhias aéreas",
+          "autocarro",
+          "autocarros",
+          "aluguer de autocarros",
+          "táxi",
+          "táxis",
+          "motorista",
+          "transfer aeroporto",
+          "comboio",
+          "comboios"
         ]
       }
     },

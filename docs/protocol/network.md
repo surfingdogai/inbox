@@ -486,7 +486,7 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
   characters) and how it is taken (`booking`, `order` or `quote_request`). Prices and durations stay
   at the inbox, where they are current.
 - `categories`: slugs of the categories list ([`vocab/categories.json`](../../packages/spec/vocab/categories.json):
-  28 slugs, each with English and Portuguese labels and synonyms). A network reads a label or
+  35 slugs, each with English and Portuguese labels and synonyms). A network reads a label or
   synonym as its slug, and keeps anything else a profile names as a free tag.
 - Protocol 0.2 adds:
   - `place_category`: `{"primary": "hair_salon", "alternates": ["beauty_salon"]}`, place category
@@ -689,12 +689,13 @@ counts in a filter**, except page language. A filter reads `declared` and `seen`
 | `found` | §4.11 |
 | `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}` |
 
-**Categories.** A listing's `categories` stay the slugs of the categories list (its 28 groups). A
+**Categories.** A listing's `categories` stay the slugs of the categories list (its 35 groups). A
 place category is an id of the Overture Maps Foundation's **Overture Place Categories** taxonomy
 (licensed CC BY 4.0), which a network names with its release in `taxonomy`; each group covers some of
 its subtrees. `GET /c/{id}` answers one: `{id, label, parent, path, group?, regulated?, taxonomy}`, or
-`404`. A network may leave whole categories unlisted for entries that are not members (regulated
-trades, for instance); `regulated` says why, and members are not affected.
+`404`. A network may leave whole categories unlisted for entries that are not members; `regulated`
+says why, and members are not affected. This network lists every kind of business except adult
+services, gambling, weapons, tobacco, cannabis and vaping, payday loans and bail bonds.
 
 **Attributes.** [`vocab/attributes.json`](../../packages/spec/vocab/attributes.json) lists each key with
 its group, the categories it applies to, how a crawler may read it (`declared`, `seen` or `never`, for
@@ -822,15 +823,15 @@ that kind leaves the denominator: a plumber is not marked down for having no cat
 
 | Profile | Applies |
 |---|---|
-| `appointments` (salons, wellness, tours) | find, catalogue, availability, message, book, change, cancel, pay, policies, feedback |
-| `classes` (classes, lessons and tutoring; version 2) | find, catalogue, availability, message, book or sign up (one capability), change, cancel, pay, policies, feedback |
-| `food` (restaurants and food) | find, catalogue, availability, message, book, order, change, cancel, pay |
+| `appointments` (salons, clinics, lawyers, advisers, tours) | find, catalogue, availability, message, book, change, cancel, pay, policies, feedback |
+| `classes` (classes, lessons, tutoring and childcare; version 2) | find, catalogue, availability, message, book or sign up (one capability), change, cancel, pay, policies, feedback |
+| `food` (restaurants, bars and food) | find, catalogue, availability, message, book, order, change, cancel, pay |
 | `trades` (trades and quote-led services) | message, negotiate, book, change, cancel, pay, receipt |
 | `shop` | find, catalogue, availability, order, pay, change, cancel, track, return, receipt |
-| `stay` (places to stay) | availability, book, change, cancel, pay, message, policies |
+| `stay` (places to stay and transport) | availability, book, change, cancel, pay, message, policies |
 | `memberships` (gyms and memberships) | find, catalogue, order or sign up (one capability, version 2), book, subscription, cancel, pay |
 | `venues` (live music, clubs, theatre, cinema, museums; version 2) | find, catalogue, availability, message, book or order or sign up (one capability), pay, change, cancel, policies |
-| `general` (type unknown; also bars, health, dental, therapy, legal, and software, API and AI companies) | find, catalogue, message, book or order or sign up (one capability, version 2), pay, policies |
+| `general` (type unknown; also software, API and AI companies) | find, catalogue, message, book or order or sign up (one capability, version 2), pay, policies |
 
 Each profile names the category groups it covers; a business without a category the network can
 read from the business itself is scored by its doors' signals, or as `general`. **Version 2** (in
@@ -838,9 +839,17 @@ force from 7 October 2026) changed three things. The `general` profile is scored
 can book, order or sign up there: its **either set** `book`/`order`/`signup` counts as one member of
 the core group, met by the best of the states, never `na`; under version 1 none applied, and a site
 that took messages and nothing else scored as high as one that also sold. That profile covers a business
-of a kind not known and the groups `bar`, `health`, `dental`, `therapy`, `legal` and `software-ai`,
-so a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking or
-order through an agent scores lower under version 2 than under version 1. And **venues** (the
+of a kind not known and the group `software-ai`; the groups `health`, `dental`, `therapy` and `legal`,
+under it in version 1, are `appointments` (booking counts, ordering does not apply) and `bar` is
+`food` (booking a table and ordering both count), so a clinic, a dentist, a therapist, a lawyer, a
+bar or a software company that takes no booking or order through an agent scores lower under
+version 2 than under version 1. The kinds this network now lists (every kind but adult services,
+gambling, weapons, tobacco, cannabis and vaping, payday loans and bail bonds) are scored where their
+own actions apply: `finance` (banks, insurance, financial advice, loans), `property` (estate agents),
+`recruitment` and `accounting` (scored as `trades` in version 1) as `appointments`; `childcare` as
+`classes`; `transport` (airlines, ferries, coaches, taxis and drivers) with places to stay as `stay`;
+wineries and distilleries in `bar`; pharmacies, drugstores and hearing aids in `shop`; licensed
+trades in `trades`. And **venues** (the
 category group `venues`: music venues, jazz clubs and nightclubs, theatres, cinemas, concert halls,
 comedy clubs, museums and galleries, event spaces) are a profile where booking tickets, a table or
 an entry, ordering them, or signing up, counts the same way (the same either set). And sign up is a

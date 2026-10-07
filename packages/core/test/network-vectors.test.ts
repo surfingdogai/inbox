@@ -1471,7 +1471,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     // Sign up where it is natural: with order for a gym, with book for a school; never for a salon.
     expect(rules.profiles.find((p) => p.id === "memberships")?.either).toEqual([["order", "signup"]]);
     expect(rules.profiles.find((p) => p.id === "classes")?.either).toEqual([["book", "signup"]]);
-    expect(rules.profiles.find((p) => p.id === "classes")?.groups).toEqual(["education"]);
+    expect(rules.profiles.find((p) => p.id === "classes")?.groups).toEqual(["education", "childcare"]);
     expect(rules.profiles.find((p) => p.id === "appointments")?.applicable).not.toContain("signup");
     // A venue books (tickets, tables, entries).
     expect(rules.profiles.find((p) => p.id === "venues")?.applicable).toContain("book");
@@ -1485,6 +1485,18 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     const groups = rules.profiles.flatMap((p) => p.groups);
     expect(new Set(groups).size).toBe(groups.length);
     for (const g of groups) expect(vocabulary.categories.map((c) => c.slug)).toContain(g);
+    // Every kind of business is scored where its own actions apply, never left to the general
+    // profile by default: clinics, dentists, therapists, lawyers, finance, property, recruitment and
+    // accountants book; bars are food; childcare is classes; transport books with places to stay.
+    const profileOf = (g: string) => rules.profiles.find((p) => p.groups.includes(g))?.id;
+    for (const c of vocabulary.categories) {
+      expect(profileOf(c.slug), c.slug).toBeDefined();
+      expect(profileOf(c.slug) === "general", c.slug).toBe(c.slug === "software-ai");
+    }
+    for (const g of ["health", "dental", "therapy", "legal", "finance", "property", "recruitment", "accounting"]) {
+      expect(profileOf(g), g).toBe("appointments");
+    }
+    expect([profileOf("bar"), profileOf("childcare"), profileOf("transport")]).toEqual(["food", "classes", "stay"]);
     // Every weighted capability has a fix; nothing unscored does.
     for (const g of rules.groups) {
       for (const c of g.members) expect(rules.fixes[c] !== undefined, c).toBe(g.weight > 0);
