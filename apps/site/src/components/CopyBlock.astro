@@ -1,0 +1,117 @@
+---
+/**
+ * One thing to copy into your AI: a title, one line of what it does, the text itself (plain and
+ * selectable, so it works with no script), and a copy button that appears only where the clipboard
+ * is there to use (src/lib/copy.ts). An optional second, quieter line can be copied too.
+ */
+interface Props {
+  title: string;
+  what: string;
+  value: string;
+  /** A second way to say it, copied on its own. */
+  alt?: { label: string; value: string };
+  more?: { href: string; label: string };
+}
+
+const { title, what, value, alt, more } = Astro.props;
+---
+
+<div class="cb">
+  <p class="cb-title">{title}</p>
+  <p class="cb-what">{what}</p>
+  <div class="cb-row">
+    <code class="cb-text">{value}</code>
+    <button class="cb-copy" type="button" data-copy={value} hidden>Copy</button>
+  </div>
+  {
+    alt && (
+      <>
+        <p class="cb-alt-label">{alt.label}</p>
+        <div class="cb-row cb-row-alt">
+          <code class="cb-text">{alt.value}</code>
+          <button class="cb-copy" type="button" data-copy={alt.value} hidden>
+            Copy
+          </button>
+        </div>
+      </>
+    )
+  }
+  {
+    more && (
+      <p class="cb-more">
+        <a class="link" href={more.href}>
+          {more.label}
+        </a>
+      </p>
+    )
+  }
+</div>
+
+<style>
+  .cb {
+    display: grid;
+    gap: var(--sp-2);
+    align-content: start;
+    min-width: 0;
+    text-align: left;
+  }
+  .cb-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cb-what,
+  .cb-alt-label {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .cb-alt-label {
+    margin-top: var(--sp-1);
+  }
+  .cb-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: 8px 8px 8px 12px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--ground) 40%, transparent);
+  }
+  .cb-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-top: 3px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: var(--fs-mono);
+    line-height: 1.55;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+  .cb-copy {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    font: inherit;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .cb-copy:hover,
+  .cb-copy:focus-visible {
+    background: var(--pill-bg-hover);
+    color: var(--ink);
+  }
+  .cb-more {
+    margin: 0;
+    font-size: var(--fs-fine);
+  }
+</style>

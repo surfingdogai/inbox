@@ -1,0 +1,191 @@
+---
+/**
+ * The one box. Words search the directory (/search?q=…); a web address goes to the checker, which
+ * reads the site and shows what an AI agent can do there (POST /check, the same form the checker's
+ * own page posts). With no script the box is a plain GET form to /search, and the search page offers
+ * the check when what was typed looks like an address.
+ */
+interface Props {
+  /** Unique per page, so two boxes never share an id. */
+  id: string;
+  value?: string;
+  /** "lg" on the home page, "md" at the top of /search. */
+  size?: "lg" | "md";
+  autofocus?: boolean;
+}
+
+const { id, value = "", size = "md", autofocus = false } = Astro.props;
+---
+
+<form class:list={["ask", `ask-${size}`]} action="/search" method="get" role="search" data-ask>
+  <label class="sr" for={id}>Search businesses, or paste a website to check it</label>
+  <svg class="ask-lens" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="6.5"></circle>
+    <path d="M16 16l4.5 4.5"></path>
+  </svg>
+  <input
+    class="ask-input"
+    id={id}
+    name="q"
+    type="search"
+    value={value}
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    maxlength="200"
+    enterkeyhint="search"
+    placeholder="Search, or paste a website"
+    autofocus={autofocus}
+    required
+  />
+  <button class="ask-go" type="submit" aria-label="Go">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6"></path>
+    </svg>
+  </button>
+</form>
+<!-- The checker takes a POST from this site's own pages; the box fills this in when it sees an address. -->
+<form class="ask-check" method="post" action="/check" hidden data-ask-check>
+  <input type="hidden" name="url" value="" />
+</form>
+
+<style>
+  .ask {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-pill);
+    background: var(--input-bg);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 10px 28px -22px color-mix(in srgb, var(--ink) 55%, transparent);
+    transition:
+      border-color var(--dur) var(--ease),
+      box-shadow var(--dur) var(--ease),
+      background-color var(--dur) var(--ease);
+  }
+  .ask:hover {
+    background: var(--input-bg-hover);
+  }
+  .ask:focus-within {
+    border-color: color-mix(in srgb, var(--violet) 45%, transparent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--violet) 14%, transparent),
+      0 12px 30px -22px color-mix(in srgb, var(--ink) 55%, transparent);
+  }
+  .ask-lg {
+    height: 52px;
+  }
+  .ask-md {
+    height: 46px;
+  }
+  .ask-lens {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    margin-left: 18px;
+    color: var(--ink-3);
+  }
+  .ask-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 10px 0 10px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+    outline: none;
+    caret-color: var(--violet-ink);
+  }
+  .ask-input::placeholder {
+    color: var(--ink-3);
+    opacity: 1;
+  }
+  .ask-input::-webkit-search-cancel-button {
+    display: none;
+  }
+  /* The box carries the focus ring as a whole. */
+  .ask-input:focus-visible {
+    outline: none;
+  }
+  @media (min-width: 768px) {
+    .ask-md .ask-input {
+      font-size: var(--fs-body);
+    }
+  }
+  .ask-go {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    margin-right: 6px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease),
+      color var(--dur-fast) var(--ease),
+      transform var(--dur-fast) var(--ease);
+  }
+  .ask-md .ask-go {
+    width: 34px;
+    height: 34px;
+  }
+  .ask-go svg {
+    width: 17px;
+    height: 17px;
+  }
+  .ask-go:hover,
+  .ask-go:focus-visible {
+    background: var(--pill-bg-hover);
+    color: var(--ink);
+  }
+  .ask-go:hover svg {
+    transform: translateX(1px);
+  }
+  .ask-go svg {
+    transition: transform var(--dur-fast) var(--ease);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+
+<script>
+  import { looksLikeAddress } from "../lib/ask";
+
+  for (const form of Array.from(document.querySelectorAll<HTMLFormElement>("[data-ask]"))) {
+    const check = form.nextElementSibling as HTMLFormElement | null;
+    form.addEventListener("submit", (e) => {
+      const input = form.querySelector<HTMLInputElement>("input[name=q]");
+      const value = input?.value.trim() ?? "";
+      if (!value) {
+        e.preventDefault();
+        input?.focus();
+        return;
+      }
+      if (looksLikeAddress(value) && check?.matches("[data-ask-check]")) {
+        e.preventDefault();
+        const url = check.querySelector<HTMLInputElement>("input[name=url]");
+        if (url) url.value = value;
+        check.submit();
+      }
+    });
+  }
+</script>

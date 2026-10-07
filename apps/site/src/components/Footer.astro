@@ -10,15 +10,14 @@ interface Group {
 /** The whole map, in small groups, so nothing is reachable only from the navigation. */
 const groups: Group[] = [
   {
-    id: "ft-network",
-    title: "Network",
+    id: "ft-search",
+    title: "Search",
     links: [
-      { href: "/directory/", label: "Directory" },
-      { href: "/check", label: "Check" },
+      { href: "/search/", label: "Search" },
+      { href: "/check", label: "Check a business" },
       { href: "/leaderboard", label: "Leaderboards" },
-      { href: "/network/", label: "How the network works" },
-      { href: "/network/#ranking", label: "Rules" },
-      { href: "/#agents", label: "For agents" },
+      { href: "/directory/", label: "Directory" },
+      { href: "/search/#agents", label: "For agents" },
     ],
   },
   {
@@ -31,6 +30,15 @@ const groups: Group[] = [
       { href: "/assistants/", label: "Assistants" },
       { href: "/requests/", label: "Requests" },
       { href: "/sponsors/", label: "Sponsors" },
+    ],
+  },
+  {
+    id: "ft-trust",
+    title: "Trust network",
+    links: [
+      { href: "/trust/", label: "Trust network" },
+      { href: "/network/#ranking", label: "Rules" },
+      { href: "/network/", label: "How the network works" },
     ],
   },
   {
@@ -62,9 +70,45 @@ const groups: Group[] = [
   },
 ];
 
+interface Props {
+  /** One quiet line: the home page's footer. */
+  minimal?: boolean;
+}
+const { minimal = false } = Astro.props;
+
+/** The home page's line: a few links, the rest of the map is one click away. */
+const short = [
+  { href: "/about/", label: "About" },
+  { href: "/faq/", label: "FAQ" },
+  { href: "/blog/", label: "Blog" },
+  { href: "/docs/", label: "Docs" },
+  { href: "/privacy/", label: "Privacy" },
+  { href: "/terms/", label: "Terms" },
+  { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
+];
+
 const year = new Date().getFullYear();
 ---
 
+{
+  minimal ? (
+    <footer class="footer footer-min">
+      <div class="wrap min-row">
+        <nav aria-label="Footer">
+          <ul class="min-links">
+            {short.map((l) => (
+              <li>
+                <a href={l.href} rel={l.external ? "noopener" : undefined}>
+                  {l.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <p class="min-who">Surfing Dog · {year}</p>
+      </div>
+    </footer>
+  ) : (
 <footer class="footer">
   <div class="wrap">
     <!-- The four-colour brand line. The shared motion script draws it once when it
@@ -111,8 +155,45 @@ const year = new Date().getFullYear();
     </div>
   </div>
 </footer>
+  )
+}
 
 <style>
+  /* The home page's footer: one line, small, centred. */
+  .footer-min {
+    margin-top: 0;
+    padding-block: var(--sp-6) var(--sp-7);
+  }
+  .min-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2) var(--sp-6);
+  }
+  .min-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-2) var(--sp-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .min-links a {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    text-decoration: none;
+  }
+  .min-links a:hover,
+  .min-links a:focus-visible {
+    color: var(--ink);
+  }
+  .min-who {
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
   .footer {
     margin-top: var(--sp-6);
     padding-block: 0 var(--sp-8);

@@ -15,13 +15,22 @@ interface Props {
   type?: "website" | "article";
   /** Structured data for the page (schema.org), written as JSON-LD. */
   ld?: Record<string, unknown> | readonly Record<string, unknown>[];
+  /** The home page's one-line footer instead of the full map. */
+  minimalFooter?: boolean;
 }
 
 const CARD_ALTS: Record<string, string> = {
   "/art/og-network-v1.png": "Surfing Dog: open doors to the agentic internet. An open directory your AI can search.",
   "/art/og-inbox-v1.png": "Surfing Dog Inbox: get AI bookings, orders and messages.",
 };
-const { title, description, image = "/art/og-network-v1.png", type = "website", ld } = Astro.props;
+const {
+  title,
+  description,
+  image = "/art/og-network-v1.png",
+  type = "website",
+  ld,
+  minimalFooter = false,
+} = Astro.props;
 const imageAlt = Astro.props.imageAlt ?? CARD_ALTS[image] ?? title;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL(image, Astro.site);
@@ -75,7 +84,7 @@ const ogImage = new URL(image, Astro.site);
     <a class="skip" href="#main">Skip to content</a>
     <Nav />
     <main id="main"><slot /></main>
-    <Footer />
+    <Footer minimal={minimalFooter} />
     <!-- Motion: reveals, the brand line and the counters. Every resting state is the
          visible one, so a page without this script is simply a finished page. -->
     <script>

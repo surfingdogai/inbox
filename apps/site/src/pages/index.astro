@@ -1,19 +1,25 @@
 ---
-import FairOrder from "../components/FairOrder.astro";
-import ForBusinesses from "../components/ForBusinesses.astro";
-import Hero from "../components/Hero.astro";
-import Leaderboards from "../components/Leaderboards.astro";
-import OpenNetwork from "../components/OpenNetwork.astro";
-import Status from "../components/Status.astro";
-import WhatAiSees from "../components/WhatAiSees.astro";
+import AskBox from "../components/AskBox.astro";
+import CopyBlock from "../components/CopyBlock.astro";
+import DirectoryCounts from "../components/DirectoryCounts.astro";
+import Mark from "../components/Mark.astro";
+import Products from "../components/Products.astro";
 import Layout from "../layouts/Layout.astro";
 
 /**
- * The home page is the network: an open directory AI assistants can search. The inbox has its own
- * page at /inbox. Live counts stay off this page until the directory lists more than our own
- * inbox; they live on /network.
+ * The home page: what Surfing Dog is in one line, one box, the live counts, two things to copy into
+ * your AI, and the three products. Everything else lives on the products' own pages: the search
+ * explainer on /search, the inbox on /inbox, the rules on /trust.
  */
 const TAGLINE = "Open doors to the agentic internet.";
+const WHAT = "Surfing Dog lists and tracks agent-ready businesses: the ones AI agents can message, book and buy from.";
+const MCP = "https://surfingdog.ai/mcp";
+const SEARCH_LINE =
+  "Use https://surfingdog.ai/llms.txt to find businesses I can book or buy from, and reach them directly.";
+// The same line as /install: the guide it points at is written for an AI to follow.
+const INSTALL_LINE =
+  "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
+
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const org = `${site}#org`;
 const ld = [
@@ -27,24 +33,30 @@ const ld = [
     logo: new URL("/icon-512.png", site).toString(),
     email: "hello@surfingdog.ai",
     sameAs: ["https://github.com/surfingdogai"],
+    description: WHAT,
   },
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "Surfing Dog",
     url: site,
-    description: `${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly.`,
+    description: `${TAGLINE} ${WHAT}`,
     publisher: { "@id": org },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: new URL("/search/?q={query}", site).toString() },
+      "query-input": "required name=query",
+    },
   },
   {
     "@context": "https://schema.org",
     "@type": "Service",
-    "@id": `${site}#network`,
-    name: "Surfing Dog Network",
-    url: "https://network.surfingdog.ai",
+    "@id": `${site}#search`,
+    name: "Surfing Dog Search",
+    url: new URL("/search/", site).toString(),
     serviceType: "Directory of businesses that AI agents can reach",
     description:
-      "An open directory AI assistants can search over MCP, REST or llms.txt. Today it lists businesses that run a verified inbox. Businesses that are answering come first, signed receipts of kept promises build each record, and no place can be bought.",
+      "Find and check agent-ready businesses: what an AI agent can do with each one, through which door, checked on the business's own site. Search it from a browser, or from your AI over MCP, REST or llms.txt.",
     provider: { "@id": org },
     offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", description: "Listing is free" },
   },
@@ -64,40 +76,160 @@ const ld = [
   },
   {
     "@context": "https://schema.org",
-    "@type": "SoftwareSourceCode",
-    name: "Surfing Dog network protocol and SDK",
-    codeRepository: "https://github.com/surfingdogai/inbox",
-    license: "https://opensource.org/licenses/MIT",
-    programmingLanguage: "TypeScript",
-    publisher: { "@id": org },
+    "@type": "Service",
+    "@id": `${site}#trust`,
+    name: "Surfing Dog Trust network",
+    url: new URL("/trust/", site).toString(),
+    description:
+      "The directory's order is made of kept promises: inboxes check in with signed pings, both sides sign receipts, and the rules are published and versioned. Nobody can pay for a place.",
+    provider: { "@id": org },
   },
 ];
 ---
 
 <Layout
-  title="Surfing Dog · Open doors to the agentic internet"
-  description={`${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly. Ranked by receipts, never by payment. Open protocol, open-source inbox.`}
+  title="Surfing Dog · Agent-ready businesses, listed and tracked"
+  description={`${WHAT} Search them, check a website, or install an inbox agents can write to. Ranked by kept promises, never by payment.`}
   image="/art/og-network-v1.png"
   ld={ld}
+  minimalFooter
 >
   <script is:inline>
-    // The inbox's sections used to live on this page. Links shared before the move still carry
-    // their old anchors, so send those to the same anchor on /inbox (and the old ranking anchor
-    // to the order section here).
+    // The search explainer used to live on this page and the inbox's sections before it. Links
+    // shared before each move still carry their old anchors, so send them to where the section is now.
     (function () {
       var h = location.hash.slice(1);
       if (["why-h", "rules", "use-cases", "inbox", "run", "wait-email"].indexOf(h) !== -1) {
         location.replace("/inbox/#" + h);
+      } else if (["listing", "leaderboards", "order", "businesses", "agents", "status"].indexOf(h) !== -1) {
+        location.replace("/search/#" + h);
       } else if (h === "reputation") {
-        location.replace("#order");
+        location.replace("/trust/");
       }
     })();
   </script>
-  <Hero />
-  <WhatAiSees />
-  <Leaderboards />
-  <FairOrder />
-  <ForBusinesses />
-  <OpenNetwork />
-  <Status />
+
+  <section class="wrap" aria-labelledby="home-h">
+    <div class="home">
+    <div class="brand">
+      <Mark size={56} class="home-mark" />
+      <h1 class="word" id="home-h">Surfing Dog</h1>
+      <span class="draw" aria-hidden="true"></span>
+      <p class="tag">{TAGLINE}</p>
+    </div>
+
+    <p class="what">{WHAT}</p>
+
+    <div class="box">
+      <AskBox id="home-ask" size="lg" />
+    </div>
+
+    <DirectoryCounts />
+
+    <div class="copies">
+      <CopyBlock
+        title="Search from your AI"
+        what="Add this address to your assistant as a connector, and it can find businesses and reach them directly."
+        value={MCP}
+        alt={{ label: "Or say it in plain words:", value: SEARCH_LINE }}
+        more={{ href: "https://network.surfingdog.ai/assistants", label: "How to add it to your assistant" }}
+      />
+      <CopyBlock
+        title="Install the inbox"
+        what="Give this to your AI. It sets up an inbox for your business that agents can write to, and asks before anything that costs money."
+        value={INSTALL_LINE}
+        more={{ href: "/install/", label: "What it does, step by step" }}
+      />
+    </div>
+
+    <Products />
+    </div>
+  </section>
 </Layout>
+
+<style>
+  /* Mostly empty space: one column, centred, small. */
+  .home {
+    display: grid;
+    justify-items: center;
+    gap: var(--sp-7);
+    max-width: 760px;
+    margin-inline: auto;
+    padding-block: clamp(40px, 9vh, 104px) var(--sp-7);
+    text-align: center;
+  }
+  .brand {
+    display: grid;
+    justify-items: center;
+    gap: var(--sp-2);
+  }
+  .brand :global(.home-mark) {
+    margin-bottom: var(--sp-1);
+  }
+  .word {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(30px, 4.4vw, 42px);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+  }
+  /* The four-colour line, drawing itself once under the wordmark. */
+  .draw {
+    display: block;
+    width: 112px;
+    height: 2px;
+    margin-top: var(--sp-1);
+    border-radius: var(--radius-pill);
+    background: linear-gradient(90deg, var(--flamingo) 0%, var(--tangerine) 34%, var(--lagoon) 68%, var(--violet) 100%);
+    transform-origin: left center;
+    animation: home-draw 1.1s var(--ease) 0.25s both;
+  }
+  @keyframes home-draw {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  .tag {
+    margin: var(--sp-1) 0 0;
+    font-size: var(--fs-fine);
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+  }
+  .what {
+    max-width: 46ch;
+    margin: calc(var(--sp-3) * -1) 0 0;
+    font-size: var(--fs-lede);
+    line-height: 1.5;
+    color: var(--ink-2);
+    text-wrap: balance;
+  }
+  .box {
+    width: 100%;
+    max-width: 600px;
+  }
+  .copies {
+    display: grid;
+    gap: var(--sp-6);
+    width: 100%;
+    padding-top: var(--sp-6);
+    border-top: 1px solid var(--hairline);
+  }
+  @media (min-width: 720px) {
+    .copies {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--sp-7);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .draw {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import { wireCopyButtons } from "../lib/copy";
+  wireCopyButtons(".copies [data-copy]");
+</script>

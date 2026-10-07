@@ -1,0 +1,162 @@
+---
+/**
+ * The live counts: how many businesses the crawler has checked, how many are agent-ready, and of
+ * those how many take messages, bookings, orders and payment or have a catalogue. Read in the
+ * browser from GET /v1/stats on this same address (its "directory" block, counted at most every ten
+ * minutes by the network). Aggregates only: the block never names a business.
+ *
+ * At rest, before the answer or without one, the page shows dashes and says where the numbers come
+ * from; it never prints a number it did not read. The numbers count up once, gently, and not at all
+ * under reduced motion.
+ */
+---
+
+<div class="counts" data-counts>
+  <p class="c-main" aria-live="polite">
+    <span class="c-pair"><b class="c-n tabular" data-n="checked">–</b> businesses checked</span>
+    <span class="c-dot" aria-hidden="true">·</span>
+    <span class="c-pair"><b class="c-n tabular" data-n="agent_ready">–</b> agent-ready</span>
+  </p>
+  <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
+  <p class="c-note" data-note>Live counts from the network.</p>
+</div>
+
+<style>
+  .counts {
+    display: grid;
+    justify-items: center;
+    gap: var(--sp-2);
+    text-align: center;
+  }
+  .c-main {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-1) var(--sp-3);
+    margin: 0;
+    font-size: var(--fs-ui);
+    color: var(--ink-2);
+  }
+  .c-pair {
+    white-space: nowrap;
+  }
+  .c-n {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: var(--fs-h-card);
+    color: var(--ink);
+  }
+  .c-dot {
+    color: var(--ink-3);
+  }
+  .c-caps {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-1) var(--sp-4);
+    max-width: 560px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .c-caps :global(li) {
+    white-space: nowrap;
+  }
+  .c-caps :global(b) {
+    font-weight: 600;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .c-note {
+    margin: 0;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+  }
+  /* The block arrives softly rather than snapping in. */
+  .counts.is-in .c-caps,
+  .counts.is-in .c-note {
+    animation: counts-in var(--dur-slow) var(--ease) both;
+  }
+  @keyframes counts-in {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .counts.is-in .c-caps,
+    .counts.is-in .c-note {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import { ago, countRows, readDirectory } from "../lib/ask";
+
+  const root = document.querySelector<HTMLElement>("[data-counts]");
+  const fmt = new Intl.NumberFormat("en");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /** Count up to n, once; the final text is exact. */
+  const count = (el: HTMLElement, n: number) => {
+    if (still || n < 3) {
+      el.textContent = fmt.format(n);
+      return;
+    }
+    const start = performance.now();
+    const ms = 900;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      el.textContent = fmt.format(Math.round(n * (1 - (1 - t) ** 3)));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
+  async function paint(): Promise<void> {
+    if (!root) return;
+    const note = root.querySelector<HTMLElement>("[data-note]");
+    const caps = root.querySelector<HTMLElement>("[data-caps]");
+    let stats: unknown = null;
+    try {
+      const res = await fetch("/v1/stats", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+      if (res.ok) stats = await res.json();
+    } catch {
+      stats = null;
+    }
+    const d = readDirectory(stats);
+    if (!d) {
+      // Nothing to show is said plainly; the dashes stay dashes.
+      if (note) note.textContent = stats ? "Counts appear here once the crawler publishes them." : "The counts are not answering just now.";
+      return;
+    }
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
+      count(el, el.dataset.n === "checked" ? d.checked : d.agent_ready);
+    }
+    if (caps) {
+      caps.replaceChildren(
+        ...countRows(d).map((r) => {
+          const li = document.createElement("li");
+          const b = document.createElement("b");
+          li.append(b, ` ${r.label}`);
+          count(b, r.n);
+          return li;
+        }),
+      );
+      caps.hidden = false;
+    }
+    if (note) {
+      const t = document.createElement("time");
+      t.dateTime = d.as_of;
+      t.title = new Date(d.as_of).toLocaleString();
+      t.textContent = ago(d.as_of);
+      note.replaceChildren("Of the agent-ready businesses · updated ", t);
+    }
+    root.classList.add("is-in");
+  }
+  void paint();
+</script>

@@ -1,0 +1,113 @@
+---
+/**
+ * The three products, in three small columns: Search, Inbox and the Trust network. Each pill reads
+ * src/lib/status.ts, so a product's state changes in one place.
+ */
+import { stateOf } from "../lib/status";
+import StatusPill from "./StatusPill.astro";
+
+const products = [
+  {
+    href: "/search/",
+    name: "Search",
+    line: "Find and check agent-ready businesses, from a browser or from your AI.",
+    state: stateOf("search"),
+  },
+  {
+    href: "/inbox/",
+    name: "Inbox",
+    line: "A typed inbox for your business that AI agents can write to. Open source.",
+    state: stateOf("inbox"),
+  },
+  {
+    href: "/trust/",
+    name: "Trust network",
+    line: "An order made of kept promises: signed receipts and answered pings, never bought.",
+    state: stateOf("ranking"),
+  },
+];
+---
+
+<ul class="products" aria-label="Products">
+  {
+    products.map((p) => (
+      <li>
+        <a class="product" href={p.href}>
+          <span class="p-head">
+            <span class="p-name">{p.name}</span>
+            <StatusPill state={p.state} />
+          </span>
+          <span class="p-line">{p.line}</span>
+        </a>
+      </li>
+    ))
+  }
+</ul>
+
+<style>
+  /* Wider by the links' own padding, so their words line up with the column above. */
+  .products {
+    display: grid;
+    gap: var(--sp-2);
+    width: calc(100% + 2 * var(--sp-4));
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 720px) {
+    .products {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--sp-4);
+    }
+  }
+  .product {
+    display: grid;
+    align-content: start;
+    gap: var(--sp-1);
+    height: 100%;
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--radius-control);
+    color: var(--ink-2);
+    text-align: left;
+    text-decoration: none;
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  .product:hover,
+  .product:focus-visible {
+    background: var(--pill-bg);
+  }
+  .p-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .p-name {
+    position: relative;
+    font-family: var(--font-display);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  /* A hairline grows under the name on hover, from the left. */
+  .p-name::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -2px;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.2s var(--ease);
+  }
+  .product:hover .p-name::after,
+  .product:focus-visible .p-name::after {
+    transform: scaleX(1);
+  }
+  .p-line {
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+  }
+</style>
