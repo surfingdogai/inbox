@@ -1,0 +1,159 @@
+{
+  "description": "An excerpt of the network's door registry, version 1: the words an HTTP method adds and the rules that map a tool, skill or operation name to capabilities. The registry itself is the network's; this copy is for the vectors.",
+  "version": 1,
+  "method_words": {
+    "POST": ["create"],
+    "PUT": ["update", "change"],
+    "PATCH": ["update", "change"],
+    "DELETE": ["cancel"],
+    "GET": ["get"]
+  },
+  "capability_rules": [
+    {
+      "cap": "find",
+      "all": [
+        ["business", "profile", "hours", "location", "about", "info", "store"],
+        ["get", "show", "read", "describe", "info"]
+      ]
+    },
+    {
+      "cap": "catalogue",
+      "all": [
+        [
+          "product",
+          "products",
+          "catalog",
+          "catalogue",
+          "menu",
+          "services",
+          "service",
+          "items",
+          "prices",
+          "price",
+          "inventory"
+        ],
+        ["list", "search", "get", "browse", "find", "show", "lookup"]
+      ]
+    },
+    {
+      "cap": "availability",
+      "all": [["availability", "available", "slots", "slot", "stock", "inventory", "openings"]]
+    },
+    {
+      "cap": "message",
+      "all": [
+        ["message", "messages", "chat", "contact", "question", "inquiry", "enquiry", "ask"],
+        ["send", "post", "ask", "create", "submit", "contact", "chat"]
+      ]
+    },
+    {
+      "cap": "negotiate",
+      "all": [
+        ["quote", "quotes", "offer", "offers", "bid", "proposal", "negotiate", "counter", "estimate"],
+        ["request", "make", "create", "get", "send", "submit", "accept", "decline", "counter", "negotiate"]
+      ]
+    },
+    {
+      "cap": "book",
+      "all": [
+        [
+          "book",
+          "booking",
+          "bookings",
+          "reserve",
+          "reservation",
+          "reservations",
+          "appointment",
+          "appointments",
+          "schedule"
+        ],
+        ["create", "make", "new", "add", "place", "submit", "request", "book", "reserve", "schedule"]
+      ]
+    },
+    {
+      "cap": "order",
+      "all": [
+        ["order", "orders", "cart", "checkout", "purchase", "buy"],
+        ["create", "place", "add", "submit", "update", "new", "checkout", "buy", "purchase", "make"]
+      ]
+    },
+    {
+      "cap": "pay",
+      "all": [
+        ["pay", "payment", "payments", "checkout"],
+        ["pay", "create", "process", "complete", "submit", "checkout", "make"]
+      ]
+    },
+    {
+      "cap": "change",
+      "all": [
+        ["reschedule", "modify", "change", "update", "edit", "amend", "move"],
+        [
+          "booking",
+          "bookings",
+          "reservation",
+          "reservations",
+          "order",
+          "orders",
+          "appointment",
+          "appointments",
+          "address",
+          "item",
+          "reschedule"
+        ]
+      ]
+    },
+    { "cap": "cancel", "all": [["cancel", "cancellation", "annul", "void"]], "none": ["policy", "policies", "terms"] },
+    {
+      "cap": "track",
+      "all": [
+        ["track", "tracking", "status", "shipment", "delivery"],
+        [
+          "order",
+          "orders",
+          "booking",
+          "bookings",
+          "reservation",
+          "shipment",
+          "delivery",
+          "item",
+          "package",
+          "parcel",
+          "track",
+          "tracking"
+        ]
+      ]
+    },
+    {
+      "cap": "return",
+      "all": [["return", "returns", "refund", "refunds", "exchange", "rma", "withdraw"]],
+      "none": ["policy", "policies"]
+    },
+    { "cap": "receipt", "all": [["receipt", "receipts", "invoice", "invoices"]] },
+    {
+      "cap": "feedback",
+      "all": [
+        ["review", "reviews", "feedback", "rating", "rate"],
+        ["leave", "submit", "create", "post", "add", "send", "rate", "give"]
+      ]
+    },
+    {
+      "cap": "subscription",
+      "all": [
+        ["subscription", "subscriptions", "membership", "memberships", "subscribe", "plan"],
+        ["pause", "resume", "cancel", "create", "update", "change", "start", "stop", "renew", "subscribe"]
+      ]
+    },
+    { "cap": "vouchers", "all": [["voucher", "vouchers", "giftcard", "gift", "coupon", "loyalty", "redeem", "promo"]] },
+    { "cap": "waitlist", "all": [["waitlist", "waitinglist"]] },
+    {
+      "cap": "support",
+      "all": [
+        ["support", "complaint", "complaints", "ticket", "tickets", "issue", "dispute"],
+        ["create", "open", "submit", "report", "file", "send"]
+      ]
+    },
+    { "cap": "policies", "all": [["policy", "policies", "terms", "faq", "faqs", "conditions"]] }
+  ],
+  "read_only_caps": ["find", "catalogue", "availability", "track", "policies"]
+}

@@ -1,17 +1,32 @@
 import {
   AMENDMENT_LIMITS,
+  aiCatalogSchema,
   attributesResponseSchema,
   attributeVocabularySchema,
   businessCardSchema,
   businessesResponseSchema,
+  CAPABILITY_IDS,
+  type CapabilityId,
+  type CapabilityState,
+  capabilitiesVocabSchema,
+  capabilityWeightOf,
+  capsOfName,
+  capsOfOperation,
   categoriesResponseSchema,
   categoryVocabularySchema,
+  checkBusinessInputSchema,
+  checkBusinessOutputSchema,
+  checkResultSchema,
   doorTypeSchema,
   doorVocabularySchema,
+  fixesOf,
   getBusinessOutputSchema,
+  gradeOf,
   isRetriedPublication,
   JSON_SCHEMAS,
   jsonSchemaOf,
+  LEAD_CAPABILITIES,
+  leaderboardSchema,
   listCategoriesOutputSchema,
   listingDetailSchema,
   listingSchema,
@@ -34,6 +49,9 @@ import {
   registerBusinessOutputSchema,
   reportRequestSchema,
   rulesOf,
+  SCORE_FORMULA_V1,
+  scoreOf,
+  scoreRulesSchema,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
   updateBusinessInputSchema,
@@ -47,10 +65,13 @@ import passes from "../../spec/vectors/passes.json";
 import profileVectors from "../../spec/vectors/profile.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
 import receiptsV6 from "../../spec/vectors/receipts-v6.json";
+import scoreVectors from "../../spec/vectors/score.json";
 import signatures from "../../spec/vectors/signatures.json";
 import attributeVocabulary from "../../spec/vocab/attributes.json";
+import capabilityVocabulary from "../../spec/vocab/capabilities.json";
 import vocabulary from "../../spec/vocab/categories.json";
 import doorVocabulary from "../../spec/vocab/doors.json";
+import scoreRulesV1 from "../../spec/vocab/score-rules-v1.json";
 import { buildNetworkVectors } from "../scripts/network-vectors";
 import { type OfferForm, type OfferTerms, termsSha } from "../src/customer/offer";
 import type { ActorKind, ItemType } from "../src/domain/types";
@@ -75,6 +96,7 @@ import {
   verifyInstanceRequest,
 } from "../src/protocol/index";
 import { receiptSha, verifyAck, verifyReceipt } from "../src/receipts/sign";
+import registryRules from "./registry-rules-v1.json";
 
 /**
  * The network protocol's vectors (packages/spec/vectors, MIT) against this code, on Node and in
@@ -989,6 +1011,13 @@ describe("protocol 0.2: vocab/doors.json and vocab/attributes.json", () => {
     expect(v.refused).toEqual(expect.arrayContaining(["mailto", "tel", "sms", "whatsapp", "form", "page"]));
     for (const k of v.delivery_kinds) expect(v.kinds).toContain(k);
     expect(v.delivery_kinds).toEqual(["ask", "quote"]);
+    // Version 2: webmcp is read and may count toward the agentic score, but it is no declarable door type.
+    expect(v.version).toBe(2);
+    expect(v.experimental).toEqual(["webmcp"]);
+    for (const t of v.experimental ?? []) {
+      expect(v.types).not.toContain(t);
+      expect(doorTypeSchema.safeParse(t).success, t).toBe(false);
+    }
   });
 
   it("every attribute applies to known groups, has five labels, and needs a proof where a register would give one", () => {
@@ -1156,9 +1185,14 @@ describe("protocol 0.2: cards, listings and the why line", () => {
     expect(whyOf({})).toBe("in the directory's published order");
   });
 
-  it("the tools: three, as before, and three more a network may offer", () => {
+  it("the tools: three, as before, and four more a network may offer", () => {
     expect([...MCP_TOOL_NAMES]).toEqual(["search_businesses", "get_business", "list_categories"]);
-    expect([...MCP_OPTIONAL_TOOL_NAMES]).toEqual(["list_attributes", "register_business", "update_business"]);
+    expect([...MCP_OPTIONAL_TOOL_NAMES]).toEqual([
+      "list_attributes",
+      "register_business",
+      "update_business",
+      "check_business",
+    ]);
     const input = searchBusinessesInputSchema.parse({
       category: "hair_salon",
       attributes: ["walk_ins", "cert=b_corp"],
@@ -1379,5 +1413,280 @@ describe("protocol 0.2: rules version 7 and the order", () => {
     // No newcomer left: the order goes on.
     const one = placeNewcomers(order.map((e) => ({ ...e, newcomer: e.ref === "c" })));
     expect(one.map((p) => p.entry.ref).join("")).toBe("abcdefghijkl");
+  });
+});
+
+describe("capabilities and the agentic score: vocab/capabilities.json, score-rules-v1.json, score.json", () => {
+  const rules = scoreRulesSchema.parse(scoreRulesV1);
+
+  it("the vocabulary: 19 capabilities in order, the five lead ones among them", () => {
+    const v = capabilitiesVocabSchema.parse(capabilityVocabulary);
+    expect(v.capabilities.map((c) => c.id)).toEqual([...CAPABILITY_IDS]);
+    expect(v.lead).toEqual([...LEAD_CAPABILITIES]);
+    expect(v.produced).toEqual(["declared"]);
+    // The rules carry the same vocabulary, each capability with its group.
+    expect(rules.capabilities.map(({ group: _, ...c }) => c)).toEqual(v.capabilities);
+  });
+
+  it("the rules: weights sum to 100, every capability in one group, the formula word for word", () => {
+    expect(rules.version).toBe(1);
+    expect(rules.name).toBe("Agentic score");
+    expect(rules.groups.reduce((n, g) => n + g.weight, 0)).toBe(100);
+    const members = rules.groups.flatMap((g) => g.members);
+    expect([...members].sort()).toEqual([...CAPABILITY_IDS].sort());
+    for (const c of rules.capabilities) {
+      expect(rules.groups.find((g) => g.members.includes(c.id))?.id, c.id).toBe(c.group);
+    }
+    expect(rules.formula).toBe(SCORE_FORMULA_V1);
+    expect(rules.profiles.map((p) => p.id)).toEqual([
+      "appointments",
+      "food",
+      "trades",
+      "shop",
+      "stay",
+      "memberships",
+      "general",
+    ]);
+    // A category group belongs to one profile at most.
+    const groups = rules.profiles.flatMap((p) => p.groups);
+    expect(new Set(groups).size).toBe(groups.length);
+    for (const g of groups) expect(vocabulary.categories.map((c) => c.slug)).toContain(g);
+    // Every weighted capability has a fix; nothing unscored does.
+    for (const g of rules.groups) {
+      for (const c of g.members) expect(rules.fixes[c] !== undefined, c).toBe(g.weight > 0);
+    }
+  });
+
+  it("the rules' words: the name, never a certification, no claims of being first or only", () => {
+    const text = JSON.stringify(scoreRulesV1);
+    expect(text).not.toMatch(/Agent ?Readiness|AgentReady/i);
+    const copy = [
+      rules.summary,
+      rules.not_certification,
+      rules.named,
+      rules.directory,
+      ...Object.values(rules.fixes).flatMap((f) => [f?.title ?? "", f?.how ?? ""]),
+    ].join("\n");
+    expect(copy).not.toMatch(/\b(first|only|verified|certified|people free)\b/i);
+    expect(rules.not_certification).toMatch(/not a certification/);
+    expect(rules.directory).toMatch(/never changes/);
+  });
+
+  it("re-derives every case of score.json: score, grade, numerator, possible weight and fixes in order", () => {
+    expect(scoreVectors.rules_version).toBe(rules.version);
+    expect(scoreVectors.cases.length).toBeGreaterThanOrEqual(25);
+    for (const c of scoreVectors.cases) {
+      const states = c.states as Record<CapabilityId, CapabilityState>;
+      const profile = rules.profiles.find((p) => p.id === c.profile);
+      expect(profile, c.name).toBeDefined();
+      // A state is given for every capability, and "na" exactly where it does not apply.
+      for (const id of CAPABILITY_IDS) {
+        expect(states[id] === "na", `${c.name} ${id}`).toBe(!profile?.applicable.includes(id));
+      }
+      const r = scoreOf(c.profile as "appointments", states, rules);
+      expect({ score: r.score, grade: r.grade, n: r.n, possible: r.possible }, c.name).toEqual({
+        score: c.expect.score,
+        grade: c.expect.grade,
+        n: c.expect.n,
+        possible: c.expect.possible,
+      });
+      expect(fixesOf(c.profile as "appointments", states, rules), c.name).toEqual(c.expect.fixes);
+    }
+  });
+
+  it("the worked examples: a salon 51 C, a restaurant 74 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
+    const by = new Map(scoreVectors.cases.map((c) => [c.name, c.expect]));
+    expect(by.get("hair-salon")).toMatchObject({ score: 51, grade: "C", n: 5800, possible: 95 });
+    expect(by.get("restaurant")).toMatchObject({ score: 74, grade: "B", n: 8400, possible: 95 });
+    expect(by.get("trades")).toMatchObject({ score: 33, grade: "D", n: 3000, possible: 75 });
+    expect(by.get("shop")).toMatchObject({ score: 53, grade: "C", n: 6000, possible: 95 });
+    expect(by.get("homepage-example")).toEqual({
+      score: 72,
+      grade: "B",
+      n: 8200,
+      possible: 95,
+      fixes: [
+        { capability: "change", points: 16 },
+        { capability: "pay", points: 7 },
+        { capability: "policies", points: 5 },
+      ],
+    });
+    expect(by.get("trades")?.fixes.map((f) => `${f.capability}+${f.points}`)).toEqual([
+      "book+18",
+      "change+14",
+      "cancel+14",
+      "receipt+14",
+      "pay+9",
+    ]);
+  });
+
+  it("leaves what does not apply out of the denominator, down to a single group", () => {
+    // Only find applies: possible is find's 5, and find alone decides.
+    const only = { applicable: ["find", "feedback"] as CapabilityId[] };
+    expect(scoreOf(only, { find: "yes" }, rules)).toEqual({ score: 100, grade: "A", n: 600, possible: 5 });
+    expect(scoreOf(only, { find: "partial" }, rules)).toEqual({ score: 50, grade: "C", n: 300, possible: 5 });
+    expect(scoreOf(only, { feedback: "yes" }, rules).score).toBe(0);
+    expect(fixesOf(only, {}, rules)).toEqual([{ capability: "find", points: 100 }]);
+    // Nothing scored applies: 0, and no fix.
+    expect(scoreOf({ applicable: ["feedback"] }, { feedback: "yes" }, rules)).toEqual({
+      score: 0,
+      grade: "E",
+      n: 0,
+      possible: 0,
+    });
+    // A state for a capability that does not apply changes nothing.
+    expect(scoreOf("trades", { find: "yes", catalogue: "yes" }, rules).score).toBe(0);
+    expect([0, 19, 20, 39, 40, 59, 60, 79, 80, 100].map((n) => gradeOf(n, rules)).join("")).toBe("EEDDCCBBAA");
+    expect(capabilityWeightOf("appointments", "book", rules)).toBe(13.3);
+    expect(capabilityWeightOf("shop", "change", rules)).toBe(7.5);
+    expect(capabilityWeightOf("appointments", "feedback", rules)).toBe(0);
+    expect(capabilityWeightOf("trades", "find", rules)).toBe(0);
+  });
+
+  it("maps names to capabilities by the registry's rules, as the network does", () => {
+    const table: [string, string[]][] = [
+      ["create_booking", ["book"]],
+      ["get_booking", []],
+      ["cancel_booking", ["cancel"]],
+      ["get_cancellation_policy", ["policies"]],
+      ["reschedule", ["change"]],
+      ["get_order_status", ["track"]],
+      ["update_cart", ["order"]],
+      ["search_shop_catalog", ["catalogue"]],
+      ["request_return", ["return"]],
+      ["pay_invoice", ["pay", "receipt"]],
+      ["sendMessage", ["message"]],
+      ["check_availability", ["availability"]],
+      ["request_quote", ["negotiate"]],
+    ];
+    for (const [name, caps] of table) expect(capsOfName(registryRules, name), name).toEqual(caps);
+    expect(capsOfOperation(registryRules, "DELETE /bookings/{id}")).toEqual(["cancel"]);
+    expect(capsOfOperation(registryRules, "POST /orders createOrder")).toEqual(["order"]);
+    expect(capsOfOperation(registryRules, "PATCH /bookings/{id}")).toEqual(["change"]);
+    expect(capsOfName(registryRules, "bookings", "POST")).toEqual(["book"]);
+  });
+
+  it("a check's result, a leaderboard and an AI catalog hold to their schemas", () => {
+    const at = "2026-10-07T09:00:00Z";
+    const site = "https://surfingdog.ai";
+    const done = {
+      domain: "salon.example",
+      site: "https://salon.example/",
+      url: `${site}/b/salon.example`,
+      state: "done",
+      checked_at: at,
+      scored_at: at,
+      rules: { version: 1, url: `${site}/v1/score-rules?version=1` },
+      agentic_score: 72,
+      grade: "B",
+      profile: {
+        id: "appointments",
+        label: "Appointments (salons, wellness, classes, tours)",
+        from: "category",
+        category: { group: "hair-beauty", id: "hair_salon", label: "Hair salon" },
+      },
+      level: "askable",
+      answers: [
+        {
+          capability: "message",
+          answer: "yes",
+          door: { type: "a2a", url: "https://salon.example/.well-known/agent-card.json" },
+          how: "A2A skill send_message",
+          checked_at: at,
+        },
+        { capability: "order", answer: "not_applicable" },
+      ],
+      capabilities: [
+        {
+          id: "book",
+          group: "core",
+          state: "yes",
+          evidence: "declared",
+          basis: "tool_name",
+          via: "create_booking",
+          door: { type: "mcp", url: "https://salon.example/mcp" },
+          source_url: "https://salon.example/.well-known/mcp/server-card.json",
+          checked_at: at,
+          weight: 13.3,
+          points: 13.3,
+          experimental: false,
+        },
+        { id: "order", group: "core", state: "na", evidence: null, weight: 0, points: 0 },
+      ],
+      fixes: [{ capability: "change", points: 16, title: "Let agents change a booking or an order", how: "…" }],
+      web_person_message: "Hello,",
+      rank: {
+        text: "#4 of 61 checked in Hair & beauty · Porto, PT",
+        scope: { group: "hair-beauty", country: "PT", place: "Porto" },
+        position: 4,
+        of: 61,
+        overall: { position: 120, of: 5412 },
+      },
+      indexable: true,
+      not_certification: "This is not a certification.",
+      badge: { svg: `${site}/badge/salon.example.svg`, snippet: "<a></a>" },
+      owner: { claim: `${site}/bot#claim`, hide: "update_business", opt_out: `${site}/bot#stop` },
+    };
+    expect(checkResultSchema.parse(done).agentic_score).toBe(72);
+    expect(checkBusinessOutputSchema.parse(done).state).toBe("done");
+    const queued = {
+      domain: "salon.example",
+      url: `${site}/b/salon.example`,
+      state: "queued",
+      queue: { position: 3, budget: "open", retry_after_s: 15 },
+      indexable: false,
+    };
+    expect(checkResultSchema.safeParse(queued).success).toBe(true);
+    expect(checkResultSchema.safeParse({ ...queued, state: "pending" }).success).toBe(false);
+    expect(checkResultSchema.safeParse({ ...done, agentic_score: 101 }).success).toBe(false);
+    expect(checkBusinessInputSchema.safeParse({ url: "salon.example" }).success).toBe(true);
+    expect(checkBusinessInputSchema.safeParse({ url: "" }).success).toBe(false);
+    expect(checkBusinessInputSchema.safeParse({ url: "x".repeat(2049) }).success).toBe(false);
+    expect(updateBusinessInputSchema.safeParse({ domain: "salon.example", score_page: "hidden" }).success).toBe(true);
+    expect(updateBusinessInputSchema.safeParse({ domain: "salon.example", score_page: "gone" }).success).toBe(false);
+    expect(
+      updateBusinessOutputSchema.parse({ status: "listed", domain: "salon.example", score_page: "shown" }),
+    ).toMatchObject({
+      score_page: "shown",
+    });
+    expect(
+      leaderboardSchema.safeParse({
+        scope: { category: "hair-beauty", country: "PT" },
+        rules: { version: 1, url: `${site}/v1/score-rules?version=1` },
+        order: "agentic score, then the most recent check, then domain",
+        not_search_order: "This list is ordered by agentic score. It is not the directory's search order.",
+        total: 61,
+        unnamed: 40,
+        page: 1,
+        next_page: null,
+        named: [
+          {
+            position: 1,
+            domain: "salon.example",
+            name: "A salon",
+            score: 72,
+            grade: "B",
+            answers: { message: "yes", order: "not_applicable" },
+            checked_at: at,
+            result_url: `${site}/b/salon.example`,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    const catalog = {
+      specVersion: "1.0",
+      host: { displayName: "A network", identifier: "did:web:network.example" },
+      entries: [
+        {
+          identifier: "urn:air:network.example:mcp:directory",
+          displayName: "Directory (MCP)",
+          type: "application/mcp-server-card+json",
+          url: "https://network.example/.well-known/mcp/server-card.json",
+          tags: ["directory"],
+        },
+      ],
+    };
+    expect(aiCatalogSchema.parse(catalog).entries[0]).toMatchObject({ tags: ["directory"] });
+    expect(aiCatalogSchema.safeParse({ ...catalog, entries: [{ identifier: "x" }] }).success).toBe(false);
   });
 });

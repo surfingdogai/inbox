@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /v1/score-rules: the agentic score's rules",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["in_force", "announced", "retired"]
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "effective_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "vocabulary": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "find",
+              "catalogue",
+              "availability",
+              "message",
+              "negotiate",
+              "book",
+              "order",
+              "pay",
+              "change",
+              "cancel",
+              "track",
+              "return",
+              "receipt",
+              "feedback",
+              "subscription",
+              "vouchers",
+              "waitlist",
+              "support",
+              "policies"
+            ]
+          },
+          "journey": {
+            "type": "string",
+            "enum": ["before", "doing", "after", "ongoing", "policies"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "enum": ["core", "after", "state", "negotiate", "readable", "find", "unscored"]
+          }
+        },
+        "required": ["id", "journey", "label", "question", "group"]
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["core", "after", "state", "negotiate", "readable", "find", "unscored"]
+          },
+          "weight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "find",
+                "catalogue",
+                "availability",
+                "message",
+                "negotiate",
+                "book",
+                "order",
+                "pay",
+                "change",
+                "cancel",
+                "track",
+                "return",
+                "receipt",
+                "feedback",
+                "subscription",
+                "vouchers",
+                "waitlist",
+                "support",
+                "policies"
+              ]
+            }
+          }
+        },
+        "required": ["id", "weight", "members"]
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "applicable": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "find",
+                "catalogue",
+                "availability",
+                "message",
+                "negotiate",
+                "book",
+                "order",
+                "pay",
+                "change",
+                "cancel",
+                "track",
+                "return",
+                "receipt",
+                "feedback",
+                "subscription",
+                "vouchers",
+                "waitlist",
+                "support",
+                "policies"
+              ]
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The directory's category groups this profile covers."
+          }
+        },
+        "required": ["id", "label", "applicable", "groups"]
+      }
+    },
+    "credit": {
+      "type": "object",
+      "properties": {
+        "yes": {
+          "type": "number"
+        },
+        "partial": {
+          "type": "number"
+        },
+        "no": {
+          "type": "number"
+        }
+      },
+      "required": ["yes", "partial", "no"]
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "number"
+        },
+        "tested": {
+          "type": "number"
+        },
+        "proven": {
+          "type": "number"
+        },
+        "produced": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["declared", "tested", "proven"]
+          }
+        }
+      },
+      "required": ["declared", "tested", "proven", "produced"]
+    },
+    "formula": {
+      "type": "string"
+    },
+    "grades": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "grade": {
+            "type": "string",
+            "enum": ["A", "B", "C", "D", "E"]
+          },
+          "min": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": ["grade", "min"]
+      }
+    },
+    "rank": {
+      "type": "string"
+    },
+    "named": {
+      "type": "string"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "not_certification": {
+      "type": "string"
+    },
+    "fixes": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "find",
+          "catalogue",
+          "availability",
+          "message",
+          "negotiate",
+          "book",
+          "order",
+          "pay",
+          "change",
+          "cancel",
+          "track",
+          "return",
+          "receipt",
+          "feedback",
+          "subscription",
+          "vouchers",
+          "waitlist",
+          "support",
+          "policies"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "how": {
+            "type": "string",
+            "description": "\"<door>\" stands for \" on your <door label> door at <url>\" when the business has a live agent door."
+          }
+        },
+        "required": ["title", "how"]
+      }
+    },
+    "changelog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": ["version", "summary"]
+      }
+    }
+  },
+  "required": [
+    "version",
+    "name",
+    "status",
+    "published_at",
+    "effective_at",
+    "summary",
+    "vocabulary",
+    "capabilities",
+    "groups",
+    "profiles",
+    "credit",
+    "evidence",
+    "formula",
+    "grades",
+    "rank",
+    "named",
+    "directory",
+    "not_certification",
+    "fixes",
+    "changelog"
+  ]
+}

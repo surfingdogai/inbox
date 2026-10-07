@@ -428,6 +428,12 @@ export type AttributeVocabulary = z.infer<typeof attributeVocabularySchema>;
 export const doorVocabularySchema = z.object({
   version: z.int().min(1),
   types: z.array(z.string()),
+  experimental: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Version 2: door types a network reads and may count toward the agentic score (§4.13), never toward a level, a listing or the order; a business cannot declare them.",
+    ),
   platform_prefix: z.string(),
   refused: z.array(z.string()),
   refused_url_schemes: z.array(z.string()),

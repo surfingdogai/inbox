@@ -1,0 +1,353 @@
+{
+  "version": 1,
+  "name": "Agentic score",
+  "status": "in_force",
+  "published_at": "2026-10-07T00:00:00Z",
+  "effective_at": "2026-10-07T00:00:00Z",
+  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, cancel and negotiate, and the journey around them. It counts what applies to that kind of business, and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
+  "vocabulary": "https://surfingdog.ai/v1/score-rules#capabilities",
+  "capabilities": [
+    {
+      "id": "find",
+      "journey": "before",
+      "label": "Find",
+      "question": "Can an agent read who the business is, its opening hours and where it is?",
+      "group": "find"
+    },
+    {
+      "id": "catalogue",
+      "journey": "before",
+      "label": "Catalogue",
+      "question": "Can an agent read its services, products or menu, with prices?",
+      "group": "readable"
+    },
+    {
+      "id": "availability",
+      "journey": "before",
+      "label": "Availability",
+      "question": "Can an agent check free slots or stock?",
+      "group": "state"
+    },
+    {
+      "id": "message",
+      "journey": "before",
+      "label": "Message",
+      "question": "Can an agent send the business a message and get an answer?",
+      "group": "core"
+    },
+    {
+      "id": "negotiate",
+      "journey": "before",
+      "label": "Negotiate",
+      "question": "Can an agent ask for a quote, make an offer or get a counter-offer?",
+      "group": "negotiate"
+    },
+    {
+      "id": "book",
+      "journey": "doing",
+      "label": "Book",
+      "question": "Can an agent make a booking, with its details?",
+      "group": "core"
+    },
+    {
+      "id": "order",
+      "journey": "doing",
+      "label": "Order",
+      "question": "Can an agent place an order, with its options?",
+      "group": "core"
+    },
+    {
+      "id": "pay",
+      "journey": "doing",
+      "label": "Pay",
+      "question": "Can an agent pay, and is it clear how payment happens?",
+      "group": "core"
+    },
+    {
+      "id": "change",
+      "journey": "after",
+      "label": "Change",
+      "question": "Can an agent change a booking or an order?",
+      "group": "after"
+    },
+    {
+      "id": "cancel",
+      "journey": "after",
+      "label": "Cancel",
+      "question": "Can an agent cancel a booking or an order?",
+      "group": "after"
+    },
+    {
+      "id": "track",
+      "journey": "after",
+      "label": "Track",
+      "question": "Can an agent see the status of a booking, an order or a delivery?",
+      "group": "state"
+    },
+    {
+      "id": "return",
+      "journey": "after",
+      "label": "Return or refund",
+      "question": "Can an agent start a return, a refund or an exchange?",
+      "group": "after"
+    },
+    {
+      "id": "receipt",
+      "journey": "after",
+      "label": "Receipt",
+      "question": "Can an agent get a receipt or an invoice?",
+      "group": "after"
+    },
+    {
+      "id": "feedback",
+      "journey": "after",
+      "label": "Feedback",
+      "question": "Can an agent leave feedback or a review?",
+      "group": "unscored"
+    },
+    {
+      "id": "subscription",
+      "journey": "ongoing",
+      "label": "Membership",
+      "question": "Can an agent pause, resume or end a membership or subscription?",
+      "group": "after"
+    },
+    {
+      "id": "vouchers",
+      "journey": "ongoing",
+      "label": "Vouchers",
+      "question": "Can an agent use a gift card, a voucher or loyalty points?",
+      "group": "unscored"
+    },
+    {
+      "id": "waitlist",
+      "journey": "ongoing",
+      "label": "Waitlist",
+      "question": "Can an agent join a waitlist?",
+      "group": "unscored"
+    },
+    {
+      "id": "support",
+      "journey": "ongoing",
+      "label": "Support",
+      "question": "Can an agent raise a complaint or a problem with an order?",
+      "group": "unscored"
+    },
+    {
+      "id": "policies",
+      "journey": "policies",
+      "label": "Policies",
+      "question": "Can an agent read the cancellation, return, deposit or no-show policy?",
+      "group": "readable"
+    }
+  ],
+  "groups": [
+    {
+      "id": "core",
+      "weight": 40,
+      "members": ["message", "book", "order", "pay"]
+    },
+    {
+      "id": "after",
+      "weight": 30,
+      "members": ["change", "cancel", "return", "subscription", "receipt"]
+    },
+    {
+      "id": "state",
+      "weight": 10,
+      "members": ["availability", "track"]
+    },
+    {
+      "id": "negotiate",
+      "weight": 5,
+      "members": ["negotiate"]
+    },
+    {
+      "id": "readable",
+      "weight": 10,
+      "members": ["catalogue", "policies"]
+    },
+    {
+      "id": "find",
+      "weight": 5,
+      "members": ["find"]
+    },
+    {
+      "id": "unscored",
+      "weight": 0,
+      "members": ["feedback", "vouchers", "waitlist", "support"]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "appointments",
+      "label": "Appointments (salons, wellness, classes, tours)",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "pay",
+        "change",
+        "cancel",
+        "feedback",
+        "policies"
+      ],
+      "groups": ["hair-beauty", "wellness", "photography", "tours", "education", "auto"]
+    },
+    {
+      "id": "food",
+      "label": "Restaurants and food",
+      "applicable": ["find", "catalogue", "availability", "message", "book", "order", "pay", "change", "cancel"],
+      "groups": ["restaurant", "cafe", "bakery"]
+    },
+    {
+      "id": "trades",
+      "label": "Trades and quote-led services",
+      "applicable": ["message", "negotiate", "book", "pay", "change", "cancel", "receipt"],
+      "groups": ["trades", "cleaning", "repair", "accounting", "consulting", "it-services", "events"]
+    },
+    {
+      "id": "shop",
+      "label": "Shops",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "order",
+        "pay",
+        "change",
+        "cancel",
+        "track",
+        "return",
+        "receipt"
+      ],
+      "groups": ["grocery", "shop", "florist", "pets", "crafts"]
+    },
+    {
+      "id": "stay",
+      "label": "Places to stay",
+      "applicable": ["availability", "message", "book", "pay", "change", "cancel", "policies"],
+      "groups": ["stay"]
+    },
+    {
+      "id": "memberships",
+      "label": "Gyms and memberships",
+      "applicable": ["find", "catalogue", "book", "order", "pay", "cancel", "subscription"],
+      "groups": ["fitness"]
+    },
+    {
+      "id": "general",
+      "label": "Business (type unknown)",
+      "applicable": ["find", "catalogue", "message", "pay", "cancel", "policies"],
+      "groups": ["bar", "health", "dental", "therapy", "legal"]
+    }
+  ],
+  "credit": {
+    "yes": 1,
+    "partial": 0.5,
+    "no": 0
+  },
+  "evidence": {
+    "declared": 1,
+    "tested": 1,
+    "proven": 1,
+    "produced": ["declared"]
+  },
+  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
+  "grades": [
+    {
+      "grade": "A",
+      "min": 80
+    },
+    {
+      "grade": "B",
+      "min": 60
+    },
+    {
+      "grade": "C",
+      "min": 40
+    },
+    {
+      "grade": "D",
+      "min": 20
+    },
+    {
+      "grade": "E",
+      "min": 0
+    }
+  ],
+  "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists",
+  "named": "a business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above), has claimed its listing with a proof, or links to its own result page; others are counted, not named",
+  "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
+  "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
+  "fixes": {
+    "find": {
+      "title": "Publish who you are, when you are open and where",
+      "how": "Add schema.org LocalBusiness markup (its most specific type) with name, address, geo and openingHoursSpecification."
+    },
+    "catalogue": {
+      "title": "Publish your services and prices for machines",
+      "how": "Add schema.org Service, Product or Menu items with Offer prices to your pages, publish a UCP catalog, or add a tool such as list_services<door>."
+    },
+    "availability": {
+      "title": "Let agents check availability",
+      "how": "Add a tool or operation such as check_availability<door>, or publish stock with your catalogue."
+    },
+    "message": {
+      "title": "Let agents send you a message",
+      "how": "Publish a door that takes messages: an agent inbox, an A2A skill, or a tool such as send_message<door>."
+    },
+    "negotiate": {
+      "title": "Let agents ask for a quote",
+      "how": "Add a tool such as request_quote or make_offer<door>, or take quote requests in an agent inbox."
+    },
+    "book": {
+      "title": "Let agents book",
+      "how": "Add a tool or operation that creates a booking, such as create_booking or POST /bookings<door>; if you use a booking platform, ask it whether it offers an agent door and declare it."
+    },
+    "order": {
+      "title": "Let agents order",
+      "how": "Publish UCP or ACP checkout, or add a tool or operation that creates an order, such as create_order<door>."
+    },
+    "pay": {
+      "title": "Let agents pay",
+      "how": "Accept payment through the agent (UCP payment handlers, ACP delegated payment, AP2 or x402, or a pay tool<door>), and state in your structured data how payment happens."
+    },
+    "change": {
+      "title": "Let agents change a booking or an order",
+      "how": "Add a tool or operation such as reschedule_booking or PATCH /orders/{id}<door>."
+    },
+    "cancel": {
+      "title": "Let agents cancel",
+      "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your cancellation policy."
+    },
+    "track": {
+      "title": "Let agents see the status",
+      "how": "Add a tool or operation such as get_order_status or GET /orders/{id}<door>."
+    },
+    "return": {
+      "title": "Let agents start a return or refund",
+      "how": "Add a tool such as request_return<door>, and mark up your returns policy (schema.org MerchantReturnPolicy)."
+    },
+    "receipt": {
+      "title": "Let agents get a receipt or invoice",
+      "how": "Add a tool or operation such as get_invoice<door>."
+    },
+    "subscription": {
+      "title": "Let agents manage a membership",
+      "how": "Add tools to pause, resume or end a membership<door>."
+    },
+    "policies": {
+      "title": "Publish your policies for machines",
+      "how": "Mark up your returns policy (schema.org MerchantReturnPolicy), link your cancellation, deposit and no-show policies from your pages, or add a tool that returns them<door>."
+    }
+  },
+  "changelog": [
+    {
+      "version": 1,
+      "summary": "The agentic score: capabilities by kind of business, published weights, declared evidence."
+    }
+  ]
+}

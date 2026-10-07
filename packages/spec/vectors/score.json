@@ -1,0 +1,1303 @@
+{
+  "description": "The agentic score, rules version 1 (GET /v1/score-rules?version=1): for each case a profile and every capability's state (na where it does not apply), and the score, grade, integer numerator n, possible weight and fixes (points gained by each capability made yes, in order) the formula gives. Five worked examples, then 20 cases drawn from a fixed seed. Both implementations re-derive every case.",
+  "rules_version": 1,
+  "cases": [
+    {
+      "name": "hair-salon",
+      "profile": "appointments",
+      "states": {
+        "find": "yes",
+        "catalogue": "yes",
+        "availability": "yes",
+        "message": "no",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "na",
+        "pay": "no",
+        "change": "no",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "no",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "no"
+      },
+      "expect": {
+        "score": 51,
+        "grade": "C",
+        "n": 5800,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 16
+          },
+          {
+            "capability": "message",
+            "points": 14
+          },
+          {
+            "capability": "pay",
+            "points": 14
+          },
+          {
+            "capability": "policies",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "restaurant",
+      "profile": "food",
+      "states": {
+        "find": "yes",
+        "catalogue": "yes",
+        "availability": "yes",
+        "message": "no",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "yes",
+        "pay": "yes",
+        "change": "no",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 74,
+        "grade": "B",
+        "n": 8400,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 15
+          },
+          {
+            "capability": "message",
+            "points": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "trades",
+      "profile": "trades",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "na",
+        "message": "yes",
+        "negotiate": "yes",
+        "book": "no",
+        "order": "na",
+        "pay": "partial",
+        "change": "no",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "no",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 33,
+        "grade": "D",
+        "n": 3000,
+        "possible": 75,
+        "fixes": [
+          {
+            "capability": "book",
+            "points": 18
+          },
+          {
+            "capability": "change",
+            "points": 14
+          },
+          {
+            "capability": "cancel",
+            "points": 14
+          },
+          {
+            "capability": "receipt",
+            "points": 14
+          },
+          {
+            "capability": "pay",
+            "points": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "shop",
+      "profile": "shop",
+      "states": {
+        "find": "yes",
+        "catalogue": "yes",
+        "availability": "yes",
+        "message": "na",
+        "negotiate": "na",
+        "book": "na",
+        "order": "yes",
+        "pay": "partial",
+        "change": "no",
+        "cancel": "no",
+        "track": "no",
+        "return": "no",
+        "receipt": "no",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 53,
+        "grade": "C",
+        "n": 6000,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "pay",
+            "points": 10
+          },
+          {
+            "capability": "change",
+            "points": 8
+          },
+          {
+            "capability": "cancel",
+            "points": 8
+          },
+          {
+            "capability": "return",
+            "points": 8
+          },
+          {
+            "capability": "receipt",
+            "points": 8
+          },
+          {
+            "capability": "track",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "homepage-example",
+      "profile": "appointments",
+      "states": {
+        "find": "yes",
+        "catalogue": "yes",
+        "availability": "yes",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "na",
+        "pay": "partial",
+        "change": "no",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "no",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "no"
+      },
+      "expect": {
+        "score": 72,
+        "grade": "B",
+        "n": 8200,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 16
+          },
+          {
+            "capability": "pay",
+            "points": 7
+          },
+          {
+            "capability": "policies",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-01",
+      "profile": "memberships",
+      "states": {
+        "find": "yes",
+        "catalogue": "yes",
+        "availability": "na",
+        "message": "na",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "no",
+        "pay": "no",
+        "change": "na",
+        "cancel": "partial",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "yes",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 60,
+        "grade": "B",
+        "n": 6100,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "order",
+            "points": 15
+          },
+          {
+            "capability": "pay",
+            "points": 15
+          },
+          {
+            "capability": "cancel",
+            "points": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-02",
+      "profile": "trades",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "na",
+        "message": "partial",
+        "negotiate": "no",
+        "book": "partial",
+        "order": "na",
+        "pay": "no",
+        "change": "yes",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "yes",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 58,
+        "grade": "C",
+        "n": 5200,
+        "possible": 75,
+        "fixes": [
+          {
+            "capability": "pay",
+            "points": 18
+          },
+          {
+            "capability": "message",
+            "points": 9
+          },
+          {
+            "capability": "book",
+            "points": 9
+          },
+          {
+            "capability": "negotiate",
+            "points": 6
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-03",
+      "profile": "food",
+      "states": {
+        "find": "no",
+        "catalogue": "no",
+        "availability": "partial",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "partial",
+        "order": "no",
+        "pay": "no",
+        "change": "partial",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 29,
+        "grade": "D",
+        "n": 3300,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "cancel",
+            "points": 16
+          },
+          {
+            "capability": "order",
+            "points": 10
+          },
+          {
+            "capability": "pay",
+            "points": 10
+          },
+          {
+            "capability": "catalogue",
+            "points": 10
+          },
+          {
+            "capability": "change",
+            "points": 8
+          },
+          {
+            "capability": "book",
+            "points": 5
+          },
+          {
+            "capability": "availability",
+            "points": 5
+          },
+          {
+            "capability": "find",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-04",
+      "profile": "memberships",
+      "states": {
+        "find": "partial",
+        "catalogue": "yes",
+        "availability": "na",
+        "message": "na",
+        "negotiate": "na",
+        "book": "no",
+        "order": "no",
+        "pay": "no",
+        "change": "na",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "no",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 15,
+        "grade": "E",
+        "n": 1500,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "cancel",
+            "points": 17
+          },
+          {
+            "capability": "subscription",
+            "points": 17
+          },
+          {
+            "capability": "book",
+            "points": 15
+          },
+          {
+            "capability": "order",
+            "points": 15
+          },
+          {
+            "capability": "pay",
+            "points": 15
+          },
+          {
+            "capability": "find",
+            "points": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-05",
+      "profile": "food",
+      "states": {
+        "find": "no",
+        "catalogue": "no",
+        "availability": "no",
+        "message": "no",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "no",
+        "pay": "no",
+        "change": "no",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 11,
+        "grade": "E",
+        "n": 1200,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 15
+          },
+          {
+            "capability": "cancel",
+            "points": 15
+          },
+          {
+            "capability": "message",
+            "points": 10
+          },
+          {
+            "capability": "order",
+            "points": 10
+          },
+          {
+            "capability": "pay",
+            "points": 10
+          },
+          {
+            "capability": "availability",
+            "points": 10
+          },
+          {
+            "capability": "catalogue",
+            "points": 10
+          },
+          {
+            "capability": "find",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-06",
+      "profile": "general",
+      "states": {
+        "find": "no",
+        "catalogue": "no",
+        "availability": "na",
+        "message": "no",
+        "negotiate": "na",
+        "book": "na",
+        "order": "na",
+        "pay": "no",
+        "change": "na",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "no"
+      },
+      "expect": {
+        "score": 35,
+        "grade": "D",
+        "n": 3600,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "message",
+            "points": 24
+          },
+          {
+            "capability": "pay",
+            "points": 24
+          },
+          {
+            "capability": "catalogue",
+            "points": 6
+          },
+          {
+            "capability": "policies",
+            "points": 6
+          },
+          {
+            "capability": "find",
+            "points": 6
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-07",
+      "profile": "food",
+      "states": {
+        "find": "no",
+        "catalogue": "no",
+        "availability": "yes",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "no",
+        "order": "yes",
+        "pay": "yes",
+        "change": "no",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 42,
+        "grade": "C",
+        "n": 4800,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 16
+          },
+          {
+            "capability": "cancel",
+            "points": 16
+          },
+          {
+            "capability": "book",
+            "points": 11
+          },
+          {
+            "capability": "catalogue",
+            "points": 11
+          },
+          {
+            "capability": "find",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-08",
+      "profile": "memberships",
+      "states": {
+        "find": "no",
+        "catalogue": "yes",
+        "availability": "na",
+        "message": "na",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "yes",
+        "pay": "no",
+        "change": "na",
+        "cancel": "partial",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "no",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 52,
+        "grade": "C",
+        "n": 5300,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "subscription",
+            "points": 18
+          },
+          {
+            "capability": "pay",
+            "points": 16
+          },
+          {
+            "capability": "cancel",
+            "points": 9
+          },
+          {
+            "capability": "find",
+            "points": 6
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-09",
+      "profile": "shop",
+      "states": {
+        "find": "yes",
+        "catalogue": "partial",
+        "availability": "no",
+        "message": "na",
+        "negotiate": "na",
+        "book": "na",
+        "order": "partial",
+        "pay": "partial",
+        "change": "partial",
+        "cancel": "yes",
+        "track": "partial",
+        "return": "yes",
+        "receipt": "yes",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 62,
+        "grade": "B",
+        "n": 7050,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "order",
+            "points": 10
+          },
+          {
+            "capability": "pay",
+            "points": 10
+          },
+          {
+            "capability": "availability",
+            "points": 5
+          },
+          {
+            "capability": "catalogue",
+            "points": 5
+          },
+          {
+            "capability": "change",
+            "points": 4
+          },
+          {
+            "capability": "track",
+            "points": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-10",
+      "profile": "food",
+      "states": {
+        "find": "yes",
+        "catalogue": "partial",
+        "availability": "partial",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "no",
+        "pay": "partial",
+        "change": "partial",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 50,
+        "grade": "C",
+        "n": 5700,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "cancel",
+            "points": 16
+          },
+          {
+            "capability": "order",
+            "points": 11
+          },
+          {
+            "capability": "change",
+            "points": 8
+          },
+          {
+            "capability": "pay",
+            "points": 5
+          },
+          {
+            "capability": "availability",
+            "points": 5
+          },
+          {
+            "capability": "catalogue",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-11",
+      "profile": "shop",
+      "states": {
+        "find": "partial",
+        "catalogue": "yes",
+        "availability": "no",
+        "message": "na",
+        "negotiate": "na",
+        "book": "na",
+        "order": "no",
+        "pay": "yes",
+        "change": "yes",
+        "cancel": "yes",
+        "track": "no",
+        "return": "no",
+        "receipt": "yes",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 58,
+        "grade": "C",
+        "n": 6600,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "order",
+            "points": 21
+          },
+          {
+            "capability": "return",
+            "points": 8
+          },
+          {
+            "capability": "availability",
+            "points": 5
+          },
+          {
+            "capability": "track",
+            "points": 5
+          },
+          {
+            "capability": "find",
+            "points": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-12",
+      "profile": "general",
+      "states": {
+        "find": "partial",
+        "catalogue": "no",
+        "availability": "na",
+        "message": "no",
+        "negotiate": "na",
+        "book": "na",
+        "order": "na",
+        "pay": "no",
+        "change": "na",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "yes"
+      },
+      "expect": {
+        "score": 44,
+        "grade": "C",
+        "n": 4500,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "message",
+            "points": 24
+          },
+          {
+            "capability": "pay",
+            "points": 24
+          },
+          {
+            "capability": "catalogue",
+            "points": 6
+          },
+          {
+            "capability": "find",
+            "points": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-13",
+      "profile": "trades",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "na",
+        "message": "partial",
+        "negotiate": "yes",
+        "book": "yes",
+        "order": "na",
+        "pay": "no",
+        "change": "yes",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "partial",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 53,
+        "grade": "C",
+        "n": 4800,
+        "possible": 75,
+        "fixes": [
+          {
+            "capability": "pay",
+            "points": 18
+          },
+          {
+            "capability": "cancel",
+            "points": 14
+          },
+          {
+            "capability": "message",
+            "points": 9
+          },
+          {
+            "capability": "receipt",
+            "points": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-14",
+      "profile": "memberships",
+      "states": {
+        "find": "yes",
+        "catalogue": "no",
+        "availability": "na",
+        "message": "na",
+        "negotiate": "na",
+        "book": "no",
+        "order": "partial",
+        "pay": "no",
+        "change": "na",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "yes",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 49,
+        "grade": "C",
+        "n": 5000,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "book",
+            "points": 16
+          },
+          {
+            "capability": "pay",
+            "points": 16
+          },
+          {
+            "capability": "catalogue",
+            "points": 12
+          },
+          {
+            "capability": "order",
+            "points": 8
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-15",
+      "profile": "stay",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "no",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "na",
+        "pay": "partial",
+        "change": "no",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "yes"
+      },
+      "expect": {
+        "score": 65,
+        "grade": "B",
+        "n": 7000,
+        "possible": 90,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 16
+          },
+          {
+            "capability": "availability",
+            "points": 11
+          },
+          {
+            "capability": "pay",
+            "points": 7
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-16",
+      "profile": "stay",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "partial",
+        "message": "no",
+        "negotiate": "na",
+        "book": "no",
+        "order": "na",
+        "pay": "yes",
+        "change": "partial",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "yes"
+      },
+      "expect": {
+        "score": 56,
+        "grade": "C",
+        "n": 6100,
+        "possible": 90,
+        "fixes": [
+          {
+            "capability": "message",
+            "points": 15
+          },
+          {
+            "capability": "book",
+            "points": 15
+          },
+          {
+            "capability": "change",
+            "points": 9
+          },
+          {
+            "capability": "availability",
+            "points": 6
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-17",
+      "profile": "memberships",
+      "states": {
+        "find": "partial",
+        "catalogue": "no",
+        "availability": "na",
+        "message": "na",
+        "negotiate": "na",
+        "book": "partial",
+        "order": "no",
+        "pay": "partial",
+        "change": "na",
+        "cancel": "no",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "yes",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 36,
+        "grade": "D",
+        "n": 3700,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "cancel",
+            "points": 18
+          },
+          {
+            "capability": "order",
+            "points": 16
+          },
+          {
+            "capability": "catalogue",
+            "points": 12
+          },
+          {
+            "capability": "book",
+            "points": 8
+          },
+          {
+            "capability": "pay",
+            "points": 8
+          },
+          {
+            "capability": "find",
+            "points": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-18",
+      "profile": "stay",
+      "states": {
+        "find": "na",
+        "catalogue": "na",
+        "availability": "yes",
+        "message": "yes",
+        "negotiate": "na",
+        "book": "no",
+        "order": "na",
+        "pay": "no",
+        "change": "yes",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "no"
+      },
+      "expect": {
+        "score": 59,
+        "grade": "C",
+        "n": 6400,
+        "possible": 90,
+        "fixes": [
+          {
+            "capability": "book",
+            "points": 15
+          },
+          {
+            "capability": "pay",
+            "points": 15
+          },
+          {
+            "capability": "policies",
+            "points": 11
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-19",
+      "profile": "food",
+      "states": {
+        "find": "no",
+        "catalogue": "no",
+        "availability": "partial",
+        "message": "partial",
+        "negotiate": "na",
+        "book": "yes",
+        "order": "no",
+        "pay": "no",
+        "change": "no",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "na"
+      },
+      "expect": {
+        "score": 37,
+        "grade": "D",
+        "n": 4200,
+        "possible": 95,
+        "fixes": [
+          {
+            "capability": "change",
+            "points": 16
+          },
+          {
+            "capability": "order",
+            "points": 10
+          },
+          {
+            "capability": "pay",
+            "points": 10
+          },
+          {
+            "capability": "catalogue",
+            "points": 10
+          },
+          {
+            "capability": "message",
+            "points": 5
+          },
+          {
+            "capability": "availability",
+            "points": 5
+          },
+          {
+            "capability": "find",
+            "points": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "generated-20",
+      "profile": "general",
+      "states": {
+        "find": "partial",
+        "catalogue": "yes",
+        "availability": "na",
+        "message": "no",
+        "negotiate": "na",
+        "book": "na",
+        "order": "na",
+        "pay": "no",
+        "change": "na",
+        "cancel": "yes",
+        "track": "na",
+        "return": "na",
+        "receipt": "na",
+        "feedback": "na",
+        "subscription": "na",
+        "vouchers": "na",
+        "waitlist": "na",
+        "support": "na",
+        "policies": "yes"
+      },
+      "expect": {
+        "score": 50,
+        "grade": "C",
+        "n": 5100,
+        "possible": 85,
+        "fixes": [
+          {
+            "capability": "message",
+            "points": 24
+          },
+          {
+            "capability": "pay",
+            "points": 24
+          },
+          {
+            "capability": "find",
+            "points": 3
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "@surfingdog/spec",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "license": "MIT",
   "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, reviews \u2014 schemas and test vectors.",

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The capability vocabulary (vocab/capabilities.json)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "name": {
+      "type": "string"
+    },
+    "states": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["yes", "partial", "no", "na"]
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["declared", "tested", "proven"]
+      }
+    },
+    "produced": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["declared", "tested", "proven"]
+      }
+    },
+    "lead": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "find",
+          "catalogue",
+          "availability",
+          "message",
+          "negotiate",
+          "book",
+          "order",
+          "pay",
+          "change",
+          "cancel",
+          "track",
+          "return",
+          "receipt",
+          "feedback",
+          "subscription",
+          "vouchers",
+          "waitlist",
+          "support",
+          "policies"
+        ]
+      }
+    },
+    "journeys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["before", "doing", "after", "ongoing", "policies"]
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "find",
+              "catalogue",
+              "availability",
+              "message",
+              "negotiate",
+              "book",
+              "order",
+              "pay",
+              "change",
+              "cancel",
+              "track",
+              "return",
+              "receipt",
+              "feedback",
+              "subscription",
+              "vouchers",
+              "waitlist",
+              "support",
+              "policies"
+            ]
+          },
+          "journey": {
+            "type": "string",
+            "enum": ["before", "doing", "after", "ongoing", "policies"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "journey", "label", "question"]
+      }
+    }
+  },
+  "required": ["version", "name", "states", "evidence", "produced", "lead", "journeys", "capabilities"]
+}

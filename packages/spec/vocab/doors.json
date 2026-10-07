@@ -1,6 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "types": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "nlweb", "webhook", "other"],
+  "experimental": ["webmcp"],
   "platform_prefix": "platform:",
   "refused": ["mailto", "tel", "sms", "whatsapp", "form", "page"],
   "refused_url_schemes": ["mailto", "tel", "sms", "whatsapp", "fax", "callto", "skype"],

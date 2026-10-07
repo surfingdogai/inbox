@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GET /b/{domain}.json: a check's result",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "maxLength": 253
+    },
+    "site": {
+      "description": "The business's own site.",
+      "type": "string",
+      "format": "uri"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Its result page."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["not_checked", "queued", "checking", "scoring", "done", "blocked", "failed", "hidden", "not_checkable"]
+    },
+    "queue": {
+      "description": "Only while queued, checking or scoring.",
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "budget": {
+          "type": "string",
+          "enum": ["open", "spent", "paused"]
+        },
+        "retry_after_s": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["position", "budget", "retry_after_s"]
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "scored_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "rules": {
+      "description": "The score rules applied (GET /v1/score-rules?version=N).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["version", "url"]
+    },
+    "agentic_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "grade": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D", "E"]
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+        },
+        "label": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "enum": ["category", "signals", "default"]
+        },
+        "category": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": ["group", "id", "label"]
+        }
+      },
+      "required": ["id", "label", "from"]
+    },
+    "level": {
+      "type": "string",
+      "enum": ["listed", "readable", "askable", "bookable", "payable"]
+    },
+    "answers": {
+      "description": "Message, book, order, cancel and negotiate, in that order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "enum": ["message", "book", "order", "cancel", "negotiate"]
+          },
+          "answer": {
+            "type": "string",
+            "enum": ["yes", "partly", "no", "not_applicable"]
+          },
+          "door": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(inbox|mcp|a2a|openapi|api|ucp|acp|nlweb|webhook|other|platform:[a-z0-9-]{1,40})$"
+                      },
+                      {
+                        "type": "string",
+                        "const": "webmcp"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": ["type", "url"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "how": {
+            "type": "string"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": ["capability", "answer"]
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "find",
+              "catalogue",
+              "availability",
+              "message",
+              "negotiate",
+              "book",
+              "order",
+              "pay",
+              "change",
+              "cancel",
+              "track",
+              "return",
+              "receipt",
+              "feedback",
+              "subscription",
+              "vouchers",
+              "waitlist",
+              "support",
+              "policies"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "enum": ["core", "after", "state", "negotiate", "readable", "find", "unscored"]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["yes", "partial", "no", "na"]
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["declared", "tested", "proven"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "tool_name",
+                  "skill",
+                  "operation",
+                  "item_types",
+                  "protocol",
+                  "structured_data",
+                  "page",
+                  "manifest"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "via": {
+            "description": "The tool, skill, operation or field it was read from.",
+            "type": "string"
+          },
+          "door": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(inbox|mcp|a2a|openapi|api|ucp|acp|nlweb|webhook|other|platform:[a-z0-9-]{1,40})$"
+                      },
+                      {
+                        "type": "string",
+                        "const": "webmcp"
+                      }
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": ["type", "url"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0
+          },
+          "points": {
+            "type": "number",
+            "minimum": 0
+          },
+          "note": {
+            "type": "string"
+          },
+          "experimental": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "group", "state", "evidence", "weight", "points"]
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string",
+            "enum": [
+              "find",
+              "catalogue",
+              "availability",
+              "message",
+              "negotiate",
+              "book",
+              "order",
+              "pay",
+              "change",
+              "cancel",
+              "track",
+              "return",
+              "receipt",
+              "feedback",
+              "subscription",
+              "vouchers",
+              "waitlist",
+              "support",
+              "policies"
+            ]
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "type": "string"
+          },
+          "how": {
+            "type": "string"
+          }
+        },
+        "required": ["capability", "points", "title", "how"]
+      }
+    },
+    "web_person_message": {
+      "type": "string"
+    },
+    "rank": {
+      "description": "Only when done, not hidden and of a kind the directory ranks.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "country": {
+              "type": "string"
+            },
+            "place": {
+              "type": "string"
+            }
+          }
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "overall": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "of": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["position", "of"]
+        }
+      },
+      "required": ["text", "scope", "position", "of", "overall"]
+    },
+    "indexable": {
+      "type": "boolean"
+    },
+    "excluded": {
+      "type": "string"
+    },
+    "not_certification": {
+      "type": "string"
+    },
+    "badge": {
+      "type": "object",
+      "properties": {
+        "svg": {
+          "type": "string",
+          "format": "uri"
+        },
+        "snippet": {
+          "type": "string"
+        }
+      },
+      "required": ["svg", "snippet"]
+    },
+    "owner": {
+      "type": "object",
+      "properties": {
+        "claim": {
+          "type": "string"
+        },
+        "hide": {
+          "type": "string"
+        },
+        "opt_out": {
+          "type": "string"
+        }
+      },
+      "required": ["claim", "hide", "opt_out"]
+    }
+  },
+  "required": ["domain", "url", "state", "indexable"]
+}

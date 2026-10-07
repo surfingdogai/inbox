@@ -388,6 +388,11 @@
       "type": "string",
       "enum": ["on", "off"]
     },
+    "score_page": {
+      "description": "hidden takes the business's agentic score result page out of view, its ranks and leaderboards included; shown brings it back. It needs the claim token or a proof, as set does.",
+      "type": "string",
+      "enum": ["hidden", "shown"]
+    },
     "opt_out": {
       "description": "Stops the listing (list), the crawl (crawl) or both (all). Without a claim token or a proof it removes an entry the network found that nobody claimed, and never a claimed or registered listing, which needs its claim_token or a proof as strong as its claim. A business that opted out comes back with a domain or key proof.",
       "type": "object",

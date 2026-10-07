@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { profileServiceSchema } from "../base";
+import { checkResultSchema } from "./capabilities";
 import { tierSchema, timestampSchema } from "./common";
 import {
   attributesResponseSchema,
@@ -26,9 +27,15 @@ export const MCP_TOOL_NAMES = ["search_businesses", "get_business", "list_catego
 
 /**
  * Tools a network may also offer (protocol 0.2): `list_attributes`, read-only; `register_business` and `update_business`,
- * which a business's own AI calls to register, claim, correct or remove its listing (§4.12).
+ * which a business's own AI calls to register, claim, correct or remove its listing (§4.12); `check_business`, which
+ * checks how far an agent can go with one business's website and gives its agentic score (§4.13).
  */
-export const MCP_OPTIONAL_TOOL_NAMES = ["list_attributes", "register_business", "update_business"] as const;
+export const MCP_OPTIONAL_TOOL_NAMES = [
+  "list_attributes",
+  "register_business",
+  "update_business",
+  "check_business",
+] as const;
 
 /** `search_businesses`: `GET /v1/businesses` for an assistant, in the same order and with the same filters. */
 export const searchBusinessesInputSchema = z.object({
@@ -432,6 +439,12 @@ export const updateBusinessInputSchema = z.object({
     })
     .optional(),
   listing: z.enum(["on", "off"]).optional().describe("off hides it from search and keeps it in the index."),
+  score_page: z
+    .enum(["hidden", "shown"])
+    .optional()
+    .describe(
+      "hidden takes the business's agentic score result page out of view, its ranks and leaderboards included; shown brings it back. It needs the claim token or a proof, as set does.",
+    ),
   opt_out: z
     .object({
       scopes: z
@@ -451,5 +464,21 @@ export const updateBusinessOutputSchema = z.object({
     .enum([...registerStatusSchema.options, "off", "removed"])
     .describe("As register_business's, and: off, hidden from search; removed, after an opt-out."),
   ...listingAnswerShape,
+  score_page: z
+    .enum(["hidden", "shown"])
+    .optional()
+    .describe("Whether its agentic score result page is hidden or shown, when the call set it."),
 });
 export type UpdateBusinessOutput = z.infer<typeof updateBusinessOutputSchema>;
+
+/* --- check_business (§4.13) ----------------------------------------------------------------------------------------- */
+
+/** `check_business`: check one business's website, or read the result of a check already made. */
+export const checkBusinessInputSchema = z.object({
+  url: z.string().min(1).max(2048).describe("The business's website, as a URL or a bare domain like salon.example."),
+});
+export type CheckBusinessInput = z.infer<typeof checkBusinessInputSchema>;
+
+/** The same as `GET /b/<domain>.json`. A new check may take minutes: call again with the same URL to read it. */
+export const checkBusinessOutputSchema = checkResultSchema;
+export type CheckBusinessOutput = z.infer<typeof checkBusinessOutputSchema>;

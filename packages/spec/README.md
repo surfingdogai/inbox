@@ -11,7 +11,9 @@ or network:
   the published rules — described for people in [`docs/protocol/network.md`](../../docs/protocol/network.md),
 - the tools a network offers assistants at `/mcp` (ADR-017 A2.7): what each takes and answers,
 - protocol 0.2: doors, readiness levels, listing fields, entries a network found on businesses'
-  own websites, claims (`register_business`, `update_business`) and rules version 7.
+  own websites, claims (`register_business`, `update_business`) and rules version 7,
+- 0.3 (optional for a network): capabilities and the agentic score (`check_business`, the score's
+  published rules, result pages and leaderboards), and the discovery documents an agent reads to find a network.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -27,15 +29,19 @@ implementations:
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
 | `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
+| `score.json` | the agentic score (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
 its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door
 types, and the human channels that are never doors) and `vocab/attributes.json` (the attributes a
 listing may carry, with the categories each applies to and labels in five languages); the network
-serves the same files.
+serves the same files. `vocab/capabilities.json` is the capability vocabulary (what an agent can do
+with a business, from finding it to a refund) and `vocab/score-rules-v1.json` the agentic score's
+rules, version 1, as `GET /v1/score-rules?version=1` serves them; `doors.json` version 2 adds the
+`experimental` door types, which count toward the score and never toward a level.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by
 `npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`,
-`ordering.json`, `profile.json` and `mcp.json` come from the network unchanged. `packages/core/test/*-vectors.test.ts` checks
+`ordering.json`, `profile.json`, `mcp.json` and `score.json` come from the network unchanged. `packages/core/test/*-vectors.test.ts` checks
 every file against the code on Node and in workerd; the network checks the same files in Go.

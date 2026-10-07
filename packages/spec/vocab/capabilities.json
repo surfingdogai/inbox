@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "name": "Surfing Dog capability vocabulary",
+  "states": ["yes", "partial", "no", "na"],
+  "evidence": ["declared", "tested", "proven"],
+  "produced": ["declared"],
+  "lead": ["message", "book", "order", "cancel", "negotiate"],
+  "journeys": ["before", "doing", "after", "ongoing", "policies"],
+  "capabilities": [
+    {
+      "id": "find",
+      "journey": "before",
+      "label": "Find",
+      "question": "Can an agent read who the business is, its opening hours and where it is?"
+    },
+    {
+      "id": "catalogue",
+      "journey": "before",
+      "label": "Catalogue",
+      "question": "Can an agent read its services, products or menu, with prices?"
+    },
+    {
+      "id": "availability",
+      "journey": "before",
+      "label": "Availability",
+      "question": "Can an agent check free slots or stock?"
+    },
+    {
+      "id": "message",
+      "journey": "before",
+      "label": "Message",
+      "question": "Can an agent send the business a message and get an answer?"
+    },
+    {
+      "id": "negotiate",
+      "journey": "before",
+      "label": "Negotiate",
+      "question": "Can an agent ask for a quote, make an offer or get a counter-offer?"
+    },
+    { "id": "book", "journey": "doing", "label": "Book", "question": "Can an agent make a booking, with its details?" },
+    {
+      "id": "order",
+      "journey": "doing",
+      "label": "Order",
+      "question": "Can an agent place an order, with its options?"
+    },
+    {
+      "id": "pay",
+      "journey": "doing",
+      "label": "Pay",
+      "question": "Can an agent pay, and is it clear how payment happens?"
+    },
+    { "id": "change", "journey": "after", "label": "Change", "question": "Can an agent change a booking or an order?" },
+    { "id": "cancel", "journey": "after", "label": "Cancel", "question": "Can an agent cancel a booking or an order?" },
+    {
+      "id": "track",
+      "journey": "after",
+      "label": "Track",
+      "question": "Can an agent see the status of a booking, an order or a delivery?"
+    },
+    {
+      "id": "return",
+      "journey": "after",
+      "label": "Return or refund",
+      "question": "Can an agent start a return, a refund or an exchange?"
+    },
+    {
+      "id": "receipt",
+      "journey": "after",
+      "label": "Receipt",
+      "question": "Can an agent get a receipt or an invoice?"
+    },
+    {
+      "id": "feedback",
+      "journey": "after",
+      "label": "Feedback",
+      "question": "Can an agent leave feedback or a review?"
+    },
+    {
+      "id": "subscription",
+      "journey": "ongoing",
+      "label": "Membership",
+      "question": "Can an agent pause, resume or end a membership or subscription?"
+    },
+    {
+      "id": "vouchers",
+      "journey": "ongoing",
+      "label": "Vouchers",
+      "question": "Can an agent use a gift card, a voucher or loyalty points?"
+    },
+    { "id": "waitlist", "journey": "ongoing", "label": "Waitlist", "question": "Can an agent join a waitlist?" },
+    {
+      "id": "support",
+      "journey": "ongoing",
+      "label": "Support",
+      "question": "Can an agent raise a complaint or a problem with an order?"
+    },
+    {
+      "id": "policies",
+      "journey": "policies",
+      "label": "Policies",
+      "question": "Can an agent read the cancellation, return, deposit or no-show policy?"
+    }
+  ]
+}

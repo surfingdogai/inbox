@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "/.well-known/ai-catalog.json (ARD), as a network serves it",
+  "type": "object",
+  "properties": {
+    "specVersion": {
+      "type": "string"
+    },
+    "host": {
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string"
+        },
+        "identifier": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["identifier", "displayName", "type", "url"],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": ["specVersion", "host", "entries"],
+  "additionalProperties": {}
+}

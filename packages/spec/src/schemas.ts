@@ -7,10 +7,15 @@ import {
   receiptPublishSchema,
 } from "./base";
 import {
+  aiCatalogSchema,
   attributesResponseSchema,
   businessesResponseSchema,
+  capabilitiesVocabSchema,
   caseAnsweredSchema,
   categoriesResponseSchema,
+  checkBusinessInputSchema,
+  checkBusinessOutputSchema,
+  checkResultSchema,
   contestAnswerSchema,
   contestCreatedSchema,
   contestRequestSchema,
@@ -22,6 +27,7 @@ import {
   instanceRegistrationRequestSchema,
   instanceRegistrationResponseSchema,
   instanceStatusSchema,
+  leaderboardSchema,
   listAttributesInputSchema,
   listAttributesOutputSchema,
   listCategoriesInputSchema,
@@ -58,6 +64,7 @@ import {
   reportAnswerSchema,
   reportFiledSchema,
   reportRequestSchema,
+  scoreRulesSchema,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
   signedPingResponseSchema,
@@ -181,6 +188,16 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
     schema: updateBusinessOutputSchema,
     title: "MCP update_business: structuredContent",
   },
+  "mcp-check-business-input": { schema: checkBusinessInputSchema, title: "MCP check_business: arguments" },
+  "mcp-check-business-output": {
+    schema: checkBusinessOutputSchema,
+    title: "MCP check_business: structuredContent",
+  },
+  capabilities: { schema: capabilitiesVocabSchema, title: "The capability vocabulary (vocab/capabilities.json)" },
+  "score-rules": { schema: scoreRulesSchema, title: "GET /v1/score-rules: the agentic score's rules" },
+  "check-result": { schema: checkResultSchema, title: "GET /b/{domain}.json: a check's result" },
+  leaderboard: { schema: leaderboardSchema, title: "GET /leaderboard.json" },
+  "ai-catalog": { schema: aiCatalogSchema, title: "/.well-known/ai-catalog.json (ARD), as a network serves it" },
 };
 
 /** One JSON Schema document, as it is written to `schemas/<name>.json`. */

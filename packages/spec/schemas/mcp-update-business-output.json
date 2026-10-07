@@ -614,6 +614,11 @@
     "detail": {
       "description": "The answer in one plain sentence.",
       "type": "string"
+    },
+    "score_page": {
+      "description": "Whether its agentic score result page is hidden or shown, when the call set it.",
+      "type": "string",
+      "enum": ["hidden", "shown"]
     }
   },
   "required": ["status", "domain"]
