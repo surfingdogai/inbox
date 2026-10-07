@@ -1,6 +1,8 @@
 # The network protocol
 
 Protocol 0.2 (October 2026). Everything in 0.2 is additive: a 0.1 network and a 0.1 inbox keep working.
+Spec 0.3 adds, all of it optional for a network and none of it read by an inbox, capabilities and the
+agentic score (§4.13) and the discovery documents (§4.14).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -36,6 +38,9 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Attributes a listing may carry | [`vocab/attributes.json`](../../packages/spec/vocab/attributes.json) (§4.10) |
 | Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
+| The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
+| The agentic score's rules, version 1 | [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
+| The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (§4.13), from the network |
 
 ## 1. Conventions
 
@@ -212,6 +217,10 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `GET /v1/attributes` (0.2, SHOULD) | none | → `{version, keys, payments}` | `attributes` |
 | `GET /v1/ranking` | none | `?version=N` → the rules | `ranking` |
 | `POST /mcp` | none | one JSON-RPC message → its answer (§4.7) | `mcp-*` |
+| `GET /v1/score-rules` (0.3, MAY) | none | `?version=N` → the agentic score's rules (§4.13) | `score-rules` |
+| `GET /b/{domain}`, `GET /b/{domain}.json` (0.3, MAY) | none | → a check's result page, or its JSON (§4.13) | `check-result` |
+| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&page=` → businesses by agentic score (§4.13) | `leaderboard` |
+| `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
 | `POST /v1/persons` | sdi-instance/1 | `{request_id, email, agent?}` → `201` | `persons-*` |
 | `POST /v1/presentations` | sdi-instance/1 | one of `pass`, `key`, `agent_key` → `200` | `presentations-*` |
@@ -537,6 +546,7 @@ is open to every origin, without credentials.
 | `list_attributes` (0.2, optional) | none | `GET /v1/attributes` |
 | `register_business` (0.2, optional) | the business, its doors and a proof (§4.12) | the status, the card, what was dropped |
 | `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
+| `check_business` (0.3, optional) | `url`: a website or a bare domain | a check's result (§4.13) |
 
 Protocol 0.2: `search_businesses` takes `attributes`, `country`, `price_band`, `accepts`,
 `requestable`, `door_type`, `level`, `has_inbox`, `source` and `order`, as `GET /v1/businesses` does
@@ -546,6 +556,14 @@ askable is listed. A card's `inbox` is present whenever `has_inbox` is true or a
 adds `facts` and `rules: {version, url}`. `MCP_TOOL_NAMES` stays the three tools above; the optional
 ones are `MCP_OPTIONAL_TOOL_NAMES`. `list_attributes` is read-only like the others;
 `register_business` and `update_business` change what a network holds and are annotated so.
+
+Spec 0.3: `check_business` (in `MCP_OPTIONAL_TOOL_NAMES`) checks how far an agent can go with one
+business's website and answers `GET /b/{domain}.json`'s shape (`schemas/mcp-check-business-*.json`).
+It may queue a read of the site within the network's daily budget, so it is annotated not read-only,
+not destructive, idempotent and open-world; calling it again with the same URL reads the result.
+Checking a site is not claiming it, and never touches a listing. `update_business` takes
+`score_page: "hidden" | "shown"`, which needs the claim token or a proof as `set` does, and answers
+it back.
 
 Their `inputSchema` and `outputSchema` are `schemas/mcp-*.json` word for word, and every tool is
 annotated read-only, idempotent and closed-world. `search_businesses` is `GET /v1/businesses` with
@@ -595,6 +613,13 @@ order or pay. The types are in [`vocab/doors.json`](../../packages/spec/vocab/do
 | `webhook` | in the vocabulary; no network delivers to one yet |
 | `other` | any other protocol, named in `protocol` (like `beckn` or `graphql`) |
 | `platform:<name>` | a commerce or booking platform's door for this business |
+
+**Experimental door types** (`vocab/doors.json` version 2, `experimental`) are read by a network but
+cannot be declared, and they never raise a level, make a listing or move anyone in the order. Today
+that is `webmcp`: tools a page registers for an agent in the browser, read from the page's own HTML
+(`<form toolname>` and inline scripts). A crawler runs no JavaScript, so tools registered by an
+external script are not seen. An experimental door may count toward the agentic score (§4.13), where
+it is marked as such.
 
 **Never a door:** mail, phone, SMS, messaging, forms and web pages (`mailto`, `tel`, `sms`, `whatsapp`,
 `form`, `page`), nor an address with a scheme or host of a human channel (`refused_url_schemes`,
@@ -760,6 +785,120 @@ or at the network's page for businesses, stops the crawling and removes an uncla
 found, at once; it never removes a claimed or registered listing. A business that opted out comes back
 with a `domain` or `key` proof; a removal the network made itself (for abuse, or on a legal request)
 stays, and the answer is `refused`. `listing: "off"` hides it from search and keeps it in the index.
+
+### 4.13 Capabilities and the agentic score
+
+A network MAY say, business by business, how far an AI agent can go with it through the doors it
+published, and sum that up as an **agentic score** from 0 to 100. It is about capabilities, not
+standards: whatever the door (an inbox, MCP, A2A, an API, UCP or ACP), can an agent message, book,
+order, cancel or negotiate here, and the journey around those.
+
+**The vocabulary** ([`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json)) lists 19
+capabilities in a fixed order, which breaks every tie: `find`, `catalogue`, `availability`,
+`message`, `negotiate`, `book`, `order`, `pay`, `change`, `cancel`, `track`, `return`, `receipt`,
+`feedback`, `subscription`, `vouchers`, `waitlist`, `support`, `policies`. Five lead every result:
+`message`, `book`, `order`, `cancel` and `negotiate`. A capability is `yes`, `partial` (met through a
+door behind a customer account, or payment described but not done by the agent), `no`, or `na`
+when it does not apply to that kind of business.
+
+**Evidence** is a ladder: `declared` (the business's own site or door says so), `tested` (a probe
+tried it) and `proven` (agents reported using it). Version 1 of the rules produces `declared` alone.
+A capability read from a tool's name, a page's words or a page's marker is still `declared`, with a
+`basis` saying which (`tool_name`, `skill`, `operation`, `item_types`, `protocol`,
+`structured_data`, `page`, `manifest`): the business published that name. A `probably` value never
+counts, a failing door counts for nothing, and a door on another host counts once its own document
+names the business (§4.8).
+
+**Profiles and what does not apply.** A business is scored for its kind, and what does not apply to
+that kind leaves the denominator: a plumber is not marked down for having no catalogue.
+
+| Profile | Applies |
+|---|---|
+| `appointments` (salons, wellness, classes, tours) | find, catalogue, availability, message, book, change, cancel, pay, policies, feedback |
+| `food` (restaurants and food) | find, catalogue, availability, message, book, order, change, cancel, pay |
+| `trades` (trades and quote-led services) | message, negotiate, book, change, cancel, pay, receipt |
+| `shop` | find, catalogue, availability, order, pay, change, cancel, track, return, receipt |
+| `stay` (places to stay) | availability, book, change, cancel, pay, message, policies |
+| `memberships` (gyms and memberships) | find, catalogue, order, book, subscription, cancel, pay |
+| `general` (type unknown) | find, catalogue, message, pay, cancel, policies |
+
+Each profile names the category groups it covers; a business without a category the network can
+read from the business itself is scored by its doors' signals, or as `general`.
+
+**Groups and weights** (rules version 1): `core` 40 (message, book, order, pay), `after` 30 (change,
+cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
+10 (catalogue, policies), `find` 5; feedback, vouchers, waitlist and support are shown and not
+counted. `yes` earns two halves, `partial` one, `no` none. The arithmetic is integer, the same in
+every language:
+
+```
+For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0. A group with A_g = ∅ is dropped.
+possible = Σ_{g: A_g≠∅} W_g
+N        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))
+D        = 120 × possible
+score    = (100 × N + D/2) div D                       (round half up; 0..100)
+grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20
+```
+
+A capability's displayed weight is `W_g / |A_g|` to one decimal place. **Fixes** are each applicable,
+weighted capability that is not `yes`, scored again as `yes`: the points it would add, by points,
+then group order, then vocabulary order; a fix worth nothing is left out. A fix's text in the rules
+may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
+business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
+`capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
+cases, a salon at 51 (C), a restaurant at 74 (B), a plumber at 33 (D), a shop at 53 (C), among them.
+
+**The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
+version in force and `?version=N` any version ever published (`404` for one that never was), shaped
+as `schemas/score-rules.json` ([`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json)
+is version 1).
+
+**The score never changes the directory's search order** (§4.4), and nobody can pay for a score or a
+place. It is not a certification: it is what was read on the business's own site and doors on the
+date shown, each capability with its door, its source and its date.
+
+**Checks and result pages.** Anyone may ask a network to check any website (`check_business`, or a
+form at the network's `/check`); a check is read within the network's daily budget and never claims,
+lists or changes a listing. Its result is `GET /b/{domain}` (a page) and `GET /b/{domain}.json`
+(`schemas/check-result.json`): the state (`not_checked`, `queued`, `checking`, `scoring`, `done`,
+`blocked`, `failed`, `hidden`, `not_checkable`), and when done the score, the grade, the profile,
+the five lead answers each with its door and date, every capability, the fixes, a plain message the
+owner can hand to whoever runs the site, and the rank.
+
+**Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`) orders
+by score, then the most recent check, then domain, by category group, country and place; it counts
+every business checked that its owner has not hidden and that is of a kind the directory lists. It
+is a separate list from the directory, and it says so.
+
+**Naming and indexing.** A business is **named** on a leaderboard, and its result page may be indexed
+by search engines, when it is agent-ready (`askable` or above, §4.9), has claimed its listing with a
+proof (§4.12), or links to its own result page or badge from its own site. Every other business is
+counted and not named, and its page carries `noindex`: no unrequested public grades. A kind of
+business the directory does not list gets a result page, never indexed and never ranked.
+
+**The owner decides.** Checking is not claiming. The owner, with a claim token or a proof, can claim
+and correct the listing, hide the result (`update_business` with `score_page: "hidden"`, which takes
+it out of ranks and leaderboards too) or opt out of crawling altogether (§4.5, §4.12). A **badge**
+(`/badge/{domain}.svg` and a snippet linking to the result page) exists for the owner to place on
+their own site if they wish; a network never places it anywhere.
+
+### 4.14 Discovery documents
+
+So an agent or a model can find a network's doors without being told, a network SHOULD serve:
+
+- **`/.well-known/ai-catalog.json`**, an ARD catalog (`specVersion`, `host`, `entries[]` of
+  `{identifier, displayName, type, url, description?, tags?, capabilities?}`) listing its MCP server
+  card (`application/mcp-server-card+json`), its A2A agent card (`application/a2a-agent-card+json`),
+  its OpenAPI document, its rules and its llms.txt, every `url` https
+  (`schemas/ai-catalog.json`, read loosely);
+- **`/.well-known/mcp/server-card.json`**: the MCP server's name, version, protocol revision,
+  endpoint, its tools exactly as `tools/list` gives them, and its instructions;
+- **`/.well-known/agent-card.json`**: an A2A agent card, when the network answers A2A (a read-only
+  `message/send` for search and check is enough);
+- **`robots.txt`** with a `Content-Signal` line saying what its public pages may be used for.
+
+Tool descriptions say plainly what the directory is and when to use it. They never tell an agent to
+call the network every time.
 
 ## 5. Persons and passes
 
@@ -1153,6 +1292,14 @@ Protocol 0.2 adds two checks, both read-only:
   `source=member`. Each filtered page must keep the relative order of the businesses it shares with
   the whole page, and, when the whole list fits that page, add nobody. A filter answered `400` is
   "not supported" and skipped.
+
+Spec 0.3 adds two more, both read-only and both a should:
+
+- `score.rules` (§4.13): it reads `GET /v1/score-rules`. A `404` passes as "not offered"; otherwise
+  the document must hold to `scoreRulesSchema`, and every capability it names must be one of the
+  vocabulary's.
+- `discovery.catalog` (§4.14): it reads `GET /.well-known/ai-catalog.json`. A `404` passes as "not
+  offered"; otherwise it must hold to `aiCatalogSchema`, and every address in it must be https.
 
 `rules.read` takes a rules version newer than the checker knows, and says it read it leniently.
 
