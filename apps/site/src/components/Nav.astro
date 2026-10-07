@@ -2,9 +2,9 @@
 import Mark from "./Mark.astro";
 
 /**
- * The bar is about the network: where to search, checking a business and the leaderboards, how a
- * business gets in, how an agent reaches it, the inbox, and the rules. The rest of the map sits in
- * the menu, with developer material last.
+ * The bar is the three products, checking a business and the blog. The rest of the map sits in the
+ * menu: the directory and the leaderboards, how a business gets in and how an agent searches, the
+ * rules, then the pages about us, with developer material last.
  * `match` is the page a link belongs to when its own href points at an anchor.
  */
 interface Link {
@@ -15,17 +15,19 @@ interface Link {
 }
 
 const links: Link[] = [
-  { href: "/directory/", label: "Directory" },
-  { href: "/check", label: "Check" },
-  { href: "/leaderboard", label: "Leaderboards" },
-  { href: "/#businesses", label: "For businesses" },
-  { href: "/#agents", label: "For agents" },
+  { href: "/search/", label: "Search" },
   { href: "/inbox/", label: "Inbox" },
-  { href: "/network/#ranking", label: "Rules", match: "/network/" },
+  { href: "/trust/", label: "Trust network" },
+  { href: "/check", label: "Check a business" },
+  { href: "/blog/", label: "Blog" },
 ];
 
 const extras: Link[] = [
-  { href: "/blog/", label: "Blog" },
+  { href: "/directory/", label: "Directory" },
+  { href: "/leaderboard", label: "Leaderboards" },
+  { href: "/search/#businesses", label: "For businesses" },
+  { href: "/search/#agents", label: "For agents" },
+  { href: "/network/#ranking", label: "Rules", match: "/network/" },
   { href: "/about/", label: "About" },
   { href: "/faq/", label: "FAQ" },
   { href: "/how-it-works/", label: "How it works" },
@@ -98,9 +100,6 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
             <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"></path>
           </svg>
         </button>
-        <a class="btn btn-primary btn-sm cta" href="/check">
-          <span class="cta-long">Check your business</span><span class="cta-short">Check</span>
-        </a>
         <button
           class="menu"
           type="button"
@@ -385,22 +384,6 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
     display: none;
   }
 
-  .cta {
-    flex: none;
-  }
-  /* The bar's button says the whole thing where there is room, and "Check" where there is not. */
-  .cta-short {
-    display: none;
-  }
-  @media (max-width: 1199px) {
-    .cta-long {
-      display: none;
-    }
-    .cta-short {
-      display: inline;
-    }
-  }
-
   /* The menu button only exists where the strip does not. */
   .menu {
     display: none;
@@ -608,10 +591,7 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
       height: 56px;
       gap: 6px;
     }
-    /* Named through .navbar so these beat .btn-sm / .btn-icon rather than tying with them. */
-    .navbar .cta {
-      height: 40px;
-    }
+    /* Named through .navbar so this beats .btn-sm / .btn-icon rather than tying with it. */
     .navbar .tt {
       width: 40px;
       height: 40px;
@@ -619,7 +599,6 @@ const section = [...links, ...extras, ...more].find((l) => current(l))?.label ??
   }
   /* A finger gets 44px even where the control is drawn smaller. */
   @media (max-width: 899px) and (pointer: coarse) {
-    .navbar .cta::before,
     .navbar .tt::before {
       content: "";
       position: absolute;
