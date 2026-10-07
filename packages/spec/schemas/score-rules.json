@@ -135,6 +135,10 @@
           "label": {
             "type": "string"
           },
+          "noun": {
+            "type": "string",
+            "description": "What \"scored as\" says: \"a shop\"."
+          },
           "applicable": {
             "type": "array",
             "items": {
@@ -170,7 +174,7 @@
             "description": "The directory's category groups this profile covers."
           }
         },
-        "required": ["id", "label", "applicable", "groups"]
+        "required": ["id", "label", "noun", "applicable", "groups"]
       }
     },
     "credit": {
@@ -278,6 +282,28 @@
           "how": {
             "type": "string",
             "description": "\"<door>\" stands for \" on your <door label> door at <url>\" when the business has a live agent door."
+          },
+          "by_profile": {
+            "description": "Another how for a kind of business.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": ["appointments", "food", "trades", "shop", "stay", "memberships", "general"]
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "how": {
+                  "type": "string",
+                  "description": "\"<door>\" stands for \" on your <door label> door at <url>\" when the business has a live agent door."
+                }
+              },
+              "required": ["how"]
+            }
+          },
+          "protocol": {
+            "description": "The how when the business's preferred door is an agent commerce protocol (UCP, ACP).",
+            "type": "string"
           }
         },
         "required": ["title", "how"]

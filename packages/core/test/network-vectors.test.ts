@@ -1558,8 +1558,22 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       ["sendMessage", ["message"]],
       ["check_availability", ["availability"]],
       ["request_quote", ["negotiate"]],
+      // A name that only reads acts on nothing; a word meets one list of a rule.
+      ["get_class_schedule", []],
+      ["get_offers", []],
+      ["get_purchase_history", []],
+      ["get_refund_status", []],
+      ["get_exchange_rate", []],
+      ["get_delivery_fee", []],
+      ["get_invoice", ["receipt"]],
+      ["book", ["book"]],
+      ["Book a table", ["book"]],
     ];
     for (const [name, caps] of table) expect(capsOfName(registryRules, name), name).toEqual(caps);
+    expect(capsOfName(registryRules, "create_booking", undefined, true)).toEqual([]);
+    expect(capsOfOperation(registryRules, "POST /orders/search")).toEqual([]);
+    expect(capsOfOperation(registryRules, "DELETE /cart/items/{id}")).toEqual([]);
+    expect(capsOfOperation(registryRules, "GET /bookings/{id}")).toEqual([]);
     expect(capsOfOperation(registryRules, "DELETE /bookings/{id}")).toEqual(["cancel"]);
     expect(capsOfOperation(registryRules, "POST /orders createOrder")).toEqual(["order"]);
     expect(capsOfOperation(registryRules, "PATCH /bookings/{id}")).toEqual(["change"]);

@@ -27,7 +27,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Is the score a certification?",
-    a: "No. It is what our crawler read on the business's own site and doors on the date shown. Every answer names its door, its source and its date.",
+    a: "No. It is what our crawler read on the business's own site and doors on the date shown. Every yes or partly answer names its door, its source and its date.",
   },
   {
     q: "How do I raise my score?",
@@ -35,7 +35,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "Someone checked my business. How do I hide the result?",
-    a: "Anyone can check any site, and checking is not claiming. To hide your result, claim your listing from your own AI with <code>register_business</code>, then call <code>update_business</code> with <code>score_page</code> set to <code>hidden</code>; that takes it off the ranks and leaderboards too. A result page is indexed by search engines when the business is agent-ready or has claimed it, and not otherwise.",
+    a: "Anyone can check any site, and checking is not claiming. To hide your result, claim your listing from your own AI with <code>register_business</code>, then call <code>update_business</code> with <code>score_page</code> set to <code>hidden</code>; that takes it off the ranks and leaderboards too. A result page is indexed by search engines, and the business named on leaderboards, when it is agent-ready, has claimed its listing, or shows its own badge on its own site; otherwise neither.",
   },
   {
     q: "How do I stop the crawler and remove everything?",

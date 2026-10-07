@@ -35,6 +35,7 @@ const NEW_OR_CHANGED = [
   "src/pages/about.astro",
   "src/pages/faq.astro",
   "src/lib/agent-example.ts",
+  "src/lib/status.ts",
   "public/robots.txt",
 ];
 

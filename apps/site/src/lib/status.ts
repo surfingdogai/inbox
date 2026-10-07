@@ -24,9 +24,9 @@ export const STATE_LABEL: Record<State, string> = {
 export const UPDATED = "7 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
-  { id: "directory", label: "Directory of businesses with a verified inbox", state: "live" },
+  { id: "directory", label: "Directory of businesses with an inbox that answers", state: "live" },
   { id: "search", label: "Search it from your AI: MCP, REST or llms.txt", state: "live" },
-  { id: "ranking", label: "Ranked by signed receipts under rules version 6; nobody can pay to rank", state: "live" },
+  { id: "ranking", label: "Ranked by signed receipts under rules version 7; nobody can pay to rank", state: "live" },
   {
     id: "protocol",
     label: "Open protocol, MIT example network, network-check and SDK 0.2.0",
@@ -37,7 +37,7 @@ export const capabilities: readonly Capability[] = [
   {
     id: "checker",
     label: "Check any business's website: what an AI agent can do there, and its agentic score by published rules",
-    state: "live",
+    state: "building",
   },
   {
     id: "crawler",

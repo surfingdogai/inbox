@@ -77,11 +77,19 @@ export type ScoreGroupId = z.infer<typeof scoreGroupIdSchema>;
 export const gradeSchema = z.enum(["A", "B", "C", "D", "E"]);
 export type Grade = z.infer<typeof gradeSchema>;
 
+const fixHowSchema = z
+  .string()
+  .describe('"<door>" stands for " on your <door label> door at <url>" when the business has a live agent door.');
 const fixTextSchema = z.object({
   title: z.string(),
-  how: z
-    .string()
-    .describe('"<door>" stands for " on your <door label> door at <url>" when the business has a live agent door.'),
+  how: fixHowSchema,
+  by_profile: z
+    .partialRecord(profileIdSchema, z.object({ how: fixHowSchema }))
+    .optional()
+    .describe("Another how for a kind of business."),
+  protocol: fixHowSchema
+    .optional()
+    .describe("The how when the business's preferred door is an agent commerce protocol (UCP, ACP)."),
 });
 
 /** `GET /v1/score-rules[?version=N]`: the score's published rules, versioned like the directory's own. */
@@ -109,6 +117,7 @@ export const scoreRulesSchema = z.object({
     z.object({
       id: profileIdSchema,
       label: z.string(),
+      noun: z.string().describe('What "scored as" says: "a shop".'),
       applicable: z.array(capabilityIdSchema),
       groups: z.array(z.string()).describe("The directory's category groups this profile covers."),
     }),
@@ -247,14 +256,20 @@ export function capabilityWeightOf(
 
 /* --- names to capabilities (the door registry's capability_rules) ---------------------------------------------------- */
 
-/** What `capsOfName` reads from a door registry: its capability rules and the words an HTTP method adds. */
+/**
+ * What `capsOfName` reads from a door registry: its capability rules, the words an HTTP method adds, the words that
+ * say a name only reads, and the capabilities such a name may meet.
+ */
 export interface CapabilityRules {
   readonly capability_rules: readonly {
     readonly cap: string;
     readonly all: readonly (readonly string[])[];
     readonly none?: readonly string[];
+    readonly alone?: readonly string[];
   }[];
   readonly method_words: Readonly<Record<string, readonly string[]>>;
+  readonly read_words?: readonly string[];
+  readonly read_only_caps?: readonly string[];
 }
 
 /** A name's words: split on anything not a letter or digit and on lower-to-upper camelCase, lower-cased. */
@@ -266,19 +281,33 @@ export function wordsOf(name: string): string[] {
     .map((w) => w.toLowerCase());
 }
 
+/** Whether each list shares a word with `words`, no word meeting two lists. */
+function listsMet(
+  lists: readonly (readonly string[])[],
+  words: readonly string[],
+  used: readonly string[] = [],
+): boolean {
+  const [first, ...rest] = lists;
+  if (!first) return true;
+  return words.some((w) => first.includes(w) && !used.includes(w) && listsMet(rest, words, [...used, w]));
+}
+
 /**
- * The capabilities a tool, skill or operation name maps to: a rule holds when each of its `all` lists shares a word
- * with the name and none of its `none` words is there. `method` (an operation's) adds the registry's words for it.
+ * The capabilities a tool, skill or operation name maps to: a rule holds when each of its `all` lists shares a word of
+ * its own with the name (or one of its `alone` words is there) and none of its `none` words is. `method` (an
+ * operation's) adds the registry's words for it. A name that only reads (one of its words is a read word, an operation
+ * by GET, or a tool its server marks read-only: `readOnly`) meets only the registry's read-only capabilities.
  */
-export function capsOfName(rules: CapabilityRules, name: string, method?: string): CapabilityId[] {
-  const words = new Set(wordsOf(name));
-  for (const w of method ? (rules.method_words[method.toUpperCase()] ?? []) : []) words.add(w);
+export function capsOfName(rules: CapabilityRules, name: string, method?: string, readOnly = false): CapabilityId[] {
+  const words = [...new Set([...wordsOf(name), ...(method ? (rules.method_words[method.toUpperCase()] ?? []) : [])])];
+  const reads = readOnly || words.some((w) => (rules.read_words ?? []).includes(w));
   const out: CapabilityId[] = [];
   for (const r of rules.capability_rules) {
     const cap = capabilityIdSchema.safeParse(r.cap);
     if (!cap.success || out.includes(cap.data)) continue;
-    if (!r.all.every((list) => list.some((w) => words.has(w)))) continue;
-    if ((r.none ?? []).some((w) => words.has(w))) continue;
+    if (reads && !(rules.read_only_caps ?? []).includes(cap.data)) continue;
+    if ((r.none ?? []).some((w) => words.includes(w))) continue;
+    if (!(r.alone ?? []).some((w) => words.includes(w)) && !listsMet(r.all, words)) continue;
     out.push(cap.data);
   }
   return out;

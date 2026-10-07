@@ -182,6 +182,7 @@
     {
       "id": "appointments",
       "label": "Appointments (salons, wellness, classes, tours)",
+      "noun": "a business taking appointments (a salon, wellness, a class or a tour)",
       "applicable": [
         "find",
         "catalogue",
@@ -199,18 +200,21 @@
     {
       "id": "food",
       "label": "Restaurants and food",
+      "noun": "a restaurant or food business",
       "applicable": ["find", "catalogue", "availability", "message", "book", "order", "pay", "change", "cancel"],
       "groups": ["restaurant", "cafe", "bakery"]
     },
     {
       "id": "trades",
       "label": "Trades and quote-led services",
+      "noun": "a trade or quote-led service",
       "applicable": ["message", "negotiate", "book", "pay", "change", "cancel", "receipt"],
       "groups": ["trades", "cleaning", "repair", "accounting", "consulting", "it-services", "events"]
     },
     {
       "id": "shop",
       "label": "Shops",
+      "noun": "a shop",
       "applicable": [
         "find",
         "catalogue",
@@ -228,19 +232,22 @@
     {
       "id": "stay",
       "label": "Places to stay",
+      "noun": "a place to stay",
       "applicable": ["availability", "message", "book", "pay", "change", "cancel", "policies"],
       "groups": ["stay"]
     },
     {
       "id": "memberships",
       "label": "Gyms and memberships",
+      "noun": "a gym or membership business",
       "applicable": ["find", "catalogue", "book", "order", "pay", "cancel", "subscription"],
       "groups": ["fitness"]
     },
     {
       "id": "general",
       "label": "Business (type unknown)",
-      "applicable": ["find", "catalogue", "message", "pay", "cancel", "policies"],
+      "noun": "a business of a kind not known",
+      "applicable": ["find", "catalogue", "message", "pay", "policies"],
       "groups": ["bar", "health", "dental", "therapy", "legal"]
     }
   ],
@@ -279,7 +286,7 @@
     }
   ],
   "rank": "score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists",
-  "named": "a business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above), has claimed its listing with a proof, or links to its own result page; others are counted, not named",
+  "named": "a business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above), has claimed its listing with a proof, or shows its own badge on its own site (a link to its result page); others are counted, not named",
   "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
   "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
   "fixes": {
@@ -289,11 +296,13 @@
     },
     "catalogue": {
       "title": "Publish your services and prices for machines",
-      "how": "Add schema.org Service, Product or Menu items with Offer prices to your pages, publish a UCP catalog, or add a tool such as list_services<door>."
+      "how": "Add schema.org Service, Product or Menu items with Offer prices to your pages, publish a UCP catalog, or add a tool such as list_services<door>.",
+      "protocol": "Publish your catalogue with its prices<door>."
     },
     "availability": {
       "title": "Let agents check availability",
-      "how": "Add a tool or operation such as check_availability<door>, or publish stock with your catalogue."
+      "how": "Add a tool or operation such as check_availability<door>, or publish stock with your catalogue.",
+      "protocol": "Publish stock with your catalogue<door>."
     },
     "message": {
       "title": "Let agents send you a message",
@@ -309,27 +318,49 @@
     },
     "order": {
       "title": "Let agents order",
-      "how": "Publish UCP or ACP checkout, or add a tool or operation that creates an order, such as create_order<door>."
+      "how": "Publish UCP or ACP checkout, or add a tool or operation that creates an order, such as create_order<door>.",
+      "protocol": "Publish checkout<door>."
     },
     "pay": {
       "title": "Let agents pay",
-      "how": "Accept payment through the agent (UCP payment handlers, ACP delegated payment, AP2 or x402, or a pay tool<door>), and state in your structured data how payment happens."
+      "how": "Accept payment through the agent (UCP payment handlers, ACP delegated payment, AP2 or x402, or a pay tool<door>), and state in your structured data how payment happens.",
+      "protocol": "Publish payment handlers (UCP) or delegated payment (ACP)<door>."
     },
     "change": {
       "title": "Let agents change a booking or an order",
-      "how": "Add a tool or operation such as reschedule_booking or PATCH /orders/{id}<door>."
+      "how": "Add a tool or operation such as reschedule_booking or PATCH /orders/{id}<door>.",
+      "by_profile": {
+        "shop": {
+          "how": "Add a tool or operation such as update_order or PATCH /orders/{id}<door>."
+        },
+        "appointments": {
+          "how": "Add a tool or operation such as reschedule_booking or PATCH /bookings/{id}<door>."
+        },
+        "stay": {
+          "how": "Add a tool or operation such as change_reservation or PATCH /reservations/{id}<door>."
+        }
+      },
+      "protocol": "Publish order management with changes to an order<door>, or add a tool or operation such as update_order."
     },
     "cancel": {
       "title": "Let agents cancel",
-      "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your cancellation policy."
+      "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your cancellation policy.",
+      "by_profile": {
+        "shop": {
+          "how": "Add a tool or operation such as cancel_order or DELETE /orders/{id}<door>, and publish your cancellation policy."
+        }
+      },
+      "protocol": "Publish order management with cancelling an order<door>, and publish your cancellation policy."
     },
     "track": {
       "title": "Let agents see the status",
-      "how": "Add a tool or operation such as get_order_status or GET /orders/{id}<door>."
+      "how": "Add a tool or operation such as get_order_status or GET /orders/{id}<door>.",
+      "protocol": "Publish order management with an order's status<door>."
     },
     "return": {
       "title": "Let agents start a return or refund",
-      "how": "Add a tool such as request_return<door>, and mark up your returns policy (schema.org MerchantReturnPolicy)."
+      "how": "Add a tool such as request_return<door>, and mark up your returns policy (schema.org MerchantReturnPolicy).",
+      "protocol": "Publish returns<door>, and mark up your returns policy (schema.org MerchantReturnPolicy)."
     },
     "receipt": {
       "title": "Let agents get a receipt or invoice",
@@ -341,7 +372,24 @@
     },
     "policies": {
       "title": "Publish your policies for machines",
-      "how": "Mark up your returns policy (schema.org MerchantReturnPolicy), link your cancellation, deposit and no-show policies from your pages, or add a tool that returns them<door>."
+      "how": "Mark up your returns policy (schema.org MerchantReturnPolicy), link your cancellation, deposit and no-show policies from your pages, or add a tool that returns them<door>.",
+      "by_profile": {
+        "appointments": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "food": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "stay": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "memberships": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "general": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        }
+      }
     }
   },
   "changelog": [

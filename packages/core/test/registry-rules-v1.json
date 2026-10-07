@@ -1,13 +1,39 @@
 {
-  "description": "An excerpt of the network's door registry, version 1: the words an HTTP method adds and the rules that map a tool, skill or operation name to capabilities. The registry itself is the network's; this copy is for the vectors.",
+  "description": "An excerpt of the network's door registry, version 1: the words an HTTP method adds, the words that say a name only reads, the rules that map a tool, skill or operation name to capabilities, and the capabilities a name that only reads may meet. The registry itself is the network's; this copy is for the vectors.",
   "version": 1,
   "method_words": {
     "POST": ["create"],
     "PUT": ["update", "change"],
     "PATCH": ["update", "change"],
-    "DELETE": ["cancel"],
+    "DELETE": ["delete"],
     "GET": ["get"]
   },
+  "read_words": [
+    "get",
+    "list",
+    "search",
+    "find",
+    "view",
+    "show",
+    "fetch",
+    "check",
+    "lookup",
+    "look",
+    "read",
+    "describe",
+    "query",
+    "browse",
+    "status",
+    "history",
+    "details",
+    "detail",
+    "info",
+    "summary",
+    "estimate",
+    "calculate",
+    "preview",
+    "validate"
+  ],
   "capability_rules": [
     {
       "cap": "find",
@@ -44,14 +70,16 @@
       "all": [
         ["message", "messages", "chat", "contact", "question", "inquiry", "enquiry", "ask"],
         ["send", "post", "ask", "create", "submit", "contact", "chat"]
-      ]
+      ],
+      "alone": ["chat", "ask", "contact"]
     },
     {
       "cap": "negotiate",
       "all": [
         ["quote", "quotes", "offer", "offers", "bid", "proposal", "negotiate", "counter", "estimate"],
-        ["request", "make", "create", "get", "send", "submit", "accept", "decline", "counter", "negotiate"]
-      ]
+        ["request", "make", "create", "send", "submit", "accept", "decline", "counter", "negotiate"]
+      ],
+      "alone": ["quote", "negotiate"]
     },
     {
       "cap": "book",
@@ -68,21 +96,24 @@
           "schedule"
         ],
         ["create", "make", "new", "add", "place", "submit", "request", "book", "reserve", "schedule"]
-      ]
+      ],
+      "alone": ["book", "reserve"]
     },
     {
       "cap": "order",
       "all": [
         ["order", "orders", "cart", "checkout", "purchase", "buy"],
         ["create", "place", "add", "submit", "update", "new", "checkout", "buy", "purchase", "make"]
-      ]
+      ],
+      "alone": ["checkout", "buy", "purchase"]
     },
     {
       "cap": "pay",
       "all": [
         ["pay", "payment", "payments", "checkout"],
         ["pay", "create", "process", "complete", "submit", "checkout", "make"]
-      ]
+      ],
+      "alone": ["pay", "checkout"]
     },
     {
       "cap": "change",
@@ -101,9 +132,32 @@
           "item",
           "reschedule"
         ]
+      ],
+      "alone": ["reschedule"]
+    },
+    {
+      "cap": "cancel",
+      "all": [["cancel", "cancellation", "annul", "void"]],
+      "none": ["policy", "policies", "terms"]
+    },
+    {
+      "cap": "cancel",
+      "all": [
+        ["delete"],
+        [
+          "booking",
+          "bookings",
+          "order",
+          "orders",
+          "reservation",
+          "reservations",
+          "appointment",
+          "appointments",
+          "subscription",
+          "subscriptions"
+        ]
       ]
     },
-    { "cap": "cancel", "all": [["cancel", "cancellation", "annul", "void"]], "none": ["policy", "policies", "terms"] },
     {
       "cap": "track",
       "all": [
@@ -122,14 +176,18 @@
           "track",
           "tracking"
         ]
-      ]
+      ],
+      "alone": ["track"]
     },
     {
       "cap": "return",
       "all": [["return", "returns", "refund", "refunds", "exchange", "rma", "withdraw"]],
-      "none": ["policy", "policies"]
+      "none": ["policy", "policies", "rate", "rates"]
     },
-    { "cap": "receipt", "all": [["receipt", "receipts", "invoice", "invoices"]] },
+    {
+      "cap": "receipt",
+      "all": [["receipt", "receipts", "invoice", "invoices"]]
+    },
     {
       "cap": "feedback",
       "all": [
@@ -142,10 +200,17 @@
       "all": [
         ["subscription", "subscriptions", "membership", "memberships", "subscribe", "plan"],
         ["pause", "resume", "cancel", "create", "update", "change", "start", "stop", "renew", "subscribe"]
-      ]
+      ],
+      "alone": ["subscribe"]
     },
-    { "cap": "vouchers", "all": [["voucher", "vouchers", "giftcard", "gift", "coupon", "loyalty", "redeem", "promo"]] },
-    { "cap": "waitlist", "all": [["waitlist", "waitinglist"]] },
+    {
+      "cap": "vouchers",
+      "all": [["voucher", "vouchers", "giftcard", "gift", "coupon", "loyalty", "redeem", "promo"]]
+    },
+    {
+      "cap": "waitlist",
+      "all": [["waitlist", "waitinglist"]]
+    },
     {
       "cap": "support",
       "all": [
@@ -153,7 +218,10 @@
         ["create", "open", "submit", "report", "file", "send"]
       ]
     },
-    { "cap": "policies", "all": [["policy", "policies", "terms", "faq", "faqs", "conditions"]] }
+    {
+      "cap": "policies",
+      "all": [["policy", "policies", "terms", "faq", "faqs", "conditions"]]
+    }
   ],
-  "read_only_caps": ["find", "catalogue", "availability", "track", "policies"]
+  "read_only_caps": ["find", "catalogue", "availability", "track", "receipt", "policies"]
 }
