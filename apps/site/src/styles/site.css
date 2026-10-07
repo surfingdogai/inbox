@@ -689,6 +689,55 @@ kbd {
   height: auto;
   image-rendering: pixelated;
 }
+/* .hero — the two-column opening of the home page and /inbox: words on the left,
+   the drawing in an .art-box on the right. Both columns start together; the
+   drawing carries its own sky above its first label, which brings its top edge
+   level with the headline. 1.15fr / 1fr lands near 573 / 499 inside the 1120
+   pill, so the drawing is the other half of the composition, not a margin note. */
+.hero {
+  display: grid;
+  gap: var(--sp-7);
+  align-items: start;
+  padding-block: var(--sp-8) var(--sp-5);
+}
+@media (min-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: var(--sp-8);
+    padding-block: var(--sp-9) var(--hero-pb);
+  }
+}
+.hero-title {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-hero);
+  line-height: var(--lh-hero);
+  letter-spacing: -0.024em;
+}
+.hero-sub {
+  max-width: var(--measure-lede);
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-lede);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  margin-top: var(--sp-6);
+}
+.hero-position {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: center;
+  max-width: 54ch;
+  margin: var(--sp-6) 0 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: var(--lh-ui);
+  color: var(--ink);
+}
 /* .art-box — the frame a hero drawing sits in, beside the words. It caps the
    drawing at 700 when the columns stack, and seats it against the words in a
    two-column hero. Used by the home page hero and the network page. */

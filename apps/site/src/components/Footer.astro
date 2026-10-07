@@ -7,18 +7,27 @@ interface Group {
   links: { href: string; label: string; external?: boolean }[];
 }
 
-/** The whole map, in three small groups, so nothing is reachable only from the navigation. */
+/** The whole map, in small groups, so nothing is reachable only from the navigation. */
 const groups: Group[] = [
   {
-    id: "ft-product",
-    title: "Product",
+    id: "ft-network",
+    title: "Network",
     links: [
-      { href: "/how-it-works/", label: "How it works" },
-      { href: "/assistants/", label: "Assistants" },
-      { href: "/network/", label: "Network" },
-      { href: "/requests/", label: "Feature requests" },
-      { href: "/install/", label: "Install" },
       { href: "/directory/", label: "Directory" },
+      { href: "/network/", label: "How the network works" },
+      { href: "/network/#ranking", label: "Rules" },
+      { href: "/#agents", label: "For agents" },
+    ],
+  },
+  {
+    id: "ft-inbox",
+    title: "Inbox",
+    links: [
+      { href: "/inbox/", label: "Inbox" },
+      { href: "/how-it-works/", label: "How it works" },
+      { href: "/install/", label: "Install" },
+      { href: "/assistants/", label: "Assistants" },
+      { href: "/requests/", label: "Requests" },
       { href: "/sponsors/", label: "Sponsors" },
     ],
   },
@@ -27,8 +36,9 @@ const groups: Group[] = [
     title: "Developers",
     links: [
       { href: "/docs/", label: "Docs" },
-      { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
       { href: "/technical/", label: "Technical" },
+      { href: "https://github.com/surfingdogai/inbox", label: "GitHub", external: true },
+      { href: "https://github.com/surfingdogai/inbox/tree/main/packages/spec", label: "Protocol", external: true },
     ],
   },
   {
@@ -61,7 +71,7 @@ const year = new Date().getFullYear();
           <Mark size={24} />
           <span>Surfing Dog</span>
         </a>
-        <p class="say">Open source. Run it on Cloudflare or your own server.</p>
+        <p class="say">Open doors to the agentic internet.</p>
       </div>
 
       <nav class="groups" aria-label="Footer" data-reveal="stagger">
@@ -89,7 +99,7 @@ const year = new Date().getFullYear();
     <div class="base">
       <p class="who">
         <img src="/logo.png" alt="" width="460" height="461" loading="lazy" decoding="async" />
-        <span>Surfing Dog · Portugal · {year}</span>
+        <span>Surfing Dog · {year}</span>
       </p>
       <p class="licence">AGPL-3.0 server and app. MIT spec and SDK.</p>
     </div>

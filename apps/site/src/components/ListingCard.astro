@@ -1,0 +1,233 @@
+---
+/**
+ * One listing, as an AI sees it. The props are the network's own listing fields (`protocols`,
+ * `item_types`, `languages`, `answering`, `verified_at`, `manifest_url`) plus a record drawn as
+ * notches, so the home page can pass example data today and /directory real data later.
+ *
+ * Doors the directory does not list yet are drawn dashed, with a small "coming", and only when
+ * `showComing` is set: the states come from src/lib/status.ts. The record is a meter with no
+ * number on purpose; the count belongs to the network, not to a picture.
+ */
+import { DOORS, shortDate } from "../lib/status";
+
+interface Props {
+  name: string;
+  protocols: string[];
+  item_types: string[];
+  languages: string[];
+  answering: boolean;
+  /** ISO date the inbox was last verified. */
+  verified_at: string;
+  manifest_url?: string;
+  /** Notches filled out of `of`. */
+  record?: { kept: number; of: number };
+  example?: boolean;
+  showComing?: boolean;
+}
+
+const {
+  name,
+  protocols,
+  item_types,
+  languages,
+  answering,
+  verified_at,
+  manifest_url,
+  record = { kept: 0, of: 8 },
+  example = false,
+  showComing = false,
+} = Astro.props;
+
+const has = new Set(protocols.map((p) => p.toLowerCase()));
+const doors = DOORS.filter((d) => has.has(d.name.toLowerCase()) || (showComing && d.state !== "live")).map((d) => ({
+  name: d.name,
+  coming: !has.has(d.name.toLowerCase()) || d.state !== "live",
+}));
+
+const TAKES: Record<string, { label: string; tint: string }> = {
+  order: { label: "Orders", tint: "order" },
+  quote_request: { label: "Quotes", tint: "quote" },
+  message: { label: "Messages", tint: "message" },
+  booking: { label: "Bookings", tint: "booking" },
+};
+const takes = item_types.map((t) => TAKES[t] ?? { label: t, tint: "" });
+
+const verified = shortDate(verified_at);
+const notches = Array.from({ length: record.of }, (_, i) => i < record.kept);
+---
+
+<article class="glass card lc" aria-label={example ? `Example listing: ${name}` : `Listing: ${name}`}>
+  <header class="lc-head">
+    <h3 class="h-card">{name}</h3>
+    {example && <span class="pill lc-ex">Example</span>}
+  </header>
+  <dl class="lc-rows">
+    <div class="lc-row">
+      <dt>Doors</dt>
+      <dd>
+        <ul class="lc-pills" data-reveal="stagger">
+          {
+            doors.map((d) => (
+              <li class:list={["pill", "lc-door", { coming: d.coming }]}>
+                {d.name}
+                {d.coming && <span class="lc-soon">coming</span>}
+              </li>
+            ))
+          }
+        </ul>
+      </dd>
+    </div>
+    <div class="lc-row">
+      <dt>Takes</dt>
+      <dd>
+        <ul class="lc-pills" data-reveal="stagger">
+          {takes.map((t) => <li class:list={["pill", t.tint && `tint-${t.tint}`]}>{t.label}</li>)}
+        </ul>
+      </dd>
+    </div>
+    <div class="lc-row">
+      <dt>Speaks</dt>
+      <dd class="mono">{languages.join(" · ")}</dd>
+    </div>
+    <div class="lc-row">
+      <dt>State</dt>
+      <dd>
+        {
+          answering ? (
+            <span class="pill tint-success">
+              <i class="dot dot-ok" aria-hidden="true" />
+              Answering
+            </span>
+          ) : (
+            <span class="pill">Quiet</span>
+          )
+        }
+      </dd>
+    </div>
+    <div class="lc-row">
+      <dt>Record</dt>
+      <dd>
+        <span class="lc-meter" role="img" aria-label={`Record: ${record.kept} of ${record.of} promises kept`}>
+          {notches.map((on) => <i class:list={{ on }} />)}
+        </span>
+      </dd>
+    </div>
+  </dl>
+  <p class="mono lc-ver">
+    inbox verified {verified} ·
+    {
+      manifest_url ? (
+        <a class="link" href={manifest_url} rel="noopener">
+          from its manifest
+        </a>
+      ) : (
+        "from its manifest"
+      )
+    }
+  </p>
+</article>
+
+<style>
+  .lc {
+    display: grid;
+    gap: var(--sp-4);
+    align-content: start;
+  }
+  .lc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+  .lc .lc-ex {
+    height: 20px;
+    padding: 0 8px;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .lc-rows {
+    display: grid;
+    gap: 0;
+    margin: 0;
+  }
+  .lc-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: var(--sp-3);
+    align-items: start;
+    padding: var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .lc-row:first-child {
+    border-top: 0;
+  }
+  .lc-row dt {
+    padding-top: 4px;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .lc-row dd {
+    margin: 0;
+    min-width: 0;
+    font-size: var(--fs-card);
+    color: var(--ink-2);
+  }
+  .lc-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .lc-pills .pill {
+    height: 22px;
+    padding: 0 9px;
+    font-size: var(--fs-fine);
+  }
+  /* .lc qualifies the rule so it outranks the global .pill, which loads later. */
+  .lc .lc-door {
+    color: var(--ink);
+    border-color: var(--hairline-strong);
+  }
+  .lc-door.coming {
+    background: transparent;
+    border: 1px dashed var(--hairline-strong);
+    color: var(--ink-3);
+  }
+  .lc-soon {
+    font-size: var(--fs-micro);
+    font-weight: 500;
+    color: var(--ink-3);
+  }
+  .lc .dot-ok {
+    width: 6px;
+    height: 6px;
+    background: var(--c-success);
+  }
+  .lc-meter {
+    display: inline-flex;
+    gap: 3px;
+    vertical-align: middle;
+  }
+  .lc-meter i {
+    width: 9px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--hairline-strong);
+  }
+  .lc-meter i.on {
+    background: var(--ink-3);
+  }
+  .lc .lc-ver {
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    overflow-wrap: anywhere;
+  }
+</style>

@@ -7,7 +7,7 @@ import starlightLlmsTxt from "starlight-llms-txt";
 const GITHUB = "https://github.com/surfingdogai/inbox";
 
 /**
- * surfingdog.ai: a static Astro site. The landing page and the blog are plain Astro pages on the
+ * surfingdog.ai: a static Astro site. The landing page (the network), the inbox page and the blog are plain Astro pages on the
  * shared design tokens; the docs are Starlight, mounted under /docs. Everything prerenders to
  * apps/site/dist and is served from our own servers.
  */
@@ -27,8 +27,8 @@ export default defineConfig({
       head: [
         { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "32x32" } },
         { tag: "link", attrs: { rel: "apple-touch-icon", href: "/apple-touch-icon.png" } },
-        { tag: "meta", attrs: { property: "og:image", content: "https://surfingdog.ai/art/og-flow.png" } },
-        { tag: "meta", attrs: { name: "twitter:image", content: "https://surfingdog.ai/art/og-flow.png" } },
+        { tag: "meta", attrs: { property: "og:image", content: "https://surfingdog.ai/art/og-inbox-v1.png" } },
+        { tag: "meta", attrs: { name: "twitter:image", content: "https://surfingdog.ai/art/og-inbox-v1.png" } },
         { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
       ],
       social: [{ icon: "github", label: "GitHub", href: GITHUB }],
@@ -38,6 +38,7 @@ export default defineConfig({
       customCss: ["./src/styles/docs.css"],
       sidebar: [
         { label: "Home", link: "/" },
+        { label: "Inbox", link: "/inbox/" },
         { label: "How it works", link: "/how-it-works/" },
         {
           label: "Start",
@@ -60,15 +61,19 @@ export default defineConfig({
       ],
       plugins: [
         starlightLlmsTxt({
-          projectName: "Surfing Dog Inbox",
+          projectName: "Surfing Dog",
           description:
-            "An open-source, self-hostable typed inbox for businesses. It receives bookings, orders, quote requests and messages from people and from AI agents through REST, MCP and email, and turns them into typed items with a lifecycle handled by rules, the owner, or the owner's own AI.",
+            "Open doors to the agentic internet. An open directory AI assistants can search to find businesses and reach them directly, and an open-source inbox that gives a business a door agents can use.",
           details: [
-            "Every instance publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. Email is a door as well, and it is not named in the manifest.",
-            "A live instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
-            "The server is AGPL-3.0; the spec and the SDK are MIT. Hosted tenancy and the network's reviews come later.",
+            "Today the directory lists businesses that run a verified inbox. Search it over MCP at https://surfingdog.ai/mcp or over REST at https://surfingdog.ai/v1/businesses.",
+            "Order: businesses whose inbox answered in the last day first; among them, those with a record of kept promises from signed receipts, then everyone else in a daily shuffle anyone can reproduce. Nobody can pay to move. Rules, versioned: https://surfingdog.ai/v1/ranking (version 6).",
+            "Being built, not listed yet: a crawler that finds businesses with other agent doors (MCP, A2A, UCP, ACP, OpenAPI). How it behaves: https://surfingdog.ai/bot.",
+            "The protocol is open: anyone can run a network. MIT example network, network-check, and @surfingdog/sdk on npm. The inbox server is AGPL-3.0: self-host it today; a hosted inbox is not open yet.",
+            "Every inbox publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. A live instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
           ].join("\n\n"),
           optionalLinks: [
+            { label: "Directory MCP", url: "https://surfingdog.ai/mcp" },
+            { label: "Directory API", url: "https://surfingdog.ai/v1/businesses" },
             { label: "Live demo manifest", url: "https://inbox.surfingdog.ai/.well-known/agent-inbox.json" },
             { label: "Live OpenAPI document", url: "https://inbox.surfingdog.ai/openapi.json" },
             { label: "Source on GitHub", url: GITHUB },

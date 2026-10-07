@@ -102,7 +102,7 @@ The commands above run inside the container, for example `docker exec inbox node
 
 ## Hosted by us
 
-Hosted tenancy is not open yet: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/#run) and we will write when it opens.
+Hosted tenancy is not open yet: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/inbox/#run) and we will write when it opens.
 
 ## First calls
 

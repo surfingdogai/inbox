@@ -1,0 +1,56 @@
+---
+/**
+ * The three states, and only three: Live is filled with a dot, Being built is an outline, Coming
+ * is a dashed outline. The words come from src/lib/status.ts, so a state is renamed in one place.
+ * `text` replaces the word when a pill needs to say more ("Coming: hosted").
+ */
+import { STATE_LABEL, type State } from "../lib/status";
+
+interface Props {
+  state: State;
+  text?: string;
+}
+
+const { state, text } = Astro.props;
+---
+
+<span class:list={["pill", "st", `st-${state}`]}>
+  {state === "live" && <i class="st-dot" aria-hidden="true" />}
+  {text ?? STATE_LABEL[state]}
+</span>
+
+<style is:global>
+  /* Global so a pill written by a page script, or nested in another component's markup, matches. */
+  .pill.st {
+    height: 20px;
+    padding: 0 8px;
+    gap: 5px;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+  }
+  /* A lighter tint than the shared .tint-success, so 10 px text clears 4.5:1 with room. */
+  .pill.st-live {
+    background: color-mix(in srgb, var(--c-success) 10%, transparent);
+    border-color: color-mix(in srgb, var(--c-success) 40%, transparent);
+    color: var(--c-success-ink);
+  }
+  .pill.st-building {
+    background: transparent;
+    border-color: var(--hairline-strong);
+    color: var(--ink-2);
+  }
+  .pill.st-coming {
+    background: transparent;
+    border: 1px dashed var(--hairline-strong);
+    color: var(--ink-3);
+  }
+  .st-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c-success);
+    flex: none;
+  }
+</style>

@@ -1,21 +1,25 @@
 ---
-import ForAgents from "../components/ForAgents.astro";
+import FairOrder from "../components/FairOrder.astro";
+import ForBusinesses from "../components/ForBusinesses.astro";
 import Hero from "../components/Hero.astro";
-import Inbox from "../components/Inbox.astro";
-import LiveMetrics from "../components/LiveMetrics.astro";
-import Reputation from "../components/Reputation.astro";
-import Rules from "../components/Rules.astro";
-import Run from "../components/Run.astro";
-import UseCases from "../components/UseCases.astro";
-import Why from "../components/Why.astro";
+import OpenNetwork from "../components/OpenNetwork.astro";
+import Status from "../components/Status.astro";
+import WhatAiSees from "../components/WhatAiSees.astro";
 import Layout from "../layouts/Layout.astro";
 
-/** Who makes this, the site, and the software itself, for search engines and assistants. */
+/**
+ * The home page is the network: an open directory AI assistants can search. The inbox has its own
+ * page at /inbox. Live counts stay off this page until the directory lists more than our own
+ * inbox; they live on /network.
+ */
+const TAGLINE = "Open doors to the agentic internet.";
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const org = `${site}#org`;
 const ld = [
   {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": org,
     name: "Surfing Dog",
     legalName: "Surfing Dog Lda",
     url: site,
@@ -28,36 +32,70 @@ const ld = [
     "@type": "WebSite",
     name: "Surfing Dog",
     url: site,
+    description: `${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly.`,
+    publisher: { "@id": org },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "@id": `${site}#network`,
+    name: "Surfing Dog Network",
+    url: "https://network.surfingdog.ai",
+    serviceType: "Directory of businesses that AI agents can reach",
+    description:
+      "An open directory AI assistants can search over MCP, REST or llms.txt. Today it lists businesses that run a verified inbox. Businesses that are answering come first, signed receipts of kept promises build each record, and no place can be bought.",
+    provider: { "@id": org },
+    offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", description: "Listing is free" },
   },
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "Surfing Dog Inbox",
     description:
-      "An open-source inbox for the bookings, orders, quote requests and messages that people and AI agents send a business, answered by the business's own rules.",
+      "An open-source inbox that gives a business a door AI agents can use: bookings, orders, quote requests and messages arrive over MCP or REST, and the business's rules answer them or pass them to a person.",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    url: site,
+    url: new URL("/inbox/", site).toString(),
     downloadUrl: "https://github.com/surfingdogai/inbox",
     license: "https://www.gnu.org/licenses/agpl-3.0.html",
     offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
-    publisher: { "@type": "Organization", name: "Surfing Dog Lda" },
+    publisher: { "@id": org },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    name: "Surfing Dog network protocol and SDK",
+    codeRepository: "https://github.com/surfingdogai/inbox",
+    license: "https://opensource.org/licenses/MIT",
+    programmingLanguage: "TypeScript",
+    publisher: { "@id": org },
   },
 ];
 ---
 
 <Layout
-  title="Surfing Dog · Get AI bookings, orders and messages."
-  description="Surfing Dog is an open-source inbox for the bookings, orders and messages that AI agents send your business. Your rules answer the routine ones, and you see the rest."
+  title="Surfing Dog · Open doors to the agentic internet"
+  description={`${TAGLINE} An open directory AI assistants can search to find businesses and reach them directly. Ranked by receipts, never by payment. Open protocol, open-source inbox.`}
+  image="/art/og-network-v1.png"
   ld={ld}
 >
+  <script is:inline>
+    // The inbox's sections used to live on this page. Links shared before the move still carry
+    // their old anchors, so send those to the same anchor on /inbox (and the old ranking anchor
+    // to the order section here).
+    (function () {
+      var h = location.hash.slice(1);
+      if (["why-h", "rules", "use-cases", "inbox", "run", "wait-email"].indexOf(h) !== -1) {
+        location.replace("/inbox/#" + h);
+      } else if (h === "reputation") {
+        location.replace("#order");
+      }
+    })();
+  </script>
   <Hero />
-  <Why />
-  <Reputation />
-  <Rules />
-  <UseCases />
-  <Inbox />
-  <LiveMetrics more />
-  <Run />
-  <ForAgents />
+  <WhatAiSees />
+  <FairOrder />
+  <ForBusinesses />
+  <OpenNetwork />
+  <Status />
 </Layout>

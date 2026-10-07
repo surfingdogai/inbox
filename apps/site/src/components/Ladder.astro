@@ -1,0 +1,147 @@
+---
+/**
+ * How far an AI can go with a business, as five rungs. A small four-colour dot climbs from Listed
+ * and rests on Bookable / Orderable; the rungs above it are dotted. The climb is the shared reveal:
+ * it plays once when the ladder scrolls in, and a page that never arms it (above the fold, reduced
+ * motion, no script) simply shows the dot resting where it ends. Levels are not on listings yet, so
+ * the pill says so, from src/lib/status.ts.
+ */
+import { stateOf } from "../lib/status";
+import StatusPill from "./StatusPill.astro";
+
+const levels = [
+  { name: "Listed", text: "It's in the directory." },
+  { name: "Readable", text: "An AI can read its hours, prices and terms." },
+  { name: "Askable", text: "An AI can ask and get an answer." },
+  { name: "Bookable / Orderable", text: "An AI can book or order." },
+  { name: "Payable", text: "An AI can pay." },
+];
+/** The rung the example rests on. */
+const AT = 3;
+---
+
+<div class="glass card ladder" data-reveal>
+  <div class="ladder-head">
+    <h3 class="h-card">How far an AI can go</h3>
+    <StatusPill state={stateOf("crawled")} text="Coming: levels on every listing" />
+  </div>
+  <ol class="rungs">
+    {
+      levels.map((l, i) => (
+        <li
+          class:list={["rung", { reached: i <= AT, here: i === AT, above: i > AT }]}
+          style={`--i:${i}`}
+          aria-current={i === AT ? "step" : undefined}
+        >
+          <span class="mark" aria-hidden="true" />
+          <span class="words">
+            <b>{l.name}</b>
+            <span>{l.text}</span>
+          </span>
+        </li>
+      ))
+    }
+  </ol>
+</div>
+
+<style>
+  .ladder {
+    display: grid;
+    gap: var(--sp-4);
+    align-content: start;
+  }
+  .ladder-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+  /* Read bottom-up, the way a ladder is climbed; the list keeps its logical order for readers. */
+  .rungs {
+    display: flex;
+    flex-direction: column-reverse;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rung {
+    position: relative;
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: var(--sp-3);
+    align-items: center;
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .rung.above {
+    border-bottom: 1px dotted var(--hairline-strong);
+  }
+  /* Name above its line on every rung, so no rung wraps differently from the next. */
+  .words {
+    display: grid;
+    gap: 2px;
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+  .words b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .rung.above .words,
+  .rung.above .words b {
+    color: var(--ink-3);
+  }
+  .mark {
+    justify-self: center;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1px dotted var(--ink-3);
+    background: transparent;
+    transition:
+      background-color var(--dur) var(--ease),
+      border-color var(--dur) var(--ease),
+      transform var(--dur) var(--ease);
+    transition-delay: calc(var(--i) * 220ms + 200ms);
+  }
+  .rung.reached .mark {
+    border: 1px solid var(--ink-3);
+    background: var(--ink-3);
+  }
+  .rung.here .mark {
+    position: relative;
+    border-color: transparent;
+    background: transparent;
+  }
+  .rung.here .mark::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    background: conic-gradient(var(--flamingo), var(--tangerine), var(--lagoon), var(--violet), var(--flamingo));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 14%, transparent);
+    transition:
+      opacity var(--dur) var(--ease),
+      transform var(--dur) var(--ease);
+    transition-delay: calc(var(--i) * 220ms + 200ms);
+  }
+  /* Armed and not yet in view: nothing reached. Arriving, the marks fill one rung at a time and
+     the dot settles on the last of them. */
+  .ladder.reveal-armed:not(.reveal-in) .rung .mark {
+    border: 1px dotted var(--ink-3);
+    background: transparent;
+    transform: scale(0.8);
+  }
+  .ladder.reveal-armed:not(.reveal-in) .rung.here .mark::after {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mark,
+    .mark::after {
+      transition: none;
+    }
+  }
+</style>

@@ -1,0 +1,228 @@
+---
+/**
+ * For AIs and builders: where to search the directory, and how to run a network of your own. The
+ * copy buttons are the technical page's: the addresses are plain, selectable text, and a button
+ * appears only where the clipboard exists. The drawing is three networks on one brand line, ours
+ * solid and marked "ours", two hollow ones marked "yours"; the line draws itself once, with the shared reveal.
+ */
+const NET = "https://network.surfingdog.ai";
+// The directory's public doors are served on surfingdog.ai itself (the network keeps its own host as its identity).
+const PUBLIC = "https://surfingdog.ai";
+const REPO = "https://github.com/surfingdogai/inbox";
+
+const addresses = [
+  { door: "MCP", url: `${PUBLIC}/mcp` },
+  { door: "REST", url: `${PUBLIC}/v1/businesses` },
+  { door: "llms.txt", url: `${PUBLIC}/llms.txt` },
+];
+const build = [
+  { label: "Protocol", href: `${REPO}/tree/main/packages/spec` },
+  { label: "Example network", href: `${REPO}/tree/main/examples/network` },
+  // Not on npm: it lives in the repo.
+  { label: "network-check", href: `${REPO}/tree/main/packages/network-check` },
+  { label: "SDK 0.2.0 on npm", href: "https://www.npmjs.com/package/@surfingdog/sdk" },
+];
+---
+
+<section class="section" id="agents" aria-labelledby="agents-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">For agents</p>
+        <h2 class="h-section" id="agents-h">Your AI can search it. Anyone can run one.</h2>
+      </div>
+    </div>
+
+    <div class="grid-cards two" data-reveal="stagger">
+      <div class="glass card col">
+        <h3 class="h-card">Search from your AI</h3>
+        <ul class="urls">
+          {
+            addresses.map((a) => (
+              <li class="url">
+                <span class="addr">
+                  <span class="door-tag mono">{a.door}</span>
+                  <span class="mono u">surfingdog.ai<wbr />{a.url.replace(PUBLIC, "")}</span>
+                </span>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  type="button"
+                  data-copy={a.url}
+                  aria-label={`Copy the ${a.door} address`}
+                  hidden
+                >
+                  Copy
+                </button>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="more"><a class="link" href={`${NET}/assistants`} rel="noopener">Add it to your assistant</a></p>
+      </div>
+
+      <div class="glass card col">
+        <div class="nets-head">
+          <h3 class="h-card">Run your own network</h3>
+          <svg class="nets" viewBox="0 0 120 34" aria-hidden="true">
+            <defs>
+              <linearGradient id="on-line" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="108" y2="0">
+                <stop offset="0%" stop-color="var(--flamingo)"></stop>
+                <stop offset="34%" stop-color="var(--tangerine)"></stop>
+                <stop offset="68%" stop-color="var(--lagoon)"></stop>
+                <stop offset="100%" stop-color="var(--violet)"></stop>
+              </linearGradient>
+            </defs>
+            <path class="wire" pathLength="1" d="M12 11H108"></path>
+            <circle class="ours" cx="12" cy="11" r="4.5"></circle>
+            <circle class="yours" cx="60" cy="11" r="4.5"></circle>
+            <circle class="yours" cx="108" cy="11" r="4.5"></circle>
+            <text x="12" y="29" text-anchor="middle">ours</text>
+            <text x="60" y="29" text-anchor="middle">yours</text>
+            <text x="108" y="29" text-anchor="middle">yours</text>
+          </svg>
+        </div>
+        <p class="card-text">
+          The protocol is open. Start from the MIT example network, test it with network-check, build with the SDK.
+        </p>
+        <ul class="builds">
+          {
+            build.map((b) => (
+              <li>
+                <a class="link" href={b.href} rel="noopener">
+                  {b.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="fine">An inbox can join several networks at once.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  @media (min-width: 900px) {
+    .two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .urls {
+    display: grid;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .url {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--sp-2);
+    align-items: center;
+    min-height: 40px;
+    padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+    border: 1px solid var(--hairline);
+  }
+  .addr {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding-block: var(--sp-1);
+  }
+  @media (min-width: 560px) {
+    .addr {
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: var(--sp-2);
+      align-items: center;
+    }
+  }
+  .url .door-tag {
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  .u {
+    min-width: 0;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .url .btn[hidden] {
+    display: none;
+  }
+  .more {
+    margin: 0;
+    font-size: var(--fs-card);
+  }
+  .nets-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+  }
+  .nets {
+    width: 120px;
+    height: 34px;
+    flex: none;
+    overflow: visible;
+  }
+  .nets text {
+    font-family: var(--font-sans);
+    font-size: var(--fs-micro);
+    fill: var(--ink-3);
+  }
+  .nets .wire {
+    fill: none;
+    stroke: url(#on-line);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 0;
+  }
+  .nets .ours {
+    fill: var(--ink);
+  }
+  .nets .yours {
+    fill: var(--ground);
+    stroke: var(--ink-3);
+    stroke-width: 1.2;
+  }
+  .builds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-card);
+  }
+  .col .fine {
+    margin: auto 0 0;
+  }
+  /* The line draws once as the card arrives. */
+  .col.reveal-armed .nets .wire {
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 0.9s var(--ease) 0.25s;
+  }
+  .col.reveal-armed.reveal-in .nets .wire {
+    stroke-dashoffset: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nets .wire {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  import { wireCopyButtons } from "../lib/copy";
+  wireCopyButtons("#agents [data-copy]");
+</script>

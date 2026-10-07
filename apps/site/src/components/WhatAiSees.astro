@@ -1,0 +1,52 @@
+---
+/**
+ * The product, shown rather than told: one listing card with example data, and the ladder of how
+ * far an AI can go. Live and coming parts are marked on the card itself (dashed doors) and on the
+ * ladder (its pill), both from src/lib/status.ts.
+ */
+import Ladder from "./Ladder.astro";
+import ListingCard from "./ListingCard.astro";
+---
+
+<section class="section" id="listing" aria-labelledby="listing-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">The listing</p>
+        <h2 class="h-section" id="listing-h">What an AI sees.</h2>
+        <p class="lede">One card per business: how to reach it, what it takes, and when we checked.</p>
+      </div>
+    </div>
+    <div class="cols">
+      <ListingCard
+        example
+        showComing
+        name="A bakery"
+        protocols={["mcp", "rest", "openapi"]}
+        item_types={["order", "quote_request", "message"]}
+        languages={["en", "fr", "ja"]}
+        answering
+        verified_at="2026-09-21"
+        record={{ kept: 6, of: 8 }}
+      />
+      <Ladder />
+    </div>
+    <p class="fine">
+      Today every listing is a verified inbox. Other doors, levels, and a source and date on every fact will come with
+      the crawler.
+    </p>
+  </div>
+</section>
+
+<style>
+  .cols {
+    display: grid;
+    gap: var(--gap-grid);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+</style>

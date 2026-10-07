@@ -1,0 +1,93 @@
+---
+/**
+ * Where it stands, in three columns, straight from src/lib/status.ts. No motion beyond the shared
+ * staggered reveal, and one soft pulse on each Live dot as it first appears.
+ */
+import { capabilities, type State, UPDATED } from "../lib/status";
+import StatusPill from "./StatusPill.astro";
+
+const order: State[] = ["live", "building", "coming"];
+const columns = order.map((state) => ({ state, items: capabilities.filter((c) => c.state === state) }));
+---
+
+<section class="section" id="status" aria-labelledby="status-h" data-reveal>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Status</p>
+        <h2 class="h-section" id="status-h">Where it stands.</h2>
+      </div>
+    </div>
+
+    <div class="grid-cards cols" data-reveal="stagger">
+      {
+        columns.map((c) => (
+          <div class="glass card col">
+            <h3 class="col-h">
+              <StatusPill state={c.state} />
+            </h3>
+            <ul class="items">
+              {c.items.map((i) => (
+                <li class:list={["item", `is-${c.state}`]}>{i.label}</li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+    <p class="fine">Updated {UPDATED}.</p>
+  </div>
+</section>
+
+<style>
+  @media (min-width: 900px) {
+    .cols {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 1.2fr);
+    }
+  }
+  .col {
+    display: grid;
+    gap: var(--sp-3);
+    align-content: start;
+  }
+  .col-h {
+    margin: 0;
+    line-height: 1;
+  }
+  .items {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .item {
+    padding: var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+  .item:first-child {
+    border-top: 0;
+  }
+  .item.is-coming {
+    color: var(--ink-3);
+  }
+  /* The Live dot breathes once as its column arrives. */
+  .col.reveal-in :global(.st-dot) {
+    animation: status-pulse 1.2s var(--ease) 0.2s 1;
+  }
+  @keyframes status-pulse {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-success) 55%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 7px color-mix(in srgb, var(--c-success) 0%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .col.reveal-in :global(.st-dot) {
+      animation: none;
+    }
+  }
+</style>

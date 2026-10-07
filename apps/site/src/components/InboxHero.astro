@@ -1,0 +1,39 @@
+---
+/** The inbox's own hero, on /inbox. The home page now opens on the network (Hero.astro). */
+import HeroFlow from "./HeroFlow.astro";
+
+const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
+---
+
+<section class="hero wrap" aria-labelledby="hero-h">
+  <div class="copy">
+    <p class="eyebrow">Surfing Dog Inbox · open source</p>
+    <h1 class="hero-title" id="hero-h">
+      Get AI bookings, orders and messages.
+    </h1>
+    <p class="hero-sub">
+      Soon your customers' AI agents will book and order for them. Surfing Dog Inbox is open source: it takes
+      those requests and answers the routine ones by your rules.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
+      <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>
+    </div>
+    <p class="hero-position">
+      <span class="u-line" aria-hidden="true"></span>
+      <span>Automated AI relations, with your own AI answering.</span>
+    </p>
+  </div>
+  <div class="art-box">
+    <HeroFlow />
+  </div>
+</section>
+
+<style>
+  /* Without the systems column the drawing is taller than it is wide, so it is held to the
+     height the wider one had rather than filling the whole art-box. */
+  .art-box :global(.sdf) {
+    max-width: 440px;
+    margin-inline: auto;
+  }
+</style>

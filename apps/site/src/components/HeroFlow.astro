@@ -4,8 +4,8 @@
  * business: bookings, orders, quotes and messages arrive as typed chips, land as rows, and are
  * decided by the owner's own rules and the owner's own AI. Four of the five are answered; one — the
  * quote — stops with an amber dot because a person is needed, which is what the product actually
- * does. Confirmed work carries on to the point of sale, the shop and the calendar. Those three are
- * drawn as a live link, never as a shipped logo, because the connectors are still being built.
+ * does. It used to carry confirmed work on to a point of sale, a shop and a calendar; those
+ * connectors do not exist, so that column is gone and the viewBox ends at the card's right margin.
  *
  * The timings are deliberate; do not retune them by accident.
  *  - TRAVEL is unequal per agent (1.34 / 1.16 / 1.42 s) so two arrivals never land on the same
@@ -27,10 +27,10 @@
  * keyframe is named sdf-*; the sd- class names exist only inside .sdf.
  *
  * The figure is not empty before that script runs. It ships with the scene at rest — the lines, the
- * card, the rule strip, the agents, the systems — server-rendered as inline SVG and dropped by
+ * card, the rule strip, the agents — server-rendered as inline SVG and dropped by
  * mount() the moment the live scene is ready. With JavaScript off, or if mount() throws, that
  * picture is what a visitor keeps, so the page can never show a hole where the hero is. The figure
- * also carries aspect-ratio 520/390, so the box holds its height from first paint and nothing below
+ * also carries aspect-ratio 374/390, so the box holds its height from first paint and nothing below
  * the hero jumps. The static markup is generated from the same numbers the script uses
  * (build/gen-seed.js in the prototype folder); regenerate it rather than hand-editing it.
  *
@@ -45,8 +45,8 @@
  * under the 4.5:1 floor, on the four words that carry the whole point. Both stay on their brand
  * hue. A host that declares these tokens itself needs the same two values.
  *
- * The pills are measured at run time (fit(), below) rather than hard-coded, so "Calendar" and
- * "Booking" cannot push out of their pills when Manrope loads or a fallback font resolves wider.
+ * The pills are measured at run time (fit(), below) rather than hard-coded, so "Booking" cannot
+ * push out of its pill when Manrope loads or a fallback font resolves wider.
  * The pads used are the drawn ones, so where the metrics match the design the floor binds and the
  * composition is exactly as approved.
  *
@@ -54,12 +54,12 @@
  * replaced by a second drawing, and the preference is honoured if it is turned on later.
  *
  * No max-width of its own: the piece is whatever its container is, and Hero.astro's .art-box
- * already caps it. The viewBox is 4:3, so a 900-wide instance is 675 tall, not 640.
+ * already caps it. The viewBox is 374 by 390, a little taller than wide.
  */
 ---
 
-<figure class="sdf" role="img" aria-label="Several AI agents send one business typed bookings, orders, quotes and messages; the business's own rules and AI answer most of them automatically, while its point of sale, online shop and calendar are kept in step as those connections come online.">
-<svg class="sd-seed" viewBox="0 0 520 390" aria-hidden="true" focusable="false">
+<figure class="sdf" role="img" aria-label="Several AI agents send one business typed bookings, orders, quotes and messages; the business's own rules and AI answer most of them automatically, and the rest wait for a person.">
+<svg class="sd-seed" viewBox="0 0 374 390" aria-hidden="true" focusable="false">
 <defs>
 <linearGradient id="sdseed-g" x1="0" y1="0" x2="0" y2="1">
 <stop offset="0%" stop-color="var(--sd-tangerine)"/>
@@ -72,15 +72,9 @@
 <path d="M56,104 C104,104 118,196 176,196" class="sd-line"/>
 <path d="M56,196 L176,196" class="sd-line"/>
 <path d="M56,288 C104,288 118,196 176,196" class="sd-line"/>
-<path d="M344,196 C380,196 388,104 420,104" class="sd-line"/>
-<path d="M344,196 L420,196" class="sd-line"/>
-<path d="M344,196 C380,196 388,288 420,288" class="sd-line"/>
 </g>
-<!-- The two captions hang off the two margins, not off their columns: AI AGENTS starts at the
-     left margin (30) and YOUR SYSTEMS ends at the right one (504). Left-aligning the right
-     caption to its pills reads as hanging, because the caption is narrower than a pill row. -->
+<!-- The caption hangs off the left margin (30), not off its column. -->
 <text x="30" y="60" font-size="8.2" class="sd-cap">AI AGENTS</text>
-<text x="504" y="60" font-size="8.2" class="sd-cap" text-anchor="end">YOUR SYSTEMS</text>
 <g>
 <rect x="176" y="76" width="168" height="240" rx="14" class="sd-glass"/>
 <path d="M188,105 A11,11 0 0 1 210,105 Z" fill="url(#sdseed-g)"/>
@@ -92,7 +86,6 @@
 <text x="218" y="105" font-size="12.5" class="sd-title">Your business</text>
 <line x1="188" y1="118" x2="332" y2="118" class="sd-hair"/>
 <circle cx="176" cy="196" r="2.6" class="sd-port"/>
-<circle cx="344" cy="196" r="2.6" class="sd-port"/>
 <g class="sd-rule">
 <rect x="188" y="126" width="100" height="19" rx="9.5"/>
 <text x="198" y="138.6" font-size="8.6">Rules + your AI</text>
@@ -122,18 +115,6 @@
 <circle cx="46.4" cy="287" r="1.7" class="eye"/>
 <line x1="42" y1="276" x2="42" y2="269"/>
 <circle cx="42" cy="266.4" r="2.6" class="ant"/>
-</g>
-<g class="sd-node">
-<rect x="420" y="88" width="84" height="32" rx="10" class="pill"/>
-<text x="462" y="107.4" font-size="9.4" text-anchor="middle">POS</text>
-</g>
-<g class="sd-node">
-<rect x="420" y="180" width="84" height="32" rx="10" class="pill"/>
-<text x="462" y="199.4" font-size="9.4" text-anchor="middle">Shop</text>
-</g>
-<g class="sd-node">
-<rect x="420" y="272" width="84" height="32" rx="10" class="pill"/>
-<text x="462" y="291.4" font-size="9.4" text-anchor="middle">Calendar</text>
 </g>
 </svg>
 </figure>
@@ -165,10 +146,10 @@
   --sd-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
   /* No max-width: the piece is whatever its container is. The host caps it —
      900 as a section piece, 520 in the hero art-box, 340 on a phone — and the
-     viewBox keeps the 4:3 composition at every one of them. aspect-ratio holds
-     that same 4:3 box open before the scene exists, so the column never
+     viewBox keeps the composition at every one of them. aspect-ratio holds
+     that same box open before the scene exists, so the column never
      collapses to nothing and nothing below it jumps. */
-  display:block;margin:0;width:100%;aspect-ratio:520/390;container-type:inline-size;
+  display:block;margin:0;width:100%;aspect-ratio:374/390;container-type:inline-size;
 }
 /* Night re-points the same properties. The literals are only the fallback for a
    host that has not declared the role aliases, never the source of truth — which
@@ -289,24 +270,15 @@
 .sdf .sd-chip .lb{fill:var(--ti);font-weight:600}
 .sdf .sd-reply .disc{fill:var(--sd-ground);stroke:var(--sd-palm);stroke-opacity:.65;stroke-width:1.1}
 .sdf .sd-reply .mark{fill:none;stroke:var(--sd-palm-i);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.sdf .sd-fandot{fill:var(--sd-palm)}
 .sdf .sd-off{display:none}
-
-/* the systems on the right */
-.sdf .sd-node .pill{fill:var(--sd-glass);stroke:var(--sd-glassb);stroke-width:1;transition:stroke .4s var(--sd-ease)}
-.sdf .sd-node.lit .pill{stroke:var(--sd-palm)}
-.sdf .sd-node text{fill:var(--sd-ink2);transition:fill .4s var(--sd-ease)}
-.sdf .sd-node.lit text{fill:var(--sd-palm-i)}
-.sdf .sd-node .ring{fill:none;stroke:var(--sd-palm);stroke-width:1.2;opacity:0;transform-box:fill-box;transform-origin:50% 50%}
-.sdf .sd-node.ping .ring{animation:sdf-ping .72s var(--sd-ease)}
-@keyframes sdf-ping{0%{opacity:.5;transform:scale(1)}100%{opacity:0;transform:scale(1.09)}}
 
 /* Below the breakpoint the viewBox has shrunk the type past reading size, so
    every label that carries meaning grows in user units together — the chip
-   words, the row labels, the statuses, the captions, the systems, the card
+   words, the row labels, the statuses, the caption, the card
    heading and the rule strip. Targets were set in CSS pixels at a 327-wide
    art-box (a 375px phone) and divided by the container scale, not picked by
-   eye. The pills are measured at run time, so a bigger word simply gets a
+   eye. The breakpoint was 460 on the old 520-wide viewBox; it is 331 on the
+   374-wide one, the same scale. The pills are measured at run time, so a bigger word simply gets a
    bigger pill.
    Two labels cannot come with them, and both were measured rather than judged.
    The rule phrase sits in a 12.5-unit band between the strip's lower edge
@@ -318,14 +290,13 @@
    So below the breakpoint those two step out and the picture says the same
    thing without words: the beat lights, the tick means answered, the amber dot
    that breathes means a person is needed. The four typed words, the card
-   heading, the captions and the systems all grow instead. */
-@container (max-width:460px){
+   heading and the caption all grow instead. */
+@container (max-width:331px){
   .sdf .sd-phrase,.sdf .sd-row .st{display:none}
   .sdf .sd-cap{font-size:12.4px}
   .sdf .sd-title{font-size:15px}
   .sdf .sd-rule text{font-size:12.3px}
   .sdf .sd-row .lb{font-size:13px}
-  .sdf .sd-node text{font-size:12.4px}
   .sdf .sd-chip .lb{font-size:13px}
 }
 
@@ -368,15 +339,12 @@ var eSoft=bez(.2,.8,.2,1),                                  /* the brand easing 
     eSine=function(t){return -(Math.cos(Math.PI*t)-1)/2;},  /* calm travel */
     cl=function(v){return v<0?0:v>1?1:v;};
 
-/* ---- geometry, all in the 520x390 viewBox ---------------------------- */
+/* ---- geometry, all in the 374x390 viewBox ---------------------------- */
 var SEND=["M56,104 C104,104 118,196 176,196","M56,196 L176,196","M56,288 C104,288 118,196 176,196"],
     BACK=["M176,182 Q116,106 58,100","M176,206 Q116,252 58,200","M176,210 Q116,286 58,292"],
-    FAN =["M344,196 C380,196 388,104 420,104","M344,196 L420,196","M344,196 C380,196 388,288 420,288"],
     AGY =[104,196,288],
     AGC =["var(--sd-violet)","var(--sd-lagoon)","var(--sd-flamingo)"],
-    NODES=[{y:104,l:"POS"},{y:196,l:"Shop"},{y:288,l:"Calendar"}],
     SLOT=[158,194,230,266], RX=188, RW=144, RH=28,
-    NX=462, NW=84,             /* systems pills: centre, and the drawn width */
     PADL=19, PADR=.8,          /* the drawn pads either side of a chip's word */
     TRAVEL=[1.34,1.16,1.42],   /* per agent, deliberately unequal: arrivals never sync */
     LOOP=12.9,
@@ -387,11 +355,11 @@ var SEND=["M56,104 C104,104 118,196 176,196","M56,196 L176,196","M56,288 C104,28
    `why` is the rule that decided it, in the owner's own words — each phrase is
    true of the product, not decoration. */
 var SCRIPT=[
-  {t:0.60,a:1,ty:"message",lb:"Message",w:62,st:"Answered", auto:1,nd:[],   why:"answered by your AI"},
-  {t:2.45,a:0,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,nd:[2],  why:"slot free, inside hours"},
-  {t:4.70,a:2,ty:"order",  lb:"Order",  w:50,st:"Confirmed",auto:1,nd:[0,1],why:"under your limit"},
-  {t:7.05,a:0,ty:"quote",  lb:"Quote",  w:52,st:"Needs you",auto:0,nd:[],   why:"needs a person"},
-  {t:8.65,a:1,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,nd:[2],  why:"slot free, inside hours"}
+  {t:0.60,a:1,ty:"message",lb:"Message",w:62,st:"Answered", auto:1,why:"answered by your AI"},
+  {t:2.45,a:0,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,why:"slot free, inside hours"},
+  {t:4.70,a:2,ty:"order",  lb:"Order",  w:50,st:"Confirmed",auto:1,why:"under your limit"},
+  {t:7.05,a:0,ty:"quote",  lb:"Quote",  w:52,st:"Needs you",auto:0,why:"needs a person"},
+  {t:8.65,a:1,ty:"booking",lb:"Booking",w:60,st:"Confirmed",auto:1,why:"slot free, inside hours"}
 ];
 
 var seq=0;
@@ -401,7 +369,7 @@ function mount(fig){
   fig.setAttribute("data-sdf","on");
 
   var uid="sd"+(++seq),
-      svg=E("svg",{viewBox:"0 0 520 390","aria-hidden":"true",focusable:"false"}),
+      svg=E("svg",{viewBox:"0 0 374 390","aria-hidden":"true",focusable:"false"}),
       defs=E("defs"),i;
 
   /* The one permitted signature: a small striped half sun, the business's mark. */
@@ -418,13 +386,11 @@ function mount(fig){
   /* --- the line ------------------------------------------------------- */
   var gl=E("g"),lines=[],trails=[];
   for(i=0;i<3;i++){lines.push(E("path",{d:SEND[i],"class":"sd-line"}));gl.appendChild(lines[i]);}
-  for(i=0;i<3;i++){lines.push(E("path",{d:FAN[i],"class":"sd-line"}));gl.appendChild(lines[3+i]);}
   for(i=0;i<3;i++){trails.push(E("path",{d:BACK[i],"class":"sd-trail"}));gl.appendChild(trails[i]);}
   svg.appendChild(gl);
 
   /* --- column captions ------------------------------------------------ */
   svg.appendChild(TX(30,60,8.2,"sd-cap","AI AGENTS"));
-  svg.appendChild(TX(504,60,8.2,"sd-cap","YOUR SYSTEMS","end"));
 
   /* --- the business ---------------------------------------------------- */
   var card=E("g");
@@ -436,7 +402,6 @@ function mount(fig){
   card.appendChild(TX(218,105,12.5,"sd-title","Your business"));
   card.appendChild(E("line",{x1:188,y1:118,x2:332,y2:118,"class":"sd-hair"}));
   card.appendChild(E("circle",{cx:176,cy:196,r:2.6,"class":"sd-port"}));
-  card.appendChild(E("circle",{cx:344,cy:196,r:2.6,"class":"sd-port"}));
 
   var rule=E("g",{"class":"sd-rule"}),
       ruleBg=E("rect",{x:188,y:126,width:100,height:19,rx:9.5}),
@@ -464,17 +429,6 @@ function mount(fig){
     ga.appendChild(E("line",{x1:42,y1:y-12,x2:42,y2:y-19}));
     ga.appendChild(E("circle",{cx:42,cy:y-21.6,r:2.6,"class":"ant"}));
     svg.appendChild(ga);agents.push(ga);
-  }
-
-  /* --- systems --------------------------------------------------------- */
-  var nodes=[],nPill=[],nRing=[],nTx=[],n,gn,pill,ring,tx;
-  for(i=0;i<3;i++){
-    n=NODES[i];gn=E("g",{"class":"sd-node"});
-    pill=E("rect",{x:NX-NW/2,y:n.y-16,width:NW,height:32,rx:10,"class":"pill"});
-    ring=E("rect",{x:NX-NW/2,y:n.y-16,width:NW,height:32,rx:10,"class":"ring"});
-    tx=TX(NX,n.y+3.4,9.4,"",n.l,"middle");
-    gn.appendChild(pill);gn.appendChild(ring);gn.appendChild(tx);
-    svg.appendChild(gn);nodes.push(gn);nPill.push(pill);nRing.push(ring);nTx.push(tx);
   }
 
   /* --- one set of pieces per scripted item, built once and reused ------- */
@@ -510,7 +464,6 @@ function mount(fig){
       rp.appendChild(E("path",{d:"M-3.1,.2 L-.9,2.5 L3.3,-2.7","class":"mark"}));
       fly.appendChild(rp); e.reply=rp;
     }
-    e.dots=e.nd.map(function(){var d=E("circle",{cx:0,cy:0,r:3,"class":"sd-fandot sd-off"});fly.appendChild(d);return d;});
     return e;
   });
 
@@ -521,8 +474,8 @@ function mount(fig){
   fig.appendChild(svg);
 
   /* path lengths need the nodes to be in the document */
-  var LSEND=[],LBACK=[],LFAN=[];
-  for(i=0;i<3;i++){LSEND[i]=lines[i].getTotalLength();LFAN[i]=lines[3+i].getTotalLength();LBACK[i]=trails[i].getTotalLength();}
+  var LSEND=[],LBACK=[];
+  for(i=0;i<3;i++){LSEND[i]=lines[i].getTotalLength();LBACK[i]=trails[i].getTotalLength();}
 
   /* ---- pills are measured, never guessed -------------------------------
      The widths written into the geometry above are floors, not fixed sizes. A
@@ -550,12 +503,6 @@ function mount(fig){
       ruleBg.setAttribute("width",rw);
       beat.setAttribute("cx",Math.max(316,188+rw+12));
     }
-    nTx.forEach(function(t,k){                /* the systems stay centred on NX */
-      var b=bx(t);if(!b)return;
-      var w=Math.max(NW,Math.ceil(b.width+22)),x=NX-w/2;
-      nPill[k].setAttribute("x",x);nPill[k].setAttribute("width",w);
-      nRing[k].setAttribute("x",x);nRing[k].setAttribute("width",w);
-    });
   }
   /* The type scale changes at the container breakpoint, so the pills are
      re-measured when the piece crosses it — and once more when the host's
@@ -566,7 +513,7 @@ function mount(fig){
      to its own floor, so measuring again can never ratchet anything wider. */
   var narrow=null,measured=false;
   function gauge(){
-    var w=fig.clientWidth,nw=w>0&&w<=460;
+    var w=fig.clientWidth,nw=w>0&&w<=331;
     if(nw===narrow&&measured)return;
     narrow=nw;
     if(w>0){fit();measured=true;}
@@ -630,7 +577,7 @@ function mount(fig){
          reply that was still flying it. Each item clears its own trail at b1,
          which always falls inside its window. */
       if(ph<0)e.f={};
-      off(e.chip);off(e.reply);e.dots.forEach(off);
+      off(e.chip);off(e.reply);
       return;
     }
     /* 1. the agent wakes and casts a typed chip onto the line */
@@ -674,20 +621,6 @@ function mount(fig){
       }else{off(e.reply);if(ph>=e.b1)tr.style.opacity=0;}
       if(live&&ph>=e.b1&&once(e,"home"))flash(agents[e.a],"wake",640);
     }
-
-    /* 5. confirmed work reaches the systems: a travelling dot, then a pulse */
-    e.nd.forEach(function(nn,k){
-      var s=e.p2+.70+k*.26,f=s+.56,d=e.dots[k];
-      if(ph>=s&&ph<f){
-        /* the only linear movement in the piece: a dot on a wire */
-        var w=lines[3+nn].getPointAtLength((ph-s)/(f-s)*LFAN[nn]);
-        put(d,w.x,w.y);
-      }else off(d);
-      if(live&&ph>=f&&once(e,"n"+k)){
-        nodes[nn].classList.add("lit");flash(nodes[nn],"ping",760);
-        hold(1500,function(){nodes[nn].classList.remove("lit");});
-      }
-    });
   }
 
   function render(t,live){EV.forEach(function(e){step(e,t-e.t,live);});}
@@ -719,7 +652,6 @@ function mount(fig){
     clearTimeout(phT);
     phrase.classList.remove("on");
     rule.classList.remove("lit","warn");
-    nodes.forEach(function(nd){nd.classList.remove("lit","ping");});
     agents.forEach(function(ag){ag.classList.remove("wake");});
   }
   function sync(){
@@ -737,8 +669,8 @@ function mount(fig){
      out and back. A browser with no paint timing simply plays it, as before. */
   var painted=false;
   try{painted=performance.getEntriesByType("paint").length>0;}catch(err){}
-  lines.forEach(function(p,i){var L=i<3?LSEND[i]:LFAN[i-3];p.style.strokeDasharray=L;p.style.strokeDashoffset=painted?0:L;});
-  function draw(){lines.forEach(function(p,i){p.style.transitionDelay=(i<3?i*.08:.26+(i-3)*.08)+"s";p.style.strokeDashoffset=0;});}
+  lines.forEach(function(p,i){var L=LSEND[i];p.style.strokeDasharray=L;p.style.strokeDashoffset=painted?0:L;});
+  function draw(){lines.forEach(function(p,i){p.style.transitionDelay=(i*.08)+"s";p.style.strokeDashoffset=0;});}
 
   /* The still is this same machine stepped forward, not a second drawing. At
      STILL=9.55 the quote is the last item the rules decided, so the strip is
@@ -746,15 +678,14 @@ function mount(fig){
      and the fifth item's chip is still clear of the card rather than sitting
      across its edge. The sweep is coarse because every gate in step() is a
      threshold, not a sample: 0.1 s finds them all, and a final exact render
-     places the pieces. Then three are held mid-journey, so one frame states
-     all four beats: a chip on the line, an answer on the return trail, a dot
-     on the wire to the point of sale. */
+     places the pieces. Then an answer is held mid-journey, so one frame states
+     every beat: a chip on the line, a decision, an answer on the return trail. */
   function still(){
     fig.classList.add("sd-still");
     settle();
     stack.length=0;
     EV.forEach(function(e){
-      e.f={};off(e.chip);off(e.reply);e.dots.forEach(off);
+      e.f={};off(e.chip);off(e.reply);
       e.chip.style.opacity="";e.row.setAttribute("class","sd-row t-"+e.ty);e.row.style.transform="";
     });
     trails.forEach(function(t){t.style.opacity=0;});
@@ -766,9 +697,7 @@ function mount(fig){
     stack.forEach(function(e){e.row.classList.add("on","res");});
     var b=trails[0].getPointAtLength(.46*LBACK[0]);
     put(EV[1].reply,b.x,b.y);EV[1].reply.style.opacity=1;trails[0].style.opacity=.55;
-    var c2=lines[3].getPointAtLength(.58*LFAN[0]);
-    put(EV[2].dots[0],c2.x,c2.y);
-    nodes[0].classList.add("lit");rule.classList.add("lit");
+    rule.classList.add("lit");
   }
 
   if(mq.matches){still();return;}

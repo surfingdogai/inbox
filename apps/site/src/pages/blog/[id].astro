@@ -17,7 +17,7 @@ const { post } = Astro.props;
 const { Content } = await render(post);
 const Anim = post.data.coverAnim ? coverAnims[post.data.coverAnim] : undefined;
 const url = new URL(`/blog/${post.id}/`, Astro.site).toString();
-const image = post.data.og ?? post.data.cover ?? "/art/og-flow.png";
+const image = post.data.og ?? post.data.cover ?? "/art/og-network-v1.png";
 /** What search engines and assistants read: the post as an article, and where it sits on the site. */
 const ld = [
   {
