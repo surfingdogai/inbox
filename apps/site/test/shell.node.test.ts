@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildShell, SHELL_SHA256, SHELL_VERSION, shellFonts, shellHash, siteDir } from "../src/lib/shell";
+import { buildShell, fontFaceCss, shellFonts, siteDir } from "../src/lib/shell";
 
 /**
  * /shell.css is how the network's public pages wear the site's look (src/lib/shell.ts). These tests
  * hold it to the site: every design token in shell.css is the one site.css and the design system
- * declare, in the same theme block; the fonts it names are published; and the version the network
- * links (?v=SHELL_VERSION) changes whenever what it builds does.
+ * declare, in the same theme block; the bar, footer, box and score card in shell/parts.css carry the
+ * declarations of the components they copy; and the fonts it names are published, and are the ones
+ * the site's own pages load.
  */
 const dir = siteDir(fileURLToPath(new URL("..", import.meta.url)));
 const read = (path: string) => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
@@ -181,12 +182,264 @@ describe("shell.css", () => {
     }
   });
 
-  it("is the version the network links", () => {
-    expect(css.split("\n")[0]).toContain(`shell.css v${SHELL_VERSION}`);
-    const hash = shellHash(css);
-    expect(
-      hash,
-      `shell.css changed: raise SHELL_VERSION in src/lib/shell.ts, set SHELL_SHA256 to ${hash}, and raise shellVersion in the network to match`,
-    ).toBe(SHELL_SHA256);
+  it("has no version to keep in step: the network links one address", () => {
+    expect(css.split("\n")[0]).toMatch(/^\/\* surfingdog\.ai shell\.css: /);
+    expect(read("src/lib/shell.ts")).not.toMatch(/SHELL_VERSION|SHELL_SHA256/);
   });
+
+  it("loads the very fonts the site's pages load, so they are fetched once", () => {
+    const layout = read("src/layouts/Layout.astro");
+    expect(layout).not.toMatch(/import\s+["']@fontsource/);
+    expect(layout).toMatch(/<style is:inline set:html=\{fonts\}><\/style>/);
+    const faces = fontFaceCss(dir);
+    for (const m of faces.matchAll(/url\(\/fonts\/([^)]+)\)/g)) expect(css).toContain(`url(/fonts/${m[1]})`);
+  });
+});
+
+/**
+ * Every declaration of a stylesheet, keyed by where (the at-rules around it, layers left out) and
+ * by selector, one key per selector of a list, with :global() unwrapped. A later declaration of the
+ * same property in the same place wins, as in the cascade.
+ */
+function rules(css: string): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  const stack: string[] = [];
+  let buf = "";
+  const flush = () => {
+    const m = buf.trim().match(/^([a-z-]+)\s*:\s*([\s\S]+)$/);
+    const top = stack.at(-1);
+    if (m?.[1] && m[2] && top && !top.startsWith("@")) {
+      const where = stack
+        .slice(0, -1)
+        .filter((x) => !x.startsWith("@layer"))
+        .join(" > ");
+      for (const sel of top.split(/,(?![^(]*\))/)) {
+        const key = `${where} | ${sel.trim().replace(/:global\(([^)]*)\)/g, "$1")}`.trim();
+        if (!out.has(key)) out.set(key, new Map());
+        out.get(key)?.set(m[1], m[2].trim().replace(/\s+/g, " "));
+      }
+    }
+    buf = "";
+  };
+  for (const ch of css.replace(/\/\*[\s\S]*?\*\//g, "")) {
+    if (ch === "{") {
+      stack.push(buf.trim().replace(/\s+/g, " "));
+      buf = "";
+    } else if (ch === "}") {
+      flush();
+      stack.pop();
+    } else if (ch === ";") {
+      flush();
+    } else {
+      buf += ch;
+    }
+  }
+  return out;
+}
+
+/** One spelling for values that mean the same: the pill radius, the easing, a box's four sides. */
+function same(value: string): string {
+  const v = value
+    .replace(/\bvar\(--ease\)/g, "var(--ease-out-soft)")
+    .replace(/\b9999px\b/g, "var(--radius-pill)")
+    .replace(/\s+/g, " ")
+    .trim();
+  const [top, right, bottom, left, ...rest] = v.split(" ");
+  if (top !== undefined && left !== undefined && rest.length === 0 && right === left) {
+    if (top === bottom) return top === right ? top : `${top} ${right}`;
+    return `${top} ${right} ${bottom}`;
+  }
+  return v;
+}
+
+/**
+ * The components shell/parts.css copies, with their classes as parts.css names them. A rule of the
+ * component whose classes are all named here must be in parts.css (under the same selector, or the
+ * one `as` gives) with every declaration it has, at the same value, unless it is listed under `not`
+ * with the reason it differs on the network.
+ */
+const COPIES: {
+  file: string;
+  names: Record<string, string>;
+  as?: Record<string, string>;
+  not: Record<string, string[] | "rule">;
+}[] = [
+  {
+    file: "src/components/Nav.astro",
+    names: {
+      "nav-shell": "sd-nav",
+      navbar: "sd-bar",
+      side: "sd-side",
+      lead: "sd-lead",
+      actions: "sd-actions",
+      brand: "sd-brand",
+      mark: "sd-mark",
+      word: "sd-word",
+      where: "sd-where",
+      "where-slash": "sd-where-slash",
+      links: "sd-links",
+      lbl: "sd-lbl",
+      tt: "sd-tt-btn",
+      menu: "sd-menu > summary",
+      bars: "sd-bars",
+      tick: "sd-tick",
+      out: "sd-out",
+      rule: "sd-sheet .sd-sep",
+      "theme-row": "sd-theme-row",
+      "theme-label": "sd-theme-label",
+      seg: "sd-seg",
+    },
+    as: { "| .sd-brand .sd-mark": "| .sd-mark" },
+    not: {
+      // The bar is not fixed over a hero and has no scrolled state (no script to see the scroll).
+      "| .sd-nav": "rule",
+      "| .sd-bar": "rule",
+      // The site's menu is a button in the bar; the network's is a <details> laid over the bar,
+      // open by [open] rather than aria-expanded.
+      "| .sd-menu > summary": ["display", "flex", "background"],
+      "@media (max-width: 899px) | .sd-menu > summary": "rule",
+      '| .sd-menu > summary[aria-expanded="true"] .sd-bars i:first-child': "rule",
+      '| .sd-menu > summary[aria-expanded="true"] .sd-bars i:last-child': "rule",
+      // The sheet's own rule: the network's sits under the bar without the site's animation.
+      "| .sd-actions": ["gap"],
+      // Day and night are two buttons on the network, not two icons in one turned by a script; on a
+      // phone the whole form moves into the menu.
+      "| .sd-tt-btn svg": ["transition"],
+      '| .sd-tt-btn[data-spun="1"] svg': "rule",
+      "@media (max-width: 560px) | .sd-bar .sd-tt-btn": "rule",
+      "| .sd-tt-btn .i-sun": "rule",
+      '@media (prefers-color-scheme: dark) | :root:not([data-theme="light"]) .sd-tt-btn .i-sun': "rule",
+      '@media (prefers-color-scheme: dark) | :root:not([data-theme="light"]) .sd-tt-btn .i-moon': "rule",
+      '| :root[data-theme="dark"] .sd-tt-btn .i-sun': "rule",
+      '| :root[data-theme="dark"] .sd-tt-btn .i-moon': "rule",
+      // Drawn once when a page arrives on the site; a network page is a fresh load each time.
+      '| .sd-links a[aria-current="page"] .sd-lbl::after': ["transform-origin", "animation"],
+      '@media (prefers-reduced-motion: reduce) | .sd-links a[aria-current="page"] .sd-lbl::after': "rule",
+      // The theme row is a form whose top margin is the site's, written with its own margin reset.
+      "| .sd-theme-row": ["margin-top"],
+      // On a phone the network keeps the menu's room only (the site's .side keeps half the bar).
+      "@media (max-width: 899px) | .sd-bar": ["--sd-none"],
+    },
+  },
+  {
+    file: "src/components/Footer.astro",
+    names: {
+      footer: "sd-foot",
+      "brand-line": "u-line",
+      top: "sd-foot-top",
+      identity: "sd-identity",
+      fbrand: "sd-fbrand",
+      mark: "sd-mark",
+      say: "sd-say",
+      groups: "sd-groups",
+      group: "sd-group",
+      ghead: "sd-ghead",
+      links: "sd-flinks",
+      base: "sd-foot-base",
+      who: "sd-who",
+      licence: "sd-licence",
+    },
+    // The mark is one rule for both; the logo is drawn from shell.css itself (no image from this
+    // host on the network's), as the footer line's ::before.
+    as: { "| .sd-fbrand .sd-mark": "| .sd-mark", "| .sd-who img": "| .sd-who::before" },
+    not: {
+      // Written as .sd-foot .u-line, the line inside the footer.
+      "| .u-line": "rule",
+    },
+  },
+  {
+    file: "src/components/AskBox.astro",
+    names: {
+      ask: "sd-ask",
+      "ask-lg": "sd-ask",
+      "ask-lens": "sd-ask-lens",
+      "ask-input": "sd-ask-input",
+      "ask-go": "sd-ask-go",
+    },
+    not: {
+      // The network's buttons keep their words ("Check", "Stop crawling this site"), so the button is
+      // a pill with a label and the arrow after it rather than the home page's round arrow.
+      "| .sd-ask-go": ["width", "justify-content", "background", "color", "transition"],
+      "| .sd-ask-go:hover, .sd-ask-go:focus-visible": "rule",
+      "| .sd-ask-go:hover": "rule",
+      "| .sd-ask-go:focus-visible": ["color"],
+      "| .sd-ask-go svg": ["width", "height"],
+      // The network's box is a text field, never a search field with a clear button.
+      "| .sd-ask-input::-webkit-search-cancel-button": "rule",
+    },
+  },
+  {
+    file: "src/components/AgentCard.astro",
+    names: {
+      ac: "",
+      "ac-score": "sd-score",
+      "ac-num": "sd-num",
+      "ac-of": "sd-of",
+      "ac-grade": "sd-grade",
+      "ac-what": "sd-what",
+      "ac-track": "sd-track",
+      "ac-rows": "sd-rows",
+      "ac-row": "sd-row",
+      "ac-ans": "sd-ans",
+      "ac-yes": "sd-yes",
+      "ac-partly": "sd-partly",
+      "ac-no": "sd-no",
+      "ac-na": "sd-na",
+      "ac-door": "sd-door",
+      dot: "dot",
+    },
+    not: {
+      // The result page's rows are questions in words ("Can an agent book here?"), not the card's
+      // one-word labels, so they get a column of their own and the card's body type.
+      "| .sd-row": ["grid-template-columns", "gap", "align-items", "padding"],
+      "| .sd-row dt": "rule",
+      "| .sd-row dd": ["align-items"],
+      // A grade can be two characters ("A+"), so the box grows from 26px rather than being 26px.
+      "| .sd-grade": ["width"],
+      // The bar's width with a default, for a result with no score.
+      "| .sd-track i": ["width"],
+    },
+  },
+];
+
+describe("shell/parts.css copies the site's components", () => {
+  const parts = rules(read("shell/parts.css"));
+  for (const copy of COPIES) {
+    it(`carries the declarations of ${copy.file.split("/").at(-1)}`, () => {
+      const src = read(copy.file);
+      const style = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join("\n");
+      const problems: string[] = [];
+      let compared = 0;
+      for (const [key, decls] of rules(style)) {
+        const cut = key.indexOf("| ");
+        const where = key.slice(0, cut).trim();
+        const selector = key.slice(cut + 2);
+        const classes = [...selector.matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1] ?? "");
+        if (classes.length === 0 || !classes.every((c) => c in copy.names)) continue;
+        const named = selector
+          .replace(/\.([a-z][\w-]*)/g, (_m, c: string) => (copy.names[c] ? `.${copy.names[c]}` : ""))
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!named) continue;
+        const at = `${where} | ${named}`.trim();
+        const skip = copy.not[at];
+        if (skip === "rule") continue;
+        const theirs = parts.get(copy.as?.[at] ?? at);
+        if (!theirs) {
+          problems.push(`${at}: not in parts.css`);
+          continue;
+        }
+        for (const [prop, value] of decls) {
+          if (skip?.includes(prop)) continue;
+          compared++;
+          const got = theirs.get(prop);
+          if (got === undefined || same(got) !== same(value)) {
+            problems.push(`${at} { ${prop}: ${value} } but parts.css has ${got ?? "nothing"}`);
+          }
+        }
+      }
+      expect(problems).toEqual([]);
+      expect(compared).toBeGreaterThan(20);
+    });
+  }
 });

@@ -31,11 +31,12 @@ export default defineConfig({
         { tag: "meta", attrs: { name: "twitter:image", content: "https://surfingdog.ai/art/og-inbox-v1.png" } },
         { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
         // The theme chosen in the docs reaches the network's pages under this domain, which carry no
-        // script and read the sd_theme cookie instead (the same lines as src/layouts/Layout.astro).
+        // script and read the sd_theme cookie instead; and a choice made there (their switch writes
+        // the cookie) is adopted here. The same rules as src/layouts/Layout.astro.
         {
           tag: "script",
           content:
-            '(()=>{try{const t=localStorage.getItem("starlight-theme");const want=t==="light"||t==="dark"?t:"";const has=(document.cookie.match(/(?:^|; )sd_theme=([^;]*)/)||[])[1]||"";if(has!==want){const h=location.hostname;const rest="; Path=/; SameSite=Lax"+(h==="surfingdog.ai"||h.endsWith(".surfingdog.ai")?"; Domain=surfingdog.ai":"")+(location.protocol==="https:"?"; Secure":"");document.cookie=want?"sd_theme="+want+"; Max-Age=31536000"+rest:"sd_theme=; Max-Age=0"+rest}}catch{}})();',
+            '(()=>{try{const h=location.hostname;const rest="; Path=/; SameSite=Lax"+(h==="surfingdog.ai"||h.endsWith(".surfingdog.ai")?"; Domain=surfingdog.ai":"")+(location.protocol==="https:"?"; Secure":"");const write=(v)=>{document.cookie="sd_theme="+v+"; Max-Age=31536000"+rest};const t=localStorage.getItem("starlight-theme");const want=t==="light"||t==="dark"?t:"";const c=(document.cookie.match(/(?:^|; )sd_theme=([^;]*)/)||[])[1]||"";if(c==="light"||c==="dark"||c==="auto"){const chosen=c==="auto"?"":c;if(chosen!==want){localStorage.setItem("starlight-theme",chosen);document.documentElement.dataset.theme=chosen||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}}else if(want){write(want)}document.addEventListener("change",(e)=>{const s=e.target;if(s instanceof HTMLSelectElement&&s.closest("starlight-theme-select")){const v=s.value;write(v==="light"||v==="dark"?v:"auto")}})}catch{}})();',
         },
       ],
       social: [{ icon: "github", label: "GitHub", href: GITHUB }],

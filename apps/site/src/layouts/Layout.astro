@@ -1,9 +1,8 @@
 ---
-import "@fontsource-variable/manrope";
-import "@fontsource-variable/plus-jakarta-sans";
 import "../styles/site.css";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
+import { fontFaceCss } from "../lib/shell";
 
 interface Props {
   title: string;
@@ -34,6 +33,9 @@ const {
 const imageAlt = Astro.props.imageAlt ?? CARD_ALTS[image] ?? title;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL(image, Astro.site);
+// Manrope and Plus Jakarta Sans at /fonts/, the files shell.css names too (src/lib/shell.ts): the
+// checker and result pages under this domain then reuse the fonts this page already fetched.
+const fonts = fontFaceCss();
 ---
 
 <!doctype html>
@@ -69,22 +71,32 @@ const ogImage = new URL(image, Astro.site);
     <meta name="twitter:image" content={ogImage} />
     <meta name="twitter:image:alt" content={imageAlt} />
     {ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}
+    <style is:inline set:html={fonts}></style>
     <script is:inline>
       // Apply a saved theme before first paint. Same key as the docs (Starlight).
-      // The choice is also kept in the sd_theme cookie, for the pages this domain serves from the
-      // network (the checker, results, leaderboards), which carry no script and read it instead.
-      // Nav.astro writes both when the theme is switched; this catches a choice made in the docs.
+      // The choice is also kept in the sd_theme cookie (light, dark or auto), which the pages this
+      // domain serves from the network (the checker, results, leaderboards) read, since they carry
+      // no script, and which their own day/night switch writes. The cookie is the latest choice
+      // wherever it was made (Nav.astro and the docs write it too), so it wins; a choice stored
+      // before the cookie existed is written into it.
       (() => {
         try {
           const t = localStorage.getItem("starlight-theme");
-          const want = t === "light" || t === "dark" ? t : "";
-          if (want) document.documentElement.setAttribute("data-theme", want);
-          const has = (document.cookie.match(/(?:^|; )sd_theme=([^;]*)/) || [])[1] || "";
-          if (has !== want) {
+          const c = (document.cookie.match(/(?:^|; )sd_theme=([^;]*)/) || [])[1] || "";
+          let want = t === "light" || t === "dark" ? t : "";
+          if (c === "light" || c === "dark" || c === "auto") {
+            const chosen = c === "auto" ? "" : c;
+            if (chosen !== want) {
+              want = chosen;
+              if (want) localStorage.setItem("starlight-theme", want);
+              else localStorage.removeItem("starlight-theme");
+            }
+          } else if (want) {
             const h = location.hostname;
             const rest = `; Path=/; SameSite=Lax${h === "surfingdog.ai" || h.endsWith(".surfingdog.ai") ? "; Domain=surfingdog.ai" : ""}${location.protocol === "https:" ? "; Secure" : ""}`;
-            document.cookie = want ? `sd_theme=${want}; Max-Age=31536000${rest}` : `sd_theme=; Max-Age=0${rest}`;
+            document.cookie = `sd_theme=${want}; Max-Age=31536000${rest}`;
           }
+          if (want) document.documentElement.setAttribute("data-theme", want);
         } catch {}
       })();
     </script>

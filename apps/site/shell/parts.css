@@ -5,9 +5,9 @@
 /*  site.css into /shell.css (src/lib/shell.ts).                       */
 /*                                                                     */
 /*  Those pages carry no script, so the bar's menu is a <details> and  */
-/*  there is no theme button: the theme follows the system, or the     */
-/*  visitor's choice on the site, which the site keeps in a cookie the  */
-/*  network reads. Every class here starts with sd- so nothing in the  */
+/*  the theme switches are forms: the network keeps the choice in the  */
+/*  same cookie the site does, and stamps data-theme from it. Every    */
+/*  class here starts with sd- so nothing in the                       */
 /*  design system's own names (.rule, .check, .row) is overridden.     */
 /*  The values follow Nav.astro, Footer.astro, AskBox.astro and        */
 /*  AgentCard.astro; keep them in step when those change.              */
@@ -67,7 +67,7 @@
 .sd-mark {
   display: block;
   flex: none;
-  transition: transform 0.35s var(--ease);
+  transition: transform 0.35s var(--ease-out-soft);
 }
 .sd-brand:hover .sd-mark,
 .sd-brand:focus-visible .sd-mark,
@@ -116,7 +116,7 @@
   white-space: nowrap;
   color: var(--ink-2);
   text-decoration: none;
-  transition: color 0.15s var(--ease);
+  transition: color 0.15s var(--ease-out-soft);
 }
 .sd-links a::before {
   content: "";
@@ -126,7 +126,7 @@
   background: var(--pill-bg-hover);
   transform: scaleX(0);
   transform-origin: left center;
-  transition: transform 0.15s var(--ease);
+  transition: transform 0.15s var(--ease-out-soft);
 }
 .sd-links a:hover,
 .sd-links a:focus-visible,
@@ -139,6 +139,37 @@
 }
 .sd-lbl {
   position: relative;
+}
+/* The day/night button: a form with one button for each way, the one that leads away from the theme
+   in force shown (Nav.astro's .tt shows the moon by day and the sun by night). */
+.sd-tt {
+  display: flex;
+  flex: none;
+  margin: 0;
+}
+.sd-tt-btn {
+  flex: none;
+}
+.sd-tt-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.sd-to-light {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sd-to-light {
+    display: inline-flex;
+  }
+  :root:not([data-theme="light"]) .sd-to-dark {
+    display: none;
+  }
+}
+:root[data-theme="dark"] .sd-to-light {
+  display: inline-flex;
+}
+:root[data-theme="dark"] .sd-to-dark {
+  display: none;
 }
 .sd-links a[aria-current="page"] .sd-lbl::after {
   content: "";
@@ -173,7 +204,7 @@
   color: var(--ink);
   cursor: pointer;
   list-style: none;
-  transition: background-color 0.15s var(--ease);
+  transition: background-color 0.15s var(--ease-out-soft);
 }
 .sd-menu > summary::-webkit-details-marker {
   display: none;
@@ -197,8 +228,8 @@
   border-radius: 2px;
   background: currentColor;
   transition:
-    transform 0.22s var(--ease),
-    width 0.22s var(--ease);
+    transform 0.22s var(--ease-out-soft),
+    width 0.22s var(--ease-out-soft);
 }
 .sd-bars i:first-child {
   top: 1px;
@@ -245,8 +276,8 @@
   color: var(--ink-2);
   text-decoration: none;
   transition:
-    background-color 0.15s var(--ease),
-    color 0.15s var(--ease);
+    background-color 0.15s var(--ease-out-soft),
+    color 0.15s var(--ease-out-soft);
 }
 .sd-sheet a:hover,
 .sd-sheet a:focus-visible,
@@ -275,9 +306,57 @@
   margin: 6px 10px;
   background: var(--hairline);
 }
+.sd-theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 10px 10px 6px;
+  border-top: 1px solid var(--hairline);
+}
+.sd-theme-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sd-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--row-bg);
+}
+.sd-seg button {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    background-color 0.15s var(--ease-out-soft),
+    color 0.15s var(--ease-out-soft);
+}
+.sd-seg button:hover,
+.sd-seg button:focus-visible {
+  color: var(--ink);
+}
+.sd-seg button[aria-pressed="true"] {
+  background: var(--pill-bg-hover);
+  color: var(--ink);
+}
 .sd-bar a:focus-visible,
+.sd-bar button:focus-visible,
 .sd-menu > summary:focus-visible,
-.sd-sheet a:focus-visible {
+.sd-sheet a:focus-visible,
+.sd-sheet button:focus-visible {
   outline: var(--focus-width) solid var(--focus);
   outline-offset: var(--focus-offset);
 }
@@ -294,6 +373,37 @@
   .sd-bar {
     height: 56px;
     gap: 6px;
+  }
+  /* The menu's button is laid over the end of the bar (it is not in it), so the bar keeps exactly
+     its room there, 6px of gap and 44px, and the rest goes to the name of the page. */
+  .sd-actions {
+    flex: none;
+    padding-right: 50px;
+  }
+  .sd-bar .sd-tt-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+@media (max-width: 899px) and (pointer: coarse) {
+  .sd-bar .sd-tt-btn::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 0;
+    left: 0;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+}
+@media (max-width: 560px) {
+  /* The choice does not disappear on a phone, it moves into the menu. */
+  .sd-bar .sd-tt {
+    display: none;
+  }
+  .sd-actions {
+    flex: 0 0 44px;
+    padding-right: 0;
   }
 }
 @media (max-width: 430px) {
@@ -370,7 +480,7 @@
 .sd-flinks a {
   color: var(--ink-2);
   text-decoration: none;
-  transition: color 0.15s var(--ease);
+  transition: color 0.15s var(--ease-out-soft);
 }
 .sd-flinks a span {
   position: relative;
@@ -385,7 +495,7 @@
   background: currentColor;
   transform: scaleX(0);
   transform-origin: left center;
-  transition: transform 0.2s var(--ease);
+  transition: transform 0.2s var(--ease-out-soft);
 }
 .sd-flinks a:hover,
 .sd-flinks a:focus-visible {
@@ -742,6 +852,7 @@
   width: 6px;
   height: 6px;
   background: var(--c-success);
+  border-radius: 50%;
 }
 .sd-partly {
   color: var(--ink);

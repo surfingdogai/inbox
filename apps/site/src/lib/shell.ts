@@ -7,8 +7,8 @@ import { pathToFileURL } from "node:url";
 /**
  * shell.css: the site's look for pages the site does not render. The network's public pages (the
  * checker at /check, result pages at /b/<domain>, the leaderboards, the crawler's /bot page) are
- * served by another service behind the same domain, and link https://surfingdog.ai/shell.css?v=N
- * so they wear the same tokens, fonts, sky, bar, footer, box and type as every page here.
+ * served by another service behind the same domain, and link https://surfingdog.ai/shell.css so
+ * they wear the same tokens, fonts, sky, bar, footer, box and type as every page here.
  *
  * It is not a copy. It is site.css itself (with the design tokens it imports from @surfingdog/ui),
  * compiled and optimised by the same Tailwind pipeline the site's own build runs (@tailwindcss/vite
@@ -17,14 +17,14 @@ import { pathToFileURL } from "node:url";
  * script. A token changed in site.css or in the tokens changes shell.css in the same build.
  *
  * The fonts are the site's own (Fontsource), published at /fonts/<name>.<hash>.woff2 so the names
- * change with the bytes and can be cached for a year.
+ * change with the bytes and can be cached for a year. The site's own pages load them from there too
+ * (fontFaceCss, in Layout.astro), so a visitor going from the site to the checker fetches them once.
  *
- * SHELL_VERSION is the ?v= the network links. The site's test holds SHELL_SHA256, the hash of what
- * this version builds: when anything that goes into shell.css changes, the test fails until the
- * version is raised and the hash recorded, and the network's shellVersion has to follow.
+ * shell.css has one address and no version: it is served for minutes, so a change here reaches the
+ * network's pages with the site's next deploy, and nothing in the network has to follow it. What
+ * keeps it the site's look is the site's test: the tokens are site.css's, and the bar, footer, box
+ * and card in shell/parts.css carry the same declarations as the components they copy.
  */
-export const SHELL_VERSION = 1;
-export const SHELL_SHA256 = "d046a0359e2f08cdf8e91062f933517cd6fa7ddaf6bc886883d09e1cc1dbf7a5";
 
 /** The utilities shell/parts.css leans on. The site's own build emits only those it finds used. */
 const UTILITIES = ["glass", "glass-strong", "pill-glass", "row-glass", "tabular"];
@@ -66,6 +66,17 @@ function fontFaces(dir: string): { css: string; fonts: ShellFont[] } {
     );
   }).join("\n");
   return { css, fonts };
+}
+
+/**
+ * The @font-face rules for both families at their /fonts/ addresses: in shell.css, and inline in the
+ * head of every page of the site (Layout.astro), so both load the very same files.
+ */
+export function fontFaceCss(dir = siteDir()): string {
+  return fontFaces(dir)
+    .css.replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\s*\n\s*/g, "")
+    .trim();
 }
 
 /** The font files shell.css names, for the /fonts/[file] endpoint. */
@@ -110,10 +121,5 @@ export async function buildShell(dir = siteDir(), { minify = true } = {}): Promi
     `:root { --sd-logo: url(data:image/png;base64,${logo}); }`,
   ].join("\n");
   const { code } = tw.optimize(css, { minify });
-  return `/* surfingdog.ai shell.css v${SHELL_VERSION}: the site's tokens, fonts, bar, footer and type for pages it does not render. Built from site.css by src/lib/shell.ts; do not edit. */\n${code.trim()}\n`;
-}
-
-/** The sha256 of a built shell.css, hex. */
-export function shellHash(css: string): string {
-  return createHash("sha256").update(css).digest("hex");
+  return `/* surfingdog.ai shell.css: the site's tokens, fonts, bar, footer and type for pages it does not render. Built from site.css by src/lib/shell.ts; do not edit. */\n${code.trim()}\n`;
 }
