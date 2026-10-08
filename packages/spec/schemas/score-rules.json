@@ -213,6 +213,100 @@
         "required": ["id", "label", "noun", "applicable", "groups"]
       }
     },
+    "follows": {
+      "description": "Version 2 as amended on 8 October 2026: when `if` applies to a business's profile and is yes or partial, the capabilities it `adds` count for it too (where an agent can book, changing and cancelling the booking count).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "if": {
+            "type": "string",
+            "enum": [
+              "find",
+              "catalogue",
+              "availability",
+              "message",
+              "negotiate",
+              "book",
+              "order",
+              "signup",
+              "pay",
+              "change",
+              "cancel",
+              "track",
+              "return",
+              "receipt",
+              "feedback",
+              "subscription",
+              "vouchers",
+              "waitlist",
+              "support",
+              "policies"
+            ]
+          },
+          "adds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "find",
+                "catalogue",
+                "availability",
+                "message",
+                "negotiate",
+                "book",
+                "order",
+                "signup",
+                "pay",
+                "change",
+                "cancel",
+                "track",
+                "return",
+                "receipt",
+                "feedback",
+                "subscription",
+                "vouchers",
+                "waitlist",
+                "support",
+                "policies"
+              ]
+            }
+          },
+          "goods": {
+            "description": "Only for a business that sells goods (`goods`).",
+            "type": "boolean"
+          }
+        },
+        "required": ["if", "adds"]
+      }
+    },
+    "goods": {
+      "description": "Who sells goods, for a follow marked `goods`: a business of one of `profiles`, or one whose signals say so (a live checkout door, a catalogue of products) and whose profile is not one of `never`.",
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["appointments", "classes", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
+          },
+          "description": "Profiles whose businesses sell goods by their kind."
+        },
+        "never": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["appointments", "classes", "food", "trades", "shop", "stay", "memberships", "venues", "general"]
+          },
+          "description": "Profiles whose businesses never do, whatever their signals."
+        }
+      },
+      "required": ["summary", "profiles", "never"]
+    },
     "credit": {
       "type": "object",
       "properties": {

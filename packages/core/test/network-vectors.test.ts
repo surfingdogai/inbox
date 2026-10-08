@@ -1,6 +1,7 @@
 import {
   AMENDMENT_LIMITS,
   aiCatalogSchema,
+  applicableOf,
   attributesResponseSchema,
   attributeVocabularySchema,
   businessCardSchema,
@@ -57,6 +58,7 @@ import {
   scoreRulesSchema,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
+  sellsGoods,
   updateBusinessInputSchema,
   updateBusinessOutputSchema,
 } from "@surfingdog/spec";
@@ -1475,12 +1477,30 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(rules.profiles.find((p) => p.id === "appointments")?.applicable).not.toContain("signup");
     // A venue books (tickets, tables, entries).
     expect(rules.profiles.find((p) => p.id === "venues")?.applicable).toContain("book");
-    // The changelog says what changed in version 2, on what day, and why.
+    // The changelog says what changed in version 2, on what day, and why; and its amendment of 8 October 2026, last.
+    const v2 = rules.changelog.find((c) => c.version === 2 && c.published !== undefined);
+    expect(v2).toMatchObject({ version: 2, published: "2026-10-07" });
+    expect(v2?.summary).toMatch(/book and order count together as one capability/);
+    expect(v2?.summary).toMatch(/Sign up is a capability of its own/);
     const last = rules.changelog.at(-1);
-    expect(last).toMatchObject({ version: 2, published: "2026-10-07" });
-    expect(last?.summary).toMatch(/book and order count together as one capability/);
-    expect(last?.summary).toMatch(/Sign up is a capability of its own/);
-    expect(last?.summary).not.toMatch(/\b(first|only)\b/i);
+    expect(last).toMatchObject({ version: 2, amended: "2026-10-08" });
+    expect(last?.published).toBeUndefined();
+    expect(last?.summary).toMatch(/what counts now follows what a business lets an agent do/);
+    expect(last?.summary).toMatch(/Why: /);
+    expect(last?.summary).toMatch(/no group's weight and no grade changed/);
+    for (const c of [v2, last]) expect(c?.summary).not.toMatch(/\b(first|only)\b/i);
+    // What follows: an order brings change, cancel, track and receipt, and a return when the business sells goods; a
+    // booking change, cancel and availability; a sign-up change, cancel and the membership. A shop sells goods by its
+    // kind, a restaurant never does. Version 1 has none of it.
+    expect(rules.follows).toEqual([
+      { if: "order", adds: ["change", "cancel", "track", "receipt"] },
+      { if: "order", adds: ["return"], goods: true },
+      { if: "book", adds: ["change", "cancel", "availability"] },
+      { if: "signup", adds: ["change", "cancel", "subscription"] },
+    ]);
+    expect(rules.goods).toMatchObject({ profiles: ["shop"], never: ["food"] });
+    expect(rulesV1.follows).toBeUndefined();
+    expect(rulesV1.goods).toBeUndefined();
     // A category group belongs to one profile at most.
     const groups = rules.profiles.flatMap((p) => p.groups);
     expect(new Set(groups).size).toBe(groups.length);
@@ -1511,7 +1531,12 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       rules.not_certification,
       rules.named,
       rules.directory,
-      ...Object.values(rules.fixes).flatMap((f) => [f?.title ?? "", f?.how ?? ""]),
+      rules.goods?.summary ?? "",
+      ...Object.values(rules.fixes).flatMap((f) => [
+        f?.title ?? "",
+        f?.how ?? "",
+        ...Object.values(f?.by_profile ?? {}).flatMap((b) => [b?.title ?? "", b?.how ?? ""]),
+      ]),
     ].join("\n");
     expect(copy).not.toMatch(/\b(first|only|verified|certified|people free)\b/i);
     expect(rules.not_certification).toMatch(/not a certification/);
@@ -1533,30 +1558,34 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       expect(vectors.cases.length).toBeGreaterThanOrEqual(25);
       for (const c of vectors.cases) {
         const states = c.states as Record<CapabilityId, CapabilityState>;
+        const goods = (c as { goods?: boolean }).goods ?? false;
         const profile = r.profiles.find((p) => p.id === c.profile);
         expect(profile, c.name).toBeDefined();
-        // A state is given for every capability of that version, and "na" exactly where it does not apply.
+        // A state is given for every capability of that version, and "na" exactly where it does not apply: not its
+        // profile's, and not brought by what an agent can do there (the rules' follows, version 2 as amended).
+        const applies = applicableOf(c.profile as "appointments", states, r, goods);
         for (const { id } of r.capabilities) {
-          expect(states[id] === "na", `${c.name} ${id}`).toBe(!profile?.applicable.includes(id));
+          expect(states[id] === "na", `${c.name} ${id}`).toBe(!applies.has(id));
         }
-        const got = scoreOf(c.profile as "appointments", states, r);
+        const got = scoreOf(c.profile as "appointments", states, r, goods);
         expect({ score: got.score, grade: got.grade, n: got.n, possible: got.possible }, c.name).toEqual({
           score: c.expect.score,
           grade: c.expect.grade,
           n: c.expect.n,
           possible: c.expect.possible,
         });
-        expect(fixesOf(c.profile as "appointments", states, r), c.name).toEqual(c.expect.fixes);
+        expect(fixesOf(c.profile as "appointments", states, r, goods), c.name).toEqual(c.expect.fixes);
       }
     }
   });
 
-  it("version 2: a general business that takes messages and nothing else falls to the low 40s; one that books and pays rises", () => {
+  it("version 2: a general business that takes messages and nothing else falls to the low 40s; book, order and sign up are one", () => {
     const by = new Map(scoreVectors.cases.map((c) => [c.name, c]));
     const states = (name: string) => by.get(name)?.states as Record<CapabilityId, CapabilityState>;
     expect(by.get("general-message-only")?.expect).toMatchObject({ score: 42, grade: "C" });
-    expect(by.get("general-book-and-pay")?.expect).toMatchObject({ score: 67, grade: "B" });
-    expect(by.get("general-message-book-pay")?.expect).toMatchObject({ score: 91, grade: "A" });
+    // Booking and paying with nothing after it: changing, cancelling and availability count since 8 October 2026.
+    expect(by.get("general-book-and-pay")?.expect).toMatchObject({ score: 39, grade: "D" });
+    expect(by.get("general-message-book-pay")?.expect).toMatchObject({ score: 53, grade: "C" });
     expect(by.get("venue-jazz-club")?.expect).toMatchObject({ score: 34, grade: "D" });
     // Under version 1 (book and order not applicable) the first two scored 55 alike.
     const v1 = (name: string) => {
@@ -1566,8 +1595,15 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect([v1("general-message-only"), v1("general-book-and-pay"), v1("general-message-book-pay")]).toEqual([
       55, 55, 91,
     ]);
-    // Book or order: either one meets the set, and both count no more than one.
-    const g = (x: Partial<Record<CapabilityId, CapabilityState>>) => scoreOf("general", x, rules).score;
+    // Book or order: either one meets the set, and both count no more than one. What follows each differs since 8
+    // October 2026, so the slot is compared over the profile's own capabilities (a set given as such: no follows).
+    const own = (p: "general" | "memberships" | "classes") => {
+      const x = rules.profiles.find((q) => q.id === p);
+      return { applicable: x?.applicable ?? [], either: x?.either ?? [] };
+    };
+    const slot = (p: "general" | "memberships" | "classes", x: Partial<Record<CapabilityId, CapabilityState>>) =>
+      scoreOf(own(p), x, rules);
+    const g = (x: Partial<Record<CapabilityId, CapabilityState>>) => slot("general", x).score;
     expect(g({ book: "yes" })).toBe(g({ order: "yes" }));
     expect(g({ book: "yes", order: "yes" })).toBe(g({ book: "yes" }));
     expect(g({ book: "partial", order: "yes" })).toBe(g({ order: "yes" }));
@@ -1587,19 +1623,72 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(g({ signup: "yes" })).toBe(g({ book: "yes" }));
     expect(g({ signup: "yes", order: "yes" })).toBe(g({ order: "yes" }));
     expect(fixed("general", { signup: "yes" })).not.toContain("book");
-    expect(scoreOf("memberships", { signup: "yes" }, rules).score).toBe(
-      scoreOf("memberships", { order: "yes" }, rules).score,
-    );
-    expect(scoreOf("classes", { signup: "yes" }, rules).score).toBe(scoreOf("classes", { book: "yes" }, rules).score);
-    expect(by.get("general-message-signup")?.expect).toMatchObject({ score: 67, grade: "B" });
-    expect(by.get("gym-signup-book")?.expect).toMatchObject({ score: 57, grade: "C" });
+    expect(slot("memberships", { signup: "yes" })).toEqual(slot("memberships", { order: "yes" }));
+    expect(slot("classes", { signup: "yes" })).toEqual(slot("classes", { book: "yes" }));
+    expect(by.get("general-message-signup")?.expect).toMatchObject({ score: 43, grade: "C" });
+    expect(by.get("gym-signup-book")?.expect).toMatchObject({ score: 51, grade: "C" });
     expect(by.get("school-enrol")?.expect).toMatchObject({ score: 49, grade: "C" });
   });
 
-  it("the worked examples: a salon 51 C, a restaurant 74 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
+  it("version 2 as amended on 8 October 2026: what counts follows what an agent can do, so a full score needs a full interaction", () => {
+    const by = new Map(scoreVectors.cases.map((c) => [c.name, c]));
+    // Ordering and paying with nothing after it is no longer 100; with changing, cancelling, tracking and a receipt it
+    // is; selling goods, a return counts too.
+    expect(by.get("general-order-no-after")?.expect).toMatchObject({ score: 58, grade: "C", possible: 95 });
+    expect(by.get("general-order-full")?.expect).toMatchObject({ score: 100, grade: "A", fixes: [] });
+    expect(by.get("general-order-full-goods")).toMatchObject({
+      goods: true,
+      expect: { score: 92, grade: "A", fixes: [{ capability: "return", points: 8 }] },
+    });
+    // A salon that books and cannot change or cancel is clearly below one that can.
+    expect(by.get("salon-books-no-change")?.expect).toMatchObject({ score: 68, grade: "B" });
+    expect(by.get("salon-books-changes")?.expect).toMatchObject({ score: 100, grade: "A" });
+    // What an order, a booking or a sign-up brings, yes or partly; no brings nothing, nor does a doing capability the
+    // profile does not count (a salon's order).
+    const brings = (
+      p: "general" | "food" | "appointments" | "trades",
+      x: Partial<Record<CapabilityId, CapabilityState>>,
+      goods = false,
+    ) => {
+      const own = rules.profiles.find((q) => q.id === p)?.applicable ?? [];
+      return [...applicableOf(p, x, rules, goods)].filter((c) => !own.includes(c)).sort();
+    };
+    expect(brings("general", { order: "no" }, true)).toEqual([]);
+    expect(brings("general", { order: "yes" })).toEqual(["cancel", "change", "receipt", "track"]);
+    expect(brings("general", { order: "partial" }, true)).toEqual(["cancel", "change", "receipt", "return", "track"]);
+    expect(brings("general", { book: "yes" })).toEqual(["availability", "cancel", "change"]);
+    expect(brings("general", { signup: "partial" })).toEqual(["cancel", "change", "subscription"]);
+    expect(brings("food", { order: "yes" }, true)).toEqual(["receipt", "track"]);
+    expect(brings("appointments", { order: "yes" }, true)).toEqual([]);
+    expect(brings("trades", { book: "yes" })).toEqual(["availability"]);
+    expect([
+      sellsGoods("shop", false, rules),
+      sellsGoods("food", true, rules),
+      sellsGoods("venues", true, rules),
+    ]).toEqual([true, false, true]);
+    // A business where an agent can do none of book, order and sign up scores as before: what follows needs one.
+    const general = rules.profiles.find((q) => q.id === "general");
+    const plain = { message: "yes", find: "yes", catalogue: "yes" } as const;
+    expect(scoreOf("general", plain, rules, true)).toEqual(
+      scoreOf({ applicable: general?.applicable ?? [], either: general?.either ?? [] }, plain, rules),
+    );
+    // The fix that lets an agent book brings changing, cancelling and availability with it, counted in its points.
+    expect(by.get("general-message-only")?.expect.fixes[0]).toEqual({
+      capability: "book",
+      points: 39,
+      with: ["availability", "change", "cancel"],
+    });
+    // Displayed weights follow what applies: a cancel brought by an order shares the after group's 30 by three.
+    expect(capabilityWeightOf("general", "cancel", rules)).toBe(0);
+    expect(capabilityWeightOf("general", "cancel", rules, { order: "yes" })).toBe(10);
+    expect(capabilityWeightOf("general", "return", rules, { order: "yes" }, true)).toBe(7.5);
+  });
+
+  it("the worked examples: a salon 51 C, a restaurant 63 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
     const by = new Map(scoreVectors.cases.map((c) => [c.name, c.expect]));
     expect(by.get("hair-salon")).toMatchObject({ score: 51, grade: "C", n: 5800, possible: 95 });
-    expect(by.get("restaurant")).toMatchObject({ score: 74, grade: "B", n: 8400, possible: 95 });
+    // A restaurant that takes orders is scored on tracking them and a receipt too (74 before 8 October 2026).
+    expect(by.get("restaurant")).toMatchObject({ score: 63, grade: "B", n: 7200, possible: 95 });
     expect(by.get("trades-plumber")).toMatchObject({ score: 33, grade: "D", n: 3000, possible: 75 });
     expect(by.get("shop")).toMatchObject({ score: 53, grade: "C", n: 6000, possible: 95 });
     expect(by.get("homepage-example")).toEqual({
@@ -1614,7 +1703,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
       ],
     });
     expect(by.get("trades-plumber")?.fixes.map((f) => `${f.capability}+${f.points}`)).toEqual([
-      "book+18",
+      "book+24",
       "change+14",
       "cancel+14",
       "receipt+14",

@@ -1017,6 +1017,37 @@
   font-weight: 500;
   color: var(--ink-3);
 }
+/* A capability's state ("Not applicable") stays on one line: a cell may break anywhere, and a narrow
+   column broke this one inside a word. */
+.sd-table .sd-state {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+/* A result's capabilities that do not apply to its kind of business, folded under its table: a
+   <details>, so it opens without a script. Its summary is one quiet line. Written under the table's
+   card, so its summary outranks the bar's menu summary, which comes earlier. */
+.sd-table-card .sd-more {
+  border-top: 1px solid var(--hairline);
+}
+.sd-table-card .sd-more > summary {
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+/* Two columns, as wide as their words: the capability, then "Not applicable" beside it. */
+.sd-table-card .sd-more .sd-table {
+  width: auto;
+}
+.sd-table-card .sd-more > summary::-webkit-details-marker {
+  display: none;
+}
+.sd-table-card .sd-more > summary:hover,
+.sd-table-card .sd-more[open] > summary {
+  color: var(--ink);
+}
 /* The leaderboard: position, business, score, the five answers, the date. */
 .sd-lb td:first-child {
   width: 2.5em;

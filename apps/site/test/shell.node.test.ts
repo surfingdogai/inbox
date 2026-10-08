@@ -177,6 +177,8 @@ describe("shell.css", () => {
       "sd-legend",
       "sd-table",
       "sd-caps",
+      "sd-state",
+      "sd-more",
       "sd-lb",
       "sd-chips",
       "sd-prose",

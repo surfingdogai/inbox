@@ -332,6 +332,35 @@
             "minimum": 1,
             "maximum": 9007199254740991
           },
+          "with": {
+            "description": "What the fix brings with it (changing and cancelling a booking), counted as yes in its points.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "find",
+                "catalogue",
+                "availability",
+                "message",
+                "negotiate",
+                "book",
+                "order",
+                "signup",
+                "pay",
+                "change",
+                "cancel",
+                "track",
+                "return",
+                "receipt",
+                "feedback",
+                "subscription",
+                "vouchers",
+                "waitlist",
+                "support",
+                "policies"
+              ]
+            }
+          },
           "title": {
             "type": "string"
           },

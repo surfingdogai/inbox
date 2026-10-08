@@ -39,7 +39,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
 | The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
-| The agentic score's rules, version 2 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
+| The agentic score's rules, version 2 as amended on 8 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
 | The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 
 ## 1. Conventions
@@ -869,6 +869,22 @@ such a phrase of two words or more; then the events it publishes at an address i
 never replace a language model's reading of the site as another kind (a bar, a restaurant): the
 venue is then a probable alternate. A language model's reading stays a hint.
 
+**What follows** (version 2 as amended on 8 October 2026). What counts follows what a business lets
+an agent do, on top of its profile: the rules' `follows`. When a capability its profile counts is
+`yes` or `partial`, the capabilities it brings count too: an **order** brings `change`, `cancel`,
+`track` and `receipt`, and `return` when the business sells goods; a **booking** brings `change`,
+`cancel` and `availability`; a **sign-up** brings `change`, `cancel` (changing or ending the
+membership or account) and `subscription`. The rules' `goods` says who sells goods: a business scored
+as a `shop`, or one whose signals say so (a live UCP, ACP or Shopify checkout door, or a catalogue of
+at least three products), never one scored as `food` (a takeaway is not returned). What a profile
+already counts stays as it is, no weight or grade changed, and book, order and sign up count as one
+where they did. So a full score needs the steps after the booking, the order or the sign-up: a
+business of no known kind where an agent can find it, read its catalogue and policies, message it,
+order and pay, and do nothing after it, scored 100 before the amendment and scores 58 (C); with
+changing, cancelling and tracking the order and a receipt it scores 100 again, and 92 (A) selling
+goods without returns. A business where an agent can do none of book, order and sign up scores as
+before, since nothing follows.
+
 **Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay; sign up too
 from version 2), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
@@ -877,7 +893,7 @@ counted. `yes` earns two halves, `partial` one, `no` none. The arithmetic is int
 every language:
 
 ```
-For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.
+For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where applicable(P) is P's applicable capabilities and what each of the rules' follows adds when its if is applicable to P and yes or partial (one marked goods when the business sells goods), and the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.
 possible = Σ_{g: A_g≠∅} W_g
 N        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))
 D        = 120 × possible
@@ -885,26 +901,34 @@ score    = (100 × N + D/2) div D                       (round half up; 0..100)
 grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20
 ```
 
-That is version 2's formula; version 1's is the same without the either clause. A capability's
-displayed weight is `W_g / |A_g|` to one decimal place (each member of an either set shows the set's). **Fixes** are each applicable,
+That is version 2's formula as amended; version 1's is the same without the follows and either
+clauses. A capability's displayed weight is `W_g / |A_g|` to one decimal place (each member of an
+either set shows the set's), over what applies. **Fixes** are each applicable,
 weighted capability that is not `yes`, scored again as `yes`, an either set being one fix under its
 first capability (`book` for book, order or sign up; `order` for a gym's order or sign up), due while none of its capabilities is `yes`: the points it would add, by points,
-then group order, then vocabulary order; a fix worth nothing is left out. A fix's text in the rules
+then group order, then vocabulary order; a fix worth nothing is left out. A fix that makes more
+apply (letting an agent book brings changing, cancelling and availability) is scored with what it
+brings as `yes` too, and lists it in its `with`: its points are what the whole interaction is worth. A fix's text in the rules
 may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
 business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
 `capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
-cases, a salon at 51 (C), a restaurant at 74 (B), a plumber at 33 (D), a shop at 53 (C), and under
-version 2 a business of no known kind that takes messages and nothing else at 42 (C, 55 under version
-1), one that books and takes payment at 67 (B), a software company that takes messages and signs
-people up at 67 (B), a gym that signs people up and books classes at 57 (C; 41 without the sign-up)
-and a school that enrols at 49 (C, as one that books), among them; `vectors/score-v1.json` holds version 1's.
+cases, a salon at 51 (C), a restaurant that takes orders it does not let an agent track or receipt at
+63 (B), a plumber at 33 (D), a shop at 53 (C), and under version 2 as amended a business of no known
+kind that takes messages and nothing else at 42 (C, 55 under version 1), one that books and takes
+payment and lets an agent neither change nor cancel at 39 (D), a software company that takes messages
+and signs people up at 43 (C), a gym that signs people up and books classes at 51 (C), a school that
+enrols at 49 (C), a business of no known kind that takes orders and payment and nothing after them at
+58 (C) and with changing, cancelling, tracking and a receipt at 100 (A), and a salon that books at 68
+(B) without changing and cancelling and 100 (A) with them, among them; `vectors/score-v1.json` holds
+version 1's. Each case says whether its signals say it sells goods (`goods`).
 
 **The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
 version in force and `?version=N` any version ever published (`404` for one that never was), shaped
 as `schemas/score-rules.json` ([`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json)
 is version 2, in force; [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) is
-version 1, its `status` `retired`). Each version's `changelog` says what changed and why.
-A new version is applied to every score the network keeps: each is worked out again.
+version 1, its `status` `retired`). Each version's `changelog` says what changed and why, and an
+amendment of a version in force is an entry of its own (`amended`, the day) saying the same. A new
+version, or an amendment, is applied to every score the network keeps: each is worked out again.
 
 **The score never changes the directory's search order** (§4.4), and nobody can pay for a score or a
 place. It is not a certification: it is what was read on the business's own site and doors on the

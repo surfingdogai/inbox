@@ -6,9 +6,10 @@ import { doorTypeSchema, levelNameSchema } from "./directory";
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
  * do with a business through doors the business published, capability by capability, and one score over the
  * capabilities that apply to its kind of business. The vocabulary is `vocab/capabilities.json`, the rules
- * `vocab/score-rules-v2.json` (in force from 7 October 2026; version 1, `vocab/score-rules-v1.json`, is retired, and a
- * network serves its own at `GET /v1/score-rules`), and `vectors/score.json` (`vectors/score-v1.json` for version 1)
- * pins the arithmetic. The score never changes a business's place in the directory's search order.
+ * `vocab/score-rules-v2.json` (in force from 7 October 2026, amended on 8 October 2026; version 1,
+ * `vocab/score-rules-v1.json`, is retired, and a network serves its own at `GET /v1/score-rules`), and
+ * `vectors/score.json` (`vectors/score-v1.json` for version 1) pins the arithmetic. The score never changes a
+ * business's place in the directory's search order.
  */
 
 /** The capabilities, in vocabulary order: that order breaks every tie. */
@@ -147,6 +148,30 @@ export const scoreRulesSchema = z.object({
       groups: z.array(z.string()).describe("The directory's category groups this profile covers."),
     }),
   ),
+  follows: z
+    .array(
+      z.object({
+        if: capabilityIdSchema,
+        adds: z.array(capabilityIdSchema).min(1),
+        goods: z.boolean().optional().describe("Only for a business that sells goods (`goods`)."),
+      }),
+    )
+    .optional()
+    .describe(
+      "Version 2 as amended on 8 October 2026: when `if` applies to a business's profile and is yes or partial, the " +
+        "capabilities it `adds` count for it too (where an agent can book, changing and cancelling the booking count).",
+    ),
+  goods: z
+    .object({
+      summary: z.string(),
+      profiles: z.array(profileIdSchema).describe("Profiles whose businesses sell goods by their kind."),
+      never: z.array(profileIdSchema).describe("Profiles whose businesses never do, whatever their signals."),
+    })
+    .optional()
+    .describe(
+      "Who sells goods, for a follow marked `goods`: a business of one of `profiles`, or one whose signals say so " +
+        "(a live checkout door, a catalogue of products) and whose profile is not one of `never`.",
+    ),
   credit: z.object({ yes: z.number(), partial: z.number(), no: z.number() }),
   evidence: z.object({
     declared: z.number(),
@@ -182,9 +207,12 @@ export const SCORE_FORMULA_V1 = [
   "grade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
 ].join("\n");
 
-/** The formula of rules version 2, word for word: version 1's, and either sets counted as one member. */
+/**
+ * The formula of rules version 2 as amended on 8 October 2026, word for word: version 1's, with what the rules'
+ * follows bring, and either sets counted as one member.
+ */
 export const SCORE_FORMULA_V2 = [
-  "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.",
+  "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where applicable(P) is P's applicable capabilities and what each of the rules' follows adds when its if is applicable to P and yes or partial (one marked goods when the business sells goods), and the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.",
   "possible = Σ_{g: A_g≠∅} W_g",
   "N        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))",
   "D        = 120 × possible",
@@ -194,11 +222,17 @@ export const SCORE_FORMULA_V2 = [
 
 /* --- the arithmetic (pure; the network's Go does the same, and vectors/score.json holds both to it) --------------- */
 
-/** A profile by id, or any set of applicable capabilities (with either sets, version 2). */
+/**
+ * A profile by id, or any set of applicable capabilities (with either sets, version 2). A set given as such is exactly
+ * what applies: the rules' follows add to a profile by id.
+ */
 export type ScoreProfile =
   | ProfileId
   | { readonly applicable: readonly CapabilityId[]; readonly either?: readonly (readonly CapabilityId[])[] };
 export type CapabilityStates = Partial<Record<CapabilityId, CapabilityState>>;
+
+/** What the arithmetic reads from a rules document; `follows` and `goods` are version 2's amendment. */
+export type ScoreRulesArithmetic = Pick<ScoreRules, "groups" | "profiles" | "grades" | "follows" | "goods">;
 
 export interface Score {
   readonly score: number;
@@ -212,6 +246,11 @@ export interface Score {
 export interface Fix {
   readonly capability: CapabilityId;
   readonly points: number;
+  /**
+   * What the fix brings with it (the rules' follows: changing and cancelling a booking, for a fix that lets an agent
+   * book), counted as yes in its points; left out when it brings nothing.
+   */
+  readonly with?: CapabilityId[];
 }
 
 const HALVES: Record<CapabilityState, number> = { yes: 2, partial: 1, no: 0, na: 0 };
@@ -221,11 +260,48 @@ interface Applying {
   readonly either: readonly (readonly CapabilityId[])[];
 }
 
-function applyingOf(profile: ScoreProfile, rules: Pick<ScoreRules, "profiles">): Applying {
-  if (typeof profile !== "string") return { applicable: new Set(profile.applicable), either: profile.either ?? [] };
+/**
+ * Whether a business of `profile` sells goods, by the rules' `goods`: its profile is one of `goods.profiles`, or its
+ * signals say so (`signals`: a live checkout door, a catalogue of products) and its profile is not one of `goods.never`.
+ */
+export function sellsGoods(profile: ProfileId, signals: boolean, rules: Pick<ScoreRules, "goods">): boolean {
+  const g = rules.goods;
+  if (!g) return false;
+  return g.profiles.includes(profile) || (signals && !g.never.includes(profile));
+}
+
+/**
+ * Every capability that counts for a business (version 2 as amended on 8 October 2026): its profile's own, and what
+ * each of the rules' follows `adds` when its `if` applies to the profile and is yes or partial in `states` (one marked
+ * `goods` when the business sells goods). What counts follows what an agent can do there.
+ */
+export function applicableOf(
+  profile: ScoreProfile,
+  states: CapabilityStates,
+  rules: Pick<ScoreRules, "profiles" | "follows" | "goods">,
+  goods = false,
+): Set<CapabilityId> {
+  if (typeof profile !== "string") return new Set(profile.applicable);
   const p = rules.profiles.find((x) => x.id === profile);
   if (!p) throw new Error(`the rules have no profile ${profile}`);
-  return { applicable: new Set(p.applicable), either: p.either ?? [] };
+  const out = new Set<CapabilityId>(p.applicable);
+  const sells = sellsGoods(profile, goods, rules);
+  for (const f of rules.follows ?? []) {
+    if (!p.applicable.includes(f.if) || HALVES[states[f.if] ?? "no"] === 0 || (f.goods && !sells)) continue;
+    for (const c of f.adds) out.add(c);
+  }
+  return out;
+}
+
+function applyingOf(
+  profile: ScoreProfile,
+  states: CapabilityStates,
+  rules: Pick<ScoreRules, "profiles" | "follows" | "goods">,
+  goods: boolean,
+): Applying {
+  const applicable = applicableOf(profile, states, rules, goods);
+  if (typeof profile !== "string") return { applicable, either: profile.either ?? [] };
+  return { applicable, either: rules.profiles.find((x) => x.id === profile)?.either ?? [] };
 }
 
 /**
@@ -262,13 +338,17 @@ const DEFAULT_GRADES: { grade: Grade; min: number }[] = [
   { grade: "E", min: 0 },
 ];
 
-/** The agentic score of one business, by the rules' integer formula. */
+/**
+ * The agentic score of one business, by the rules' integer formula. `goods`: its signals say it sells goods (a live
+ * checkout door, a catalogue of products), which with its profile decides whether a follow marked goods applies.
+ */
 export function scoreOf(
   profile: ScoreProfile,
   states: CapabilityStates,
-  rules: Pick<ScoreRules, "groups" | "profiles" | "grades">,
+  rules: ScoreRulesArithmetic,
+  goods = false,
 ): Score {
-  const groups = groupsOf(applyingOf(profile, rules), rules);
+  const groups = groupsOf(applyingOf(profile, states, rules, goods), rules);
   let possible = 0;
   let n = 0;
   for (const g of groups) {
@@ -285,15 +365,20 @@ export function scoreOf(
 /**
  * What would raise the score most: each applicable, weighted capability that is not yet "yes", scored again as "yes".
  * An either set is one fix, under its first capability (book for book or order), and none is due once one of its
- * capabilities is "yes". Fixes worth nothing are left out. By points, then group order, then vocabulary order.
+ * capabilities is "yes". A fix that makes more apply (book brings change, cancel and availability) is scored with what
+ * it brings as "yes" too, and names it (`with`). Fixes worth nothing are left out. By points, then group order, then
+ * vocabulary order.
  */
 export function fixesOf(
   profile: ScoreProfile,
   states: CapabilityStates,
-  rules: Pick<ScoreRules, "groups" | "profiles" | "grades" | "capabilities">,
+  rules: ScoreRulesArithmetic & Pick<ScoreRules, "capabilities">,
+  goods = false,
 ): Fix[] {
-  const groups = groupsOf(applyingOf(profile, rules), rules);
-  const base = scoreOf(profile, states, rules).score;
+  const groups = groupsOf(applyingOf(profile, states, rules, goods), rules);
+  const base = scoreOf(profile, states, rules, goods).score;
+  const before = applicableOf(profile, states, rules, goods);
+  const weighted = new Set(rules.groups.filter((g) => g.weight > 0).flatMap((g) => g.members));
   const groupAt = new Map(rules.groups.map((g, i) => [g.id, i]));
   const vocabAt = new Map(rules.capabilities.map((c, i) => [c.id, i]));
   const fixes: (Fix & { g: number; v: number })[] = [];
@@ -301,24 +386,43 @@ export function fixesOf(
     for (const slot of g.slots) {
       const c = slot[0];
       if (c === undefined || slot.some((x) => (states[x] ?? "no") === "yes")) continue;
-      const points = scoreOf(profile, { ...states, [c]: "yes" }, rules).score - base;
-      if (points > 0) fixes.push({ capability: c, points, g: groupAt.get(g.id) ?? 99, v: vocabAt.get(c) ?? 99 });
+      const next: CapabilityStates = { ...states, [c]: "yes" };
+      const brings = rules.capabilities
+        .map((x) => x.id)
+        .filter((x) => applicableOf(profile, next, rules, goods).has(x) && !before.has(x) && weighted.has(x))
+        .filter((x) => next[x] !== "yes");
+      for (const x of brings) next[x] = "yes";
+      const points = scoreOf(profile, next, rules, goods).score - base;
+      if (points > 0) {
+        fixes.push({
+          capability: c,
+          points,
+          ...(brings.length > 0 ? { with: brings } : {}),
+          g: groupAt.get(g.id) ?? 99,
+          v: vocabAt.get(c) ?? 99,
+        });
+      }
     }
   }
   fixes.sort((a, b) => b.points - a.points || a.g - b.g || a.v - b.v);
-  return fixes.map(({ capability, points }) => ({ capability, points }));
+  return fixes.map(({ g: _g, v: _v, ...fix }) => fix);
 }
 
 /**
  * A capability's displayed weight, W_g / |A_g| to one decimal place (an either set counted once, each of its members
- * showing the set's weight); 0 when it is not scored or does not apply.
+ * showing the set's weight); 0 when it is not scored or does not apply. What applies follows `states` and `goods` as
+ * for the score.
  */
 export function capabilityWeightOf(
   profile: ScoreProfile,
   capability: CapabilityId,
-  rules: Pick<ScoreRules, "groups" | "profiles">,
+  rules: Pick<ScoreRules, "groups" | "profiles" | "follows" | "goods">,
+  states: CapabilityStates = {},
+  goods = false,
 ): number {
-  const g = groupsOf(applyingOf(profile, rules), rules).find((x) => x.slots.some((slot) => slot.includes(capability)));
+  const g = groupsOf(applyingOf(profile, states, rules, goods), rules).find((x) =>
+    x.slots.some((slot) => slot.includes(capability)),
+  );
   return g ? Math.round((g.weight / g.slots.length) * 10) / 10 : 0;
 }
 
@@ -485,7 +589,18 @@ export const checkResultSchema = z.object({
     )
     .optional(),
   fixes: z
-    .array(z.object({ capability: capabilityIdSchema, points: z.int().min(1), title: z.string(), how: z.string() }))
+    .array(
+      z.object({
+        capability: capabilityIdSchema,
+        points: z.int().min(1),
+        with: z
+          .array(capabilityIdSchema)
+          .optional()
+          .describe("What the fix brings with it (changing and cancelling a booking), counted as yes in its points."),
+        title: z.string(),
+        how: z.string(),
+      }),
+    )
     .optional(),
   web_person_message: z.string().optional(),
   rank: z

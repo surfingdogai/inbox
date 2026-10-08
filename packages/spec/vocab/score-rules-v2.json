@@ -4,7 +4,7 @@
   "status": "in_force",
   "published_at": "2026-10-07T00:00:00Z",
   "effective_at": "2026-10-07T00:00:00Z",
-  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, sign up, cancel and negotiate, and the journey around them. It counts what applies to that kind of business and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
+  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, sign up, cancel and negotiate, and the journey around them. It counts what applies to that kind of business, and what follows from what an agent can do there (where it can book, order or sign up, changing and cancelling that too, and the other steps after it), and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
   "vocabulary": "https://surfingdog.ai/v1/score-rules#capabilities",
   "capabilities": [
     {
@@ -314,6 +314,30 @@
       "groups": ["software-ai"]
     }
   ],
+  "follows": [
+    {
+      "if": "order",
+      "adds": ["change", "cancel", "track", "receipt"]
+    },
+    {
+      "if": "order",
+      "adds": ["return"],
+      "goods": true
+    },
+    {
+      "if": "book",
+      "adds": ["change", "cancel", "availability"]
+    },
+    {
+      "if": "signup",
+      "adds": ["change", "cancel", "subscription"]
+    }
+  ],
+  "goods": {
+    "summary": "A business sells goods when it is scored as a shop, or when it has a live UCP, ACP or Shopify checkout door or a catalogue of at least three products, unless it is a restaurant, a bar or a food business: a takeaway is not returned.",
+    "profiles": ["shop"],
+    "never": ["food"]
+  },
   "credit": {
     "yes": 1,
     "partial": 0.5,
@@ -325,7 +349,7 @@
     "proven": 1,
     "produced": ["declared"]
   },
-  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
+  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where applicable(P) is P's applicable capabilities and what each of the rules' follows adds when its if is applicable to P and yes or partial (one marked goods when the business sells goods), and the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
   "grades": [
     {
       "grade": "A",
@@ -433,6 +457,10 @@
         },
         "venues": {
           "how": "Add a tool or operation such as change_booking or PATCH /bookings/{id}<door>, for a date, a seat or the number of tickets."
+        },
+        "general": {
+          "title": "Let agents change a booking, an order or a membership",
+          "how": "Add a tool or operation that changes what an agent booked, ordered or signed up for, such as reschedule_booking, update_order or update_membership<door>."
         }
       },
       "protocol": "Publish order management with changes to an order<door>, or add a tool or operation such as update_order."
@@ -446,6 +474,9 @@
         },
         "venues": {
           "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your refund and exchange policy for tickets."
+        },
+        "general": {
+          "how": "Add a tool or operation that cancels a booking or an order, or ends a membership or an account, such as cancel_booking, cancel_order or end_membership<door>, and publish your cancellation policy."
         }
       },
       "protocol": "Publish order management with cancelling an order<door>, and publish your cancellation policy."
@@ -507,6 +538,11 @@
       "version": 2,
       "published": "2026-10-07",
       "summary": "Version 2. The general profile (a business whose kind is not known, and software, API and AI companies) is now scored on whether an agent can book, order or sign up there: book and order count together as one capability of the core group, and sign up with them (yes when any of them is yes, partly when any is partly), so its core group is message, book or order or sign up, and pay, still weighing 40. Under version 1 none applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy; a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking, order or sign-up through an agent now scores lower than before. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking tickets, a table or an entry, ordering them, or signing up, counts the same way. Sign up is a capability of its own (can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?), in the core group, met by a tool, skill or operation that signs a person up (sign_up, register, create_account, joining a club, a class or a membership, enrol, a schema.org RegisterAction or JoinAction), never by one that logs a person in and nothing more, nor by one that registers a tool, a model, a webhook or a passkey, joins tables, or adds staff or team members. It applies where it is natural: for a business of a kind not known and for venues it counts with book and order as one; for gyms and memberships it counts with order as one (joining is buying the membership); and classes, lessons and tutoring are now a kind of business of their own, the profile classes (before, scored as appointments, with the same weights), where booking a lesson or enrolling counts as one. No group's weight changed, and a business that signs nobody up scores as it did. A fix for book, order or sign up is one fix. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1. With version 2 every leaderboard puts the businesses where an agent can book, order or sign up above the rest (yes, then partly, then no or not applicable), then orders them by score (rank); the score itself is not changed by that order. Clinics, dentists, therapists and lawyers are scored as appointment businesses (booking counts, ordering does not apply), and bars with food and drink (booking a table or ordering both count); under version 1 they fell under the general profile. The directory now lists every kind of business but adult services, gambling, weapons, tobacco, cannabis and vaping, payday loans and bail bonds, and each kind it now lists is scored where its own actions apply: banks, insurance, financial advice and loans (the group finance), estate agents (property) and recruitment agencies (recruitment) as appointment businesses, and accountants too (scored as trades under version 1); childcare as classes, where booking or enrolling counts as one; passenger transport (airlines, ferries, coaches, taxis and drivers, the group transport) with places to stay, where checking availability, booking, changing and cancelling apply; wineries and distilleries with bars; pharmacies, drugstores and hearing aids as shops; and licensed trades (electricians, plumbers, locksmiths and the like) as trades."
+    },
+    {
+      "version": 2,
+      "amended": "2026-10-08",
+      "summary": "Version 2, amended: what counts now follows what a business lets an agent do, on top of its kind (the rules' follows). Where an agent can order (yes or partly), changing, cancelling and tracking the order and getting a receipt count too, and a return or refund when the business sells goods (a shop, a UCP, ACP or Shopify checkout, or a catalogue of products; never a restaurant's takeaway). Where it can book, changing and cancelling the booking and checking availability count. Where it can sign a person up, changing and ending the membership or account, and managing the membership, count. Why: what a kind of business counted was fixed in advance, so a business of a kind not known where an agent could order and pay, and do nothing after it (no change, no cancel, no tracking, no receipt), scored 100, as high as one where an agent can see the whole thing through; a full score now needs the steps after it. What a kind of business already counted stays as it was, no group's weight and no grade changed, book, order and sign up still count as one where they did, and a business where an agent can do none of them scores as before. A fix that lets an agent book, order or sign up now counts the steps it brings with it, done as well, and says so. Every stored score is worked out again under the amended rules."
     }
   ]
 }
