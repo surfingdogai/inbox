@@ -230,10 +230,11 @@ describe("the home page and the three products", () => {
   it("what the home page says matches the status pills", () => {
     const home = visible(read("src/pages/index.astro"));
     const counts = visible(read("src/components/DirectoryCounts.astro"));
-    // It lists and tracks agent-ready businesses, counts what the crawler checked, and its box
+    // It lists and tracks agent-ready businesses, counts them (how many were checked stays internal), and its box
     // checks any address: the directory, the crawler, the businesses it finds and the checker are live.
     expect(home).toMatch(/lists and tracks agent-ready businesses/);
-    expect(counts).toMatch(/businesses checked/);
+    expect(counts).toMatch(/agent-ready businesses/);
+    expect(counts).not.toMatch(/businesses checked/);
     expect(read("src/components/AskBox.astro")).toMatch(/action="\/check"/);
     for (const id of ["directory", "crawler", "crawled", "checker", "search"]) expect(stateOf(id), id).toBe("live");
     // The Search product finds and checks: its pill is the least live of the parts it names.
@@ -306,7 +307,7 @@ describe("the home page and the three products", () => {
     expect(READY_HREF).toBe("/leaderboard?ready=1");
     for (const c of COUNTED) expect(countHref(c.key)).toBe(`/leaderboard?can=${c.key}`);
     const counts = read("src/components/DirectoryCounts.astro");
-    expect(counts).toMatch(/href=\{CHECKED_HREF\}/);
+    expect(counts).not.toMatch(/CHECKED_HREF/); // how many were checked stays internal
     expect(counts).toMatch(/href=\{READY_HREF\}/);
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
