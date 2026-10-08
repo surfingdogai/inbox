@@ -7,7 +7,11 @@ import Layout from "../layouts/Layout.astro";
 const faqs: { q: string; a: string }[] = [
   {
     q: "What is Surfing Dog?",
-    a: 'A public directory of businesses that AI agents can reach through doors the businesses published (an agent inbox, MCP, A2A, an API, UCP or ACP), and a checker that shows how far an agent can go with any business\'s website. More on the <a href="/about/">about page</a>.',
+    a: 'A public directory of businesses that AI agents can reach through doors the businesses published (an agent inbox, MCP, A2A, an API, UCP or ACP), and a checker that shows how far an agent can go with any business\'s website. We also make Surfing Dog Inbox, open-source software a business runs for itself. More on the <a href="/about/">about page</a>.',
+  },
+  {
+    q: "Does my business move onto Surfing Dog?",
+    a: 'No. Surfing Dog Inbox is open-source software (AGPL-3.0) that is yours: it runs on your own subdomain, like inbox.salon.example, on your Cloudflare account or your own server (a hosted option, where we run it for you, is coming). Its manifest and its doors for agents, MCP and REST, live on your domain and name your business, and your customers and their agents write to you there, directly. Surfing Dog is not in the middle of a message, a booking, an order or a payment, and your data is in your own database, so you can leave whenever you like. Joining the network is a separate choice: it lists you in the directory and records the receipts your inbox signs (bookings confirmed, orders accepted, and how they ended), with no names, no messages and nothing of what was ordered. Everything a network receives is listed on <a href="/network/#shared">the network page</a>. The directory lists businesses whatever software they use: MCP, A2A, UCP, ACP, an API, or Surfing Dog Inbox.',
   },
   {
     q: "How do I check my business?",
@@ -90,13 +94,13 @@ const ld = {
 
 <Layout
   title="FAQ · Surfing Dog"
-  description="Questions owners and AI agents ask about Surfing Dog: checking a business, the agentic score, hiding a result, opting out, and which doors count."
+  description="Questions owners and AI agents ask about Surfing Dog: whether a business moves onto it, checking a business, the agentic score, hiding a result, opting out, and which doors count."
   ld={ld}
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="faq-h">
     <p class="eyebrow">FAQ</p>
     <h1 class="h-page" id="faq-h">Questions, answered</h1>
-    <p class="lede">What owners and AI agents ask about the directory, the checker and the agentic score.</p>
+    <p class="lede">What owners and AI agents ask about the directory, the inbox, the checker and the agentic score.</p>
   </section>
 
   <section class="section section-tight" aria-label="Questions">

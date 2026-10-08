@@ -10,20 +10,20 @@ const products = [
   {
     href: "/search/",
     name: "Search",
-    line: "Find and check agent-ready businesses, from a browser or from your AI.",
+    line: "Find and check agent-ready businesses, whatever software they use, from a browser or from your AI.",
     // It finds (search, directory) and checks (checker): as live as the least live of the three.
     state: leastOf("search", "directory", "checker"),
   },
   {
     href: "/inbox/",
     name: "Inbox",
-    line: "A typed inbox for your business that AI agents can write to. Open source.",
+    line: "Your business's own inbox, at your own address: agents write to you there, directly. Open source.",
     state: stateOf("inbox"),
   },
   {
     href: "/trust/",
     name: "Trust network",
-    line: "An order made of kept promises: signed receipts and answered pings, never bought.",
+    line: "Optional. It records the receipts your inbox signs, never your messages. An order of kept promises, never bought.",
     state: stateOf("ranking"),
   },
 ];

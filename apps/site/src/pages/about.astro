@@ -1,8 +1,8 @@
 ---
-// What Surfing Dog is, in about a minute: the directory, the checker and its score, how agents
-// connect, what is free, and that nobody can pay for order or score. Kept short on purpose; the
-// FAQ and the docs carry the detail. The Organization node reuses the home page's @id, so search
-// engines read one organisation, not two.
+// What Surfing Dog is, in about a minute: the directory, the inbox (the business's own), the
+// checker and its score, how agents connect, what is free, and that nobody can pay for order or
+// score. Kept short on purpose; the FAQ and the docs carry the detail. The Organization node reuses
+// the home page's @id, so search engines read one organisation, not two.
 import Layout from "../layouts/Layout.astro";
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
@@ -48,6 +48,14 @@ const doors = [
         takes, and a source and date on every fact. A person's AI finds a business here, then talks to it at its own
         doors. The directory takes nothing in between.
       </p>
+      <h2>The inbox</h2>
+      <p>
+        One door a business can open is <a href="/inbox/">Surfing Dog Inbox</a>: open-source software it runs itself,
+        on its own subdomain, on its Cloudflare account or its own server. Agents and people write to the business
+        there, directly; Surfing Dog is not in the middle, and the business can leave whenever it likes, with its data.
+        Joining the network is a separate choice: it lists the business and records the receipts its inbox signs, never
+        its messages.
+      </p>
       <h2>The checker and the agentic score</h2>
       <p>
         Paste a website at <a href="/check">/check</a>, or ask an AI to call <code>check_business</code>. We read what
@@ -71,7 +79,8 @@ const doors = [
       </ul>
       <h2>Free, and not for sale</h2>
       <p>
-        Being listed, found, searched and checked is free, and the protocol is open source. Nobody can pay for a place
+        Being listed, found, searched and checked is free, the inbox is free to run yourself, and the protocol is open
+        source. Nobody can pay for a place
         in the directory's order, or for a score. Questions? Read the <a href="/faq/">FAQ</a>.
       </p>
     </div>

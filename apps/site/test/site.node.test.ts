@@ -215,6 +215,28 @@ describe("the home page and the three products", () => {
     expect(existsSync(site("public/install.md"))).toBe(true);
   });
 
+  it("the inbox is the business's own, and the network is a separate choice that records receipts", () => {
+    // An assistant read the site and concluded that installing the inbox puts a business on Surfing Dog.
+    // It does not: the inbox runs at the business's own address and nobody sits in the middle.
+    const faq = visible(read("src/pages/faq.astro"));
+    expect(faq).toContain('q: "Does my business move onto Surfing Dog?"');
+    expect(faq).toMatch(/a: 'No\. Surfing Dog Inbox is open-source software/);
+    expect(faq).toContain("Surfing Dog is not in the middle of a message, a booking, an order or a payment");
+    const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
+    expect(opening).toContain("**The inbox is the business's own.**");
+    expect(opening).toContain("does not put the business on Surfing Dog");
+    expect(opening).toMatch(/Joining a network \(Step 5\) is optional and separate/);
+    const llms = read("astro.config.mjs");
+    expect(llms).toContain("Installing it does not put a business on Surfing Dog");
+    expect(llms).toContain("https://surfingdog.ai/network#shared");
+    // The short version of what a network gets never says it gets nothing about customers: the
+    // detailed list (install.md Step 5, /network#shared) includes a first-time customer's email.
+    for (const path of ["src/pages/faq.astro", "src/pages/trust.astro", "src/components/Products.astro"]) {
+      expect(visible(read(path)), path).not.toMatch(/never (your|its) customers/i);
+    }
+    expect(visible(read("src/pages/network.astro"))).not.toMatch(/directory of inboxes/);
+  });
+
   it("the box searches words and checks addresses", () => {
     for (const a of ["salon.example", "https://shop.example/menu", "www.café.example", "bike-repair.co.example:8443"]) {
       expect(looksLikeAddress(a), a).toBe(true);

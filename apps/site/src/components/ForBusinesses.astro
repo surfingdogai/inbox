@@ -1,8 +1,8 @@
 ---
 /**
- * Three ways in for a business: it has our inbox, it already has another agent door, or it has no
- * door yet. Each card carries its state from src/lib/status.ts. The three door marks are thin line
- * icons that each do one small thing once, when the cards scroll in: the open door swings, the
+ * Three ways in for a business: it runs the open-source inbox, it already has another agent door,
+ * or it has no door yet. Each card carries its state from src/lib/status.ts. The three door marks
+ * are thin line icons that each do one small thing once, when the cards scroll in: the open door swings, the
  * scanned door's ring goes out twice, the third door is drawn in by a dashed line. The resting
  * frame is the finished drawing, and nothing loops.
  */
@@ -18,7 +18,9 @@ const BOT = "https://network.surfingdog.ai/bot";
       <div>
         <p class="eyebrow">For businesses</p>
         <h2 class="h-section" id="businesses-h">Easy to be found.</h2>
-        <p class="lede">Your customers deal with you, not us. Their AI talks to you.</p>
+        <p class="lede">
+          Your customers deal with you, not us. Their AI talks to you at your own doors, whatever software you use.
+        </p>
       </div>
     </div>
 
@@ -33,10 +35,10 @@ const BOT = "https://network.surfingdog.ai/bot";
           </svg>
           <StatusPill state={stateOf("directory")} />
         </div>
-        <h3 class="h-card">Have our inbox?</h3>
+        <h3 class="h-card">Running the open-source inbox?</h3>
         <p class="card-text">
-          Switch on Join the directory in Settings. You're listed once we confirm the address is yours (it needs a public
-          https address).
+          Joining is your choice: switch on Join the directory in Settings. You're listed once we confirm the address is
+          yours (it needs a public https address).
         </p>
         <p class="foot"><a class="link" href="/network/#join">How joining works</a></p>
       </article>
@@ -75,7 +77,10 @@ const BOT = "https://network.surfingdog.ai/bot";
           </span>
         </div>
         <h3 class="h-card">No door yet?</h3>
-        <p class="card-text">Get the open-source inbox. Your AI can set it up from one line.</p>
+        <p class="card-text">
+          Get the open-source inbox. It runs at your own address, and agents write to you there. Your AI can set it up
+          from one line.
+        </p>
         <p class="foot"><a class="btn btn-secondary btn-sm" href="/install/">Tell your AI to set it up</a></p>
       </article>
     </div>

@@ -1,9 +1,18 @@
 # Install Surfing Dog Inbox — instructions for an AI agent
 
 You are installing **Surfing Dog Inbox** for the person you are working for. They own a business.
-When you are finished, their business has an inbox at its own subdomain that takes bookings,
+When you are finished, their business has its own inbox, at its own subdomain, that takes bookings,
 orders, quote requests and messages from people and from other AI agents, over REST, MCP and
 email.
+
+**The inbox is the business's own.** It is open-source software (AGPL-3.0) that runs on their
+Cloudflare account or their own server, at their own subdomain, and its manifest and doors name
+their business. Customers and their agents write to the business there, directly. Installing it
+does not put the business on Surfing Dog: Surfing Dog is not in the middle of any message, booking,
+order or payment, and the business can leave whenever it likes, its data in its own database.
+Joining a network (Step 5) is optional and separate: a network lists the business in its directory
+and records the receipts the inbox signs, with no names, no messages and nothing of what was
+ordered; Step 5 lists exactly what a network receives. If the person asks, tell them this plainly.
 
 Read this whole file before you start. Then tell the person, in two or three sentences, which of
 the two paths below you are taking and what it will cost them. Do not begin until they answer.
