@@ -1,6 +1,6 @@
 ---
 /**
- * The live counts: how many businesses the crawler has checked, how many are agent-ready, and of
+ * The live counts: how many businesses are agent-ready (how many were checked stays internal), and of
  * those how many take messages, bookings, orders and payment or have a catalogue. Read in the
  * browser from GET /v1/stats on this same address (its "directory" block, counted at most every ten
  * minutes by the network). Aggregates only: the block never names a business.
@@ -11,20 +11,18 @@
  * from screen readers: a separate live region says the final numbers once, and each link is named by
  * its final number.
  *
- * Every count is a link to the list of the businesses it counts, on the network: "businesses
- * checked" to the board of every kind, "agent-ready" to every agent-ready business, and each
+ * Every count is a link to the list of the businesses it counts, on the network: "agent-ready"
+ * to every agent-ready business, and each
  * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
  * the same businesses its count counts: it names them, or says how many more it counts and does not
  * name.
  */
-import { CHECKED_HREF, READY_HREF } from "../lib/ask";
+import { READY_HREF } from "../lib/ask";
 ---
 
 <div class="counts" data-counts>
   <p class="c-main">
-    <a class="c-pair c-link" href={CHECKED_HREF} data-label="businesses checked"><b class="c-n tabular" data-n="checked" aria-hidden="true">–</b> businesses checked</a>
-    <span class="c-dot" aria-hidden="true">·</span>
-    <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready</a>
+    <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready businesses"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready businesses</a>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
@@ -186,11 +184,11 @@ import { CHECKED_HREF, READY_HREF } from "../lib/ask";
     if (said) {
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
-        `${fmt.format(d.checked)} businesses checked, ${fmt.format(d.agent_ready)} agent-ready.` +
+        `${fmt.format(d.agent_ready)} agent-ready businesses.` +
         (rows.length ? ` Of those, ${rows.join(", ")}.` : "");
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
-      const n = el.dataset.n === "checked" ? d.checked : d.agent_ready;
+      const n = d.agent_ready;
       count(el, n);
       const link = el.closest<HTMLAnchorElement>("a");
       link?.setAttribute("aria-label", `${fmt.format(n)} ${link.dataset.label ?? ""}`.trim());
