@@ -4,6 +4,10 @@ import Shot from "./Shot.astro";
 /** `phase` marks a point that is not shipped yet; every point below is live today. */
 const points: { title: string; text: string; phase?: string }[] = [
   {
+    title: "Yours, at your address",
+    text: "It runs on your own subdomain, on your Cloudflare account or your own server. Customers and their agents write to you there, and Surfing Dog is not in the middle of a message, a booking, an order or a payment. Your data is in your own database, so you can leave whenever you like.",
+  },
+  {
     title: "Each request has a type",
     text: "Every request is a booking, an order, a quote or a message, and it moves step by step until it's done.",
   },
@@ -13,7 +17,7 @@ const points: { title: string; text: string; phase?: string }[] = [
   },
   {
     title: "A signed receipt",
-    text: "When a booking is confirmed or an order is paid, the inbox signs a receipt. The customer's agent can counter-sign it.",
+    text: "When a booking is confirmed or an order is paid, the inbox signs a receipt. The customer's agent can counter-sign it. It goes to a network only if you join one.",
   },
 ];
 ---

@@ -27,11 +27,11 @@ try {
 const steps = [
   {
     h: "Inboxes check in",
-    p: "Each inbox on the network checks in every hour with a ping it signs. An inbox that checked in within the last day, with its manifest reachable, is answering, and answering businesses come before the rest.",
+    p: "Each inbox whose business chose to join checks in every hour with a ping it signs. An inbox that checked in within the last day, with its manifest reachable, is answering, and answering businesses come before the rest.",
   },
   {
     h: "Both sides sign the promise",
-    p: "When a business confirms a booking, accepts an order or owes a refund, its inbox signs a receipt, and the customer's agent can counter-sign it. When the promise closes, kept, late or broken, another receipt says so. A customer is named by a code nobody can trace back to them.",
+    p: "When a business confirms a booking, accepts an order or owes a refund, its inbox signs a receipt, and the customer's agent can counter-sign it. When the promise closes, kept, late or broken, another receipt says so. A customer is named by a code nobody can trace back to them. The network records these receipts: no names, no messages, nothing of what was ordered.",
   },
   {
     h: "The order reads the record",
@@ -39,7 +39,7 @@ const steps = [
   },
   {
     h: "Nobody can pay for a place",
-    p: "Not now, and not later. A free self-hosted inbox ranks the same as ours, and every rule is published, with a version number, before it counts.",
+    p: "Not now, and not later. A free self-hosted inbox ranks the same as a hosted one, and every rule is published, with a version number, before it counts.",
   },
 ];
 
@@ -49,7 +49,7 @@ const now = capabilities.filter((c) => ids.includes(c.id));
 
 <Layout
   title="Trust network: ranked by kept promises · Surfing Dog"
-  description="The directory's order is made of kept promises: inboxes check in with signed pings, businesses and agents sign receipts, and the rules are public and versioned. Nobody can pay for a place."
+  description="Optional for a business, and separate from its inbox: the network records the receipts its inbox signs, never its messages. The directory's order is made of kept promises, the rules are public and versioned, and nobody can pay for a place."
   image="/art/og-receipts-v1.png"
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="trust-h">
@@ -57,7 +57,9 @@ const now = capabilities.filter((c) => ids.includes(c.id));
     <h1 class="h-page" id="trust-h">An order made of kept promises</h1>
     <p class="lede">
       The directory puts businesses in order by what they did, never by what they paid. Inboxes check in, both sides
-      sign what was promised, and the rules that read it are public.
+      sign what was promised, and the rules that read it are public. Joining is each business's choice, and the
+      network never carries a booking or an order: those go straight from the customer's agent to the business, and
+      the network records the receipts.
     </p>
   </section>
 
@@ -114,6 +116,8 @@ const now = capabilities.filter((c) => ids.includes(c.id));
       </p>
       <p class="more">
         <a class="link" href="/docs/receipts/">Receipts, in detail</a>
+        <span aria-hidden="true">·</span>
+        <a class="link" href="/network/#shared">What a network receives</a>
         <span aria-hidden="true">·</span>
         <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md" rel="noopener">The full rules</a>
         <span aria-hidden="true">·</span>

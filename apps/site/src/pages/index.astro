@@ -56,7 +56,7 @@ const ld = [
     url: new URL("/search/", site).toString(),
     serviceType: "Directory of businesses that AI agents can reach",
     description:
-      "Find and check agent-ready businesses: what an AI agent can do with each one, through which door, checked on the business's own site. Search it from a browser, or from your AI over MCP, REST or llms.txt.",
+      "Find and check agent-ready businesses, whatever software they use: what an AI agent can do with each one, through which door, checked on the business's own site. Search it from a browser, or from your AI over MCP, REST or llms.txt.",
     provider: { "@id": org },
     offers: { "@type": "Offer", price: "0", priceCurrency: "EUR", description: "Listing is free" },
   },
@@ -65,7 +65,7 @@ const ld = [
     "@type": "SoftwareApplication",
     name: "Surfing Dog Inbox",
     description:
-      "An open-source inbox that gives a business a door AI agents can use: bookings, orders, quote requests and messages arrive over MCP or REST, and the business's rules answer them or pass them to a person.",
+      "An open-source inbox a business runs itself, at its own address, on its own Cloudflare account or server: people and AI agents send bookings, orders, quote requests and messages straight to the business over MCP, REST or email, and the business's rules answer them or pass them to a person. Surfing Dog is not in the middle.",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     url: new URL("/inbox/", site).toString(),
@@ -81,7 +81,7 @@ const ld = [
     name: "Surfing Dog Trust network",
     url: new URL("/trust/", site).toString(),
     description:
-      "The directory's order is made of kept promises: inboxes check in with signed pings, both sides sign receipts, and the rules are published and versioned. Nobody can pay for a place.",
+      "Optional for a business, and separate from its inbox: the network lists it and records the receipts its inbox signs, never its messages. The directory's order is made of kept promises: inboxes check in with signed pings, both sides sign receipts, and the rules are published and versioned. Nobody can pay for a place.",
     provider: { "@id": org },
   },
 ];
@@ -89,7 +89,7 @@ const ld = [
 
 <Layout
   title="Surfing Dog · Agent-ready businesses, listed and tracked"
-  description={`${WHAT} Search them, check a website, or install an inbox agents can write to. Ranked by kept promises, never by payment.`}
+  description={`${WHAT} Search them, check a website, or install your own open-source inbox, where agents write to you directly. Ranked by kept promises, never by payment.`}
   image="/art/og-network-v1.png"
   ld={ld}
   minimalFooter
@@ -136,8 +136,8 @@ const ld = [
         more={{ href: "https://network.surfingdog.ai/assistants", label: "Connector setup, on network.surfingdog.ai" }}
       />
       <CopyBlock
-        title="Install the inbox"
-        what="Give this to your AI. It sets up an inbox for your business that agents can write to, and asks before anything that costs money."
+        title="Install your own inbox"
+        what="Give this to your AI. It sets up an open-source inbox that is yours, at your own address, where agents write to you directly. It asks before anything that costs money."
         value={INSTALL_LINE}
         more={{ href: "/install/", label: "What it does, step by step" }}
       />
