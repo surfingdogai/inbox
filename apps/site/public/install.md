@@ -5,7 +5,7 @@ When you are finished, their business has its own inbox, at its own subdomain, t
 orders, quote requests and messages from people and from other AI agents, over REST, MCP and
 email.
 
-**The inbox is the business's own.** It is open-source software (AGPL-3.0) that runs on their
+**The inbox is the business's own.** It is open-source software (MIT) that runs on their
 Cloudflare account or their own server, at their own subdomain, and its manifest and doors name
 their business. Customers and their agents write to the business there, directly. Installing it
 does not put the business on Surfing Dog: Surfing Dog is not in the middle of any message, booking,

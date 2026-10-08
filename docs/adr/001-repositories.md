@@ -11,7 +11,7 @@
   with a pinned tag and sha256 check.
 
 ## Why
-The Inbox is TypeScript, AGPL and public; our Go monoliths have
+The Inbox is TypeScript, open source (its licence: ADR-008) and public; our Go monoliths have
 different stacks, licences and audiences. Our private platform already provides a server, PostgreSQL 18 +
 PostGIS, Cloudflare DNS, Caddy, systemd, magic-link sign-in and Stripe — the network gets all of
 it for free, and its geo data sits next to the map's.

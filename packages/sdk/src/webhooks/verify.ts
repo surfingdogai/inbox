@@ -2,8 +2,8 @@ import type { InboxEvent } from "./events.js";
 
 /**
  * Standard Webhooks v1.0.0 verification (ADR-015 §4), in about a hundred lines of WebCrypto so it
- * runs unchanged in a Worker, in Node and in a browser. This file is MIT on purpose: verifying our
- * events must never cost anyone an AGPL dependency, and a receiver that cannot be bothered to
+ * runs unchanged in a Worker, in Node and in a browser. It is small on purpose: verifying our
+ * events must never cost anyone a heavy dependency, and a receiver that cannot be bothered to
  * check a signature will accept anything anyone posts at that URL.
  *
  * The contract, verbatim:

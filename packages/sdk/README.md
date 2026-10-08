@@ -10,8 +10,8 @@ signature and hands you a typed event. [For agents](#for-agents) is further down
 
 - **No dependencies.** WebCrypto and nothing else.
 - **Runs everywhere unchanged** — Node 20+, Cloudflare Workers, Deno, Bun, and the browser.
-- **MIT**, on purpose: the Inbox itself is AGPL, and verifying its events should never cost you
-  a copyleft dependency.
+- **MIT**, like the rest of Surfing Dog Inbox: use it anywhere, change it, ship it in closed
+  code, with no obligation to share.
 - **[Standard Webhooks](https://www.standardwebhooks.com) v1.0.0**, so if you would rather use
   another library that reads the same three headers, it will work. Nothing here is branded.
 

@@ -10,7 +10,7 @@ import { defineConfig } from "vitest/config";
 const include = ["apps/*/test/**/*.test.ts", "packages/*/test/**/*.test.ts", "examples/*/test/**/*.test.ts"];
 
 /**
- * The MIT packages that build on the SDK (the network checker, the example network) are tested
+ * The packages that build on the SDK (the network checker, the example network) are tested
  * against its source, so a test never runs against a stale build.
  */
 const resolve = {

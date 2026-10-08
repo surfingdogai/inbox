@@ -7,8 +7,8 @@ import {
   verifyWebhook as verifyWithSigner,
 } from "../../adapters/src/webhooks/sign";
 // The producer, imported from the Inbox itself. The shipped SDK never imports it: @surfingdog/sdk
-// is MIT so that verifying an event costs no one an AGPL dependency, and the point of this file is
-// that the two implementations are PROVEN to agree rather than assumed to.
+// is published on its own so that verifying an event needs nothing else, and the point of this
+// file is that the two implementations are PROVEN to agree rather than assumed to.
 import { TEST_EVENT_TYPE as SIGNER_TEST_EVENT_TYPE } from "../../core/src/capabilities/webhooks";
 import type { ThinInboxEvent } from "../src/index";
 import {

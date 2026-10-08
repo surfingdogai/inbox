@@ -9,6 +9,8 @@ coverAnim: open
 og: /art/og-open-v1.png
 ---
 
+*Update, 8 Oct 2026: the inbox is now MIT-licensed, like the rest of the project.*
+
 Every small business has an inbox. Bookings land there, and orders, and someone who wants a price for a job you have never priced. It works because a person reads every message.
 
 Some of those messages now come from software. People ask an assistant to book the bike in for a service or order the bread, and the assistant has to reach you somehow. A contact form built for humans is a clumsy way in.

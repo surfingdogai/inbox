@@ -1,5 +1,5 @@
 /**
- * @surfingdog/sdk — MIT, so that talking to an Inbox costs no one an AGPL dependency.
+ * @surfingdog/sdk — MIT, and published on its own, so that talking to an Inbox needs nothing else.
  *
  * Two halves, both WebCrypto only:
  * - for a business's own systems: the webhook verifier and the event types (ADR-015);

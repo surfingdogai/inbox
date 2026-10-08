@@ -17,7 +17,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | Network | Join any network, or none, from settings | Same | Our network bundled: directory listing, receipts, reviews |
 | Domain | Your Worker route or custom domain | Yours | `<slug>.surfingdog.ai`, or your own hostname through Cloudflare for SaaS |
 | Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | Flat plus per confirmed item, metered from day one; announced when hosted opens |
-| Licence | AGPL-3.0 | AGPL-3.0 | Same software, same licence |
+| Licence | MIT | MIT | Same software, same licence |
 
 Two things are worth stating plainly. First, the open-source edition is never crippled: every connector, every door and every format in the hosted edition is in the repository. What hosted sells is the work a small business will not do, which is registering and maintaining OAuth apps, verifications, webhooks, email and backups, plus the network features bundled ([ADR-014](https://github.com/surfingdogai/inbox/blob/main/docs/adr/014-connectors-strategy.md)). Second, hosted is not on Cloudflare: it runs on our own server so that no US processor holds message content, and it can move to Cloudflare Durable Objects later without touching the core ([ADR-003](https://github.com/surfingdogai/inbox/blob/main/docs/adr/003-hosted-tenancy.md)).
 

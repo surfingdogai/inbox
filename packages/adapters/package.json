@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "description": "The doors: REST + OpenAPI, public and owner MCP, and the bearer/access-token resolver that turns a request into a Caller.",
   "exports": {
     ".": "./src/index.ts"

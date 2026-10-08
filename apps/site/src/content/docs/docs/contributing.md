@@ -1,16 +1,15 @@
 ---
 title: Contributing
-description: Licences, the toolchain, and the rules every change must respect.
+description: The licence, the toolchain, and the rules every change must respect.
 ---
 
 The repository is [github.com/surfingdogai/inbox](https://github.com/surfingdogai/inbox). Read the decision records in `docs/adr/` before changing architecture; they are short and they explain why things are the way they are.
 
-## Licences
+## Licence
 
-- **AGPL-3.0-only** for the server and the app: `apps/*`, `packages/core`, `packages/platform`, `packages/adapters`, `packages/ui`, and the channels, connectors, AI and hosted packages as they arrive.
-- **MIT** for `packages/spec` (the manifest, receipt and review formats with test vectors), `packages/sdk` (the typed client) and the connector SDK, so anyone can implement a compatible instance, agent, review service or integration.
+Everything in the repository is **MIT**: the server and the app (`apps/*`, `packages/core`, `packages/platform`, `packages/adapters`, `packages/ui`), `packages/spec` (the manifest, receipt and review formats with test vectors), `packages/sdk` (the typed client), `packages/network-check`, `examples/network`, and the channels, connectors, AI and hosted packages as they arrive. Anyone can run it, change it, implement a compatible instance, agent, review service or integration, and build on it; nothing they build has to be shared.
 
-Every package carries its own `LICENSE`. Contributions to the MIT packages must not import AGPL code.
+The root `LICENSE` covers the whole repository. The packages published on their own (`packages/spec`, `packages/sdk`, `packages/network-check`) and `examples/network` carry a copy of it.
 
 ## Toolchain
 
@@ -39,11 +38,11 @@ pnpm kit                              # the design kit
 ```
 apps/inbox         the product: a Hono server that runs on Workers and on Node
 apps/site          this website: Astro, Starlight for the docs
-packages/core      domain model, state machines, rules, jobs, receipts (AGPL)
+packages/core      domain model, state machines, rules, jobs, receipts
 packages/platform  the runtime interfaces (Db, Blob, Jobs, MailIn, MailOut) and their adapters
 packages/adapters  the doors: REST + OpenAPI, MCP, email, OAuth, sessions
-packages/spec      manifest, receipt and review formats with test vectors (MIT)
-packages/sdk       typed client for the public and owner APIs (MIT)
+packages/spec      manifest, receipt and review formats with test vectors
+packages/sdk       typed client for the public and owner APIs
 packages/ui        design tokens, glass utilities and the kit page
 docs/              the plan and the ADRs
 ```

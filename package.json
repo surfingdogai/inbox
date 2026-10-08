@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Surfing Dog Inbox \u2014 an open-source, self-hostable typed inbox for businesses: messages, quotes, bookings and orders from people and AI agents.",
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "packageManager": "pnpm@11.3.0",
   "engines": {
     "node": "^22.16 || ^24 || >=26"

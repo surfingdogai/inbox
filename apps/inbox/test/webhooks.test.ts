@@ -2,9 +2,9 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { createApiKey } from "@surfingdog/adapters";
 import { type Db, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-// The published verifier, imported by path: `@surfingdog/sdk` is MIT and deliberately not a
-// dependency of this AGPL app, and checking our own signature with our own signer would prove
-// only that we agree with ourselves.
+// The published verifier, imported by path: `@surfingdog/sdk` is published on its own and
+// deliberately not a dependency of this app, and checking our own signature with our own signer
+// would prove only that we agree with ourselves.
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { type App, createApp, createInbox, type Inbox } from "../src/app";
 import { freshDb, futureDay } from "./harness";
@@ -344,11 +344,11 @@ describe("webhook MCP tools", () => {
  * The whole of ADR-015 step two in one pass, through the real doors and nothing stubbed but the
  * receiver's socket: the owner adds an endpoint over REST, a customer's agent books over
  * the public REST door, the owner confirms it, the job runner drains — and a server on the other
- * side of the internet gets two signed POSTs it can verify with the MIT helper we publish, while a
+ * side of the internet gets two signed POSTs it can verify with the helper we publish, while a
  * poller of `GET /v1/owner/events` sees exactly the same events under exactly the same ids.
  *
  * `verifyWebhook` is imported from `packages/sdk` by path: the SDK is deliberately not a
- * dependency of the app (it is MIT and the app is AGPL), and a test that used our own signer to
+ * dependency of the app (it is published on its own), and a test that used our own signer to
  * check our own signature would prove only that we agree with ourselves.
  */
 describe("end to end: from a booking to a signed request on someone else's server", () => {

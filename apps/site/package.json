@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "description": "surfingdog.ai: the landing page, docs and blog for Surfing Dog Inbox.",
   "scripts": {
     "dev": "astro dev",

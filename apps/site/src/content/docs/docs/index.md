@@ -32,6 +32,6 @@ Still to come: passkeys, connectors (coming), hosted tenancy, and the network's 
 - [Manifest](/docs/manifest/): the discovery document an instance publishes.
 - [Self-hosted vs hosted](/docs/self-hosted-vs-hosted/): an honest comparison.
 - [Security and privacy](/docs/security-and-privacy/): what leaves the instance, and what never does.
-- [Contributing](/docs/contributing/): licences, the toolchain and the rules of the repo.
+- [Contributing](/docs/contributing/): the licence, the toolchain and the rules of the repo.
 
 The source is at [github.com/surfingdogai/inbox](https://github.com/surfingdogai/inbox); the plan and the architecture decision records live in its `docs/` folder.

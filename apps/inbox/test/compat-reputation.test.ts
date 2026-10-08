@@ -3,7 +3,7 @@ import { type Caller, type Db, networkSuccessStatement, type PublicJwk, schema, 
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
-// The published verifier, by path (MIT, deliberately not a dependency of this AGPL app).
+// The published verifier, by path (published on its own, deliberately not a dependency of this app).
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { createInbox } from "../src/app";
 import { confirmed, freshDb } from "./harness";

@@ -73,4 +73,4 @@ pnpm test              # every test, on Node and on Workers
 
 ## Licence
 
-AGPL-3.0 for the server and the app. MIT for `packages/spec`, `packages/sdk`, `packages/network-check` and `examples/network`.
+MIT, for everything in this repository: the server, the app, the site, the spec, the SDK, `packages/network-check` and `examples/network`. You can run it, change it and build on it; nothing you build has to be shared. See [LICENSE](LICENSE).
