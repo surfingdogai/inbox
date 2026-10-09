@@ -14,6 +14,12 @@ Joining a network (Step 5) is optional and separate: a network lists the busines
 and records the receipts the inbox signs, with no names, no messages and nothing of what was
 ordered; Step 5 lists exactly what a network receives. If the person asks, tell them this plainly.
 
+**Advice before you start.** https://surfingdog.ai/setting-up-for-agents.md is guidance from a
+real installation: the inbox as a business's front door, or as a thin agent door in front of the
+helpdesk, booking system or checkout it already has; deciding what handles each door; making doors
+findable; payments. It is guidance, not rules: the business may use other tools and other ways.
+Read it before Step 3 when the business already uses such tools.
+
 Read this whole file before you start. Then tell the person, in two or three sentences, which of
 the two paths below you are taking and what it will cost them. Do not begin until they answer.
 

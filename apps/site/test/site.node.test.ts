@@ -178,6 +178,70 @@ describe("the checker's pages and components", () => {
   });
 });
 
+describe("the setup guidance", () => {
+  const DOC = "src/content/docs/docs/setting-up-for-agents.md";
+  const PLAIN = "public/setting-up-for-agents.md";
+  const withoutUrls = (text: string) => text.replace(/https?:\/\/[^\s)>"`]+/g, " ");
+  const headings = (text: string) => text.split("\n").filter((l) => /^#{2,3} /.test(l));
+  const privateWords = (process.env.SITE_PRIVATE_WORDS ?? "")
+    .split(",")
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean);
+
+  it("says it is guidance and not rules, in the page, its Markdown copy, install.md and llms.txt", () => {
+    for (const path of [DOC, PLAIN]) {
+      expect(read(path), path).toContain("**It is guidance, not a set of rules.**");
+      expect(read(path), path).toContain("a business may use other tools and other ways");
+    }
+    const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
+    expect(opening).toContain("https://surfingdog.ai/setting-up-for-agents.md");
+    expect(opening).toContain("It is guidance, not rules");
+    const config = read("astro.config.mjs");
+    expect(config).toContain("https://surfingdog.ai/setting-up-for-agents.md");
+    expect(config).toContain("recommendations and not rules");
+    expect(config).toContain('"docs/setting-up-for-agents"');
+    expect(read("src/content/docs/docs/index.md")).toContain("(/docs/setting-up-for-agents/)");
+  });
+
+  it("the Markdown copy has the page's sections, in the same order, and absolute links", () => {
+    expect(headings(read(PLAIN))).toEqual(headings(read(DOC)));
+    expect(read(PLAIN)).toMatch(/^# Setting a business up for agents: guidance\n/);
+    expect(read(PLAIN)).not.toMatch(/\]\(\/(?!\/)/);
+  });
+
+  it("makes no claim of being first or alone, names no real business, and dates what moves fast", () => {
+    for (const path of [DOC, PLAIN]) {
+      const text = withoutUrls(read(path));
+      expect(text, path).not.toMatch(/\b(first|only|verified|people free)\b/i);
+      expect(text, path).toContain("Written on 9 October 2026");
+      expect(text, path).toContain("as of October 2026");
+    }
+  });
+
+  it.skipIf(privateWords.length === 0)("names no person, business or host (SITE_PRIVATE_WORDS)", () => {
+    for (const path of [DOC, PLAIN]) {
+      const words = new Set(
+        read(path)
+          .toLowerCase()
+          .split(/[^a-z0-9]+/),
+      );
+      for (const w of privateWords) expect(words.has(w), `${path}: a private word`).toBe(false);
+    }
+  });
+
+  it("every link on this site that the page makes goes somewhere", () => {
+    const hrefs = [...read(DOC).matchAll(/\]\((\/[^)\s]*)\)/g)].map((m) => m[1] ?? "");
+    expect(hrefs.length).toBeGreaterThan(5);
+    for (const h of hrefs) {
+      const p = h.replace(/[?#].*$/, "").replace(/\/+$/, "");
+      const found = p.startsWith("/docs/")
+        ? existsSync(site(`src/content/docs${p}.md`))
+        : existsSync(site(`public${p}`)) || existsSync(site(`src/pages${p}.astro`));
+      expect(found, h).toBe(true);
+    }
+  });
+});
+
 describe("the home page and the three products", () => {
   it("the home page is the line, the box, the counts, two things to copy and the three products, and nothing else", () => {
     const home = read("src/pages/index.astro");

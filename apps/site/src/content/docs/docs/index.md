@@ -26,6 +26,7 @@ Still to come: passkeys, connectors (coming), hosted tenancy, and the network's 
 ## Pages
 
 - [Quickstart](/docs/quickstart/): deploy to Cloudflare, run on your own server, or join the hosted waitlist, then make your first calls.
+- [Setting a business up for agents](/docs/setting-up-for-agents/): guidance, not rules, from a real installation: the inbox as the front door, or as a thin agent door in front of the tools a business already has; what handles each door; making doors findable; payments; helpdesk bridges.
 - [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, receipts and two-sided reviews.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.
 - [API](/docs/api/): every public and owner operation, and the conventions they share.

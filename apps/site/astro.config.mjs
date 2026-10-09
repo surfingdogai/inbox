@@ -52,7 +52,7 @@ export default defineConfig({
         { label: "How it works", link: "/how-it-works/" },
         {
           label: "Start",
-          items: ["docs", "docs/quickstart"],
+          items: ["docs", "docs/quickstart", "docs/setting-up-for-agents"],
         },
         {
           label: "Understand",
@@ -81,6 +81,7 @@ export default defineConfig({
             "Search: find businesses an AI agent can reach, with the doors each one opens, whatever software opens them: MCP, A2A, UCP, ACP, an API, or Surfing Dog Inbox. Over MCP at https://surfingdog.ai/mcp, over REST at https://surfingdog.ai/v1/businesses?q=<words>, or in a browser at https://surfingdog.ai/search?q=<words>. Live counts (agent-ready businesses, and how many take messages, bookings, orders and payment or have a catalogue) are in the directory block of https://surfingdog.ai/v1/stats.",
             "Inbox: the business's own inbox, open source (MIT), for bookings, orders, quote requests and messages over REST, MCP and email. It runs on the business's own subdomain (for example inbox.yourbusiness.com), on its Cloudflare account or its own server; a hosted option is not open yet. Its manifest and doors live on the business's domain and name the business, and customers and their agents write to the business there, directly. Installing it does not put a business on Surfing Dog: Surfing Dog is not in the middle of a message, a booking, an order or a payment, and the business can leave any time with its data, which is in its own database. To install it, an AI follows https://surfingdog.ai/install.md. About it: https://surfingdog.ai/inbox.",
             "Trust network: optional and separate from the inbox; joining is the business's choice. It lists the business in the directory and records the receipts its inbox signs (bookings confirmed, orders accepted, and how they ended), with no names, no messages and nothing of what was ordered; everything a network receives is listed at https://surfingdog.ai/network#shared. Inboxes check in with signed hourly pings, businesses and agents sign receipts for what was promised, and the directory's order reads kept promises. Nobody can pay for a place. The rules are versioned at https://surfingdog.ai/v1/ranking, the version in force and the next one announced. About it: https://surfingdog.ai/trust.",
+            "Setting a business up for agents: guidance from a real installation, recommendations and not rules (a business may use other tools and other ways). The inbox as a business's front door, or as a thin agent door in front of the helpdesk (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk), booking system, checkout or own AI it already has; deciding what handles each door; making doors findable; the full journey after an order or a booking; payments in the UK and the EU; bridges to helpdesks and chat apps. Plain Markdown for an AI: https://surfingdog.ai/setting-up-for-agents.md; the same page for people: https://surfingdog.ai/docs/setting-up-for-agents/.",
             "Check a business: https://surfingdog.ai/check, or the MCP tool check_business. Results: https://surfingdog.ai/b/<domain>. Agentic score rules, versioned: https://surfingdog.ai/v1/score-rules.",
             "Leaderboards by category and place, the businesses where an agent can book, order or sign up above the rest, then by agentic score, separate from the directory's search order: https://surfingdog.ai/leaderboard.",
             "Discovery for agents: https://surfingdog.ai/.well-known/ai-catalog.json (ARD), the MCP server card at https://surfingdog.ai/.well-known/mcp/server-card.json and the A2A agent card at https://surfingdog.ai/.well-known/agent-card.json.",
@@ -91,6 +92,10 @@ export default defineConfig({
             { label: "Search", url: "https://surfingdog.ai/search" },
             { label: "Trust network", url: "https://surfingdog.ai/trust" },
             { label: "Install guide for an AI", url: "https://surfingdog.ai/install.md" },
+            {
+              label: "Setting a business up for agents: guidance",
+              url: "https://surfingdog.ai/setting-up-for-agents.md",
+            },
             { label: "Directory MCP", url: "https://surfingdog.ai/mcp" },
             { label: "Directory API", url: "https://surfingdog.ai/v1/businesses" },
             { label: "Agentic score rules", url: "https://surfingdog.ai/v1/score-rules" },
