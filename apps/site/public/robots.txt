@@ -1,6 +1,7 @@
 User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
+Disallow: /b/*/live
 
 Sitemap: https://surfingdog.ai/sitemap-index.xml
 Sitemap: https://surfingdog.ai/sitemap-checks.xml

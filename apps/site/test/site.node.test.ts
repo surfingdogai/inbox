@@ -138,6 +138,11 @@ describe("the checker's pages and components", () => {
     expect(robots).toContain("Content-Signal: search=yes, ai-input=yes, ai-train=yes");
     expect(robots).toContain("Sitemap: https://surfingdog.ai/sitemap-index.xml");
     expect(robots).toContain("Sitemap: https://surfingdog.ai/sitemap-checks.xml");
+    // A check's live page streams a read as it happens; it is never a page to index, so every
+    // crawler is kept off it, in the one group they all read.
+    const everyone = robots.split(/\n\s*\n/).find((g) => /^User-agent: \*$/m.test(g)) ?? "";
+    expect(everyone).toMatch(/^Disallow: \/b\/\*\/live$/m);
+    expect(robots.match(/^User-agent:/gm)).toHaveLength(1);
     // The catalog is proxied from the network, so its tool list has one source.
     expect(existsSync(site("public/.well-known/ai-catalog.json"))).toBe(false);
   });
