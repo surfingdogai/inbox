@@ -25,7 +25,7 @@ export const STATE_LABEL: Record<State, string> = {
 };
 
 /** The date this list was last checked against the running network. */
-export const UPDATED = "7 Oct 2026";
+export const UPDATED = "10 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
   {
@@ -73,7 +73,11 @@ export const capabilities: readonly Capability[] = [
       "Businesses found on their own websites in the directory, with doors, levels, what they accept and a source and date on every fact",
     state: "live",
   },
-  { id: "self-serve", label: "Add, correct or remove your listing from your own AI", state: "coming" },
+  {
+    id: "self-serve",
+    label: "Add, correct, hide or remove your listing from your own AI (register_business, update_business)",
+    state: "live",
+  },
   { id: "fan-out", label: "One request to up to three businesses, agent to agent", state: "coming" },
   { id: "rules-doors", label: "Ranking rules for other doors", state: "coming" },
   { id: "hosted", label: "A hosted inbox", state: "coming" },
