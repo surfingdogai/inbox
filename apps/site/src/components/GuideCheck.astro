@@ -1,0 +1,110 @@
+---
+/**
+ * Where every guide ends: check that the change worked, and see businesses that do it already. The
+ * form posts to the checker, as the home page's box does, and asks for a fresh read: the checker
+ * decides whether one is due, and shows the last read when it isn't.
+ */
+import { CHECK_HREF, type Examples } from "../lib/guides";
+
+interface Props {
+  examples: readonly Examples[];
+  /** "Check it worked" under a guide; the hub asks to look at a business instead. */
+  title?: string;
+}
+const { examples, title = "Check it worked" } = Astro.props;
+const intro = title !== "Check it worked";
+---
+
+<section class="g-check" aria-labelledby="g-check-h">
+  <h2 class="h-section" id="g-check-h">{title}</h2>
+  <p>
+    {
+      intro
+        ? "Paste your website. We read it the way a customer's assistant would, and show what it can do there, what's missing, and where to start."
+        : "Once your change is live, check your site. We read it the way a customer's assistant would, and show what it can do there now, and what's still missing."
+    }
+  </p>
+  <form class="g-form" method="post" action={CHECK_HREF}>
+    <label for="g-check-url">Your website</label>
+    <input
+      class="input"
+      id="g-check-url"
+      name="url"
+      type="text"
+      inputmode="url"
+      autocomplete="url"
+      autocapitalize="off"
+      spellcheck="false"
+      maxlength="2048"
+      placeholder="yourbusiness.example"
+      required
+    />
+    <input type="hidden" name="fresh" value="1" />
+    <button class="btn btn-secondary btn-sm" type="submit">Check</button>
+  </form>
+  <p class="g-fine">
+    Or open <a class="link" href={CHECK_HREF}>the checker</a>. If your site was read recently, you'll see that read, and
+    when you can ask for a fresh one.
+  </p>
+</section>
+
+{
+  examples.length > 0 && (
+    <section class="g-examples" aria-labelledby="g-examples-h">
+      <h2 class="h-section" id="g-examples-h">
+        See it working
+      </h2>
+      <ul>
+        {examples.map((e) => (
+          <li>
+            <a class="link" href={e.href}>
+              {e.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="g-fine">On the leaderboards, with what an agent can do at each one and through which door.</p>
+    </section>
+  )
+}
+
+<style>
+  .g-check p,
+  .g-examples p {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .g-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-top: var(--sp-4);
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .g-form label {
+    flex: 1 0 100%;
+  }
+  .g-form .input {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .g-check .g-fine,
+  .g-examples .g-fine {
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .g-examples ul {
+    display: grid;
+    gap: var(--sp-1);
+    margin: var(--sp-2) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-body);
+  }
+</style>

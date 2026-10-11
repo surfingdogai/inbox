@@ -1,0 +1,107 @@
+---
+/**
+ * The guides, as a list: on the hub, each with what it answers; at the foot of a guide, the others
+ * in one quiet line.
+ */
+import { GUIDES, type GuideSlug, guideHref } from "../lib/guides";
+
+interface Props {
+  /** The guide this list sits under, left out of it. */
+  current?: GuideSlug;
+  /** One line of names, for the foot of a guide. */
+  compact?: boolean;
+}
+const { current, compact = false } = Astro.props;
+const shown = GUIDES.filter((g) => g.slug !== current);
+---
+
+{
+  compact ? (
+    <nav class="g-more" aria-labelledby="g-more-h">
+      <h2 class="g-more-h" id="g-more-h">
+        More guides
+      </h2>
+      <p>
+        {shown.map((g, i) => (
+          <>
+            {i > 0 && <span aria-hidden="true"> · </span>}
+            <a class="link" href={guideHref(g.slug)}>
+              {g.short}
+            </a>
+          </>
+        ))}
+        <span aria-hidden="true"> · </span>
+        <a class="link" href={guideHref("")}>
+          All guides
+        </a>
+      </p>
+    </nav>
+  ) : (
+    <ul class="g-list">
+      {shown.map((g) => (
+        <li>
+          <a href={guideHref(g.slug)}>
+            <b>{g.title}</b>
+            <span>{g.description}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+<style>
+  .g-more {
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--hairline);
+  }
+  .g-more-h {
+    margin: 0;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .g-more p {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-ui);
+    line-height: 1.7;
+    color: var(--ink-3);
+  }
+  .g-list {
+    display: grid;
+    margin: var(--sp-3) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .g-list li {
+    border-top: 1px solid var(--hairline);
+  }
+  .g-list li:last-child {
+    border-bottom: 1px solid var(--hairline);
+  }
+  .g-list a {
+    display: grid;
+    gap: 2px;
+    padding: var(--sp-3) 0;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .g-list b {
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    line-height: 1.35;
+    transition: color var(--dur-fast) ease;
+  }
+  .g-list span {
+    font-size: var(--fs-card);
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .g-list a:hover b,
+  .g-list a:focus-visible b {
+    color: var(--violet-ink);
+  }
+</style>

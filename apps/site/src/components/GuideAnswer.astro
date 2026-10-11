@@ -1,0 +1,41 @@
+---
+/**
+ * The answer at the top of a guide: the whole of it in at most fifty words, for a reader in a hurry
+ * and for the assistants and search engines that quote one paragraph. A quiet box, a hairline and
+ * the accent's thin edge, nothing louder.
+ */
+interface Props {
+  text: string;
+}
+const { text } = Astro.props;
+---
+
+<div class="g-answer">
+  <p class="g-answer-label">In short</p>
+  <p class="g-answer-text">{text}</p>
+</div>
+
+<style>
+  .g-answer {
+    margin: var(--sp-6) 0 0;
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--hairline-strong);
+    border-left: 2px solid color-mix(in srgb, var(--violet) 70%, transparent);
+    border-radius: var(--radius-control);
+    background: var(--row-bg);
+  }
+  .g-answer-label {
+    margin: 0;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .g-answer-text {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-lede);
+    line-height: 1.55;
+    color: var(--ink);
+  }
+</style>

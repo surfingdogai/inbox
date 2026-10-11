@@ -1,0 +1,147 @@
+---
+// One guide: the answer in short, what an assistant needs, what the check counts (the Markdown in
+// src/content/guides), the ways to do it, a check that it worked, and businesses that do it already.
+// Every slug in src/lib/guides.ts has a page, and a Markdown file without one fails the build.
+import { type CollectionEntry, getCollection, render } from "astro:content";
+import GuideAnswer from "../../components/GuideAnswer.astro";
+import GuideCheck from "../../components/GuideCheck.astro";
+import GuideList from "../../components/GuideList.astro";
+import GuideOptions from "../../components/GuideOptions.astro";
+import Layout from "../../layouts/Layout.astro";
+import { GUIDES, type Guide, guideBySlug, guideHref } from "../../lib/guides";
+
+export async function getStaticPaths() {
+  const entries = await getCollection("guides");
+  for (const e of entries) {
+    if (!guideBySlug(e.id)) throw new Error(`src/content/guides/${e.id}.md has no entry in src/lib/guides.ts`);
+  }
+  return GUIDES.map((guide) => {
+    const entry = entries.find((e) => e.id === guide.slug);
+    if (!entry) throw new Error(`src/content/guides/${guide.slug}.md is missing`);
+    return { params: { slug: guide.slug }, props: { guide, entry } };
+  });
+}
+
+const { guide, entry } = Astro.props as { guide: Guide; entry: CollectionEntry<"guides"> };
+const { Content } = await render(entry);
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(guideHref(guide.slug), site).toString();
+/** When the guides were last read against the check's rules. */
+const MODIFIED = "2026-10-11";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: guide.title,
+    description: guide.description,
+    abstract: guide.answer,
+    datePublished: MODIFIED,
+    dateModified: MODIFIED,
+    author: { "@type": "Organization", name: "Surfing Dog", url: site },
+    publisher: { "@id": `${site}#org` },
+    isPartOf: { "@type": "CollectionPage", name: "Guides", url: new URL(guideHref(""), site).toString() },
+    image: new URL("/art/og-network-v1.png", site).toString(),
+    mainEntityOfPage: url,
+    url,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site },
+      { "@type": "ListItem", position: 2, name: "Guides", item: new URL(guideHref(""), site).toString() },
+      { "@type": "ListItem", position: 3, name: guide.title, item: url },
+    ],
+  },
+];
+---
+
+<Layout title={`${guide.title} · Surfing Dog`} description={guide.description} type="article" ld={ld}>
+  <article class="wrap wrap-read section is-head guide" aria-labelledby="g-title">
+    <p class="eyebrow"><a href={guideHref("")}>Guides</a></p>
+    <h1 class="h-page" id="g-title">{guide.title}</h1>
+    <GuideAnswer text={guide.answer} />
+    <div class="prose g-body">
+      <Content />
+    </div>
+    <GuideOptions options={guide.options} />
+    <GuideCheck examples={guide.examples} />
+    <GuideList current={guide.slug} compact />
+  </article>
+</Layout>
+
+<style>
+  .guide {
+    padding-bottom: var(--section-y);
+  }
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  /* The guides are read and acted on, so the prose keeps the interface's size rather than the blog's. */
+  .g-body {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .g-body > :global(p:first-child) {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  .g-body :global(h2) {
+    font-size: var(--fs-section);
+  }
+  .g-body :global(ul) {
+    list-style: disc;
+  }
+  .g-body :global(ol) {
+    list-style: decimal;
+  }
+  .g-body :global(li::marker) {
+    color: var(--ink-3);
+  }
+  /* Names in running text are many here: a faint ground, no box. */
+  .g-body :global(:not(pre) > code) {
+    padding: 0 4px;
+    border-color: transparent;
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+  }
+  .g-body :global(h3) {
+    font-size: var(--fs-h-sub);
+  }
+  .g-body :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+  }
+  .g-body :global(th) {
+    padding: 0 var(--sp-3) var(--sp-2) 0;
+    text-align: left;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .g-body :global(td) {
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+    vertical-align: top;
+    color: var(--ink-2);
+    overflow-wrap: anywhere;
+  }
+  .g-body :global(td code) {
+    white-space: normal;
+  }
+  /* An example file is read whole, so its long lines wrap rather than scroll. */
+  .g-body :global(pre) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+</style>

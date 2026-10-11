@@ -1,0 +1,206 @@
+---
+// The guides' hub: what being ready for AI agents means, the five steps the network places a
+// business on, the doors that count, how the score is worked out (#score, from the published rules)
+// and the eight guides, each written for any business, anywhere.
+import GuideAnswer from "../../components/GuideAnswer.astro";
+import GuideCheck from "../../components/GuideCheck.astro";
+import GuideList from "../../components/GuideList.astro";
+import Layout from "../../layouts/Layout.astro";
+import { GUIDES, guideHref, HUB, LEVELS, SCORE_GRADES, SCORE_GROUPS } from "../../lib/guides";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(guideHref(""), site).toString();
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: HUB.title,
+    description: HUB.description,
+    url,
+    publisher: { "@id": `${site}#org` },
+    hasPart: GUIDES.map((g) => ({
+      "@type": "Article",
+      headline: g.title,
+      description: g.description,
+      url: new URL(guideHref(g.slug), site).toString(),
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site },
+      { "@type": "ListItem", position: 2, name: "Guides", item: url },
+    ],
+  },
+];
+/** "A from 80, B from 60, …, E below 20", from the published grades. */
+const grades = SCORE_GRADES.map((g, i) =>
+  g.min > 0 ? `${g.grade} from ${g.min}` : `${g.grade} below ${SCORE_GRADES[i - 1]?.min ?? ""}`,
+);
+---
+
+<Layout title={`${HUB.title} · Surfing Dog`} description={HUB.description} ld={ld}>
+  <article class="wrap wrap-read section is-head hub" aria-labelledby="hub-h">
+    <p class="eyebrow">Guides</p>
+    <h1 class="h-page" id="hub-h">{HUB.title}</h1>
+    <GuideAnswer text={HUB.answer} />
+
+    <section class="prose hub-body" aria-labelledby="steps-h">
+      <h2 id="steps-h">Five steps</h2>
+      <p>We place each business on five steps, by the best door we find on its own site:</p>
+      <ol class="steps">
+        {
+          LEVELS.map((l) => (
+            <li>
+              <b>{l.name}.</b> {l.says}
+            </li>
+          ))
+        }
+      </ol>
+      <p>
+        From askable up, a business is named on the leaderboards, and its result page may appear in search, unless its
+        site tells AI systems not to use or train on its content.
+      </p>
+
+      <h2 id="doors-h">Doors</h2>
+      <p>
+        A door is a machine address on the business's own domain, or one its site leads to, that an assistant can use
+        without a person in between. These count:
+      </p>
+      <ul>
+        <li><b>An MCP server</b>: tools an assistant can call, such as checking free times or making a booking.</li>
+        <li><b>An A2A agent card</b>, for a business with an AI agent of its own.</li>
+        <li><b>A UCP or ACP checkout profile</b>, for a shop.</li>
+        <li><b>An OpenAPI document</b> that describes an API.</li>
+        <li><b>An agent inbox</b>, with a manifest at <code>/.well-known/agent-inbox.json</code>.</li>
+      </ul>
+      <p>
+        Pages, forms, email, phone and chat widgets are made for people, so they don't count as doors. They still matter:
+        an assistant reads them to learn about you. WebMCP tools in a page are read as experimental, and tools a page adds
+        with a script aren't seen, since our check never runs JavaScript.
+      </p>
+
+      <h2 id="guides-h">The guides</h2>
+      <p>Each one says what an assistant needs, what the check counts, the ways to do it, and how to check it worked.</p>
+    </section>
+    <GuideList />
+
+    <section class="prose hub-body" aria-labelledby="score">
+      <h2 id="score">How the score works</h2>
+      <p>
+        Each check ends in an agentic score from 0 to 100, with a grade. It's worked out from what we read on the
+        business's own site and doors, by rules that are published and versioned (<a href="/v1/score-rules">rules as
+        data</a>).
+      </p>
+      <p>
+        What counts depends on the kind of business: a salon is scored on bookings, a shop on orders, a trade on quotes. A
+        capability that doesn't apply is left out, so it never counts against anyone (<a
+          href={`${guideHref("business-details-for-ai")}#kind`}>how we tell your kind</a
+        >). What does apply sits in groups with fixed weights:
+      </p>
+    </section>
+    <table class="weights">
+      <thead>
+        <tr><th scope="col">Group</th><th scope="col" class="n">Weight</th></tr>
+      </thead>
+      <tbody>
+        {
+          SCORE_GROUPS.map((g) => (
+            <tr>
+              <th scope="row">{g.holds}</th>
+              <td class="n">{g.weight}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+    <section class="prose hub-body" aria-label="Grades and fairness">
+      <p>
+        A yes earns a capability's full share, a partly half of it. Where an agent can book, order or sign up, changing and
+        cancelling count too, and for an order, tracking and a receipt, so a full 100 needs the whole journey. Grades:
+        {grades.join(", ")}.
+      </p>
+      <p>
+        Nobody can pay for a score, and it never changes a business's place in Surfing Dog Search (<a
+          href="/network/#ranking">how that order works</a
+        >). It is not a certification: it is what the site and its doors said on the day we read them.
+      </p>
+    </section>
+
+    <GuideCheck examples={HUB.examples} title="Check your business" />
+  </article>
+</Layout>
+
+<style>
+  .hub {
+    padding-bottom: var(--section-y);
+  }
+  .hub-body {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .hub-body > :global(p:first-child) {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  .hub-body h2 {
+    font-size: var(--fs-section);
+  }
+  .hub-body code {
+    font-size: var(--fs-mono);
+  }
+  .hub-body ul {
+    list-style: disc;
+  }
+  .hub-body ol {
+    list-style: decimal;
+  }
+  .hub-body li::marker {
+    color: var(--ink-3);
+  }
+  .hub-body code {
+    padding: 0 4px;
+    border-color: transparent;
+    background: var(--row-bg);
+  }
+  .steps b {
+    font-weight: 600;
+  }
+  .weights {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+    color: var(--ink-2);
+  }
+  .weights thead th {
+    padding: 0 var(--sp-3) var(--sp-2) 0;
+    text-align: left;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .weights tbody th,
+  .weights td {
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+    text-align: left;
+    font-weight: 500;
+  }
+  .weights .n {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The column's own rhythm puts the table under its paragraph, not out on the page's width. */
+  .hub > .weights {
+    position: static;
+    left: auto;
+    transform: none;
+    width: 100%;
+    margin-block: var(--sp-4);
+  }
+</style>

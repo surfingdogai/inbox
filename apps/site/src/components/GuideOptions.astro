@@ -1,0 +1,115 @@
+---
+/**
+ * A guide's options: the ways to give an assistant what the guide describes, as two columns, the
+ * way and what it takes, with the pages to read beside it. Our own inbox is a row like the others,
+ * named as ours (src/lib/guides.ts says where it appears).
+ */
+import type { GuideOption } from "../lib/guides";
+
+interface Props {
+  options: readonly GuideOption[];
+}
+const { options } = Astro.props;
+/** `code` in backticks, the one mark the options' words use. */
+const parts = (text: string) => text.split("`");
+const external = (href: string) => /^https?:\/\//.test(href);
+---
+
+<section class="g-options" aria-labelledby="g-options-h">
+  <h2 class="h-section" id="g-options-h">Your options</h2>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Way</th>
+        <th scope="col">What it takes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        options.map((o) => (
+          <tr data-ours={o.ours ? "" : undefined}>
+            <th scope="row">{o.way}</th>
+            <td>
+              <p>{parts(o.what).map((t, i) => (i % 2 === 1 ? <code>{t}</code> : t))}</p>
+              {o.links && o.links.length > 0 && (
+                <p class="g-links">
+                  {o.links.map((l, i) => (
+                    <>
+                      {i > 0 && <span aria-hidden="true"> · </span>}
+                      <a class="link" href={l.href} rel={external(l.href) ? "noopener" : undefined}>
+                        {l.label}
+                      </a>
+                    </>
+                  ))}
+                </p>
+              )}
+            </td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</section>
+
+<style>
+  .g-options table {
+    width: 100%;
+    margin-top: var(--sp-3);
+    border-collapse: collapse;
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .g-options thead th {
+    padding: 0 var(--sp-3) var(--sp-2) 0;
+    text-align: left;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .g-options tbody th,
+  .g-options td {
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) 0;
+    border-top: 1px solid var(--hairline);
+    text-align: left;
+    vertical-align: top;
+  }
+  .g-options tbody th {
+    width: 32%;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .g-options td p {
+    margin: 0;
+  }
+  .g-options td code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: var(--fs-mono);
+    overflow-wrap: anywhere;
+  }
+  .g-options .g-links {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  @media (max-width: 560px) {
+    .g-options thead {
+      display: none;
+    }
+    .g-options tr,
+    .g-options tbody th,
+    .g-options td {
+      display: block;
+      width: auto;
+    }
+    .g-options tbody th {
+      padding-bottom: var(--sp-1);
+    }
+    .g-options td {
+      padding-top: 0;
+      border-top: 0;
+    }
+  }
+</style>

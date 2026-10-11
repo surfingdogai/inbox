@@ -5,11 +5,20 @@ import { glob } from "astro/loaders";
 import { z } from "astro/zod";
 
 /**
- * Starlight's docs (src/content/docs, served under /docs) and the blog (src/content/blog, one
- * Markdown file per post, rendered by src/pages/blog).
+ * Starlight's docs (src/content/docs, served under /docs), the blog (src/content/blog, one
+ * Markdown file per post, rendered by src/pages/blog) and the guides (src/content/guides, rendered by
+ * src/pages/guides).
  */
 export const collections = {
   docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  /**
+   * A guide's prose, one Markdown file per slug and nothing in its frontmatter: its title, answer,
+   * options and examples are in src/lib/guides.ts, which the hub, the pages and the tests all read.
+   */
+  guides: defineCollection({
+    loader: glob({ pattern: "*.md", base: "./src/content/guides" }),
+    schema: z.object({}).strict(),
+  }),
   blog: defineCollection({
     loader: glob({ pattern: "**/[^_]*.md", base: "./src/content/blog" }),
     schema: z.object({
