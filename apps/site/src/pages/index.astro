@@ -7,9 +7,10 @@ import Products from "../components/Products.astro";
 import Layout from "../layouts/Layout.astro";
 
 /**
- * The home page: what Surfing Dog is in one line, one box, the live counts, two things to copy into
- * your AI, and the three products. Everything else lives on the products' own pages: the search
- * explainer on /search, the inbox on /inbox, the rules on /trust.
+ * The home page: what Surfing Dog is in one line, one box, the live counts, one line on checking a
+ * business (with the guides), two things to copy into your AI, and the three products. Everything else
+ * lives on the products' own pages: the search explainer on /search, the inbox on /inbox, the rules on
+ * /trust.
  */
 const TAGLINE = "Open doors to the agentic internet.";
 const WHAT = "Surfing Dog lists and tracks agent-ready businesses: the ones AI agents can message, book and buy from.";
@@ -126,6 +127,15 @@ const ld = [
 
     <DirectoryCounts />
 
+    <section class="ready" aria-labelledby="ready-h">
+      <h2 class="ready-h" id="ready-h">Can a customer's AI assistant book with you?</h2>
+      <p class="ready-p">
+        Paste your website in the box, or <a class="link" href="/check">check your business</a>: we read it the way an
+        assistant would, and show what it can do there, what's missing and where to start. The
+        <a class="link" href="/guides/">guides</a> explain each step.
+      </p>
+    </section>
+
     <div class="copies">
       <CopyBlock
         title="Search from your AI"
@@ -209,6 +219,27 @@ const ld = [
   .box {
     width: 100%;
     max-width: 600px;
+  }
+  /* One quiet line on checking a business: a small heading and a sentence, no box. */
+  .ready {
+    display: grid;
+    gap: var(--sp-2);
+    max-width: 52ch;
+  }
+  .ready-h {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-h-sub);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .ready-p {
+    margin: 0;
+    font-size: var(--fs-card);
+    line-height: 1.55;
+    color: var(--ink-2);
+    text-wrap: balance;
   }
   .copies {
     display: grid;

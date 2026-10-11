@@ -29,6 +29,8 @@ A customer's Muse can do its job with you when three things are true:
 - Your free times are real and up to date, not a picture of a calendar.
 - There's a way to book that answers straight away: yes, no, or here's another time.
 
+[A free check of your website](/check) shows which of these an assistant finds there today.
+
 This is what [Surfing Dog Inbox](/how-it-works/) is for. It's an open-source inbox that runs on your own domain, like inbox.yourbarber.com, and it gives every assistant a proper way in:
 
 - **An MCP server**, the standard way AI assistants plug into a service. Muse can use one as a [custom connector](/assistants/meta-muse/), with no sign-in needed for a customer.

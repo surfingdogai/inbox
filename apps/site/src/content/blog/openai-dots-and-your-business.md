@@ -31,6 +31,8 @@ That's how a small business loses a customer it never knew it had. Nobody called
 - **A clear answer.** Yes, no, or another time, never "we'll get back to you".
 - **The person's say on anything priced.** A dot comes back to its person when something needs their review, and your side should leave room for that.
 
+To see what an agent would find on your own site, [check your business](/check).
+
 ## How Surfing Dog Inbox gives it both doors
 
 [Surfing Dog Inbox](/how-it-works/) is an open-source inbox that runs on your own domain, like inbox.yourrestaurant.com.

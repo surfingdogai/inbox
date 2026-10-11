@@ -37,4 +37,6 @@ An open inbox gives you the same kind of door on your own terms. It lives on you
 
 Then you can join networks, the directories agents search when someone asks for a bakery nearby. An inbox can join several, in Settings → Networks. [Ours](/network/) has [public ranking rules](https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md), in force now. Businesses whose inbox is online come first. Those with a good record of kept promises are ranked by it, and the rest are shuffled once a day. Nobody can buy a place. The inbox reports kept and broken promises as they close, so a record builds itself. And [anyone can launch a network](/blog/launch-your-own-network/), because the protocol is open.
 
+Not sure where you stand? [Check your website](/check) to see what an assistant can already do with your business.
+
 To start, open [surfingdog.ai/install](/install/) and paste the one line there into your AI. It's told to set the inbox up and to ask you before anything that costs money.

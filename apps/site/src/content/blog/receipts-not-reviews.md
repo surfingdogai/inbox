@@ -35,4 +35,6 @@ Customers make promises as well, mostly the promise to turn up. A customer who d
 
 The rules are already published and in force. Until records build up, businesses whose inbox is online come first and the rest are shuffled once a day. Nobody can buy a place, now or later.
 
+A receipt needs a booking or an order to sign, and that needs a door an agent can use: [check a business](/check) to see whether it has one.
+
 The receipt format is open under MIT, and anyone can launch a network. A trade body could run one. So could a town. Once our ranking rules are out, they can use them or write their own.

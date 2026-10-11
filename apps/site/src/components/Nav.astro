@@ -3,8 +3,9 @@ import Mark from "./Mark.astro";
 
 /**
  * The bar is the three products and checking a business. The rest of the map sits in the
- * menu, the blog included: the directory and the leaderboards, how a business gets in and how an agent searches, the
- * rules, then the pages about us, with developer material last.
+ * menu, the blog and the guides included: the directory and the leaderboards, how a business gets in and how an agent
+ * searches, the rules, then the pages about us, with developer material last. The network's pages mirror this menu
+ * (its shell), so a link added here is added there too.
  * `match` is the page a link belongs to when its own href points at an anchor.
  */
 interface Link {
@@ -23,6 +24,7 @@ const links: Link[] = [
 
 const extras: Link[] = [
   { href: "/blog/", label: "Blog" },
+  { href: "/guides/", label: "Guides" },
   { href: "/directory/", label: "Directory" },
   { href: "/leaderboard", label: "Leaderboards" },
   { href: "/search/#businesses", label: "For businesses" },

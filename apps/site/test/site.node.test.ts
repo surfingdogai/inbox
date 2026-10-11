@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { fixesOf, scoreOf, scoreRulesSchema } from "../../../packages/spec/src/index";
@@ -176,6 +176,7 @@ describe("the checker's pages and components", () => {
       const text = read(path);
       expect(text, path).toContain('href: "/check"');
       expect(text, path).toContain('href: "/leaderboard"');
+      expect(text, path).toContain('{ href: "/guides/", label: "Guides" }');
     }
     const footer = read("src/components/Footer.astro");
     expect(footer).toContain('href: "/about/"');
@@ -248,7 +249,7 @@ describe("the setup guidance", () => {
 });
 
 describe("the home page and the three products", () => {
-  it("the home page is the line, the box, the counts, two things to copy and the three products, and nothing else", () => {
+  it("the home page is the line, the box, the counts, a line on checking a business, two things to copy and the three products, and nothing else", () => {
     const home = read("src/pages/index.astro");
     for (const part of ["<AskBox", "<DirectoryCounts", "<CopyBlock", "<Products", "minimalFooter"]) {
       expect(home, part).toContain(part);
@@ -304,6 +305,18 @@ describe("the home page and the three products", () => {
       expect(visible(read(path)), path).not.toMatch(/never (your|its) customers/i);
     }
     expect(visible(read("src/pages/network.astro"))).not.toMatch(/directory of inboxes/);
+  });
+
+  it("the home page asks whether an assistant can book with you, and every blog post links the checker", () => {
+    const home = read("src/pages/index.astro");
+    expect(home).toContain('<h2 class="ready-h" id="ready-h">Can a customer\'s AI assistant book with you?</h2>');
+    expect(home).toContain('<a class="link" href="/check">check your business</a>');
+    expect(home).toContain('href="/guides/"');
+    const posts = readdirSync(site("src/content/blog")).filter((f) => f.endsWith(".md"));
+    expect(posts.length).toBeGreaterThanOrEqual(7);
+    for (const f of posts) expect(read(`src/content/blog/${f}`), f).toMatch(/\]\(\/check\)/);
+    expect(read("src/content/blog/what-ai-assistants-need-from-your-business.md")).toMatch(/\]\(\/guides\/\)/);
+    expect(visible(read("src/pages/faq.astro"))).toContain('<a href="/guides/">guides</a>');
   });
 
   it("the box searches words and checks addresses", () => {

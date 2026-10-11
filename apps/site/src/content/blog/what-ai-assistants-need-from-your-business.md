@@ -11,7 +11,7 @@ In September 2026 the personal AI assistant stopped being a chat window. Meta's 
 
 For a small business that means a new kind of customer: one who sends their assistant. The assistant does the searching and comparing, then books whoever it can actually book.
 
-Here's what it needs from you, in the order it needs it.
+Here's what it needs from you, in the order it needs it. To see which of these an assistant finds on your site today, [check your business](/check); [the guides](/guides/) go through each one in more detail.
 
 ## 1. Your services and prices, written down
 
