@@ -1,11 +1,11 @@
 ---
 title: "Setting a business up for agents: guidance"
-description: Recommendations, not rules, from installing the inbox with a real shop. Two ways to use the inbox, what handles each door, making doors findable, the full journey, payments in the UK and the EU, and bridges to the helpdesk a business already uses.
+description: Recommendations, not rules, from installing the inbox with a shop we worked with. Two ways to use the inbox, what handles each door, making doors findable, the full journey, how agents pay, and bridges to the helpdesk a business already uses.
 sidebar:
   label: Setting up for agents
 ---
 
-This page is advice for the AI, or the person, installing Surfing Dog Inbox for a business. It comes from a week of work alongside a UK online grocery shop, including the things we got wrong.
+This page is advice for the AI, or the person, installing Surfing Dog Inbox for a business. It comes from a shop we worked with for a week, including the things we got wrong.
 
 **It is guidance, not a set of rules.** Every recommendation here has alternatives, and a business may use other tools and other ways of doing things. The inbox is built to sit beside them. Where this page and the business's own judgement differ, the business decides.
 
@@ -78,7 +78,7 @@ Agents and crawlers find doors by reading files at known places. Make the list e
 - **`llms.txt`** on the main domain, with a line per door that says what the URL is (example below).
 - **schema.org markup** on the pages: the business (`Organization` or `LocalBusiness`), products with an `Offer` (price, currency, availability), opening hours, and policies (see the next section).
 - **A product feed** (CSV or Google Merchant XML), which agents can read, and so can the inbox's own [feed import](/docs/feeds/).
-- Optionally, **a DNS record** on the main domain that points at the inbox: `_agent-inbox.example.com. TXT "v=sdi1; manifest=https://inbox.example.com/.well-known/agent-inbox.json"`.
+- Optionally, **a DNS record** on the main domain that points at the inbox: `_agent-inbox.example.com. TXT "v=sdi1; manifest=https://inbox.example.com/.well-known/agent-inbox.json"`. Our crawler does not look this record up; other readers may, so it does no harm, but list the inbox in a file as well.
 
 An `llms.txt` section a reader can act on, one door per line, each saying what it is:
 
@@ -92,6 +92,8 @@ An `llms.txt` section a reader can act on, one door per line, each saying what i
 - Order lookup API: POST https://example.com/api/orders/lookup
 - Returns policy: https://example.com/returns
 ```
+
+Give the inbox's line the manifest's own address, the one that ends in `/.well-known/agent-inbox.json`: that is how our crawler tells an inbox in `llms.txt` from the other doors, and it reads the manifest from there.
 
 **Keep every door on the business's own domain or a subdomain**, such as `inbox.example.com` or `agent.example.com`. A door on an unrelated host is easy to fake, so careful readers set it aside unless the business's own site leads to it; a network that follows [the network protocol](https://github.com/surfingdogai/inbox/blob/main/docs/protocol/network.md) (§4.8) also wants the door's own document to name the business's domain. A booking platform's page for the business counts once the business's site links to it and the platform's document names the business.
 
@@ -119,24 +121,24 @@ A booking or an order is the start of the job, not the end of it.
 
 The Surfing Dog agentic score rewards the full journey: an order counts for more when changing, cancelling, tracking and a receipt follow it ([the published rules](https://surfingdog.ai/v1/score-rules)). The score is a reading, not the aim. The aim is that an agent can finish what its person asked for.
 
-## Payments in the UK and the EU, as of October 2026
+## Payments, as of October 2026
 
 This changes month by month. Check the sources at the end of this section before choosing.
 
-**Why an agent should not type a card number.** In the EU (under PSD2) and in the UK, a card payment the customer starts needs Strong Customer Authentication: two of something they know, something they have and something they are. An agent filling in a card number at a checkout stalls at that step, or needs the person there anyway, and it holds a card number it should never see. What works is a credential made for agents: a token or a mandate the person approves once, usually with a passkey or their banking app, limited to a merchant, an amount or a period, which the agent presents and the payment provider checks.
+**Why an agent should not type a card number.** In many places, the EU (under PSD2), the UK and India among them, a card payment the customer starts needs strong authentication: a second step, such as a code, a passkey or the banking app. An agent filling in a card number at a checkout stalls at that step, or needs the person there anyway, and it holds a card number it should never see. What works is a credential made for agents: a token or a mandate the person approves once, usually with a passkey or their banking app, limited to a merchant, an amount or a period, which the agent presents and the payment provider checks.
 
 Options, a line each:
 
 - **Stripe Agentic Commerce Suite, with Shared Payment Tokens**: a scoped token an agent hands to the merchant without seeing the card. It implements the Agentic Commerce Protocol's (ACP) delegated payment and carries Mastercard Agent Pay and Visa Intelligent Commerce tokens. The short path for a business already on Stripe.
 - **Mollie**: supports ACP's delegated payment API, for European merchants.
 - **Adyen Agentic**: catalogue, basket and payment APIs for agent commerce, suited to larger merchants already on Adyen.
-- **Mastercard Agent Pay and Visa Intelligent Commerce**: the card networks' own agent tokens, reached through the business's payment provider rather than directly. Mastercard says every issuer in Europe is enabled for Agent Pay at network level; Visa's Agentic Ready programme began in Europe, the UK included, in March 2026, starting with banks.
-- **UK pay by bank**: a mandate the payer can limit or revoke at any time, as Direct Debit and, as they open up, Variable Recurring Payments. GoCardless has completed an agent-led pay-by-bank donation inside the FCA's AI Live Testing programme.
+- **Mastercard Agent Pay and Visa Intelligent Commerce**: the card networks' own agent tokens, reached through the business's payment provider rather than directly, and opening region by region. In Europe, for example, Mastercard says every issuer is enabled for Agent Pay at network level, and Visa's Agentic Ready programme began there, the UK included, in March 2026, starting with banks.
+- **Pay by bank, with a mandate**: an account-to-account payment the payer can limit or revoke at any time, such as Pix Automático in Brazil, UPI AutoPay in India, PayTo in Australia, SEPA Direct Debit in Europe, and Direct Debit and Variable Recurring Payments in the UK. Whether a scheme lets an agent use a mandate differs from one to the next; in the UK, GoCardless has completed an agent-led pay-by-bank donation inside the FCA's AI Live Testing programme.
 - **x402 and stablecoins**: payments over HTTP 402, mostly in stablecoins. Niche for a consumer business today.
 
 **A hand-off link is a fine start.** The agent fills the basket or the order, and a person pays on the business's own checkout; no card details go near the agent. **Today** the inbox supports this: the business's own system asks for payment with a link (`request_payment` with a `paymentUrl`) and records it back with `record_payment`, both with an integration key the owner gave `money:write`. Readers such as our score count a hand-off as "partly": a person still pays, and the agent did the rest.
 
-**Elsewhere.** The same provider products and card-network programmes are offered in other regions, and the rules on authentication differ by country. Wherever the business is, a scoped token or a mandate is safer than an agent holding a card number.
+**Wherever the business is.** The same provider products and card-network programmes reach different regions at different times, and the rules on authentication differ by country. Everywhere, a scoped token or a mandate is safer than an agent holding a card number.
 
 Sources: [Stripe's agentic commerce updates](https://paymentexpert.com/2026/05/01/stripes-agentic-commerce-updates/) (Payment Expert) · [Mollie on agentic commerce in Europe](https://www.mollie.com/news/agentic-commerce-mollie-europe) · [Mastercard: Europe is building the foundations for trusted agentic commerce](https://newsroom.mastercard.com/news/europe/en/perspectives/en/2026/europe-is-building-the-foundations-for-trusted-agentic-commerce/) · [Visa Agentic Ready launches in Europe](https://www.fintechfutures.com/ai-in-fintech/visa-agentic-ready-launches-in-europe) (FinTech Futures) · [GoCardless and Trussell: an agentic payment by bank](https://gocardless.com/blog/uk-first-agentic-payment-trussell) · [Adyen's agentic commerce documentation](https://docs.adyen.com/online-payments/agentic-commerce).
 

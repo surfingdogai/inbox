@@ -235,6 +235,44 @@ describe("the setup guidance", () => {
     }
   });
 
+  it("says where it comes from without naming or placing anyone, and speaks of payments for any country", () => {
+    for (const path of [DOC, PLAIN]) {
+      const text = read(path);
+      expect(text, path).toContain("It comes from a shop we worked with for a week");
+      expect(text, path).not.toMatch(/grocer|online shop in|a UK |alongside a /i);
+      expect(text, path).toContain("## Payments, as of October 2026");
+      expect(text, path).not.toMatch(/UK and the EU/);
+      for (const place of ["Brazil", "India", "Australia", "Europe"])
+        expect(text, `${path}: ${place}`).toContain(place);
+    }
+    expect(read("astro.config.mjs")).not.toMatch(/UK and the EU/);
+    // No page or file the site publishes says where the guidance came from.
+    const files = (dir: string): string[] =>
+      readdirSync(site(dir), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? files(`${dir}/${e.name}`)
+          : /\.(md|astro|ts|txt|json|mjs)$/.test(e.name)
+            ? [`${dir}/${e.name}`]
+            : [],
+      );
+    for (const path of [...files("src"), ...files("public"), "astro.config.mjs"]) {
+      expect(read(path), path).not.toMatch(/grocer/i);
+    }
+  });
+
+  it("says what our crawler reads of an inbox: the llms.txt line with the manifest's address, never the DNS record", () => {
+    for (const path of [DOC, PLAIN]) {
+      const text = read(path);
+      expect(text, path).toContain(
+        "- Inbox for messages, quotes and returns: https://inbox.example.com/.well-known/agent-inbox.json",
+      );
+      expect(text, path).toMatch(
+        /ends in `\/\.well-known\/agent-inbox\.json`: that is how our crawler tells an inbox in `llms\.txt`/,
+      );
+      expect(text, path).toContain("Our crawler does not look this record up");
+    }
+  });
+
   it("every link on this site that the page makes goes somewhere", () => {
     const hrefs = [...read(DOC).matchAll(/\]\((\/[^)\s]*)\)/g)].map((m) => m[1] ?? "");
     expect(hrefs.length).toBeGreaterThan(5);
