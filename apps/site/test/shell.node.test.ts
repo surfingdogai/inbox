@@ -182,8 +182,70 @@ describe("shell.css", () => {
       "sd-lb",
       "sd-chips",
       "sd-prose",
+      // a check while it reads, and the result as a guide
+      "sd-live",
+      "sd-live-row",
+      "sd-chip",
+      "is-yes",
+      "is-no",
+      "sd-guide-line",
+      "sd-handon",
+      "sd-footcheck",
     ]) {
       expect(css, cls).toMatch(new RegExp(`\\.${cls}[\\s,.:{\\[>]`));
+    }
+  });
+
+  it("keeps the check's live rows, chips, steps and forms quiet: tokens only, no warm or alarm colour, still under reduced motion", () => {
+    const parts = read("shell/parts.css");
+    const at = parts.indexOf("/* --- A check while it reads");
+    expect(at).toBeGreaterThan(0);
+    const section = parts.slice(at).replace(/\/\*[\s\S]*?\*\//g, "");
+    // No colour of its own, and none of the design system's warm or alarm tokens: the accent is the
+    // violet-blue, the rest is ink and hairline.
+    expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i);
+    expect(section).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|sun|warning|booking|order|refund)(?:-ink)?\b/);
+    expect(section).toMatch(/var\(--violet(?:-ink)?\)/);
+    // Every animation or transition it starts stops under reduced motion.
+    const decls = rules(section);
+    let moving = 0;
+    for (const [key, d] of decls) {
+      if (key.includes("prefers-reduced-motion")) continue;
+      const selector = key.slice(key.indexOf("| ") + 2);
+      for (const prop of ["animation", "transition"]) {
+        const v = d.get(prop);
+        if (!v || v === "none") continue;
+        moving++;
+        expect(
+          decls.get(`@media (prefers-reduced-motion: reduce) | ${selector}`)?.get(prop),
+          `${selector} ${prop}`,
+        ).toBe("none");
+      }
+    }
+    expect(moving).toBeGreaterThan(0);
+  });
+
+  it("names no red anywhere in parts.css: every colour written out is ink, white, black or a cool hue", () => {
+    const parts = read("shell/parts.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    const literals = [
+      ...[...parts.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)].map((m) => {
+        const h = m[1] ?? "";
+        const x = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+        return [0, 2, 4].map((i) => Number.parseInt(x.slice(i, i + 2), 16));
+      }),
+      ...[...parts.matchAll(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g)].map((m) => [m[1], m[2], m[3]].map(Number)),
+    ];
+    for (const [r = 0, g = 0, b = 0] of literals) {
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      if (max - min < 40) continue; // grey, white or black
+      const hue =
+        max === r
+          ? (60 * ((g - b) / (max - min)) + 360) % 360
+          : max === g
+            ? 60 * ((b - r) / (max - min)) + 120
+            : 60 * ((r - g) / (max - min)) + 240;
+      expect(hue > 20 && hue < 330, `rgb(${r}, ${g}, ${b})`).toBe(true);
     }
   });
 

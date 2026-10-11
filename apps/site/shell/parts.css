@@ -1023,31 +1023,6 @@
   white-space: nowrap;
   overflow-wrap: normal;
 }
-/* A result's capabilities that do not apply to its kind of business, folded under its table: a
-   <details>, so it opens without a script. Its summary is one quiet line. Written under the table's
-   card, so its summary outranks the bar's menu summary, which comes earlier. */
-.sd-table-card .sd-more {
-  border-top: 1px solid var(--hairline);
-}
-.sd-table-card .sd-more > summary {
-  padding: var(--sp-3) var(--sp-2);
-  font-size: var(--fs-fine);
-  font-weight: 600;
-  color: var(--ink-3);
-  cursor: pointer;
-  list-style: none;
-}
-/* Two columns, as wide as their words: the capability, then "Not applicable" beside it. */
-.sd-table-card .sd-more .sd-table {
-  width: auto;
-}
-.sd-table-card .sd-more > summary::-webkit-details-marker {
-  display: none;
-}
-.sd-table-card .sd-more > summary:hover,
-.sd-table-card .sd-more[open] > summary {
-  color: var(--ink);
-}
 /* The leaderboard: position, business, score, the five answers, the date. */
 .sd-lb td:first-child {
   width: 2.5em;
@@ -1286,4 +1261,247 @@ textarea.sd-code {
 }
 .sd-field .label {
   margin: 0;
+}
+
+/* --- A check while it reads, and the result as a guide ----------- */
+/* The classes the network's live check page, result pages and leaderboards use from the site: the
+   rows a check streams as it reads, the chips for the files it found, a suggested step, the folded
+   "More", the two blocks to hand on, and the small form at a page's foot. Thin and quiet: hairlines, small type, the violet-blue accent for what was found, nothing
+   in the warm or alarm colours, and no motion under prefers-reduced-motion. Tokens only, no colour
+   of their own. */
+
+/* The live rows: one line per finding, streamed as the check reads the site (the page has no script,
+   so a row fades in as it arrives, and simply appears under reduced motion). */
+.sd-live {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  color: var(--ink-2);
+}
+.sd-live-row {
+  margin: 0;
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--hairline);
+  overflow-wrap: anywhere;
+  animation: sd-in 160ms var(--ease-out-soft) both;
+}
+.sd-live-row:first-child {
+  border-top: 0;
+}
+@keyframes sd-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+/* A file the check asked for: found (.is-yes, the accent with a dot) or not there (.is-no, paper grey
+   with a dashed edge), never told apart by colour alone. */
+.sd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+  margin: 2px 4px 2px 0;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-fine);
+  line-height: 1.2;
+  white-space: nowrap;
+  vertical-align: baseline;
+  color: var(--ink-2);
+}
+.sd-chip.is-yes {
+  border-color: color-mix(in srgb, var(--violet) 55%, transparent);
+  background: color-mix(in srgb, var(--violet) 9%, transparent);
+  color: var(--violet-ink);
+}
+.sd-chip.is-yes::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sd-chip.is-no {
+  border-style: dashed;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+/* A suggested step: its title and points, a how for the site's setup, a line on another way, a link
+   to its guide, and the rest folded under "More". Steps sit on hairlines, not in boxes. */
+.sd-guide-line {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  font-size: var(--fs-card);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.sd-guide-line:first-child {
+  border-top: 0;
+}
+.sd-guide-line > :is(p, h2, h3, h4, ul, ol, div, details) {
+  margin: 0;
+  max-width: var(--measure);
+}
+.sd-guide-line > :first-child {
+  font-family: var(--font-display);
+  font-size: var(--fs-h-card);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.sd-guide-line a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 45%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+.sd-guide-line a:hover,
+.sd-guide-line a:focus-visible {
+  text-decoration-color: var(--violet);
+}
+.sd-guide-line code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+  overflow-wrap: anywhere;
+}
+
+/* "More", "What we read", "Hand it on": a <details> whose summary is one small line with a thin
+   chevron, so it opens without a script. */
+/* biome-ignore lint/style/noDescendingSpecificity: a disclosure's summary is never the bar's menu summary, the one that outranks it above. */
+.sd-more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+.sd-more > summary::-webkit-details-marker {
+  display: none;
+}
+.sd-more > summary::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease-out-soft);
+}
+.sd-more[open] > summary::before {
+  transform: rotate(45deg);
+}
+.sd-more > summary:hover,
+.sd-more[open] > summary {
+  color: var(--ink);
+}
+.sd-more > :not(summary) {
+  margin: var(--sp-2) 0 0;
+  max-width: var(--measure);
+  font-size: var(--fs-card);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.sd-more code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+  overflow-wrap: anywhere;
+}
+/* A result's capabilities that do not apply to its kind of business, folded under its table: its
+   summary is one plain line across the card, with no chevron. Written after the general rules, so the
+   card's own line outranks them, and after the bar's menu summary, which comes earlier. */
+.sd-table-card .sd-more {
+  border-top: 1px solid var(--hairline);
+}
+.sd-table-card .sd-more > summary {
+  display: block;
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+.sd-table-card .sd-more > summary::before {
+  content: none;
+}
+.sd-table-card .sd-more > :not(summary) {
+  max-width: none;
+  margin: 0;
+}
+/* Two columns, as wide as their words: the capability, then "Not applicable" beside it. */
+.sd-table-card .sd-more .sd-table {
+  width: auto;
+}
+.sd-table-card .sd-more > summary:hover,
+.sd-table-card .sd-more[open] > summary {
+  color: var(--ink);
+}
+
+/* Hand it on: the message for whoever runs the website and the prompt for an AI, each folded, each a
+   text box to copy from. */
+.sd-handon {
+  display: grid;
+  gap: var(--sp-3);
+}
+.sd-handon .sd-more > :not(summary) {
+  max-width: none;
+}
+.sd-handon textarea {
+  width: 100%;
+  min-height: 12em;
+  resize: vertical;
+}
+
+/* Check another business: a small form at the foot of a result or a leaderboard, under a hairline. */
+.sd-footcheck {
+  display: grid;
+  gap: var(--sp-2);
+  max-width: 560px;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--hairline);
+}
+.sd-footcheck > :is(h2, h3, label) {
+  margin: 0;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  line-height: var(--lh-ui);
+  color: var(--ink-2);
+}
+.sd-footcheck > p {
+  margin: 0;
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.sd-footcheck .sd-ask {
+  height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-live-row {
+    animation: none;
+  }
+  .sd-more > summary::before {
+    transition: none;
+  }
 }
