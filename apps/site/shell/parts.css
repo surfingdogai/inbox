@@ -1299,7 +1299,7 @@ textarea.sd-code {
 }
 
 /* A file the check asked for: found (.is-yes, the accent with a dot) or not there (.is-no, paper grey
-   with a dashed edge), never told apart by colour alone. */
+   with a dashed edge), never told apart by colour alone, and said in words to a screen reader (.sd-sr). */
 .sd-chip {
   display: inline-flex;
   align-items: center;
@@ -1333,6 +1333,17 @@ textarea.sd-code {
   border-style: dashed;
   background: transparent;
   color: var(--ink-3);
+}
+.sd-chip .sd-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* A suggested step: its title and points, a how for the site's setup, a line on another way, a link
