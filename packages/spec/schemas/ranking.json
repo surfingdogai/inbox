@@ -717,8 +717,14 @@
                       "maximum": 9007199254740991
                     },
                     "verified_evidence": {
-                      "description": "The tier also needs verified_share > 0: part of the record someone other than the business confirmed.",
+                      "description": "The tier also needs evidence the business's customers confirmed: verified_kept_share_min of the record.",
                       "type": "boolean"
+                    },
+                    "verified_kept_share_min": {
+                      "description": "The share of the record that must be kept outcomes a verified acknowledgement backs (0.2), as shown.",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
                     }
                   },
                   "required": ["min_score"]
@@ -740,8 +746,14 @@
                       "maximum": 9007199254740991
                     },
                     "verified_evidence": {
-                      "description": "The tier also needs verified_share > 0: part of the record someone other than the business confirmed.",
+                      "description": "The tier also needs evidence the business's customers confirmed: verified_kept_share_min of the record.",
                       "type": "boolean"
+                    },
+                    "verified_kept_share_min": {
+                      "description": "The share of the record that must be kept outcomes a verified acknowledgement backs (0.2), as shown.",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
                     }
                   },
                   "required": ["min_score"]
@@ -1064,7 +1076,7 @@
           "properties": {
             "claims": {
               "type": "string",
-              "description": "Claims v2 only: what a v1 receipt meets, and the v1 promises held from before."
+              "description": "Claims v2 only: what a v1 receipt meets, the v1 promises held from before, and one due and end per item."
             },
             "due_days_max": {
               "type": "object",
@@ -1090,11 +1102,11 @@
             },
             "business_notice_from": {
               "type": "string",
-              "description": "What a business's notice is measured from: the arrival, on the network's clock, not iat."
+              "description": "What a business's notice is measured from: when the network stored the cancellation, on its clock, not iat nor a first sighting."
             },
             "refused": {
               "type": "string",
-              "description": "The refusals' codes, and that they are final."
+              "description": "The refusals' codes (ref_refused for what names a promise refused), and that they are final."
             }
           },
           "required": [

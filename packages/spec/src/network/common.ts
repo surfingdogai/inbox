@@ -128,6 +128,12 @@ export const networkErrorCodeSchema = z.enum([
   "bad_code",
   "code_expired",
   "positive_only",
+  // 422, from rules version 8 (ADR-017 A4.6): final, never retried
+  "v2_required",
+  "due_too_far",
+  "end_too_far",
+  "promise_conflict",
+  "ref_refused",
   // 429
   "too_many_receipts",
   "rate_limited",

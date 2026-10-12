@@ -814,10 +814,12 @@ describe("what an inbox reads from a network's answers", () => {
       [409, "nonce_reused"],
       [400, undefined],
       [422, "ack_bad_signature"],
-      // Version 7 as amended (ADR-017 A4.6): the same receipt always meets the same arrival.
+      // Rules version 8 (ADR-017 A4.6): the same receipt always meets the same arrival and the same promise.
       [422, "v2_required"],
       [422, "due_too_far"],
       [422, "end_too_far"],
+      [422, "promise_conflict"],
+      [422, "ref_refused"],
     ] as const) {
       expect(isRetriedPublication(status, code), `${status} ${code}`).toBe(false);
     }
@@ -1456,13 +1458,16 @@ describe("rules version 8: version 7 amended before it took effect (ADR-017 Amen
     expect(readRankingDocument({ ...bare, version: 9 }).ok).toBe(true);
   });
 
-  it("a record on the business's own word alone shows its counts and no score; one with verified evidence its score", () => {
-    const base = { tier: "new", kept: 50, broken: 0, customers: 0, verified_share: 0, rules: 8 } as const;
-    const selfReported = { ...base, ranked: false, open: 3, self_reported: true };
+  it("a record on the business's own word shows its counts and no score; one its customers confirmed its score", () => {
+    const base = { tier: "new", kept: 50, broken: 0, verified_share: 0, rules: 8 } as const;
+    // No score and no customers: the business chooses who they are.
+    const selfReported = { ...base, ranked: false, open: 3, verified_kept_share: 0, self_reported: true };
     expect(reputationSchema.safeParse(selfReported).success).toBe(true);
     expect("score" in reputationSchema.parse(selfReported)).toBe(false);
-    const verified = { ...base, ranked: true, score: 0.9682, tier: "trusted", customers: 12, verified_share: 0.2 };
-    expect(reputationSchema.safeParse({ ...verified, open: 0 }).success).toBe(true);
+    expect("customers" in reputationSchema.parse(selfReported)).toBe(false);
+    const verified = { ...base, ranked: true, score: 0.9682, tier: "trusted", customers: 12, verified_share: 0.25 };
+    expect(reputationSchema.safeParse({ ...verified, open: 0, verified_kept_share: 0.25 }).success).toBe(true);
+    expect(reputationSchema.safeParse({ ...verified, verified_kept_share: 1.5 }).success).toBe(false);
     // Before version 8 every listing's reputation has its score, and nothing more.
     expect(reputationSchema.safeParse({ ...verified, rules: 7 }).success).toBe(true);
     const card = businessCardSchema.shape.standing.unwrap();
@@ -1472,7 +1477,7 @@ describe("rules version 8: version 7 amended before it took effect (ADR-017 Amen
         ranked: false,
         in_words:
           "Its record so far is its own word: 50 promises kept, 0 promises broken and 3 promises still open. " +
-          "It is ranked once someone other than the business confirms part of it.",
+          "This network cannot yet confirm any business's record with its customers, so no business is ranked by its record yet.",
         kept: 50,
         broken: 0,
         open: 3,
@@ -1480,6 +1485,10 @@ describe("rules version 8: version 7 amended before it took effect (ADR-017 Amen
       }).success,
     ).toBe(true);
     expect(card.safeParse({ tier: "trusted", ranked: true, in_words: "…", verified_share: 1.5 }).success).toBe(false);
+    expect(
+      card.safeParse({ tier: "trusted", ranked: true, in_words: "…", verified_share: 0.3, verified_kept_share: 0.25 })
+        .success,
+    ).toBe(true);
   });
 });
 

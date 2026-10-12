@@ -336,9 +336,11 @@
               "acknowledged": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 9007199254740991
+                "maximum": 9007199254740991,
+                "description": "Promises an acknowledgement came with; from rules version 8, receipts an acknowledgement the network verified backs."
               },
               "customers": {
+                "description": "On the detail: the distinct subs its promises name. From rules version 8 absent when self_reported.",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
@@ -387,7 +389,7 @@
             "properties": {
               "ranked": {
                 "type": "boolean",
-                "description": "score ≥ 0.40 (building): sorts before the daily shuffle; from rules version 8 only with verified evidence (verified_share > 0)."
+                "description": "score ≥ 0.40 (building): sorts before the daily shuffle; from rules version 8 only with verified_kept_share ≥ 0.2, as shown."
               },
               "score": {
                 "description": "Absent from rules version 8 when self_reported: a record that rests on the business's own word alone has no score.",
@@ -410,25 +412,31 @@
                 "maximum": 9007199254740991
               },
               "open": {
-                "description": "From rules version 8: its promises still open (issued, not yet closed by an outcome and not unclosed). Never scored.",
+                "description": "From rules version 8: its v2 promises still open (issued, not yet closed by an outcome and not unclosed). Never scored.",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
               },
               "customers": {
+                "description": "Distinct customers (§5.3). From rules version 8 absent when self_reported: the business chooses them.",
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 9007199254740991,
-                "description": "Distinct customers (§5.3)."
+                "maximum": 9007199254740991
               },
               "verified_share": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1,
-                "description": "The share of weight from verified evidence."
+                "description": "The share of weight from verified evidence, reports included."
+              },
+              "verified_kept_share": {
+                "description": "From rules version 8: the share of weight from kept outcomes a verified acknowledgement backs. Ranked and scored from 0.2, as shown (four decimals).",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
               },
               "self_reported": {
-                "description": "From rules version 8, true when no part of the record is verified evidence: not ranked, tier new, no score, and its counts are the business's own word.",
+                "description": "From rules version 8, true when the record rests on the business's own word (verified_kept_share below 0.2): not ranked, tier new, no score, no customers, and its counts are the business's own word.",
                 "type": "boolean"
               },
               "rules": {
@@ -442,7 +450,7 @@
                 "format": "uri"
               }
             },
-            "required": ["ranked", "tier", "kept", "broken", "customers", "verified_share", "rules"]
+            "required": ["ranked", "tier", "kept", "broken", "verified_share", "rules"]
           },
           "source": {
             "description": "member: through its inbox; registered: by the business, with a proof; found: by the network's crawler.",

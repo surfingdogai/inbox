@@ -303,14 +303,20 @@ export const rankingOrderV7Schema = rankingV6Schema.shape.order.extend({
 });
 
 /**
- * What a member's receipts must also meet once version 7 is in force, as amended on 12 October 2026 (ADR-017
- * Amendment 4, A4.6): claims v2 only, `due` within `due_days_max` of the later of `iat` and the arrival, `end`
- * within `end_after_due_days_max` of `due`, and a business's notice measured from the arrival. A refusal is `422`
- * with `v2_required`, `due_too_far` or `end_too_far`, and final. Version 8's document publishes it; version 7's
- * stays as it was published.
+ * What a member's receipts must also meet under version 7 as amended on 12 October 2026, in force from version 8
+ * (ADR-017 Amendment 4, A4.6): claims v2 only, `due` within `due_days_max` of the later of `iat` and the arrival,
+ * `end` within `end_after_due_days_max` of `due`, the same `due` and `end` on every receipt of an item, and a
+ * business's notice measured from when the network stored its cancellation. A refusal is `422` with
+ * `v2_required`, `due_too_far`, `end_too_far` or `promise_conflict`, and final; an outcome or an amendment naming a
+ * promise refused for good is `422 ref_refused`. Version 8's document publishes it; version 7's stays as it was
+ * published.
  */
 export const rankingIntakeSchema = z.object({
-  claims: z.string().describe("Claims v2 only: what a v1 receipt meets, and the v1 promises held from before."),
+  claims: z
+    .string()
+    .describe(
+      "Claims v2 only: what a v1 receipt meets, the v1 promises held from before, and one due and end per item.",
+    ),
   due_days_max: z
     .record(z.string(), z.int().min(1))
     .describe("By item type (booking, order, refund): how many days after the later of iat and arrival due may be."),
@@ -318,8 +324,12 @@ export const rankingIntakeSchema = z.object({
   end_after_due_days_max: days.describe("How many days after due a booking's end may be."),
   business_notice_from: z
     .string()
-    .describe("What a business's notice is measured from: the arrival, on the network's clock, not iat."),
-  refused: z.string().describe("The refusals' codes, and that they are final."),
+    .describe(
+      "What a business's notice is measured from: when the network stored the cancellation, on its clock, not iat nor a first sighting.",
+    ),
+  refused: z
+    .string()
+    .describe("The refusals' codes (ref_refused for what names a promise refused), and that they are final."),
 });
 
 export const rankingV7Schema = rankingV6Schema.extend({
@@ -331,13 +341,15 @@ export type RankingV7 = z.infer<typeof rankingV7Schema>;
 
 /**
  * Version 8: network rules 0.2.1, version 7 amended before it took effect (ADR-017 Amendment 4, 12 October 2026).
- * Version 7's shape and numbers, with: a record ranks only with verified evidence (`tiers.ranked`,
- * `order.within_reach`, `verified_evidence` on the business tiers), and one that rests on the business's own word
- * alone shows its counts and no score (`score.shown`); every row that names no person is one anonymous customer
- * (`weights.repeat.pair`); reach 1 only after answering `order.reach_1_after_days` (30) without a break; relations a
- * network cannot see are unknown (`verified.unknown`); every member is a newcomer for its first 90 days, ranked or
- * not, and at most `order.newcomers.per_group_per_hour` newcomer of a relations group has its turn in an hour's order
- * (`order.newcomers.group`, `order.newcomers.turn`); and the intake bounds (`intake`). Published by its own notice:
+ * Version 7's shape and numbers, with: a record ranks only when a fifth of it is kept outcomes a verified
+ * acknowledgement backs (`tiers.ranked`, `order.within_reach`, `verified_evidence` and `verified_kept_share_min` on
+ * the business tiers), and any other rests on the business's own word and shows its counts and no score
+ * (`score.shown`); rows that name no person are one anonymous customer at a business that names none, and count
+ * only against one that names some (`weights.repeat.pair`); reach 1 only after answering
+ * `order.reach_1_after_days` (30) without a break; relations a network cannot see are unknown (`verified.unknown`);
+ * every member is a newcomer for its first 90 days, ranked or not, and at most `order.newcomers.per_group_per_hour`
+ * newcomer of a relations group has its turn in an hour's order (`order.newcomers.group`, `order.newcomers.turn`);
+ * and the intake bounds (`intake`). Published by its own notice:
  * in force the moment a network publishes it when no more than one business is a member of it then, otherwise at
  * 00:00 UTC on the sixteenth day after; never before version 7 takes effect.
  */
@@ -354,7 +366,15 @@ const tierRuleV8Schema = tierRuleSchema.extend({
   verified_evidence: z
     .boolean()
     .optional()
-    .describe("The tier also needs verified_share > 0: part of the record someone other than the business confirmed."),
+    .describe(
+      "The tier also needs evidence the business's customers confirmed: verified_kept_share_min of the record.",
+    ),
+  verified_kept_share_min: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe("The share of the record that must be kept outcomes a verified acknowledgement backs (0.2), as shown."),
 });
 
 export const rankingV8Schema = rankingV7Schema.extend({

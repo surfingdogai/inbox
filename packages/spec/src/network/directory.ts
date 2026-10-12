@@ -10,14 +10,15 @@ import { outcomeCodeSchema } from "./receipts";
 
 /**
  * A listing's reputation, from the last nightly snapshot (present once the ranked order is in force). From rules
- * version 8 (ADR-017 Amendment 4) a record no part of which is verified evidence is self-reported: it shows its
- * counts, `kept`, `broken` and `open`, and no `score`, and it is neither ranked nor above `new`.
+ * version 8 (ADR-017 Amendment 4) a record less than a fifth of which is kept outcomes a verified acknowledgement
+ * backs (`verified_kept_share` < 0.2) rests on the business's own word and is self-reported: it shows its counts,
+ * `kept`, `broken` and `open`, and no `score` and no `customers`, and it is neither ranked nor above `new`.
  */
 export const reputationSchema = z.object({
   ranked: z
     .boolean()
     .describe(
-      "score ≥ 0.40 (building): sorts before the daily shuffle; from rules version 8 only with verified evidence (verified_share > 0).",
+      "score ≥ 0.40 (building): sorts before the daily shuffle; from rules version 8 only with verified_kept_share ≥ 0.2, as shown.",
     ),
   score: z
     .number()
@@ -35,15 +36,27 @@ export const reputationSchema = z.object({
     .min(0)
     .optional()
     .describe(
-      "From rules version 8: its promises still open (issued, not yet closed by an outcome and not unclosed). Never scored.",
+      "From rules version 8: its v2 promises still open (issued, not yet closed by an outcome and not unclosed). Never scored.",
     ),
-  customers: z.int().min(0).describe("Distinct customers (§5.3)."),
-  verified_share: z.number().min(0).max(1).describe("The share of weight from verified evidence."),
+  customers: z
+    .int()
+    .min(0)
+    .optional()
+    .describe("Distinct customers (§5.3). From rules version 8 absent when self_reported: the business chooses them."),
+  verified_share: z.number().min(0).max(1).describe("The share of weight from verified evidence, reports included."),
+  verified_kept_share: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe(
+      "From rules version 8: the share of weight from kept outcomes a verified acknowledgement backs. Ranked and scored from 0.2, as shown (four decimals).",
+    ),
   self_reported: z
     .boolean()
     .optional()
     .describe(
-      "From rules version 8, true when no part of the record is verified evidence: not ranked, tier new, no score, and its counts are the business's own word.",
+      "From rules version 8, true when the record rests on the business's own word (verified_kept_share below 0.2): not ranked, tier new, no score, no customers, and its counts are the business's own word.",
     ),
   rules: z.int().min(1).describe("The rules version that ordered this listing."),
   rules_url: z.url().optional(),
@@ -219,8 +232,17 @@ export const listingSchema = z.object({
   software: z.object({ version: z.string().optional(), runtime: z.string().optional() }).optional(),
   receipts: z.object({
     issued: z.int().min(0).describe("Promises only."),
-    acknowledged: z.int().min(0),
-    customers: z.int().min(0).optional(),
+    acknowledged: z
+      .int()
+      .min(0)
+      .describe(
+        "Promises an acknowledgement came with; from rules version 8, receipts an acknowledgement the network verified backs.",
+      ),
+    customers: z
+      .int()
+      .min(0)
+      .optional()
+      .describe("On the detail: the distinct subs its promises name. From rules version 8 absent when self_reported."),
     last_at: timestampSchema.optional(),
   }),
   answering: z.boolean().describe("A ping, signed or not, within 24 h and no failed manifest sweep since."),
