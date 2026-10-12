@@ -1,6 +1,8 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { DbError, normalizeParams, type RawResult, type SqliteClient, type Statement, toDbError } from "../db";
 
+export * from "./outbound";
+
 /**
  * SqliteClient over Node's built-in `node:sqlite` (Node 22.16+ for FTS5). Synchronous underneath,
  * so `batch` is a real BEGIN IMMEDIATE … COMMIT. No native module to compile.

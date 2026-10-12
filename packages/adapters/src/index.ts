@@ -71,7 +71,10 @@ export interface DoorDeps {
   readonly baseUrl?: string | undefined;
   /** Addresses that may create the first account by magic link. */
   readonly ownerEmails?: (() => Promise<readonly string[]>) | undefined;
-  /** Outbound fetch for agents' key directories (tests inject a fake). */
+  /**
+   * Outbound fetch for agents' key directories and Client ID Metadata Documents: the host's (on
+   * Node, one that resolves the name and refuses private addresses), or a test's fake.
+   */
   readonly fetchImpl?: typeof fetch | undefined;
   /** Other numbers than `LIMITS` for some classes, per caller (a public demo sets `DEMO_LIMITS`). */
   readonly limits?: LimitTable | undefined;
@@ -344,7 +347,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       db: deps.db,
       mailOut: deps.mailOut,
       businessName: deps.businessName,
-      fetchMetadata: deps.fetchClientMetadata ?? ((url) => safeFetchJson<ClientMetadata>(url)),
+      fetchMetadata:
+        deps.fetchClientMetadata ?? ((url) => safeFetchJson<ClientMetadata>(url, { fetchImpl: deps.fetchImpl })),
       now: deps.now,
       baseUrl: deps.baseUrl,
     }),

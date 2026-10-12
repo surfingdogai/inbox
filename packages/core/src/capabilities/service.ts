@@ -319,11 +319,24 @@ export class Capabilities {
      * writes an event and polls for it in the same tick ever passes zero.
      */
     eventSettleMs?: number | undefined,
+    /**
+     * How this inbox calls addresses someone else chose, for what it calls from a request (a test
+     * event to a webhook): the host's outbound fetch, and the one for an endpoint the owner allowed
+     * onto a private address. Absent, the runtime's own fetch.
+     */
+    outbound?: { readonly fetch?: typeof fetch | undefined; readonly privateFetch?: typeof fetch | undefined },
   ) {
     this.setup = new SetupCapabilities(db);
     this.feeds = new FeedCapabilities(db);
     this.secrets = secrets;
-    this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
+    this.webhooks = new WebhookCapabilities(
+      db,
+      secrets,
+      outbound?.fetch,
+      baseUrl,
+      eventSettleMs,
+      outbound?.privateFetch,
+    );
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);

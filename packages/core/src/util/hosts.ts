@@ -1,7 +1,9 @@
 /**
  * Which hosts this instance will call, and what counts as a network's address. Settings validate
  * with these at write time and the jobs check again at run time, so a bad address is refused where
- * the owner can see it and never reaches the network code at all.
+ * the owner can see it and never reaches the network code at all. These judge the name; what the
+ * name resolves to is judged by `refusedAddress` in `@surfingdog/platform`, wherever the runtime
+ * can resolve a name before it connects (Node's `pinnedFetch`).
  */
 
 const BLOCKED_HOSTS = new Set(["localhost", "localhost.localdomain", "metadata", "metadata.google.internal"]);

@@ -345,7 +345,11 @@ export class WebhookCapabilities {
   constructor(
     private readonly db: Db,
     private readonly box: SecretBox | null,
-    /** Test seam. Production delivery is the `webhook_delivery` job; this is only `sendTestEvent`. */
+    /**
+     * How `sendTestEvent` reaches an endpoint: the host's outbound fetch (on Node, one that refuses
+     * private addresses after resolving the name), or a test's. Production delivery is the
+     * `webhook_delivery` job, which is handed the same one.
+     */
     private readonly fetchImpl?: typeof fetch | undefined,
     /** `INBOX_PUBLIC_URL`, when the host knows it. See `eventBaseUrl`. */
     private readonly baseUrl?: string | undefined,
@@ -354,6 +358,12 @@ export class WebhookCapabilities {
      * horizon off, which is only ever right for a test that writes and polls in the same tick.
      */
     private readonly settleMs: number = EVENT_SETTLE_MS,
+    /**
+     * The fetch for an endpoint the owner allowed onto a private address (`allowPrivateTargets`):
+     * the host's ranges still refused, the built-in ones lifted. Absent, `fetchImpl` is used, so a
+     * host that gave only the public one refuses such an endpoint rather than reaching it unchecked.
+     */
+    private readonly privateFetchImpl?: typeof fetch | undefined,
   ) {}
 
   // ---- endpoints ---------------------------------------------------------------
@@ -673,14 +683,15 @@ export class WebhookCapabilities {
     const timestampSec = Math.floor(now / 1000);
     const signature = await webhookSignature(secrets, eventId, timestampSec, body, now);
     const started = Date.now();
-    const fetchImpl = this.fetchImpl ?? fetch;
+    const allowPrivate = settings.integrations.webhooks.allowPrivateTargets;
+    const fetchImpl = (allowPrivate ? (this.privateFetchImpl ?? this.fetchImpl) : this.fetchImpl) ?? fetch;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), settings.integrations.webhooks.timeoutMs);
     let status: number | null = null;
     let error: string | null = null;
     // The same rule the delivery job applies, re-checked here: an address that was public when it
     // was added is not necessarily public now that `allowPrivateTargets` has been turned back off.
-    const unsafe = checkWebhookUrl(row.url, settings.integrations.webhooks.allowPrivateTargets);
+    const unsafe = checkWebhookUrl(row.url, allowPrivate);
     try {
       if (unsafe) throw new Error(unsafe.message);
       const res = await fetchImpl(row.url, {

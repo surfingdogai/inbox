@@ -1,7 +1,8 @@
 /**
  * Fetches a public https URL the way an untrusted input demands: no IP literals, no local hosts,
  * no redirects to another host, a short timeout and a size cap. Used for Client ID Metadata
- * Documents, key directories and website imports.
+ * Documents, key directories and website imports. These are checks on the name; what it resolves
+ * to is checked by the `fetchImpl` the host passes (`pinnedFetch` on Node), before it connects.
  */
 import { isPublicHost } from "@surfingdog/core";
 
@@ -18,7 +19,8 @@ export interface SafeFetchOptions {
   readonly maxBytes?: number;
   readonly maxRedirects?: number;
   readonly accept?: string;
-  readonly fetchImpl?: typeof fetch;
+  /** The host's outbound fetch (`pinnedFetch` on Node), or a test's; absent, the runtime's own. */
+  readonly fetchImpl?: typeof fetch | undefined;
 }
 
 export async function safeFetchJson<T = unknown>(url: string, opts: SafeFetchOptions = {}): Promise<T | null> {

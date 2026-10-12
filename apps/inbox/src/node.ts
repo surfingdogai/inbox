@@ -18,10 +18,10 @@ import {
   type MailOut,
   resendMailOut,
 } from "@surfingdog/platform";
-import { nodeSqliteClient } from "@surfingdog/platform/node";
+import { nodeSqliteClient, pinnedFetch } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
-import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { listFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 import { NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
@@ -33,9 +33,12 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  * Email Service (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN + MAIL_FROM), else Resend
  * (RESEND_API_KEY), else the console. INBOX_OWNER_EMAIL (comma-separated) lists who may create the
  * first account by magic link. INBOX_SECRET_KEY (comma-separated, newest first) seals connector
- * credentials and webhook secrets; without it the instance refuses to store one. INBOX_DEMO=1 makes
- * it a public demo shop (demo.ts): it seeds itself, emails nobody but the owner, calls no network,
- * and wipes itself every night.
+ * credentials and webhook secrets; without it the instance refuses to store one. Every call to an
+ * address someone else chose (webhooks, feeds, networks, OAuth client documents, key directories)
+ * resolves the name first and connects only to a public address it checked; INBOX_OUTBOUND_DENY
+ * (comma-separated addresses and ranges) closes more, such as the server's own public address.
+ * INBOX_DEMO=1 makes it a public demo shop (demo.ts): it seeds itself, emails nobody but the owner,
+ * calls no network, and wipes itself every night.
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
@@ -101,6 +104,14 @@ const mailOut: MailOut =
       : consoleMailOut();
 const ownerEmails = listFrom(process.env.INBOX_OWNER_EMAIL);
 const demo = flagOn(process.env.INBOX_DEMO);
+// A range the operator meant to close and mistyped would be open without a word, so it stops here.
+const deny = outboundDenyFrom(process.env.INBOX_OUTBOUND_DENY);
+if (deny.bad.length > 0) {
+  console.error(
+    `INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range (like 203.0.114.7 or 2a01:4f8::/32); fix it to start`,
+  );
+  process.exit(1);
+}
 const { app, runner, prepare } = createInbox({
   db,
   mailOut,
@@ -108,6 +119,9 @@ const { app, runner, prepare } = createInbox({
   ownerEmails,
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
+  fetchImpl: pinnedFetch({ deny: deny.ranges }),
+  // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
+  privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail
