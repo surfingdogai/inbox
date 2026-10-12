@@ -19,7 +19,7 @@ export const SHOPIFY = {
   description:
     "Shopify agentic commerce, as of October 2026: what ChatGPT, Gemini, Copilot and Meta do with your store, what Shopify publishes for you, and what's missing.",
   answer:
-    "Often, in part. For eligible stores Shopify publishes agent doors on your own domain: a UCP checkout, a cart, an order read and an llms.txt. ChatGPT sends buyers to your checkout; Gemini, Copilot and Meta check out in the chat for US buyers. Questions, cancelling, returns and receipts need more.",
+    "Often, in part. Shopify publishes agent doors on an eligible store's domain, such as a UCP checkout and an llms.txt. ChatGPT sends buyers to your checkout; Gemini and Copilot check out in the chat for US buyers, Meta for the US, Canada and Mexico. Questions, cancelling and returns need more.",
 } as const;
 
 const HELP = "https://help.shopify.com/en/manual/online-sales-channels/agentic-storefronts";
@@ -78,7 +78,7 @@ export const SHOPIFY_DOORS: readonly { readonly path: string; readonly what: str
   },
   {
     path: "/api/ucp/mcp",
-    what: "That server: tools to search your catalogue, build a cart, create and complete a checkout, and read an order an agent placed. An agent presents its own UCP profile, and a checkout that needs the buyer hands over to your checkout page.",
+    what: "That server: tools to search your catalogue, build a cart, create and complete a checkout, and read an order an agent placed. An agent identifies itself to Shopify (a token or a signed request) and presents its own UCP profile, and a checkout that needs the buyer hands over to your checkout page.",
   },
   {
     path: "/api/mcp",

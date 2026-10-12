@@ -91,35 +91,45 @@ const doorSources = [
       </ul>
 
       <h2 id="doors">What Shopify publishes on your domain</h2>
-      <p>Agents find these on your store's own address, with nothing for you to install:</p>
-      <ul>
-        {
-          SHOPIFY_DOORS.map((d) => (
-            <li>
-              <code>{d.path}</code>: {d.what}
-            </li>
-          ))
-        }
-      </ul>
-      <p class="src">
-        ({doorSources.map((src, i) => <>{i > 0 && "; "}<a href={src.href} rel="noopener">{src.label}</a></>)})
+      <p>
+        Shopify serves a UCP profile, its MCP server, a policies search and an llms.txt on your store's own address, with
+        nothing for you to install.
       </p>
+      <details class="more">
+        <summary>The four addresses, and what each does</summary>
+        <ul>
+          {
+            SHOPIFY_DOORS.map((d) => (
+              <li>
+                <code>{d.path}</code>: {d.what}
+              </li>
+            ))
+          }
+        </ul>
+        <p class="src">
+          ({doorSources.map((src, i) => <>{i > 0 && "; "}<a href={src.href} rel="noopener">{src.label}</a></>)})
+        </p>
+      </details>
 
       <h2 id="check">Agentic commerce readiness on Shopify: what our check counts</h2>
       <p>
         We read what your store publishes, and never place an order. Under the
         <a href="/v1/score-rules">published rules</a> (version 2, amended on 12 October 2026), a Shopify store is scored
-        as a shop. When we can read your UCP profile and its server, these count:
+        as a shop. When we can read your UCP profile and its server, ordering, paying, your catalogue and tracking count.
       </p>
-      <ul>
-        <li><b>Order and pay</b>: the UCP checkout, its <code>create_checkout</code> tool.</li>
-        <li><b>Catalogue and stock</b>: the UCP catalogue, such as <code>search_catalog</code>.</li>
-        <li><b>Track</b>: the UCP order capability.</li>
-        <li>
-          <b>Who you are</b>: <code>LocalBusiness</code> markup with your name, address and opening hours; selling through
-          UCP counts in place of the address.
-        </li>
-      </ul>
+      <details class="more">
+        <summary>What counts, and from where</summary>
+        <ul>
+          <li><b>Order</b>: the UCP checkout, its <code>create_checkout</code> tool.</li>
+          <li><b>Pay</b>: the payment handlers your UCP profile names.</li>
+          <li><b>Catalogue and stock</b>: the UCP catalogue, such as <code>search_catalog</code>.</li>
+          <li><b>Track</b>: the UCP order capability.</li>
+          <li>
+            <b>Who you are</b>: <code>LocalBusiness</code> markup with your name, address and opening hours; selling
+            through UCP counts in place of the address.
+          </li>
+        </ul>
+      </details>
       <p>These don't come with Shopify's doors, and they hold most of the points left:</p>
       <ul>
         <li>
@@ -237,6 +247,17 @@ const doorSources = [
   .src {
     font-size: var(--fs-fine);
     color: var(--ink-3);
+  }
+  .more summary {
+    width: fit-content;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .more summary:hover {
+    color: var(--ink);
+  }
+  .more > :global(ul) {
+    margin-top: var(--sp-2);
   }
   .sources summary {
     width: fit-content;

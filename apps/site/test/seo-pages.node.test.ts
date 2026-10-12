@@ -257,13 +257,13 @@ describe("the owners' pages", () => {
     );
     expect(text).toContain('<a href="/v1/score-rules">published rules</a>');
     // The points it gives are the rules' weights for a shop that sells goods: core (message, order,
-    // pay) and after (change, cancel, return, receipt). The spec's copy of version 2 predates the
-    // amendment that made message apply to shops, so it is added here as the rules now say.
+    // pay) and after (change, cancel, return, receipt).
     const rules = scoreRulesV2 as {
       groups: { id: string; weight: number; members: string[] }[];
       profiles: { id: string; applicable: string[] }[];
     };
-    const shop = new Set([...(rules.profiles.find((p) => p.id === "shop")?.applicable ?? []), "message"]);
+    const shop = new Set(rules.profiles.find((p) => p.id === "shop")?.applicable ?? []);
+    expect(shop.has("message")).toBe(true);
     const groups = rules.groups.filter((g) => g.weight > 0 && g.members.some((m) => shop.has(m)));
     const possible = groups.reduce((n, g) => n + g.weight, 0);
     const share = (cap: string) => {

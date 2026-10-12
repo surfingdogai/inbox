@@ -150,7 +150,7 @@ export const GUIDES: readonly Guide[] = [
     title: "Agentic commerce readiness: sell through AI assistants",
     short: "Selling",
     description:
-      "Agentic commerce readiness for a shop: how ChatGPT, Gemini and other assistants order through UCP or ACP checkout, and the steps after: cancel, track, return.",
+      "Agentic commerce readiness for a shop: how Gemini, Copilot and other assistants order through UCP or ACP checkout, and the steps after: cancel, track, return.",
     answer:
       "An assistant can order from you when your shop publishes a checkout it can use, such as a UCP or ACP profile, or an order tool on your own domain. Then let it change, cancel and track the order, fetch a receipt and start a return.",
     options: [

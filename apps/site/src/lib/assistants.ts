@@ -144,6 +144,11 @@ const SRC = {
   },
   musePlatform: { label: "Meta: the Muse developer platform", href: "https://muse.ai/platform" },
   grokBot: { label: "xAI: Grok Bot documentation", href: "https://docs.x.ai/grok-bot/teams-and-enterprises" },
+  grokConnectors: { label: "xAI: Grok connectors", href: "https://docs.x.ai/grok/connectors" },
+  museCanada: {
+    label: "iPhone in Canada, 18 September 2026",
+    href: "https://www.iphoneincanada.ca/2026/09/18/metas-muse-ai-agent-is-now-available-in-canada/",
+  },
 } satisfies Record<string, Source>;
 
 export const ASSISTANTS: readonly Assistant[] = [
@@ -174,11 +179,11 @@ export const ASSISTANTS: readonly Assistant[] = [
       question: "Can Meta Muse book or order with your business?",
       does: [
         {
-          text: "Muse launched in the US on 8 September 2026. It works in a browser of its own on a secure computer, uses the apps its person connects, and checks with its person before a purchase; it can pay with Link, by Stripe.",
-          sources: [SRC.muse],
+          text: "Muse launched in the US on 8 September 2026, and in Canada on 18 September. It works in a browser of its own on a secure computer, uses the apps its person connects, and checks with its person before a purchase; it can pay with Link, by Stripe.",
+          sources: [SRC.muse, SRC.museCanada],
         },
         {
-          text: "Reported on 23 September 2026: Muse books appointments, searches Shopify's catalogue, and buys with Link or Shop Pay.",
+          text: "Reported on 23 September 2026: Muse searches Shopify's catalogue and buys with Link or Shop Pay; booking an appointment by voice on Meta's glasses is to follow.",
           sources: [SRC.museReport],
         },
         {
@@ -186,7 +191,7 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.shopifyMeta],
         },
         {
-          text: "Meta reviews the connectors in its directory. A business that isn't listed there can still be reached as a custom connector.",
+          text: "Meta reviews the connectors businesses submit for its directory, and lists them in Muse once approved.",
           sources: [SRC.musePlatform],
         },
       ],
@@ -226,12 +231,12 @@ export const ASSISTANTS: readonly Assistant[] = [
       question: "Can Grok book or order with your business?",
       does: [
         {
-          text: "Grok Bot, xAI's agent, is in beta as of October 2026. It works on a cloud computer of its own: it browses, fills in pages and uses MCP connectors, and its person chooses which actions, payment steps among them, need their say before it acts.",
+          text: "As of October 2026, Grok Bot, xAI's agent, works on a cloud computer of its own: it browses, fills in pages and uses MCP connectors, and its person chooses which actions, payment steps among them, need their say before it acts.",
           sources: [SRC.grokBot],
         },
         {
-          text: "Grok on grok.com takes custom connectors, MCP servers, on xAI's paid plans: it books, asks or orders through whatever a server offers.",
-          sources: [SRC.grokBot],
+          text: "Grok on grok.com takes custom connectors, MCP servers: it books, asks or orders through whatever a server offers.",
+          sources: [SRC.grokConnectors],
         },
       ],
       faqs: [
@@ -282,7 +287,7 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.openaiApps],
         },
         {
-          text: "Agents: dots, OpenAI's always-on agents (from 29 September 2026), work through ChatGPT's apps and, where none fits, a browser of their own, and come back to their person when something needs them.",
+          text: "Agents: dots, OpenAI's always-on agents (from 29 September 2026, on Pro outside the EEA, Switzerland and the UK, and on Business Premium), work through ChatGPT's apps and, where none fits, a browser of their own, and come back to their person when something needs them.",
           sources: [SRC.openaiDots],
         },
       ],
@@ -293,7 +298,7 @@ export const ASSISTANTS: readonly Assistant[] = [
         },
         {
           q: "Can ChatGPT make restaurant reservations?",
-          a: "Yes. Since August 2026 it books tables through OpenTable worldwide, Resy in the US and Yelp in the US and Canada. A restaurant on none of them needs a door of its own, such as an MCP server or an agent inbox, for ChatGPT to book it there.",
+          a: "Yes. Since August 2026 it books tables through OpenTable worldwide, Resy in the US and Yelp in the US and Canada. A restaurant on none of them can offer a door of its own, such as an MCP server a person adds to ChatGPT as a connector, or a booking page an agent can finish.",
         },
         {
           q: "Can ChatGPT order things for you?",
@@ -390,26 +395,26 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.googleUk, SRC.diningReport],
         },
         {
-          text: "Appointments: Google says Gemini can reserve a table with OpenTable and book a doctor's appointment with Zocdoc, through apps it connected in August 2026; Thumbtack and Angi joined at the same time.",
+          text: "Appointments: Google says Gemini can reserve a table with OpenTable in the UK and book a doctor's appointment with Zocdoc in the US, through apps it connected in August 2026; Thumbtack and Angi joined at the same time.",
           sources: [SRC.geminiApps],
         },
         {
-          text: "Local services: Google said in May 2026 that AI Mode would book local services such as home repair, beauty and pet care, and call businesses for its users, for everyone in the US over the summer.",
+          text: "Local services: Google said in May 2026 that AI Mode finds local experiences and services with prices and free times, with links to finish booking with the provider, and, for home repair, beauty and pet care, calls businesses for its users, for everyone in the US over the summer.",
           sources: [SRC.googleIo],
         },
         {
-          text: "Shopping: AI Mode and the Gemini app check out through the Universal Commerce Protocol (UCP) with merchants who join, and the merchant stays the merchant of record. Shopify stores based in the US have it on by default.",
+          text: "Shopping: AI Mode and the Gemini app check out through the Universal Commerce Protocol (UCP) with merchants Google admits, starting in the US, and the merchant stays the merchant of record. Shopify stores based in the US have it on by default.",
           sources: [SRC.googleUcp, SRC.shopifyGoogle],
         },
       ],
       faqs: [
         {
           q: "Can Gemini book an appointment?",
-          a: "Yes, through the apps it connects to, such as Zocdoc and OpenTable, and Google's AI Mode books restaurant tables and, in the US, some local services. A business none of them reach needs a door of its own on its website. Our free check shows which doors your site offers.",
+          a: "Yes, through apps it connects to, such as Zocdoc in the US and OpenTable in the UK. Google's AI Mode finds free times and links to the booking platform; in the US it can also call some local businesses. A business none of them reach needs a door of its own. Our free check shows which doors your site offers.",
         },
         {
           q: "Can Gemini buy things for you?",
-          a: "From merchants who offer checkout through UCP, the Universal Commerce Protocol, in AI Mode and the Gemini app; the merchant stays the merchant of record. Shopify stores based in the US and selling there have it on by default. Other shops join through Google Merchant Center and UCP.",
+          a: "From merchants who offer checkout through UCP, the Universal Commerce Protocol, in AI Mode and the Gemini app; the merchant stays the merchant of record. Shopify stores based in the US and selling there have it on by default. Other shops can ask to join through Google Merchant Center; there is a waitlist.",
         },
       ],
     },
@@ -446,7 +451,7 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.copilotCheckout, SRC.shopifyCopilot],
         },
         {
-          text: "Bookings: Microsoft said in April 2025 that Copilot's Actions book dinner reservations and event tickets, with partners such as OpenTable, Booking.com and Expedia, and work with most websites.",
+          text: "Bookings: Microsoft announced Copilot Actions in April 2025, booking dinner reservations and event tickets with partners such as OpenTable and Booking.com; we couldn't confirm from Microsoft how widely it is available in October 2026.",
           sources: [SRC.copilotActions],
         },
         {
@@ -461,7 +466,7 @@ export const ASSISTANTS: readonly Assistant[] = [
         },
         {
           q: "Can Copilot book a table or tickets?",
-          a: "Microsoft said in April 2025 that Copilot's Actions book dinner reservations and event tickets through partners such as OpenTable and Booking.com, and work with most websites. A business on none of those platforms is easiest to book through a door on its own site.",
+          a: "Microsoft announced Copilot Actions in April 2025, booking dinner reservations and event tickets through partners such as OpenTable and Booking.com; we couldn't confirm from Microsoft how widely it is available in October 2026. A business on none of those platforms is easiest to book through a door on its own site.",
         },
       ],
     },
