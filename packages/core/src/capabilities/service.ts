@@ -1281,6 +1281,15 @@ export class Capabilities {
       .select({ doc: settingsTable.doc, version: settingsTable.version })
       .from(settingsTable)
       .limit(1);
+    // A write sent against another version than the one stored is refused here, before anything is
+    // merged: the merge and every check below read this row, so only this row may be replaced. Taking
+    // the version the caller named instead would let a write that raced in between (the host's own,
+    // switching something off) be overwritten by a document merged without it.
+    if (row && input.expected_version !== undefined && input.expected_version !== row.version) {
+      throw new WriteError("version_conflict", "settings changed since you read them", {
+        details: { currentVersion: row.version },
+      });
+    }
     const stored = row && isPlainObject(row.doc) ? row.doc : {};
     let doc = withoutMaskedSecrets(input.doc);
     // What the host set or locked is the host's (`settings/policy.ts`): nobody changes it here, the
@@ -1466,17 +1475,16 @@ export class Capabilities {
       });
       version = 1;
     } else {
-      const expected = input.expected_version ?? row.version;
       const res = await this.db.client.query({
         sql: "UPDATE settings SET doc = ?, version = version + 1, updated_at = ? WHERE id = 'singleton' AND version = ?",
-        params: [json, now, expected],
+        params: [json, now, row.version],
         method: "run",
       });
       if (res.changes !== 1)
         throw new WriteError("version_conflict", "settings changed since you read them", {
           details: { currentVersion: row.version },
         });
-      version = expected + 1;
+      version = row.version + 1;
     }
     // A network just switched on hears from this inbox now, not at the top of the next hour: its
     // ping, and its publisher, which queues every receipt already issued (ADR-017 §8.1). Losing

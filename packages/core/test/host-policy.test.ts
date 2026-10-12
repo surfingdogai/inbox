@@ -265,6 +265,39 @@ describe("a host's policy", () => {
     expect(await caps.applyHostPolicy(T0 + 2)).toBe(false);
   });
 
+  // A write is merged over the version it read. Sent against the next version, it must not replace
+  // a write that landed after its read, such as the host's own switching the listing off.
+  it("keeps a write sent against another version from replacing one that landed after its read", async () => {
+    const { db, caps } = await setup(null);
+    await caps.updateSettings(owner, { doc: { directory: { listed: true } } });
+    const v = await version(db);
+    const query = db.client.query.bind(db.client);
+    let raced = false;
+    Object.assign(db.client, {
+      query: async (stmt: Parameters<typeof query>[0]) => {
+        const result = await query(stmt);
+        if (!raced && /^select .* from "settings"/i.test(stmt.sql)) {
+          raced = true;
+          await query({
+            sql: "UPDATE settings SET doc = json_set(doc, '$.directory.listed', json('false')), version = version + 1",
+            method: "run",
+          });
+        }
+        return result;
+      },
+    });
+    const write = caps.updateSettings(owner, {
+      doc: { booking: { cancellationWindowMin: 90 } },
+      expected_version: v + 1,
+    });
+    await expect(write).rejects.toMatchObject({ code: "version_conflict" });
+    Object.assign(db.client, { query });
+    expect(raced).toBe(true);
+    const s = await readSettings(db);
+    expect(s.directory.listed).toBe(false);
+    expect(s.booking.cancellationWindowMin).not.toBe(90);
+  });
+
   it("is nothing at all for an inbox run without one", async () => {
     const { db, caps } = await setup(null);
     expect(await caps.applyHostPolicy(T0)).toBe(false);
