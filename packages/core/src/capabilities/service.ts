@@ -38,6 +38,15 @@ import { changedSettings, DATA_OUT_SETTINGS, OWNER_ONLY_SETTINGS, openedNetworks
 import { mergeSettings, patchPaths } from "../settings/merge";
 import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
 import {
+  checkHostPolicy,
+  forcedPatch,
+  type HostPolicy,
+  hostLockedChanges,
+  hostLockedError,
+  hostLockedPaths,
+  hostLocks,
+} from "../settings/policy";
+import {
   isPlainObject,
   parseStoredSettings,
   REDACTED_SECRET,
@@ -233,6 +242,11 @@ export interface SettingsView {
   /** Settings paths that hold a secret this read masks as `REDACTED_SECRET`, e.g. `email.inboundSecret`. */
   readonly redacted: readonly string[];
   /**
+   * Settings the host set or locked (`settings/policy.ts`), dotted: nobody changes them here, the
+   * owner included. Empty for an inbox run without a host's policy.
+   */
+  readonly locked: readonly string[];
+  /**
    * Settings the reader may not see, left out of `doc` (ADR-018 §4): the owner's limits for automation
    * (`negotiation.ai`) and rewards (`negotiation.rewards`), which only the owner in person reads. A
    * write that leaves them out keeps them.
@@ -284,11 +298,65 @@ export class Capabilities {
 
   private readonly baseUrl: string | undefined;
   private mail: MailOut | null = null;
+  private policy: HostPolicy | null = null;
 
   /** How email goes out: kept to say in Settings whether it does, and handed on for one-time codes. */
   attachMail(mail: MailOut | null): void {
     this.mail = mail;
     this.people.attachMail(mail);
+  }
+
+  /**
+   * The host's policy (`settings/policy.ts`): the settings it sets, and the ones nobody changes
+   * here. Attached once, as the inbox is built; it throws on a path that is not a setting.
+   */
+  attachPolicy(policy: HostPolicy | null): void {
+    if (policy) checkHostPolicy(policy);
+    this.policy = policy;
+  }
+
+  /**
+   * Writes what the host's policy sets over the stored settings, when they differ from it, past the
+   * policy's own lock and with what any write does after (a network switched off is told). True when
+   * it wrote. A write that loses a race with another is read again and tried once more.
+   */
+  async applyHostPolicy(now: number = Date.now()): Promise<boolean> {
+    const policy = this.policy;
+    if (!policy) return false;
+    const host: Caller = {
+      actor: { kind: "system", id: "host", channel: "system" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => now,
+    };
+    for (let attempt = 0; ; attempt++) {
+      const [row] = await this.db.orm
+        .select({ doc: settingsTable.doc, version: settingsTable.version })
+        .from(settingsTable)
+        .limit(1);
+      const stored = row && isPlainObject(row.doc) ? row.doc : {};
+      const current = parseStoredSettings(stored).settings;
+      const patch = forcedPatch(policy, current);
+      if (Object.keys(patch).length === 0) return false;
+      const prepared = prepareSettingsWrite(stored, patch);
+      if ("problems" in prepared) throw new Error(`host policy: forced ${describeProblems(prepared.problems)}`);
+      const after = parseStoredSettings(mergeSettings(prepared.base, prepared.patch)).settings;
+      const drifted = changedSettings(
+        current,
+        after,
+        patchPaths(prepared.patch).map((path) => ({ path })),
+      );
+      if (drifted.length === 0) return false;
+      try {
+        await this.writeSettings(host, { doc: patch, ...(row ? { expected_version: row.version } : {}) }, true);
+        return true;
+      } catch (error) {
+        // Someone saved the settings at the same moment, or created them: theirs are read again.
+        const raced = !row || (error instanceof WriteError && error.code === "version_conflict");
+        if (attempt === 0 && raced) continue;
+        throw error;
+      }
+    }
   }
 
   /**
@@ -1138,7 +1206,19 @@ export class Capabilities {
       .limit(1);
     // Leniently, like every other reader: a stored value this version rejects is shown as its
     // default, and the owner app saving the page writes only what the owner changed.
-    return redact(parseStoredSettings(row?.doc ?? {}).settings, row?.version ?? 0, caller);
+    const settings = parseStoredSettings(row?.doc ?? {}).settings;
+    return redact(settings, row?.version ?? 0, caller, this.lockedOf(settings));
+  }
+
+  /** What the host's policy holds, dotted, for a read to name: a section held whole names none of its keys. */
+  private lockedOf(settings: Settings): string[] {
+    if (!this.policy) return [];
+    const paths = hostLockedPaths(this.policy, settings);
+    const within = (path: string[], held: string[]) =>
+      held.length < path.length && held.every((part, i) => part === path[i]);
+    return [
+      ...new Set(paths.filter((path) => !paths.some((held) => within(path, held))).map((path) => path.join("."))),
+    ];
   }
 
   /**
@@ -1150,6 +1230,11 @@ export class Capabilities {
    * was valid once and is not now does not block a change to something else.
    */
   async updateSettings(caller: Caller, input: T.UpdateSettingsInput): Promise<SettingsView> {
+    return this.writeSettings(caller, input, false);
+  }
+
+  /** `updateSettings`, or, `asHost`, the host's own write of what its policy sets, past the policy's lock. */
+  private async writeSettings(caller: Caller, input: T.UpdateSettingsInput, asHost: boolean): Promise<SettingsView> {
     requireBusiness(caller);
     const now = nowOf(caller);
     const [row] = await this.db.orm
@@ -1158,11 +1243,22 @@ export class Capabilities {
       .limit(1);
     const stored = row && isPlainObject(row.doc) ? row.doc : {};
     let doc = withoutMaskedSecrets(input.doc);
+    // What the host set or locked is the host's (`settings/policy.ts`): nobody changes it here, the
+    // owner and the inbox itself included, and that is checked before anything else so whoever asks
+    // is told the real reason. Sending it back unchanged changes nothing and is never refused.
+    if (this.policy && !asHost) {
+      const held = hostLockedChanges(this.policy, stored, doc);
+      if (held.length) throw hostLockedError(held);
+    }
     // `security` is the owner's own: whether scopes are enforced, and where security reports go.
     // An AI, or a key handed to another system, must not be able to change either.
     // Sending it back unchanged is not a change: a client that writes back the whole document it
     // read (every read has the section) keeps working, and the section is left as it is stored.
-    if (Object.hasOwn(doc, "security") && (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner")) {
+    if (
+      !asHost &&
+      Object.hasOwn(doc, "security") &&
+      (!isOwnerInPerson(caller) || caller.actor.channel === "mcp_owner")
+    ) {
       const { security, ...rest } = doc;
       const current = parseStoredSettings(stored).settings.security;
       const wanted = parseStoredSettings(mergeSettings(stored, { security })).settings.security;
@@ -1360,7 +1456,7 @@ export class Capabilities {
       ...listing.map((origin) => listingJobStatement(origin, now)),
     ];
     if (statements.length) await this.db.batch(statements);
-    return redact(after, version, caller);
+    return redact(after, version, caller, this.lockedOf(after));
   }
 
   /**
@@ -1383,7 +1479,10 @@ export class Capabilities {
       .select({ doc: settingsTable.doc, version: settingsTable.version })
       .from(settingsTable)
       .limit(1);
-    if (parseStoredSettings(row?.doc ?? {}).settings.notifications.appUrl) return false;
+    const current = parseStoredSettings(row?.doc ?? {}).settings;
+    if (current.notifications.appUrl) return false;
+    // An address the host holds is the host's to set.
+    if (this.policy && hostLocks(this.policy, current, ["notifications", "appUrl"])) return false;
     const system: Caller = {
       actor: { kind: "system", id: "sign-in", channel: "system" },
       tier: "verified_principal",
@@ -1473,7 +1572,7 @@ function metaString(meta: unknown, key: string): string | null {
   return typeof v === "string" ? v : null;
 }
 
-function redact(settings: Settings, version: number, caller: Caller): SettingsView {
+function redact(settings: Settings, version: number, caller: Caller, locked: readonly string[]): SettingsView {
   const doc = structuredClone(settings) as unknown as Record<string, Record<string, unknown> | undefined>;
   const redacted: string[] = [];
   for (const [section, key] of SECRET_SETTINGS_PATHS) {
@@ -1497,7 +1596,7 @@ function redact(settings: Settings, version: number, caller: Caller): SettingsVi
       }
     }
   }
-  return { doc: doc as unknown as Settings, version, redacted, withheld };
+  return { doc: doc as unknown as Settings, version, redacted, withheld, locked };
 }
 
 /** What only the owner in person reads of `negotiation`: automation's limits, and the rewards. */

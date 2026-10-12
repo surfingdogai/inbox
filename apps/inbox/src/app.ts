@@ -34,6 +34,7 @@ import {
   directoryProfile,
   enabledNetworks,
   FRONT_PATHS,
+  type HostPolicy,
   IDENTITY_ISSUE_KIND,
   type JobRunner,
   MANIFEST_PATH,
@@ -96,6 +97,12 @@ export interface AppDeps {
    * and seeded every night, and `/demo/live` shows what is happening. Absent, none of this exists.
    */
   readonly demo?: DemoOptions | undefined;
+  /**
+   * The settings whoever runs this inbox sets for it, and the ones nobody changes through it, the
+   * owner included (core `settings/policy.ts`). What it sets is written before the first request is
+   * served and again on every `prepare`. Absent, every setting is the owner's.
+   */
+  readonly policy?: HostPolicy | undefined;
 }
 
 export interface Inbox {
@@ -103,9 +110,10 @@ export interface Inbox {
   readonly runner: JobRunner;
   readonly caps: Capabilities;
   /**
-   * Gets the instance ready before it serves: in a demo, seeds the shop when the database is empty
-   * and queues the nightly run. Nothing to do otherwise. Safe to call on every boot and every cron
-   * tick. In a demo over a database that already holds anything, it throws `DEMO_REFUSED`.
+   * Gets the instance ready before it serves: writes what the host's policy sets, when it has one;
+   * in a demo, seeds the shop when the database is empty and queues the nightly run. Nothing to do
+   * otherwise. Safe to call on every boot and every cron tick. In a demo over a database that
+   * already holds anything, it throws `DEMO_REFUSED`.
    */
   readonly prepare: () => Promise<void>;
 }
@@ -145,6 +153,8 @@ export function createInbox(deps: AppDeps): Inbox {
   const port = createIdentityPort(identity);
   caps.people.attachPort(port);
   caps.attachMail(mailOut);
+  // Throws here, as the inbox is built, on a policy that names something that is not a setting.
+  caps.attachPolicy(deps.policy ?? null);
   const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts, secrets: caps.secrets })
     // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
     // call to a network runs in that network's own lane, so a slow one never delays another.
@@ -202,7 +212,19 @@ export function createInbox(deps: AppDeps): Inbox {
     demoAnswer = r.active;
     return r.active;
   };
+  // What the host's policy sets is in place before anything is served: written once per process on
+  // the first request, as the migrations are, and on every `prepare`. Only the answer is kept, never
+  // a write in progress, for the same reason as the demo's: a request on Workers may be cancelled.
+  let policyApplied = !deps.policy;
+  const applyPolicy = async (): Promise<void> => {
+    await caps.applyHostPolicy(deps.now ? deps.now() : Date.now());
+    policyApplied = true;
+  };
   const prepare = async (): Promise<void> => {
+    if (deps.policy) {
+      await ensureMigrated(deps.db.client, MIGRATIONS);
+      await applyPolicy();
+    }
     if (demo && !(await demoActive())) throw new Error(DEMO_REFUSED);
   };
 
@@ -284,6 +306,9 @@ export function createInbox(deps: AppDeps): Inbox {
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {
     await ensureMigrated(deps.db.client, MIGRATIONS);
+    // A policy that cannot be written fails the request: nothing is served with settings the host
+    // has not set. The next request tries again.
+    if (!policyApplied) await applyPolicy();
     // A demo seeds itself on its first request, so a fresh Worker has a shop before its first cron.
     if (demo)
       await demoActive().catch((error) => console.error("demo:", error instanceof Error ? error.message : error));
