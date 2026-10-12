@@ -4,8 +4,11 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 /**
  * The pages a link in an owner's email opens: a sign-in link, a host's handoff, an address change
  * and its undo. Each shows what pressing its button would do and changes nothing itself, since mail
- * scanners open every link in an email; only the POST its form sends acts. No script, nothing
- * fetched from anywhere else, and no Referer: the address the page was opened at carries the token.
+ * scanners open every link in an email; only the POST its form sends acts. No script, and nothing
+ * fetched from anywhere else. The address the page was opened at carries the token, so no Referer
+ * leaves this origin; inside it one is sent (`same-origin`), since a browser that marks no fetch with
+ * Sec-Fetch-Site sends `Origin: null` with a form posted from a no-referrer page, and its button
+ * would then be refused as coming from another site.
  */
 export interface AuthPage {
   readonly title: string;
@@ -33,7 +36,7 @@ export function authPageHtml(page: AuthPage): string {
         .join("")}<button class="primary" type="submit">${esc(page.form.button)}</button></form>`
     : "";
   const link = page.link ? `<p class="note"><a href="${esc(page.link.href)}">${esc(page.link.label)}</a></p>` : "";
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>${esc(page.title)}</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="same-origin"><meta name="robots" content="noindex"><title>${esc(page.title)}</title>
 <style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:Manrope,ui-sans-serif,system-ui,sans-serif;background:#f6f5ff;color:#14163c}@media(prefers-color-scheme:dark){body{background:#0d0e26;color:#f2f1ff}}
 .card{width:min(460px,92vw);padding:28px 24px;border-radius:20px;background:rgba(255,255,255,.44);border:1px solid rgba(255,255,255,.6);backdrop-filter:blur(26px) saturate(150%);box-shadow:0 8px 24px -16px rgba(20,90,140,.22)}@media(prefers-color-scheme:dark){.card{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14)}}
 h1{font-size:20px;margin:0 0 10px;overflow-wrap:anywhere}p{margin:0 0 14px;opacity:.8;overflow-wrap:anywhere}.note{font-size:14px}a{color:inherit}

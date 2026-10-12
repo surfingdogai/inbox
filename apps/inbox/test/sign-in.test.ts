@@ -33,7 +33,7 @@ describe("a sign-in link a mail scanner opens first", () => {
       expect(page.headers.get("cache-control")).toBe("no-store");
       const html = await page.text();
       expect(html).toContain('<form method="post" action="/auth/verify">');
-      expect(html).toContain('<meta name="referrer" content="no-referrer">');
+      expect(html).toContain('<meta name="referrer" content="same-origin">');
       expect(html).toContain(`You are signing in as ${OWNER}.`);
     }
     expect((await app.request(link, { method: "HEAD" })).headers.get("set-cookie")).toBeNull();
@@ -69,6 +69,27 @@ describe("a sign-in link a mail scanner opens first", () => {
     }
     expect(await authState(db)).toBe(before);
     expect((await press(app, link)).status).toBe(303);
+  });
+
+  // Safari before 16.4 marks no request with Sec-Fetch-Site. From a page whose referrer policy is
+  // no-referrer it would send `Origin: null` with the form, and the button would be refused; the page
+  // keeps the Referer to its own origin, so the browser sends the real one.
+  it("signs in from a browser that sends only Origin with the page's form", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: [OWNER] });
+    await askSignIn(app, ORIGIN, OWNER);
+    const { link } = lastSignIn(mail, OWNER);
+    const html = await (await app.request(link)).text();
+    expect(html).toContain('<meta name="referrer" content="same-origin">');
+    expect(html).not.toContain("no-referrer");
+    const res = await app.request(`${ORIGIN}/auth/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+      body: new URLSearchParams(formOf(html).fields).toString(),
+    });
+    expect(res.status).toBe(303);
+    expect(sessionCookie(res)).toMatch(/^__Host-sdi_session=/);
   });
 });
 
