@@ -23,13 +23,13 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: connectors (coming), hosted tenancy, and the network's reviews and reputation (coming). Every page in these docs says whether a feature is live.
+Still to come: connectors (coming), hosted tenancy, and the track record each network listing shows: promises kept, broken or still open (being built). Every page in these docs says whether a feature is live.
 
 ## Pages
 
 - [Quickstart](/docs/quickstart/): deploy to Cloudflare, run on your own server, or join the hosted waitlist, then make your first calls.
 - [Setting a business up for agents](/docs/setting-up-for-agents/): guidance, not rules, from a real installation: the inbox as the front door, or as a thin agent door in front of the tools a business already has; what handles each door; making doors findable; payments; helpdesk bridges.
-- [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, receipts and two-sided reviews.
+- [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, networks, and receipts: promises kept, broken or still open.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.
 - [API](/docs/api/): every public and owner operation, and the conventions they share.
 - [Manifest](/docs/manifest/): the discovery document an instance publishes.

@@ -14,7 +14,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | Email in | Email Routing (needs a Cloudflare zone) or a provider webhook | Forwarding, a subdomain MX, or a provider webhook | Included: `<slug>@in.surfingdog.ai` |
 | Connectors (coming) | The same MIT connector SDK; you bring your own credentials (a Shopify custom app token, a Google OAuth client, a Stripe restricted key…) | Same | The same connectors as one-click apps through our registered OAuth apps; tokens refreshed and webhooks registered by us |
 | Backups | Yours (D1 time travel) | Yours; Litestream or nightly snapshots are the documented path | Done by us |
-| Network | Join any network, or none, from settings | Same | Our network bundled: directory listing, receipts, reviews |
+| Network | Join any network, or none, from settings | Same | Our network bundled: directory listing, receipts, track record |
 | Domain | Your Worker route or custom domain | Yours | `<slug>.surfingdog.ai`, or your own hostname through Cloudflare for SaaS |
 | Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | Flat plus per confirmed item, metered from day one; announced when hosted opens |
 | Licence | MIT | MIT | Same software, same licence |

@@ -5,7 +5,7 @@ description: The signed proof an instance issues when it makes a promise — a b
 
 A **receipt** is the instance's signed statement about a transaction: this booking was confirmed, this order was paid, this refund is owed by the 14th — a **promise** — then any change both sides agreed to it — an **amendment** — and later how it ended: the booking happened, the customer did not turn up, the order went out, the refund was paid on time — an **outcome**. It is a compact JWS, Ed25519, small enough to sit in a header, and it names the customer only by a pseudonym. Both sides can hold one, a network can count one, and nobody who sees one learns an address.
 
-Receipts are issued by the instance and counter-signed by the customer's agent. They are the ground a review will later stand on: a review is only ever accepted against a receipt, in both directions. Reviews themselves are not built yet; receipts are.
+Receipts are issued by the instance and counter-signed by the customer's agent. They are how a network measures promise against delivery: what a business promised, and whether each promise was kept, broken or is still open.
 
 ## When one is issued
 
@@ -187,7 +187,7 @@ Which receipts a network gets depends on the rules it applies, which the instanc
 
 The network believes nothing it is sent. It finds the business by `iss`, takes the keys from the manifest it fetched from that domain itself, verifies the receipt, verifies the acknowledgement against the key in its header and the receipt's `sha`, and counts one receipt per `(issuer, nonce)`. It refuses a receipt from a domain it has not listed (`404`), one signed by a key the manifest does not publish (`422 unknown_key`, after refreshing its copy), an outcome whose `ref` it does not hold yet (`422 unknown_ref`, sent again later), a forgery (`422 bad_signature`) and one dated more than five minutes ahead (`422 not_yet`). It stores the receipt whole, with the acknowledgement when there is one: the pseudonym, the type, the kind, when, and the amount and payment method when the receipt carries them — never an address, never a name — and keeps every one. A directory listing shows how many promises a business has made and how many were counter-signed, and how they ended; the amounts are never published.
 
-Any service that speaks this one endpoint can be a review service, and an instance can publish to several; `https://network.surfingdog.ai` is only the default.
+Any service that speaks this one endpoint can take an instance's receipts, and an instance can publish to several; `https://network.surfingdog.ai` is only the default.
 
 ## For implementers
 

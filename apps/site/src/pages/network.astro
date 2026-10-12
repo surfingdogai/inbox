@@ -1,7 +1,7 @@
 ---
 // apps/site/src/pages/network.astro
 // The network, explained for a busy owner or an agent developer in about a minute: what it is,
-// how joining works, how reputation will work (decided, not built yet), what leaves an inbox, and
+// how joining works, how the track record works (promises kept or broken), what leaves an inbox, and
 // that anyone can run one. LiveMetrics carries the live numbers, so the fetch, the fallback and the
 // refresh live in one place. Its note says what an instance reports "is set out below", so it has
 // to sit above the "What leaves your inbox" section. The top is a two-column hero like the home
@@ -13,7 +13,7 @@ import Layout from "../layouts/Layout.astro";
 
 const contents = [
   { href: "#how", label: "How it works" },
-  { href: "#reputation", label: "Reputation" },
+  { href: "#reputation", label: "Track record" },
   { href: "#network", label: "Live numbers" },
   { href: "#shared", label: "What leaves your inbox" },
   { href: "#open", label: "Launch your own" },
@@ -133,7 +133,7 @@ const shared = [
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Reputation</p>
+          <p class="eyebrow">Track record</p>
           <h2 class="h-section" id="reputation-h">Earned by keeping promises</h2>
           <p class="lede">
             In force for businesses since 29 September 2026. Customer records are paused until their privacy safeguards
@@ -241,7 +241,7 @@ const shared = [
           network.surfingdog.ai.
         </p>
         <p>
-          The protocol is open, and the reputation rules are published with it, so any network can rank the same way
+          The protocol is open, and the ranking rules are published with it, so any network can rank the same way
           or its own way.
         </p>
         <p>

@@ -7,7 +7,7 @@ The repository is [github.com/surfingdogai/inbox](https://github.com/surfingdoga
 
 ## Licence
 
-Everything in the repository is **MIT**: the server and the app (`apps/*`, `packages/core`, `packages/platform`, `packages/adapters`, `packages/ui`), `packages/spec` (the manifest, receipt and review formats with test vectors), `packages/sdk` (the typed client), `packages/network-check`, `examples/network`, and the channels, connectors, AI and hosted packages as they arrive. Anyone can run it, change it, implement a compatible instance, agent, review service or integration, and build on it; nothing they build has to be shared.
+Everything in the repository is **MIT**: the server and the app (`apps/*`, `packages/core`, `packages/platform`, `packages/adapters`, `packages/ui`), `packages/spec` (the manifest, receipt and network formats with test vectors), `packages/sdk` (the typed client), `packages/network-check`, `examples/network`, and the channels, connectors, AI and hosted packages as they arrive. Anyone can run it, change it, implement a compatible instance, agent, network or integration, and build on it; nothing they build has to be shared.
 
 The root `LICENSE` covers the whole repository. The packages published on their own (`packages/spec`, `packages/sdk`, `packages/network-check`) and `examples/network` carry a copy of it.
 
@@ -41,7 +41,7 @@ apps/site          this website: Astro, Starlight for the docs
 packages/core      domain model, state machines, rules, jobs, receipts
 packages/platform  the runtime interfaces (Db, Blob, Jobs, MailIn, MailOut) and their adapters
 packages/adapters  the doors: REST + OpenAPI, MCP, email, OAuth, sessions
-packages/spec      manifest, receipt and review formats with test vectors
+packages/spec      manifest, receipt and network formats with test vectors
 packages/sdk       typed client for the public and owner APIs
 packages/ui        design tokens, glass utilities and the kit page
 docs/              the plan and the ADRs

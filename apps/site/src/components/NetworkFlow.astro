@@ -111,7 +111,7 @@ const GEO = {
       "Agents search the network",
       "The business keeps its promise",
       "A signed receipt comes back",
-      "Reputation grows, both ways",
+      "The record grows, both ways",
     ],
   },
   /** Two passes. The bike shop is the showcase business, so it goes first. */
@@ -233,8 +233,8 @@ const first = GEO.rows[GEO.beats[0]?.r ?? 0]?.name ?? "";
   <figcaption class="nf-sr">
     An AI agent asks the network for bike repair in Lisbon, and the directory points it to Oficina Maré. The agent books
     with the shop directly. The shop keeps the booking, and its inbox sends a signed receipt back to the network.
-    Reputation will grow from those receipts, for the business and for the customer. Then the same happens with a bread
-    order from Padaria Sol.
+    A track record grows from those receipts, for the business and, later, for the customer. Then the same happens
+    with a bread order from Padaria Sol.
   </figcaption>
 </figure>
 
@@ -1318,7 +1318,7 @@ const first = GEO.rows[GEO.beats[0]?.r ?? 0]?.name ?? "";
         }
       } else off(e.slip);
 
-      /* 6. reputation grows, both ways: the listing's meter, then the customer's */
+      /* 6. the record grows, both ways: the listing's meter, then the customer's */
       if (ph >= e.r3 && once(e, "grow")) {
         grow(e, true);
         sayIt(3, live);
