@@ -1477,18 +1477,30 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(rules.profiles.find((p) => p.id === "appointments")?.applicable).not.toContain("signup");
     // A venue books (tickets, tables, entries).
     expect(rules.profiles.find((p) => p.id === "venues")?.applicable).toContain("book");
-    // The changelog says what changed in version 2, on what day, and why; and its amendment of 8 October 2026, last.
+    // The changelog says what changed in version 2, on what day, and why; then its amendments, in order: 8 October
+    // 2026 (what follows), and 12 October 2026 (a request counts as doing it, then message for every kind of business).
     const v2 = rules.changelog.find((c) => c.version === 2 && c.published !== undefined);
     expect(v2).toMatchObject({ version: 2, published: "2026-10-07" });
     expect(v2?.summary).toMatch(/book and order count together as one capability/);
     expect(v2?.summary).toMatch(/Sign up is a capability of its own/);
-    const last = rules.changelog.at(-1);
-    expect(last).toMatchObject({ version: 2, amended: "2026-10-08" });
-    expect(last?.published).toBeUndefined();
-    expect(last?.summary).toMatch(/what counts now follows what a business lets an agent do/);
-    expect(last?.summary).toMatch(/Why: /);
-    expect(last?.summary).toMatch(/no group's weight and no grade changed/);
-    for (const c of [v2, last]) expect(c?.summary).not.toMatch(/\b(first|only)\b/i);
+    const amended = rules.changelog.filter((c) => c.version === 2 && c.amended !== undefined);
+    expect(amended.map((c) => c.amended)).toEqual(["2026-10-08", "2026-10-12", "2026-10-12"]);
+    expect(rules.changelog.at(-1)).toBe(amended.at(-1));
+    const [follows, requests, message] = amended;
+    expect(follows?.summary).toMatch(/what counts now follows what a business lets an agent do/);
+    expect(follows?.summary).toMatch(/Why: /);
+    expect(follows?.summary).toMatch(/no group's weight and no grade changed/);
+    expect(requests?.summary).toMatch(/a request counts as doing it \(requests\)/);
+    expect(message?.summary).toMatch(/message counts for every kind of business, shops included/);
+    for (const c of [v2, ...amended]) {
+      expect(c?.published).toBe(c === v2 ? "2026-10-07" : undefined);
+      expect(c?.summary).not.toMatch(/\b(first|only)\b/i);
+    }
+    // A request counts as doing it; and message applies to every kind of business, a shop's and a gym's included.
+    expect(rules.requests).toMatch(/^A request counts as doing it\./);
+    expect(rulesV1.requests).toBeUndefined();
+    for (const p of rules.profiles) expect(p.applicable, p.id).toContain("message");
+    expect(rulesV1.profiles.find((p) => p.id === "shop")?.applicable).not.toContain("message");
     // What follows: an order brings change, cancel, track and receipt, and a return when the business sells goods; a
     // booking change, cancel and availability; a sign-up change, cancel and the membership. A shop sells goods by its
     // kind, a restaurant never does. Version 1 has none of it.
@@ -1626,7 +1638,9 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(slot("memberships", { signup: "yes" })).toEqual(slot("memberships", { order: "yes" }));
     expect(slot("classes", { signup: "yes" })).toEqual(slot("classes", { book: "yes" }));
     expect(by.get("general-message-signup")?.expect).toMatchObject({ score: 43, grade: "C" });
-    expect(by.get("gym-signup-book")?.expect).toMatchObject({ score: 51, grade: "C" });
+    // A gym where an agent can sign up and book, and never ask anything: message counts for a gym since 12 October
+    // 2026 (51 before).
+    expect(by.get("gym-signup-book")?.expect).toMatchObject({ score: 42, grade: "C" });
     expect(by.get("school-enrol")?.expect).toMatchObject({ score: 49, grade: "C" });
   });
 
@@ -1684,13 +1698,22 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(capabilityWeightOf("general", "return", rules, { order: "yes" }, true)).toBe(7.5);
   });
 
-  it("the worked examples: a salon 51 C, a restaurant 63 B, a plumber 33 D, a shop 53 C, the homepage's 72 B", () => {
+  it("the worked examples: a salon 51 C, a restaurant 63 B, a plumber 33 D, a shop 42 C, the homepage's 72 B", () => {
     const by = new Map(scoreVectors.cases.map((c) => [c.name, c.expect]));
     expect(by.get("hair-salon")).toMatchObject({ score: 51, grade: "C", n: 5800, possible: 95 });
     // A restaurant that takes orders is scored on tracking them and a receipt too (74 before 8 October 2026).
     expect(by.get("restaurant")).toMatchObject({ score: 63, grade: "B", n: 7200, possible: 95 });
     expect(by.get("trades-plumber")).toMatchObject({ score: 33, grade: "D", n: 3000, possible: 75 });
-    expect(by.get("shop")).toMatchObject({ score: 53, grade: "C", n: 6000, possible: 95 });
+    // A shop an agent can order from, pay partly and never ask anything: message counts for a shop since 12 October 2026
+    // (53 before), a third of the core group beside ordering and paying.
+    expect(by.get("shop")).toMatchObject({ score: 42, grade: "C", n: 4800, possible: 95 });
+    // The whole order without a way to ask is 86; with one, 100.
+    expect(by.get("shop-full-no-message")).toMatchObject({
+      score: 86,
+      grade: "A",
+      fixes: [{ capability: "message", points: 14 }],
+    });
+    expect(by.get("shop-full-with-message")).toMatchObject({ score: 100, grade: "A", fixes: [] });
     expect(by.get("homepage-example")).toEqual({
       score: 72,
       grade: "B",

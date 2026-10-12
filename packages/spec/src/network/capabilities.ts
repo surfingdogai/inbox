@@ -6,7 +6,7 @@ import { doorTypeSchema, levelNameSchema } from "./directory";
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
  * do with a business through doors the business published, capability by capability, and one score over the
  * capabilities that apply to its kind of business. The vocabulary is `vocab/capabilities.json`, the rules
- * `vocab/score-rules-v2.json` (in force from 7 October 2026, amended on 8 October 2026; version 1,
+ * `vocab/score-rules-v2.json` (in force from 7 October 2026, amended on 8 and 12 October 2026; version 1,
  * `vocab/score-rules-v1.json`, is retired, and a network serves its own at `GET /v1/score-rules`), and
  * `vectors/score.json` (`vectors/score-v1.json` for version 1) pins the arithmetic. The score never changes a
  * business's place in the directory's search order.
@@ -173,6 +173,13 @@ export const scoreRulesSchema = z.object({
         "(a live checkout door, a catalogue of products) and whose profile is not one of `never`.",
     ),
   credit: z.object({ yes: z.number(), partial: z.number(), no: z.number() }),
+  requests: z
+    .string()
+    .optional()
+    .describe(
+      "Version 2 as amended on 12 October 2026: a request an agent files to change, cancel or return something, with a " +
+        "reference it can follow to the answer, counts as yes, the same as a door that carries it out at once.",
+    ),
   evidence: z.object({
     declared: z.number(),
     tested: z.number(),

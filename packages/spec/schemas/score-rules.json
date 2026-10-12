@@ -322,6 +322,10 @@
       },
       "required": ["yes", "partial", "no"]
     },
+    "requests": {
+      "description": "Version 2 as amended on 12 October 2026: a request an agent files to change, cancel or return something, with a reference it can follow to the answer, counts as yes, the same as a door that carries it out at once.",
+      "type": "string"
+    },
     "evidence": {
       "type": "object",
       "properties": {

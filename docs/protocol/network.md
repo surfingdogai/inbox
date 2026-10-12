@@ -39,7 +39,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
 | The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
-| The agentic score's rules, version 2 as amended on 8 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
+| The agentic score's rules, version 2 as amended on 8 and 12 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
 | The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 
 ## 1. Conventions
@@ -887,6 +887,14 @@ changing, cancelling and tracking the order and a receipt it scores 100 again, a
 goods without returns. A business where an agent can do none of book, order and sign up scores as
 before, since nothing follows.
 
+**Requests, and a message for every kind** (version 2 as amended on 12 October 2026). A request
+counts as doing it (the rules' `requests`): where an agent can file a request to change, cancel or
+return something and gets back a reference it can follow to the answer, that is `yes`, the same as a
+door that carries it out at once, whether or not a person at the business approves each one. And
+`message` applies to every profile, `shop` and `memberships` included: for a shop, message, order and
+pay are a third of the core group each. Cancelling a cart, a basket or a checkout is not `cancel`,
+which is cancelling an order or a booking.
+
 **Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay; sign up too
 from version 2), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
@@ -915,13 +923,14 @@ may hold `<door>`, which a network replaces with " on your <door label> door at 
 business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
 `capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
 cases, a salon at 51 (C), a restaurant that takes orders it does not let an agent track or receipt at
-63 (B), a plumber at 33 (D), a shop at 53 (C), and under version 2 as amended a business of no known
+63 (B), a plumber at 33 (D), a shop that takes orders and no message at 42 (C), and under version 2 as amended a business of no known
 kind that takes messages and nothing else at 42 (C, 55 under version 1), one that books and takes
 payment and lets an agent neither change nor cancel at 39 (D), a software company that takes messages
-and signs people up at 43 (C), a gym that signs people up and books classes at 51 (C), a school that
+and signs people up at 43 (C), a gym that signs people up and books classes at 42 (C), a school that
 enrols at 49 (C), a business of no known kind that takes orders and payment and nothing after them at
 58 (C) and with changing, cancelling, tracking and a receipt at 100 (A), and a salon that books at 68
-(B) without changing and cancelling and 100 (A) with them, among them; `vectors/score-v1.json` holds
+(B) without changing and cancelling and 100 (A) with them, and a shop where an agent can do the whole
+order at 86 (A) without a way to message it and 100 (A) with one, among them; `vectors/score-v1.json` holds
 version 1's. Each case says whether its signals say it sells goods (`goods`).
 
 **The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
