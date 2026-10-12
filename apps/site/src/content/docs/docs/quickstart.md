@@ -68,6 +68,7 @@ node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner A
 node apps/inbox/dist/server.mjs seed-demo                 # adds a demo bike shop if the instance is empty
 node apps/inbox/dist/server.mjs seed-showcase             # the same shop with a week of items, rules and hours
 node apps/inbox/dist/server.mjs network-ping              # reports to every network that is on now, not at the next hour
+node apps/inbox/dist/server.mjs apply-plan plan.json      # applies a setup plan (see the API); --dry-run says what it would do
 ```
 
 Open `/login`: enter an address from `INBOX_OWNER_EMAIL` and click the link you receive, or paste an owner key. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.

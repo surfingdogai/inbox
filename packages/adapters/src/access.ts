@@ -54,6 +54,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /rules/presets": [READ_SETUP, "setup:run"],
   "POST /rules/presets/:key": ["setup:run"],
   "POST /rules/test": [READ_SETUP, "setup:run"],
+  // A dry run only reads; applying is the owner's in person, checked by the capability whatever the scopes.
+  "POST /setup/plan": [READ_SETUP, "setup:run"],
   "POST /rules": ["setup:run"],
   "PATCH /rules/:id": ["setup:run"],
   "DELETE /rules/:id": ["setup:run"],

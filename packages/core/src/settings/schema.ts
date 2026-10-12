@@ -58,6 +58,34 @@ export const networkEntrySchema = z.object({
 export type NetworkEntry = z.infer<typeof networkEntrySchema>;
 export type NetworkShare = keyof NetworkEntry["share"];
 
+/**
+ * Where one detail of a setup plan came from (`capabilities/plan.ts`): `declared` when the site
+ * states it in structured data, `read` when it was read from the page's words and the owner should
+ * check it, `confirmed` when the owner confirmed it themselves.
+ */
+export const setupSourceSchema = z.object({
+  source_url: z
+    .url({ protocol: /^https?$/ })
+    .max(2048)
+    .describe("The page it was read from."),
+  checked_at: z.iso.datetime({ offset: true }).describe("When it was read."),
+  confidence: z
+    .enum(["declared", "read", "confirmed"])
+    .describe(
+      "declared: the site states it in structured data; read: read from the page's words, for the owner to check; confirmed: the owner confirmed it.",
+    ),
+});
+export type SetupSource = z.infer<typeof setupSourceSchema>;
+
+/** A field a setup plan names a source for: `hours`, `services`, `profile.name`, `directory.address`. */
+export const setupFieldSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z_]+(\.[a-z_]+)*$/, "a field like hours, services or profile.name");
+
+/** At most this many fields with a source. */
+export const MAX_SETUP_SOURCES = 30;
+
 const disabledNetwork = (): NetworkEntry => networkEntrySchema.parse({});
 const defaultNetworks = (): Record<string, NetworkEntry> => ({ [DEFAULT_NETWORK]: disabledNetwork() });
 
@@ -632,6 +660,22 @@ const sections = {
         .or(z.literal(""))
         .default("")
         .describe("The business's own website, if it has one."),
+    })
+    .prefault({}),
+  /**
+   * Where the details a setup plan filled in came from (`capabilities/plan.ts`), per field: the page,
+   * when it was read, and how. Kept so the owner app can ask the owner to check what was only read
+   * from a page's words. Never published.
+   */
+  setup: z
+    .object({
+      sources: z
+        .record(setupFieldSchema, setupSourceSchema)
+        .refine((s) => Object.keys(s).length <= MAX_SETUP_SOURCES, {
+          message: `at most ${MAX_SETUP_SOURCES} fields`,
+        })
+        .default({})
+        .describe("Where each detail a setup plan filled in was read, keyed by field (hours, services, profile.name)."),
     })
     .prefault({}),
   testMode: z.boolean().default(false),

@@ -77,6 +77,7 @@ import { CustomerData } from "./customers";
 import { offeredItemTypes } from "./directory";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
+import { applySetupPlan, type SetupPlanInput, type SetupPlanResult } from "./plan";
 import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
 import { WebhookCapabilities } from "./webhooks";
@@ -351,6 +352,18 @@ export class Capabilities {
     opts?: OnceOptions,
   ): Promise<OnceResult<T>> {
     return once(this.db, caller, op, input, run, opts);
+  }
+
+  /**
+   * A setup plan (`plan.ts`): a business's details as read from its site and checked by its owner,
+   * applied in one go, or with `dryRun` only said in sentences. Idempotent; the owner's or the inbox's own.
+   */
+  applySetupPlan(
+    caller: Caller,
+    plan: SetupPlanInput,
+    opts: { readonly dryRun?: boolean | undefined } = {},
+  ): Promise<SetupPlanResult> {
+    return applySetupPlan(this, this.db, caller, plan, opts);
   }
 
   // ---- public ----------------------------------------------------------------

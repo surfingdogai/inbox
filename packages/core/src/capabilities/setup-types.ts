@@ -152,9 +152,15 @@ export const updateRuleInput = patchOf(ruleInput).extend({
 });
 export const ruleIdInput = z.object({ rule_id: z.string().min(1) });
 export const presetKeySchema = z.enum(["appointments", "trades", "shop"]);
+export const presetConfirmSchema = z
+  .enum(["owner", "rules"])
+  .describe(
+    "owner: the owner confirms each booking and accepts each order, and the preset's rules that would say yes on their own are left out; rules: they are kept, and confirm a small booking in a free slot or accept a small order on their own.",
+  );
 export const applyPresetInput = z.object({
   preset: presetKeySchema,
   replace: z.boolean().default(false).describe("Remove the existing rules first."),
+  confirm: presetConfirmSchema.default("rules"),
 });
 export const testRuleInput = z.object({
   definition: ruleDefinitionSchema,

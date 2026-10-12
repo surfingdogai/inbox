@@ -286,8 +286,21 @@ const OFFER_A_CODE_PT: Preset = {
   },
 };
 
+/**
+ * Who says yes to a booking or an order: `rules`, the preset as it is, whose rules confirm a small
+ * booking in a free slot and accept a small order on their own; or `owner`, the same preset without
+ * those, so the owner confirms each booking and accepts each order. Asking a person, raising a
+ * priority and offering a code stay either way.
+ */
+export type PresetConfirm = "owner" | "rules";
+
+/** Whether a rule says yes on its own: it confirms a booking or accepts an order. */
+export function saysYesOnItsOwn(definition: RuleDefinition): boolean {
+  return definition.actions.some((a) => a.action === "transition" && (a.event === "confirm" || a.event === "accept"));
+}
+
 /** A vertical's rules, their words in the business's first language (`en` or `pt`). */
-export function presetFor(key: string, lang: "en" | "pt"): Preset[] {
-  const rules = PRESETS[key] ?? [];
+export function presetFor(key: string, lang: "en" | "pt", confirm: PresetConfirm = "rules"): Preset[] {
+  const rules = (PRESETS[key] ?? []).filter((r) => confirm === "rules" || !saysYesOnItsOwn(r.definition));
   return lang === "pt" ? rules.map((r) => (r === OFFER_A_CODE ? OFFER_A_CODE_PT : r)) : rules;
 }

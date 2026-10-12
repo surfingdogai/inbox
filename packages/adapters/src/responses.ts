@@ -505,6 +505,20 @@ export const ruleTestSchema = z.looseObject({
     ),
 });
 
+/** What a setup plan does, or did (`POST /setup/plan`). */
+export const setupPlanResultSchema = z.object({
+  dry_run: z.boolean(),
+  changed: z.boolean().describe("Whether anything changes (a dry run) or changed. False: the inbox already matched."),
+  sentences: z
+    .array(z.string())
+    .describe("For a person, in order: where the details were read, what applying does, and what agents can do."),
+  doors: z.object({
+    on: z.array(z.string()).describe("The doors on once the plan is applied."),
+    expected: z.array(z.string()).nullable(),
+    missing: z.array(z.object({ door: z.string(), why: z.string() })).describe("Expected doors that stay shut."),
+  }),
+});
+
 export const deliverySummarySchema = z.object({
   pending: z.number().int(),
   delivered: z.number().int(),

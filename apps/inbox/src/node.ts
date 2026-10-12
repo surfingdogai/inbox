@@ -1,15 +1,17 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createApiKey, ensureNetworkPing, pingNetworksNow } from "@surfingdog/adapters";
 import {
+  type Caller,
   Capabilities,
   createDb,
   createSecretBox,
   ensureLifecycleSweep,
   MIGRATIONS,
   parseSecretKeys,
+  type SetupPlanInput,
 } from "@surfingdog/core";
 import {
   cloudflareEmailRestMailOut,
@@ -43,6 +45,7 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs seed-showcase      the demo bike shop with a week of items, rules and hours (screenshots)
  *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
  *   node server.mjs network-ping       report to every network now instead of at the next hour
+ *   node server.mjs apply-plan <file>  apply a setup plan (JSON); --dry-run says what it would do
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 mkdirSync(path.dirname(file), { recursive: true });
@@ -74,9 +77,32 @@ if (command) {
   } else if (command === "network-ping") {
     await pingNetworksNow(db);
     console.log("queued a ping to every network that is on; the running server sends them within a second");
+  } else if (command === "apply-plan") {
+    // A setup plan (capabilities/plan.ts), applied as the inbox itself; the sentences say what it did.
+    const planFile = process.argv.slice(3).find((a) => !a.startsWith("--"));
+    if (!planFile) {
+      console.error("usage: apply-plan <plan.json> [--dry-run]");
+      process.exit(2);
+    }
+    const system: Caller = {
+      actor: { kind: "system", id: "apply-plan", channel: "system" },
+      tier: "verified_principal",
+      sandbox: false,
+    };
+    try {
+      // Checked against the plan's schema by the capability: the file is only parsed here.
+      const plan = JSON.parse(readFileSync(planFile, "utf8")) as SetupPlanInput;
+      const r = await new Capabilities(db, null, publicUrl).applySetupPlan(system, plan, {
+        dryRun: process.argv.includes("--dry-run"),
+      });
+      for (const sentence of r.sentences) console.log(sentence);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   } else {
     console.error(
-      `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog or network-ping`,
+      `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog, network-ping or apply-plan`,
     );
     process.exit(2);
   }
