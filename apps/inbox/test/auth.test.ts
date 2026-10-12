@@ -206,6 +206,8 @@ describe("the sign-in link on an instance deployed with one click", () => {
     expect(mail.sent).toEqual([]);
     expect(said()).toHaveLength(2);
     expect(said()[0]).toContain("not in INBOX_OWNER_EMAIL");
+    // Found by the search the setup docs give: `sign-in email`.
+    expect(said()[0]).toMatch(/^sign-in email not sent: /);
     // Whoever asked stays out of the log: on a public demo, which has no account, it is a stranger.
     expect(said().join("\n")).not.toMatch(/0wner@|mallory@|token=/);
 
@@ -219,7 +221,7 @@ describe("the sign-in link on an instance deployed with one click", () => {
     spy.mockClear();
     expect((await ask(empty)).status).toBe(200);
     expect(said()).toHaveLength(1);
-    expect(said()[0]).toMatch(/INBOX_OWNER_EMAIL is empty/);
+    expect(said()[0]).toMatch(/^sign-in email not sent: INBOX_OWNER_EMAIL is empty/);
   });
 });
 

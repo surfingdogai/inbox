@@ -371,8 +371,8 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       const listed = deps.ownerEmails ? (await deps.ownerEmails()).length : 0;
       log(
         listed
-          ? "sign-in link not sent: that address is not in INBOX_OWNER_EMAIL, and nobody has signed in here yet, so check the value"
-          : "sign-in link not sent: INBOX_OWNER_EMAIL is empty, so nobody can create the first account; set it and ask again",
+          ? "sign-in email not sent: that address is not in INBOX_OWNER_EMAIL, and nobody has signed in here yet, so check the value"
+          : "sign-in email not sent: INBOX_OWNER_EMAIL is empty, so nobody can create the first account; set it and ask again",
       );
     }
     if (known) {
