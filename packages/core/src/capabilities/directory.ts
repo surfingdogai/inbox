@@ -34,7 +34,8 @@ const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", 
  * A kind the business takes somewhere else (`elsewhere`, from `settings.doorsElsewhere`) is not
  * listed, and nor is a refund of it: the manifest names where to go for it instead.
  *
- * Only what is advertised reads this. No write path depends on it: a door still takes what it took.
+ * Only what is advertised reads this. A kind taken somewhere else is refused to customers by the
+ * doors themselves (`createBooking`, `createOrder`, `checkAvailability`), which name where to go.
  */
 export async function offeredItemTypes(db: Db, elsewhere: readonly string[] = []): Promise<ItemType[]> {
   const [services, open, products] = await Promise.all([

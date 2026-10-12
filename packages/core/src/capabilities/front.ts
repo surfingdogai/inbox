@@ -316,6 +316,9 @@ export async function frontBookAct(
   form: FrontForm,
   opts: { readonly now?: number } = {},
 ): Promise<LinkActResult> {
+  // Bookings taken at a platform are made there: the visitor is sent on, and nothing is written here.
+  const elsewhere = await caps.doorElsewhere("booking");
+  if (elsewhere) return { redirect: elsewhere };
   const f = frontCopy(lang);
   const now = opts.now ?? Date.now();
   const service = (await servicesOf(caps)).find((s) => s.id === form.service && s.price?.model !== "quote");

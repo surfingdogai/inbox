@@ -464,6 +464,25 @@ export class Capabilities {
 
   // ---- public ----------------------------------------------------------------
 
+  /**
+   * Where the business takes `kind` instead of here (`settings.doorsElsewhere`), or null when it
+   * takes it here: a booking platform, its own shop's checkout.
+   */
+  async doorElsewhere(kind: "booking" | "order"): Promise<string | null> {
+    return (await readSettings(this.db)).doorsElsewhere.find((d) => d.itemType === kind)?.url ?? null;
+  }
+
+  /**
+   * A customer's booking or order of a kind the business takes somewhere else is refused, and names
+   * where: the manifest leaves the kind out, and an agent that never read it must not book a time
+   * the platform's calendar never sees. The business still adds one here itself.
+   */
+  private async refuseElsewhere(caller: Caller, kind: "booking" | "order"): Promise<void> {
+    if (!isCustomer(caller)) return;
+    const elsewhere = await this.doorElsewhere(kind);
+    if (elsewhere) throw takenElsewhere(kind, elsewhere);
+  }
+
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
     const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
@@ -556,6 +575,9 @@ export class Capabilities {
     input: T.CheckAvailabilityInput,
     opts: { readonly now?: number } = {},
   ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
+    // Times the inbox would offer for bookings taken at a platform are not the platform's times.
+    const elsewhere = await this.doorElsewhere("booking");
+    if (elsewhere) throw takenElsewhere("booking", elsewhere);
     const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
     return findSlots(this.db, {
       serviceId: input.service_id,
@@ -581,6 +603,7 @@ export class Capabilities {
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
   async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
+    await this.refuseElsewhere(caller, "booking");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
@@ -595,6 +618,7 @@ export class Capabilities {
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
+    await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     const pricing = await this.customer.pricingFor(c, input);
     const confirmed = await this.customer.confirmCreate(c, "order", input, pricing);
@@ -1756,4 +1780,14 @@ async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEnt
       ? { automated: true as const }
       : {}),
   }));
+}
+
+/** The refusal for a kind of request the business takes somewhere else: where to go instead. */
+function takenElsewhere(kind: "booking" | "order", url: string): WriteError {
+  const what = kind === "booking" ? "bookings" : "orders";
+  return new WriteError(
+    "not_allowed",
+    `This business takes ${what} at ${url}, not here: send the customer there. Nothing was written. Messages and quote requests still come here.`,
+    { details: { reason: "taken_elsewhere", item_type: kind, url } },
+  );
 }

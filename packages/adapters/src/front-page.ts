@@ -73,8 +73,11 @@ export function frontPage(deps: FrontPageDeps): Hono {
     });
   });
 
-  app.get("/book", async (c) =>
-    renderCustomerPage(
+  app.get("/book", async (c) => {
+    // Bookings taken at a platform: a booking page here would offer times the platform never sees.
+    const elsewhere = await deps.caps.doorElsewhere("booking");
+    if (elsewhere) return c.redirect(elsewhere, 303);
+    return renderCustomerPage(
       c,
       await frontBookView(
         deps.caps,
@@ -82,8 +85,8 @@ export function frontPage(deps: FrontPageDeps): Hono {
         { service: c.req.query("service"), from: c.req.query("from") },
         { now: now() },
       ),
-    ),
-  );
+    );
+  });
   app.get("/quote", async (c) => renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "quote")));
   app.get("/message", async (c) => renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "message")));
   app.get("/sent", async (c) =>
