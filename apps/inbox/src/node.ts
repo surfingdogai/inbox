@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { createApiKey, ensureNetworkPing, pingNetworksNow } from "@surfingdog/adapters";
+import { createApiKey, ensureNetworkPing, pingNetworksNow, setOwnerEmail } from "@surfingdog/adapters";
 import {
   Capabilities,
   createDb,
@@ -39,6 +39,8 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *
  *   node server.mjs                    serve
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
+ *   node server.mjs set-owner-email <new> [<old>]
+ *                                      the address the owner signs in with, for one who lost the old one
  *   node server.mjs seed-demo          add the demo bike shop if the instance is empty
  *   node server.mjs seed-showcase      the demo bike shop with a week of items, rules and hours (screenshots)
  *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
@@ -60,6 +62,24 @@ if (command) {
   if (command === "create-owner-key") {
     const { key } = await createApiKey(db, { kind: "owner", name: process.argv[3] ?? "cli" });
     console.log(key);
+  } else if (command === "set-owner-email") {
+    if (!process.argv[3]) {
+      console.error("usage: set-owner-email <new address> [<the owner's address now>]");
+      process.exit(2);
+    }
+    try {
+      const r = await setOwnerEmail(db, { to: process.argv[3], from: process.argv[4] });
+      console.log(
+        r.outcome === "moved"
+          ? `the owner signs in with ${r.to} now, not ${r.from}; every session of theirs was signed out`
+          : r.outcome === "first_owner"
+            ? `nobody has signed in yet: ${r.to} may create the first account`
+            : "that is the owner's address already; nothing changed",
+      );
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
   } else if (command === "seed-demo") {
     const r = await seedDemo(db, Date.now(), seedDeps);
     console.log(r.seeded ? "seeded the demo business" : "an instance business already exists; nothing changed");
@@ -76,7 +96,7 @@ if (command) {
     console.log("queued a ping to every network that is on; the running server sends them within a second");
   } else {
     console.error(
-      `unknown command ${command}; use create-owner-key, seed-demo, seed-showcase, seed-surfingdog or network-ping`,
+      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog or network-ping`,
     );
     process.exit(2);
   }

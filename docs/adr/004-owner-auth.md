@@ -47,3 +47,8 @@ What a link in an email does when it is opened, and what reaches a log, changed:
   server with no TLS yet), and ignored over https. Sessions signed in before this end once.
 - **A handoff** (`createHandoff`): a host that has just confirmed an owner's address itself signs
   them in with a token that works once, for a minute, at that host only, by the same page and POST.
+- **Changing the owner's address** needs a step-up code sent to the current address, and a link
+  to the new one, confirmed in a browser signed in as that owner. The old address is then told, with
+  a link that puts it back for seven days and signs out every session. A host is told through
+  `onOwnerEmailChange`; a server's operator can run `set-owner-email` instead. The same step-up
+  helper (`sendStepUp`, `checkStepUp`) is for anything else that moves an inbox away from its owner.

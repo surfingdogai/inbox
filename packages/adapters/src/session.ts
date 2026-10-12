@@ -133,6 +133,11 @@ export function clearSessionCookies(c: Context, baseUrl: string | undefined): vo
   if (overHttps(c, baseUrl)) setCookie(c, SESSION_COOKIE, "", { httpOnly: true, maxAge: 0, prefix: "host" });
 }
 
+/** Ends every session a user has, on every device: after their address was taken back. */
+export async function endSessions(db: Db, userId: string): Promise<void> {
+  await db.client.query({ sql: "DELETE FROM sessions WHERE user_id = ?", params: [userId], method: "run" });
+}
+
 /** The hash a code is kept as: the row's own hash and the code, so equal codes never hash alike. */
 export async function codeHash(rowHash: string, code: string): Promise<string> {
   return hashKey(`${rowHash}:${code}`);

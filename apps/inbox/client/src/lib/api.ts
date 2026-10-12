@@ -176,6 +176,15 @@ export const api = {
   /** The code from the sign-in email, instead of its link: sets the session cookie. */
   signInWithCode: (email: string, code: string) =>
     call<{ ok: boolean; redirect: string }>("POST", "/auth/code", { body: { email, code }, public: true }),
+  /** A fresh code to the owner's own address, before changing it (the owner signed in, in person). */
+  stepUp: (purpose: "email_change") =>
+    call<{ ok: boolean; sent_to: string; expires_in: number }>("POST", "/auth/step-up", {
+      body: { purpose },
+      public: true,
+    }),
+  /** Asks to sign in with another address: a link goes there, to confirm in this browser. */
+  changeEmail: (email: string, code: string) =>
+    call<{ ok: boolean; sent_to: string }>("POST", "/auth/email", { body: { email, code }, public: true }),
   /** Sign-in by key: the settings document is the cheapest owner-only read. */
   verifyKey: (key: string) => call<SettingsDoc>("GET", "/v1/owner/settings", { key }),
   listItems: (params: ListParams) => call<Page<ItemView>>("GET", "/v1/owner/items", { query: { ...params } }),

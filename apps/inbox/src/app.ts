@@ -19,6 +19,7 @@ import {
   networkPingOneHandler,
   networkPublishHandler,
   networkReceiptHandler,
+  type OwnerEmailChange,
   publicOrigin,
   WEBHOOK_DELIVERY_KIND,
   WEBHOOK_FANOUT_KIND,
@@ -96,6 +97,11 @@ export interface AppDeps {
    * and seeded every night, and `/demo/live` shows what is happening. Absent, none of this exists.
    */
   readonly demo?: DemoOptions | undefined;
+  /**
+   * Told each time the owner's sign-in address changes or is put back, after it has: a host that
+   * keeps its own record of who owns each inbox updates it here. It cannot stop the change.
+   */
+  readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
 }
 
 export interface Inbox {
@@ -371,7 +377,7 @@ export function createInbox(deps: AppDeps): Inbox {
     baseUrl: deps.baseUrl,
     version: VERSION,
     sandbox: async () => (await readSettings(deps.db)).testMode,
-    // The doors send one kind of mail, the owner's sign-in link.
+    // The doors send only the owner's own mail: sign-in, step-up codes and address changes.
     mailOut: ownerMail,
     limits: demo ? DEMO_LIMITS : undefined,
     sharedLimits: demo ? DEMO_SHARED : undefined,
@@ -385,6 +391,7 @@ export function createInbox(deps: AppDeps): Inbox {
       const fromSettings = (await readSettings(deps.db)).notifications.ownerEmail;
       return [...(deps.ownerEmails ?? []), ...(fromSettings ? [fromSettings] : [])];
     },
+    onOwnerEmailChange: deps.onOwnerEmailChange,
   });
 
   // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.

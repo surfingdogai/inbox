@@ -23,10 +23,12 @@ import {
 import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin, sameOrigin } from "./origin";
+import { type OwnerEmailChange, ownerEmailRoutes } from "./owner-email";
 import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
+import { stepUpRoutes } from "./step-up";
 
 export * from "./access";
 export * from "./auth";
@@ -41,11 +43,13 @@ export * from "./mcp";
 export * from "./network";
 export * from "./oauth";
 export * from "./origin";
+export * from "./owner-email";
 export * from "./problem";
 export * from "./responses";
 export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
+export * from "./step-up";
 export * from "./untrusted";
 export * from "./webhooks/index";
 
@@ -78,12 +82,15 @@ export interface DoorDeps {
   readonly limits?: LimitTable | undefined;
   /** Buckets every caller shares, taken after the caller's own (a public demo sets `DEMO_SHARED`). */
   readonly sharedLimits?: LimitTable | undefined;
+  /** Told each time the owner's sign-in address changes, or is put back (owner-email.ts). */
+  readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
 }
 
 /**
  * The sign-in routes anyone can call that send an email or check a code: each POST takes an `auth`
  * token, so nobody fills an owner's mailbox or guesses at codes from one address. The other POSTs
- * there take the flood guard's: a link's button, and signing out.
+ * there take the flood guard's: a link's button, signing out, and what only the owner signed in can
+ * ask for (a step-up code, an address change), which counts its own sends and tries per owner.
  */
 const AUTH_LIMITED = new Set(["/auth/magic-link", "/auth/code"]);
 
@@ -349,6 +356,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       rememberOrigin: (origin) => deps.caps.rememberInboxAddress(origin),
     }),
   );
+  // Before the owner changes their address (and before anything else that moves the inbox away
+  // from them), a code to the address they have now; then the change itself, and its undo.
+  app.route("/auth/step-up", stepUpRoutes(ownerMail));
+  app.route("/auth/email", ownerEmailRoutes({ ...ownerMail, onOwnerEmailChange: deps.onOwnerEmailChange }));
   app.route(
     "/oauth",
     oauthRoutes({

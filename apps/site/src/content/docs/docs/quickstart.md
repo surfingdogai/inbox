@@ -65,6 +65,7 @@ A few commands run against the same database and exit:
 
 ```bash
 node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once
+node apps/inbox/dist/server.mjs set-owner-email new@x.com # the owner signs in with this address now (lost the old one)
 node apps/inbox/dist/server.mjs seed-demo                 # adds a demo bike shop if the instance is empty
 node apps/inbox/dist/server.mjs seed-showcase             # the same shop with a week of items, rules and hours
 node apps/inbox/dist/server.mjs network-ping              # reports to every network that is on now, not at the next hour
