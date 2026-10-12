@@ -1,6 +1,8 @@
 import {
+  ACCESS_PREFIX,
   createApiKey,
   EMAIL_UNDO_TTL_MS,
+  hashKey,
   type OwnerEmailChange,
   STEP_UP_ATTEMPTS,
   setOwnerEmail,
@@ -19,6 +21,8 @@ const NEW = "rita@oficinamare.pt";
 interface Owner {
   readonly db: Db;
   readonly mail: LogMailOut;
+  /** Addresses the mail service fails to send to, for as long as they are in it. */
+  readonly failTo: Set<string>;
   readonly app: App;
   readonly cookie: string;
   readonly changes: OwnerEmailChange[];
@@ -29,11 +33,18 @@ interface Owner {
 async function signedIn(): Promise<Owner> {
   const db = await freshDb();
   const mail = logMailOut();
+  const failTo = new Set<string>();
   const changes: OwnerEmailChange[] = [];
   const clock = { t: Date.now() };
   const app = createApp({
     db,
-    mailOut: mail,
+    mailOut: {
+      ...mail,
+      send: async (m) => {
+        if (m.to.some((to) => failTo.has(to))) throw new Error("the mail service is down");
+        return mail.send(m);
+      },
+    },
     ownerEmails: [OWNER],
     now: () => clock.t,
     onOwnerEmailChange: (change) => {
@@ -47,7 +58,7 @@ async function signedIn(): Promise<Owner> {
     body: JSON.stringify({ doc: { notifications: { ownerEmail: "Owner@OficinaMare.pt" } } }),
   });
   expect(saved.status).toBe(200);
-  return { db, mail, app, cookie, changes, clock };
+  return { db, mail, failTo, app, cookie, changes, clock };
 }
 
 const post = (o: Owner, path: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -200,6 +211,66 @@ describe("changing the address the owner signs in with", () => {
     const form = formOf(await (await o.app.request(confirm)).text());
     expect((await postForm(o.app, EVIL, form, { cookie: o.cookie })).status).toBe(200);
     expect(new URL(lastLink(o.mail, OWNER)).origin).toBe(ORIGIN);
+  });
+
+  // Someone who could read the owner's mailbox and signed in as them may have made a key, or
+  // connected an AI app, before changing the address: taking the address back cuts those off too.
+  it("cuts off, when it is put back, the keys made in Settings and the AI apps connected", async () => {
+    const o = await signedIn();
+    const made = await o.app.request(`${ORIGIN}/v1/owner/api-keys`, {
+      method: "POST",
+      headers: { cookie: o.cookie, origin: ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Zapier", preset: "read_only" }),
+    });
+    expect(made.status).toBe(201);
+    const { key } = (await made.json()) as { key: string };
+    const asKey = () => o.app.request(`${ORIGIN}/v1/owner/items`, { headers: { authorization: `Bearer ${key}` } });
+    expect((await asKey()).status).toBe(200);
+    const access = `${ACCESS_PREFIX}an-app-connected-while-someone-else-held-the-session`;
+    await o.db.client.query({
+      sql: `INSERT INTO oauth_tokens (token_hash, kind, client_id, user_id, scope, family_id, expires_at, created_at)
+            SELECT ?, 'access', 'client_x', id, 'inbox:read', 'family_x', ?, ? FROM users`,
+      params: [await hashKey(access), o.clock.t + 3_600_000, o.clock.t],
+      method: "run",
+    });
+    const asApp = () => o.app.request(`${ORIGIN}/v1/owner/items`, { headers: { authorization: `Bearer ${access}` } });
+    expect((await asApp()).status).toBe(200);
+
+    await post(o, "/auth/email", { email: NEW, code: await stepUp(o) });
+    await press(o.app, lastLink(o.mail, NEW), { cookie: o.cookie });
+    const back = await press(o.app, lastLink(o.mail, OWNER));
+    expect(back.status).toBe(200);
+    expect(await back.text()).toContain(
+      "Cut off as well, since whoever had your address could have made them: 1 key made in Settings and 1 connected AI app.",
+    );
+    expect((await asKey()).status).toBe(401);
+    expect((await asApp()).status).toBe(401);
+  });
+
+  it("does not stand when the old address cannot be told, and a later Confirm tries again", async () => {
+    const o = await signedIn();
+    await post(o, "/auth/email", { email: NEW, code: await stepUp(o) });
+    const confirm = lastLink(o.mail, NEW);
+    const form = formOf(await (await o.app.request(confirm)).text());
+    o.failTo.add(OWNER);
+    const failed = await postForm(o.app, ORIGIN, form, { cookie: o.cookie });
+    expect(failed.status).toBe(502);
+    expect(await failed.text()).toContain("so nothing changed");
+    expect(await userEmail(o.db)).toBe(OWNER);
+    expect(await toldAt(o)).toBe(OWNER);
+    expect(o.changes).toEqual([]);
+    const { rows } = await o.db.client.query({
+      sql: "SELECT COUNT(*) FROM login_tokens WHERE kind = 'email_undo'",
+      params: [],
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(0);
+
+    o.failTo.delete(OWNER);
+    const done = await postForm(o.app, ORIGIN, form, { cookie: o.cookie });
+    expect(done.status).toBe(200);
+    expect(await userEmail(o.db)).toBe(NEW);
+    expect(lastLink(o.mail, OWNER)).toContain("/auth/email/undo?token=");
   });
 
   it("can no longer be put back after seven days", async () => {

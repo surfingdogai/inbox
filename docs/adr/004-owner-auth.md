@@ -53,7 +53,9 @@ What a link in an email does when it is opened, and what reaches a log, changed:
   them in with a token that works once, for a minute, at that host only, by the same page and POST.
 - **Changing the owner's address** needs a step-up code sent to the current address, and a link
   to the new one, confirmed in a browser signed in as that owner. The old address is then told, with
-  a link that puts it back for seven days and signs out every session. A host is told through
+  a link that puts it back for seven days, signs out every session and cuts off every key made in
+  Settings and every AI app connected, since an intruder's session could have made them. When that
+  notice cannot be sent, the change does not stand: it carries the only way back. A host is told through
   `onOwnerEmailChange`; a server's operator can run `set-owner-email` instead. The same step-up
   helper (`sendStepUp`, `checkStepUp`) guards a download, and anything else that moves an inbox away
   from its owner.

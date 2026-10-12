@@ -25,8 +25,9 @@ import { checkStepUp, ownerInPerson } from "./step-up";
  * to the address they have now; then a link goes to the new address, and nothing changes until it
  * is opened and confirmed in a browser signed in as that owner, so a typo hands the inbox to nobody.
  * The address the owner is told at (`notifications.ownerEmail`) moves with it when it was the same.
- * Once it has changed the old address is told, with a link that puts it back for seven days and
- * signs out every session; and the host, when there is one, is told each time
+ * Once it has changed the old address is told, with a link that puts it back for seven days, signs
+ * out every session and cuts off the keys and AI apps a session could have made; a change the old
+ * address could not be told of does not stand. The host, when there is one, is told each time
  * (`onOwnerEmailChange`). A server's operator can set it from the command line instead
  * (`setOwnerEmail`), for an owner who can no longer read the old address.
  */
@@ -165,9 +166,11 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
   const answer = (
     c: Context,
     form: boolean,
-    status: 200 | 403 | 409 | 410,
+    status: 200 | 403 | 409 | 410 | 502,
     page: AuthPage,
-    json: { readonly code: string; readonly detail: string } | { readonly ok: true; readonly email: string },
+    json:
+      | { readonly code: string; readonly detail: string }
+      | { readonly ok: true; readonly email: string; readonly [more: string]: unknown },
   ): Response => {
     if (form) return authPage(c, status, page);
     if ("ok" in json) return c.json(json, status);
@@ -332,16 +335,47 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
       method: "run",
     });
     const undoLink = `${await linkOrigin(deps, c.req.raw)}/auth/email/undo?token=${undo}`;
-    let told = true;
     try {
       await sendOwnerMail(deps, {
         what: "address change notice",
         to: from,
         subject: `The address you sign in with was changed`,
-        text: `From now on you sign in to ${await businessName()} with ${to}, not with this address.\n\nIf that wasn't you, put this address back within 7 days:\n${undoLink}\n\nThat also signs out every session.`,
+        text: `From now on you sign in to ${await businessName()} with ${to}, not with this address.\n\nIf that wasn't you, put this address back within 7 days:\n${undoLink}\n\nThat also signs out every session, and cuts off every key made in Settings and every AI app connected.`,
       });
     } catch {
-      told = false;
+      // The notice carries the only link that puts the old address back, and whoever pressed Confirm
+      // may not be the owner: a change the old address was not told of does not stand. It is moved
+      // back, and the link that asked for it works again, so pressing Confirm later tries again.
+      const back = await moveOwnerEmail(deps.db, { userId: row.userId, from: to, to: from, now: now() }).catch(
+        () => false,
+      );
+      await deps.db.batch([
+        { sql: "DELETE FROM login_tokens WHERE hash = ?", params: [await hashKey(undo)], method: "run" },
+        ...(back
+          ? [
+              {
+                sql: "UPDATE login_tokens SET used_at = NULL WHERE hash = ? AND kind = 'email_change'",
+                params: [row.hash],
+                method: "run" as const,
+              },
+            ]
+          : []),
+      ]);
+      return answer(
+        c,
+        form,
+        502,
+        {
+          title: "Not changed",
+          heading: "Couldn't send the notice to your old address",
+          lines: [`It carries the link that puts ${from} back, so nothing changed. Press Confirm again in a minute.`],
+          ...(back ? { form: { action: "/auth/email/confirm", fields: { token }, button: "Confirm" } } : {}),
+        },
+        {
+          code: "mail_failed",
+          detail: `Couldn't send the notice to ${from}, so nothing changed. Try again in a minute.`,
+        },
+      );
     }
     await tellHost({ userId: row.userId, from, to, how: "changed" });
     return answer(
@@ -351,12 +385,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
       {
         title: "Address changed",
         heading: "Done",
-        lines: [
-          `You sign in with ${to} from now on.`,
-          told
-            ? `${from} was told, with a link that puts it back for 7 days.`
-            : `We couldn't send the notice to ${from}.`,
-        ],
+        lines: [`You sign in with ${to} from now on.`, `${from} was told, with a link that puts it back for 7 days.`],
         link: { href: "/", label: "Go to your inbox" },
       },
       { ok: true, email: to },
@@ -372,7 +401,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
       title: "Put your address back",
       heading: `Put back ${row.email} as the address you sign in with?`,
       lines: [
-        `The address for ${await businessName()} was changed to ${String(row.detail.to ?? "another one")}. If that wasn't you, put yours back. Every session is signed out, wherever it is.`,
+        `The address for ${await businessName()} was changed to ${String(row.detail.to ?? "another one")}. If that wasn't you, put yours back. Every session is signed out, wherever it is, and every key made in Settings and every AI app connected is cut off.`,
       ],
       form: { action: "/auth/email/undo", fields: { token }, button: "Put it back" },
     });
@@ -420,14 +449,44 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
       }
     }
     // Everything the other address could still use goes: its pending changes, other undo links,
-    // codes, and every session.
-    await deps.db.client.query({
-      sql: "UPDATE login_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
-      params: [now(), row.userId],
-      method: "run",
+    // codes, every session, and what a session could have made while someone else held it: the keys
+    // made in Settings and the AI apps connected. Which of those the owner made and which an intruder
+    // did cannot be told apart, so all of them go, and the owner makes again the ones they need.
+    const { rows: apps } = await deps.db.client.query({
+      sql: "SELECT COUNT(DISTINCT client_id) FROM oauth_tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?",
+      params: [row.userId, now()],
+      method: "all",
     });
+    const [, keys] = await deps.db.batch([
+      {
+        sql: "UPDATE login_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
+        params: [now(), row.userId],
+        method: "run",
+      },
+      {
+        sql: "UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND kind = 'integration' AND revoked_at IS NULL",
+        params: [now(), row.userId],
+        method: "run",
+      },
+      {
+        sql: "UPDATE oauth_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+        params: [now(), row.userId],
+        method: "run",
+      },
+      {
+        sql: "UPDATE oauth_codes SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
+        params: [now(), row.userId],
+        method: "run",
+      },
+    ]);
     await endSessions(deps.db, row.userId);
     if (current !== back) await tellHost({ userId: row.userId, from: current, to: back, how: "undone" });
+    const keysCut = keys?.changes ?? 0;
+    const appsCut = Number(apps[0]?.[0] ?? 0);
+    const cut = [
+      keysCut ? `${keysCut} ${keysCut === 1 ? "key" : "keys"} made in Settings` : "",
+      appsCut ? `${appsCut} connected AI ${appsCut === 1 ? "app" : "apps"}` : "",
+    ].filter(Boolean);
     return answer(
       c,
       form,
@@ -437,11 +496,13 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
         heading: "Done",
         lines: [
           `You sign in with ${back} again, and every session was signed out.`,
-          "Sign in, then check Settings → Keys for anything you do not recognise.",
+          cut.length
+            ? `Cut off as well, since whoever had your address could have made them: ${cut.join(" and ")}. Sign in, then make again, or connect again, the ones you use.`
+            : "No key had been made in Settings and no AI app was connected, so nothing else needed cutting off.",
         ],
         link: { href: "/login", label: "Sign in" },
       },
-      { ok: true, email: back },
+      { ok: true, email: back, keys_revoked: keysCut, apps_disconnected: appsCut },
     );
   });
 
