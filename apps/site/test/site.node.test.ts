@@ -60,6 +60,7 @@ const NEW_OR_CHANGED = [
   "src/lib/ask.ts",
   "src/lib/results.ts",
   "src/lib/rules.ts",
+  "src/components/TrustFlow.astro",
 ];
 
 describe("the checker's pages and components", () => {
@@ -568,5 +569,224 @@ describe("the home page and the three products", () => {
       const hrefs = [...read(path).matchAll(/href(?:=|: )["'`](\/[^"'`{]*)["'`]/g)].map((m) => m[1] ?? "");
       for (const h of hrefs) expect(exists(h), `${path}: ${h}`).toBe(true);
     }
+  });
+});
+
+describe("the trust page's animation", () => {
+  const PATH = "src/components/TrustFlow.astro";
+  const source = read(PATH);
+  const front = source.split(/^---$/m)[1] ?? "";
+  const template = source.split(/^---$/m)[2] ?? "";
+  const style = template.match(/<style is:global>([\s\S]*?)<\/style>/)?.[1] ?? "";
+  const script = template.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+
+  type Geo = {
+    rows: { name: string; level: number }[];
+    pass: { r: number; over: number };
+    row: { slots: number[]; notches: number };
+    say: { phrases: string[] };
+    at: {
+      loop: number;
+      rest: number;
+      say: number[];
+      reset: number[];
+      ask: number[];
+      item: number;
+      kept: number;
+      slip: number;
+      seal: number;
+      road: number[];
+      notch: number;
+      swap: number[];
+      settle: number[];
+      coin: number[];
+    };
+  };
+  /** GEO as the figure carries it: the object literal in the frontmatter, through JSON and back. */
+  function geo(): Geo {
+    const literal = front.match(/const GEO = (\{[\s\S]*?\n\});/)?.[1];
+    expect(literal, "GEO").toBeDefined();
+    const value: unknown = new Function(`return (${literal});`)();
+    return JSON.parse(JSON.stringify(value)) as Geo;
+  }
+
+  it("is on /trust, in the hero's art-box beside the words, as the network page places its own", () => {
+    const page = read("src/pages/trust.astro");
+    expect(page).toContain('import TrustFlow from "../components/TrustFlow.astro";');
+    expect(page).toMatch(/<section class="wrap section is-head top"[^>]*>\s*<div class="copy">/);
+    expect(page).toMatch(/<div class="art-box">\s*<TrustFlow \/>\s*<\/div>/);
+    expect(page.indexOf("<TrustFlow />")).toBeLessThan(page.indexOf('id="how-h"'));
+  });
+
+  it("its geometry parses as the JSON the script reads, and its timeline is in order", () => {
+    const G = geo();
+    const A = G.at;
+    expect(source).toContain("data-tf={JSON.stringify(GEO)}");
+    expect(G.rows.length).toBeGreaterThanOrEqual(3);
+    expect(G.row.slots.length).toBe(G.rows.length);
+    for (const r of G.rows) expect(r.level).toBeLessThan(G.row.notches);
+    // One phrase per time, every time inside the loop, in order.
+    expect(A.say.length).toBe(G.say.phrases.length);
+    for (const [i, t] of A.say.entries()) {
+      expect(t).toBeGreaterThanOrEqual(0);
+      expect(t).toBeLessThan(A.loop);
+      if (i > 0) expect(t).toBeGreaterThan(A.say[i - 1] ?? 0);
+    }
+    const marks = [
+      ...A.reset,
+      ...A.ask,
+      A.item,
+      A.kept,
+      A.slip,
+      A.seal,
+      ...A.road,
+      A.notch,
+      ...A.swap,
+      ...A.settle,
+      ...A.coin,
+    ];
+    for (const m of marks) expect(m >= 0 && m < A.loop, String(m)).toBe(true);
+    // The story in order: ordered, kept, signed, sent, counted, reordered, settled, then the coin.
+    const story = [A.ask[0], A.item, A.kept, A.slip, A.seal, A.road[0], A.road[1], A.notch, A.swap[0], A.swap[1]];
+    expect([...story].sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual(story);
+    expect(A.settle[0]).toBeGreaterThan(A.swap[1] ?? 0);
+    expect(A.coin[0]).toBeGreaterThan(A.settle[1] ?? 0);
+  });
+
+  it("puts up one short phrase at a time, each on screen long enough to read", () => {
+    const G = geo();
+    const A = G.at;
+    for (const p of G.say.phrases) {
+      expect(p.split(/\s+/).length, p).toBeLessThanOrEqual(6);
+      expect(p, p).not.toMatch(/[!?]|\d/);
+    }
+    // 1.2 s is the shortest that five words can be read in; the last phrase holds over the wrap.
+    for (const [i, t] of A.say.entries()) {
+      const next = A.say[i + 1] ?? A.loop + (A.say[0] ?? 0);
+      expect(next - t, G.say.phrases[i]).toBeGreaterThanOrEqual(1.2);
+    }
+    // The strip has one text node, written only after the old phrase has faded.
+    expect(template.match(/class="tf-phrase/g)?.length).toBe(1);
+    expect(script).toMatch(
+      /phrase\.classList\.remove\("on"\);[\s\S]*?hold\(170, \(\) => \{\s*phrase\.textContent = want;/,
+    );
+  });
+
+  it("never moves the order under the words that say nobody can pay for a place", () => {
+    const G = geo();
+    const A = G.at;
+    const coda = G.say.phrases.findIndex((p) => /pay for a place/.test(p));
+    expect(coda).toBe(G.say.phrases.length - 1);
+    const from = A.say[coda] ?? 0;
+    const until = A.loop + (A.say[0] ?? 0) + 0.17; // the first phrase is written 0.17 s after its time
+    const during = (t: number) => (t >= from && t < A.loop) || t + A.loop < until;
+    // The rows trade places, and go back at the top of the loop, only while another phrase is up.
+    const flip = ((A.reset[0] ?? 0) + (A.reset[1] ?? 0)) / 2;
+    for (const t of [flip, ...A.swap]) expect(during(t), String(t)).toBe(false);
+    expect(A.reset[0]).toBeGreaterThanOrEqual(A.say[0] ?? 0);
+    // The coin falls and goes while that phrase is up.
+    for (const t of A.coin) expect(during(t), String(t)).toBe(true);
+  });
+
+  it("renders at rest: the server draws the resting frame whole, and the script starts from that same moment", () => {
+    const G = geo();
+    const A = G.at;
+    expect(template).toMatch(/<svg class="tf-seed" viewBox="0 0 520 390"/);
+    expect(style).toMatch(/aspect-ratio: 520 \/ 390;/);
+    // The resting moment is after the swap and before the receipt settles, so one frame holds the
+    // kept order, the signed receipt docked on its listing, the new notch and the new order.
+    expect(A.rest).toBeGreaterThan(A.swap[1] ?? 0);
+    expect(A.rest).toBeLessThan(A.settle[0] ?? 0);
+    expect(A.rest).toBeGreaterThan(A.kept);
+    expect(A.rest).toBeGreaterThan(A.notch);
+    expect(template).toContain('class="tf-item on res"');
+    expect(template).toContain('class="tf-slip signed"');
+    expect(template).toContain('"tf-notch on new"');
+    expect(template).toContain('class={gained ? "tf-dir hit" : "tf-dir"}');
+    expect(template).toContain("{say.phrases[restSay]}");
+    expect(front).toMatch(/const restSay = GEO\.at\.say\.filter\(\(t\) => t <= GEO\.at\.rest\)\.length - 1;/);
+    // The script clones the seed, swaps the clone in whole, starts its clock at rest, and a throw
+    // leaves the seed standing.
+    expect(script).toContain("seed.cloneNode(true)");
+    expect(script).toContain("seed.replaceWith(svg)");
+    expect(script).toContain("let clock = A.rest;");
+    expect(script).toMatch(/try \{\s*mount\(f\);\s*\} catch/);
+  });
+
+  it("holds still under reduced motion, from the start or when it is turned on later", () => {
+    expect(script).toContain('matchMedia("(prefers-reduced-motion: reduce)")');
+    expect(script).toMatch(/if \(mq\.matches\) \{\s*still\(\);\s*return;\s*\}/);
+    expect(script).toMatch(/mq\.addEventListener\("change"/);
+    const media = style.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+    expect(media).toMatch(/\.stf \* \{\s*animation: none !important;\s*transition: none !important;/);
+    expect(style).toMatch(
+      /\.stf\.tf-still \*,\s*\.stf\.tf-still \{\s*animation: none !important;\s*transition: none !important;/,
+    );
+    // Off-screen or in a hidden tab the clock stops.
+    expect(script).toContain("IntersectionObserver");
+    expect(script).toContain('addEventListener("visibilitychange"');
+  });
+
+  it("names no red: tokens and written colours are ink, the order's tangerine, palm, violet and sun, and the brand's mark is Mark.astro's", () => {
+    // The brand's own mark keeps the brand's own gradient, exactly as Mark.astro draws it.
+    const gradient = template.match(/<linearGradient id="tfseed-g"[\s\S]*?<\/linearGradient>/)?.[0] ?? "";
+    const stops = (s: string) => [...s.matchAll(/stop-color="var\((--[a-z]+), (#[0-9a-f]{6})\)"/g)].map((m) => m[1]);
+    expect(stops(gradient)).toEqual(["--tangerine", "--flamingo", "--violet"]);
+    expect(stops(read("src/components/Mark.astro"))).toEqual(["--tangerine", "--flamingo", "--violet"]);
+    const rest = source
+      .replace(gradient, " ")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ");
+    expect(rest).not.toMatch(/--(?:c-)?(?:danger|flamingo|booking|refund|warning)(?:-ink)?\b/);
+    expect(rest).not.toMatch(/\bred\b/i);
+    const literals = [
+      ...[...rest.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)].map((m) => {
+        const h = m[1] ?? "";
+        const x = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+        return [0, 2, 4].map((i) => Number.parseInt(x.slice(i, i + 2), 16));
+      }),
+      ...[...rest.matchAll(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g)].map((m) => [m[1], m[2], m[3]].map(Number)),
+    ];
+    expect(literals.length).toBeGreaterThan(10);
+    for (const [r = 0, g = 0, b = 0] of literals) {
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      if (max - min < 40) continue; // grey, white or black
+      const hue =
+        max === r
+          ? (60 * ((g - b) / (max - min)) + 360) % 360
+          : max === g
+            ? 60 * ((b - r) / (max - min)) + 120
+            : 60 * ((r - g) / (max - min)) + 240;
+      expect(hue > 20 && hue < 330, `rgb(${r}, ${g}, ${b})`).toBe(true);
+    }
+    // Night redefines the fallbacks under both the media query and the theme attribute.
+    expect(style).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \.stf \{/);
+    expect(style).toContain('[data-theme="dark"] .stf {');
+  });
+
+  it("draws only what the page says is live, with illustrative businesses, and asks nothing of the network", () => {
+    const G = geo();
+    // Drawn working: receipts and the order that reads them, nobody paying included.
+    expect(stateOf("receipts")).toBe("live");
+    expect(stateOf("ranking")).toBe("live");
+    expect(capabilities.find((c) => c.id === "ranking")?.label).toMatch(/nobody can pay/i);
+    // Not drawn: the per-listing track record (kept, late or broken) is being built, and customers'
+    // records are paused, so the agent carries no record and no listing says late or broken.
+    expect(stateOf("reliability")).not.toBe("live");
+    const words = visible(source);
+    expect(words).not.toMatch(/track record|\blate\b|\bbroken\b|\bscore|\bstars?\b|\brating/i);
+    expect(template).not.toMatch(/tf-pip|class="pip/);
+    // The record is a meter of notches: no numbers in any phrase, any name or the drawing's words.
+    expect(G.say.phrases.join(" ")).not.toMatch(/\d/);
+    // The businesses are named by their kind, so none can be a real one.
+    for (const r of G.rows) expect(r.name, r.name).toMatch(/^[A-Z][a-z]+$/);
+    expect(G.rows.some((r) => r.name === "Bakery")).toBe(true);
+    // The order goes from the agent to the business; what reaches the network is the receipt.
+    expect(words).toMatch(/orders bread from a bakery, directly/);
+    expect(words).toMatch(/no names, no messages and nothing of what was ordered/);
+    // No external requests: the only address is the SVG namespace.
+    expect([...source.matchAll(/https?:\/\/[^\s"'`)]+/g)].map((m) => m[0])).toEqual(["http://www.w3.org/2000/svg"]);
+    expect(script).not.toMatch(/\bfetch\(|XMLHttpRequest|import\(/);
   });
 });

@@ -1,0 +1,1147 @@
+---
+/**
+ * The trust page's opening animation, "a kept promise". An AI agent orders from a bakery, directly:
+ * the order travels the agent's own line to the bakery's inbox, and the network is not on it. The
+ * bakery delivers, its inbox signs a receipt, and that receipt, and nothing else, travels to the
+ * trust network: the message beside it stays in the inbox. The receipt lands on the bakery's
+ * listing, the listing's record grows a notch, and the bakery moves up past a salon that has kept
+ * fewer promises. Then a coin drops onto the network and falls away, and the order does not move.
+ *
+ * What is drawn is what the page says is live (src/lib/status.ts and the pills under "Today"):
+ *  - receipts, live: the inbox signs one, and the network records it;
+ *  - ranking, live: the order reads kept promises, and nobody can pay for a place;
+ *  - the record is a gentle meter of notches, as NetworkFlow draws it: no numbers, no stars,
+ *    nothing that reads as anyone's real score. The per-listing track record (kept, late or
+ *    broken), which the page marks "Being built", is not drawn;
+ *  - customers' records are paused, so the agent carries no record of its own here;
+ *  - what a network receives is the receipt: no names, no messages, nothing of what was ordered.
+ * The order goes from the agent to the business, never through the network. The bakery, the
+ * salon and the clinic are illustrations, named by their kind so they can never be a real one.
+ *
+ * The timings are deliberate and live in GEO.at, where the tests read them; do not retune them by
+ * accident.
+ *  - One pass and one coda in a 13.4 s loop. The captions change at 0.20, 3.00, 4.50, 6.05, 7.50
+ *    and 10.20 s, so they hold 2.8, 1.5, 1.55, 1.45, 2.7 and 3.4 s (the last one over the wrap).
+ *    1.2 s is the shortest five words can be read in. Exactly one phrase is ever on screen: the
+ *    strip has one text node, and a new phrase is written only after the old one has faded.
+ *  - The directory goes back to where it started at the top of the loop, under the first phrase
+ *    and while the eye is on the agent: it fades down, the rows take their old places and the new
+ *    notch its old colour, and it fades back. Never under "Nobody can pay for a place", where a
+ *    moving order would say the opposite of the words.
+ *  - The coin falls with gravity (ease-in), meets the glass at the card's top edge, and falls
+ *    away fading. Nothing in the directory moves while it does.
+ *  - The piece starts from the picture at rest, 8.9 s into the loop: the order kept, the receipt
+ *    docked on the bakery's listing, the new notch, the bakery on top. The first thing a visitor
+ *    sees move is the receipt settling into the record.
+ *
+ * Every static part is drawn once below, as a server-rendered SVG built from GEO, in that resting
+ * frame. mount() clones it, adds the pieces that move and swaps the clone in whole, so there is
+ * never a hole where the figure is: with JavaScript off, or if mount() throws, the picture at rest
+ * is what a visitor keeps, and it already shows the whole story. The same GEO reaches the script
+ * as JSON on the figure, so the drawing and the machine cannot disagree about where anything is.
+ * The figure holds aspect-ratio 520/390 from first paint, so nothing below it jumps. With reduced
+ * motion the machine renders that same frame and stops; the preference is honoured if it is
+ * turned on later. Off-screen or in a hidden tab the clock stops.
+ *
+ * The styles are global because the moving pieces are made at run time, where Astro's scoped
+ * selectors cannot reach. Nothing leaks: every selector begins with .stf, every keyframe is named
+ * stf-*, and the tf- class names exist only inside .stf. None of them overlap HeroFlow's .sdf,
+ * NetworkFlow's .snf or HowFlow's .shf.
+ *
+ * Colours are the site's tokens, with a literal fallback only for a host that has not declared
+ * them; night redefines the fallbacks under both the prefers-color-scheme query and
+ * [data-theme="dark"]. No red anywhere: ink, the order's tangerine, the palm of a kept promise,
+ * the agent's violet and a coin's sun gold, and no pink outside the brand's own mark, which keeps
+ * the brand's own gradient as Mark.astro draws it. The order's word is drawn in its ink pulled toward
+ * --ink (18% by day, 32% by night), as NetworkFlow does, so it clears 4.5:1 and keeps its hue.
+ *
+ * No max-width of its own: the piece is whatever its container is (the page's .art-box caps it).
+ */
+
+/** The world, in the 520x390 viewBox. The drawing below and the script both read this. */
+const GEO = {
+  agent: { x: 30, y: 134 },
+  /** the agent to the business's inbox, directly: the network is not on this line */
+  ask: "M56,134 C80,134 72,160 96,160",
+  /** the route receipts take, from the inbox's door to the network's */
+  link: "M240,160 C268,160 268,192 296,192",
+  /** the receipt's whole journey: off the order's row, along the link, onto the listing */
+  road: "M236,160 L240,160 C268,160 268,192 296,192 L305,192",
+  ports: [
+    [96, 160],
+    [240, 160],
+    [296, 192],
+  ],
+  inbox: { x: 96, y: 102, w: 144, h: 126, name: "Bakery", room: 96 },
+  item: { x: 104, y: 146, w: 128, h: 28, lb: "Order", st: "Delivered" },
+  /** what stays in the inbox: the message, the name, what was ordered */
+  msg: { x: 104, y: 184, w: 128, h: 30 },
+  net: { x: 296, y: 102, w: 208, h: 152, name: "Trust network" },
+  row: { x: 308, w: 184, h: 28, slots: [146, 178, 210], notchX: 14, notchStep: 5.4, notches: 5, nameX: 52 },
+  /** in the order they start in; the pass row overtakes the one above it */
+  rows: [
+    { name: "Salon", level: 3 },
+    { name: "Bakery", level: 3 },
+    { name: "Clinic", level: 2 },
+  ],
+  pass: { r: 1, over: 0 },
+  /** the receipt docks on its listing's left edge, beside the meter */
+  dockX: 305,
+  coin: { x: 452, from: 20, edge: 102, r: 7 },
+  say: {
+    cx: 260,
+    y: 302,
+    h: 20,
+    w: 200,
+    phrases: [
+      "A business keeps its promise",
+      "Its inbox signs a receipt",
+      "Just the receipt travels",
+      "Its record grows a notch",
+      "The order follows kept promises",
+      "Nobody can pay for a place",
+    ],
+  },
+  /** the timeline, in seconds into the loop */
+  at: {
+    loop: 13.4,
+    rest: 8.9,
+    say: [0.2, 3.0, 4.5, 6.05, 7.5, 10.2],
+    reset: [0.2, 1.2],
+    ask: [0.35, 1.3],
+    item: 1.5,
+    kept: 2.4,
+    slip: 3.05,
+    seal: 3.55,
+    road: [4.55, 5.85],
+    notch: 6.05,
+    swap: [7.55, 8.45],
+    settle: [9.5, 9.9],
+    coin: [10.3, 11.0, 11.9],
+  },
+};
+
+const { agent, inbox, item, msg, net, row, say } = GEO;
+/* At rest the pass row has overtaken: it holds the slot above, and the one it passed holds its. */
+const slotAtRest = GEO.rows.map((_, i) => (i === GEO.pass.r ? GEO.pass.over : i === GEO.pass.over ? GEO.pass.r : i));
+const passY = row.slots[slotAtRest[GEO.pass.r] ?? 0] ?? 0;
+/* the inbox's mark: the striped half sun, as on the other pages' business cards */
+const sunY = inbox.y + 25;
+const sun = `M${inbox.x + 12},${sunY} A7,7 0 0 1 ${inbox.x + 26},${sunY} Z`;
+/* the network's mark: three listings, linked, sitting on the title's baseline */
+const glyph = [
+  [net.x + 14.5, net.y + 24.5],
+  [net.x + 22, net.y + 13.5],
+  [net.x + 29.5, net.y + 24.5],
+];
+/* A rough width for the picture at rest; the script measures the real one. */
+const est = (s: string, fs: number) => Math.round(s.length * fs * 0.54);
+const sayW = Math.max(say.w, ...say.phrases.map((p) => est(p, 9) + 34));
+const sayX = say.cx - sayW / 2;
+/* the phrase on screen at rest */
+const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
+---
+
+<figure class="stf" aria-label="How a kept promise orders the directory" data-tf={JSON.stringify(GEO)}>
+  <svg class="tf-seed" viewBox="0 0 520 390" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- the brand's mark, in the brand's own gradient, as Mark.astro draws it -->
+      <linearGradient id="tfseed-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--tangerine, #ff9650)"></stop>
+        <stop offset="58%" stop-color="var(--flamingo, #ff6fa8)"></stop>
+        <stop offset="100%" stop-color="var(--violet, #8a6bff)"></stop>
+      </linearGradient>
+      <clipPath id="tfseed-c"><path d={sun}></path></clipPath>
+    </defs>
+
+    <g class="tf-lines">
+      <path d={GEO.ask} class="tf-line" />
+      <path d={GEO.link} class="tf-line" />
+    </g>
+
+    <text x={agent.x} y="90" font-size="8.2" class="tf-cap">AI AGENT</text>
+    <g class="tf-agent">
+      <rect x={agent.x} y={agent.y - 12} width="24" height="24" rx="7" class="bodyfill" />
+      <rect x={agent.x} y={agent.y - 12} width="24" height="24" rx="7" />
+      <rect x={agent.x - 4} y={agent.y - 16} width="32" height="32" rx="10" class="halo" />
+      <circle cx={agent.x + 7.6} cy={agent.y - 1} r="1.7" class="eye" />
+      <circle cx={agent.x + 16.4} cy={agent.y - 1} r="1.7" class="eye" />
+      <line x1={agent.x + 12} y1={agent.y - 12} x2={agent.x + 12} y2={agent.y - 19} />
+      <circle cx={agent.x + 12} cy={agent.y - 21.6} r="2.6" class="ant" />
+    </g>
+
+    <g class="tf-ib">
+      <rect x={inbox.x} y={inbox.y} width={inbox.w} height={inbox.h} rx="14" class="tf-glass" />
+      <g class="tf-sun">
+        <path d={sun} fill="url(#tfseed-g)"></path>
+        <g clip-path="url(#tfseed-c)">
+          {[5.5, 4, 2.7].map((d) => (
+            <rect x={inbox.x + 11} y={sunY - d} width="16" height=".6" fill="var(--tf-ground)" />
+          ))}
+        </g>
+      </g>
+      <text x={inbox.x + 34} y={sunY} font-size="12" class="tf-title tf-ibname">{inbox.name}</text>
+      <line x1={inbox.x + 12} y1={inbox.y + 36} x2={inbox.x + inbox.w - 12} y2={inbox.y + 36} class="tf-hair" />
+      <g class="tf-item on res" transform={`translate(${item.x},${item.y})`}>
+        <rect width={item.w} height={item.h} rx="8" class="bg" />
+        <rect y="5" width="2.5" height={item.h - 10} rx="1.25" class="bar" />
+        <text x="10" y="17.8" font-size="9.6" class="lb">{item.lb}</text>
+        <g class="res">
+          <text x={item.w - 24} y="17.8" font-size="8.4" text-anchor="end" class="st">{item.st}</text>
+          <path d={`M${item.w - 18.6},14.4 l2.7,2.9 l5.1,-6.2`} class="tf-tick" />
+        </g>
+      </g>
+      <g class="tf-msg" transform={`translate(${msg.x},${msg.y})`}>
+        <rect width={msg.w} height={msg.h} rx="8" class="bg" />
+        <path d="M10.5,9.5 h11 a2.5,2.5 0 0 1 2.5,2.5 v4 a2.5,2.5 0 0 1 -2.5,2.5 h-6 l-3,2.6 v-2.6 h-2 a2.5,2.5 0 0 1 -2.5,-2.5 v-4 a2.5,2.5 0 0 1 2.5,-2.5 Z" class="ic" />
+        <rect x="32" y="10.2" width="74" height="2.6" rx="1.3" class="ln" />
+        <rect x="32" y="17.2" width="48" height="2.6" rx="1.3" class="ln" />
+      </g>
+    </g>
+
+    <g class="tf-net">
+      <rect x={net.x} y={net.y} width={net.w} height={net.h} rx="14" class="tf-glass" />
+      <g class="tf-glyph">
+        <path d={`M${glyph.map(([x, y]) => `${x},${y}`).join(" L")} Z`} />
+        {glyph.map(([x, y]) => <circle cx={x} cy={y} r="2.3" />)}
+      </g>
+      <text x={net.x + 38} y={net.y + 25} font-size="12" class="tf-title">{net.name}</text>
+      <line x1={net.x + 12} y1={net.y + 36} x2={net.x + net.w - 12} y2={net.y + 36} class="tf-hair" />
+      <g class="tf-dirs">
+        {
+          GEO.rows.map((r, i) => {
+            const gained = i === GEO.pass.r;
+            return (
+              <g
+                class={gained ? "tf-dir hit" : "tf-dir"}
+                transform={`translate(${row.x},${row.slots[slotAtRest[i] ?? i] ?? 0})`}
+              >
+                <rect width={row.w} height={row.h} rx="8" class="bg" />
+                <rect width={row.w} height={row.h} rx="8" class="ring" />
+                {Array.from({ length: row.notches }, (_, k) => (
+                  <rect
+                    x={row.notchX + k * row.notchStep}
+                    y="9"
+                    width="3.2"
+                    height="10"
+                    rx="1.4"
+                    class={k < r.level ? "tf-notch on" : gained && k === r.level ? "tf-notch on new" : "tf-notch"}
+                  />
+                ))}
+                <text x={row.nameX} y="17.8" font-size="9.2" class="nm">{r.name}</text>
+              </g>
+            );
+          })
+        }
+      </g>
+    </g>
+
+    {GEO.ports.map(([x, y]) => <circle cx={x} cy={y} r="2.6" class="tf-port" />)}
+
+    <g class="tf-slip signed" transform={`translate(${GEO.dockX},${passY + row.h / 2})`}>
+      <rect x="-6.5" y="-8.5" width="13" height="17" rx="2.2" class="paper" />
+      <line x1="-3.4" y1="-4.4" x2="3.4" y2="-4.4" class="ln" />
+      <line x1="-3.4" y1="-1.4" x2="1.6" y2="-1.4" class="ln" />
+      <circle cx="2.4" cy="3.9" r="2.8" class="seal" />
+    </g>
+
+    <g class="tf-say">
+      <rect x={sayX} y={say.y} width={sayW} height={say.h} rx={say.h / 2} />
+      <circle cx={sayX + 12} cy={say.y + say.h / 2} r="3" class="tf-beat" />
+      <text x={sayX + (sayW + 10) / 2} y={say.y + 13.2} font-size="9" text-anchor="middle" class="tf-phrase on">{say.phrases[restSay]}</text>
+    </g>
+  </svg>
+  <figcaption class="tf-sr">
+    An AI agent orders bread from a bakery, directly. The bakery delivers, and its inbox signs a receipt. Just the
+    receipt goes to the trust network, with no names, no messages and nothing of what was ordered. The bakery's record
+    grows a notch, and it moves up past a salon that has kept fewer promises. A coin dropped on the network falls away,
+    and the order does not move: nobody can pay for a place. The businesses are illustrations.
+  </figcaption>
+</figure>
+
+<style is:global>
+  /* Every selector below begins with .stf and every keyframe is named stf-*. */
+  .stf {
+    --tf-ground: var(--ground, #f6f5ff);
+    --tf-ink: var(--ink, #14163c);
+    --tf-ink2: var(--ink-2, #474a75);
+    --tf-ink3: var(--ink-3, #6b6e96);
+    --tf-hair: var(--hairline, rgba(20, 22, 60, 0.08));
+    --tf-glass: var(--glass-bg, rgba(255, 255, 255, 0.32));
+    --tf-glassb: var(--glass-border, rgba(255, 255, 255, 0.55));
+    --tf-row: var(--row-bg, rgba(255, 255, 255, 0.24));
+    --tf-order: var(--c-order, #ff9650);
+    --tf-order-i: var(--c-order-ink, #9c4409);
+    --tf-palm: var(--c-success, #2fd3a5);
+    --tf-palm-i: var(--c-success-ink, #147a5c);
+    --tf-violet: var(--violet, #8a6bff);
+    --tf-sun: var(--sun, #ffcf5c);
+    --tf-sun-i: var(--sun-ink, #866000);
+    --tf-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    /* how much of the order's ink is kept when its word is pulled toward --ink */
+    --tf-tmix: 82%;
+    position: relative;
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 520 / 390;
+    container-type: inline-size;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .stf {
+      --tf-ground: var(--ground, #0d0e26);
+      --tf-ink: var(--ink, #f2f1ff);
+      --tf-ink2: var(--ink-2, #b9b8dd);
+      --tf-ink3: var(--ink-3, #8e8db8);
+      --tf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+      --tf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+      --tf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+      --tf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+      --tf-order-i: var(--c-order-ink, #ffb27c);
+      --tf-palm-i: var(--c-success-ink, #72e6c3);
+      --tf-sun-i: var(--sun-ink, #ffda80);
+      --tf-tmix: 68%;
+    }
+  }
+  [data-theme="dark"] .stf {
+    --tf-ground: var(--ground, #0d0e26);
+    --tf-ink: var(--ink, #f2f1ff);
+    --tf-ink2: var(--ink-2, #b9b8dd);
+    --tf-ink3: var(--ink-3, #8e8db8);
+    --tf-hair: var(--hairline, rgba(255, 255, 255, 0.1));
+    --tf-glass: var(--glass-bg, rgba(255, 255, 255, 0.07));
+    --tf-glassb: var(--glass-border, rgba(255, 255, 255, 0.14));
+    --tf-row: var(--row-bg, rgba(255, 255, 255, 0.05));
+    --tf-order-i: var(--c-order-ink, #ffb27c);
+    --tf-palm-i: var(--c-success-ink, #72e6c3);
+    --tf-sun-i: var(--sun-ink, #ffda80);
+    --tf-tmix: 68%;
+  }
+
+  .stf svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .stf text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--tf-ink2);
+  }
+  .stf .tf-cap {
+    letter-spacing: 0.11em;
+  }
+  .stf .tf-title {
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* thin lines: the agent's own line to the business, and the receipts' route */
+  .stf .tf-line {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.34;
+    stroke-width: 1.1;
+  }
+  .stf .tf-port {
+    fill: var(--tf-ink3);
+    fill-opacity: 0.55;
+  }
+
+  /* glass: a wash and a hairline, never a shadow */
+  .stf .tf-glass {
+    fill: var(--tf-glass);
+    stroke: var(--tf-glassb);
+    stroke-width: 1;
+  }
+  .stf .tf-hair {
+    stroke: var(--tf-hair);
+    stroke-width: 1;
+  }
+  .stf .tf-glyph path {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.5;
+    stroke-width: 1;
+    stroke-linejoin: round;
+  }
+  .stf .tf-glyph circle {
+    fill: var(--tf-ink3);
+  }
+
+  /* the agent: drawn in ink, its identity in one small tinted dot */
+  .stf .tf-agent rect,
+  .stf .tf-agent line {
+    fill: none;
+    stroke: var(--tf-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.2;
+  }
+  .stf .tf-agent .bodyfill {
+    fill: var(--tf-violet);
+    fill-opacity: 0.07;
+    stroke: none;
+  }
+  .stf .tf-agent .eye {
+    fill: var(--tf-ink2);
+    fill-opacity: 0.5;
+  }
+  .stf .tf-agent .ant {
+    fill: var(--tf-violet);
+  }
+  .stf .tf-agent .halo {
+    stroke: var(--tf-violet);
+    stroke-opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .stf .tf-agent.wake .halo {
+    animation: stf-halo 0.62s var(--tf-ease);
+  }
+  @keyframes stf-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.82);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.3);
+    }
+  }
+
+  /* the order, in the business's inbox */
+  .stf .tf-item {
+    opacity: 0;
+    transition: opacity 0.3s linear;
+  }
+  .stf .tf-item.on {
+    opacity: 1;
+  }
+  .stf .tf-item .bg {
+    fill: var(--tf-row);
+  }
+  .stf .tf-item .bar {
+    fill: var(--tf-order);
+  }
+  .stf .tf-item .lb {
+    fill: color-mix(in srgb, var(--tf-order-i) var(--tf-tmix), var(--tf-ink));
+    font-weight: 600;
+  }
+  .stf .tf-item .res {
+    opacity: 0;
+    transition: opacity 0.36s var(--tf-ease);
+  }
+  .stf .tf-item.res .res {
+    opacity: 1;
+  }
+  .stf .tf-tick {
+    fill: none;
+    stroke: var(--tf-palm-i);
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* what stays in the inbox */
+  .stf .tf-msg .bg {
+    fill: var(--tf-row);
+  }
+  .stf .tf-msg .ic {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.55;
+    stroke-width: 1;
+    stroke-linejoin: round;
+  }
+  .stf .tf-msg .ln {
+    fill: var(--tf-ink3);
+    fill-opacity: 0.3;
+    transition: fill-opacity 0.5s var(--tf-ease);
+  }
+  .stf .tf-msg.stay .ln {
+    fill-opacity: 0.6;
+  }
+
+  /* the directory */
+  .stf .tf-dir .bg {
+    fill: var(--tf-row);
+    stroke: var(--tf-palm);
+    stroke-opacity: 0;
+    stroke-width: 1;
+    transition: stroke-opacity 0.36s var(--tf-ease);
+  }
+  .stf .tf-dir.hit .bg {
+    stroke-opacity: 0.6;
+  }
+  .stf .tf-dir .ring {
+    fill: none;
+    stroke: var(--tf-palm);
+    stroke-width: 1.2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .stf .tf-dir.ping .ring {
+    animation: stf-ping 0.72s var(--tf-ease);
+  }
+  @keyframes stf-ping {
+    0% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.06, 1.3);
+    }
+  }
+  .stf .tf-dir .nm {
+    fill: var(--tf-ink);
+    font-weight: 600;
+  }
+
+  /* The record: a few notches, never a number. A notch that has just been
+     earned comes in palm and grows up out of its slot. */
+  .stf .tf-notch {
+    fill: var(--tf-ink3);
+    fill-opacity: 0.2;
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    transition:
+      fill 1s var(--tf-ease),
+      fill-opacity 1s var(--tf-ease);
+  }
+  .stf .tf-notch.on {
+    fill-opacity: 0.62;
+  }
+  .stf .tf-notch.new {
+    fill: var(--tf-palm);
+    fill-opacity: 1;
+    transition: none;
+  }
+  /* the moves are their own classes, added only as they happen, so the
+     picture at rest never plays them on arrival */
+  .stf .tf-notch.grow {
+    animation: stf-grow 0.7s var(--tf-ease);
+  }
+  @keyframes stf-grow {
+    0% {
+      transform: scaleY(0.2);
+    }
+    60% {
+      transform: scaleY(1.18);
+    }
+    100% {
+      transform: scaleY(1);
+    }
+  }
+
+  /* the receipt: paper, two lines, and the inbox's seal once it is signed */
+  .stf .tf-slip .paper {
+    fill: color-mix(in srgb, var(--tf-palm) 10%, var(--tf-ground));
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.6;
+    stroke-width: 1;
+  }
+  .stf .tf-slip .ln {
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.7;
+    stroke-width: 1;
+    stroke-linecap: round;
+  }
+  .stf .tf-slip .seal {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.5;
+    stroke-width: 0.9;
+    stroke-dasharray: 1.4 1.2;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .stf .tf-slip.signed .seal {
+    fill: var(--tf-palm);
+    stroke: none;
+  }
+  .stf .tf-slip.pop .seal {
+    animation: stf-pop 0.6s var(--tf-ease);
+  }
+  @keyframes stf-pop {
+    0% {
+      transform: scale(0.4);
+    }
+    55% {
+      transform: scale(1.6);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* the pieces that move */
+  .stf .tf-dot {
+    fill: var(--tf-violet);
+  }
+  .stf .tf-coin .face {
+    fill: color-mix(in srgb, var(--tf-sun) 55%, var(--tf-ground));
+    stroke: var(--tf-sun-i);
+    stroke-opacity: 0.7;
+    stroke-width: 1;
+  }
+  .stf .tf-coin .rim {
+    fill: none;
+    stroke: var(--tf-sun-i);
+    stroke-opacity: 0.55;
+    stroke-width: 0.9;
+  }
+  .stf .tf-coin .edge {
+    fill: var(--tf-sun-i);
+    fill-opacity: 0.4;
+  }
+  .stf .tf-ripple {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-width: 1;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .stf .tf-ripple.hit {
+    animation: stf-ripple 0.8s var(--tf-ease);
+  }
+  @keyframes stf-ripple {
+    0% {
+      opacity: 0.6;
+      transform: scale(0.5);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.6);
+    }
+  }
+  .stf .tf-off {
+    display: none;
+  }
+  .stf .tf-guide {
+    fill: none;
+    stroke: none;
+  }
+
+  /* the caption strip: one phrase, faded out before the next is written */
+  .stf .tf-say rect {
+    fill: none;
+    stroke: var(--tf-ink3);
+    stroke-opacity: 0.3;
+    stroke-width: 1;
+  }
+  .stf .tf-beat {
+    fill: var(--tf-palm);
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .stf .tf-say.beat .tf-beat {
+    animation: stf-beat 0.7s var(--tf-ease);
+  }
+  @keyframes stf-beat {
+    0% {
+      transform: scale(1);
+    }
+    36% {
+      transform: scale(1.5);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  .stf .tf-phrase {
+    fill: var(--tf-ink2);
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.16s linear;
+  }
+  .stf .tf-phrase.on {
+    opacity: 1;
+    transition: opacity 0.24s var(--tf-ease);
+  }
+
+  /* Read by a screen reader, not drawn. */
+  .stf .tf-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Below the breakpoint the viewBox shrinks the type past reading size, so the
+     words that carry the story grow in user units: the caption, the card
+     titles, the names, the order's word and the phrase. Targets are CSS pixels
+     at a 342-wide art-box (a 390px phone) divided by the container scale. The
+     order's status steps out because it cannot grow inside its row; the tick
+     still says it was delivered. The script measures the phrases again after
+     the switch, so a bigger word gets a bigger strip. */
+  @container (max-width: 460px) {
+    .stf .tf-item .st {
+      display: none;
+    }
+    .stf .tf-cap {
+      font-size: 12.4px;
+    }
+    .stf .tf-title {
+      font-size: 15px;
+    }
+    .stf .tf-dir .nm {
+      font-size: 12.6px;
+    }
+    .stf .tf-item .lb {
+      font-size: 13px;
+    }
+    .stf .tf-phrase {
+      font-size: 12.4px;
+    }
+  }
+
+  /* Reduced motion: the machine renders the picture at rest and stops, and
+     every transition and keyframe inside the figure is switched off. Paused,
+     the CSS keyframes stop with the clock. */
+  .stf.tf-still *,
+  .stf.tf-still {
+    animation: none !important;
+    transition: none !important;
+  }
+  .stf.tf-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stf * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  /* The drawing machine. It clones the server-rendered picture, adds the pieces
+     that move, and draws every frame from the time alone, so any moment of the
+     loop can be drawn without playing the ones before it. */
+  type Geo = {
+    agent: { x: number; y: number };
+    ask: string;
+    road: string;
+    item: { x: number; y: number; w: number; h: number };
+    inbox: { room: number };
+    row: { x: number; h: number; slots: number[]; notchX: number; notchStep: number };
+    rows: { name: string; level: number }[];
+    pass: { r: number; over: number };
+    dockX: number;
+    coin: { x: number; from: number; edge: number; r: number };
+    say: { cx: number; w: number; phrases: string[] };
+    at: {
+      loop: number;
+      rest: number;
+      say: number[];
+      reset: [number, number];
+      ask: [number, number];
+      item: number;
+      kept: number;
+      slip: number;
+      seal: number;
+      road: [number, number];
+      notch: number;
+      swap: [number, number];
+      settle: [number, number];
+      coin: [number, number, number];
+    };
+  };
+
+  const NS = "http://www.w3.org/2000/svg";
+  function E<K extends keyof SVGElementTagNameMap>(n: K, a: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
+    const e = document.createElementNS(NS, n);
+    for (const k in a) e.setAttribute(k, String(a[k]));
+    return e;
+  }
+  function all<T extends Element>(root: ParentNode, sel: string): T[] {
+    return Array.from(root.querySelectorAll<T>(sel));
+  }
+  function one<T extends Element>(root: ParentNode, sel: string): T {
+    const e = root.querySelector<T>(sel);
+    if (!e) throw new Error(`trust flow: missing ${sel}`);
+    return e;
+  }
+  function must<T>(v: T | undefined, what: string): T {
+    if (v === undefined) throw new Error(`trust flow: missing ${what}`);
+    return v;
+  }
+
+  /* Newton solve for a CSS cubic-bezier, so the travel uses the same curve as
+     the CSS transitions around it. */
+  function bez(x1: number, y1: number, x2: number, y2: number) {
+    const cx = 3 * x1;
+    const bx = 3 * (x2 - x1) - cx;
+    const ax = 1 - cx - bx;
+    const cy = 3 * y1;
+    const by = 3 * (y2 - y1) - cy;
+    const ay = 1 - cy - by;
+    return (x: number) => {
+      let t = x;
+      for (let i = 0; i < 5; i++) {
+        const e = ((ax * t + bx) * t + cx) * t - x;
+        if (Math.abs(e) < 1e-4) break;
+        const d = (3 * ax * t + 2 * bx) * t + cx;
+        if (Math.abs(d) < 1e-6) break;
+        t -= e / d;
+      }
+      return ((ay * t + by) * t + cy) * t;
+    };
+  }
+  const eSoft = bez(0.2, 0.8, 0.2, 1);
+  const eSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+  const cl = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
+  const within = (t: number, [a, b]: readonly number[]) => t >= (a ?? 0) && t < (b ?? 0);
+  const prog = (t: number, a: number, b: number) => cl((t - a) / (b - a));
+
+  let seq = 0;
+
+  function mount(fig: HTMLElement) {
+    if (fig.dataset.tfOn === "on") return; /* one scene per figure, however often this runs */
+    fig.dataset.tfOn = "on";
+    const G = JSON.parse(fig.dataset.tf ?? "") as Geo;
+    const A = G.at;
+    const seed = one<SVGSVGElement>(fig, "svg.tf-seed");
+
+    /* The live scene is the picture at rest plus the pieces that move. It is
+       built off the page and swapped in whole, so the figure is never empty. */
+    const svg = seed.cloneNode(true) as SVGSVGElement;
+    svg.classList.remove("tf-seed");
+    const uid = `tf${++seq}`;
+    one(svg, "#tfseed-g").id = `${uid}g`;
+    one(svg, "#tfseed-c").id = `${uid}c`;
+    for (const el of all(svg, '[fill="url(#tfseed-g)"]')) el.setAttribute("fill", `url(#${uid}g)`);
+    for (const el of all(svg, '[clip-path="url(#tfseed-c)"]')) el.setAttribute("clip-path", `url(#${uid}c)`);
+
+    const agent = one<SVGGElement>(svg, ".tf-agent");
+    const itemG = one<SVGGElement>(svg, ".tf-item");
+    const msgG = one<SVGGElement>(svg, ".tf-msg");
+    const dirsG = one<SVGGElement>(svg, ".tf-dirs");
+    const dirs = all<SVGGElement>(dirsG, ".tf-dir");
+    const pass = must(dirs[G.pass.r], "the listing that moves up");
+    const gain = must(all<SVGRectElement>(pass, ".tf-notch")[G.rows[G.pass.r]?.level ?? 0], "the notch it earns");
+    const slip = one<SVGGElement>(svg, ".tf-slip");
+    const ibName = one<SVGTextElement>(svg, ".tf-ibname");
+    const sayG = one<SVGGElement>(svg, ".tf-say");
+    const sayRect = one<SVGRectElement>(sayG, "rect");
+    const sayDot = one<SVGCircleElement>(sayG, ".tf-beat");
+    const phrase = one<SVGTextElement>(sayG, ".tf-phrase");
+
+    /* the pieces made here: the order's dot, the coin and the glass's answer to it */
+    const dot = E("circle", { r: 3.2, class: "tf-dot tf-off" });
+    const coin = E("g", { class: "tf-coin tf-off" });
+    const C = G.coin;
+    coin.append(
+      E("ellipse", { cy: 1.6, rx: C.r, ry: C.r, class: "edge" }),
+      E("circle", { r: C.r, class: "face" }),
+      E("circle", { r: C.r - 2.6, class: "rim" }),
+    );
+    const ripple = E("ellipse", { cx: C.x, cy: C.edge, rx: 14, ry: 3.2, class: "tf-ripple" });
+    svg.append(dot, ripple, coin);
+    /* unpainted guides the moving pieces follow */
+    const askPath = E("path", { d: G.ask, class: "tf-guide" });
+    const roadPath = E("path", { d: G.road, class: "tf-guide" });
+    svg.append(askPath, roadPath);
+
+    /* Anything that throws from here on leaves a drawn scene, not a hole. */
+    seed.replaceWith(svg);
+
+    const LASK = askPath.getTotalLength();
+    const LROAD = roadPath.getTotalLength();
+    const birth = roadPath.getPointAtLength(0);
+
+    /* ---- words are measured, never guessed ------------------------------ */
+    function bx(t: SVGGraphicsElement): DOMRect | null {
+      try {
+        const b = t.getBBox();
+        return b?.width ? b : null;
+      } catch {
+        return null;
+      }
+    }
+    function fit() {
+      /* the caption strip holds its widest phrase, so it never changes size under a phrase */
+      const said = phrase.textContent;
+      let widest = 0;
+      for (const p of G.say.phrases) {
+        phrase.textContent = p;
+        widest = Math.max(widest, bx(phrase)?.width ?? 0);
+      }
+      phrase.textContent = said;
+      const W = Math.max(G.say.w, Math.ceil(widest + 34));
+      const x0 = G.say.cx - W / 2;
+      sayRect.setAttribute("x", String(x0));
+      sayRect.setAttribute("width", String(W));
+      sayDot.setAttribute("cx", String(x0 + 12));
+      phrase.setAttribute("x", String(x0 + (W + 10) / 2));
+      /* the inbox's title shrinks only if a wide fallback font would push it out of its card */
+      ibName.style.fontSize = "";
+      const b = bx(ibName);
+      if (b && b.width > G.inbox.room) {
+        const px = Number.parseFloat(getComputedStyle(ibName).fontSize) || 12;
+        ibName.style.fontSize = `${((px * G.inbox.room) / b.width).toFixed(2)}px`;
+      }
+    }
+    /* The type scale changes at the container breakpoint, so the words are
+       re-measured when the piece crosses it, when a hidden piece is first
+       revealed, and once more when the webfonts have arrived. */
+    let narrow: boolean | null = null;
+    let measured = false;
+    function gauge() {
+      const w = fig.clientWidth;
+      const nw = w > 0 && w <= 460;
+      if (nw === narrow && measured) return;
+      narrow = nw;
+      if (w > 0) {
+        fit();
+        measured = true;
+      }
+    }
+    gauge();
+    if ("ResizeObserver" in window) new ResizeObserver(gauge).observe(fig);
+    document.fonts?.ready.then(fit, () => {});
+
+    /* ---- the pieces ------------------------------------------------------ */
+    function put(el: SVGElement, x: number, y: number, s = 1) {
+      el.setAttribute("transform", `translate(${x},${y})${s === 1 ? "" : ` scale(${s})`}`);
+      el.classList.remove("tf-off");
+    }
+    function off(el: SVGElement) {
+      el.classList.add("tf-off");
+    }
+    /* Highlights are wall-clock, so every timer is held here: a paused or
+       stilled piece must not have a late timer reach in and undo it. */
+    const timers: number[] = [];
+    function hold(ms: number, fn: () => void) {
+      timers.push(window.setTimeout(fn, ms));
+    }
+    function flash(el: Element, cls: string, ms: number) {
+      el.classList.remove(cls);
+      void el.getBoundingClientRect(); /* a reflow, so a repeated highlight starts again */
+      el.classList.add(cls);
+      hold(ms, () => el.classList.remove(cls));
+    }
+
+    /* One phrase on screen at a time: a single text node, faded out before the
+       next phrase is written into it. */
+    let want = phrase.textContent?.trim() ?? "";
+    function sayIt(i: number, live: boolean) {
+      const text = G.say.phrases[i] ?? "";
+      if (text === want) return;
+      want = text;
+      if (!live) {
+        phrase.textContent = text;
+        phrase.classList.add("on");
+        return;
+      }
+      phrase.classList.remove("on");
+      flash(sayG, "beat", 720);
+      hold(170, () => {
+        phrase.textContent = want;
+        phrase.classList.add("on");
+      });
+    }
+
+    /* ---- one moment of the loop ----------------------------------------- */
+    const slotY = (slot: number) => G.row.slots[slot] ?? 0;
+    const restY = (i: number) => slotY(i);
+    const endY = (i: number) => slotY(i === G.pass.r ? G.pass.over : i === G.pass.over ? G.pass.r : i);
+    const mid = ((A.reset[0] ?? 0) + (A.reset[1] ?? 0)) / 2;
+    const half = G.row.h / 2;
+    const level = G.rows[G.pass.r]?.level ?? 0;
+    const notchX = G.row.x + G.row.notchX + level * G.row.notchStep + 1.6;
+    /* a mark is crossed when the clock passes it between two frames, wrap included */
+    const crossed = (a: number, b: number, m: number) => (b >= a ? a < m && m <= b : m > a || m <= b);
+
+    function render(t: number, prev: number, live: boolean) {
+      /* the caption: the last phrase whose time has come, the coda's before the first */
+      let s = G.say.phrases.length - 1;
+      A.say.forEach((at, i) => {
+        if (t >= at) s = i;
+      });
+      sayIt(s, live);
+
+      /* 1. the agent orders from the business itself, on its own line */
+      if (live && crossed(prev, t, A.ask[0])) flash(agent, "wake", 640);
+      if (within(t, A.ask)) {
+        const v = prog(t, A.ask[0], A.ask[1]);
+        const p = askPath.getPointAtLength(eSine(v) * LASK);
+        dot.style.opacity = String(v < 0.15 ? v / 0.15 : 1);
+        put(dot, p.x, p.y);
+      } else if (t >= A.ask[1] && t < A.item) {
+        const u = eSoft(prog(t, A.ask[1], A.item));
+        dot.style.opacity = String(1 - u);
+        put(dot, lerp(G.item.x - 8, G.item.x + 10, u), G.item.y + G.item.h / 2);
+      } else off(dot);
+
+      /* 2. the order is in the inbox, and the business delivers it */
+      itemG.classList.toggle("on", t >= A.item);
+      itemG.classList.toggle("res", t >= A.kept);
+
+      /* where the rows are: the pass row and the one it overtakes trade places */
+      const moved = t < mid ? 1 : t < A.swap[0] ? 0 : eSoft(prog(t, A.swap[0], A.swap[1]));
+      const passY = lerp(restY(G.pass.r), endY(G.pass.r), moved);
+
+      /* 3. its inbox signs a receipt, and just the receipt travels */
+      const signed = t >= A.seal && t < A.settle[1];
+      if (live && crossed(prev, t, A.seal)) flash(slip, "pop", 640);
+      slip.classList.toggle("signed", signed);
+      msgG.classList.toggle("stay", t >= A.road[0] && t < A.road[1] + 0.3);
+      if (t < A.slip || t >= A.settle[1]) {
+        off(slip);
+      } else if (t < A.road[0]) {
+        const u = eSoft(prog(t, A.slip, A.slip + 0.25));
+        slip.style.opacity = String(u);
+        put(slip, birth.x, birth.y, 0.4 + 0.6 * u);
+      } else if (t < A.road[1]) {
+        const p = roadPath.getPointAtLength(eSine(prog(t, A.road[0], A.road[1])) * LROAD);
+        slip.style.opacity = "1";
+        put(slip, p.x, p.y);
+      } else if (t < A.settle[0]) {
+        /* docked on the listing, and carried with it when it moves up */
+        slip.style.opacity = "1";
+        put(slip, G.dockX, passY + half);
+      } else {
+        /* and taken into the record, toward the notch it earned */
+        const u = eSoft(prog(t, A.settle[0], A.settle[1]));
+        slip.style.opacity = String(1 - u);
+        put(slip, lerp(G.dockX, notchX, u), passY + half, 1 - 0.4 * u);
+      }
+
+      /* 4. the listing's record grows a notch */
+      if (live && crossed(prev, t, A.road[1])) flash(pass, "ping", 760);
+      if (live && crossed(prev, t, A.notch)) flash(gain, "grow", 720);
+      pass.classList.toggle("hit", t >= A.road[1] && t < A.settle[1]);
+      const gained = t >= A.notch || t < mid;
+      gain.classList.toggle("on", gained);
+      gain.classList.toggle("new", gained);
+
+      /* 5. the order follows kept promises */
+      dirs.forEach((d, i) => {
+        d.setAttribute("transform", `translate(${G.row.x},${lerp(restY(i), endY(i), moved)})`);
+      });
+      /* the one that moves up passes in front */
+      if (dirsG.lastElementChild !== pass) dirsG.appendChild(pass);
+
+      /* The top of the loop: the directory fades down, takes its old places
+         and fades back, under the first phrase and while the eye is on the agent. */
+      dirsG.style.opacity = within(t, A.reset) ? String(1 - 0.88 * Math.sin(Math.PI * prog(t, A.reset[0], A.reset[1]))) : "";
+
+      /* 6. a coin meets the glass and falls away; the order does not move */
+      const [c0, c1, c2] = A.coin;
+      if (t >= c0 && t < c1) {
+        const v = prog(t, c0, c1);
+        coin.style.opacity = String(v < 0.2 ? v / 0.2 : 1);
+        put(coin, C.x, lerp(C.from, C.edge - C.r, v * v));
+      } else if (t >= c1 && t < c2) {
+        const v = prog(t, c1, c2);
+        coin.style.opacity = String(v < 0.3 ? 1 : 1 - (v - 0.3) / 0.7);
+        put(coin, C.x + 16 * v, C.edge - C.r - 64 * v + 40 * v * v);
+      } else off(coin);
+      if (live && crossed(prev, t, c1)) flash(ripple, "hit", 820);
+    }
+
+    /* ---- the clock ------------------------------------------------------- */
+    let clock = A.rest; /* the piece starts from the picture at rest */
+    let prevT = A.rest;
+    let last = 0;
+    let raf = 0;
+    let run = false;
+    let seen = true;
+    const mq = matchMedia("(prefers-reduced-motion: reduce)");
+
+    function frame(now: number) {
+      if (!run) return;
+      clock += Math.min((now - last) / 1000, 0.05); /* clamped: a stall slows the piece, never teleports it */
+      last = now;
+      const t = clock % A.loop;
+      render(t, prevT, true);
+      prevT = t;
+      raf = requestAnimationFrame(frame);
+    }
+    /* Resume from a settled state: timers that were cut off by a pause must not
+       leave a half-faded phrase or a lit halo behind. */
+    function settle() {
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+      phrase.textContent = want;
+      phrase.classList.add("on");
+      sayG.classList.remove("beat");
+      agent.classList.remove("wake");
+      ripple.classList.remove("hit");
+      slip.classList.remove("pop");
+      gain.classList.remove("grow");
+      for (const d of dirs) d.classList.remove("ping");
+    }
+    function sync() {
+      if (fig.classList.contains("tf-still")) return;
+      const go = seen && !document.hidden;
+      if (go === run) return;
+      run = go;
+      if (run) {
+        fig.classList.remove("tf-paused");
+        settle();
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else {
+        cancelAnimationFrame(raf);
+        fig.classList.add("tf-paused");
+      }
+    }
+
+    /* The still is the picture at rest, drawn by this same machine. */
+    function still() {
+      fig.classList.add("tf-still");
+      settle();
+      render(A.rest, A.rest, false);
+    }
+
+    render(A.rest, A.rest, false);
+    if (mq.matches) {
+      still();
+      return;
+    }
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(
+        (es) => {
+          seen = es[0]?.isIntersecting ?? true;
+          sync();
+        },
+        { threshold: 0.01 },
+      ).observe(fig);
+    }
+    document.addEventListener("visibilitychange", sync);
+    /* The preference can be turned on after the page has loaded; both paths end
+       in the same frame. */
+    mq.addEventListener("change", () => {
+      if (!mq.matches || fig.classList.contains("tf-still")) return;
+      run = false;
+      cancelAnimationFrame(raf);
+      still();
+    });
+    sync();
+  }
+
+  /* One figure that throws must not take the page's other figures with it, and
+     leaves its own picture at rest standing. */
+  function mountAll() {
+    for (const f of document.querySelectorAll<HTMLElement>(".stf")) {
+      try {
+        mount(f);
+      } catch (err) {
+        console.warn("trust flow", err);
+      }
+    }
+  }
+  mountAll();
+  document.addEventListener("astro:page-load", mountAll);
+</script>
