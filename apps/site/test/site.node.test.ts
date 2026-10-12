@@ -583,7 +583,9 @@ describe("the trust page's animation", () => {
   type Geo = {
     rows: { name: string; level: number }[];
     pass: { r: number; over: number };
-    row: { slots: number[]; notches: number };
+    row: { h: number; slots: number[]; notches: number };
+    link: { x0: number; y0: number; bend: number; x1: number };
+    road: string;
     say: { phrases: string[] };
     at: {
       loop: number;
@@ -711,6 +713,50 @@ describe("the trust page's animation", () => {
     expect(script).toContain("seed.replaceWith(svg)");
     expect(script).toContain("let clock = A.rest;");
     expect(script).toMatch(/try \{\s*mount\(f\);\s*\} catch/);
+  });
+
+  it("points the receipts' route at the bakery's listing wherever it is, at rest and in motion", () => {
+    const G = geo();
+    const A = G.at;
+    const centre = (slot: number) => (G.row.slots[slot] ?? 0) + G.row.h / 2;
+    // The receipt travels while the listing is still in its first place, and the road ends there.
+    expect(A.road[1]).toBeLessThan(A.swap[0] ?? 0);
+    const end = G.road.match(/(-?[\d.]+),(-?[\d.]+)$/);
+    expect(Number(end?.[2])).toBe(centre(G.pass.r));
+    expect(G.road).toContain(`L${G.link.x0},${G.link.y0} C${G.link.bend},${G.link.y0}`);
+    expect(G.road).toContain(`${G.link.x1},${centre(G.pass.r)}`);
+    // At rest the listing has moved up, and the route's far end and its door are drawn to it there.
+    const slotAtRest = G.rows.map((_, i) => (i === G.pass.r ? G.pass.over : i === G.pass.over ? G.pass.r : i));
+    expect(slotAtRest[G.pass.r]).toBe(G.pass.over);
+    expect(front).toMatch(/const passY = row\.slots\[slotAtRest\[GEO\.pass\.r\] \?\? 0\] \?\? 0;/);
+    expect(front).toContain("const door = passY + row.h / 2;");
+    expect(template).toContain('<path d={linkTo(door)} class="tf-line tf-link" />');
+    expect(template).toContain('<circle cx={L.x1} cy={door} r="2.6" class="tf-port tf-door" />');
+    // The script draws the same route from the same numbers, and moves its end with the listing.
+    const build =
+      /const linkTo = \(y: number\) => `M\$\{L\.x0\},\$\{L\.y0\} C\$\{L\.bend\},\$\{L\.y0\} \$\{L\.bend\},\$\{y\} \$\{L\.x1\},\$\{y\}`;/;
+    expect(front).toMatch(build);
+    expect(script).toMatch(build);
+    expect(script).toContain('linkEl.setAttribute("d", linkTo(doorY));');
+    expect(script).toContain('doorEl.setAttribute("cy", String(doorY));');
+  });
+
+  it("gives the picture at rest a strip wide enough for the phrase at a phone's type size", () => {
+    // The container query grows the phrase; the seed's phone strip is estimated at that same size.
+    const query = style.match(/@container \(max-width: 460px\) \{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+    const size = query.match(/\.stf \.tf-phrase \{\s*font-size: ([\d.]+)px;/)?.[1];
+    expect(size).toBeDefined();
+    expect(front).toContain(`est(p, ${size}) + 34`);
+    // Shown only in the seed and only below the breakpoint, where the desktop strip steps out.
+    expect(template).toMatch(/<rect x=\{sayXn\}[^>]*class="tf-narrow" \/>/);
+    expect(template).toMatch(/<circle cx=\{sayXn \+ 12\}[^>]*class="tf-beat tf-narrow" \/>/);
+    expect(style).toMatch(/\.stf \.tf-narrow \{\s*display: none;/);
+    expect(query).toMatch(/\.stf \.tf-seed \.tf-narrow \{\s*display: inline;/);
+    expect(query).toMatch(/\.stf \.tf-seed \.tf-wide \{\s*display: none;/);
+    // The live clone drops it before it finds the strip it measures.
+    const drop = script.indexOf('for (const el of all(svg, ".tf-narrow")) el.remove();');
+    expect(drop).toBeGreaterThan(-1);
+    expect(drop).toBeLessThan(script.indexOf('const sayRect = one<SVGRectElement>(sayG, "rect");'));
   });
 
   it("holds still under reduced motion, from the start or when it is turned on later", () => {

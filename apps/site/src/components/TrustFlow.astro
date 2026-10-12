@@ -32,7 +32,9 @@
  *    away fading. Nothing in the directory moves while it does.
  *  - The piece starts from the picture at rest, 8.9 s into the loop: the order kept, the receipt
  *    docked on the bakery's listing, the new notch, the bakery on top. The first thing a visitor
- *    sees move is the receipt settling into the record.
+ *    sees move is the receipt settling into the record. The receipts' route ends on the bakery's
+ *    listing and goes where the listing goes, so at rest it points at the bakery, never at the
+ *    row the bakery left; at the top of the loop it glides back down while the rows are faded.
  *
  * Every static part is drawn once below, as a server-rendered SVG built from GEO, in that resting
  * frame. mount() clones it, adds the pieces that move and swaps the clone in whole, so there is
@@ -63,14 +65,15 @@ const GEO = {
   agent: { x: 30, y: 134 },
   /** the agent to the business's inbox, directly: the network is not on this line */
   ask: "M56,134 C80,134 72,160 96,160",
-  /** the route receipts take, from the inbox's door to the network's */
-  link: "M240,160 C268,160 268,192 296,192",
-  /** the receipt's whole journey: off the order's row, along the link, onto the listing */
+  /** the route receipts take, from the inbox's door to the network's. The far end is the door on
+      the bakery's listing, so it goes where the listing goes: it is drawn to the listing's centre. */
+  link: { x0: 240, y0: 160, bend: 268, x1: 296 },
+  /** the receipt's whole journey: off the order's row, along the link, onto the listing, which is
+      still in its first place while the receipt travels */
   road: "M236,160 L240,160 C268,160 268,192 296,192 L305,192",
   ports: [
     [96, 160],
     [240, 160],
-    [296, 192],
   ],
   inbox: { x: 96, y: 102, w: 144, h: 126, name: "Bakery", room: 96 },
   item: { x: 104, y: 146, w: 128, h: 28, lb: "Order", st: "Delivered" },
@@ -125,6 +128,10 @@ const { agent, inbox, item, msg, net, row, say } = GEO;
 /* At rest the pass row has overtaken: it holds the slot above, and the one it passed holds its. */
 const slotAtRest = GEO.rows.map((_, i) => (i === GEO.pass.r ? GEO.pass.over : i === GEO.pass.over ? GEO.pass.r : i));
 const passY = row.slots[slotAtRest[GEO.pass.r] ?? 0] ?? 0;
+/* the receipts' route, to a door at height y; at rest that door is on the bakery, in its new place */
+const L = GEO.link;
+const linkTo = (y: number) => `M${L.x0},${L.y0} C${L.bend},${L.y0} ${L.bend},${y} ${L.x1},${y}`;
+const door = passY + row.h / 2;
 /* the inbox's mark: the striped half sun, as on the other pages' business cards */
 const sunY = inbox.y + 25;
 const sun = `M${inbox.x + 12},${sunY} A7,7 0 0 1 ${inbox.x + 26},${sunY} Z`;
@@ -138,6 +145,11 @@ const glyph = [
 const est = (s: string, fs: number) => Math.round(s.length * fs * 0.54);
 const sayW = Math.max(say.w, ...say.phrases.map((p) => est(p, 9) + 34));
 const sayX = say.cx - sayW / 2;
+/* Below the breakpoint the phrase is drawn larger (the container query below), so the picture at
+   rest also carries a phone's strip, shown only there; the script drops it and measures its own.
+   The phrase's x is say.cx + 5 at either width. */
+const sayWn = Math.max(say.w, ...say.phrases.map((p) => est(p, 12.4) + 34));
+const sayXn = say.cx - sayWn / 2;
 /* the phrase on screen at rest */
 const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
 ---
@@ -156,7 +168,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
 
     <g class="tf-lines">
       <path d={GEO.ask} class="tf-line" />
-      <path d={GEO.link} class="tf-line" />
+      <path d={linkTo(door)} class="tf-line tf-link" />
     </g>
 
     <text x={agent.x} y="90" font-size="8.2" class="tf-cap">AI AGENT</text>
@@ -237,6 +249,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     </g>
 
     {GEO.ports.map(([x, y]) => <circle cx={x} cy={y} r="2.6" class="tf-port" />)}
+    <circle cx={L.x1} cy={door} r="2.6" class="tf-port tf-door" />
 
     <g class="tf-slip signed" transform={`translate(${GEO.dockX},${passY + row.h / 2})`}>
       <rect x="-6.5" y="-8.5" width="13" height="17" rx="2.2" class="paper" />
@@ -246,8 +259,10 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     </g>
 
     <g class="tf-say">
-      <rect x={sayX} y={say.y} width={sayW} height={say.h} rx={say.h / 2} />
-      <circle cx={sayX + 12} cy={say.y + say.h / 2} r="3" class="tf-beat" />
+      <rect x={sayX} y={say.y} width={sayW} height={say.h} rx={say.h / 2} class="tf-wide" />
+      <circle cx={sayX + 12} cy={say.y + say.h / 2} r="3" class="tf-beat tf-wide" />
+      <rect x={sayXn} y={say.y} width={sayWn} height={say.h} rx={say.h / 2} class="tf-narrow" />
+      <circle cx={sayXn + 12} cy={say.y + say.h / 2} r="3" class="tf-beat tf-narrow" />
       <text x={sayX + (sayW + 10) / 2} y={say.y + 13.2} font-size="9" text-anchor="middle" class="tf-phrase on">{say.phrases[restSay]}</text>
     </g>
   </svg>
@@ -661,6 +676,10 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     opacity: 1;
     transition: opacity 0.24s var(--tf-ease);
   }
+  /* the phone's strip, drawn only in the picture at rest and only below the breakpoint */
+  .stf .tf-narrow {
+    display: none;
+  }
 
   /* Read by a screen reader, not drawn. */
   .stf .tf-sr {
@@ -681,7 +700,8 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
      at a 342-wide art-box (a 390px phone) divided by the container scale. The
      order's status steps out because it cannot grow inside its row; the tick
      still says it was delivered. The script measures the phrases again after
-     the switch, so a bigger word gets a bigger strip. */
+     the switch, so a bigger word gets a bigger strip; without the script, the
+     picture at rest swaps to the wider strip it carries for this. */
   @container (max-width: 460px) {
     .stf .tf-item .st {
       display: none;
@@ -700,6 +720,12 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     }
     .stf .tf-phrase {
       font-size: 12.4px;
+    }
+    .stf .tf-seed .tf-narrow {
+      display: inline;
+    }
+    .stf .tf-seed .tf-wide {
+      display: none;
     }
   }
 
@@ -729,6 +755,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
   type Geo = {
     agent: { x: number; y: number };
     ask: string;
+    link: { x0: number; y0: number; bend: number; x1: number };
     road: string;
     item: { x: number; y: number; w: number; h: number };
     inbox: { room: number };
@@ -816,6 +843,8 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
        built off the page and swapped in whole, so the figure is never empty. */
     const svg = seed.cloneNode(true) as SVGSVGElement;
     svg.classList.remove("tf-seed");
+    /* the phone's strip is the seed's alone: the live strip is measured (fit, below) */
+    for (const el of all(svg, ".tf-narrow")) el.remove();
     const uid = `tf${++seq}`;
     one(svg, "#tfseed-g").id = `${uid}g`;
     one(svg, "#tfseed-c").id = `${uid}c`;
@@ -835,6 +864,8 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     const sayRect = one<SVGRectElement>(sayG, "rect");
     const sayDot = one<SVGCircleElement>(sayG, ".tf-beat");
     const phrase = one<SVGTextElement>(sayG, ".tf-phrase");
+    const linkEl = one<SVGPathElement>(svg, ".tf-link");
+    const doorEl = one<SVGCircleElement>(svg, ".tf-door");
 
     /* the pieces made here: the order's dot, the coin and the glass's answer to it */
     const dot = E("circle", { r: 3.2, class: "tf-dot tf-off" });
@@ -961,6 +992,9 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     const notchX = G.row.x + G.row.notchX + level * G.row.notchStep + 1.6;
     /* a mark is crossed when the clock passes it between two frames, wrap included */
     const crossed = (a: number, b: number, m: number) => (b >= a ? a < m && m <= b : m > a || m <= b);
+    const L = G.link;
+    const linkTo = (y: number) => `M${L.x0},${L.y0} C${L.bend},${L.y0} ${L.bend},${y} ${L.x1},${y}`;
+    let doorAt = Number.NaN;
 
     function render(t: number, prev: number, live: boolean) {
       /* the caption: the last phrase whose time has come, the coda's before the first */
@@ -990,6 +1024,16 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
       /* where the rows are: the pass row and the one it overtakes trade places */
       const moved = t < mid ? 1 : t < A.swap[0] ? 0 : eSoft(prog(t, A.swap[0], A.swap[1]));
       const passY = lerp(restY(G.pass.r), endY(G.pass.r), moved);
+
+      /* the receipts' route ends on the bakery's listing, wherever it is; at the top of the loop
+         it glides back down while the rows are faded, rather than jumping when they do */
+      const dm = within(t, A.reset) ? 1 - eSoft(prog(t, A.reset[0], A.reset[1])) : moved;
+      const doorY = lerp(restY(G.pass.r), endY(G.pass.r), dm) + half;
+      if (doorY !== doorAt) {
+        doorAt = doorY;
+        linkEl.setAttribute("d", linkTo(doorY));
+        doorEl.setAttribute("cy", String(doorY));
+      }
 
       /* 3. its inbox signs a receipt, and just the receipt travels */
       const signed = t >= A.seal && t < A.settle[1];
