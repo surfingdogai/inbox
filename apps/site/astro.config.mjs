@@ -1,10 +1,17 @@
 // @ts-check
+import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
 
 const GITHUB = "https://github.com/surfingdogai/inbox";
+
+/**
+ * The network's own sitemap: the checker, the leaderboards and the result pages it serves on this
+ * address. robots.txt names it, and the sitemap index lists it beside this site's pages.
+ */
+const NETWORK_SITEMAP = "https://surfingdog.ai/sitemap-checks.xml";
 
 /**
  * surfingdog.ai: a static Astro site. The home page, the three product pages (/search, /inbox, /trust) and the blog are plain Astro pages on the
@@ -17,6 +24,9 @@ export default defineConfig({
   // Keep the pre-7 whitespace rules: inline elements separated by a newline keep their space.
   compressHTML: true,
   integrations: [
+    // Starlight adds this integration itself when it is missing; given here, it also lists the
+    // network's sitemap in sitemap-index.xml.
+    sitemap({ customSitemaps: [NETWORK_SITEMAP] }),
     starlight({
       title: "Surfing Dog Inbox",
       description:
