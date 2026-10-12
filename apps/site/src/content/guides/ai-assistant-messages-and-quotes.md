@@ -27,4 +27,4 @@ We read what your site and its doors declare, and never send a message to test t
 
 Not counted: email, phone, forms and chat widgets.
 
-A message counts toward the score of most kinds of business. A shop or a gym is scored on ordering or signing up instead, though a door that takes messages still makes it askable.
+A message counts toward the score of every kind of business, shops and gyms included: an assistant can ask a shop a question before buying, or raise a problem after.

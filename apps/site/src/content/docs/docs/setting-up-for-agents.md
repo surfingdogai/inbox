@@ -23,7 +23,7 @@ The step-by-step install is [install.md](/install.md). The exact calls for conne
 
 A plumber, a salon, a small shop with a contact form. Here the inbox is the front door for agents: they send messages, ask for quotes, book and order there, and the business answers from the owner app, with rules, or with its own AI.
 
-**What a score counts depends on the kind of business.** The Surfing Dog score weighs what matters for each kind: a salon is scored on bookings, a shop on orders and what follows them, not on messages. Messages and quote requests still help a shop's customers; they just don't change its score. Each result page says what the inbox would add for that business, in points where the score counts it.
+**What a score counts depends on the kind of business.** The Surfing Dog score weighs what matters for each kind: a salon is scored on bookings, a shop on orders, what follows them, and messages. Quote requests still help a shop's customers; they don't change its score. Each result page says what the inbox would add for that business, in points where the score counts it.
 
 **Today** the inbox handles all five kinds of item (message, quote request, booking, order, refund). It answers availability from the business's services and opening hours, prices from its catalogue, and keeps every item's history. Rules, with presets for appointments, trades and shops, can confirm, reply and flag on their own. The owner's AI works inside limits the owner sets in code, not in a prompt ([Your limits](/docs/api/#your-limits)).
 
