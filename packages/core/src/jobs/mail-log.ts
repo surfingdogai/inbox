@@ -1,4 +1,4 @@
-import type { MailOut, OutboundMail, Statement } from "@surfingdog/platform";
+import type { CustomerMailKind, MailAbout, MailHold, MailOut, OutboundMail, Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { shortError } from "../network/index";
@@ -24,9 +24,19 @@ export type MailStatus = "queued" | "sent" | "retrying" | "failed" | "skipped";
  * `no_address`: the customer gave none; `no_sender`: nothing to send from; `no_service`: the instance
  * has no mail service, and its log took the email instead; `test_item`: a test item; `ack_limit`: the
  * address already had its acknowledgements for the day (`ACKS_PER_ADDRESS_PER_DAY`); `alert_limit`:
- * the owner already had the hour's alerts, and this one is in the hour's digest (`OWNER_ALERTS_PER_HOUR`).
+ * the owner already had the hour's alerts, and this one is in the hour's digest (`OWNER_ALERTS_PER_HOUR`);
+ * `host_policy`: the transport does not send this kind of email to customers (`allowCustomerMail`);
+ * and what the transport's `beforeSend` held it back for (`MailHold`).
  */
-export type SkipReason = "no_address" | "no_sender" | "no_service" | "test_item" | "ack_limit" | "alert_limit";
+export type SkipReason =
+  | "no_address"
+  | "no_sender"
+  | "no_service"
+  | "test_item"
+  | "ack_limit"
+  | "alert_limit"
+  | "host_policy"
+  | MailHold;
 
 export interface MailRow {
   readonly id: string;
@@ -241,10 +251,27 @@ export async function sendLogged(
     readonly onSent?: readonly Statement[] | undefined;
     /** A failure for good asks for a person on the item (every customer email but the code email). */
     readonly raise?: boolean | undefined;
+    /** For an email to a customer, what kind it is (`customerMailKind`); one without is `automatic`. */
+    readonly kind?: CustomerMailKind | undefined;
   },
-): Promise<string> {
+): Promise<string | null> {
   const { final, now } = opts;
   try {
+    // What the transport lets go (`allowCustomerMail`, `beforeSend`): one held back is kept as not
+    // sent, with the reason, and never retried as an error. Null says so to the caller.
+    const held = await mailHeldBack(mailOut, mail, {
+      recipient: row.recipient,
+      template: row.template,
+      ...(row.recipient === "customer" ? { kind: opts.kind ?? "automatic" } : {}),
+    });
+    if (held) {
+      await db.client.query({
+        sql: `UPDATE outbound_mail SET status = 'skipped', skip_reason = ?, last_error = NULL, updated_at = ? WHERE id = ?`,
+        params: [held, now, row.id],
+        method: "run",
+      });
+      return null;
+    }
     const { messageId } = await mailOut.send(mail);
     if (mailOut.delivers === false) {
       // A log took it, not a mail service: nobody got it, and the item must never say it was sent.
@@ -291,6 +318,18 @@ export async function sendLogged(
   }
 }
 
+/**
+ * Why the transport holds an email back, or null when it may go: a kind of customer email it does
+ * not send (`host_policy`), or what its `beforeSend` said. An email to a customer always has a kind:
+ * one that names none is asked about as `automatic`, the kind a transport is least likely to allow.
+ */
+export async function mailHeldBack(mailOut: MailOut, mail: OutboundMail, about: MailAbout): Promise<SkipReason | null> {
+  const kind = about.recipient === "customer" ? (about.kind ?? "automatic") : undefined;
+  if (kind && mailOut.allowCustomerMail && !(await mailOut.allowCustomerMail(kind))) return "host_policy";
+  if (!mailOut.beforeSend) return null;
+  return (await mailOut.beforeSend(mail, { ...about, ...(kind ? { kind } : {}) })) ?? null;
+}
+
 /** A customer email that will not go out: the item asks for a person, as the system. */
 async function raiseNotSent(db: Db, itemId: string, now: number): Promise<void> {
   const system: Caller = {
@@ -309,28 +348,36 @@ async function raiseNotSent(db: Db, itemId: string, now: number): Promise<void> 
   }
 }
 
-/** The sender every customer email is from, and where a reply goes; null when there is no address to send from. */
+/**
+ * The sender every customer email is from, and where a reply goes; null when there is no address to
+ * send from. A pinned transport (`pinnedMailOut`) is who the email is from whatever Settings say:
+ * its address, its name when it has one, and no Reply-To from Settings (it sets its own).
+ */
 export function senderOf(
   settings: Settings,
   opts: {
-    readonly transport?: MailOut["sender"];
+    /** How email goes out: its own address (MAIL_FROM), and whether every message goes from it. */
+    readonly transport?: Pick<MailOut, "sender" | "pinned"> | null | undefined;
     readonly publicUrl?: string | undefined;
     /** The business's name as its profile gives it (`businessFacts`), which the setup wizard writes. */
     readonly business?: string | undefined;
   } = {},
 ): Pick<OutboundMail, "from" | "replyTo"> | null {
-  const address = settings.email.fromAddress ?? opts.transport?.address;
+  const own = opts.transport?.sender;
+  const pinned = opts.transport?.pinned === true ? own : undefined;
+  const address = pinned ? pinned.address : (settings.email.fromAddress ?? own?.address);
   if (!address) return null;
   // The business's name, never the software's: its own, else the address its customers use.
-  const name =
-    settings.email.fromName ||
-    opts.business?.trim() ||
-    settings.business.name.trim() ||
-    opts.transport?.name ||
-    hostOf(opts.publicUrl);
+  const name = pinned
+    ? pinned.name || opts.business?.trim() || settings.business.name.trim() || hostOf(opts.publicUrl)
+    : settings.email.fromName ||
+      opts.business?.trim() ||
+      settings.business.name.trim() ||
+      own?.name ||
+      hostOf(opts.publicUrl);
   return {
     from: { address, ...(name ? { name } : {}) },
-    ...(settings.email.replyTo ? { replyTo: settings.email.replyTo } : {}),
+    ...(!pinned && settings.email.replyTo ? { replyTo: settings.email.replyTo } : {}),
   };
 }
 

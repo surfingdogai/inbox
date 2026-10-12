@@ -22,7 +22,7 @@ import {
   type PresentResult,
 } from "../identity/types";
 import { ulid } from "../ids";
-import { autoHeaders, senderOf } from "../jobs/mail-log";
+import { autoHeaders, mailHeldBack, senderOf } from "../jobs/mail-log";
 import { directoryNetworks, mayReceiveEmails, verifiedNetworks } from "../network";
 import { secretHash } from "../protocol/credentials";
 import type { SecretBox } from "../secrets/box";
@@ -311,22 +311,26 @@ export class IdentityCapabilities {
       return { sent_to: req.sentTo, test: true };
     }
     if (code === undefined) {
-      if (!this.mail) {
-        throw new WriteError("nothing_to_verify", "We cannot send email right now, so we cannot send a code.");
-      }
+      const cannot = () =>
+        new WriteError("nothing_to_verify", "We cannot send email right now, so we cannot send a code.");
+      // No mail service, no address to send from, or a transport that sends no codes to customers.
+      if (!this.mail || (this.mail.allowCustomerMail && !(await this.mail.allowCustomerMail("code")))) throw cannot();
       const facts = await businessFacts(this.db);
-      const sender = senderOf(settings, { transport: this.mail.sender, business: facts.name });
-      if (!sender) {
-        throw new WriteError("nothing_to_verify", "We cannot send email right now, so we cannot send a code.");
-      }
+      const sender = senderOf(settings, { transport: this.mail, business: facts.name });
+      if (!sender) throw cannot();
       const req = await createCode(this.db, target, settings, now);
       const lang = customerLang(await partyLocale(this.db, target.partyId), facts.languages);
-      await this.mail.send({
+      const mail = {
         ...sender,
         to: [req.email],
         ...codeMail({ business: facts.name, minutes: settings.customers.otp.ttlMinutes, code: req.code, lang }),
         headers: autoHeaders({ automatic: true, template: "code" }),
-      });
+      };
+      // Held back by the transport (a suppressed address, a cap): said the same way, so whoever asks
+      // learns nothing about the address from the answer.
+      if (await mailHeldBack(this.mail, mail, { recipient: "customer", kind: "code", template: "code" }))
+        throw cannot();
+      await this.mail.send(mail);
       return { sent_to: req.sentTo };
     }
     await checkCode(this.db, target, code, settings, now);

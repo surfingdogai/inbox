@@ -271,7 +271,7 @@ async function sendKeysAlone(
   const publicUrl = baseUrl || settings.notifications.appUrl || "";
   if (!secrets || !publicUrl) return 0;
   const facts = await businessFacts(db, settings);
-  const sender = senderOf(settings, { transport: mailOut.sender, publicUrl, business: facts.name });
+  const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
   let sent = 0;
   for (const itemId of await keysDueAlone(db, now, batch)) {
     const { rows } = await db.client.query({
@@ -344,7 +344,7 @@ async function sendKeysAlone(
     if (!sender) continue;
     const mail = render(keys.map((k) => k.key));
     try {
-      await sendLogged(
+      const id = await sendLogged(
         db,
         mailOut,
         row,
@@ -358,9 +358,9 @@ async function sendKeysAlone(
             ...autoHeaders({ automatic: true, template: "key" }),
           },
         },
-        { final: row.attempts + 1 >= KEY_MAIL_ATTEMPTS, now, onSent: [delivered], raise: false },
+        { final: row.attempts + 1 >= KEY_MAIL_ATTEMPTS, now, onSent: [delivered], raise: false, kind: "code" },
       );
-      if (mailOut.delivers !== false) sent++;
+      if (id !== null && mailOut.delivers !== false) sent++;
     } catch {
       // Recorded on the row; the next run tries again until the row is pruned.
     }

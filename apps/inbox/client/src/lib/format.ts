@@ -547,6 +547,12 @@ const SKIP_WORDS: Record<string, string> = {
   no_sender: "no address to send from (Settings, Send from)",
   no_service: "this inbox has no mail service set up",
   test_item: "test item",
+  // What the host this inbox runs on decides about its email.
+  host_policy: "your host does not send this kind of email from this inbox",
+  suppressed: "this address bounced or asked not to get email",
+  recipient_limit: "this address already had all the email it can get today",
+  daily_limit: "this inbox already sent all the email it can send today",
+  paused: "email from this inbox is paused",
 };
 
 /**

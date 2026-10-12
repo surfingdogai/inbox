@@ -169,7 +169,10 @@ export interface MailView {
   readonly body: string;
   /** queued | sent | retrying | failed | skipped: never `sent` before the mail service took it. */
   readonly status: string;
-  /** Why it was not sent: no_address, no_sender, no_service, test_item. */
+  /**
+   * Why it was not sent: no_address, no_sender, no_service, test_item, ack_limit, alert_limit; or, as
+   * the transport's host decides, host_policy, suppressed, recipient_limit, daily_limit, paused.
+   */
   readonly skip_reason: string | null;
   readonly last_error: string | null;
   readonly attempts: number;
@@ -300,7 +303,7 @@ export class Capabilities {
     const publicUrl = this.baseUrl ?? settings.notifications.appUrl ?? "";
     return {
       service: this.mail !== null && this.mail.delivers !== false,
-      sender: senderOf(settings, { transport: this.mail?.sender, publicUrl, business: facts.name }) !== null,
+      sender: senderOf(settings, { transport: this.mail, publicUrl, business: facts.name }) !== null,
       links: this.secrets !== null && publicUrl.length > 0,
     };
   }

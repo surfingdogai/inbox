@@ -307,6 +307,14 @@ describe("what became of an email", () => {
     expect(d("skipped", { skip_reason: "no_service" })).toBe("Not sent: this inbox has no mail service set up");
     // The day's acknowledgements to one address were used: held back, and shown so.
     expect(d("skipped", { skip_reason: "ack_limit" })).toBe("Not sent: this address already had 3 of these today");
+    // What the host this inbox runs on held back, each in words of its own.
+    expect(d("skipped", { skip_reason: "host_policy" })).toBe(
+      "Not sent: your host does not send this kind of email from this inbox",
+    );
+    expect(d("skipped", { skip_reason: "suppressed" })).toBe(
+      "Not sent: this address bounced or asked not to get email",
+    );
+    expect(d("skipped", { skip_reason: "paused" })).toBe("Not sent: email from this inbox is paused");
     expect(mailWord({ template: "ack.booking", recipient: "customer" })).toBe("We have your request");
     expect(mailWord({ template: "booking.proposed", recipient: "customer" })).toBe("Another time");
     expect(mailWord({ template: "order.paid", recipient: "customer" })).toBe("About their order");

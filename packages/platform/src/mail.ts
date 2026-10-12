@@ -220,6 +220,58 @@ export function cloudflareEmailRestMailOut(
   };
 }
 
+/**
+ * Header names that would name another sender or more recipients than `to`. A pinned transport
+ * never passes them on, so nothing in a message's headers can change who it is from or who gets it.
+ */
+const ADDRESS_HEADERS = /^(from|sender|reply-to|return-path|to|cc|bcc|resent-[a-z-]+)$/i;
+
+/**
+ * A transport that sends every message from one address, whatever the message names: the sender
+ * set where the inbox is run, not Send from, Sender name or Customers reply to in Settings. Wraps
+ * any transport.
+ *
+ * - From is `from.address`, with `from.name` when one is given, else the message's own name.
+ * - Reply-To is `replyTo` when one is given, and absent otherwise: a reply then comes back to the
+ *   sender, never to an address someone typed into Settings.
+ * - Headers that name a sender or a recipient are left out.
+ *
+ * `sender` is the pinned address, so a message that names none (the owner's sign-in link) goes from
+ * it too, and `pinned` tells the inbox its email is from here. What the inner transport says of
+ * itself (`delivers`) and its hooks (`allowCustomerMail`, `beforeSend`) are kept.
+ */
+export function pinnedMailOut(
+  inner: MailOut,
+  pin: {
+    readonly from: { readonly address: string; readonly name?: string | undefined };
+    readonly replyTo?: string | undefined;
+  },
+): MailOut {
+  const sender = pin.from.name ? { address: pin.from.address, name: pin.from.name } : { address: pin.from.address };
+  return {
+    sender,
+    pinned: true,
+    ...(inner.delivers === false ? { delivers: false } : {}),
+    ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
+    ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),
+    async send(mail) {
+      const name = pin.from.name ?? mail.from.name;
+      const headers = Object.fromEntries(
+        Object.entries(mail.headers ?? {}).filter(([header]) => !ADDRESS_HEADERS.test(header.trim())),
+      );
+      return inner.send({
+        from: name ? { address: pin.from.address, name } : { address: pin.from.address },
+        to: mail.to,
+        ...(pin.replyTo ? { replyTo: pin.replyTo } : {}),
+        subject: mail.subject,
+        text: mail.text,
+        ...(mail.html ? { html: mail.html } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
+      });
+    },
+  };
+}
+
 function headersOf(mail: OutboundMail): { headers?: Record<string, string> } {
   const headers = cloudflareHeaders(mail.headers);
   return headers ? { headers } : {};
