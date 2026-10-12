@@ -552,8 +552,17 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
   inbox keeps retrying on its own and sends it everything it missed once it answers.
 - "More than one account available" from wrangler → `export CLOUDFLARE_ACCOUNT_ID` (preflight, 2).
 - The custom domain can't be added → the domain is not on this Cloudflare account (preflight, 3).
-- The owner's address is wrong → set `INBOX_OWNER_EMAIL` again (`secret put`, or `.env` and a restart
-  on their own server), then sign in at `/login` with the right one.
+- The owner's address is wrong → before anyone has signed in, set `INBOX_OWNER_EMAIL` again
+  (`secret put`, or `.env` and a restart on their own server), then sign in at `/login` with the
+  right one. After that it changes nothing: the owner changes the address in Settings → Keys (a code
+  goes to the current address first). On their own server, if the old address is lost:
+  `node /opt/inbox/server.mjs set-owner-email new@… old@…`, which signs out every session. On
+  Cloudflare there is no such command; the owner must still read the current address.
+- The sign-in email fails and the log holds no link → the log says why (most often `MAIL_FROM` on a
+  domain not onboarded yet). Fix the mail setup and ask again. While setting it up, remove
+  `MAIL_FROM` and clear Settings → Send from, and the whole email is written to the log instead; on
+  Cloudflare, with nobody signed in to clear Send from: `npx wrangler d1 execute surfingdog-inbox
+  --remote --command "UPDATE settings SET doc = json_remove(doc, '$.email.fromAddress')"`.
 
 ## Running it again, or taking it down
 
