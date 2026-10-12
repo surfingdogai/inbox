@@ -241,9 +241,10 @@ describe("a customer, end to end", () => {
     const id = booking.view.item.id;
     expect(booking.view.item.state).toBe("requested");
     await drain(s, LATER);
-    // The request is acknowledged, in the business's name, with the price.
+    // The request is acknowledged, in the business's name, with the price; its subject is fixed words.
     const [ack] = mailTo(s, rita);
-    expect(ack?.mail.subject).toMatch(/Full service/);
+    expect(ack?.mail.subject).toBe("We have your booking request");
+    expect(ack?.mail.text).toMatch(/Full service/);
     expect(ack?.mail.from.name).toBe("Oficina Maré");
     expect(ack?.mail.text).toContain("€45.00");
     expect(ack?.mail.text).toMatch(/Western European|GMT|WE[S]?T/);
@@ -475,7 +476,8 @@ describe("a customer, end to end", () => {
     const q = (await created.json()) as { view: { item: { id: string } }; accessToken: string };
     const id = q.view.item.id;
     await drain(s, LATER);
-    expect(mailTo(s, rita).at(-1)?.mail.subject).toMatch(/Wheel rebuild/);
+    expect(mailTo(s, rita).at(-1)?.mail.subject).toBe("We have your request for a quote");
+    expect(mailTo(s, rita).at(-1)?.mail.text).toMatch(/Wheel rebuild/);
 
     const validThrough = `${DAY}T18:00:00Z`;
     const quoted = await s.app.request(

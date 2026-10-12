@@ -219,7 +219,7 @@ describe("a first contact (§2.1)", () => {
     await s.drain(T0 + HOUR);
     const early = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
     // Only the acknowledgement, without the key.
-    expect(early.map((m) => m.subject)).toEqual(["We have your booking request: Surf lesson"]);
+    expect(early.map((m) => m.subject)).toEqual(["We have your booking request"]);
     expect(early[0]?.text).not.toContain("sdkey1_");
     await s.drain(T0 + DAY + MIN);
     const alone = s.mail.sent.filter((m) => m.to.includes("rita@example.com")).slice(1);

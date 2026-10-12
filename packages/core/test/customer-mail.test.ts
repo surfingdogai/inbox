@@ -141,21 +141,15 @@ describe("the emails a business sends its customer", () => {
         booking("requested"),
         { event: "create" },
         "ack.booking",
-        "We have your booking request: Surf lesson",
+        "We have your booking request",
         `Thank you. We have your request for "Surf lesson" on ${at(START)}.`,
       ],
-      [
-        order("received"),
-        { event: "create" },
-        "ack.order",
-        "We have your order: 2 × Wax",
-        "Thank you. We have your order:",
-      ],
+      [order("received"), { event: "create" }, "ack.order", "We have your order", "Thank you. We have your order:"],
       [
         quote("received"),
         { event: "create" },
         "ack.quote",
-        "We have your request: Board repair",
+        "We have your request for a quote",
         'Thank you. We have your request for a quote for "Board repair". We will send you a price soon.',
       ],
       [
@@ -613,19 +607,14 @@ describe("the emails a business sends its customer", () => {
       [
         booking("requested"),
         { event: "create" },
-        "Recebemos o seu pedido de marcação: Surf lesson",
+        "Recebemos o seu pedido de marcação",
         `Obrigado. Recebemos o seu pedido de "Surf lesson" para ${at(START, "pt")}.`,
       ],
-      [
-        order("received"),
-        { event: "create" },
-        "Recebemos a sua encomenda: 2 × Wax",
-        "Obrigado. Recebemos a sua encomenda:",
-      ],
+      [order("received"), { event: "create" }, "Recebemos a sua encomenda", "Obrigado. Recebemos a sua encomenda:"],
       [
         quote("received"),
         { event: "create" },
-        "Recebemos o seu pedido: Board repair",
+        "Recebemos o seu pedido de orçamento",
         'Obrigado. Recebemos o seu pedido de orçamento para "Board repair". Vamos enviar-lhe um preço em breve.',
       ],
       [
@@ -938,7 +927,7 @@ describe("the emails a customer gets", () => {
     expect(s.toRita()).toHaveLength(0);
     await s.drain(T0 + 2 * MIN);
     const [ack] = s.toRita();
-    expect(ack?.subject).toBe("Recebemos o seu pedido de marcação: Surf lesson");
+    expect(ack?.subject).toBe("Recebemos o seu pedido de marcação");
     expect(ack?.text).toContain(`Referência: ${shortRef(b.view.item.id)}`);
     // Threaded from the first email: the item's anchor, which a reply carries back.
     expect(ack?.headers?.References).toMatch(/^<a\.[0-9a-z]{22}@oficinamare\.pt>$/);
@@ -957,7 +946,7 @@ describe("the emails a customer gets", () => {
     );
     await s.drain(T0 + 6 * MIN);
     const toAna = s.mail.sent.filter((m) => m.to.includes("ana@example.com"));
-    expect(toAna.map((m) => m.subject)).toEqual(["We have your booking request: Surf lesson"]);
+    expect(toAna.map((m) => m.subject)).toEqual(["We have your booking request"]);
     expect(toAna[0]?.text).toContain(`Reference: ${shortRef(en.view.item.id)}`);
     // No message is acknowledged: an automatic answer to an email could loop.
     await s.caps.sendMessage(customer(T0 + 7 * MIN), { body: "Hi", contact: { email: "joe@example.com" } });

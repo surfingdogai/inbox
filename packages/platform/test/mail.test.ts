@@ -5,6 +5,8 @@ import {
   cloudflareEmailRestMailOut,
   cloudflareHeaders,
   consoleMailOut,
+  logMailOut,
+  pinnedMailOut,
   resendMailOut,
 } from "../src/mail";
 
@@ -222,5 +224,106 @@ describe("no mail service", () => {
     expect(lines[0]).toContain("https://inbox.test/auth/verify?token=abc123");
     expect(lines[1]).toContain("sdkey1_network.example_abcdefghijklmnop_…");
     expect(lines[1]).not.toContain("qrstuvwxyz234567");
+  });
+});
+
+describe("a pinned sender", () => {
+  // Every transport, wrapped: the message names the address and the Reply-To that Settings hold,
+  // and headers that would name others; what reaches the service is the pinned sender alone.
+  const pin = { from: { address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" } };
+  const named = {
+    ...mail,
+    from: { address: "owner@personal.example", name: "Not the business" },
+    replyTo: "attacker@evil.example",
+    headers: {
+      References: "<a.1@mail.example.net>",
+      From: "owner@personal.example",
+      "Reply-To": "attacker@evil.example",
+      Bcc: "everyone@evil.example",
+      "X-Item-Ref": "7K3QXA",
+    },
+  };
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+  it("goes from the pinned address through the send_email binding, and nowhere else", async () => {
+    const seen: Parameters<CloudflareEmailBinding["send"]>[0][] = [];
+    const binding: CloudflareEmailBinding = {
+      async send(m) {
+        seen.push(m);
+        return { messageId: "m-1" };
+      },
+    };
+    await pinnedMailOut(cloudflareEmailMailOut(binding, { address: "inbox@oficinamare.pt" }), pin).send(named);
+    expect(seen[0]?.from).toEqual({ email: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" });
+    expect(seen[0]).not.toHaveProperty("replyTo");
+    expect(seen[0]?.headers).toEqual({ References: "<a.1@mail.example.net>", "X-Item-Ref": "7K3QXA" });
+    expect(JSON.stringify(seen[0])).not.toMatch(/evil\.example|personal\.example/);
+  });
+
+  it("goes from the pinned address through Resend", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return json({ id: "re-1" });
+    }) as typeof fetch;
+    await pinnedMailOut(resendMailOut("re_key", fetchImpl, { address: "inbox@oficinamare.pt" }), pin).send(named);
+    expect(bodies[0]?.from).toBe("Oficina Maré <calm-otter-7k2q@mail.example.net>");
+    expect(bodies[0]).not.toHaveProperty("reply_to");
+    expect(bodies[0]?.headers).toEqual({ References: "<a.1@mail.example.net>", "X-Item-Ref": "7K3QXA" });
+    expect(JSON.stringify(bodies[0])).not.toMatch(/evil\.example|personal\.example/);
+  });
+
+  it("goes from the pinned address through the REST API", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return json({ success: true, errors: [], result: { delivered: ["rita@example.com"] } });
+    }) as typeof fetch;
+    const rest = cloudflareEmailRestMailOut(
+      { accountId: "acc", token: "tok", from: { address: "calm-otter-7k2q@mail.example.net" } },
+      fetchImpl,
+    );
+    await pinnedMailOut(rest, pin).send(named);
+    expect(bodies[0]?.from).toEqual({ address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" });
+    expect(bodies[0]).not.toHaveProperty("reply_to");
+    expect(JSON.stringify(bodies[0])).not.toMatch(/evil\.example|personal\.example/);
+  });
+
+  it("goes from the pinned address to the log and the console", async () => {
+    const log = logMailOut();
+    await pinnedMailOut(log, pin).send(named);
+    expect(log.sent[0]?.from).toEqual(pin.from);
+    expect(log.sent[0]?.replyTo).toBeUndefined();
+    const lines: string[] = [];
+    const out = pinnedMailOut(
+      consoleMailOut((line) => lines.push(line)),
+      pin,
+    );
+    await out.send(named);
+    expect(lines[0]).not.toMatch(/evil\.example|personal\.example/);
+    // A transport that delivers nothing still says so.
+    expect(out.delivers).toBe(false);
+  });
+
+  it("sets the Reply-To it is given, keeps the message's name when it pins none, and says it is pinned", async () => {
+    const log = logMailOut();
+    const out = pinnedMailOut(log, {
+      from: { address: "calm-otter-7k2q@mail.example.net" },
+      replyTo: "hello@oficinamare.pt",
+    });
+    await out.send(named);
+    expect(log.sent[0]?.from).toEqual({ address: "calm-otter-7k2q@mail.example.net", name: "Not the business" });
+    expect(log.sent[0]?.replyTo).toBe("hello@oficinamare.pt");
+    expect(out.pinned).toBe(true);
+    expect(out.sender).toEqual({ address: "calm-otter-7k2q@mail.example.net" });
+  });
+
+  it("keeps the inner transport's hooks", async () => {
+    const allowCustomerMail = (kind: string) => kind === "person";
+    const beforeSend = () => "paused" as const;
+    const out = pinnedMailOut({ ...logMailOut(), allowCustomerMail, beforeSend }, pin);
+    expect(out.allowCustomerMail).toBe(allowCustomerMail);
+    expect(out.beforeSend).toBe(beforeSend);
   });
 });

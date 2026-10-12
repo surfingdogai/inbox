@@ -1536,7 +1536,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Get settings",
         description:
-          "The settings document and its version. Secrets are never returned: one that is set reads (redacted), and its path is listed in redacted. The owner's limits for you and their rewards for customers (negotiation.ai, negotiation.rewards) are the owner's alone: they are left out and listed in withheld. Writing the document back as read keeps them all.",
+          "The settings document and its version. Secrets are never returned: one that is set reads (redacted), and its path is listed in redacted. The owner's limits for you and their rewards for customers (negotiation.ai, negotiation.rewards) are the owner's alone: they are left out and listed in withheld. Settings set by the host this inbox runs on are listed in locked: nobody can change them, the owner included. Writing the document back as read keeps them all.",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
@@ -1575,7 +1575,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Update settings",
         description:
-          'Change settings. Send only the sections and keys you want to change: anything left out keeps its value, and null removes a key so its default applies again. Networks are a map keyed by https origin: {"networks": {"https://network.example.com": {"enabled": true}}} adds or switches on that one and leaves the others alone; {"enabled": false} switches it off. Send expected_version from get_settings so a concurrent change is refused rather than overwritten. Some settings are the owner\'s alone and are refused from you whatever your scopes: where alerts and email go (notifications.ownerEmail, notifications.appUrl, email.fromAddress, email.fromName, email.replyTo), switching webhooks or test mode on, email.inboundSecret, integrations.webhooks.allowPrivateTargets, identity, customers.otp, the security section, and switching a network on or sharing more with one. Tell the owner what you suggest.',
+          'Change settings. Send only the sections and keys you want to change: anything left out keeps its value, and null removes a key so its default applies again. Networks are a map keyed by https origin: {"networks": {"https://network.example.com": {"enabled": true}}} adds or switches on that one and leaves the others alone; {"enabled": false} switches it off. Send expected_version from get_settings so a concurrent change is refused rather than overwritten. Some settings are the owner\'s alone and are refused from you whatever your scopes: where alerts and email go (notifications.ownerEmail, notifications.appUrl, email.fromAddress, email.fromName, email.replyTo), switching webhooks or test mode on, email.inboundSecret, integrations.webhooks.allowPrivateTargets, identity, customers.otp, the security section, and switching a network on or sharing more with one. Tell the owner what you suggest. Settings listed in locked by get_settings are set by the host this inbox runs on, and are refused from everyone.',
         inputSchema: keyed(updateSettingsInput),
         annotations: writes,
       },

@@ -410,7 +410,7 @@ describe("the code for a first-time customer's assistant", () => {
     await s.sweep(T0 + 23 * 60 * MIN);
     const toRita = () =>
       (s.mailOut as ReturnType<typeof logMailOut>).sent.filter((m) => m.to.includes("rita@example.com"));
-    expect(toRita().map((m) => m.subject)).toEqual(["We have your booking request: Surf lesson"]);
+    expect(toRita().map((m) => m.subject)).toEqual(["We have your booking request"]);
     await s.sweep(T0 + DAY + MIN);
     const [, keyMail] = toRita();
     expect(keyMail?.subject).toBe("For next time");

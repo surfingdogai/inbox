@@ -1,4 +1,4 @@
-import type { MailOut, OutboundMail } from "@surfingdog/platform";
+import type { CustomerMailKind, MailOut, OutboundMail } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { type BusinessFacts, businessFacts } from "../customer/audience";
 import { oneLine } from "../customer/format";
@@ -69,7 +69,7 @@ export function notifyHandler(
     // never filled the field in still hears of a new request. With neither, the row says so.
     const ownerAddress = p.to === "owner" ? await ownerAddressOf(db, settings) : null;
     const facts = await businessFacts(db, settings);
-    const sender = senderOf(settings, { transport: mailOut.sender, publicUrl, business: facts.name });
+    const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
     const contact = p.to === "customer" ? await contactOf(db, item.partyId) : null;
 
     let logged = await mailByJob(db, job.id);
@@ -85,6 +85,7 @@ export function notifyHandler(
               jobKey: job.id,
               contact,
               canSend: sender !== null,
+              mailOut,
               secrets: opts.secrets ?? null,
               base: publicUrl,
               settings,
@@ -110,6 +111,7 @@ export function notifyHandler(
     // Threading for the customer's mail client; for every mailbox, the headers that say nobody should
     // answer this automatically, and whether anybody at the business wrote it.
     const cause = logged.recipient === "customer" ? await causeOf(db, p) : null;
+    const kind = cause ? customerMailKind(p.event, cause, logged.template) : undefined;
     const headers = {
       ...(logged.recipient === "customer" ? await threadHeaders(db, item.id, logged.messageRef) : {}),
       ...autoHeaders({
@@ -131,7 +133,8 @@ export function notifyHandler(
           : logged.bodyText,
       headers,
     };
-    await sendLogged(db, mailOut, logged, mail, { final: job.attempts >= job.maxAttempts, now });
+    const sent = await sendLogged(db, mailOut, logged, mail, { final: job.attempts >= job.maxAttempts, now, kind });
+    if (sent === null) return { note: "not sent: held back" };
     // The job log says who it went to, never their address: the log is not where customers are kept.
     return { note: `sent to the ${p.to}` };
   };
@@ -187,6 +190,8 @@ async function customerMail(
     readonly jobKey: string;
     readonly contact: Contact | null;
     readonly canSend: boolean;
+    /** Asked whether this kind of email goes at all (`allowCustomerMail`). */
+    readonly mailOut: MailOut;
     readonly secrets: SecretBox | null;
     readonly base: string;
     readonly settings: Settings;
@@ -214,6 +219,11 @@ async function customerMail(
   const facts = o.facts;
   const lang = customerLang(o.contact?.locale, facts.languages);
   const cause = await causeOf(db, p);
+  // Whether the transport sends this kind of email to a customer at all: one it does not is kept on
+  // the item as not sent, and needs no links.
+  const allow = o.mailOut.allowCustomerMail;
+  const kind = customerMailKind(p.event, cause);
+  const allowed = !allow || (await allow(kind));
   // What lapsed, and until when it could have been taken. One that lapsed long before anybody noticed
   // (an offer from before offers had a table, reached late) closes quietly: news that old is no news.
   const lapsedAt = p.event === "expire" && p.eventId ? await lapsedAtOf(db, p.eventId) : null;
@@ -225,11 +235,13 @@ async function customerMail(
     ? ("test_item" as const)
     : !o.contact?.email
       ? ("no_address" as const)
-      : ackLimited
-        ? ("ack_limit" as const)
-        : !o.canSend
-          ? ("no_sender" as const)
-          : undefined;
+      : !allowed
+        ? ("host_policy" as const)
+        : ackLimited
+          ? ("ack_limit" as const)
+          : !o.canSend
+            ? ("no_sender" as const)
+            : undefined;
   // What waits for the customer's answer carries the links to give it: a page on this inbox, in
   // the customer's language (ADR-018 §5). Without a secret to sign them, or an address for them to
   // point at, the email asks for a reply instead.
@@ -285,6 +297,7 @@ async function customerMail(
     returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
     now: o.now,
   });
+  const held = skip ?? (await heldAs(o.mailOut, kind, customerMailKind(p.event, cause, rendered.template)));
   return {
     itemId: item.id,
     jobKey: o.jobKey,
@@ -296,7 +309,7 @@ async function customerMail(
     subject: rendered.subject,
     // Kept without the links' macs: what the log shows can never answer for the customer.
     text: cutLinks(rendered.text),
-    ...(skip ? { skip } : {}),
+    ...(held ? { skip: held } : {}),
   };
 }
 
@@ -409,7 +422,7 @@ export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } 
     const settings = await readSettings(db);
     const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
     const facts = await businessFacts(db, settings);
-    const sender = senderOf(settings, { transport: mailOut.sender, publicUrl, business: facts.name });
+    const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
     let logged = await mailByJob(db, job.id);
     if (!logged) {
       const { rows } = await db.client.query({
@@ -460,7 +473,7 @@ export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } 
       });
       return { note: `not sent: ${address ? "no sender" : "no address"}` };
     }
-    await sendLogged(
+    const sent = await sendLogged(
       db,
       mailOut,
       logged,
@@ -473,7 +486,9 @@ export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } 
       },
       { final: job.attempts >= job.maxAttempts, now },
     );
-    return { note: "digest sent to the owner" };
+    return {
+      note: sent === null ? "digest not sent: held back" : "digest sent to the owner",
+    };
   };
 }
 
@@ -604,6 +619,43 @@ export async function causeOf(
 }
 
 const textOf = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/** The events whose email asks the customer to pay, with the link to pay. */
+const PAYMENT_EVENTS: ReadonlySet<string> = new Set(["request_payment", "payment_failed"]);
+/** The emails that ask the customer to pay: what any event on an order waiting for payment renders. */
+const PAYMENT_TEMPLATES: ReadonlySet<string> = new Set(["order.awaiting_payment", "order.payment_failed"]);
+
+/**
+ * An email is rendered from the item as it stands when its job runs, so one about an earlier event
+ * (an order accepted, then payment asked for before the email went) can carry the link to pay: it is
+ * asked about again as the kind it became. Undefined when that kind may go.
+ */
+async function heldAs(
+  mailOut: MailOut,
+  asked: CustomerMailKind,
+  became: CustomerMailKind,
+): Promise<"host_policy" | undefined> {
+  if (became === asked || !mailOut.allowCustomerMail || (await mailOut.allowCustomerMail(became))) return undefined;
+  return "host_policy";
+}
+
+/**
+ * What kind of email to the customer a `notify` job sends, for a transport that decides which kinds
+ * go (`MailOut.allowCustomerMail`): the acknowledgement a request gets unasked, a request for payment,
+ * else whether a person at the business caused it (`causedByPerson`).
+ */
+export function customerMailKind(
+  event: string,
+  cause: { readonly actorKind: string | null; readonly channel: string | null; readonly writtenBy: string | null },
+  /** The email as rendered, when it is: one that asks for payment is a payment request, whatever the event. */
+  template?: string | undefined,
+): CustomerMailKind {
+  if (event === "create") return "acknowledgement";
+  if (PAYMENT_EVENTS.has(event) || (template !== undefined && PAYMENT_TEMPLATES.has(template))) {
+    return "payment_request";
+  }
+  return causedByPerson(cause.actorKind, cause.channel, cause.writtenBy) ? "person" : "automatic";
+}
 
 const CHANGE_WORDS: Readonly<Record<string, string>> = {
   propose_change: "asks for a change",

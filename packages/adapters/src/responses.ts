@@ -366,6 +366,11 @@ export const settingsViewSchema = z.object({
     .describe(
       "Settings only the owner in person reads, left out of doc: negotiation.ai (the limits for automation) and negotiation.rewards. A write that leaves them out keeps them.",
     ),
+  locked: z
+    .array(z.string())
+    .describe(
+      "Settings set by the host this inbox runs on, as dotted paths: nobody can change them here, the owner included. A write that sends them back as read changes nothing.",
+    ),
 });
 
 /** The owner's floors (ADR-018 §4): the lowest price automation may go to, per product or service. */
