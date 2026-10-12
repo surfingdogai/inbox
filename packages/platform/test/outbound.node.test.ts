@@ -22,7 +22,11 @@ beforeAll(async () => {
     });
     req.on("end", () => {
       seen.push({ url: req.url ?? "", host: req.headers.host ?? "", method: req.method ?? "", body });
-      if (req.url === "/gzip") {
+      if (req.url === "/stall") {
+        // Headers and a little of the body, then nothing: a server that stops half-way.
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.write("half");
+      } else if (req.url === "/gzip") {
         res.writeHead(200, { "content-type": "text/plain", "content-encoding": "gzip" });
         res.end(gzipSync("unzipped on the way in"));
       } else if (req.url?.startsWith("/to/")) {
@@ -38,7 +42,13 @@ beforeAll(async () => {
   port = (server.address() as AddressInfo).port;
 });
 
-afterAll(() => new Promise<void>((done) => server.close(() => done())));
+afterAll(
+  () =>
+    new Promise<void>((done) => {
+      server.closeAllConnections();
+      server.close(() => done());
+    }),
+);
 
 /** A resolver that answers from a table, and counts how often it was asked. */
 function table(map: Record<string, string[]>) {
@@ -160,6 +170,16 @@ describe("a call that is let through", () => {
     const error = await refusal(outbound(`http://127.0.0.1:${port}/to/${encodeURIComponent(away)}`));
     expect(error.message).toBe("127.0.0.2 is an address this host does not call: not called");
     expect(seen.length).toBe(before + 1);
+  });
+
+  it("closes a connection that has gone quiet, so a stalled server holds no socket", async () => {
+    const res = await pinnedFetch({ allowPrivate: true, idleTimeoutMs: 100 })(`http://127.0.0.1:${port}/stall`);
+    expect(res.status).toBe(200);
+    const error = await res.text().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(Error);
   });
 
   it("stops when its signal does", async () => {

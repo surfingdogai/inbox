@@ -35,6 +35,11 @@ export interface PinnedFetchOptions {
   readonly resolve?: ((hostname: string) => Promise<readonly ResolvedAddress[]>) | undefined;
   /** The most redirects a call that asks to follow them is taken through. Default 5. */
   readonly maxRedirects?: number | undefined;
+  /**
+   * How long a connection may sit with nothing moving before it is closed, in milliseconds: a server
+   * that stops half-way, or a body nobody reads, never holds a socket for good. Default 60 s.
+   */
+  readonly idleTimeoutMs?: number | undefined;
 }
 
 export interface ResolvedAddress {
@@ -54,6 +59,7 @@ const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 export function pinnedFetch(opts: PinnedFetchOptions = {}): typeof fetch {
   const resolve = opts.resolve ?? systemResolve;
+  const idle = opts.idleTimeoutMs ?? 60_000;
   const why = (address: string): string | null => {
     const kind = refusedAddress(address, opts);
     return kind ? refusedAddressText(kind) : null;
@@ -61,29 +67,30 @@ export function pinnedFetch(opts: PinnedFetchOptions = {}): typeof fetch {
 
   // Node's socket asks this for the addresses to connect to, and connects only to what it answers.
   const lookup: LookupFunction = (hostname, options, callback) => {
+    const want =
+      options.family === 4 || options.family === "IPv4" ? 4 : options.family === 6 || options.family === "IPv6" ? 6 : 0;
     resolve(hostname)
       .then((all) => {
         for (const a of all) {
           const refused = why(a.address);
           if (refused) throw new OutboundRefused(`${hostname} resolves to ${a.address}, ${refused}: not called`);
         }
-        const want =
-          options.family === 4 || options.family === "IPv4"
-            ? 4
-            : options.family === 6 || options.family === "IPv6"
-              ? 6
-              : 0;
         const fit = all.filter((a) => !want || a.family === want);
-        const first = fit[0];
-        if (!first) throw Object.assign(new Error(`${hostname} has no address`), { code: "ENOTFOUND" });
-        if (options.all)
-          callback(
-            null,
-            fit.map((a) => ({ address: a.address, family: a.family })),
-          );
-        else callback(null, first.address, first.family);
+        if (!fit[0]) throw Object.assign(new Error(`${hostname} has no address`), { code: "ENOTFOUND" });
+        return fit;
       })
-      .catch((error: NodeJS.ErrnoException) => callback(error, ""));
+      .then(
+        (fit) => {
+          const first = fit[0] as ResolvedAddress;
+          if (options.all)
+            callback(
+              null,
+              fit.map((a) => ({ address: a.address, family: a.family })),
+            );
+          else callback(null, first.address, first.family);
+        },
+        (error: NodeJS.ErrnoException) => callback(error, ""),
+      );
   };
 
   const once = (url: URL, method: string, headers: Headers, body: Uint8Array | null, signal: AbortSignal) =>
@@ -102,7 +109,7 @@ export function pinnedFetch(opts: PinnedFetchOptions = {}): typeof fetch {
       if (body) out["content-length"] = String(body.byteLength);
       const req = (url.protocol === "https:" ? https : http).request(
         url,
-        { method, headers: out, lookup, agent: false, signal },
+        { method, headers: out, lookup, agent: false, signal, timeout: idle },
         (res) => {
           try {
             done(toResponse(res, method));
@@ -112,6 +119,7 @@ export function pinnedFetch(opts: PinnedFetchOptions = {}): typeof fetch {
           }
         },
       );
+      req.on("timeout", () => req.destroy(new Error(`${url.host} sent nothing for ${idle / 1000} s`)));
       req.on("error", fail);
       req.end(body ?? undefined);
     });
