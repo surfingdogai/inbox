@@ -118,7 +118,8 @@ export function nodeSqliteClient(path: string, options: NodeSqliteOptions = {}):
  * rollback journal so it stays one file, `strip` runs on it, and `VACUUM` rebuilds it so what was
  * removed is gone from its pages too. Until `strip` has run the copy holds everything the database
  * does, so it is made in a directory of its own that only this process's user can open, under `dir`
- * (the system's temporary directory unless the host names another), and removed whatever happens.
+ * (the system's temporary directory unless the host names another: the database's own directory has
+ * room for a copy, where a tmpfs in memory may not), and removed whatever happens.
  */
 export function nodeSnapshot(client: NodeSqliteClient, dir: string = tmpdir()): SqliteSnapshot {
   return async (strip): Promise<Snapshot> => {

@@ -38,6 +38,15 @@ describe("the doors each host answers first", () => {
   });
 });
 
+// A download copies the whole database before it is stripped. The system's temporary directory is
+// often a small tmpfs in memory, where a large inbox does not fit; the database's own directory has room.
+describe("a download on the Node server", () => {
+  it("is copied beside the database", () => {
+    const node = readFileSync(path.resolve(import.meta.dirname, "../src/node.ts"), "utf8");
+    expect(node).toMatch(/snapshot: nodeSnapshot\(client, path\.dirname\(file\)\)/);
+  });
+});
+
 // INBOX_DEMO over a database that holds a real business: the server says why and does not start,
 // rather than serving that business with its mail off.
 describe("the Node server in demo mode", () => {

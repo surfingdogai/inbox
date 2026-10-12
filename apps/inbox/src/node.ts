@@ -169,8 +169,10 @@ const { app, runner, prepare } = createInbox({
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),
-  // The owner can download the inbox: a copy of this file, without who is signed in or any secret.
-  snapshot: nodeSnapshot(client),
+  // The owner can download the inbox: a copy of this file, without who is signed in or any secret,
+  // made beside it, on a disk known to have room for it (the system's temporary directory is often
+  // a small tmpfs held in memory).
+  snapshot: nodeSnapshot(client, path.dirname(file)),
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail
