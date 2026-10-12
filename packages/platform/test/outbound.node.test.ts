@@ -124,6 +124,20 @@ describe("a call to an address that is not public", () => {
     }
     const literal = await refusal(pinnedFetch({ deny })("https://8.8.8.8/"));
     expect(literal.message).toBe("8.8.8.8 is an address this host does not call: not called");
+    // The same address through NAT64's prefix, as DNS64 on an IPv6-only server answers for it.
+    const nat64 = table({ "self6.example.com": ["64:ff9b::808:808"] });
+    for (const allowPrivate of [false, true]) {
+      const error = await refusal(
+        pinnedFetch({ resolve: nat64.resolve, deny, allowPrivate })("https://self6.example.com/"),
+      );
+      expect(error.message).toContain("an address this host does not call");
+    }
+  });
+
+  it("is refused through NAT64's prefix too, as the IPv4 address it reaches", async () => {
+    const dns = table({ "rebind6.example.com": ["93.184.215.14", "64:ff9b::7f00:1"] });
+    const error = await refusal(pinnedFetch({ resolve: dns.resolve })("https://rebind6.example.com/"));
+    expect(error.message).toBe("rebind6.example.com resolves to 64:ff9b::7f00:1, a loopback address: not called");
   });
 });
 

@@ -30,7 +30,10 @@ describe("the addresses an outbound call never reaches", () => {
     ["fd12:3456:789a::1", "unique-local"],
     ["fe80::1", "link-local"],
     ["fe80::1%eth0", "link-local"],
-    ["64:ff9b::7f00:1", "reserved"],
+    ["64:ff9b::7f00:1", "loopback"],
+    ["64:ff9b::a00:1", "private"],
+    ["64:ff9b::169.254.169.254", "link-local"],
+    ["64:ff9b:1::7f00:1", "reserved"],
     ["::127.0.0.1", "reserved"],
     ["fec0::1", "reserved"],
     ["ff02::1", "reserved"],
@@ -55,6 +58,13 @@ describe("the addresses an outbound call never reaches", () => {
     }
   });
 
+  // An IPv6-only server with DNS64 gets 64:ff9b::a.b.c.d for every name with only an IPv4 address:
+  // judged as that IPv4 address, a public one is called and a private one still is not.
+  it("calls a public IPv4 address reached through NAT64's well-known prefix", () => {
+    expect(refusedAddress("64:ff9b::5db8:d822")).toBeNull();
+    expect(refusedAddress("64:ff9b::93.184.216.34")).toBeNull();
+  });
+
   it("refuses anything that is not an address", () => {
     for (const a of ["", "localhost", "example.com", "1.2.3", "1.2.3.4.5", "256.1.1.1", "01.2.3.4", "1::2::3", ":::"]) {
       expect(refusedAddress(a), a).toBe("reserved");
@@ -75,6 +85,14 @@ describe("the addresses an outbound call never reaches", () => {
     expect(refusedAddress("203.0.114.9", { deny, allowPrivate: true })).toBe("denied");
     expect(refusedAddress("192.168.1.10", { deny, allowPrivate: true })).toBeNull();
     expect(refusedAddress("127.0.0.1", { allowPrivate: true })).toBeNull();
+    expect(refusedAddress("::1", { allowPrivate: true })).toBeNull();
+    // Through NAT64 it is the same address; through a tunnel it cannot be told, so it is not called.
+    expect(refusedAddress("64:ff9b::cb00:7209", { deny })).toBe("denied");
+    expect(refusedAddress("64:ff9b::203.0.114.9", { deny, allowPrivate: true })).toBe("denied");
+    expect(refusedAddress("64:ff9b::c0a8:10a", { deny, allowPrivate: true })).toBeNull();
+    for (const tunnelled of ["::203.0.114.9", "2002:cb00:7209::1", "64:ff9b:1::cb00:7209", "2001:0:4136:e378::1"]) {
+      expect(refusedAddress(tunnelled, { deny, allowPrivate: true }), tunnelled).toBe("reserved");
+    }
   });
 
   it("says what each refused address is", () => {

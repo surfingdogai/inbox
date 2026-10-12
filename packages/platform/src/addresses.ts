@@ -64,9 +64,9 @@ const BUILT_IN: readonly (readonly [AddressRange, RefusedAddress])[] = RANGES.ma
 ]);
 
 /**
- * IPv6 outside 2000::/3 is not global unicast: NAT64's 64:ff9b::/96 (which reaches IPv4 addresses
- * through the host's own translator), the old IPv4-compatible form, site-local and multicast among
- * it. Inside it, the protocol assignments (Teredo with them), documentation and 6to4.
+ * IPv6 outside 2000::/3 is not global unicast: the old IPv4-compatible form, NAT64's local-use
+ * prefix, site-local and multicast among it. Inside it, the protocol assignments (Teredo with them),
+ * documentation and 6to4.
  */
 const GLOBAL_V6 = parseAddressRange("2000::/3") as AddressRange;
 const RESERVED_IN_GLOBAL_V6: readonly AddressRange[] = ["2001::/23", "2001:db8::/32", "2002::/16", "3fff::/20"].map(
@@ -74,10 +74,29 @@ const RESERVED_IN_GLOBAL_V6: readonly AddressRange[] = ["2001::/23", "2001:db8::
 );
 
 /**
+ * NAT64's well-known prefix: 64:ff9b::a.b.c.d reaches the IPv4 address a.b.c.d through the network's
+ * translator. On a server with only IPv6 and DNS64, every name with only an IPv4 address resolves to
+ * one, so it is judged as the IPv4 address it carries: a public one is called, 64:ff9b::7f00:1
+ * (127.0.0.1) is not.
+ */
+const NAT64 = parseAddressRange("64:ff9b::/96") as AddressRange;
+
+/**
+ * The other ways an IPv6 address carries an IPv4 one, to reach it through a tunnel or a translator:
+ * IPv4-compatible (::a.b.c.d), NAT64's local-use prefix, Teredo and 6to4. None is called even for a
+ * call allowed private addresses, since the host's own IPv4 ranges cannot be read off all of them.
+ */
+const CARRIES_V4: readonly AddressRange[] = ["::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16"].map(
+  (r) => parseAddressRange(r) as AddressRange,
+);
+const THIS_MACHINE = parseAddressRange("::/127") as AddressRange;
+
+/**
  * Why `address` is not connected to, or null when it may be. `deny` adds ranges of the host's own
- * (its own public addresses, a neighbour's); `allowPrivate` lifts the built-in ranges for a call the
- * owner pointed at a machine of their own, and the host's `deny` still holds then. Anything that is
- * not an address is refused.
+ * (its own public addresses, a neighbour's), and an IPv4 range there holds for the same address
+ * written as IPv6 (IPv4-mapped, NAT64) too; `allowPrivate` lifts the built-in ranges for a call the
+ * owner pointed at a machine of their own, and the host's `deny` still holds then, so an address
+ * that reaches IPv4 through a tunnel is still refused. Anything that is not an address is refused.
  */
 export function refusedAddress(
   address: string,
@@ -85,11 +104,16 @@ export function refusedAddress(
 ): RefusedAddress | null {
   const bytes = parseIp(address);
   if (!bytes) return "reserved";
-  const mapped = mappedV4(bytes);
+  const nat64 = bytes.length === 16 && inRange(bytes, NAT64);
+  const v4 = mappedV4(bytes) ?? (nat64 ? bytes.slice(12) : null);
   for (const range of opts.deny ?? []) {
-    if (inRange(bytes, range) || (mapped && inRange(mapped, range))) return "denied";
+    if (inRange(bytes, range) || (v4 && inRange(v4, range))) return "denied";
   }
-  if (opts.allowPrivate) return null;
+  if (nat64 && v4) return refusedAddress(v4.join("."), opts);
+  if (opts.allowPrivate) {
+    const tunnelled = CARRIES_V4.some((r) => inRange(bytes, r)) && !inRange(bytes, THIS_MACHINE);
+    return tunnelled ? "reserved" : null;
+  }
   for (const [range, kind] of BUILT_IN) if (inRange(bytes, range)) return kind;
   if (bytes.length === 16) {
     if (!inRange(bytes, GLOBAL_V6)) return "reserved";
