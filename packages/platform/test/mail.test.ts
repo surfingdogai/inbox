@@ -253,7 +253,7 @@ describe("no mail service", () => {
 describe("a pinned sender", () => {
   // Every transport, wrapped: the message names the address and the Reply-To that Settings hold,
   // and headers that would name others; what reaches the service is the pinned sender alone.
-  const pin = { from: { address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" } };
+  const pin = { from: { address: "oficina-mare@mail.example.net", name: "Oficina Maré" } };
   const named = {
     ...mail,
     from: { address: "owner@personal.example", name: "Not the business" },
@@ -278,7 +278,7 @@ describe("a pinned sender", () => {
       },
     };
     await pinnedMailOut(cloudflareEmailMailOut(binding, { address: "inbox@oficinamare.pt" }), pin).send(named);
-    expect(seen[0]?.from).toEqual({ email: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" });
+    expect(seen[0]?.from).toEqual({ email: "oficina-mare@mail.example.net", name: "Oficina Maré" });
     expect(seen[0]).not.toHaveProperty("replyTo");
     expect(seen[0]?.headers).toEqual({ References: "<a.1@mail.example.net>", "X-Item-Ref": "7K3QXA" });
     expect(JSON.stringify(seen[0])).not.toMatch(/evil\.example|personal\.example/);
@@ -291,7 +291,7 @@ describe("a pinned sender", () => {
       return json({ id: "re-1" });
     }) as typeof fetch;
     await pinnedMailOut(resendMailOut("re_key", fetchImpl, { address: "inbox@oficinamare.pt" }), pin).send(named);
-    expect(bodies[0]?.from).toBe("Oficina Maré <calm-otter-7k2q@mail.example.net>");
+    expect(bodies[0]?.from).toBe("Oficina Maré <oficina-mare@mail.example.net>");
     expect(bodies[0]).not.toHaveProperty("reply_to");
     expect(bodies[0]?.headers).toEqual({ References: "<a.1@mail.example.net>", "X-Item-Ref": "7K3QXA" });
     expect(JSON.stringify(bodies[0])).not.toMatch(/evil\.example|personal\.example/);
@@ -304,11 +304,11 @@ describe("a pinned sender", () => {
       return json({ success: true, errors: [], result: { delivered: ["rita@example.com"] } });
     }) as typeof fetch;
     const rest = cloudflareEmailRestMailOut(
-      { accountId: "acc", token: "tok", from: { address: "calm-otter-7k2q@mail.example.net" } },
+      { accountId: "acc", token: "tok", from: { address: "oficina-mare@mail.example.net" } },
       fetchImpl,
     );
     await pinnedMailOut(rest, pin).send(named);
-    expect(bodies[0]?.from).toEqual({ address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" });
+    expect(bodies[0]?.from).toEqual({ address: "oficina-mare@mail.example.net", name: "Oficina Maré" });
     expect(bodies[0]).not.toHaveProperty("reply_to");
     expect(JSON.stringify(bodies[0])).not.toMatch(/evil\.example|personal\.example/);
   });
@@ -332,14 +332,14 @@ describe("a pinned sender", () => {
   it("sets the Reply-To it is given, keeps the message's name when it pins none, and says it is pinned", async () => {
     const log = logMailOut();
     const out = pinnedMailOut(log, {
-      from: { address: "calm-otter-7k2q@mail.example.net" },
+      from: { address: "oficina-mare@mail.example.net" },
       replyTo: "hello@oficinamare.pt",
     });
     await out.send(named);
-    expect(log.sent[0]?.from).toEqual({ address: "calm-otter-7k2q@mail.example.net", name: "Not the business" });
+    expect(log.sent[0]?.from).toEqual({ address: "oficina-mare@mail.example.net", name: "Not the business" });
     expect(log.sent[0]?.replyTo).toBe("hello@oficinamare.pt");
     expect(out.pinned).toBe(true);
-    expect(out.sender).toEqual({ address: "calm-otter-7k2q@mail.example.net" });
+    expect(out.sender).toEqual({ address: "oficina-mare@mail.example.net" });
   });
 
   // The name the message carries is the business's, which the owner, or a key with settings:write,
@@ -351,7 +351,7 @@ describe("a pinned sender", () => {
       return json({ id: "re-1" });
     }) as typeof fetch;
     const out = pinnedMailOut(resendMailOut("re_key", fetchImpl), {
-      from: { address: "calm-otter-7k2q@mail.example.net" },
+      from: { address: "oficina-mare@mail.example.net" },
     });
     const send = (name: string, headers: Record<string, string> = {}) =>
       out.send({ ...mail, from: { address: "owner@personal.example", name }, headers });
@@ -362,11 +362,11 @@ describe("a pinned sender", () => {
       "X-Bad Name": "x",
     });
     expect(bodies.map((b) => b.from)).toEqual([
-      '"Acme other-inbox@mail.example.net" <calm-otter-7k2q@mail.example.net>',
-      '"A Bcc: x@evil.example" <calm-otter-7k2q@mail.example.net>',
+      '"Acme other-inbox@mail.example.net" <oficina-mare@mail.example.net>',
+      '"A Bcc: x@evil.example" <oficina-mare@mail.example.net>',
     ]);
     // Whatever the name, the one address in angle brackets is the pinned one.
-    for (const b of bodies) expect(String(b.from).match(/<[^>]*>/g)).toEqual(["<calm-otter-7k2q@mail.example.net>"]);
+    for (const b of bodies) expect(String(b.from).match(/<[^>]*>/g)).toEqual(["<oficina-mare@mail.example.net>"]);
     expect(bodies[1]?.headers).toEqual({ "X-Item-Ref": "7K3QXA Bcc: everyone@evil.example" });
     expect(JSON.stringify(bodies)).not.toMatch(/\\r|\\n/);
   });

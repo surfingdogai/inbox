@@ -217,8 +217,8 @@ describe("a host's handoff", () => {
   it("signs the first owner in once, within a minute, at the host it was made for only", async () => {
     const dbA = await freshDb();
     const dbB = await freshDb();
-    const A = "https://calm-otter-x7k2.tenants.test";
-    const B = "https://brisk-heron-p3q9.tenants.test";
+    const A = "https://inbox-a.example";
+    const B = "https://inbox-b.example";
     // The host named the owner when it made the inbox; nobody has signed in yet.
     const clock = { t: Date.now() };
     const now = () => clock.t;

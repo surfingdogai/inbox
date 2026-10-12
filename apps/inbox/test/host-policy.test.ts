@@ -19,8 +19,8 @@ import { freshDb } from "./harness";
  * authorities; every email goes from the sender the host pinned, whatever Settings held before; and
  * a customer is sent nothing automatic. Runs on Node and in workerd.
  */
-const ADDRESS = "https://calm-otter-7k2q.example.net";
-const PIN = { address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" };
+const ADDRESS = "https://oficina-mare.example.net";
+const PIN = { address: "oficina-mare@mail.example.net", name: "Oficina Maré" };
 const SECRET_KEY = "5c0e7b1a9d3f48e2a6c1b7d04f9e3a21";
 const T0 = Date.parse("2026-10-12T10:00:00Z");
 

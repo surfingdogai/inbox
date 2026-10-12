@@ -31,8 +31,8 @@ import { confirming, makeClient, resetTables } from "./harness";
 const T0 = Date.parse("2026-10-12T09:00:00Z");
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
-const BASE = "https://calm-otter-7k2q.example.net";
-const PIN = { address: "calm-otter-7k2q@mail.example.net", name: "Oficina Maré" };
+const BASE = "https://oficina-mare.example.net";
+const PIN = { address: "oficina-mare@mail.example.net", name: "Oficina Maré" };
 
 const owner = (t = T0, kind: "owner" | "owner_ai" = "owner"): Caller => ({
   actor: { kind, id: kind === "owner" ? "u1" : "app_1", channel: kind === "owner" ? "owner_ui" : "mcp_owner" },

@@ -17,7 +17,7 @@ import { makeClient, resetTables } from "./harness";
  * nothing changes. Everything else stays the owner's. Runs on Node and in workerd.
  */
 const T0 = Date.parse("2026-10-12T09:00:00Z");
-const ADDRESS = "https://calm-otter-7k2q.example.net";
+const ADDRESS = "https://oficina-mare.example.net";
 const OTHER = "https://people.example.org";
 
 /** An inbox no site links to yet: no sender of its own, no private calls, unlisted, no network. */
