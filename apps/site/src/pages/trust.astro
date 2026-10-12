@@ -1,5 +1,6 @@
 ---
 import StatusPill from "../components/StatusPill.astro";
+import TrustFlow from "../components/TrustFlow.astro";
 import Layout from "../layouts/Layout.astro";
 import { type RulesLine, rulesFallback, rulesLine } from "../lib/rules";
 import { capabilities, stateOf } from "../lib/status";
@@ -9,7 +10,9 @@ import { capabilities, stateOf } from "../lib/status";
  * receipts, the order reads kept promises, nobody can pay for a place, the rules are public), which
  * rules are in force, and what is live today against what is being built. The rules line is read
  * from the network when the site is built and again in the browser; a build that cannot read it says
- * what was published when this was written (src/lib/rules.ts).
+ * what was published when this was written (src/lib/rules.ts). The top is a two-column hero like the
+ * network page's: the words on the left, TrustFlow on the right in the same .art-box, stacked on a
+ * phone with the drawing after the words.
  */
 const RANKING = "https://surfingdog.ai/v1/ranking";
 
@@ -52,15 +55,20 @@ const now = capabilities.filter((c) => ids.includes(c.id));
   description="Optional for a business, and separate from its inbox: the network records the receipts its inbox signs, never its messages. The directory's order is made of kept promises, the rules are public and versioned, and nobody can pay for a place."
   image="/art/og-receipts-v1.png"
 >
-  <section class="wrap wrap-read section is-head" aria-labelledby="trust-h">
-    <p class="eyebrow">Trust network <StatusPill state={stateOf("ranking")} /></p>
-    <h1 class="h-page" id="trust-h">An order made of kept promises</h1>
-    <p class="lede">
-      The directory puts businesses in order by what they did, never by what they paid. Inboxes check in, both sides
-      sign what was promised, and the rules that read it are public. Joining is each business's choice, and the
-      network never carries a booking or an order: those go straight from the customer's agent to the business, and
-      the network records the receipts.
-    </p>
+  <section class="wrap section is-head top" aria-labelledby="trust-h">
+    <div class="copy">
+      <p class="eyebrow">Trust network <StatusPill state={stateOf("ranking")} /></p>
+      <h1 class="h-page" id="trust-h">An order made of kept promises</h1>
+      <p class="lede">
+        The directory puts businesses in order by what they did, never by what they paid. Inboxes check in, both sides
+        sign what was promised, and the rules that read it are public. Joining is each business's choice, and the
+        network never carries a booking or an order: those go straight from the customer's agent to the business, and
+        the network records the receipts.
+      </p>
+    </div>
+    <div class="art-box">
+      <TrustFlow />
+    </div>
   </section>
 
   <section class="section section-tight" aria-labelledby="how-h">
@@ -128,6 +136,20 @@ const now = capabilities.filter((c) => ids.includes(c.id));
 </Layout>
 
 <style>
+  /* The same two columns as the network page's hero: the words take 1.15 parts
+     and the drawing 1, both starting at the top. Below 900px it is one column
+     and the drawing follows the words. */
+  .top {
+    display: grid;
+    gap: var(--sp-7);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .top {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: var(--sp-8);
+    }
+  }
   .eyebrow :global(.pill) {
     margin-left: var(--sp-2);
     text-transform: none;
