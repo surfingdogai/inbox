@@ -307,4 +307,16 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `network_status` ADD `listed_at` integer;",
     ],
   },
+  {
+    version: 21,
+    name: "0020_owner_sign_in",
+    statements: [
+      "-- Owner sign-in (ADR-004): a sign-in email carries a link and a six-digit code, either of which signs\n-- in once. `code_hash` is the code's, hashed with the row's own hash; `attempts` counts the tries at\n-- it, and after five the code stops working (the link, which nobody can guess, still does). The same\n-- columns hold the step-up codes the owner gets before changing their address. `user_id` is the\n-- owner a step-up code or an address change is for, and `detail` what a row is about beyond its\n-- address: an address change's old and new address, or the origin a handoff signs in at.\nALTER TABLE `login_tokens` ADD `code_hash` text;",
+      "ALTER TABLE `login_tokens` ADD `attempts` integer NOT NULL DEFAULT 0;",
+      "ALTER TABLE `login_tokens` ADD `user_id` text;",
+      "ALTER TABLE `login_tokens` ADD `detail` text;",
+      "CREATE INDEX IF NOT EXISTS `login_tokens_email` ON `login_tokens` (`email`, `kind`, `created_at`);",
+      "CREATE INDEX IF NOT EXISTS `login_tokens_user` ON `login_tokens` (`user_id`, `kind`, `created_at`);",
+    ],
+  },
 ];

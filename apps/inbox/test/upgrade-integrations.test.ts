@@ -430,7 +430,7 @@ describe("upgrading to keys, scopes and attribution", () => {
     const put = (headers: Record<string, string>, body: unknown) => request("PUT", "/v1/owner/settings", headers, body);
     // Signed in by link (the session) and by a pasted owner key (a bearer): the tab's two ways in.
     for (const headers of [
-      { cookie: `sdi_session=${session.token}`, origin: INBOX },
+      { cookie: `__Host-sdi_session=${session.token}`, origin: INBOX },
       { authorization: `Bearer ${key}` },
     ]) {
       expect((await put(headers, { doc: { email: { inboundSecret: INBOUND } } })).status).toBe(200);

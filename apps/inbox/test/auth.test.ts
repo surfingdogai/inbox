@@ -7,6 +7,23 @@ import { freshDb } from "./harness";
 
 const ORIGIN = "https://inbox.test";
 
+/** Opens a sign-in link as a browser does: the page it shows, then the POST its button sends. */
+async function press(app: App, link: string): Promise<Response> {
+  const page = await app.request(link);
+  expect(page.status).toBe(200);
+  const html = await page.text();
+  const action = /<form method="post" action="([^"]+)"/.exec(html)?.[1];
+  const fields = [...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map(
+    ([, k, v]) => [k ?? "", (v ?? "").replaceAll("&amp;", "&")] as [string, string],
+  );
+  if (!action) throw new Error("no form on the page");
+  return app.request(`${new URL(link).origin}${action}`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", origin: new URL(link).origin },
+    body: new URLSearchParams(fields).toString(),
+  });
+}
+
 async function signIn(app: App, mail: ReturnType<typeof logMailOut>, email: string): Promise<string> {
   const ask = await app.request(`${ORIGIN}/auth/magic-link`, {
     method: "POST",
@@ -16,12 +33,12 @@ async function signIn(app: App, mail: ReturnType<typeof logMailOut>, email: stri
   expect(ask.status).toBe(200);
   const link = /https?:\/\/\S+/.exec(mail.sent.at(-1)?.text ?? "")?.[0];
   if (!link) throw new Error("no link mailed");
-  const verify = await app.request(link);
-  expect(verify.status).toBe(200);
+  const verify = await press(app, link);
+  expect(verify.status).toBe(303);
   const cookie = verify.headers.get("set-cookie") ?? "";
-  const token = /sdi_session=([^;]+)/.exec(cookie)?.[1];
+  const token = /__Host-sdi_session=([^;]+)/.exec(cookie)?.[1];
   if (!token) throw new Error("no session cookie");
-  return `sdi_session=${token}`;
+  return `__Host-sdi_session=${token}`;
 }
 
 describe("owner sign-in", () => {
@@ -82,6 +99,12 @@ describe("the sign-in link on an instance deployed with one click", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     return () => spy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("/auth/verify?token="));
   };
+  const everything = () => {
+    const spies = (["log", "error", "warn", "info"] as const).map((m) =>
+      vi.spyOn(console, m).mockImplementation(() => {}),
+    );
+    return () => spies.flatMap((s) => s.mock.calls.map((c) => c.map(String).join(" "))).join("\n");
+  };
   afterEach(() => vi.restoreAllMocks());
 
   it("goes out from the mail service's own address (MAIL_FROM), never from localhost", async () => {
@@ -98,26 +121,34 @@ describe("the sign-in link on an instance deployed with one click", () => {
     expect(sent.map((m) => m.from.address)).toEqual(["inbox@oficinamare.pt"]);
   });
 
-  it("is written to the server's log when the email cannot be sent, and that link signs the owner in", async () => {
-    const lines = logged();
+  // A mail service that fails may work on a second try, and a log may be read by more people than
+  // the owner: the reason is logged, never the link or the code.
+  it("says Couldn't send when the email cannot be sent, and writes no link or code to the log", async () => {
+    const said = everything();
+    const tried: OutboundMail[] = [];
     const mailOut: MailOut = {
       sender: { address: "inbox@not-onboarded.example" },
-      async send() {
+      async send(m) {
+        tried.push(m);
         throw new Error("E_SENDER_NOT_VERIFIED: sender domain not verified");
       },
     };
-    const app = createApp({ db: await freshDb(), mailOut, ownerEmails: [OWNER] });
+    const db = await freshDb();
+    const app = createApp({ db, mailOut, ownerEmails: [OWNER] });
     const res = await ask(app);
     expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ code: "mail_failed", detail: expect.stringContaining("log") });
-    const [line] = lines();
-    expect(line).toContain("E_SENDER_NOT_VERIFIED");
-    expect(line).toContain(OWNER);
-    const link = /https:\/\/\S+\/auth\/verify\?token=\S+/.exec(line ?? "")?.[0];
-    if (!link) throw new Error("no link in the log");
-    const verify = await app.request(link);
-    expect(verify.status).toBe(200);
-    expect(await verify.json()).toMatchObject({ ok: true, user: { email: OWNER, role: "owner" } });
+    expect(await res.json()).toMatchObject({ code: "mail_failed", detail: expect.stringContaining("Couldn't send") });
+    const log = said();
+    expect(log).toContain("E_SENDER_NOT_VERIFIED");
+    const link = /https:\/\/\S+\/auth\/verify\?token=([\w-]+)/.exec(tried[0]?.text ?? "");
+    const code = /code: (\d{6})/.exec(tried[0]?.text ?? "")?.[1];
+    if (!link?.[1] || !code) throw new Error("the email would have carried a link and a code");
+    expect(log).not.toContain(link[1]);
+    expect(log).not.toContain(code);
+    expect(log).not.toContain("token=");
+    // Nobody got that email, so it is no way in either.
+    const rows = await db.client.query({ sql: "SELECT COUNT(*) FROM login_tokens", params: [], method: "all" });
+    expect(Number(rows.rows[0]?.[0])).toBe(0);
   });
 
   it("is written to the log when there is no address to send from, and the answer is the same as for anyone", async () => {
@@ -208,9 +239,24 @@ describe("where a sign-in link lands afterwards", () => {
       expect(ask.status).toBe(200);
       const link = /https?:\/\/\S+/.exec(mail.sent.at(-1)?.text ?? "")?.[0];
       if (!link) throw new Error("no link mailed");
-      const res = await app.request(link, { headers: { accept: "text/html" } });
-      expect(res.status).toBe(302);
+      const res = await press(app, link);
+      expect(res.status).toBe(303);
       expect(new URL(res.headers.get("location") ?? "", ORIGIN).origin).toBe(ORIGIN);
+      // Nor when the POST itself names somewhere else.
+      const again = await app.request(`${ORIGIN}/auth/magic-link`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "cf-connecting-ip": "198.51.100.7" },
+        body: JSON.stringify({ email: OWNER }),
+      });
+      expect(again.status).toBe(200);
+      const token = /token=([\w-]+)/.exec(mail.sent.at(-1)?.text ?? "")?.[1] ?? "";
+      const direct = await app.request(`${ORIGIN}/auth/verify`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+        body: new URLSearchParams({ token, redirect }).toString(),
+      });
+      expect(direct.status).toBe(303);
+      expect(new URL(direct.headers.get("location") ?? "", ORIGIN).origin).toBe(ORIGIN);
     },
   );
 
@@ -224,7 +270,7 @@ describe("where a sign-in link lands afterwards", () => {
     });
     const link = /https?:\/\/\S+/.exec(mail.sent.at(-1)?.text ?? "")?.[0];
     if (!link) throw new Error("no link mailed");
-    const res = await app.request(link, { headers: { accept: "text/html" } });
+    const res = await press(app, link);
     expect(res.headers.get("location")).toBe("/items/01J?tab=timeline#reply");
   });
 });

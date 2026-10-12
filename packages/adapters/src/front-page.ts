@@ -13,7 +13,7 @@ import {
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
 import { pageLang, renderCustomerPage } from "./customer-page";
-import { SESSION_COOKIE } from "./session";
+import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
 
 /**
  * The business's own page (the web form door, ADR-010), served by the inbox in the business's name:
@@ -32,10 +32,17 @@ export interface FrontPageDeps {
 /** At most this much form to read: the longest field is five thousand characters. */
 const MAX_FORM_BYTES = 64 * 1024;
 
-/** Whether a request carries an owner's session cookie: then `/` is their app, not the front page. */
+/**
+ * Whether a request carries an owner's session cookie, under either name (session.ts): then `/` is
+ * their app, not the front page. Only which page to serve; the app's own calls check the session.
+ */
 export function hasOwnerSession(request: Request): boolean {
   const cookie = request.headers.get("cookie") ?? "";
-  return cookie.split(/;\s*/).some((c) => c.startsWith(`${SESSION_COOKIE}=`) && c.length > SESSION_COOKIE.length + 1);
+  return cookie
+    .split(/;\s*/)
+    .some((c) =>
+      [SESSION_COOKIE, HOST_SESSION_COOKIE].some((name) => c.startsWith(`${name}=`) && c.length > name.length + 1),
+    );
 }
 
 /** `GET /` for a visitor: the front page. */

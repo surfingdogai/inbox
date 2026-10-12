@@ -842,14 +842,30 @@ export const sessions = sqliteTable("sessions", {
   lastSeenAt: integer("last_seen_at"),
 });
 
-export const loginTokens = sqliteTable("login_tokens", {
-  hash: text("hash").primaryKey(),
-  email: text("email").notNull(),
-  kind: text("kind").notNull().default("magic_link"),
-  expiresAt: integer("expires_at").notNull(),
-  usedAt: integer("used_at"),
-  createdAt: createdAt(),
-});
+/**
+ * What signs the owner in, or proves it is them, once: a sign-in email (`magic_link`: a link, and a
+ * six-digit code hashed in `code_hash`), a host's handoff, a step-up code (`step_up:<purpose>`), an
+ * address change and its undo. `attempts` counts tries at a code; `detail` is JSON (migration 0020).
+ */
+export const loginTokens = sqliteTable(
+  "login_tokens",
+  {
+    hash: text("hash").primaryKey(),
+    email: text("email").notNull(),
+    kind: text("kind").notNull().default("magic_link"),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+    createdAt: createdAt(),
+    codeHash: text("code_hash"),
+    attempts: integer("attempts").notNull().default(0),
+    userId: text("user_id"),
+    detail: text("detail"),
+  },
+  (t) => [
+    index("login_tokens_email").on(t.email, t.kind, t.createdAt),
+    index("login_tokens_user").on(t.userId, t.kind, t.createdAt),
+  ],
+);
 
 export const passkeys = sqliteTable("passkeys", {
   id: id(),

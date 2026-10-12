@@ -14,14 +14,14 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - the core write path: typed items, five state machines, append-only events, idempotency keys and compare-and-set versions;
 - the rules engine, with presets for appointments, trades and shops;
 - REST with an OpenAPI document, a public MCP server and an owner MCP server;
-- owner API keys, owner sign-in by magic link, and an OAuth 2.1 authorization server for the owner MCP;
+- owner API keys, owner sign-in by an emailed link or code, and an OAuth 2.1 authorization server for the owner MCP;
 - the owner app, first version: sign in by emailed link or owner key, a three-pane inbox, a typed item view with the valid next actions as buttons, and settings;
 - the email door: inbound MIME parsed, deduplicated and threaded onto the right item;
 - the job runner for notifications and rules, on cron and queues on Workers and on a loop on Node;
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: passkeys, connectors (coming), hosted tenancy, and the network's reviews and reputation (coming). Every page in these docs says whether a feature is live.
+Still to come: connectors (coming), hosted tenancy, and the network's reviews and reputation (coming). Every page in these docs says whether a feature is live.
 
 ## Pages
 

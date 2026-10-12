@@ -30,6 +30,7 @@ import { authRoutes } from "./session";
 
 export * from "./access";
 export * from "./auth";
+export * from "./auth-page";
 export * from "./customer-page";
 export * from "./email";
 export * from "./feeds/index";
@@ -78,6 +79,13 @@ export interface DoorDeps {
   /** Buckets every caller shares, taken after the caller's own (a public demo sets `DEMO_SHARED`). */
   readonly sharedLimits?: LimitTable | undefined;
 }
+
+/**
+ * The sign-in routes anyone can call that send an email or check a code: each POST takes an `auth`
+ * token, so nobody fills an owner's mailbox or guesses at codes from one address. The other POSTs
+ * there take the flood guard's: a link's button, and signing out.
+ */
+const AUTH_LIMITED = new Set(["/auth/magic-link", "/auth/code"]);
 
 /** The longest idempotency key a door accepts, header or field. */
 const MAX_IDEMPOTENCY_KEY = 200;
@@ -310,10 +318,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     c.set("caller", withAgent(caller, seen));
     await next();
   });
-  // Sign-in links go to the owner's mailbox; nobody gets to fill it.
+  // Sign-in emails go to the owner's mailbox; nobody gets to fill it, or to guess at its codes.
   app.use("/auth/*", async (c, next) => {
     if (c.req.method === "POST") {
-      const refused = await limited(c, ["auth"]);
+      const refused = await limited(c, AUTH_LIMITED.has(c.req.path.replace(/\/$/, "")) ? ["auth"] : ["public"]);
       if (refused) return refused;
     }
     await next();
@@ -326,14 +334,17 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }
     await next();
   });
+  const ownerMail = {
+    db: deps.db,
+    mailOut: deps.mailOut,
+    businessName: deps.businessName,
+    now: deps.now,
+    baseUrl: deps.baseUrl,
+  };
   app.route(
     "/auth",
     authRoutes({
-      db: deps.db,
-      mailOut: deps.mailOut,
-      businessName: deps.businessName,
-      now: deps.now,
-      baseUrl: deps.baseUrl,
+      ...ownerMail,
       ownerEmails: deps.ownerEmails,
       rememberOrigin: (origin) => deps.caps.rememberInboxAddress(origin),
     }),

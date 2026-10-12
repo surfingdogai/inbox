@@ -50,12 +50,12 @@ An assistant may sign its requests (`sdi-agent/1`, HTTP Message Signatures, Web 
 - Owner API keys (`sdi_own_…`) and agent keys (`sdi_agent_…`) are stored as SHA-256 hashes with a short prefix for identification. The key is shown once, when it is created.
 - OAuth access tokens (`sdi_at_…`, one hour) and refresh tokens (`sdi_rt_…`, thirty days) are opaque, hashed, and rotate on every refresh. A refresh token presented twice revokes the whole token family.
 - An AI app gets in only through the consent screen, with the owner signed in. The screen shows where the app's access goes, says when its name is self-chosen, and warns when a name claims a known assistant that the destination doesn't belong to. An Allow posted from another site is refused. The owner is emailed each time an app is allowed, and disconnects any app in Settings → Keys, which revokes its tokens at once.
-- Magic-link tokens are hashed, single-use and expire in fifteen minutes. Sessions are hashed and expire after thirty days.
+- A sign-in email carries a link and a six-digit code. Both are hashed, single-use and expire in fifteen minutes. Opening the link changes nothing: it shows a page whose button signs in, so a mail scanner that opens every link uses up none. A code stops after five wrong tries, and an address gets twenty tries a day. Neither the link nor the code is written to a log when an email fails to send; only an instance with no address to send from writes the whole email to its log. Sessions are hashed and expire after thirty days.
 - Receipts are signed with an Ed25519 key generated on the instance; the private half is sealed by `INBOX_SECRET_KEY` before it is stored, and the public half is published in the manifest and at `/.well-known/jwks.json`. A retired key stays published so old receipts still verify. Without `INBOX_SECRET_KEY` no key is created and no receipt is issued, rather than storing a signing key in the clear.
 
 ## Same-origin writes for cookies
 
-A session cookie only writes from the instance's own origin: cross-site requests that carry a cookie are refused with `403` on anything but `GET`. API keys and OAuth tokens carry no ambient authority, so they are checked wherever they are sent. Cookies are `HttpOnly`, `SameSite=Lax` and `Secure` behind HTTPS.
+A session cookie only writes from the instance's own origin: cross-site requests that carry a cookie are refused with `403` on anything but `GET`. API keys and OAuth tokens carry no ambient authority, so they are checked wherever they are sent. Cookies are `HttpOnly` and `SameSite=Lax`; over HTTPS the session cookie is `__Host-sdi_session`, so it is `Secure`, kept to the instance's own host, and cannot be set by another host under the same domain.
 
 ## Small blast radius by design
 

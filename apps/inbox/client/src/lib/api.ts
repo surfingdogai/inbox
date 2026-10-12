@@ -164,12 +164,18 @@ const customerPath = (partyId: string) => `/v1/owner/customers/${encodeURICompon
 
 export const api = {
   business: () => call<BusinessProfile>("GET", "/v1/business", { public: true }),
-  /** Sign-in by email: the server mails a link (or logs it when no mail provider is set up). */
+  /**
+   * Sign-in by email: the server mails a link and a code (or writes the email to its log while it
+   * has no address to send from).
+   */
   requestMagicLink: (email: string, redirect: string | undefined) =>
     call<{ ok: boolean; message: string }>("POST", "/auth/magic-link", {
       body: { email, ...(redirect ? { redirect } : {}) },
       public: true,
     }),
+  /** The code from the sign-in email, instead of its link: sets the session cookie. */
+  signInWithCode: (email: string, code: string) =>
+    call<{ ok: boolean; redirect: string }>("POST", "/auth/code", { body: { email, code }, public: true }),
   /** Sign-in by key: the settings document is the cheapest owner-only read. */
   verifyKey: (key: string) => call<SettingsDoc>("GET", "/v1/owner/settings", { key }),
   listItems: (params: ListParams) => call<Page<ItemView>>("GET", "/v1/owner/items", { query: { ...params } }),

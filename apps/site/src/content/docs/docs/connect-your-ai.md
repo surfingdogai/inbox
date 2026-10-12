@@ -42,7 +42,7 @@ Scopes: `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `availabi
 
 In the history and in every event, the AI appears as itself: actor `owner_ai` with the app's name, not as you.
 
-Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a magic link by email (`POST /auth/magic-link`, then `GET /auth/verify`; the first address to sign in on a fresh instance becomes its owner). The owner app offers both ways in: the emailed link, which creates that session, and an owner API key for people who only ever use the API. Passkey sign-in is being built.
+Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a sign-in email (`POST /auth/magic-link`; then the page its link opens, whose button posts to `/auth/verify`, or its six-digit code posted to `/auth/code`; the first address to sign in on a fresh instance becomes its owner). The owner app offers both ways in: the sign-in email, which creates that session, and an owner API key for people who only ever use the API.
 
 ### Claude
 

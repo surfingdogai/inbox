@@ -76,7 +76,7 @@ async function main() {
   try {
     await waitFor(() => log.includes("listening on"), 30_000, "the server to start");
 
-    // Sign in like a person would: ask for a link, then open the one the server printed.
+    // Sign in like a person would: ask for an email, then open the link the server printed.
     const ask = await fetch(`${base}/auth/magic-link`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -96,7 +96,9 @@ async function main() {
       timezoneId: "Europe/Lisbon",
     });
     const page = await context.newPage();
+    // The link opens a page; its button is what signs in.
     await page.goto(link);
+    await page.getByRole("button", { name: "Sign in" }).click();
     await page.locator(".row").first().waitFor({ timeout: 20_000 });
 
     const items = async (query) => {
