@@ -1,4 +1,4 @@
-import { type Manifest, manifestSchema, type Profile } from "@surfingdog/spec";
+import { type DoorElsewhere, type Manifest, manifestSchema, type Profile } from "@surfingdog/spec";
 import { AGENT_GUIDE_URL } from "./identity/types";
 
 /** The discovery manifest: what this instance accepts and where each door is. */
@@ -17,13 +17,19 @@ export function buildManifest(input: {
    * inbox cannot sign a `POST /v1/instances/{domain}/listing` to; the signed call says it per network.
    */
   directory?: { readonly listed: boolean } | undefined;
+  /**
+   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`). A
+   * kind named here is left out of `item_types`, so the document never says both.
+   */
+  doorsElsewhere?: readonly DoorElsewhere[] | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
+  const elsewhere = input.doorsElsewhere ?? [];
   return manifestSchema.parse({
     spec: "surfingdog-inbox/0",
     instance: origin,
     ...(input.profile ? { profile: input.profile } : {}),
-    item_types: input.itemTypes ?? [],
+    item_types: (input.itemTypes ?? []).filter((t) => !elsewhere.some((d) => d.item_type === t)),
     protocols: {
       openapi: `${origin}/openapi.json`,
       rest: `${origin}/v1`,
@@ -43,5 +49,6 @@ export function buildManifest(input: {
     receipt_keys: { keys: input.receiptKeys ?? [] },
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
+    ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
   });
 }

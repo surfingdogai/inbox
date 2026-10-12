@@ -21,6 +21,11 @@ export interface FrontCopy {
   readonly messageLink: string;
   /** Before the quote and message links when there are services too. */
   readonly or: string;
+  /** The way to book when the business takes bookings somewhere else: `Book at fresha.com`. */
+  readonly bookAt: (place: string) => string;
+  /** Above the way to order, when the business takes orders in its own checkout. */
+  readonly orderHeading: string;
+  readonly orderAt: (place: string) => string;
   readonly book: {
     readonly heading: (service: string) => string;
     readonly lead: string;
@@ -62,6 +67,9 @@ const EN: FrontCopy = {
   quoteLink: "Ask for a quote",
   messageLink: "Send us a message",
   or: "Or:",
+  bookAt: (place) => `Book at ${place}`,
+  orderHeading: "Order",
+  orderAt: (place) => `Order at ${place}`,
   book: {
     heading: (service) => `Book: ${service}`,
     lead: "Pick a time, then tell us who you are. We'll confirm by email.",
@@ -109,6 +117,9 @@ const PT: FrontCopy = {
   quoteLink: "Pedir um orçamento",
   messageLink: "Enviar uma mensagem",
   or: "Ou:",
+  bookAt: (place) => `Marcar em ${place}`,
+  orderHeading: "Encomendar",
+  orderAt: (place) => `Encomendar em ${place}`,
   book: {
     heading: (service) => `Marcar: ${service}`,
     lead: "Escolha uma hora e diga-nos quem é. Confirmamos por e-mail.",

@@ -255,15 +255,19 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "get_business_profile",
       {
         title: "Business profile",
-        description: "Name, time zone, currency, languages and the item types this business accepts.",
+        description:
+          "Name, time zone, currency, languages and the item types this business accepts, and where it takes any other kind instead (doors_elsewhere).",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
       () =>
         run(async () => {
           const p = await caps.getBusinessProfile();
+          const away = (p.doors_elsewhere ?? []).map((d) => `${d.item_type} at ${d.url}`);
           return {
-            text: `${p.name} (${p.timezone}, ${p.currency}) accepts: ${p.item_types.join(", ")}.`,
+            text: `${p.name} (${p.timezone}, ${p.currency}) accepts: ${p.item_types.join(", ")}.${
+              away.length ? ` Taken elsewhere: ${away.join("; ")}.` : ""
+            }`,
             structured: p,
           };
         }),

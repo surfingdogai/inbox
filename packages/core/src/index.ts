@@ -3,8 +3,8 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-export type { Manifest } from "@surfingdog/spec";
-export { MANIFEST_PATH, manifestSchema } from "@surfingdog/spec";
+export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
+export { MANIFEST_PATH, manifestSchema, readDoorsElsewhere } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
 export * from "./customer/index";

@@ -421,6 +421,12 @@ export const businessProfileSchema = profileSchema.extend({
     })
     .optional()
     .describe("Who the business is, as the law asks before a contract: only what it filled in."),
+  doors_elsewhere: z
+    .array(z.object({ item_type: z.string(), url: z.string() }))
+    .optional()
+    .describe(
+      "Kinds of request the business takes somewhere else, and where: a booking platform, its own checkout. None of them is in item_types.",
+    ),
 });
 
 export const serviceSchema = z.looseObject({

@@ -366,6 +366,8 @@ export function createInbox(deps: AppDeps): Inbox {
       // Whose people it recognises (ADR-017 §8.4): every network switched on, when it can sign.
       identity: { passes: await port.canSign(), networks: enabledNetworks(settings) },
       ...(unlisted ? { directory: { listed: false } } : {}),
+      // Where an agent goes for a kind the business takes somewhere else: a booking platform, its own checkout.
+      doorsElsewhere: profile.doors_elsewhere,
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

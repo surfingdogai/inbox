@@ -2,7 +2,7 @@ import { copyFor } from "../customer/copy";
 import { dayText, localDate, moneyIn, timeText, zoneName } from "../customer/format";
 import { frontCopy } from "../customer/front-copy";
 import type { CustomerLang } from "../customer/lang";
-import type { CustomerPage, LinkActResult, PageField, PageLink } from "../customer/page";
+import type { CustomerPage, LinkActResult, PageField, PageLink, PageSection } from "../customer/page";
 import { ulid } from "../ids";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -63,33 +63,64 @@ async function base(caps: Capabilities, lang: CustomerLang, status: CustomerPage
   return { status, lang, business, footer: business, help: "" } as const;
 }
 
-/** The front page: what can be booked, and the other ways to ask. */
+/**
+ * The front page: what can be booked, and the other ways to ask. A kind the business takes
+ * somewhere else (`settings.doorsElsewhere`) is a link there instead, named by its host: bookings at
+ * a booking platform, orders in the business's own checkout. Quotes and messages stay here.
+ */
 export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise<CustomerPage> {
   const f = frontCopy(lang);
-  const services = await servicesOf(caps);
-  const bookable = services.filter((s) => s.price?.model !== "quote");
+  const away = (await caps.getBusinessProfile()).doors_elsewhere ?? [];
+  const bookAway = away.find((d) => d.item_type === "booking");
+  const orderAway = away.find((d) => d.item_type === "order");
+  const bookable = bookAway ? [] : (await servicesOf(caps)).filter((s) => s.price?.model !== "quote");
   const ask: PageLink[] = [
     { label: f.quoteLink, href: FRONT_PATHS.quote },
     { label: f.messageLink, href: FRONT_PATHS.message },
   ];
-  return {
-    ...(await base(caps, lang)),
-    heading: f.heading,
-    sections: bookable.length
+  const sections: PageSection[] = [
+    ...(bookAway
       ? [
           {
             heading: f.bookHeading,
             paragraphs: [],
-            links: bookable.map((s) => ({
-              label: f.serviceLine({ name: s.name, facts: factsOf(s, lang) }),
-              href: `${FRONT_PATHS.book}?service=${encodeURIComponent(s.id)}`,
-            })),
+            links: [{ label: f.bookAt(placeOf(bookAway.url)), href: bookAway.url }],
           },
         ]
-      : [],
-    links: { lead: bookable.length ? f.or : undefined, items: ask },
+      : bookable.length
+        ? [
+            {
+              heading: f.bookHeading,
+              paragraphs: [],
+              links: bookable.map((s) => ({
+                label: f.serviceLine({ name: s.name, facts: factsOf(s, lang) }),
+                href: `${FRONT_PATHS.book}?service=${encodeURIComponent(s.id)}`,
+              })),
+            },
+          ]
+        : []),
+    ...(orderAway
+      ? [
+          {
+            heading: f.orderHeading,
+            paragraphs: [],
+            links: [{ label: f.orderAt(placeOf(orderAway.url)), href: orderAway.url }],
+          },
+        ]
+      : []),
+  ];
+  return {
+    ...(await base(caps, lang)),
+    heading: f.heading,
+    sections,
+    links: { lead: sections.length ? f.or : undefined, items: ask },
     nav: [{ label: f.signIn, href: "/login" }],
   };
+}
+
+/** A place elsewhere as a visitor reads it: its host, exactly as the address names it. */
+function placeOf(url: string): string {
+  return new URL(url).host;
 }
 
 /** What a form sent, as the adapter read it: every value a string, trimmed. */
