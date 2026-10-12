@@ -111,7 +111,7 @@ const GEO = {
       "Agents search the network",
       "The business keeps its promise",
       "A signed receipt comes back",
-      "The record grows, both ways",
+      "A track record grows",
     ],
   },
   /** Two passes. The bike shop is the showcase business, so it goes first. */
@@ -1318,7 +1318,7 @@ const first = GEO.rows[GEO.beats[0]?.r ?? 0]?.name ?? "";
         }
       } else off(e.slip);
 
-      /* 6. the record grows, both ways: the listing's meter, then the customer's */
+      /* 6. a track record grows: the listing's meter, then the customer's */
       if (ph >= e.r3 && once(e, "grow")) {
         grow(e, true);
         sayIt(3, live);

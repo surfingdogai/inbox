@@ -18,7 +18,7 @@ copy it, change it. MIT.
 | **Receipts** | `POST /v1/receipts` checks the signature against the issuer's published keys, the claims, the nonce and, for an outcome, the receipt it answers. A receipt it cannot check is refused, never kept. |
 | **Directory** | `GET /v1/businesses` (`q`, `category`, `language`, `item_type`, `cursor`), `GET /v1/businesses/{domain}` with its counted outcomes, `GET /v1/categories`. |
 | **Assistants** | `/llms.txt`, and `POST /mcp` with `search_businesses`, `get_business` and `list_categories`. |
-| **Everything else** | `404 not_found`, as §10.1 asks: no persons, no reputation, no reviews. |
+| **Everything else** | `404 not_found`, as §10.1 asks: no persons and no track record. |
 
 Its rules document says so, which is how an inbox knows not to ask it for more:
 

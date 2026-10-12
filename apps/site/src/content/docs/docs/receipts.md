@@ -169,7 +169,7 @@ await fetch(`${iss}/v1/items/${itemId}/receipt-ack`, {
 });
 ```
 
-The instance checks that the signature verifies against the key in the header, that `rcp` names a receipt on this item and `sha` is that receipt's hash, that `iat` is no more than an hour old and no more than five minutes ahead, and keeps it. The response is the receipt with `acknowledged_at` set. **The first acknowledgement is the one both sides hold**: a second one, with the same key or another, is accepted and changes nothing. Keep the private key you signed with; it is how a network will know a later review comes from the same agent.
+The instance checks that the signature verifies against the key in the header, that `rcp` names a receipt on this item and `sha` is that receipt's hash, that `iat` is no more than an hour old and no more than five minutes ahead, and keeps it. The response is the receipt with `acknowledged_at` set. **The first acknowledgement is the one both sides hold**: a second one, with the same key or another, is accepted and changes nothing. Keep the private key you signed with: a network weighs each acknowledgement by the key that signed it, and counts one from a verified agent above what the business says alone.
 
 Refusals are problem documents: `403` when the item is not yours, `404` when `rcp` is not on this item, `422` with a `reason` (`bad_signature`, `expired`, `not_yet`, `bad_alg`, `malformed`) when the acknowledgement itself is wrong.
 

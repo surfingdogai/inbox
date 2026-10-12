@@ -178,8 +178,8 @@ export const receiptAckPayloadSchema = z.object({
 export type ReceiptAckPayload = z.infer<typeof receiptAckPayloadSchema>;
 
 /**
- * What an instance sends a review service it publishes to: `POST <service>/v1/receipts`. The
- * service verifies the receipt against the keys published at the issuer's own domain and, when
+ * What an instance sends each network it publishes receipts to: `POST <network>/v1/receipts`. The
+ * network verifies the receipt against the keys published at the issuer's own domain and, when
  * an acknowledgement is present, the acknowledgement against the key it carries and the
  * receipt's hash. Nothing in the body is trusted; everything in it is checked.
  */
