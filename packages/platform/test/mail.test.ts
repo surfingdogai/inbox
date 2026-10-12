@@ -191,6 +191,29 @@ describe("the REST API", () => {
   });
 });
 
+describe("Resend", () => {
+  // Resend takes From as one string, so a name is written as RFC 5322 writes one: as it is when it
+  // is only words, in quotes when it holds anything an address could.
+  it("writes the sender's name as a name, quoted when it holds a comma, a bracket or an @", async () => {
+    const froms: unknown[] = [];
+    const fetchImpl = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      froms.push(JSON.parse(String(init?.body ?? "{}")).from);
+      return new Response(JSON.stringify({ id: "re-1" }), { status: 200 });
+    }) as typeof fetch;
+    const out = resendMailOut("re_key", fetchImpl);
+    for (const name of ["Oficina Maré", 'Smith, Jones & "Co"', "Acme <other@example.com>", "\r\n", ""]) {
+      await out.send({ ...mail, from: { address: "inbox@oficinamare.pt", name } });
+    }
+    expect(froms).toEqual([
+      "Oficina Maré <inbox@oficinamare.pt>",
+      '"Smith, Jones & \\"Co\\"" <inbox@oficinamare.pt>',
+      '"Acme <other@example.com>" <inbox@oficinamare.pt>',
+      "inbox@oficinamare.pt",
+      "inbox@oficinamare.pt",
+    ]);
+  });
+});
+
 describe("a transport's own address (MAIL_FROM)", () => {
   // The binding and Resend have no sender of their own: without MAIL_FROM a message that names none,
   // such as the owner's sign-in link, has nobody to go out as.
@@ -317,6 +340,35 @@ describe("a pinned sender", () => {
     expect(log.sent[0]?.replyTo).toBe("hello@oficinamare.pt");
     expect(out.pinned).toBe(true);
     expect(out.sender).toEqual({ address: "calm-otter-7k2q@mail.example.net" });
+  });
+
+  // The name the message carries is the business's, which the owner, or a key with settings:write,
+  // types: it must never read as another address, nor break into a header of its own.
+  it("keeps a name it is given to a name on one line, and every header to one line", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? "{}")));
+      return json({ id: "re-1" });
+    }) as typeof fetch;
+    const out = pinnedMailOut(resendMailOut("re_key", fetchImpl), {
+      from: { address: "calm-otter-7k2q@mail.example.net" },
+    });
+    const send = (name: string, headers: Record<string, string> = {}) =>
+      out.send({ ...mail, from: { address: "owner@personal.example", name }, headers });
+    await send("Acme <other-inbox@mail.example.net>");
+    await send("A\r\nBcc: x@evil.example", {
+      "X-Item-Ref": "7K3QXA\r\nBcc: everyone@evil.example",
+      "Bcc\r\n": "everyone@evil.example",
+      "X-Bad Name": "x",
+    });
+    expect(bodies.map((b) => b.from)).toEqual([
+      '"Acme other-inbox@mail.example.net" <calm-otter-7k2q@mail.example.net>',
+      '"A Bcc: x@evil.example" <calm-otter-7k2q@mail.example.net>',
+    ]);
+    // Whatever the name, the one address in angle brackets is the pinned one.
+    for (const b of bodies) expect(String(b.from).match(/<[^>]*>/g)).toEqual(["<calm-otter-7k2q@mail.example.net>"]);
+    expect(bodies[1]?.headers).toEqual({ "X-Item-Ref": "7K3QXA Bcc: everyone@evil.example" });
+    expect(JSON.stringify(bodies)).not.toMatch(/\\r|\\n/);
   });
 
   it("keeps the inner transport's hooks", async () => {

@@ -135,6 +135,45 @@ export function cloudflareEmailMailOut(
   };
 }
 
+/** `text` on one line: each run of control characters, line breaks among them, becomes one space. */
+function oneLine(text: string): string {
+  let out = "";
+  let control = false;
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code < 0x20 || code === 0x7f) {
+      if (!control) out += " ";
+      control = true;
+    } else {
+      out += ch;
+      control = false;
+    }
+  }
+  return out;
+}
+
+/**
+ * A display name as RFC 5322 writes it in a From line: as it is when it is only words, else in
+ * quotes, with quotes and backslashes escaped, so `Acme <other@example.com>` is a name and never a
+ * second address. On one line: a name is never another header. Empty when nothing of it is left.
+ */
+export function displayName(name: string): string {
+  const clean = oneLine(name).replace(/\s+/g, " ").trim();
+  return /[()<>[\]:;@\\,."]/.test(clean) ? `"${clean.replace(/["\\]/g, "\\$&")}"` : clean;
+}
+
+/** A header's name as RFC 5322 allows one: printable, with no space and no colon. */
+const HEADER_NAME = /^[!-9;-~]+$/;
+
+/** Headers a service is handed as they are: names that are names, values on one line. */
+function oneLineHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers)
+      .filter(([name]) => HEADER_NAME.test(name))
+      .map(([name, value]) => [name, oneLine(value).trim()]),
+  );
+}
+
 /** Resend's HTTP API; runs anywhere fetch does. `sender` (MAIL_FROM) is for messages that name none. */
 export function resendMailOut(
   apiKey: string,
@@ -144,17 +183,19 @@ export function resendMailOut(
   return {
     ...(sender ? { sender } : {}),
     async send(mail) {
+      // One string, as Resend takes it: the name quoted when it holds anything an address could.
+      const name = displayName(mail.from.name ?? "");
       const res = await fetchImpl("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
         body: JSON.stringify({
-          from: mail.from.name ? `${mail.from.name} <${mail.from.address}>` : mail.from.address,
+          from: name ? `${name} <${mail.from.address}>` : mail.from.address,
           to: mail.to,
           ...(mail.replyTo ? { reply_to: mail.replyTo } : {}),
           subject: mail.subject,
           text: mail.text,
           ...(mail.html ? { html: mail.html } : {}),
-          ...(mail.headers ? { headers: mail.headers } : {}),
+          ...(mail.headers ? { headers: oneLineHeaders(mail.headers) } : {}),
         }),
       });
       if (!res.ok) throw new Error(`resend: ${res.status} ${await res.text()}`);
@@ -231,10 +272,11 @@ const ADDRESS_HEADERS = /^(from|sender|reply-to|return-path|to|cc|bcc|resent-[a-
  * set where the inbox is run, not Send from, Sender name or Customers reply to in Settings. Wraps
  * any transport.
  *
- * - From is `from.address`, with `from.name` when one is given, else the message's own name.
+ * - From is `from.address`, with `from.name` when one is given, else the message's own name, on one
+ *   line and without angle brackets, so no name it was given can read as another address.
  * - Reply-To is `replyTo` when one is given, and absent otherwise: a reply then comes back to the
  *   sender, never to an address someone typed into Settings.
- * - Headers that name a sender or a recipient are left out.
+ * - Headers that name a sender or a recipient are left out, and the rest are each kept to one line.
  *
  * `sender` is the pinned address, so a message that names none (the owner's sign-in link) goes from
  * it too, and `pinned` tells the inbox its email is from here. What the inner transport says of
@@ -255,9 +297,14 @@ export function pinnedMailOut(
     ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
     ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),
     async send(mail) {
-      const name = pin.from.name ?? mail.from.name;
-      const headers = Object.fromEntries(
-        Object.entries(mail.headers ?? {}).filter(([header]) => !ADDRESS_HEADERS.test(header.trim())),
+      const own = mail.from.name?.replace(/[<>]/g, " ");
+      const name = oneLine(pin.from.name ?? own ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const headers = oneLineHeaders(
+        Object.fromEntries(
+          Object.entries(mail.headers ?? {}).filter(([header]) => !ADDRESS_HEADERS.test(header.trim())),
+        ),
       );
       return inner.send({
         from: name ? { address: pin.from.address, name } : { address: pin.from.address },
