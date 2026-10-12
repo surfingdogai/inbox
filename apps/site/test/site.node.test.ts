@@ -182,6 +182,20 @@ describe("the checker's pages and components", () => {
     expect(footer).toContain('href: "/about/"');
     expect(footer).toContain('href: "/faq/"');
   });
+
+  it("a field's example is a name a business would have, never a reserved .example name", () => {
+    const astro = (dir: string): string[] =>
+      readdirSync(site(dir), { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? astro(`${dir}/${e.name}`) : e.name.endsWith(".astro") ? [`${dir}/${e.name}`] : [],
+      );
+    const files = [...astro("src/pages"), ...astro("src/components")];
+    expect(files.length).toBeGreaterThan(10);
+    for (const path of files) {
+      expect(read(path), path).not.toMatch(/placeholder="[^"]*\bexample\b/);
+    }
+    expect(read("src/pages/search.astro")).toContain('placeholder="yourbusiness.com"');
+    expect(read("src/components/GuideCheck.astro")).toContain('placeholder="yourbusiness.com"');
+  });
 });
 
 describe("the setup guidance", () => {
