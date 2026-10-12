@@ -264,13 +264,54 @@ describe("a setup plan", () => {
     expect(both.doors.missing).toEqual([{ door: "booking", why: "Booking turns on once there are opening hours." }]);
   });
 
-  it("refuses doors handled elsewhere, which this version does not record, and a time zone it does not know", async () => {
+  it("keeps bookings at a booking platform: booking stays shut, quotes and messages stay here", async () => {
+    const { db, caps } = await setup();
+    const BOOKING = "https://booking.example.com/salao-rosa";
+    const plan: SetupPlanInput = {
+      ...salon,
+      doors: ["message", "quote_request"],
+      doors_elsewhere: [{ door: "booking", url: BOOKING, name: "Booking Example" }],
+    };
+    const dry = await caps.applySetupPlan(owner, plan, { dryRun: true });
+    expect(dry.sentences).toContain("Bookings stay at Booking Example.");
+    expect(dry.doors.on).toEqual(["message", "quote_request"]);
+    expect((await readSettings(db)).doorsElsewhere).toEqual([]);
+
+    const applied = await caps.applySetupPlan(system, plan);
+    expect(applied.doors).toEqual(dry.doors);
+    expect((await readSettings(db)).doorsElsewhere).toEqual([{ itemType: "booking", url: BOOKING }]);
+    expect((await caps.applySetupPlan(system, plan)).changed).toBe(false);
+    // Expected anyway, it says where agents go instead.
+    const expecting = await caps.applySetupPlan(owner, { ...plan, doors: ["booking"] }, { dryRun: true });
+    expect(expecting.doors.missing).toEqual([
+      { door: "booking", why: "Bookings stay at Booking Example, so agents are sent there." },
+    ]);
+
+    // An empty list brings bookings back to the inbox.
+    const back = await caps.applySetupPlan(system, { doors_elsewhere: [] });
+    expect(back.sentences).toContain("Bookings come to this inbox again.");
+    expect(back.doors.on).toContain("booking");
+    expect((await readSettings(db)).doorsElsewhere).toEqual([]);
+  });
+
+  it("refuses a door kept elsewhere that is not a booking or an order, or not on a public host, and a time zone it does not know", async () => {
     const { caps } = await setup();
     await expect(
       caps.applySetupPlan(system, {
-        doors_elsewhere: [{ door: "booking", url: "https://booking.example.com/salao-rosa", name: "Booking" }],
+        doors_elsewhere: [{ door: "quote_request" as "booking", url: "https://booking.example.com/salao-rosa" }],
       }),
-    ).rejects.toMatchObject({ code: "invalid_input", fields: [{ path: "plan.doors_elsewhere" }] });
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      caps.applySetupPlan(system, { doors_elsewhere: [{ door: "booking", url: "https://localhost/book" }] }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    await expect(
+      caps.applySetupPlan(system, {
+        doors_elsewhere: [
+          { door: "booking", url: "https://booking.example.com/a" },
+          { door: "booking", url: "https://booking.example.com/b" },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
     await expect(caps.applySetupPlan(system, { profile: { timezone: "Mars/Olympus" } })).rejects.toMatchObject({
       code: "invalid_input",
       fields: [{ path: "plan.profile.timezone" }],

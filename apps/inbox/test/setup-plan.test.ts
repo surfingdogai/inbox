@@ -167,3 +167,27 @@ describe("a salon with no hours or services read, set up from a plan", () => {
     expect(mail.sent.some((m) => m.to.includes(OWNER))).toBe(true);
   });
 });
+
+describe("a salon whose bookings are at a booking platform, set up from a plan", () => {
+  it("lists message and quote_request, names booking at the platform, and its page says Book at", async () => {
+    const { call, inbox } = await setup();
+    const BOOKING = "https://booking.example.com/salao-rosa";
+    const plan: SetupPlanInput = {
+      ...salon,
+      doors: ["message", "quote_request"],
+      doors_elsewhere: [{ door: "booking", url: BOOKING, name: "Booking Example" }],
+    };
+    const applied = await call("POST", "/v1/owner/setup/plan", plan);
+    expect(applied.status).toBe(200);
+    expect(applied.body.sentences).toContain("Bookings stay at Booking Example.");
+    expect(applied.body.doors).toMatchObject({ on: ["message", "quote_request"], missing: [] });
+
+    const manifest = await call("GET", MANIFEST_PATH, undefined, PUBLIC);
+    expect(manifest.body.item_types).toEqual(["message", "quote_request"]);
+    expect(manifest.body.doors_elsewhere).toEqual([{ item_type: "booking", url: BOOKING }]);
+    const page = await inbox.app.request(new Request(`${BASE}/`, { headers: { "accept-language": "en" } }));
+    expect(await page.text()).toContain(
+      `<a href="${BOOKING}" rel="noopener noreferrer">Book at booking.example.com</a>`,
+    );
+  });
+});

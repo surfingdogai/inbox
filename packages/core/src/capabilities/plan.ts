@@ -7,6 +7,7 @@ import { ulid } from "../ids";
 import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets";
 import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
+  isDoorElsewhereUrl,
   MAX_SETUP_SOURCES,
   readSettings,
   type SetupSource,
@@ -107,11 +108,18 @@ const planServiceSchema = z.object({
     ),
 });
 
-/** Where a door is handled instead of this inbox: a booking platform, the shop's own checkout. */
+/**
+ * Where bookings or orders are taken instead of this inbox: a booking platform, the shop's own
+ * checkout. Kept in the settings as `doorsElsewhere`; messages and quotes always stay here.
+ */
 const planElsewhereSchema = z.object({
-  door: z.enum(["booking", "order", "quote_request"]),
-  url: z.url({ protocol: /^https$/ }).max(2048),
-  name: z.string().max(120).optional(),
+  door: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in the shop's own checkout."),
+  url: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
+    .describe("Where customers go for it."),
+  name: z.string().max(120).optional().describe("What the place is called, for the sentences; not kept."),
 });
 
 /** A field a plan may never carry, with the reason in the refusal. */
@@ -149,9 +157,14 @@ export const setupPlanSchema = z
       ),
     doors_elsewhere: z
       .array(planElsewhereSchema)
-      .max(5)
+      .max(2)
       .optional()
-      .describe("Doors handled somewhere else, such as bookings on a booking platform."),
+      .refine((list) => !list || new Set(list.map((d) => d.door)).size === list.length, {
+        message: "one place for each door",
+      })
+      .describe(
+        "Bookings or orders taken somewhere else, and where: replaces the list, so [] brings both back to the inbox.",
+      ),
     sources: z
       .record(setupFieldSchema, setupSourceSchema)
       .refine((s) => Object.keys(s).length <= MAX_SETUP_SOURCES, { message: `at most ${MAX_SETUP_SOURCES} fields` })
@@ -216,13 +229,6 @@ export async function applySetupPlan(
   const parsed = setupPlanSchema.safeParse(input);
   if (!parsed.success) throw fromZod(parsed.error, "plan");
   const plan = parsed.data;
-  if (plan.doors_elsewhere?.length) {
-    throw new WriteError(
-      "invalid_input",
-      "This version of the inbox does not record doors handled elsewhere: leave doors_elsewhere out of the plan.",
-      { fields: [{ path: "plan.doors_elsewhere", problem: "invalid", message: "not recorded by this version" }] },
-    );
-  }
   if (plan.profile?.timezone !== undefined && !validTimezone(plan.profile.timezone)) {
     throw new WriteError("invalid_input", `unknown time zone ${plan.profile.timezone}`, {
       fields: [{ path: "plan.profile.timezone", problem: "invalid", message: "use an IANA name like Europe/Lisbon" }],
@@ -455,6 +461,25 @@ export async function applySetupPlan(
     }
     if (Object.keys(patch).length) settingsPatch.directory = patch;
   }
+  // ---- bookings or orders taken somewhere else ----
+  const elsewhereNow = state.settings.doorsElsewhere.map((d) => ({ itemType: d.itemType, url: d.url }));
+  const elsewhere = plan.doors_elsewhere
+    ? plan.doors_elsewhere.map((d) => ({ itemType: d.door, url: d.url, name: d.name }))
+    : elsewhereNow;
+  if (plan.doors_elsewhere) {
+    const wanted = elsewhere.map((d) => ({ itemType: d.itemType, url: d.url }));
+    if (!same(byDoor(wanted), byDoor(elsewhereNow))) {
+      settingsPatch.doorsElsewhere = wanted;
+      for (const d of byDoor(elsewhere)) said.push(elsewhereWords(d));
+      for (const d of elsewhereNow) {
+        if (!wanted.some((w) => w.itemType === d.itemType)) {
+          said.push(
+            d.itemType === "booking" ? "Bookings come to this inbox again." : "Orders come to this inbox again.",
+          );
+        }
+      }
+    }
+  }
   if (plan.sources && !same(sorted(plan.sources), sorted(state.settings.setup.sources))) {
     // A merge keeps keys it is not sent, so a field the plan no longer names is sent as null.
     const gone = Object.keys(state.settings.setup.sources).filter((k) => !(k in (plan.sources ?? {})));
@@ -468,15 +493,22 @@ export async function applySetupPlan(
   if (!dryRun) for (const step of steps) await step.run();
 
   // ---- what agents can do once it is applied ----
+  const away = new Map(elsewhere.map((d) => [d.itemType as ItemType, elsewhereWords(d)]));
   const on = dryRun
-    ? predictDoors({ services: servicesAfter, own: state.ownHours, hours: hoursAfter, products: state.products })
+    ? predictDoors({
+        services: servicesAfter,
+        own: state.ownHours,
+        hours: hoursAfter,
+        products: state.products,
+        elsewhere: away,
+      })
     : await caps.getBusinessProfile().then((p) => ITEM_ORDER.filter((t) => p.item_types.includes(t)));
   const rules = dryRun ? rulesAfter : (await readState(caps, db, caller)).rules;
   const expected = plan.doors ? ITEM_ORDER.filter((t) => plan.doors?.includes(t)) : null;
   const shut = expected ? expected.filter((d) => !on.includes(d)) : [];
   const missing = shut.map((door) => ({
     door,
-    why: whyShut(door, { services: servicesAfter, own: state.ownHours, hours: hoursAfter }),
+    why: whyShut(door, { services: servicesAfter, own: state.ownHours, hours: hoursAfter, elsewhere: away }),
   }));
 
   const sentences = [
@@ -569,6 +601,8 @@ interface DoorState {
   readonly services: readonly { id: string; active: boolean; price: unknown }[];
   readonly own: ReadonlyMap<string, WeeklyHours>;
   readonly hours: WeeklyHours | null;
+  /** The doors taken somewhere else, each with the sentence that says where. */
+  readonly elsewhere: ReadonlyMap<ItemType, string>;
 }
 
 /** A service that can be booked: on offer, with weekly hours that have a window (its own, else the business's). */
@@ -579,7 +613,8 @@ function bookable(s: DoorState): boolean {
 /**
  * The doors on once a plan is applied, read as `offeredItemTypes` reads the inbox: a message always,
  * a booking with a service that has hours, a quote with a service or a product, an order with a
- * product, a refund with something paid. The tests hold the two to the same answer.
+ * product, a refund with something paid; a booking or an order taken somewhere else, never. The
+ * tests hold the two to the same answer.
  */
 function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[] {
   const active = s.services.filter((svc) => svc.active);
@@ -587,16 +622,20 @@ function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[]
     const model = (svc.price as { model?: unknown } | null)?.model;
     return model === "fixed" || model === "from";
   });
+  const booking = !s.elsewhere.has("booking") && bookable(s);
+  const order = !s.elsewhere.has("order") && s.products;
   const on = new Set<ItemType>(["message"]);
-  if (bookable(s)) on.add("booking");
-  if (s.products) on.add("order");
+  if (booking) on.add("booking");
+  if (order) on.add("order");
   if (active.length > 0 || s.products) on.add("quote_request");
-  if (s.products || (bookable(s) && priced)) on.add("refund");
+  if (order || (booking && priced)) on.add("refund");
   return ITEM_ORDER.filter((t) => on.has(t));
 }
 
 /** What opens a door the plan expects and the inbox will not have on. */
 function whyShut(door: ItemType, s: DoorState): string {
+  const away = s.elsewhere.get(door);
+  if (away) return `${away.replace(/\.$/, "")}, so agents are sent there.`;
   if (door === "booking") {
     const service = s.services.some((svc) => svc.active);
     const hours = hasWindows(s.hours) || [...s.own.values()].some(hasWindows);
@@ -753,6 +792,17 @@ function list(words: readonly string[], last: "and" | "or"): string {
 /** A service's name as two plans or an owner might spell it: trimmed, any case. */
 function nameKey(name: string): string {
   return name.trim().toLowerCase();
+}
+
+/** A door taken somewhere else, said: "Bookings stay at Fresha." or "Orders stay in your own checkout." */
+function elsewhereWords(d: { readonly itemType: string; readonly url: string; readonly name?: string | undefined }) {
+  if (d.itemType === "order") return "Orders stay in your own checkout.";
+  return `Bookings stay at ${d.name?.trim() || new URL(d.url).hostname}.`;
+}
+
+/** Doors elsewhere in one order, booking first, so the same list compares the same. */
+function byDoor<T extends { readonly itemType: string }>(list: readonly T[]): T[] {
+  return [...list].sort((a, b) => (a.itemType < b.itemType ? -1 : a.itemType > b.itemType ? 1 : 0));
 }
 
 function same(a: unknown, b: unknown): boolean {

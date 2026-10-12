@@ -710,7 +710,7 @@ const sections = {
  * A place a door elsewhere may send customers: what any reader of the manifest keeps
  * (`readDoorsElsewhere`), on a host this instance would call itself (`isPublicHost`).
  */
-function isDoorElsewhereUrl(url: string): boolean {
+export function isDoorElsewhereUrl(url: string): boolean {
   if (readDoorsElsewhere({ doors_elsewhere: [{ item_type: "booking", url }] }).length !== 1) return false;
   return isPublicHost(new URL(url).hostname);
 }

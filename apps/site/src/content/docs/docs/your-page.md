@@ -13,7 +13,7 @@ Each request arrives in your inbox like any other: a booking, a quote request or
 
 You don't set anything up. Your page lists the services you added in Settings → Services. A service priced "on request" isn't offered as a booking; people ask for a quote for it instead.
 
-If you take bookings on a booking platform, or orders in your own shop's checkout, say where with `doorsElsewhere` in your settings (`PUT /v1/owner/settings` with an owner key; the owner app has no field for it yet). Your page then shows **Book at** or **Order at** that address instead of times to pick, and your manifest tells agents to go there for it. Quotes and messages still come to your inbox.
+If you take bookings on a booking platform, or orders in your own shop's checkout, say where with `doorsElsewhere` in your settings (`PUT /v1/owner/settings` with an owner key, or `doors_elsewhere` in a [setup plan](/docs/api/); the owner app has no field for it yet). Your page then shows **Book at** or **Order at** that address instead of times to pick, and your manifest tells agents to go there for it. Quotes and messages still come to your inbox.
 
 ## Where to link it
 
