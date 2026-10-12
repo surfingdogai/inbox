@@ -67,7 +67,9 @@ Some starting points, to adjust with the owner:
 
 **Today** the inbox advertises what it has the means to do: `message` always, `booking` once a service has opening hours, `order` once a product is active, `quote_request` with either ([Manifest](/docs/manifest/)). So a shop whose orders go to its own checkout leaves products out of the inbox, and the inbox's manifest does not offer orders. If an agent sends an order anyway, the public API still takes it as a request that waits for a person: nothing is promised until someone accepts it.
 
-**Coming**: a setting per door in the inbox: handled by the inbox, handled elsewhere at an address the business owns, or off and declared as unavailable, with sensible defaults for each kind of business. The manifest will then list the doors handled elsewhere too.
+Where bookings or orders are taken somewhere else, say so with `doorsElsewhere` ([Your page](/docs/your-page/)): the manifest names that address as `doors_elsewhere`, leaves the kind out of `item_types`, and the business's page links there.
+
+**Coming**: a setting per door in the inbox: handled by the inbox, handled elsewhere at an address the business owns, or off and declared as unavailable, with sensible defaults for each kind of business.
 
 ## Make every door findable
 
@@ -75,7 +77,7 @@ Agents and crawlers find doors by reading files at known places. Make the list e
 
 **Keep one list of doors, and repeat it where readers look:**
 
-- **The inbox manifest**, at `/.well-known/agent-inbox.json` on the inbox's subdomain. Today it lists the inbox's own doors (REST, OpenAPI, MCP); doors handled elsewhere join it with the per-door setting that is coming.
+- **The inbox manifest**, at `/.well-known/agent-inbox.json` on the inbox's subdomain. It lists the inbox's own doors (REST, OpenAPI, MCP), and where bookings or orders are taken instead (`doors_elsewhere`).
 - **An MCP server card** for each MCP server the business runs. `/.well-known/mcp/server-card.json` is a proposed convention; a site with several servers can also list them at `/.well-known/mcp.json` as `{"servers": [{"url": "…"}]}`. Readers differ, so publishing a card as well as a list is cheap insurance.
 - **`llms.txt`** on the main domain, with a line per door that says what the URL is (example below).
 - **schema.org markup** on the pages: the business (`Organization` or `LocalBusiness`), products with an `Offer` (price, currency, availability), opening hours, and policies (see the next section).
