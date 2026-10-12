@@ -6,7 +6,10 @@ Amendment 2 (a customer's stop and erasure, A2.1–A2.2; leaving the directory a
 the business profile and searching near a place, A2.5; searching by words and language, A2.6;
 assistants, A2.7; a page for a person, A2.8; a customer's contest, A2.9; customers not scored for
 now, A2.10), accepted, rules version 5 (§15); Amendment 3 (changes both sides agreed, and
-refunds, from ADR-018), accepted, rules version 6 (§15). The decisions are
+refunds, from ADR-018), accepted, rules version 6 (§15); Amendment 4 (12 October 2026: a record
+ranks only with verified evidence, rows that name no customer are one customer, and version 7's
+order amended before it takes effect, with bounds on what a network takes), decided, rules version
+8 (§15). The decisions are
 the founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
@@ -37,15 +40,21 @@ Numbers marked \* are defaults, changed only with 15 days' notice (§11).
    is `ana@gmail.com`).
 4. **The business's own word** (what no verified agent signed) gives at most 50\* outcomes' worth of
    confidence, ageing like the rest. A new business counts nothing for 30 days, then at most 30\*
-   units more a month until day 90 (R31).
+   units more a month until day 90 (R31). From version 8 a record that rests on the business's own
+   word alone is not ranked and shows its kept, broken and still-open promises with no score, and
+   every outcome that names no customer counts with the others as one customer (A4.1, A4.2).
 5. **The order (R10–R12, R32).** Answering businesses first; among them those at 0.40 or more
-   (`building`) by score, then everyone else, newcomers included, in a daily shuffle. Silent 24 h\*:
+   (`building`) by score, from version 8 only when someone other than the business confirmed part
+   of the record (A4.1), then everyone else, newcomers included, in a daily shuffle. From version 7
+   reach comes first (protocol §4.4): a member's inbox that answers, from version 8 once it has
+   answered for 30 days without a break (A4.3), then other live doors by level. Silent 24 h\*:
    keeps its score, sorts after, "not answering since …"; once an inbox signs its pings, only its
    signed pings count. Silent 90 days\*: set aside until it answers, after a warning 30 days\*
    before (A2.4). Near me: within `radius_km` (10). A search by words, category or language, or for
    what is open now, only leaves businesses out; nothing a business says about itself moves it
    (A2.5, A2.6).
-6. **Tiers (R25):** `new`, `building` (≥ 0.40), `trusted` (≥ 0.75\*, with breadth). Nothing below.
+6. **Tiers (R25):** `new`, `building` (≥ 0.40), `trusted` (≥ 0.75\*, with breadth); from version 8 a
+   business's `building` and `trusted` also need verified evidence (A4.1). Nothing below.
 7. **People (R16, R19–R22, R28).** One key per person per network, issued at a first booking and
    sent by email. Agents carry a pass or sign with our SDK. A business sees a person's record only
    when their agent presents it. Lost key: recover by email. Our network recognises only its keys.
@@ -82,7 +91,7 @@ Numbers marked \* are defaults, changed only with 15 days' notice (§11).
 | R29 | Old records drop slowly, never to zero: age lowers weight and confidence. | "Drop slowly, never to zero" |
 | R30 | A promise with no outcome 9 days after it was due counts as broken. | |
 | R31 | A new business's evidence is held 30 days, then released gradually. | |
-| R32 | A business sorts above the newcomers only from 0.40 (`building`); below, it shuffles with them. | |
+| R32 | A business sorts above the newcomers only from 0.40 (`building`); below, it shuffles with them. From version 8, only when part of its record is verified evidence; a record on its own word alone shows counts and no score (A4.1). | |
 
 ## 2. Identity
 
@@ -306,10 +315,18 @@ outcome posts its promise first. With `share.receipts` off, outcomes of publishe
   first saw a receipt, even in an attempt it refused with `429`/`5xx`. A `per` entry that names no
   presentation to the same business made by `iat + 60` s is ignored: the receipt counts without a
   person. **Late:** a promise arriving over 24 h after its `iat`, or after `due`, makes its kept
-  outcome presumed, so waiting to see how things go never pays.
+  outcome presumed, so waiting to see how things go never pays. **Bounds** (from version 7 as
+  amended, A4.6): a member's receipts are claims v2 only (`422 v2_required`, also for an outcome or
+  an amendment whose `ref` names a v1 promise held from before); `due` at most 400\* days after the
+  later of `iat` and arrival for a booking, 60\* for an order or a refund (`422 due_too_far`); `end`
+  at most 31\* days after `due` (`422 end_too_far`). Each is final: the same receipt always meets
+  the same arrival. Before then a v1 `ref` is fine.
 - **Dating.** Evidence is dated by `iat`, the business's broken outcomes by max(`iat`, arrival −
-  24 h). The date sets `t` (§5) and notice (a cancellation ≥ 24 h before `due`). A customer's late
-  cancellation ≥ 48 h before `due` closes the promise with no row.
+  24 h). The date sets `t` (§5) and, up to version 7 as published, notice (a cancellation ≥ 24 h
+  before `due`); from version 7 as amended notice is measured from the arrival, on the network's
+  clock: a business's cancellation has notice only when the network first saw it ≥ 24 h before
+  `due`, whatever its `iat` says (A4.6). A customer's late cancellation ≥ 48 h before `due` closes
+  the promise with no row.
 - **Which outcome stands.** Per item and side, the greatest `iat`, then nonce, never arrival order.
   From version 6 the item's `due` and `end`, for notice, R30 and reports, are those of its latest
   `amended` receipt within A3.1's limits (greatest `iat`, then nonce), else its earliest promise's
@@ -354,7 +371,8 @@ business has let the 14 days pass (A2.9).
 
 **Never counts** (stored, R9): cancelling in time; declines, expiries, quotes, messages, refunds
 (from version 6: a customer's returns and withdrawals, and a refund nothing promised, A3.5),
-sandbox items; promise and v1 receipts; amounts; the business's own items or email domain.
+sandbox items; promise and v1 receipts (from version 7 as amended a member's v1 receipts are no
+longer taken, A4.6); amounts; the business's own items or email domain.
 
 ## 4. Verified evidence (R3)
 
@@ -364,8 +382,10 @@ when the item's person has a network-proven email and the key passes a route:
 
 1. **Vouched.** The key is in the Web Bot Auth directory of a platform on `recognised_platforms`
    **and** made the item's own presentation (`per`); a platform key is shared by all its users, so
-   without the item's person it verifies nothing. The list is **seeded at launch** with every
-   platform that publishes a directory over https and names its operator; additions are changelog
+   without the item's person it verifies nothing. The list is **empty**, and stays empty until this
+   route is built as an attestation at delegation: a recognised platform's Web Bot Auth signature
+   over the key its agent delegates (§7.2). Platforms sign HTTP requests, not acknowledgement
+   tokens, so a list seeded before then would verify nothing (A4.7). Additions are changelog
    entries.
 2. **Delegated.** The key is delegated, through the person's session (§7.2), to a pass of the item's
    person, who is **established**: `trusted` (§5.3) with kept outcomes at ≥ 3 mutually unrelated
@@ -381,7 +401,12 @@ relates nobody (§3.4's own-domain rule still reads its domain, which can only c
 itself), and the overlap groups a customer by customer key or company domain only once their email
 is network-proven, and counts anyone else as their own person, since any business can register any
 address for a customer (A1.4). Levels are fixed at intake and only lowered, by a logged operator
-record of a relation or fraud, with the subjects rescored.
+record of a relation or fraud, with the subjects rescored. **Unknown** (from version 8, A4.4): a
+member whose relations the network cannot see is related to nobody and unrelated to nobody: a
+tenant under a private suffix (ours included), and a member whose signed pings in the last 30 days
+came only from ignored egress, or that sent none. A customer presented there is not presented at
+an unrelated business, and kept outcomes there count toward nobody's unrelated businesses (`U`, a
+person's `trusted` tier, establishment).
 
 **Customers count by customer key**, wherever the rules count them: distinct customers (§5.3), `U`
 (§5), the overlap relation (for network-proven customers, above), and the customer in `r`'s pair
@@ -395,7 +420,10 @@ or touches their key.
 **Effect.** Verified evidence about a business has `q` = 2.5 (*default*) and sits outside the word
 cap. Evidence about a customer is never verified (the business is its only witness): it weighs by
 the business's reputation, capped per business and open to contest. Little is verified at first
-(`verified_share` shows it); meanwhile fresh perfect records of 50+ units tie at 0.9682.
+(`verified_share` shows it); meanwhile fresh perfect records of 50+ units tie at 0.9682. Today
+nothing can be verified: route 1's list is empty, and route 2 needs an established person, whom a
+network that scores no customer (A2.10) never has. So from version 8 no record is ranked, ours
+included, until one of the routes works (A4.1).
 
 ## 5. The formula
 
@@ -431,7 +459,9 @@ score = 0 if n = 0,  else  (p + z²/(2n) − z·√(p(1−p)/n + z²/(4n²))) / 
 - **Score.** `z = 1.2816` (*default*), `z² = 1.6425`; stored to 6 decimals, compared as `floor(score
   × 10⁴ + 0.5)`. A perfect record of `n` units scores `n / (n + 1.6425)`: 0.40 needs 1.10 units,
   0.75 needs 4.93. A business is **ranked** from 0.40 (`building`, R32); below, it shuffles with
-  the businesses that have no record.
+  the businesses that have no record. From version 8 it is ranked only when part of its record is
+  verified evidence (`verified_share` > 0); a record on its own word alone, whatever it scores, is
+  not ranked, and its listing shows its counts and no score (A4.1).
 
 **R5, as it holds.** Fresh: 20 of 20 (0.9241) outranks 900 of 1000 on the word (0.8323) or all
 verified (0.8920); 2 of 2 (0.5491, at most 0.7527) does not. In general, 20 of 20 kept within six
@@ -461,6 +491,7 @@ stated. All follow from §5.1; these and more (presumed outcomes, reports) are i
 | 10 kept, 10 unclosed | 20 | 0.5 | 0.3623 | not ranked |
 | **R31: 20 kept in the first week** | 0 / 20 / 15 | 1 | 0 to day 29; 0.9241 day 30; 0.9013 day 60 | held, then released |
 | 5,000 invented on day 0 | 0 / 30 / 37.5 / 12.5 | 1 | 0; 0.9481 days 30–59; 0.9580 to day 182; 0.8839 after a year | honest 990/1000: 0.9508 |
+| From version 8: 50 invented, each naming no customer | 3 | 1 | **0.6462**, and not ranked: no part of it is verified | one anonymous customer (A4.1, A4.2) |
 
 ### 5.3 Nightly computation, tiers and presentations
 
@@ -471,14 +502,14 @@ result is a pure function of evidence, previous snapshot and `scoring_time`, rep
 
 | Tier | Customer (person) | Business |
 |---|---|---|
-| `trusted` | ≥ 0.75, kept at ≥ 3 mutually unrelated businesses | ≥ 0.75, kept with ≥ 10 distinct customers |
-| `building` | ≥ 0.40 | ≥ 0.40 (ranked, R32) |
+| `trusted` | ≥ 0.75, kept at ≥ 3 mutually unrelated businesses | ≥ 0.75, kept with ≥ 10 distinct customers; from version 8 with verified evidence (A4.1) |
+| `building` | ≥ 0.40 | ≥ 0.40 (ranked, R32); from version 8 with verified evidence (A4.1) |
 | `new` | everything else, including no record | everything else, including no record |
 
 A **distinct customer** is one customer key (§4), counted once a person under it has a network-proven
-email or was presented at another, unrelated business: one mailbox is one customer, whatever `+` or
-dots it adds. A customer's kept outcomes always count, and their broken ones only once their email
-is proven (§3, A1.7).
+email or was presented at another, unrelated business (from version 8 one whose relations are
+known, A4.4): one mailbox is one customer, whatever `+` or dots it adds. A customer's kept outcomes
+always count, and their broken ones only once their email is proven (§3, A1.7).
 Customers: 1 kept → 0.3784 `new`; 2 kept → 0.5491 `building`; 1 kept at a business at 0.80 (`c` 1.8)
 → 0.5229; 4 visits at each of 3 unrelated businesses → 0.7617 `trusted`, 0.7056 a month after the
 last visit, 0.4442 after a year (R29). A trusted person with a proven email (3 kept at `c` 1.9,
@@ -502,7 +533,8 @@ For a business that has never signed, unsigned pings count too, so existing inst
 (R18); one that goes back to an inbox that cannot sign shows as not answering until it signs again.
 `not_answering_since` is the later of the last ping that counts and the last good manifest fetch.
 Every hour at `:00` UTC the network freezes, per listed business, `rank_answering`, `rank_score_int`
-(`floor(score × 10⁴ + 0.5)`), `rank_ranked` (`rank_score_int ≥ 4000`, R32), `rank_shuffle` and
+(`floor(score × 10⁴ + 0.5)`), `rank_ranked` (`rank_score_int ≥ 4000`, R32; from version 8 also
+`verified_share` > 0, A4.1), `rank_shuffle` and
 
 ```
 rank_pos = ROW_NUMBER() OVER (ORDER BY rank_answering DESC, rank_ranked DESC,
@@ -519,6 +551,13 @@ order is `rank_pos`, with `distance_km`. **Filters:** `category`, `item_type`, `
 a business matches `q` orders nothing. **Cursor:** base64url JSON
 `{m, p}` (mode, last `rank_pos`), continued in the current snapshot, so across `:00` an entry may
 repeat or be skipped; other cursors, including earlier formats: `410 cursor_expired`.
+
+**From version 7** the directory also lists businesses that are not members, and the order is
+protocol §4.4's: a search's band, then reach (a member's inbox that answers, then other live doors
+by level, then the rest), then the record and the daily shuffle as above, with every 5th place of
+the whole order to an answering newcomer. Version 8 amends it before it takes effect (A4.3–A4.5):
+reach 1 only after 30 days answering without a break; every member a newcomer for its first 90
+days, ranked or not; at most one newcomer of each relations group an hour.
 
 ## 7. The network protocol (R24)
 
@@ -564,8 +603,10 @@ list), `tags`, `languages`, `item_types` (string arrays), `protocols` (name → 
 ping that counts, §6), `software? {version, runtime}`, `receipts {issued, acknowledged, last_at?}`
 (promises only), `answering`, `online` (its alias), `not_answering_since`, `rank_pos` and
 `reputation {ranked, score, tier, kept, broken, customers, verified_share, rules}` (times ISO 8601;
-`verified_share` is the share of weight from verified evidence). Nothing about any customer is ever
-returned.
+`verified_share` is the share of weight from verified evidence). From version 8 `reputation` also
+has `open`, the promises still open, and a record no part of which is verified evidence has
+`self_reported: true`, `ranked: false`, tier `new` and no `score` (A4.1). Nothing about any customer
+is ever returned.
 
 `POST /v1/presentations` takes one of `pass`, `key` or `agent_key`, `purpose: "request"|"ack"`,
 `sha?`, `email?`, `email_proof?` and `resume?`; `person` is §5.3's object. A person who stopped this
@@ -601,12 +642,16 @@ sent a signed ping (§6), and is kept as telemetry (§9). **Signed:**
 [{id, receipt_sha, out, why, created_at, respond_by}], contests: [{id, evidence_id, out,
 created_at, respond_by}], standing: {score, tier, ranked}, listing: {listed, delisted_at, dormant_since}}`;
 anyone can ping for any domain, so only a signed ping sees these. The new inbox treats `200` and `204` as success.
+`standing` keeps its `score` from version 8 too, since only the business sees it, with `ranked`
+false while no part of its record is verified (A4.1).
 
 `GET /v1/ranking` (the version in force; `?version=N` for any past one, forever) returns `{version,
 rules, status, effective_at, summary, order, score, weights, timing, verified, tiers, never_used,
 changelog, next}` (version 3's `rules` is `"0.1"`; version 4's `"0.1.1"`, 0.1 with Amendment 1;
 version 5's `"0.1.2"`, 0.1.1 with Amendment 2, with the fields "A2 in the rules version" lists;
-version 6's `"0.1.3"`, 0.1.2 with Amendment 3, adding `amendments` and `refunds`): §6's order and
+version 6's `"0.1.3"`, 0.1.2 with Amendment 3, adding `amendments` and `refunds`; version 7's
+`"0.2.0"`, the directory of protocol 0.2, §4.4 there; version 8's `"0.2.1"`, 0.2.0 with Amendment 4,
+adding the fields "A4 in the rules version" lists): §6's order and
 every §14 value (with `recognised_platforms` and the PSL snapshot date) under the `packages/spec`
 schema's names; `never_used` lists advertising, payment, amounts, anything a business's profile
 says about it except its location, and who is searching. The changelog starts at version 2
@@ -623,8 +668,12 @@ RFC 9457 problems with a `code` (a `400` may have none); a failed acknowledgemen
 `you_acknowledged_it`, `nothing_to_verify` (inbox), `already_verified` (inbox). **410** `revoked`,
 `cursor_expired`. **413** `too_large` (a body over the network's limit, 64 KB at most). **422**
 `unknown_key`, `unknown_ref`, `bad_alg`, `bad_typ`, `not_yet`, `report_window`, `contest_window`
-(A2.9), `bad_code`, `code_expired`, `positive_only` (inbox, saving a rule, §8.3). **429**
-`too_many_receipts`, `rate_limited`, `too_many_attempts`.
+(A2.9), `bad_code`, `code_expired`, `positive_only` (inbox, saving a rule, §8.3), and from version
+7 as amended `v2_required`, `due_too_far`, `end_too_far` (A4.6). **429** `too_many_receipts`,
+`rate_limited`, `too_many_attempts`. A receipt, its header, an acknowledgement and the body that
+carries them are read as strict JSON (A4.6): a member named twice, invalid UTF-8 or the like is
+refused (`400`, `422 malformed` or `bad_payload`, `ack_` for an acknowledgement), never read two
+ways.
 
 Schemas are zod in `packages/spec` (MIT), JSON Schema generated by `z.toJSONSchema` into
 `packages/spec/schemas/`. Vectors in `packages/spec/vectors/`: `receipts-v6.json` (version 6:
@@ -793,11 +842,11 @@ presentations are served from the snapshot.
 
 | Attack | Defence in 0.1 | Still open |
 |---|---|---|
-| **Invented customers** | Word ≤ 50 fresh units (0.9682), ageing; 30-day hold, ≤ 30 units a month to day 90; distinct customers need a proven email or a presentation elsewhere, and one mailbox is one customer (`+` and Gmail dots folded); issuance ≤ 50 a day; outcomes need a held promise; `verified_share` public. | A fabricated word record reaches an honest 50/50's ceiling, above an honest 990/1000 (0.9508). Alias services such as Apple's Hide My Email give one person many addresses no fold can join; counting each such domain as one customer is the founder's call. |
-| **Self-acknowledgement, shared platform keys** | A pass never verifies, nor a forwarded signature, whose body the network never sees; only an acknowledgement token of that receipt, by a key vouched and making the item's own presentation, or delegated to an established person. Nothing a business holds can block a report. | Paying real orders at honest shops. |
+| **Invented customers** | Word ≤ 50 fresh units (0.9682), ageing; 30-day hold, ≤ 30 units a month to day 90; distinct customers need a proven email or a presentation elsewhere, and one mailbox is one customer (`+` and Gmail dots folded); issuance ≤ 50 a day; outcomes need a held promise; `verified_share` public. From version 8 a record on the business's own word alone is not ranked and shows its counts and no score, and every outcome that names no customer counts with the others as one customer (A4.1, A4.2). | A fabricated record still shows its invented counts, as the business's own word. Padding a record that has some verified evidence with invented kept outcomes: the word's part in the share is not yet held to the cap's scale (the next rules version). Alias services such as Apple's Hide My Email give one person many addresses no fold can join; counting each such domain as one customer is the founder's call. |
+| **Self-acknowledgement, shared platform keys** | A pass never verifies, nor a forwarded signature, whose body the network never sees; only an acknowledgement token of that receipt, by a key vouched and making the item's own presentation, or delegated to an established person. Nothing a business holds can block a report. Receipts and acknowledgements are read as strict JSON, so one receipt cannot say one outcome to the network and another to the customer's agent (A4.6). | Paying real orders at honest shops. While no customer is scored nothing verifies (§4), so these wait for the next rules version: a business can send an acknowledgement of its own first, so that the customer's is never stored, or name as an item's person someone else it presented. |
 | **Borrowed passes and keys** | Only standing is borrowed (R20); acting as the person needs an emailed session; `unusual_use`; presentations listed; recovery rotates all. | Accepted (R20). |
-| **Collusion rings** | Relations as components, each resting on proof (a copied contact email joins nobody, and the overlap groups by mailbox or company domain only customers with a network-proven email); `c` scaled by `min(1, U/5)`; the word cap. | Genuinely distinct businesses and customers. |
-| **Hiding broken promises** | `due`; late promises make kept outcomes presumed; `promise.unclosed`, final; broken outcomes dated by arrival; notice decided by the network. | — |
+| **Collusion rings** | Relations as components, each resting on proof (a copied contact email joins nobody, and the overlap groups by mailbox or company domain only customers with a network-proven email); `c` scaled by `min(1, U/5)`; the word cap. From version 8 a tenant of a private suffix (ours included), and a member seen only through ignored egress, is unrelated to nobody; reach 1 only after 30 days answering; one newcomer of each relations group an hour (A4.3–A4.5). | Genuinely distinct businesses and customers. Customers presented at a member on a domain the network can see still count as distinct, until presentations count only at businesses whose record someone else confirmed. Puppet persons, once customers are scored: a route to verify evidence that does not rest on the businesses' own word comes first (§4). |
+| **Hiding broken promises** | `due`; late promises make kept outcomes presumed; `promise.unclosed`, final; broken outcomes dated by arrival; notice decided by the network. From version 7 as amended: a member's receipts are claims v2 only; `due` within 400 days (an order or a refund 60) after the later of `iat` and its arrival, `end` within 31 days of `due`; a business's notice measured from the arrival, on the network's clock (A4.6). | **Not closed** (A4.7). A business can record its own failure as the customer's cancellation (`booking.cancelled_by_customer`, `order.lapsed`), which closes the promise with no row, so R30 never fires and a later report cannot count; a promise that names no person can be neither reported nor acknowledged by its customer, and its failure is diluted in the one anonymous customer (A4.2); going silent for a day before deadlines restarts R30's nine days. The next rules version is to bring the customer's own voice and close these. A promise the business never publishes leaves no record at all: only customers' agents publishing the promises they hold can close that. |
 | **Rivals' false reports** | Signed, verified, the item's own person, once; never above the kept row; 0.5 against 0.5 when disputed; automatic dispute. | A per-business cap (§13). |
 | **A hostile business; tier as credit** | A customer's broken outcomes from one business ≤ one outcome's worth, nothing while contested, halved once the business disputes the contest (A2.9); order payment never waived; instant bookings ≤ 2 open, ≤ 20000; shop ≤ 2× paid. | — |
 | **Floods, clocks, probing, impersonation** | Tokens before signatures; per-platform, per-instance, issuance and per-address limits; future `iat` refused, backdating lowers `t`; `201` against `409` counted and audited; a weak match gets a provisional party and codes go to the known address; a customer's broken outcomes count only once their email is proven; a business that signs its pings answers only by signed ones. | Knowing whether an email is known (accepted); phone-only customers until SMS. |
@@ -847,10 +896,10 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
 
 | Number | Value | Source | Does |
 |---|---|---|---|
-| Ranked | score ≥ 0.40 (`building`) | The founder (R32) | Sorts before the newcomers' shuffle |
+| Ranked | score ≥ 0.40 (`building`); from version 8 also `verified_share` > 0 | The founder (R32, A4.1) | Sorts before the newcomers' shuffle; a record on the business's own word alone shows counts, no score |
 | Unclosed promise | broken, `o` 1.0, 9 days after due | The founder (R30) | Silence never beats an honest outcome |
 | Hold; release | 30 days; then ≤ 30 units a month to day 90 | The founder (R31); release default | New businesses |
-| Repeat | cap 3; +0.25 a return; a customer's broken pieces per business ≤ 1 | The founder (R7) cap; rest default | Returning customers |
+| Repeat | cap 3; +0.25 a return; a customer's broken pieces per business ≤ 1; from version 8 every row about a business that names no person is one customer, kept and broken together | The founder (R7) cap, (A4.2) anonymous customer; rest default | Returning customers; invented ones count as one |
 | `radius_km` | 10; max 1000 | The founder (R11); max default | Near mode |
 | Keys | one per network | The founder (R28) | Identity |
 | Networks per inbox | up to 8 | The founder (R23) "multiple"; limit default | Bounds background work per inbox; raise when needed |
@@ -859,10 +908,14 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
 | A customer's broken outcomes | count only when their email was proven by the outcome's date: network-proven, for every business; or at the business that recorded them (`email_proof`, or their key presented there), for its own; kept ones always count | The founder (A1.7) | Someone using your email can't hurt you |
 | Word cap; verified; disputed | 50 fresh units, ageing (0.9682); 2.5; × 0.5 | default | The word alone; R3; both sides stand |
 | Counterparty; `z` | 1 + score × min(1, unrelated / 5); 1.2816 | R13's proposed ratio, scaled; default | The other side's record; caution |
-| Established; platforms | trusted, 3 unrelated trusted businesses, 60 days, proven email; seeded at launch (https directory, named operator) | default | When a key verifies |
+| Established; platforms | trusted, 3 unrelated trusted businesses, 60 days, proven email; no platform until route 1 is built as an attestation at delegation (A4.7) | default; platforms the founder (A4.7) | When a key verifies |
 | Related | same /24 or /48 within 30 d, from signed pings; overlap ≥ 50%, grouping by mailbox or domain only customers with a network-proven email; no contact-email relation; one non-free-mail domain = one customer; one mailbox = one customer (`+` and Gmail dots folded) | The founder (A1.3, A1.4) contact email, mailbox; rest default | "Unrelated"; distinct customers |
 | Tiers | trusted ≥ 0.75 (+ 3 businesses or 10 customers); building ≥ 0.40; `person.tier` best across networks | default; building R32 | Rules and presets |
 | Order; timing | answering 24 h; hourly snapshot; daily shuffle; notice 24 h; late customer 48 h; late promise 24 h; auto-complete 48 h after the end; rules change notice 15 d | default | R10, R12, R17, §3 |
+| Reach 1 (version 8) | a member's inbox that has answered for 30 days without a break | The founder (A4.3) | A new or sporadic inbox does not sort above every listing at once |
+| Newcomers (version 8) | every 5th place; every member for its first 90 days, ranked or not, while it answers; one newcomer of each relations group an hour, every member with unknown relations in one group | The founder (A4.5) | Fair to newcomers, never to a farm of them |
+| Unknown relations (version 8) | a tenant of a private suffix; a member whose signed pings in 30 days came only from ignored egress, or that sent none | The founder (A4.4) | A ring the network cannot see is not counted as unrelated |
+| Intake (version 7 as amended) | claims v2 only from members; `due` ≤ 400 days (booking), ≤ 60 days (order, refund) after the later of `iat` and arrival; `end` ≤ `due` + 31 days; notice from arrival | The founder (A4.6); 60 days for orders and refunds default | A promise can always be found unclosed or reported |
 | Silence; leaving | set aside after 90 d with no ping that counts and no good manifest fetch, warned ≥ 30 d before; one notice a day to any one address; ≤ 10 listing changes a day (A2.3, A2.4) | The founder (N3); rest default | A closed inbox is not listed for ever; a business leaves when it likes |
 | Contests | an open contest's outcome counts nothing; disputed within 14 d of filing, half; not disputed by then, never (A2.9) | The founder (Q2); 14 d default | A customer's word that a record is wrong holds while it is checked |
 | Orders; reports | lapse 14 d after a payment request; due 30 d; reports `due` + 1 h to + 90 d, disputed within 14 d | default | §3 |
@@ -909,6 +962,21 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   force 29 September 2026: as version 5 (N1), at once when no more than one business is a member of
   the network publishing it then, otherwise at 00:00 UTC on the sixteenth day after the day it
   published it. Ours had one member, our own inbox, when it published it.
+- **Version 7 (rules 0.2.0, protocol 0.2):** the directory lists agent-ready businesses with their
+  doors, members and the businesses a network finds on their own websites in one order (protocol
+  §4.4). Always announced 15 days ahead; on our network it takes effect on 23 October 2026.
+- **Version 8 (Amendment 4), decided 12 October 2026:** version 7 amended before it takes effect.
+  A record ranks only when part of it is verified evidence, and one on the business's own word
+  alone shows its counts and no score (A4.1); every row that names no person is one customer of
+  the business (A4.2); reach 1 after 30 days answering (A4.3); relations a network cannot see are
+  unknown (A4.4); every member a newcomer for 90 days, one newcomer of each relations group an
+  hour (A4.5); and, from version 7, bounds on what a network takes (A4.6). Its rules are named
+  0.2.1. A network puts it in force as versions 5 and 6: the moment it publishes it when no more
+  than one business is a member of that network then, otherwise at 00:00 UTC on the sixteenth day
+  after the day it published it; and never before version 7 takes effect, which it amends. Ours had
+  one member, our own inbox, when it was decided, so on our network it is to take effect with
+  version 7, and version 7 is never to order the directory on its own; its changelog entry says
+  what happened.
 
 ## Amendment 1 (23 Sep 2026)
 
@@ -1549,9 +1617,13 @@ and keeps its promises is not found.
   in one plain sentence. The tools' schemas are public (`packages/spec/schemas/mcp-*.json`), and
   `vectors/mcp.json` pins down how a card is derived from a listing.
 - **Positive first.** A tier in words is never a mark against a business: no standing yet is said to
-  be where every business starts. The words carry no count of broken promises; `get_business`
-  carries the count of every outcome in its structured answer, as the listing always has, and its
-  text does not list them.
+  be where every business starts. The words carry no count of broken promises, except a
+  self-reported record's from version 8 (below); `get_business` carries the count of every outcome in its
+  structured answer, as the listing always has, and its text does not list them. From version 8 a
+  card's `standing` also carries `kept`, `broken` and `open`, and either `verified_share` or, for a
+  record on the business's own word alone, `self_reported: true`; then `in_words` says its kept,
+  broken and still-open promises as its own word, instead of a tier, and no score is given anywhere
+  (A4.1).
 - **A business's words are its own.** What a business wrote about itself (name, description, city,
   services, tags) reaches an assistant as data: in the text of a result it comes after the network's
   own words, inside a block marked for each answer with a boundary no business can know, and the
@@ -1867,3 +1939,198 @@ here counts against a customer. R30 holds, reading the latest agreed dates. R9: 
 **Text changed:** the header, §3 (table), §3.3 (which outcome stands, a customer's notice, unclosed),
 §3.4 (never counts), §7.4 (vectors: `receipts-v6.json`), §14 (amendments; refunds; the refund-refused report
 window), §15 (version 6).
+
+## Amendment 4 (12 Oct 2026): version 7 amended before it takes effect — rules version 8
+
+**Status: decided (12 Oct 2026)**, as rules version 8 (`"0.2.1"`): version 7 (`"0.2.0"`, protocol
+§4.4) amended before it takes effect, with bounds on what a network takes from version 7 on
+(A4.6). Version 7 is amended, not postponed. A network publishes version 8 by its own notice and
+puts it in force as it did versions 5 and 6: the moment it publishes it when no more than one
+business is a member of that network then, otherwise at 00:00 UTC on the sixteenth day after the
+day it published it (§11); and never before version 7 takes effect, since it amends it. Ours had
+one member, our own inbox, when this was decided, so, as for versions 3 to 6, nobody else was owed
+15 days' notice; on our network it is to take effect with version 7, which then never orders the
+directory on its own. Its changelog entry says what happened. Every number of version 7 is kept.
+
+**Why.** A review of the network found that every score rested on the business's own signed word,
+and that nothing in the network could yet contradict it: no acknowledgement can verify (§4: route
+1 has no list, and route 2 needs an established person, whom a network that scores no customer
+never has), and no report can be filed. Under version 7 as published:
+
+- a record of 50 invented kept promises, each with a fresh `sub`, scores 0.9682 from day 60, above
+  an honest 990 kept and 10 broken (0.9508);
+- from the day it takes effect, every answering member, a free one on a hosting suffix included,
+  sorts above every business the network found on its own website, and a farm of new members can
+  take most newcomers' places;
+- a promise due years ahead, or a v1 promise, can never be found unclosed nor reported, and a
+  business's notice is measured from its own `iat`.
+
+Nothing had gone wrong: no business but ours was a member, and the network held no receipt at all,
+so every change here was cheapest now.
+
+### A4.1 A record ranks only with verified evidence
+
+- **Rule.** A business is ranked, sorting before the daily shuffle, only when its score reaches
+  0.40 **and** part of its record is verified evidence (`verified_share` > 0): a kept outcome a
+  verified acknowledgement token backs, or a customer's report that stands. A row the network
+  writes itself (`promise.unclosed`) is not verified evidence: it counts against the business and
+  never lifts a record into the ranks, or a business could leave one promise open to be ranked.
+  `building` and `trusted` need the same; a record that rests on the business's own word alone is
+  `new`, whatever it scores.
+- **What is shown.** Such a record shows its counts and no score, in the directory, its listings,
+  the API and the assistants' tools (§7.2, A2.7): `kept` and `broken`, the pieces the night scored,
+  and `open`, its promises issued, not yet closed by an outcome and not unclosed, with
+  `self_reported: true`. A card says the counts in words, as the business's own, instead of a
+  tier, and never a score an assistant could carry on. A record with verified evidence shows its
+  score, tier and `verified_share` as before. The business still sees its own score, in its signed
+  ping's `standing`, with `ranked` false.
+- It sorts with everyone unranked, in the daily shuffle as before.
+- **Consequence, accepted.** Nobody is ranked until a route to verify evidence works, ours
+  included: for months the order inside each reach is the daily shuffle. Showing the number with a
+  "self-reported" label beside it was not enough, because the reader is often an assistant, which
+  carries the number on and drops the label.
+
+### A4.2 Rows that name no customer are one customer
+
+- **Rule.** Every row about a business that names no person is one anonymous customer of that
+  business, kept and broken together: R7's `m` counts all of them, so together they weigh at most
+  `cap` (3) pieces, kept and broken in their own proportion. An honest 990 kept and 10 broken that
+  name nobody keep `p` = 0.99; only the confidence falls.
+- **Effect.** Invented `sub`s no longer count as customers: 50 of them give `n` = 3 (0.6462), not
+  50.
+- **A push, on purpose.** An inbox whose customers the network can tell apart (a person, a
+  presented pass, a proven email) counts for more than one whose customers it cannot. Inboxes that
+  issue promises naming no person, ours included today, count for less until they know who their
+  customers are.
+- **Known gap, for the next rules version.** Kept and broken share the one anonymous customer in
+  their own proportion, so kept outcomes nobody can confirm dilute broken ones that name no person.
+  A business that names no person on the promises it fails, and invents kept ones that name nobody,
+  weighs its failures away: once a route to verify evidence exists, it can score above an honest
+  990 kept and 10 broken. Before the pool each such broken piece weighed in full; an anonymous
+  broken piece should not weigh less for kept pieces nobody confirmed.
+
+### A4.3 Reach 1 after 30 days answering
+
+- **Rule.** A member's inbox is in reach 1 only once its signed pings have kept it answering for
+  30\* days without a break (`order.reach_1_after_days`): the current answering spell began at
+  least 30 days before the hour's order. A day without a signed ping, or a failed manifest sweep,
+  begins a new spell. Until then it is in reach 2, at its inbox's level.
+- An honest inbox that is down for a day waits 30 days again: a member that cannot keep answering
+  is not the first business an assistant should be sent to.
+
+### A4.4 Relations a network cannot see are unknown
+
+- **Rule.** A member whose relations a network cannot see is related to nobody and unrelated to
+  nobody (`verified.unknown`): a tenant under a private suffix (`private_suffixes`, ours first),
+  since a network cannot see who owns each tenant; and a member whose signed pings in the 30 days
+  before came from no address outside `egress_ignored` (the published egress of the serverless
+  platforms inboxes run on, and the addresses the operator adds), or that sent none.
+- **Effect.** A customer presented there is not presented "at another, unrelated business"
+  (§5.3); kept outcomes there give no person an unrelated business (`U`, a person's `trusted`
+  tier, establishment); no business is unrelated to it, so its own `U` counts nobody; and its
+  newcomers share one group (A4.5). The components themselves are unchanged.
+
+### A4.5 Newcomers
+
+- **Rule.** Every member is a newcomer for 90 days after it became one, ranked or not, at any
+  reach, while its inbox answers (a signed ping within 24 hours and a manifest fetched within 7
+  days).
+- At most one newcomer of each group has its turn in an hour's order: the one whose turn key, the
+  first 16 hex digits of `SHA-256("<YYYY-MM-DDTHH>:<business uuid, lowercase>")`, is lowest, then
+  the lowest uuid. A group is a connected component of the night's relations; every member whose
+  relations are unknown (A4.4), or that has no night's score yet, is in one group, `unknown`.
+  Places 5, 10, 15… go to the next newcomer whose turn it is; a newcomer may still come earlier in
+  its own place; the others keep theirs.
+- Grouping by hosting suffix instead would let a ring spread itself over the free suffixes. With
+  one group for every unknown member, a farm of them takes one place an hour, whatever its size.
+
+### A4.6 What a network takes
+
+From version 7, as amended (on our network, the moment version 8 takes effect):
+
+- **Claims v2 only.** A member's receipts are claims v2 (`ver: 2`, with `due`). A v1 receipt is
+  refused (`422 v2_required`), and so is an outcome or an amendment whose `ref` names a v1 promise
+  held from before: a v1 promise has no `due`, so it could never be found unclosed, and its
+  outcomes would count only when the business chose to send them. v1 receipts never counted
+  (§3.4), so the items a business makes itself, which keep v1 promises (protocol §6), lose nothing
+  that counted.
+- **`due` within reach.** `due` falls at most 400\* days after the later of `iat` and the arrival
+  for a booking, since a venue, an event or a holiday let may be booked a year ahead, and at most
+  60\* days after it for an order or a refund (`422 due_too_far`). An order's `due` is its
+  delivery date, else `iat` + 30 days, which is also the EU's default delivery period; twice that
+  covers the orders that name a later date, and every day beyond is a day a non-delivery could be
+  neither reported nor found unclosed. A refund is owed within 14 days of a withdrawal, and 60 days
+  is four times that. A pre-order due later is refused when it is made, which costs the business
+  only that it is not counted.
+- **`end` within a month of `due`:** at most 31\* days after it (`422 end_too_far`).
+- Every v2 receipt is held to these: promises, amendments (which name a new `due`) and outcomes
+  (which copy it). Each refusal is final, since the same receipt always meets the same arrival.
+- **Notice on the network's clock.** A business's cancellation has notice (`o` 0.5) only when the
+  network first saw it at least 24 hours before `due`, whatever its `iat` says. Its date is
+  unchanged: max(`iat`, arrival − 24 h).
+- **Strict JSON**, under every version, since it is how a network reads and not a rule of what
+  counts. A receipt's claims, its JWS header, an acknowledgement and the body that carries them are
+  read as strict JSON: one value with nothing after it, valid UTF-8, no member named twice, no lone
+  surrogate or U+0000, nesting at most 16 deep, never `null` or the wrong type where a member is
+  named, and no member that names one the network reads in another case (`"Out"` beside or instead
+  of `"out"`). A header naming `crit` or `b64` is refused: a network understands no JWS extension.
+  Read loosely, `{"out": "booking.cancelled_by_business", "Out": "booking.completed"}` was a
+  completed booking to a reader that folds case and a cancelled one to a reader that does not, so a
+  customer's agent could acknowledge one outcome while the network counted the other. Members no
+  schema names, in any case, are still ignored, as every schema allows (protocol §1).
+- Version 8's document publishes these bounds under `intake`; version 7's stays as it was
+  published.
+
+### A4.7 Corrections to the text of 0.1, and what stays open
+
+- **§4, route 1 ("vouched").** The list is not seeded. It stays empty until the route is built as
+  an attestation at delegation (a recognised platform's Web Bot Auth signature over the key its
+  agent delegates), because platforms sign HTTP requests, not acknowledgement tokens, and a seeded
+  list would verify nothing. Additions remain changelog entries.
+- **§10, "Hiding broken promises".** It said nothing was still open. That was wrong. A4.6 closes a
+  far `due`, v1 promises and notice measured from `iat`. These stay open until the next rules
+  version, which is to bring the customer's own voice:
+  - recording the business's own failure as the customer's cancellation
+    (`booking.cancelled_by_customer`, `order.lapsed`), which closes the promise with no row, so R30
+    never fires, and a report that comes later cannot count;
+  - a cancellation recorded as the customer's close to `due`, with nothing from the customer to
+    back it;
+  - promises that name no person, which no customer can report or acknowledge (A4.2 lowers what
+    they are worth);
+  - going silent for a day before deadlines, which restarts R30's nine days;
+  - failing promises that name no person, diluted in the one anonymous customer (A4.2's known gap).
+
+  A promise a business never publishes leaves no record at all. Only customers' agents publishing
+  the promises they hold can close that.
+- **§10, "Invented customers".** A4.1 and A4.2 close the ranked half: a fabricated word record is
+  not ranked and shows no score, and its invented customers count as one. Padding a record that has
+  some verified evidence with invented kept outcomes stays open until the word's part in the share
+  is held to the cap's scale.
+- **§10, "Collusion rings".** A4.3 to A4.5 close a free member's place above every listing and the
+  newcomer farm. Customers presented at a member on a domain the network can see still count as
+  distinct, until presentations count only at businesses whose record someone else confirmed.
+- **Also for the next rules version:** a report that stands always counts against the business,
+  and one that cannot count is refused rather than taken; `aut` informs and halves nothing while
+  nothing can verify; the word enters the share at the cap's scale; R7 applies only to customers
+  the network knows; R30's nine days restart at most once per promise. Each comes with its notice.
+
+### A4 in the rules version
+
+Rules version 8 (`"0.2.1"`) keeps every member and number of version 7. It adds
+`order.reach_1_after_days` (30), `order.newcomers.group`, `order.newcomers.per_group_per_hour` (1),
+`order.newcomers.turn`, `score.shown`, `verified.unknown`, `verified_evidence` on the business tiers
+and `intake` (A4.6), and it rewrites `order.rule`, `order.reach`, `order.within_reach`,
+`order.newcomers.who` and `how`, `weights.repeat.pair`, `tiers.ranked` and `tiers.distinct_customer`.
+Version 7's document stays as it was published, but for `next`. A listing's `reputation` gains `open` and `self_reported`, and has no `score` when `self_reported`; a
+card's `standing` gains `kept`, `broken`, `open`, `self_reported` and `verified_share`. The schemas
+are `ranking`, `business`, `businesses` and the tools' outputs in `packages/spec`.
+
+**Decisions.** R2, R5 and R7 hold. R32 now needs verified evidence. R25 holds: nothing here is a
+mark against a business, and a record on its own word alone is shown as plain counts. Reputation
+stays per person: nothing here reviews an agent.
+
+**Text changed:** the header, the rules in one screen, §1 (R32), §3.3 (bounds, notice), §3.4
+(never counts), §4 (route 1, unknown relations, nothing verifies yet), §5.1, §5.2 (one row), §5.3
+(tiers, distinct customers), §6 (`rank_ranked`, version 7's order), §7.2, §7.3, §7.4 (codes,
+strict JSON), A2.7 (the card), §10, §14 (ranked, repeat, platforms, reach 1, newcomers, unknown
+relations, intake), §15 (versions 7 and 8).

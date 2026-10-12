@@ -287,7 +287,9 @@ again, and the regular fetch comes all the same.
   out, created_at, respond_by}], standing: {score, tier, ranked}, listing: {listed, delisted_at,
   dormant_since}}` — the open reports and contests the business may answer (oldest first, at most
   200 each; a contest's `respond_by` is the last moment it may dispute it, §5.4), its standing in
-  the last nightly snapshot, and whether it is listed (§4.5).
+  the last nightly snapshot, and whether it is listed (§4.5). From rules version 8 `standing.ranked`
+  is false, and `tier` is `new`, while no part of the business's record is verified evidence; its
+  `score` is still there, since only the business sees it (ADR-017 A4.1).
   Anyone can ping for any domain, so only the domain's own signature sees this.
 - **A signature that fails** (or one by another listed domain) is a ping all the same: `204` with
   `Sdi-Signature: invalid; reason="<code>"`.
@@ -308,13 +310,29 @@ network fetched it; an unknown `kid` makes it fetch the manifest once more.
 | `409 nonce_reused` | the issuer already sent a different receipt with this nonce |
 | `422 bad_alg`, `bad_typ`, `malformed`, `unknown_key`, `bad_signature`, `bad_payload`, `not_yet` | the receipt (`not_yet`: `iat` more than 300 s ahead; there is no maximum age) |
 | `422 unknown_ref` | an outcome whose `ref` names no promise the network holds: publish the promise first |
+| `422 v2_required` | from rules version 7 as amended (ADR-017 A4.6): a member's v1 receipt, or an outcome or amendment whose `ref` names a v1 promise held from before |
+| `422 due_too_far` | from rules version 7 as amended: `due` more than 400 days (a booking) or 60 days (an order or a refund) after the later of `iat` and the arrival |
+| `422 end_too_far` | from rules version 7 as amended: `end` more than 31 days after `due` |
 | `422 ack_<code>` | the acknowledgement |
 | `429 too_many_receipts` | over 10,000 promises today, or over 32 outcomes for one item |
 
 An inbox **retries** `404`, `429`, `5xx`, and `422` with `unknown_key` or `unknown_ref`; every
 other refusal is final. It publishes an outcome's promise before the outcome. A network records
 **arrival** (the first time it saw a receipt that verified) even on an attempt it refuses with
-`422 unknown_ref`, `429` or `5xx`, so retrying never makes a receipt late.
+`422 unknown_ref`, `429` or `5xx`, so retrying never makes a receipt late. The bounds of version
+7 as amended are measured from that arrival, so the same receipt always meets the same answer; a
+promise refused for good is never held, and its outcomes meet `unknown_ref`. A network publishes
+the bounds in its rules, under `intake` (§4.4).
+
+The body, the receipt's JOSE header, its claims and the acknowledgement's are read as **strict
+JSON**, under every rules version: one value with nothing after it, valid UTF-8, no member named
+twice, no lone surrogate or U+0000, nesting at most 16 deep, never `null` or another JSON type
+where a member is named, and no member that names one the network reads in another case (`"Out"`
+beside or instead of `"out"`, which a reader that folds case takes for `out`). Members no schema
+names, in any case, are still ignored (§1). A header naming `crit` or `b64` is refused, since the
+network understands no JWS extension. A body that is not strict JSON is `400`; a header, `422
+malformed`; claims, `422 bad_payload`; an acknowledgement, the same codes with `ack_`. The same
+bytes then read the same to every reader: the network, the inbox and the customer's agent.
 
 ### 4.3 The directory
 
@@ -328,10 +346,13 @@ published no hours), `services [{name, type}]`, `geo? {lat, lng}`,
 `software? {version, runtime}`, `receipts {issued, acknowledged, customers?, last_at?}` (promises
 only), `answering`, `online` (the same), `not_answering_since`, and, once the ranked order is in
 force, `rank_pos`, `rank_shuffle` (a 16-hex-digit **string**) and `reputation {ranked, score, tier,
-kept, broken, customers, verified_share, rules, rules_url}`. Nothing about any customer is ever
-returned. `GET /v1/businesses/{domain}` adds `outcomes`, a count for every outcome code in §6. Only
-listed businesses are returned; the detail of a business that left the directory, or was set aside,
-is `404`, and the problem's `detail` says which.
+kept, broken, customers, verified_share, rules, rules_url}`. From rules version 8 `reputation` also
+has `open` (promises issued, not yet closed by an outcome and not unclosed), and a record no part
+of which is verified evidence is **self-reported**: `self_reported: true`, `ranked: false`, tier
+`new` and **no `score`**, so what is shown is its counts, as the business's own word (ADR-017
+A4.1). Nothing about any customer is ever returned. `GET /v1/businesses/{domain}` adds `outcomes`,
+a count for every outcome code in §6. Only listed businesses are returned; the detail of a
+business that left the directory, or was set aside, is `404`, and the problem's `detail` says which.
 
 The order and the cursor are ADR-017 §6; `ordering.json` holds the shuffle (the first 16 hex digits
 of `SHA-256("<YYYY-MM-DD>:<business uuid>")`), one full snapshot's order and the cursors (base64url
@@ -422,6 +443,37 @@ network found and businesses registered without an inbox appear in a separate ti
 member, so no member's position changes. Version 7 is always announced 15 days ahead, whatever the
 number of members. The schema is `ranking`; `vectors/ordering-v7.json` holds the order, the
 newcomers' places and pages.
+
+Version 8 (network rules 0.2.1, ADR-017 Amendment 4, decided 12 October 2026) is version 7 amended
+before it takes effect, and keeps every member and number of version 7:
+
+- **A record ranks only with verified evidence.** Ranked needs a score of 0.40 or more **and**
+  `verified_share` > 0: a kept outcome a verified acknowledgement backs, or a report that stands.
+  A record on the business's own word alone is not ranked, its tier is `new`, and listings and
+  cards show its counts and no score (§4.3, §4.7). Until a network can verify anything, nobody is
+  ranked there.
+- **Rows that name no customer are one customer**, kept and broken together, so they weigh at most
+  3 pieces of the business's record, in their own proportion. Inboxes that know who their customers
+  are count for more than inboxes that do not.
+- **Reach 1** only once a member's signed pings have kept it answering for 30 days without a break
+  (`order.reach_1_after_days`); before that it is in reach 2, at its inbox's level.
+- **Relations a network cannot see are unknown** (`verified.unknown`): a tenant under a private
+  suffix, and a member whose signed pings in the last 30 days came only from `egress_ignored`, or
+  that sent none, is related to nobody and unrelated to nobody.
+- **Newcomers:** every member is a newcomer for its first 90 days, ranked or not, at any reach,
+  while its inbox answers; at most one newcomer of each relations group has its turn in an hour's
+  order (`order.newcomers.group`, `per_group_per_hour`, `turn`: the lowest first 16 hex digits of
+  `SHA-256("<YYYY-MM-DDTHH>:<business uuid, lowercase>")`), and every member whose relations are
+  unknown, or that has no night's score yet, is in one group.
+- **Intake** (from version 7 as amended): claims v2 only from members, `due` and `end` within the
+  bounds of §4.2, and a business's notice measured from the arrival, on the network's clock
+  (`intake`).
+
+Its document adds `order.reach_1_after_days`, the newcomers' `group`, `per_group_per_hour` and
+`turn`, `score.shown`, `verified.unknown`, `verified_evidence` on the business tiers and `intake`;
+version 7's document stays as it was published, but for `next`. A network puts version 8 in force as it does versions 5 and 6, and never before version 7 takes
+effect, since it amends it; when both take effect together, a version 6 network's `next` (and a
+signed ping's `next_rules`) names version 8.
 
 **A reader accepts a version newer than it knows.** It reads `version`, `status`, `effective_at`,
 `summary` and `next`, which every version has, ignores the rest, and takes the receipt claims as
@@ -581,7 +633,10 @@ anything else percent-encoded) and holding no space, control character or hidden
 schemas say `format: uri`, and a client that checks it refuses a whole answer for one door that is
 not), `standing? {tier, ranked, in_words}` and `listing_url`. `in_words` says a
 tier in one plain sentence and is never a mark against a business: no standing yet is said to be
-where every business starts, which it is.
+where every business starts, which it is. From rules version 8 `standing` also has `kept`, `broken`
+and `open`, and then either `verified_share` or, for a record on the business's own word alone,
+`self_reported: true`: `in_words` then says those counts as the business's own word instead of a
+tier, and the card carries no score (§4.4).
 
 Each result also carries its content as one text block, for assistants that read only text: first,
 in the network's own words, what the network knows (the order and the rules it follows, and for each
@@ -1167,13 +1222,13 @@ v1 claims and the JOSE header are unchanged (ADR-016). A v2 receipt adds:
 
 | Claim | Rule |
 |---|---|
-| `ver` | `2` (absent or `1` is v1; anything else is refused) |
+| `ver` | `2` (absent or `1` is v1; anything else is refused); from rules version 7 as amended a member's v1 receipts are refused, `422 v2_required` (§4.2) |
 | `typ` | `booking` or `order` only |
 | `knd` | `confirmed`, `paid`, `accepted` (promises) or `outcome` |
 | `out` | exactly when `knd` is `outcome`: one of the inbox outcomes below, of the receipt's `typ` |
 | `ref` | exactly with `out`: the `nonce` of the item's earliest promise (32 lowercase hex) |
-| `due` | required, 1 to 2³⁷: a booking's start; an order's delivery time, else `iat` + 30 days; an outcome copies its promise's |
-| `end` | a booking's end, not before `due`; never on an order |
+| `due` | required, 1 to 2³⁷: a booking's start; an order's delivery time, else `iat` + 30 days; an outcome copies its promise's. From rules version 7 as amended at most 400 days (a booking) or 60 days (an order or a refund) after the later of `iat` and the arrival, `422 due_too_far` |
+| `end` | a booking's end, not before `due`; never on an order. From rules version 7 as amended at most 31 days after `due`, `422 end_too_far` |
 | `aut` | `1` when nobody decided it in the moment: the system (a booking completed after its end) or a rule |
 | `per` | at most 8 `{n: "<network host>", p: "<presentation id>"}`, one per network holding a presentation for the item; each network reads only its own |
 
@@ -1181,8 +1236,9 @@ Every refusal of these is `422 bad_payload`. An acknowledgement's payload may ad
 reference.
 
 An inbox issues v2 claims for the bookings and orders its customers made (and a shop's connector
-brought in); the items a business makes itself keep v1 promises and record no outcome. `iat` is
-the time of the event that caused the receipt, `due` and `end` are the same on every receipt of an
+brought in); the items a business makes itself keep v1 promises and record no outcome. They never
+count, and from rules version 7 as amended a network refuses them for good (`422 v2_required`), so
+an inbox need not send them there. `iat` is the time of the event that caused the receipt, `due` and `end` are the same on every receipt of an
 item, and an outcome whose item has no promise yet is issued after that promise. Which transition
 records which outcome is one function of the item type, the event, the state it leaves and who
 fired it; `receipts-v2.json` lists every path through the booking and order state machines with
@@ -1313,7 +1369,7 @@ the inbox asks each network only about its own. No network ever sees another's s
 | 409 | `person_exists`, `nonce_reused`, `already_reported`, `you_acknowledged_it` |
 | 410 | `revoked`, `cursor_expired` |
 | 413 | `too_large` |
-| 422 | `unknown_key`, `unknown_ref`, `bad_alg`, `bad_typ`, `not_yet`, `report_window`, `contest_window`, `bad_code`, `code_expired` |
+| 422 | `unknown_key`, `unknown_ref`, `bad_alg`, `bad_typ`, `not_yet`, `report_window`, `contest_window`, `bad_code`, `code_expired`, and from rules version 7 as amended `v2_required`, `due_too_far`, `end_too_far` (§4.2) |
 | 429 | `too_many_receipts`, `rate_limited`, `too_many_attempts` |
 
 An inbox also answers its own callers with `409 nothing_to_verify`, `409 already_verified` and
