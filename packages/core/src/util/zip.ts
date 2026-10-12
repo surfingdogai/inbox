@@ -105,7 +105,7 @@ export function crc32(data: Uint8Array): number {
     }
   }
   let crc = 0xffffffff;
-  for (const byte of data) crc = (table[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8);
+  for (let i = 0; i < data.length; i++) crc = (table[(crc ^ (data[i] as number)) & 0xff] as number) ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 

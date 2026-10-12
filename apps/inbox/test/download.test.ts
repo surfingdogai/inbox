@@ -1,4 +1,4 @@
-import { createApiKey } from "@surfingdog/adapters";
+import { createApiKey, sendStepUpCode } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -151,6 +151,23 @@ describe("downloading the inbox", () => {
       new Request(`${BASE}/v1/owner/download/code`, { method: "POST", body: "{}" }),
     );
     expect(nobody.status).toBe(401);
+    // Someone signed in as staff gets no code: what a download takes is the owner's.
+    const staff = ulid();
+    await s.db.orm.insert(schema.users).values({ id: staff, email: "ana@salaorosa.pt", role: "staff", createdAt: T0 });
+    const words = { subject: (code: string) => code, text: (code: string) => code };
+    await expect(
+      sendStepUpCode(
+        { db: s.db, mailOut: s.mail },
+        {
+          actor: { kind: "owner", id: staff, channel: "rest" },
+          principal: { via: "session", id: "s1", name: "ana@salaorosa.pt", scopes: ["*"], userId: staff },
+          tier: "verified_principal",
+          sandbox: false,
+        },
+        "download",
+        words,
+      ),
+    ).rejects.toMatchObject({ code: "not_allowed" });
     expect(s.mail.sent).toEqual([]);
   });
 

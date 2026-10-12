@@ -58,15 +58,21 @@ export function requireStepUpCaller(caller: Caller, what: string): void {
 
 /**
  * The owner's own address, where a code goes: the signed-in person's, or for a full owner key the
- * owner's (the owner email in Settings, else the first owner who signed in).
+ * owner's (the owner email in Settings, else the first owner who signed in). A person signed in as
+ * staff gets no code: what a step-up guards is the owner's.
  */
 export async function ownerAddress(db: Db, caller: Caller): Promise<string | null> {
   const userId = caller.principal?.userId;
   if (userId) {
     const [user] = await db.orm
-      .select({ email: schema.users.email })
+      .select({ email: schema.users.email, role: schema.users.role })
       .from(schema.users)
       .where(eq(schema.users.id, userId));
+    if (user && user.role !== "owner") {
+      throw new WriteError("not_allowed", "Only the owner can do this, signed in as the owner. Nothing was done.", {
+        details: { reason: "owner_only" },
+      });
+    }
     return user?.email ?? null;
   }
   const set = (await readSettings(db)).notifications.ownerEmail;
