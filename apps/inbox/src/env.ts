@@ -1,3 +1,5 @@
+import { type AddressRange, parseAddressRange } from "@surfingdog/platform";
+
 /**
  * The host's settings, read the same way on both runtimes. The Deploy to Cloudflare button asks for
  * every value in `.dev.vars.example`, so any of them can arrive empty or as whatever was typed: an
@@ -77,4 +79,21 @@ export function secretKeyFrom(
     );
   }
   return typed;
+}
+
+/**
+ * INBOX_OUTBOUND_DENY: comma-separated addresses and ranges (`203.0.114.7`, `2a01:4f8::/32`) that no
+ * outbound call reaches, besides the loopback, private and other ranges no call ever does — the
+ * server's own public addresses, say, or a neighbour's. `bad` holds what is not an address or a
+ * range, for the server to refuse to start on: a range meant to be closed must not be silently open.
+ */
+export function outboundDenyFrom(value: string | undefined): { ranges: AddressRange[]; bad: string[] } {
+  const ranges: AddressRange[] = [];
+  const bad: string[] = [];
+  for (const entry of listFrom(value)) {
+    const range = parseAddressRange(entry);
+    if (range) ranges.push(range);
+    else bad.push(entry);
+  }
+  return { ranges, bad };
 }

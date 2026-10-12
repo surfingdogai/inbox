@@ -60,6 +60,7 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `INBOX_SECRET_KEY` | unset | Seals connector credentials, webhook secrets and the receipt-signing key (AES-256-GCM), and is the source of the pseudonym pepper in receipts. One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, refuses to store a secret rather than store it in the clear, and issues no [receipts](/docs/receipts/). |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | unset | Real email through Cloudflare Email Service (sign-in links, notifications), from an address on a domain onboarded there. `MAIL_FROM_NAME` is optional. |
 | `RESEND_API_KEY` | unset | Real email through Resend instead, from `MAIL_FROM`. With neither, mail is printed to the console, sign-in links included. |
+| `INBOX_OUTBOUND_DENY` | unset | Comma-separated addresses and ranges no outbound call reaches, like `203.0.114.7, 2a01:4f8::/32`: the server's own public addresses, or a neighbour's. Loopback, private, link-local and the other non-public ranges are always refused (see [Security and privacy](/docs/security-and-privacy/)). An entry that is not an address or a range stops the server at boot. |
 
 A few commands run against the same database and exit:
 

@@ -7,6 +7,7 @@
 
 import type { SqliteClient } from "./db";
 
+export * from "./addresses";
 export * from "./db";
 export * from "./mail";
 export * from "./migrate";

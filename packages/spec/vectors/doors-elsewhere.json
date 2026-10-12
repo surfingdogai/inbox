@@ -1,0 +1,294 @@
+{
+  "description": "What a reader keeps of a manifest's doors_elsewhere: each case's manifest gives kept. Every entry is checked alone and dropped alone: an item type of the five, not one the manifest lists in item_types and not one an entry kept before it names; a URL kept as written, https, at most 2048 characters, with no user or password, on a host of two labels or more whose last label starts with a letter. Read by packages/core/test/doors-elsewhere.test.ts with readDoorsElsewhere from @surfingdog/spec.",
+  "cases": [
+    {
+      "name": "a salon whose bookings are taken at a booking platform",
+      "manifest": {
+        "item_types": ["message", "quote_request"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/ana-salon"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://booking.example/ana-salon"
+        }
+      ]
+    },
+    {
+      "name": "a shop whose orders stay in its own checkout",
+      "manifest": {
+        "item_types": ["message", "quote_request"],
+        "doors_elsewhere": [
+          {
+            "item_type": "order",
+            "url": "https://shop.example.com/"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://shop.example.com/"
+        }
+      ]
+    },
+    {
+      "name": "both, in the order written",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "order",
+            "url": "https://shop.example.com/"
+          },
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/ana-salon"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://shop.example.com/"
+        },
+        {
+          "item_type": "booking",
+          "url": "https://booking.example/ana-salon"
+        }
+      ]
+    },
+    {
+      "name": "absent: the inbox's own doors are all there is",
+      "manifest": {
+        "item_types": ["message", "booking"]
+      },
+      "kept": []
+    },
+    {
+      "name": "not a list",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": {
+          "item_type": "booking",
+          "url": "https://booking.example/ana-salon"
+        }
+      },
+      "kept": []
+    },
+    {
+      "name": "a kind the inbox lists in item_types is taken there, not elsewhere",
+      "manifest": {
+        "item_types": ["message", "booking"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/ana-salon"
+          },
+          {
+            "item_type": "order",
+            "url": "https://shop.example.com/"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://shop.example.com/"
+        }
+      ]
+    },
+    {
+      "name": "one place per kind: the first kept wins",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/ana-salon"
+          },
+          {
+            "item_type": "booking",
+            "url": "https://other.example/book"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://booking.example/ana-salon"
+        }
+      ]
+    },
+    {
+      "name": "a kind dropped for its URL leaves room for a later entry of the same kind",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "http://booking.example/ana-salon"
+          },
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/ana-salon"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://booking.example/ana-salon"
+        }
+      ]
+    },
+    {
+      "name": "a kind that is not an item type, and an entry that is not an object",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "table",
+            "url": "https://tables.example/ana"
+          },
+          "booking",
+          null,
+          {
+            "url": "https://booking.example/ana-salon"
+          },
+          {
+            "item_type": "order",
+            "url": "https://shop.example.com/"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://shop.example.com/"
+        }
+      ]
+    },
+    {
+      "name": "not https",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "http://booking.example/ana-salon"
+          },
+          {
+            "item_type": "order",
+            "url": "mailto:orders@shop.example.com"
+          }
+        ]
+      },
+      "kept": []
+    },
+    {
+      "name": "a user or a password in the URL",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://ana@booking.example/ana-salon"
+          },
+          {
+            "item_type": "order",
+            "url": "https://shop:secret@shop.example.com/"
+          }
+        ]
+      },
+      "kept": []
+    },
+    {
+      "name": "an IP address, either family, or a host with one label",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://203.0.114.7/book"
+          },
+          {
+            "item_type": "order",
+            "url": "https://[2001:db8::1]/shop"
+          },
+          {
+            "item_type": "quote_request",
+            "url": "https://localhost/quote"
+          },
+          {
+            "item_type": "refund",
+            "url": "https://shop.example.123/refund"
+          }
+        ]
+      },
+      "kept": []
+    },
+    {
+      "name": "not a URL, or not a string",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "book with us on Tuesdays"
+          },
+          {
+            "item_type": "order",
+            "url": 42
+          }
+        ]
+      },
+      "kept": []
+    },
+    {
+      "name": "at most 2048 characters, kept as written",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://booking.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "item_type": "order",
+            "url": "https://booking.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://booking.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "name": "a trailing dot and a path, query and fragment are the URL's own business",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://booking.example./ana-salon?lang=pt#times"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://booking.example./ana-salon?lang=pt#times"
+        }
+      ]
+    }
+  ]
+}

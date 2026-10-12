@@ -31,9 +31,12 @@ const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", 
  * - `quote_request`, with an active service or product to ask about;
  * - `refund`, with something paid to refund: an order, or a booking of a service with a price.
  *
+ * A kind the business takes somewhere else (`elsewhere`, from `settings.doorsElsewhere`) is not
+ * listed, and nor is a refund of it: the manifest names where to go for it instead.
+ *
  * Only what is advertised reads this. No write path depends on it: a door still takes what it took.
  */
-export async function offeredItemTypes(db: Db): Promise<ItemType[]> {
+export async function offeredItemTypes(db: Db, elsewhere: readonly string[] = []): Promise<ItemType[]> {
   const [services, open, products] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
@@ -46,11 +49,13 @@ export async function offeredItemTypes(db: Db): Promise<ItemType[]> {
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
   const own = new Map(open.rows.filter((r) => r[0] !== null && r[0] !== undefined).map((r) => [String(r[0]), r[1]]));
   // A service's own hours replace the business's, so a service whose own hours are empty is closed.
-  const bookable = services.rows.some((r) => {
-    const id = String(r[0]);
-    return hasWindows(own.has(id) ? own.get(id) : base?.[1]);
-  });
-  const orderable = products.rows.length > 0;
+  const bookable =
+    !elsewhere.includes("booking") &&
+    services.rows.some((r) => {
+      const id = String(r[0]);
+      return hasWindows(own.has(id) ? own.get(id) : base?.[1]);
+    });
+  const orderable = !elsewhere.includes("order") && products.rows.length > 0;
   const priced = services.rows.some((r) => {
     const model = (json(r[1]) as { model?: unknown } | null)?.model;
     return model === "fixed" || model === "from";
@@ -58,7 +63,8 @@ export async function offeredItemTypes(db: Db): Promise<ItemType[]> {
   const offered = new Set<ItemType>(["message"]);
   if (bookable) offered.add("booking");
   if (orderable) offered.add("order");
-  if (services.rows.length > 0 || orderable) offered.add("quote_request");
+  // Something can still be asked about here when it is bought or booked somewhere else.
+  if (services.rows.length > 0 || products.rows.length > 0) offered.add("quote_request");
   if (orderable || (bookable && priced)) offered.add("refund");
   return ITEM_TYPES.filter((t) => offered.has(t));
 }

@@ -127,7 +127,7 @@ curl -s -X POST https://your-inbox.example.com/v1/owner/webhooks \
 
 Four fields, and only the first is required:
 
-- **`url`** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk;
+- **`url`** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk. On a Node server the name is resolved at every delivery, and a name that resolves to a private or loopback address is refused then, with the reason in the delivery's error. `integrations.webhooks.allowPrivateTargets` in Settings lifts both rules for a machine you control;
 - **`events`** — the patterns you want; `["*"]`, everything, is the default;
 - **`payload_style`** — thin or full, see [thin and full](#thin-and-full) at the bottom of this page. Thin is the default and the right answer for almost everyone; full sends the customer's data to that address;
 - **`headers`** — up to five extra headers sent with every delivery, for a receiver that checks a header rather than the signature: n8n's and Make's webhook triggers, Pipedream, a gateway. `{"Authorization": "Bearer …"}` or `{"Authorization": "Basic …"}` is the usual one. The values are sealed like the signing secret and never shown again; the endpoint lists only the names. `PATCH` merges: a name with a value sets it, a name with `null` removes it. Headers the delivery sets itself (`content-type`, `user-agent`, `webhook-*`, `sdi-*` and the connection's own) are refused.

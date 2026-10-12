@@ -55,10 +55,12 @@ export class FeedFetchError extends Error {
  * address, `localhost`, and the cloud metadata service that hands out credentials to anything
  * that asks it. Two host rules drifting apart is how one door ends up laxer than the other.
  *
- * It is not a complete answer to server-side request forgery — a public name that resolves to a
- * private address defeats any check made on the name alone, and a Worker cannot resolve it to
- * find out. Closing that needs a resolver we do not have, and opening it needs a DNS record made
- * on purpose by whoever already owns the instance.
+ * A check on the name alone is not a complete answer to server-side request forgery: a public
+ * name can resolve to a private address. On Node the host's fetch (`pinnedFetch` in
+ * `@surfingdog/platform/node`) closes that, resolving the name, refusing it when any address is
+ * not public, and connecting to the address it checked. A Worker cannot resolve a name or pin an
+ * address, and its fetch leaves from Cloudflare's network rather than from a machine of the
+ * owner's, so there the name rule is what holds.
  */
 function checkUrl(raw: string): URL {
   let url: URL;

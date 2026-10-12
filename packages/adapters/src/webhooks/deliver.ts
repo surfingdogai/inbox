@@ -75,7 +75,13 @@ export interface DeliverDeps {
   readonly version: string;
   /** This instance's public URL, for the `url` a thin event points at. */
   readonly baseUrl?: string | undefined;
+  /** The host's outbound fetch: on Node, one that resolves the name and refuses private addresses. */
   readonly fetchImpl?: typeof fetch | undefined;
+  /**
+   * The fetch for an endpoint the owner allowed onto a private address (`allowPrivateTargets`): the
+   * host's own ranges still refused. Absent, `fetchImpl`, which refuses such an endpoint.
+   */
+  readonly privateFetchImpl?: typeof fetch | undefined;
 }
 
 export interface WebhookSettings {
@@ -218,7 +224,8 @@ export function webhookDeliverHandler(deps: DeliverDeps): JobHandler {
       userAgent: deps.version ? `surfingdog-inbox/${deps.version}` : USER_AGENT,
       extra,
     });
-    const result = await post(endpoint.url, body, headers, conf, deps.fetchImpl);
+    const outbound = conf.allowPrivateTargets ? (deps.privateFetchImpl ?? deps.fetchImpl) : deps.fetchImpl;
+    const result = await post(endpoint.url, body, headers, conf, outbound);
 
     if (result.status >= 200 && result.status < 300) {
       await db.batch([
@@ -438,7 +445,9 @@ async function partyView(db: Db, partyId: string) {
 /**
  * The POST itself, built from the same rules as `safeFetchJson`: https only, no IP literals, no
  * local or internal hosts, a short timeout, and `redirect: "manual"` so a 3xx comes back as a
- * status to record rather than a hop to follow.
+ * status to record rather than a hop to follow. The name is checked here; what it resolves to is
+ * the host's outbound fetch's to check (`pinnedFetch` on Node), and a refusal there is recorded as
+ * the attempt's error like any other.
  */
 async function post(
   url: string,

@@ -438,6 +438,26 @@
         "type": "string",
         "maxLength": 200
       }
+    },
+    "doors_elsewhere": {
+      "maxItems": 5,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_type": {
+            "type": "string",
+            "enum": ["message", "quote_request", "booking", "order", "refund"]
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "Where to go for it: an https page on a named host, with no user or password in it."
+          }
+        },
+        "required": ["item_type", "url"]
+      }
     }
   },
   "required": ["spec", "instance", "item_types", "protocols", "agent_policy", "receipt_keys", "review_services"]

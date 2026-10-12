@@ -71,8 +71,17 @@ export interface AppDeps {
   readonly baseUrl?: string | undefined;
   /** The owner app's page, where the runtime serves it only on request (Workers: the assets binding). */
   readonly appShell?: ((request: Request) => Promise<Response>) | undefined;
-  /** Outbound fetch for the network ping (tests inject a fake). */
+  /**
+   * Outbound fetch for every call to an address someone else chose: networks, webhooks, product
+   * feeds, Client ID Metadata Documents and agents' key directories. The Node server passes
+   * `pinnedFetch` (resolve, refuse what is not public, connect to what was checked); tests a fake.
+   */
   readonly fetchImpl?: typeof fetch | undefined;
+  /**
+   * Outbound fetch for a webhook the owner allowed onto a private address
+   * (`integrations.webhooks.allowPrivateTargets`). Absent, `fetchImpl`, which refuses one.
+   */
+  readonly privateFetchImpl?: typeof fetch | undefined;
   /** Addresses that may create the first account by magic link (INBOX_OWNER_EMAIL). */
   readonly ownerEmails?: readonly string[] | undefined;
   /**
@@ -131,6 +140,7 @@ export function createInbox(deps: AppDeps): Inbox {
     createSecretBox(parseSecretKeys(deps.secretKey)),
     deps.baseUrl,
     deps.eventSettleMs,
+    { fetch: deps.fetchImpl, privateFetch: deps.privateFetchImpl },
   );
   const demo = deps.demo;
   const transport = deps.mailOut ?? logMailOut();
@@ -175,6 +185,7 @@ export function createInbox(deps: AppDeps): Inbox {
         version: VERSION,
         baseUrl: deps.baseUrl,
         fetchImpl: deps.fetchImpl,
+        privateFetchImpl: deps.privateFetchImpl,
       }),
     )
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
@@ -380,6 +391,8 @@ export function createInbox(deps: AppDeps): Inbox {
       // Whose people it recognises (ADR-017 §8.4): every network switched on, when it can sign.
       identity: { passes: await port.canSign(), networks: enabledNetworks(settings) },
       ...(unlisted ? { directory: { listed: false } } : {}),
+      // Where an agent goes for a kind the business takes somewhere else: a booking platform, its own checkout.
+      doorsElsewhere: profile.doors_elsewhere,
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

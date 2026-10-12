@@ -1,7 +1,8 @@
+import { readDoorsElsewhere } from "@surfingdog/spec";
 import { z } from "zod";
 import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
-import { canonicalNetworkOrigin, networkOriginOfUrl } from "../util/hosts";
+import { canonicalNetworkOrigin, isPublicHost, networkOriginOfUrl } from "../util/hosts";
 
 /**
  * The settings document: one versioned, Zod-validated JSON. It grows toward the full wizard;
@@ -634,8 +635,41 @@ const sections = {
         .describe("The business's own website, if it has one."),
     })
     .prefault({}),
+  /**
+   * Kinds of request the business takes somewhere else, and where: bookings at a booking platform,
+   * orders in its own shop's checkout. Each is named in the manifest (`doors_elsewhere`) and on the
+   * business's own page ("Book at …"), and is no longer among the kinds the inbox lists as its own,
+   * so an agent goes there for it. It sends customers to another address, so the owner's AI may not
+   * change it (`guard.ts`).
+   */
+  doorsElsewhere: z
+    .array(
+      z.object({
+        itemType: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in your own checkout."),
+        url: z
+          .url({ protocol: /^https$/ })
+          .max(2048)
+          .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
+          .describe("Where customers go for it: an https address."),
+      }),
+    )
+    .max(2)
+    .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
+    .default([])
+    .describe(
+      "Kinds of request you take somewhere else, and where: bookings at a booking platform, orders in your own checkout.",
+    ),
   testMode: z.boolean().default(false),
 };
+
+/**
+ * A place a door elsewhere may send customers: what any reader of the manifest keeps
+ * (`readDoorsElsewhere`), on a host this instance would call itself (`isPublicHost`).
+ */
+function isDoorElsewhereUrl(url: string): boolean {
+  if (readDoorsElsewhere({ doors_elsewhere: [{ item_type: "booking", url }] }).length !== 1) return false;
+  return isPublicHost(new URL(url).hostname);
+}
 
 /** Settings paths that hold a secret: never returned by a read, only ever written. */
 export const SECRET_SETTINGS_PATHS: readonly (readonly [string, string])[] = [["email", "inboundSecret"]];

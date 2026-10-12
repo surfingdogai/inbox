@@ -1,4 +1,5 @@
 import type { MailOut } from "@surfingdog/platform";
+import type { DoorElsewhere } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
@@ -110,6 +111,11 @@ export interface BusinessProfile {
   readonly return_policy: ReturnPolicy;
   /** Who the business is, as the law asks before a contract (CRD art. 6(1)): only what the owner filled in. */
   readonly trader?: Trader | undefined;
+  /**
+   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`), as
+   * the manifest names them; absent when there are none. None of them is in `item_types`.
+   */
+  readonly doors_elsewhere?: readonly DoorElsewhere[] | undefined;
 }
 
 /** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
@@ -390,11 +396,24 @@ export class Capabilities {
      * writes an event and polls for it in the same tick ever passes zero.
      */
     eventSettleMs?: number | undefined,
+    /**
+     * How this inbox calls addresses someone else chose, for what it calls from a request (a test
+     * event to a webhook): the host's outbound fetch, and the one for an endpoint the owner allowed
+     * onto a private address. Absent, the runtime's own fetch.
+     */
+    outbound?: { readonly fetch?: typeof fetch | undefined; readonly privateFetch?: typeof fetch | undefined },
   ) {
     this.setup = new SetupCapabilities(db);
     this.feeds = new FeedCapabilities(db);
     this.secrets = secrets;
-    this.webhooks = new WebhookCapabilities(db, secrets, undefined, baseUrl, eventSettleMs);
+    this.webhooks = new WebhookCapabilities(
+      db,
+      secrets,
+      outbound?.fetch,
+      baseUrl,
+      eventSettleMs,
+      outbound?.privateFetch,
+    );
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);
@@ -427,11 +446,12 @@ export class Capabilities {
   // ---- public ----------------------------------------------------------------
 
   async getBusinessProfile(): Promise<BusinessProfile> {
-    const [[row], s, itemTypes] = await Promise.all([
-      this.db.orm.select().from(business).limit(1),
-      readSettings(this.db),
-      offeredItemTypes(this.db),
-    ]);
+    const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
+    const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
+    const itemTypes = await offeredItemTypes(
+      this.db,
+      elsewhere.map((d) => d.item_type),
+    );
     return {
       name: row?.name || s.business.name,
       domain: row?.domain ?? null,
@@ -455,6 +475,7 @@ export class Capabilities {
         ...(s.commerce.legal.country ? { returnPolicyCountry: s.commerce.legal.country } : {}),
       },
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
+      ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
     };
   }
 

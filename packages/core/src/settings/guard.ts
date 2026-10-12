@@ -23,6 +23,8 @@ interface Watched {
  * - `email.*` sender and reply-to: where customers' answers go, and whose name they see.
  * - Webhooks switched back on, and test mode switched on: the first sends every event to the
  *   endpoints again, the second silently stops every email to customers and to the owner.
+ * - `doorsElsewhere`: where customers are sent to book or to order instead, from the business's
+ *   own page and its manifest.
  */
 export const DATA_OUT_SETTINGS: readonly Watched[] = [
   { path: ["notifications", "ownerEmail"] },
@@ -32,6 +34,7 @@ export const DATA_OUT_SETTINGS: readonly Watched[] = [
   { path: ["email", "replyTo"] },
   { path: ["integrations", "webhooks", "enabled"], on: "switched_on" },
   { path: ["testMode"], on: "switched_on" },
+  { path: ["doorsElsewhere"] },
 ];
 
 /**
