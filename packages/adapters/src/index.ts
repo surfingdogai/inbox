@@ -358,6 +358,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     businessName: deps.businessName,
     now: deps.now,
     baseUrl: deps.baseUrl,
+    secrets: deps.caps.secrets,
   };
   app.route(
     "/auth",

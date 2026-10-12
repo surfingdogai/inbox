@@ -1,4 +1,4 @@
-import { type Db, randomToken, readSettings, schema, sixDigits, ulid } from "@surfingdog/core";
+import { type Db, randomToken, readSettings, type SecretBox, schema, sixDigits, ulid } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -180,15 +180,25 @@ export async function endSessions(db: Db, userId: string): Promise<void> {
   await db.client.query({ sql: "DELETE FROM sessions WHERE user_id = ?", params: [userId], method: "run" });
 }
 
-/** The hash a code is kept as: the row's own hash and the code, so equal codes never hash alike. */
-export async function codeHash(rowHash: string, code: string): Promise<string> {
-  return hashKey(`${rowHash}:${code}`);
+/**
+ * The hash a code is kept as: the row's own hash and the code, so equal codes never hash alike. A
+ * code is six digits, so a plain hash of it falls to a million tries by whoever reads the table (a
+ * backup, a copy, a leaked query); with INBOX_SECRET_KEY it is an HMAC under a key derived from it,
+ * which the table does not hold. Without one, the plain hash, as before.
+ */
+export async function codeHash(rowHash: string, code: string, secrets?: SecretBox | null): Promise<string> {
+  if (!secrets) return hashKey(`${rowHash}:${code}`);
+  const key = await secrets.mac("login-code");
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${rowHash}:${code}`) as BufferSource);
+  return `k1.${[...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 export interface OwnerMailDeps {
   readonly db: Db;
   readonly mailOut: MailOut;
   readonly businessName: () => Promise<string>;
+  /** INBOX_SECRET_KEY's box, when there is one: the codes in these emails are kept keyed by it (`codeHash`). */
+  readonly secrets?: SecretBox | null | undefined;
   /** The server's log (console.log). Only an email that nothing could send is written there whole. */
   readonly log?: ((line: string) => void) | undefined;
 }
@@ -442,7 +452,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         hash,
         email,
         kind: "magic_link",
-        codeHash: await codeHash(hash, code),
+        codeHash: await codeHash(hash, code, deps.secrets),
         expiresAt: now() + MAGIC_TTL_MS,
         createdAt: now(),
       });
@@ -598,7 +608,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         tries.retryAfterSec,
       );
     }
-    const row = await takeCode(deps.db, email, code, now());
+    const row = await takeCode(deps.db, email, code, now(), deps.secrets);
     if (!row) {
       return c.json(
         {
@@ -695,7 +705,13 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
  * try on are compared, so one that already had its five stays shut even to the right code. The one
  * it matches is used up at once.
  */
-async function takeCode(db: Db, email: string, code: string, now: number): Promise<TokenRow | null> {
+async function takeCode(
+  db: Db,
+  email: string,
+  code: string,
+  now: number,
+  secrets: SecretBox | null | undefined,
+): Promise<TokenRow | null> {
   const { rows } = await db.client.query({
     sql: `UPDATE login_tokens SET attempts = attempts + 1
            WHERE email = ? AND kind = 'magic_link' AND used_at IS NULL AND expires_at > ?
@@ -706,7 +722,7 @@ async function takeCode(db: Db, email: string, code: string, now: number): Promi
   });
   for (const r of rows) {
     const hash = String(r[0]);
-    if ((await codeHash(hash, code)) !== String(r[1])) continue;
+    if ((await codeHash(hash, code, secrets)) !== String(r[1])) continue;
     const { rows: taken } = await db.client.query({
       sql: `UPDATE login_tokens SET used_at = ? WHERE hash = ? AND used_at IS NULL
            RETURNING hash, email, user_id, detail`,

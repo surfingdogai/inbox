@@ -38,7 +38,8 @@ What a link in an email does when it is opened, and what reaches a log, changed:
 - **A code beside the link.** The sign-in email carries a six-digit code too, for an email read on
   another device. It works once, for 15 minutes, and stops after five wrong tries; an address gets
   at most twenty tries a day and a few emails at once, then one a minute, counted alike whether or
-  not it is known here.
+  not it is known here. A code is kept as an HMAC under a key derived from `INBOX_SECRET_KEY`, so a
+  copy of the table alone cannot be tried against; without that key, as a plain hash.
 - **No link or code in a log outside development.** When a send fails, the log says why and the
   page says "Couldn't send". Only an instance with no address to send from at all writes the
   whole email to its log, as before.

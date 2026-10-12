@@ -210,7 +210,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
     }
     if (await hasAccount(deps.db, to)) return problemResponse(c, taken());
     try {
-      await checkStepUp(deps.db, owner, "email_change", fields.code ?? "", now());
+      await checkStepUp(deps.db, owner, "email_change", fields.code ?? "", now(), deps.secrets);
     } catch (error) {
       return problemResponse(c, error);
     }

@@ -179,6 +179,30 @@ describe("the code in a sign-in email", () => {
     expect(await unknown.json()).toEqual(await known.json());
   });
 
+  // Six digits are a million tries: whoever reads login_tokens (a backup, a copy) must not be able to
+  // run them against what is kept there, so with INBOX_SECRET_KEY the code is kept keyed by it.
+  it("is kept keyed by INBOX_SECRET_KEY, so the table alone does not give it away", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({
+      db,
+      mailOut: mail,
+      ownerEmails: [OWNER],
+      secretKey: "sign-in-code-test-secret-0123456789",
+    });
+    await askSignIn(app, ORIGIN, OWNER);
+    const { code } = lastSignIn(mail, OWNER);
+    const { rows } = await db.client.query({
+      sql: "SELECT hash, code_hash FROM login_tokens",
+      params: [],
+      method: "all",
+    });
+    const [hash, kept] = [String(rows[0]?.[0]), String(rows[0]?.[1])];
+    expect(kept).toMatch(/^k1\.[0-9a-f]{64}$/);
+    expect(kept).not.toBe(await hashKey(`${hash}:${code}`));
+    expect((await tryCode(app, OWNER, code)).status).toBe(200);
+  });
+
   it("takes twenty tries a day for one address, from however many client addresses", async () => {
     const db = await freshDb();
     const app = createApp({ db, mailOut: logMailOut(), ownerEmails: [OWNER] });

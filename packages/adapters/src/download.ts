@@ -121,7 +121,7 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
       const body = (await c.req.json().catch(() => ({}))) as { code?: unknown };
       const owner = await stepUpOwner(deps.db, caller);
       const now = clock();
-      await checkStepUp(deps.db, owner, "download", typeof body.code === "string" ? body.code : "", now);
+      await checkStepUp(deps.db, owner, "download", typeof body.code === "string" ? body.code : "", now, deps.secrets);
       const profile = await deps.caps.getBusinessProfile();
       const download = await buildDownload(snapshot, {
         now,

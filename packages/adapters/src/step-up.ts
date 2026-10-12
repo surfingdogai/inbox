@@ -5,6 +5,7 @@ import {
   maskEmail,
   randomToken,
   readSettings,
+  type SecretBox,
   schema,
   sixDigits,
   WriteError,
@@ -87,7 +88,7 @@ export async function sendStepUp(
       user.email,
       `step_up:${purpose}`,
       user.id,
-      await codeHash(hash, code),
+      await codeHash(hash, code, deps.secrets),
       now + STEP_UP_TTL_MS,
       now,
       user.id,
@@ -130,6 +131,7 @@ export async function checkStepUp(
   purpose: StepUpPurpose,
   code: string,
   now: number,
+  secrets: SecretBox | null | undefined,
 ): Promise<void> {
   const kind = `step_up:${purpose}`;
   const typed = code.replace(/\s+/g, "");
@@ -145,7 +147,7 @@ export async function checkStepUp(
   if (rows.length === 0) throw await whyNot(db, user.id, kind, now);
   for (const r of rows) {
     const hash = String(r[0]);
-    if (!/^[0-9]{6}$/.test(typed) || (await codeHash(hash, typed)) !== String(r[1])) continue;
+    if (!/^[0-9]{6}$/.test(typed) || (await codeHash(hash, typed, secrets)) !== String(r[1])) continue;
     const used = await db.client.query({
       sql: "UPDATE login_tokens SET used_at = ? WHERE hash = ? AND used_at IS NULL",
       params: [now, hash],

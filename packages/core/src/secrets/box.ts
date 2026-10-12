@@ -46,7 +46,12 @@ export type MacPurpose =
    */
   | "receipt-terms"
   /** Links in the business's emails (ADR-018 §5): rotating the secret retires every link out there. */
-  | "action-link";
+  | "action-link"
+  /**
+   * The owner's six-digit sign-in and step-up codes, as `login_tokens.code_hash` keeps them: without
+   * the key, whoever reads that table cannot try the million codes against it.
+   */
+  | "login-code";
 
 export interface SecretBox {
   /**
