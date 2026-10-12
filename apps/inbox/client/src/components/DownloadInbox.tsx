@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api, problemOf } from "../lib/api";
@@ -8,9 +9,17 @@ import { Field } from "./Form";
 /**
  * Downloading the inbox: one file with every request and conversation, the customers, the services,
  * the hours, the rules and the settings, to run on a server of the owner's own. The inbox emails the
- * owner a code first, and tells them once it is done.
+ * owner a code first, and tells them once it is done. Where the inbox cannot copy its own database
+ * (Cloudflare D1) the card says how to copy it instead, and offers no button that could only fail.
  */
 export function DownloadInbox() {
+  const here = useQuery({
+    queryKey: ["download"],
+    queryFn: api.downloadAvailable,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+  const away = here.error ? problemOf(here.error) : null;
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,6 +56,18 @@ export function DownloadInbox() {
       setBusy(false);
     }
   };
+
+  if (away?.code === "not_available") {
+    return (
+      <section className="card glass stack">
+        <h3 className="sec">Download your inbox</h3>
+        <p className="hint">
+          {/* The answer names the command in backticks: shown as code. */}
+          {away.detail.split("`").map((part, i) => (i % 2 ? <code key={part}>{part}</code> : part))}
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="card glass stack">

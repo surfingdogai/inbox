@@ -236,6 +236,8 @@ export const api = {
   customer: (partyId: string) => call<CustomerSummary>("GET", customerPath(partyId)),
   exportCustomer: (partyId: string) => call<unknown>("GET", `${customerPath(partyId)}/export`),
   /** Six digits to the owner's own address, which a download needs. */
+  /** Whether a download works here: a 501 `not_available` says how to copy the database instead. */
+  downloadAvailable: () => call<{ available: true }>("GET", "/v1/owner/download"),
   downloadCode: () => call<{ sent_to: string; expires_at: string }>("POST", "/v1/owner/download/code", { body: {} }),
   /** The whole inbox as a zip, for the code just emailed. */
   downloadInbox: (code: string) => file("/v1/owner/download", { code }),

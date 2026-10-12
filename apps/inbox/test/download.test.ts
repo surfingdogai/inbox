@@ -56,6 +56,8 @@ async function setup(opts: { snapshot?: boolean; mailOut?: MailOut } = {}) {
         body: JSON.stringify(body),
       }),
     );
+  const get = (path: string, key: string = owner.key) =>
+    inbox.app.request(new Request(`${BASE}${path}`, { headers: { authorization: `Bearer ${key}` } }));
   /** The code in the last email to the owner, which is only ever there. */
   const lastCode = () => /code: (\d{6})/.exec(mail.sent.filter((m) => m.to.includes(OWNER)).at(-1)?.text ?? "")?.[1];
   return {
@@ -63,6 +65,7 @@ async function setup(opts: { snapshot?: boolean; mailOut?: MailOut } = {}) {
     inbox,
     mail,
     post,
+    get,
     strips,
     lastCode,
     tick: (ms: number) => {
@@ -187,6 +190,22 @@ describe("downloading the inbox", () => {
     const said = [...logged.mock.calls, ...errors.mock.calls].flat().map(String).join("\n");
     expect(said).toContain("E_SENDER_NOT_VERIFIED");
     expect(said).not.toMatch(/\b\d{6}\b/);
+  });
+
+  // The owner app asks first, so on D1 it shows the way to copy the database, not a button that fails.
+  it("says, before anything is sent, whether it can be downloaded here", async () => {
+    const here = await setup();
+    const yes = await here.get("/v1/owner/download");
+    expect(yes.status).toBe(200);
+    expect(await yes.json()).toEqual({ available: true });
+    const d1 = await setup({ snapshot: false });
+    const no = await d1.get("/v1/owner/download");
+    expect(no.status).toBe(501);
+    expect(await no.json()).toMatchObject({
+      code: "not_available",
+      detail: expect.stringContaining("wrangler d1 export"),
+    });
+    expect([...here.mail.sent, ...d1.mail.sent]).toEqual([]);
   });
 
   it("says how to copy the database instead where it cannot copy it, before sending any code", async () => {

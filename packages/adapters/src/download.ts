@@ -39,6 +39,31 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
   app.onError((error, c) => problemResponse(c, error));
   const clock = () => (deps.now ? deps.now() : Date.now());
 
+  // Whether this inbox can be downloaded here, asked before anything is sent: the owner app shows the
+  // way to copy the database instead where it cannot be.
+  app.get(
+    "/download",
+    describeRoute({
+      tags: ["owner"],
+      summary: "Whether the inbox can be downloaded here",
+      description:
+        "200 when POST /download/code and POST /download work on this runtime; 501 not_available, with how to copy the database instead, where they do not (Cloudflare D1). Sends nothing and changes nothing.",
+      security: OWNER_SECURITY,
+      responses: {
+        200: {
+          description: "It can",
+          content: { "application/json": { schema: resolver(z.object({ available: z.literal(true) })) } },
+        },
+        ...ERRORS,
+      },
+    }),
+    async (c) => {
+      requireStepUpCaller(c.get("caller"), "download the inbox");
+      if (!deps.snapshot) return notAvailable(c);
+      return c.json({ available: true as const }, 200);
+    },
+  );
+
   app.post(
     "/download/code",
     describeRoute({
