@@ -61,35 +61,77 @@ export interface SessionUser {
 }
 
 /**
+ * The migration that brought the `__Host-` cookie (0020). A session made before it was set under
+ * the plain name over https too, and is still taken under that name until it ends (`findSession`).
+ */
+const HOST_COOKIE_MIGRATION = "0020_owner_sign_in";
+
+/**
  * The session token a request carries: the `__Host-` cookie, or the plain one on a request that
  * came over http. Over https a plain cookie is ignored, since any host under the same domain could
- * have set it.
+ * have set it. `baseUrl` (INBOX_PUBLIC_URL) says whether this instance is reached over https, as the
+ * cookie was set by it: a proxy that forwards no X-Forwarded-Proto makes the request itself say http.
  */
-export function sessionToken(request: Request): string | null {
-  const cookie = request.headers.get("cookie") ?? "";
-  const secure = /(?:^|;\s*)__Host-sdi_session=([^;]+)/.exec(cookie)?.[1];
-  if (secure) return secure;
-  if (publicOrigin(request).startsWith("https:")) return null;
-  return /(?:^|;\s*)sdi_session=([^;]+)/.exec(cookie)?.[1] ?? null;
+export function sessionToken(request: Request, baseUrl?: string | undefined): string | null {
+  const carried = carriedSession(request, baseUrl);
+  return carried && !carried.plainOverHttps ? carried.token : null;
 }
 
-export async function userFromCookie(db: Db, request: Request, now = Date.now()): Promise<SessionUser | null> {
-  const token = sessionToken(request);
-  if (!token) return null;
+function carriedSession(
+  request: Request,
+  baseUrl: string | undefined,
+): { readonly token: string; readonly plainOverHttps: boolean } | null {
+  const cookie = request.headers.get("cookie") ?? "";
+  const secure = /(?:^|;\s*)__Host-sdi_session=([^;]+)/.exec(cookie)?.[1];
+  if (secure) return { token: secure, plainOverHttps: false };
+  const plain = /(?:^|;\s*)sdi_session=([^;]+)/.exec(cookie)?.[1];
+  if (!plain) return null;
+  return { token: plain, plainOverHttps: publicOrigin(request, baseUrl).startsWith("https:") };
+}
+
+/**
+ * The session a request carries, with its token and when it ends. Over https a plain cookie counts
+ * only for a session made before the `__Host-` cookie existed (`legacy`): every session since has
+ * the `__Host-` one there, so a plain cookie another host under the domain set gains nothing, and
+ * nobody who was signed in before an upgrade is signed out by it.
+ */
+async function findSession(
+  db: Db,
+  request: Request,
+  now: number,
+  baseUrl: string | undefined,
+): Promise<{ user: SessionUser; token: string; expiresAt: number; legacy: boolean } | null> {
+  const carried = carriedSession(request, baseUrl);
+  if (!carried) return null;
   const { rows } = await db.client.query({
-    sql: `SELECT s.id, u.id, u.email, u.role FROM sessions s JOIN users u ON u.id = s.user_id
-           WHERE s.token_hash = ? AND s.expires_at > ?`,
-    params: [await hashKey(token), now],
+    sql: `SELECT s.id, u.id, u.email, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id
+           WHERE s.token_hash = ? AND s.expires_at > ?
+             ${carried.plainOverHttps ? "AND s.created_at < (SELECT applied_at FROM migrations WHERE name = ?)" : ""}`,
+    params: [await hashKey(carried.token), now, ...(carried.plainOverHttps ? [HOST_COOKIE_MIGRATION] : [])],
     method: "all",
   });
   const row = rows[0];
   if (!row) return null;
   return {
-    sessionId: String(row[0]),
-    id: String(row[1]),
-    email: String(row[2]),
-    role: row[3] === "staff" ? "staff" : "owner",
+    user: {
+      sessionId: String(row[0]),
+      id: String(row[1]),
+      email: String(row[2]),
+      role: row[3] === "staff" ? "staff" : "owner",
+    },
+    token: carried.token,
+    expiresAt: Number(row[4]),
+    legacy: carried.plainOverHttps,
   };
+}
+
+export async function userFromCookie(
+  db: Db,
+  request: Request,
+  now = Date.now(),
+  baseUrl?: string | undefined,
+): Promise<SessionUser | null> {
+  return (await findSession(db, request, now, baseUrl))?.user ?? null;
 }
 
 export async function createSession(
@@ -612,8 +654,8 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
   });
 
   app.get("/me", async (c) => {
-    const user = await userFromCookie(deps.db, c.req.raw, now());
-    if (!user)
+    const found = await findSession(deps.db, c.req.raw, now(), deps.baseUrl);
+    if (!found)
       return c.json(
         {
           type: "https://surfingdog.ai/problems/unauthorized",
@@ -625,11 +667,18 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         401,
         { "Content-Type": "application/problem+json" },
       );
+    // The owner app asks this first on every load: a session from before the `__Host-` cookie moves
+    // to it here, and the plain cookie goes.
+    if (found.legacy) {
+      setCookie(c, SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+      setSessionCookie(c, deps.baseUrl, found);
+    }
+    const { user } = found;
     return c.json({ id: user.id, email: user.email, role: user.role });
   });
 
   app.post("/logout", async (c) => {
-    const user = await userFromCookie(deps.db, c.req.raw, now());
+    const user = await userFromCookie(deps.db, c.req.raw, now(), deps.baseUrl);
     if (user)
       await deps.db.client.query({ sql: "DELETE FROM sessions WHERE id = ?", params: [user.sessionId], method: "run" });
     clearSessionCookies(c, deps.baseUrl);

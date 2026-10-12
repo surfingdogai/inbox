@@ -274,7 +274,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         }),
       );
     }
-    const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "rest", sandbox: await sandbox() });
+    const caller = await callerFromRequest(deps.db, c.req.raw, {
+      channel: "rest",
+      sandbox: await sandbox(),
+      baseUrl: deps.baseUrl,
+    });
     // Cookie sessions only write from our own origin; keys and OAuth tokens carry no ambient authority.
     if (
       caller.auth?.via === "session" &&
@@ -480,7 +484,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   });
 
   app.all("/mcp/owner", async (c) => {
-    const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_owner", sandbox: await sandbox() });
+    const caller = await callerFromRequest(deps.db, c.req.raw, {
+      channel: "mcp_owner",
+      sandbox: await sandbox(),
+      baseUrl: deps.baseUrl,
+    });
     if (caller.auth?.kind !== "owner") {
       return unauthorized(
         c,
@@ -503,7 +511,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     return serveMcp(mcpOwner, c.req.raw, body, authInfo(caller));
   });
   app.all("/mcp", async (c) => {
-    const caller = await callerFromRequest(deps.db, c.req.raw, { channel: "mcp_public", sandbox: await sandbox() });
+    const caller = await callerFromRequest(deps.db, c.req.raw, {
+      channel: "mcp_public",
+      sandbox: await sandbox(),
+      baseUrl: deps.baseUrl,
+    });
     if (caller.principal?.keyKind === "integration") {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;

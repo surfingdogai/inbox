@@ -44,7 +44,10 @@ What a link in an email does when it is opened, and what reaches a log, changed:
   whole email to its log, as before.
 - **The session cookie is `__Host-sdi_session`** over https: this host only, https only, set for
   every path, never with a domain. The plain `sdi_session` is used only over http (localhost, or a
-  server with no TLS yet), and ignored over https. Sessions signed in before this end once.
+  server with no TLS yet), and ignored over https, except for a session made before this change:
+  that one still signs in under the plain name until it ends, and moves to `__Host-sdi_session` the
+  next time the owner app loads (`/auth/me`), so an upgrade signs nobody out. Whether a request
+  came over https is read with `INBOX_PUBLIC_URL` first, as the cookie was set.
 - **A handoff** (`createHandoff`): a host that has just confirmed an owner's address itself signs
   them in with a token that works once, for a minute, at that host only, by the same page and POST.
 - **Changing the owner's address** needs a step-up code sent to the current address, and a link

@@ -274,7 +274,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
     if (!open) return answer(c, form, 410, gone, goneJson);
     // Whoever reads the new address is not enough: a typo would hand them the inbox. It is confirmed
     // in a browser signed in as the owner who asked.
-    const user = await userFromCookie(deps.db, c.req.raw, now());
+    const user = await userFromCookie(deps.db, c.req.raw, now(), deps.baseUrl);
     if (!user || user.id !== open.userId) {
       return answer(
         c,

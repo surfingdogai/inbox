@@ -98,6 +98,8 @@ export interface CallerOptions {
   /** The instance is in test mode: every item is sandbox. */
   readonly sandbox?: boolean;
   readonly now?: () => number;
+  /** INBOX_PUBLIC_URL: whether a session's plain cookie came over https (`sessionToken`). */
+  readonly baseUrl?: string | undefined;
 }
 
 /** Who is knocking, from the headers alone. Never throws: an unknown key is simply anonymous. */
@@ -127,7 +129,7 @@ export async function callerFromRequest(
       };
   }
   if (!key && !bearer) {
-    const user = await userFromCookie(db, request, now());
+    const user = await userFromCookie(db, request, now(), opts.baseUrl);
     if (user)
       key = {
         id: user.sessionId,

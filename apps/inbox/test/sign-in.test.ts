@@ -1,9 +1,19 @@
-import { createHandoff, HANDOFF_TTL_MS, SIGN_IN_CODE_TRIES } from "@surfingdog/adapters";
+import { createHandoff, HANDOFF_TTL_MS, hashKey, SIGN_IN_CODE_TRIES } from "@surfingdog/adapters";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
 import { freshDb } from "./harness";
-import { askSignIn, authState, clientIp, formOf, lastSignIn, postForm, press, sessionCookie } from "./owner-session";
+import {
+  askSignIn,
+  authState,
+  clientIp,
+  formOf,
+  lastSignIn,
+  postForm,
+  press,
+  sessionCookie,
+  signInByCode,
+} from "./owner-session";
 
 const ORIGIN = "https://inbox.test";
 const OWNER = "owner@oficinamare.pt";
@@ -260,6 +270,55 @@ describe("the session cookie", () => {
     expect(set).not.toMatch(/Secure/);
     const token = /sdi_session=([^;]+)/.exec(set)?.[1];
     expect((await me(app, `sdi_session=${token}`, local)).status).toBe(200);
+  });
+
+  // INBOX_PUBLIC_URL says https, and the proxy in front forwards no X-Forwarded-Proto: the request
+  // says http, the cookie was set as __Host-, and a plain one is still one any host could have set.
+  it("is not taken under the plain name behind a proxy that does not say https", async () => {
+    const mail = logMailOut();
+    const app = createApp({ db: await freshDb(), mailOut: mail, ownerEmails: [OWNER], baseUrl: ORIGIN });
+    const behind = "http://inbox.test";
+    await askSignIn(app, behind, OWNER);
+    const { code } = lastSignIn(mail, OWNER);
+    const res = await tryCode(app, OWNER, code, behind);
+    expect(res.status).toBe(200);
+    const token = /__Host-sdi_session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
+    expect((await me(app, `__Host-sdi_session=${token}`, behind)).status).toBe(200);
+    expect((await me(app, `sdi_session=${token}`, behind)).status).toBe(401);
+  });
+
+  // Before the __Host- cookie, a session over https had the plain name. One made then still signs in
+  // under it until it ends, and the owner app's first call moves it to __Host-; one made since never.
+  it("keeps a session from before __Host- signed in, and moves it to __Host-", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: [OWNER] });
+    const cookie = await signInByCode(app, mail, ORIGIN, OWNER);
+    const fresh = cookie.replace("__Host-sdi_session=", "");
+    expect((await me(app, `sdi_session=${fresh}`)).status).toBe(401);
+
+    const { rows } = await db.client.query({
+      sql: "SELECT applied_at FROM migrations WHERE name = '0020_owner_sign_in'",
+      params: [],
+      method: "all",
+    });
+    const upgraded = Number(rows[0]?.[0]);
+    const old = "an-old-session-token-from-before-the-upgrade";
+    await db.client.query({
+      sql: `INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at)
+            SELECT 'sess_old', id, ?, ?, ? FROM users`,
+      params: [await hashKey(old), Date.now() + 86_400_000, upgraded - 60_000],
+      method: "run",
+    });
+    const res = await me(app, `sdi_session=${old}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ email: OWNER, role: "owner" });
+    const set = res.headers.getSetCookie();
+    expect(set.find((c) => c.startsWith("__Host-sdi_session="))).toMatch(
+      /^__Host-sdi_session=an-old-session-token-from-before-the-upgrade;.*; Secure(;|$)/,
+    );
+    expect(set.find((c) => c.startsWith("sdi_session="))).toMatch(/^sdi_session=; Max-Age=0;/);
+    expect((await me(app, `__Host-sdi_session=${old}`)).status).toBe(200);
   });
 
   it("is asked for by a 401 that names only the ways in that exist", async () => {

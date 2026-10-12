@@ -177,7 +177,7 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
     const q = c.req.query();
     const check = await validateAuthorize(deps, q, now());
     if (!check.ok) return err(c, 400, check.error, check.description);
-    const user = await userFromCookie(deps.db, c.req.raw, now());
+    const user = await userFromCookie(deps.db, c.req.raw, now(), deps.baseUrl);
     if (!user) {
       const back = `/oauth/authorize?${new URLSearchParams(q).toString()}`;
       return c.redirect(`/login?redirect=${encodeURIComponent(back)}`);
@@ -195,7 +195,7 @@ export function oauthRoutes(deps: OAuthDeps): Hono<CallerEnv> {
     >;
     const check = await validateAuthorize(deps, q, now());
     if (!check.ok) return err(c, 400, check.error, check.description);
-    const user = await userFromCookie(deps.db, c.req.raw, now());
+    const user = await userFromCookie(deps.db, c.req.raw, now(), deps.baseUrl);
     if (!user) return err(c, 401, "login_required", "Sign in first.");
     const redirect = new URL(check.redirectUri);
     if (q.decision !== "allow") {

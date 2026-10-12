@@ -190,7 +190,7 @@ export async function ownerInPerson(
   c: Context,
   deps: { readonly db: Db; readonly baseUrl?: string | undefined; readonly now?: (() => number) | undefined },
 ): Promise<SessionUser | Response> {
-  const user = await userFromCookie(deps.db, c.req.raw, deps.now ? deps.now() : Date.now());
+  const user = await userFromCookie(deps.db, c.req.raw, deps.now ? deps.now() : Date.now(), deps.baseUrl);
   if (!user) return unauthorized(c, "Sign in to the owner app in this browser first.");
   if (user.role !== "owner") return forbidden(c, "Only the owner can do this.");
   if (!["GET", "HEAD"].includes(c.req.method) && !sameOrigin(c.req.raw, deps.baseUrl)) {
