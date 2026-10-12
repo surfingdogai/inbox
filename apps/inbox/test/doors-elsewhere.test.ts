@@ -71,7 +71,7 @@ async function setup(kind: "salon" | "shop") {
     const client = new Client({ name: "an-agent", version: "0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
-        fetch: (input: string | URL | Request, init?: RequestInit) => inbox.app.request(String(input), init),
+        fetch: async (input: string | URL | Request, init?: RequestInit) => inbox.app.request(String(input), init),
       }),
     );
     return client;
