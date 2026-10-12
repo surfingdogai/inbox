@@ -5,7 +5,7 @@ import { KeyRound, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Sun } from "../components/Feedback";
 import { api, problemOf } from "../lib/api";
-import { ensureSignedIn, KEY_PREFIX, sameSitePath, signInWithKey } from "../lib/auth";
+import { ensureSignedIn, forgetSession, KEY_PREFIX, sameSitePath, signInWithKey } from "../lib/auth";
 import { useBusiness } from "../lib/queries";
 
 interface LoginSearch {
@@ -30,13 +30,15 @@ export const Route = createFileRoute("/login")({
 type Mode = "email" | "sent" | "key";
 
 /**
- * Sign in by email first: the server mails a link that sets the session cookie. An owner API key
- * is the other way in, for people who only ever use the API.
+ * Sign in by email first: the server mails a link, whose page sets the session cookie, and a code
+ * to type here instead, for an email read on another device. An owner API key is the other way in,
+ * for people who only ever use the API.
  */
 function LoginPage() {
   const { redirect: back, reason } = Route.useSearch();
   const business = useBusiness();
   const [mode, setMode] = useState<Mode>("email");
+  const [unsent, setUnsent] = useState(false);
   const name = business.data?.name;
   const title = name ? `Sign in to ${name}` : "Sign in";
 
@@ -45,7 +47,7 @@ function LoginPage() {
       <div className="login glass-strong">
         <Sun size="sm" />
         {mode === "sent" ? (
-          <SentState onAnother={() => setMode("email")} />
+          <SentState back={back} unsent={unsent} onAnother={() => setMode("email")} />
         ) : mode === "key" ? (
           <KeyForm title={title} back={back} reason={reason} onEmail={() => setMode("email")} />
         ) : (
@@ -53,7 +55,10 @@ function LoginPage() {
             title={title}
             back={back}
             reason={reason}
-            onSent={() => setMode("sent")}
+            onSent={(failed) => {
+              setUnsent(failed);
+              setMode("sent");
+            }}
             onKey={() => setMode("key")}
           />
         )}
@@ -74,7 +79,8 @@ function EmailForm({
   title: string;
   back: string | undefined;
   reason: "expired" | undefined;
-  onSent: () => void;
+  /** `failed`: the email could not be sent, and the next screen says so. */
+  onSent: (failed: boolean) => void;
   onKey: () => void;
 }) {
   const [email, setEmail] = useState(lastEmail);
@@ -83,7 +89,13 @@ function EmailForm({
     mutationFn: (address: string) => api.requestMagicLink(address, back),
     onSuccess: (_r, address) => {
       lastEmail = address;
-      onSent();
+      onSent(false);
+    },
+    // Couldn't send: an earlier email's code may still work, so the code field is shown anyway.
+    onError: (e, address) => {
+      if (problemOf(e).code !== "mail_failed") return;
+      lastEmail = address;
+      onSent(true);
     },
   });
   const trimmed = email.trim().toLowerCase();
@@ -104,7 +116,7 @@ function EmailForm({
   return (
     <form className="stack" onSubmit={submit}>
       <h1>{title}</h1>
-      <p className="lede">We email you a link to open the inbox. No password to remember.</p>
+      <p className="lede">We email you a link and a code to open the inbox. No password to remember.</p>
       {reason === "expired" && (
         <p className="hint error" role="alert">
           You were signed out: the session ended or the key was refused. Sign in again.
@@ -131,7 +143,7 @@ function EmailForm({
           aria-describedby="login-email-hint"
         />
         <div id="login-email-hint" className={clsx("hint", shown && "error")} aria-live="polite">
-          {shown ?? "Only addresses added to this inbox get a link."}
+          {shown ?? "Only addresses added to this inbox get an email."}
         </div>
       </div>
       <button type="submit" className="btn btn-primary btn-lg" disabled={request.isPending}>
@@ -140,7 +152,7 @@ function EmailForm({
         ) : (
           <Mail className="icon" aria-hidden="true" />
         )}
-        Email me a sign-in link
+        Send me a sign-in email
       </button>
       <div className="hr" />
       <button type="button" className="btn btn-ghost" onClick={onKey}>
@@ -151,24 +163,74 @@ function EmailForm({
   );
 }
 
-function SentState({ onAnother }: { onAnother: () => void }) {
-  const again = useMutation({ mutationFn: () => api.requestMagicLink(lastEmail, undefined) });
-  const problem = again.error ? problemOf(again.error).detail : null;
+function SentState({ back, unsent, onAnother }: { back: string | undefined; unsent: boolean; onAnother: () => void }) {
+  const [code, setCode] = useState("");
+  const again = useMutation({ mutationFn: () => api.requestMagicLink(lastEmail, back) });
+  const enter = useMutation({
+    mutationFn: (typed: string) => api.signInWithCode(lastEmail, typed),
+    // A full load: the app starts again signed in, and a page outside the app (an AI app's consent) opens as itself.
+    onSuccess: () => {
+      forgetSession();
+      window.location.assign(back ?? "/");
+    },
+  });
+  const failed =
+    !again.isSuccess && (unsent || (again.error !== null && problemOf(again.error).code === "mail_failed"));
+  const problem = enter.error
+    ? problemOf(enter.error).detail
+    : again.error && !failed
+      ? problemOf(again.error).detail
+      : null;
+  const typed = code.replace(/\s+/g, "");
   return (
-    <div className="stack" aria-live="polite">
+    <form
+      className="stack"
+      aria-live="polite"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (/^[0-9]{6}$/.test(typed)) enter.mutate(typed);
+      }}
+    >
       <h1>Check your email</h1>
-      <p className="lede">
-        If <b>{lastEmail}</b> belongs to this inbox, a sign-in link is on its way. It works for 15 minutes.
-      </p>
-      <p className="hint">
-        Nothing there? Look in spam, or ask the owner to add your address. If this inbox can't send email yet, the link
-        is in the server's log instead. On Cloudflare, that's your Worker's logs in the dashboard.
-      </p>
-      {problem && (
+      {failed ? (
         <p className="hint error" role="alert">
-          {problem}
+          Couldn't send. Send it again in a minute, or use the code from an earlier email.
+        </p>
+      ) : (
+        <p className="lede">
+          If <b>{lastEmail}</b> belongs to this inbox, a sign-in email is on its way. Open its link, or type its code
+          here. Both work for 15 minutes.
         </p>
       )}
+      <div>
+        <label className="label" htmlFor="login-code">
+          Code
+        </label>
+        <input
+          id="login-code"
+          className="input"
+          autoComplete="one-time-code"
+          inputMode="numeric"
+          spellCheck={false}
+          maxLength={7}
+          placeholder="123456"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            enter.reset();
+          }}
+          aria-invalid={enter.error ? "true" : undefined}
+          aria-describedby="login-code-hint"
+        />
+        <div id="login-code-hint" className={clsx("hint", problem && "error")}>
+          {problem ??
+            "Nothing there? Look in spam, or ask the owner to add your address. If this inbox can't send email yet, the email is in the server's log instead. On Cloudflare, that's your Worker's logs in the dashboard."}
+        </div>
+      </div>
+      <button type="submit" className="btn btn-primary btn-lg" disabled={enter.isPending || !/^[0-9]{6}$/.test(typed)}>
+        {enter.isPending ? <span className="spinner" aria-hidden="true" /> : null}
+        Sign in
+      </button>
       <div className="rowx">
         <button type="button" className="btn btn-secondary" onClick={onAnother}>
           Use another address
@@ -177,7 +239,7 @@ function SentState({ onAnother }: { onAnother: () => void }) {
           {again.isSuccess ? "Sent again" : "Send it again"}
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -266,7 +328,7 @@ function KeyForm({
       <div className="hr" />
       <button type="button" className="btn btn-ghost" onClick={onEmail}>
         <Mail className="icon" aria-hidden="true" />
-        Email me a link instead
+        Send me a sign-in email instead
       </button>
     </form>
   );

@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * The one place that knows how the owner is authenticated: the session cookie the magic-link flow
- * sets (/auth/magic-link → /auth/verify → sdi_session), or an owner API key kept in localStorage
- * for API-only owners. Every request goes out with `credentials: "include"`; the key, when there
- * is one, rides as a Bearer header and wins.
+ * The one place that knows how the owner is authenticated: the session cookie a sign-in email sets
+ * (/auth/magic-link, then the POST of the page its link opens, or /auth/code with its code), or an
+ * owner API key kept in localStorage for API-only owners. Every request goes out with
+ * `credentials: "include"`; the key, when there is one, rides as a Bearer header and wins.
  */
 export const KEY_PREFIX = "sdi_own_";
 const STORAGE_KEY = "sdi.owner_key";

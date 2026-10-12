@@ -108,7 +108,7 @@ npx wrangler --version
 They need a Cloudflare account. The free plan runs the inbox. To send email (sign-in links,
 alerts, customer replies) they need **Workers Paid** and their domain onboarded to **Email Sending**
 (dashboard → Email Service → Email Sending → Onboard Domain). Ask whether they want email now; the
-inbox works without it, and the sign-in link then goes to the Worker's logs.
+inbox works without it, and the sign-in email then goes to the Worker's logs.
 
 ### A2. Get the code
 
@@ -154,8 +154,9 @@ Then:
 printf 'inbox@theirdomain.com' | npx wrangler secret put MAIL_FROM
 ```
 
-`wrangler.jsonc` already has the `send_email` binding this uses. Without MAIL_FROM, or with an
-address whose domain is not onboarded, the sign-in link is written to the Worker's logs instead.
+`wrangler.jsonc` already has the `send_email` binding this uses. Without MAIL_FROM, the sign-in
+email is written to the Worker's logs instead. With an address whose domain is not onboarded,
+nothing is sent and the logs say why: onboard the domain, or delete MAIL_FROM while you set up.
 
 ### A5. Build and deploy
 
@@ -298,14 +299,16 @@ curl -s https://inbox.theirdomain.com/healthz
 curl -s https://inbox.theirdomain.com/login
 ```
 
-Tell the person to open `/login` and enter the address you set as `INBOX_OWNER_EMAIL`. They get a
-link by email. If the inbox cannot send email yet, the link is written to the server's log instead,
-with the reason. Read it from there and give it to them. It works once, for 15 minutes. If the
-log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo: set it again.
+Tell the person to open `/login` and enter the address you set as `INBOX_OWNER_EMAIL`. They get an
+email with a link and a code. The link opens a page with a Sign in button; the code goes in the
+sign-in page instead. If the inbox has no address to send email from yet, the whole email is
+written to the server's log instead. Read it from there and give it to them. It works once, for 15
+minutes. If sending failed, the log says why and holds no link: fix the mail setup, and ask again.
+If the log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo: set it again.
 
 - On their own server: `journalctl -u inbox` (or the container's log).
-- On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask for the link again, or
-  open the Worker in the dashboard, go to Logs, and search for `sign-in link`.
+- On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask again, or open the
+  Worker in the dashboard, go to Logs, and search for `sign-in email`.
 
 Alternatively mint a key. On their own server:
 
@@ -375,7 +378,7 @@ that proves the last hop.
 
 ### Email out, optional
 
-Without it, sign-in links are written to the log and other email is not sent. The item says so.
+Without it, sign-in emails are written to the log and other email is not sent. The item says so.
 
 - **Cloudflare Workers:** `MAIL_FROM` (step A4), through the `send_email` binding.
 - **Their own server, Cloudflare Email Sending:** `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`

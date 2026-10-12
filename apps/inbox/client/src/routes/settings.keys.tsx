@@ -1,11 +1,12 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Check, Copy, Plus } from "lucide-react";
-import { useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
-import { type ApiProblem, problemOf } from "../lib/api";
+import { type ApiProblem, api, problemOf } from "../lib/api";
+import { type SessionUser, session } from "../lib/auth";
 import { relativeTime } from "../lib/format";
 import {
   qk,
@@ -38,6 +39,7 @@ function KeysPage() {
   return (
     <>
       <SecurityCard list={keys.data} />
+      <AddressCard />
       {keys.data && <ConnectedAppsCard list={keys.data} />}
       <KeysCard />
       {keys.data && keys.data.ai_clients.length > 0 && <AiAppsCard list={keys.data} />}
@@ -135,6 +137,125 @@ function SecurityCard({ list }: { list: KeyList | undefined }) {
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+/* --- The address the owner signs in with ------------------------------------ */
+
+/**
+ * The address the owner signs in with, and changing it: a code to the address they have now, then a
+ * link to the new one, confirmed in this browser. Only for the owner signed in by email: a key kept
+ * in this browser is not a person, and the server refuses it.
+ */
+function AddressCard() {
+  const [me, setMe] = useState<SessionUser | null | undefined>(undefined);
+  useEffect(() => {
+    void session().then(setMe);
+  }, []);
+  const [step, setStep] = useState<"address" | "code" | "sent">("address");
+  const [to, setTo] = useState("");
+  const [code, setCode] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const failed = (e: unknown) => setNotice({ tone: "danger", text: problemOf(e).detail });
+  const ask = useMutation({
+    mutationFn: () => api.stepUp("email_change"),
+    onSuccess: (r) => {
+      setStep("code");
+      setNotice({ tone: "success", text: `We sent a code to ${r.sent_to}. It works for 10 minutes.` });
+    },
+    onError: failed,
+  });
+  const change = useMutation({
+    mutationFn: () => api.changeEmail(to.trim().toLowerCase(), code.replace(/\s+/g, "")),
+    onSuccess: () => {
+      setStep("sent");
+      setNotice(null);
+    },
+    onError: failed,
+  });
+  if (me === undefined) return null;
+  const address = to.trim().toLowerCase();
+  const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address) && address !== me?.email;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setNotice(null);
+    if (step === "code") change.mutate();
+    else if (valid) ask.mutate();
+  };
+  return (
+    <section className="card glass stack">
+      <SectionHead title="The address you sign in with" />
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
+      {!me ? (
+        <p className="hint">
+          You are using an API key in this browser. Sign in with your email to see or change the address you sign in
+          with.
+        </p>
+      ) : step === "sent" ? (
+        <p className="hint">
+          We sent a link to <b>{address}</b>. Open it in this browser and press Confirm. Until then you sign in with{" "}
+          <b>{me.email}</b>.
+        </p>
+      ) : (
+        <form className="stack" onSubmit={submit}>
+          <p className="hint">
+            You sign in with <b>{me.email}</b>. To change it, we send a code to that address first, then a link to the
+            new one. The old address is told, with a link that puts it back for 7 days.
+          </p>
+          <Field id="new-email" label="New address">
+            <input
+              id="new-email"
+              className="input"
+              type="email"
+              autoComplete="email"
+              spellCheck={false}
+              value={to}
+              disabled={step === "code"}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </Field>
+          {step === "code" && (
+            <Field id="email-code" label={`Code sent to ${me.email}`}>
+              <input
+                id="email-code"
+                className="input"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={7}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </Field>
+          )}
+          <div className="rowx">
+            <button
+              type="submit"
+              className="btn btn-secondary btn-sm"
+              disabled={
+                ask.isPending ||
+                change.isPending ||
+                (step === "code" ? !/^[0-9]{6}$/.test(code.replace(/\s+/g, "")) : !valid)
+              }
+            >
+              {step === "code" ? "Send the link" : "Send me a code"}
+            </button>
+            {step === "code" && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setStep("address");
+                  setCode("");
+                  setNotice(null);
+                }}
+              >
+                Start again
+              </button>
+            )}
+          </div>
+        </form>
+      )}
     </section>
   );
 }

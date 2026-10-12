@@ -28,7 +28,7 @@ Leave the build and deploy commands as they are. The build makes the owner app; 
 ### After it deploys
 
 1. Open `https://<worker>.<your-subdomain>.workers.dev/healthz`. Expect `{"ok":true,…}`. Migrations run on the first request.
-2. Open `/login` and enter your address. If `MAIL_FROM` works, the link comes by email. If it doesn't, the link is in the Worker's logs, with the reason: open the Worker in the dashboard, go to Logs and search for `sign-in link`, or run `npx wrangler tail <worker>` and ask again. A link works once, for 15 minutes. If the log says your address is not in `INBOX_OWNER_EMAIL`, fix that value under Settings → Variables and Secrets.
+2. Open `/login` and enter your address. If `MAIL_FROM` works, an email comes with a link and a code: open the link and press Sign in, or type the code on the sign-in page. Each works once, for 15 minutes. Without `MAIL_FROM`, the email is in the Worker's logs instead: open the Worker in the dashboard, go to Logs and search for `sign-in email`, or run `npx wrangler tail <worker>` and ask again. If sending fails, for example because the domain is not onboarded yet, the logs say why and hold no link: onboard the domain, or delete `MAIL_FROM` while you set up. If the log says your address is not in `INBOX_OWNER_EMAIL`, fix that value under Settings → Variables and Secrets.
 3. The setup wizard opens. Your first sign-in saves the address you signed in at as the Inbox address (Settings). Links in emails use it, and receipts name it as their issuer.
 4. Your own subdomain: Worker → Settings → Domains & Routes → Add → Custom domain. Then change the Inbox address in Settings, or add `INBOX_PUBLIC_URL` as a secret under Settings → Variables and Secrets.
 5. Email later: onboard the domain, then add `MAIL_FROM` as a secret there. Or add `RESEND_API_KEY` to send through Resend. Add these as secrets, not text: the next deploy from your repository removes a plain-text variable.
@@ -59,19 +59,20 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `INBOX_OWNER_EMAIL` | unset | Comma-separated addresses allowed to create the first account by email link. Without it, the first sign-in needs an owner API key. |
 | `INBOX_SECRET_KEY` | unset | Seals connector credentials, webhook secrets and the receipt-signing key (AES-256-GCM), and is the source of the pseudonym pepper in receipts. One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, refuses to store a secret rather than store it in the clear, and issues no [receipts](/docs/receipts/). |
 | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`, `MAIL_FROM` | unset | Real email through Cloudflare Email Service (sign-in links, notifications), from an address on a domain onboarded there. `MAIL_FROM_NAME` is optional. |
-| `RESEND_API_KEY` | unset | Real email through Resend instead, from `MAIL_FROM`. With neither, mail is printed to the console, sign-in links included. |
+| `RESEND_API_KEY` | unset | Real email through Resend instead, from `MAIL_FROM`. With neither, mail is printed to the console, sign-in emails included. |
 | `INBOX_OUTBOUND_DENY` | unset | Comma-separated addresses and ranges no outbound call reaches, like `203.0.114.7, 2a01:4f8::/32`: the server's own public addresses, or a neighbour's. Loopback, private, link-local and the other non-public ranges are always refused (see [Security and privacy](/docs/security-and-privacy/)). An entry that is not an address or a range stops the server at boot. |
 
 A few commands run against the same database and exit:
 
 ```bash
 node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once
+node apps/inbox/dist/server.mjs set-owner-email new@x.com # the owner signs in with this address now (lost the old one)
 node apps/inbox/dist/server.mjs seed-demo                 # adds a demo bike shop if the instance is empty
 node apps/inbox/dist/server.mjs seed-showcase             # the same shop with a week of items, rules and hours
 node apps/inbox/dist/server.mjs network-ping              # reports to every network that is on now, not at the next hour
 ```
 
-Open `/login`: enter an address from `INBOX_OWNER_EMAIL` and click the link you receive, or paste an owner key. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
+Open `/login`: enter an address from `INBOX_OWNER_EMAIL`, then open the link you receive and press Sign in, or type its code; or paste an owner key. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
 
 ### With Docker
 

@@ -7,6 +7,7 @@ import {
   LIMITS,
   mcpCreates,
   mcpNegotiates,
+  SIGN_IN_MAILS,
 } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
@@ -107,16 +108,26 @@ describe("rate limits", () => {
 
   it("keep sign-in links from filling the owner's mailbox", async () => {
     const { app } = await setup();
-    const ask = () =>
+    const ask = (email: string, ip = "203.0.113.10") =>
       app.request(
         new Request("https://inbox.test/auth/magic-link", {
           method: "POST",
-          headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.10" },
-          body: JSON.stringify({ email: "owner@example.com" }),
+          headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+          body: JSON.stringify({ email }),
         }),
       );
-    for (let i = 0; i < LIMITS.auth.capacity; i++) expect((await ask()).status, `link ${i + 1}`).not.toBe(429);
-    expect((await ask()).status).toBe(429);
+    // From one client address, a few asks, whichever addresses they name.
+    for (let i = 0; i < LIMITS.auth.capacity; i++) {
+      expect((await ask(`person${i}@example.com`)).status, `link ${i + 1}`).not.toBe(429);
+    }
+    expect((await ask("owner@example.com")).status).toBe(429);
+    // To one address, a few at once from anywhere, then one a minute: known here or not, alike.
+    for (const email of ["owner@example.com", "nobody@example.com"]) {
+      for (let i = 0; i < SIGN_IN_MAILS.capacity; i++) {
+        expect((await ask(email, `198.51.100.${i + 1}`)).status, `${email} ${i + 1}`).toBe(200);
+      }
+      expect((await ask(email, "198.51.100.200")).status).toBe(429);
+    }
   });
 
   it("do not apply to the inbound mail webhook, which has its own secret", async () => {

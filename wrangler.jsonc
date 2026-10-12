@@ -36,7 +36,7 @@
     }
   ],
   // Email out through Cloudflare Email Sending. It sends from MAIL_FROM, which must be on a domain
-  // onboarded to Email Sending on the same account. Without that, sign-in links go to the logs.
+  // onboarded to Email Sending on the same account. Without MAIL_FROM, sign-in emails go to the logs.
   "send_email": [{ "name": "EMAIL" }],
   "queues": {
     "producers": [{ "binding": "JOBS", "queue": "surfingdog-inbox-jobs" }],

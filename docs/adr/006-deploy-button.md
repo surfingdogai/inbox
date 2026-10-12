@@ -29,9 +29,10 @@ changed:
 - **Email out is the `send_email` binding** plus `MAIL_FROM`, which the button asks for. Before,
   there was no binding, so the sign-in link reached nobody (the log showed only its subject); with
   one added by hand it went out from `inbox@localhost` and was refused.
-- **Signing in never depends on email.** When the inbox cannot send (no `MAIL_FROM`, or a
-  domain not onboarded), the link goes to the Worker's logs with the reason. Only people who can
-  read the account's logs see it. It works once, for 15 minutes.
+- **Signing in never depends on email.** When the inbox has no address to send from (no
+  `MAIL_FROM`), the sign-in email goes to the Worker's logs. Only people who can read the account's
+  logs see it. It works once, for 15 minutes. (Narrowed on 12 Oct 2026, ADR-004: a send that fails,
+  such as from a domain not onboarded, puts only the reason in the log, never the link.)
 - **No address to type.** The button cannot know the Worker's URL before it exists. The owner's
   first sign-in over https saves that address as the Inbox address in Settings, and receipts, links
   in emails and networks use it when `INBOX_PUBLIC_URL` is not set.

@@ -1,20 +1,57 @@
-import { type Db, randomToken, readSettings, schema, ulid } from "@surfingdog/core";
+import { type Db, randomToken, readSettings, schema, sixDigits, ulid } from "@surfingdog/core";
 import type { MailOut } from "@surfingdog/platform";
-import { and, eq, gt, isNull } from "drizzle-orm";
-import { Hono } from "hono";
+import { eq } from "drizzle-orm";
+import { type Context, Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { hashKey } from "./auth";
-import { publicOrigin } from "./origin";
+import { authPage } from "./auth-page";
+import { consume, type Limit } from "./limits";
+import { publicOrigin, sameOrigin } from "./origin";
+import { forbidden, tooManyRequests } from "./problem";
 import type { CallerEnv } from "./rest";
 
 /**
- * Owner sign-in without passwords: a magic link by email, then a hashed session cookie. The first
- * person to sign in on a fresh instance becomes its owner; after that only known addresses get a
- * link, and the reply never says whether an address is known.
+ * Owner sign-in without passwords: an email with a link and a six-digit code, either of which signs
+ * in once, then a hashed session cookie. The first person to sign in on a fresh instance becomes its
+ * owner; after that only known addresses get an email, and the reply never says whether an address
+ * is known.
+ *
+ * Opening a link changes nothing. Mail scanners open every link in an email, and a link that signed
+ * in on a GET would be used up before the owner got to it, so the link opens a page with a button,
+ * and only the POST that button sends signs in. The code is for signing in on another device than
+ * the one the email is read on. A host that has just confirmed an owner signs them in with a
+ * handoff: the same page, a token that works once, for a minute, at that host only.
  */
 export const SESSION_COOKIE = "sdi_session";
+/**
+ * The session cookie's name over https. `__Host-` has the browser keep it to this exact host, send
+ * it over https only and never take it from a response that names a domain, so no other host under
+ * the same domain can set or replace it. The plain name is only for http (a server on localhost, or
+ * one with no TLS yet), where a browser keeps no `__Host-` cookie.
+ */
+export const HOST_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`;
 export const SESSION_TTL_MS = 30 * 86_400_000;
+/** How long a sign-in email's link and code work. */
 export const MAGIC_TTL_MS = 15 * 60_000;
+/** How long a host's handoff works: long enough for one redirect and one press of a button. */
+export const HANDOFF_TTL_MS = 60_000;
+/**
+ * Wrong tries at one sign-in code before it stops working. The link in the same email still works:
+ * nobody can guess it, and a stranger's guesses should not cost the owner the email they were sent.
+ */
+export const CODE_ATTEMPTS = 5;
+
+/**
+ * Sign-in emails to one address: three at once, then one a minute, whoever asks. Counted alike for
+ * every address, known here or not, so being refused says nothing about one.
+ */
+export const SIGN_IN_MAILS: Limit = { capacity: 3, perMs: 1 / 60_000 };
+/**
+ * Tries at a sign-in code for one address, right or wrong, known or not: twenty a day. A code stops
+ * after five wrong tries and a new one comes at most once a minute, so this is what holds a guesser
+ * with many client addresses of its own to a few dozen guesses a day at a million codes.
+ */
+export const SIGN_IN_CODE_TRIES: Limit = { capacity: 20, perMs: 20 / 86_400_000 };
 
 export interface SessionUser {
   readonly id: string;
@@ -23,22 +60,36 @@ export interface SessionUser {
   readonly sessionId: string;
 }
 
-export async function userFromCookie(db: Db, request: Request, now = Date.now()): Promise<SessionUser | null> {
+/**
+ * The session token a request carries: the `__Host-` cookie, or the plain one on a request that
+ * came over http. Over https a plain cookie is ignored, since any host under the same domain could
+ * have set it.
+ */
+export function sessionToken(request: Request): string | null {
   const cookie = request.headers.get("cookie") ?? "";
-  const token = /(?:^|;\s*)sdi_session=([^;]+)/.exec(cookie)?.[1];
+  const secure = /(?:^|;\s*)__Host-sdi_session=([^;]+)/.exec(cookie)?.[1];
+  if (secure) return secure;
+  if (publicOrigin(request).startsWith("https:")) return null;
+  return /(?:^|;\s*)sdi_session=([^;]+)/.exec(cookie)?.[1] ?? null;
+}
+
+export async function userFromCookie(db: Db, request: Request, now = Date.now()): Promise<SessionUser | null> {
+  const token = sessionToken(request);
   if (!token) return null;
-  const [row] = await db.orm
-    .select({
-      sessionId: schema.sessions.id,
-      userId: schema.users.id,
-      email: schema.users.email,
-      role: schema.users.role,
-    })
-    .from(schema.sessions)
-    .innerJoin(schema.users, eq(schema.users.id, schema.sessions.userId))
-    .where(and(eq(schema.sessions.tokenHash, await hashKey(token)), gt(schema.sessions.expiresAt, now)));
+  const { rows } = await db.client.query({
+    sql: `SELECT s.id, u.id, u.email, u.role FROM sessions s JOIN users u ON u.id = s.user_id
+           WHERE s.token_hash = ? AND s.expires_at > ?`,
+    params: [await hashKey(token), now],
+    method: "all",
+  });
+  const row = rows[0];
   if (!row) return null;
-  return { id: row.userId, email: row.email, role: row.role as "owner" | "staff", sessionId: row.sessionId };
+  return {
+    sessionId: String(row[0]),
+    id: String(row[1]),
+    email: String(row[2]),
+    role: row[3] === "staff" ? "staff" : "owner",
+  };
 }
 
 export async function createSession(
@@ -61,11 +112,104 @@ export async function createSession(
   return { token, expiresAt };
 }
 
-export interface SessionDeps {
-  readonly baseUrl?: string | undefined;
+/** Whether this instance is reached over https, as the browser sees it. */
+function overHttps(c: Context, baseUrl: string | undefined): boolean {
+  return publicOrigin(c.req.raw, baseUrl).startsWith("https:");
+}
+
+function setSessionCookie(c: Context, baseUrl: string | undefined, session: { token: string; expiresAt: number }) {
+  setCookie(c, SESSION_COOKIE, session.token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    expires: new Date(session.expiresAt),
+    ...(overHttps(c, baseUrl) ? { prefix: "host" as const } : {}),
+  });
+}
+
+/** Both names go: a browser may still hold the plain cookie from before this instance had https. */
+export function clearSessionCookies(c: Context, baseUrl: string | undefined): void {
+  setCookie(c, SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  if (overHttps(c, baseUrl)) setCookie(c, SESSION_COOKIE, "", { httpOnly: true, maxAge: 0, prefix: "host" });
+}
+
+/** Ends every session a user has, on every device: after their address was taken back. */
+export async function endSessions(db: Db, userId: string): Promise<void> {
+  await db.client.query({ sql: "DELETE FROM sessions WHERE user_id = ?", params: [userId], method: "run" });
+}
+
+/** The hash a code is kept as: the row's own hash and the code, so equal codes never hash alike. */
+export async function codeHash(rowHash: string, code: string): Promise<string> {
+  return hashKey(`${rowHash}:${code}`);
+}
+
+export interface OwnerMailDeps {
   readonly db: Db;
   readonly mailOut: MailOut;
   readonly businessName: () => Promise<string>;
+  /** The server's log (console.log). Only an email that nothing could send is written there whole. */
+  readonly log?: ((line: string) => void) | undefined;
+}
+
+/** An email to the owner, or to an address they gave. `what` names it in the log ("sign-in email"). */
+export interface OwnerMail {
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+  readonly what: string;
+}
+
+/**
+ * Sends an email that is the owner's own: a sign-in, a step-up code, an address change. It goes out
+ * from the transport's own address (MAIL_FROM) first, else Send from in Settings.
+ *
+ * With neither there is nobody to send it as: the instance is run for development, or is still being
+ * set up, and its log is the only way in, so the whole email goes there (`logged`). Only whoever runs
+ * the server reads that log. A send that fails is another matter: the log says why, never what the
+ * email carried, since the mail service may work on a second try and a log may be read by more people
+ * than the owner. It throws, and the caller says "Couldn't send".
+ */
+export async function sendOwnerMail(deps: OwnerMailDeps, mail: OwnerMail): Promise<"sent" | "logged"> {
+  const log = deps.log ?? ((line: string) => console.log(line));
+  const address = deps.mailOut.sender?.address ?? (await readSettings(deps.db)).email.fromAddress;
+  if (!address) {
+    log(
+      `${mail.what} for ${mail.to} written here, not sent: there is no address to send email from (set MAIL_FROM, or Send from in Settings)\n${mail.subject}\n${mail.text}`,
+    );
+    return "logged";
+  }
+  const name = await deps.businessName();
+  try {
+    await deps.mailOut.send({
+      from: { address, name: name || deps.mailOut.sender?.name || "Surfing Dog Inbox" },
+      to: [mail.to],
+      subject: mail.subject,
+      text: mail.text,
+    });
+    return "sent";
+  } catch (error) {
+    log(`${mail.what} not sent: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  }
+}
+
+/** The answer when an owner's email could not be sent: the page says so, and offers the way round. */
+export function mailFailed(c: Context, detail: string): Response {
+  return c.json(
+    {
+      type: "https://surfingdog.ai/problems/mail_failed",
+      title: "Email could not be sent",
+      status: 502,
+      code: "mail_failed",
+      detail,
+    },
+    502,
+    { "Content-Type": "application/problem+json" },
+  );
+}
+
+export interface SessionDeps extends OwnerMailDeps {
+  readonly baseUrl?: string | undefined;
   readonly now?: (() => number) | undefined;
   /**
    * Addresses allowed to create the first account (INBOX_OWNER_EMAIL, the owner email in
@@ -78,8 +222,6 @@ export interface SessionDeps {
    * nor INBOX_PUBLIC_URL is set: receipts, and the links in emails, need an address outside a request.
    */
   readonly rememberOrigin?: ((origin: string) => Promise<unknown>) | undefined;
-  /** Where a sign-in link goes when it cannot be emailed: the server's log (console.log). */
-  readonly log?: ((line: string) => void) | undefined;
 }
 
 async function mayBootstrap(deps: SessionDeps, email: string): Promise<boolean> {
@@ -87,17 +229,114 @@ async function mayBootstrap(deps: SessionDeps, email: string): Promise<boolean> 
   return list.some((e) => e.trim().toLowerCase() === email);
 }
 
+/** An email address as this inbox keeps it, or null when it is not one. */
+export function emailOf(value: unknown): string | null {
+  const email = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && email.length <= 320 ? email : null;
+}
+
+/** A POST's fields, from a page's form or from JSON (the owner app, a script), and which it was. */
+export async function postedFields(c: Context): Promise<{ fields: Record<string, string>; form: boolean }> {
+  const json = (c.req.header("content-type") ?? "").includes("application/json");
+  const raw = json ? await c.req.json().catch(() => null) : await c.req.parseBody().catch(() => null);
+  const fields: Record<string, string> = {};
+  if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === "string") fields[k] = v;
+  }
+  return { fields, form: !json };
+}
+
+/** One row of `login_tokens` as a link or code finds it. */
+export interface TokenRow {
+  readonly hash: string;
+  readonly email: string;
+  readonly userId: string | null;
+  readonly detail: Record<string, unknown>;
+}
+
+function tokenRow(r: readonly unknown[]): TokenRow {
+  let detail: Record<string, unknown> = {};
+  try {
+    const parsed = r[3] ? JSON.parse(String(r[3])) : {};
+    if (parsed && typeof parsed === "object") detail = parsed as Record<string, unknown>;
+  } catch {
+    // a row from before `detail`: nothing more to know
+  }
+  return { hash: String(r[0]), email: String(r[1]), userId: r[2] === null ? null : String(r[2]), detail };
+}
+
+/** The open token a link carries, read only: what a GET shows. Null when used, expired or unknown. */
+export async function openToken(db: Db, token: string, kind: string, now: number): Promise<TokenRow | null> {
+  if (!token) return null;
+  const { rows } = await db.client.query({
+    sql: "SELECT hash, email, user_id, detail FROM login_tokens WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?",
+    params: [await hashKey(token), kind, now],
+    method: "all",
+  });
+  return rows[0] ? tokenRow(rows[0]) : null;
+}
+
+/**
+ * Uses up a token in one statement, so two requests with the same link cannot both get it. `origin`
+ * holds a handoff to the host it was made for. Null when used, expired, unknown or elsewhere.
+ */
+export async function takeToken(
+  db: Db,
+  token: string,
+  kind: string,
+  now: number,
+  origin?: string,
+): Promise<TokenRow | null> {
+  if (!token) return null;
+  const { rows } = await db.client.query({
+    sql: `UPDATE login_tokens SET used_at = ?
+           WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ?
+             ${origin === undefined ? "" : "AND json_extract(detail, '$.origin') = ?"}
+         RETURNING hash, email, user_id, detail`,
+    params: [now, await hashKey(token), kind, now, ...(origin === undefined ? [] : [origin])],
+    method: "all",
+  });
+  return rows[0] ? tokenRow(rows[0]) : null;
+}
+
+/**
+ * Makes a handoff: a sign-in for `email` at `origin` that works once, within a minute, by the POST
+ * of the page `url` opens. A host calls this right after it confirmed the owner's address itself,
+ * and sends their browser to `url`. A handoff names its host, so it signs in nowhere else, even
+ * where two inboxes share storage.
+ */
+export async function createHandoff(
+  db: Db,
+  o: { email: string; origin: string; now?: number },
+): Promise<{ token: string; url: string }> {
+  const email = emailOf(o.email);
+  if (!email) throw new Error("createHandoff: not an email address");
+  const origin = new URL(o.origin).origin;
+  const now = o.now ?? Date.now();
+  const token = randomToken(32);
+  await db.orm.insert(schema.loginTokens).values({
+    hash: await hashKey(token),
+    email,
+    kind: "handoff",
+    detail: JSON.stringify({ origin }),
+    expiresAt: now + HANDOFF_TTL_MS,
+    createdAt: now,
+  });
+  return { token, url: `${origin}/auth/handoff?token=${token}` };
+}
+
 export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
   const app = new Hono<CallerEnv>();
   const now = deps.now ?? (() => Date.now());
   const log = deps.log ?? ((line: string) => console.log(line));
+  const businessName = async () => (await deps.businessName()) || "your inbox";
 
   app.post("/magic-link", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { email?: string; redirect?: string };
-    const email = String(body.email ?? "")
-      .trim()
-      .toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; redirect?: unknown };
+    const email = emailOf(body.email);
+    if (!email) {
       return c.json(
         {
           type: "https://surfingdog.ai/problems/invalid_input",
@@ -111,11 +350,19 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         { "Content-Type": "application/problem+json" },
       );
     }
-    const [existing] = await db(deps)
+    const turn = await consume(deps.db, "auth", `to:${await hashKey(email)}`, now(), SIGN_IN_MAILS);
+    if (!turn.allowed) {
+      return tooManyRequests(
+        c,
+        "A sign-in email went to that address a moment ago. Use its link or code, or ask again in a minute.",
+        turn.retryAfterSec,
+      );
+    }
+    const [existing] = await deps.db.orm
       .select({ id: schema.users.id })
       .from(schema.users)
       .where(eq(schema.users.email, email));
-    const [anyUser] = await db(deps).select({ id: schema.users.id }).from(schema.users).limit(1);
+    const [anyUser] = await deps.db.orm.select({ id: schema.users.id }).from(schema.users).limit(1);
     const known = Boolean(existing) || (!anyUser && (await mayBootstrap(deps, email)));
     if (!known && !anyUser) {
       // Nobody has signed in yet, so this is most likely the owner, and a typo in the value they
@@ -130,102 +377,59 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
     }
     if (known) {
       const token = randomToken(32);
+      const hash = await hashKey(token);
+      const code = sixDigits();
       await deps.db.orm.insert(schema.loginTokens).values({
-        hash: await hashKey(token),
+        hash,
         email,
         kind: "magic_link",
+        codeHash: await codeHash(hash, code),
         expiresAt: now() + MAGIC_TTL_MS,
         createdAt: now(),
       });
+      const redirect = typeof body.redirect === "string" ? safeRedirect(body.redirect) : "/";
       const origin = publicOrigin(c.req.raw, deps.baseUrl);
-      const link = `${origin}/auth/verify?token=${token}${body.redirect ? `&redirect=${encodeURIComponent(body.redirect)}` : ""}`;
+      const link = `${origin}/auth/verify?token=${token}${redirect === "/" ? "" : `&redirect=${encodeURIComponent(redirect)}`}`;
       const name = await deps.businessName();
-      // The transport's own address first (MAIL_FROM), the one set up to send; else Send from in
-      // Settings. With neither there is nobody to send it as, and the link goes to the log.
-      const address = deps.mailOut.sender?.address ?? (await readSettings(deps.db)).email.fromAddress;
-      // Only people who can read this server's log see it there: whoever runs it.
-      const toLog = (why: string) => log(`sign-in link for ${email} (${why}), open it within 15 minutes: ${link}`);
-      if (!address) {
-        toLog("no address to send email from: set MAIL_FROM, or Send from in Settings");
-      } else {
-        try {
-          await deps.mailOut.send({
-            from: { address, name: name || deps.mailOut.sender?.name || "Surfing Dog Inbox" },
-            to: [email],
-            subject: `Sign in to ${name || "your inbox"}`,
-            text: `Open this link within 15 minutes to sign in:\n\n${link}\n\nIf you did not ask for it, ignore this email.`,
-          });
-        } catch (error) {
-          toLog(`the email could not be sent: ${error instanceof Error ? error.message : String(error)}`);
-          return c.json(
-            {
-              type: "https://surfingdog.ai/problems/mail_failed",
-              title: "Email could not be sent",
-              status: 502,
-              code: "mail_failed",
-              detail:
-                "The sign-in email could not be sent, so the link was written to this server's log instead, with the reason. Or sign in with an API key.",
-            },
-            502,
-            { "Content-Type": "application/problem+json" },
-          );
-        }
+      try {
+        await sendOwnerMail(deps, {
+          what: "sign-in email",
+          to: email,
+          subject: `Sign in to ${name || "your inbox"}`,
+          text: `Your sign-in code: ${code}\n\nOr open this link and press Sign in:\n${link}\n\nThe code and the link work once, for 15 minutes. If you did not ask to sign in, ignore this email.`,
+        });
+      } catch {
+        // Nobody got this one, so it is no way in: an earlier email's link or code still is.
+        await deps.db.client.query({ sql: "DELETE FROM login_tokens WHERE hash = ?", params: [hash], method: "run" });
+        return mailFailed(
+          c,
+          "Couldn't send the sign-in email. Send it again in a minute, or use the code from an earlier one.",
+        );
       }
     }
-    return c.json({ ok: true, message: "If that address is known here, a sign-in link is on its way." });
+    return c.json({ ok: true, message: "If that address is known here, a sign-in email is on its way." });
   });
 
-  app.get("/verify", async (c) => {
-    const token = c.req.query("token") ?? "";
-    const redirect = safeRedirect(c.req.query("redirect"));
-    const [row] = await db(deps)
-      .select()
-      .from(schema.loginTokens)
-      .where(
-        and(
-          eq(schema.loginTokens.hash, await hashKey(token)),
-          eq(schema.loginTokens.kind, "magic_link"),
-          isNull(schema.loginTokens.usedAt),
-          gt(schema.loginTokens.expiresAt, now()),
-        ),
-      );
-    if (!row)
-      return c.json(
-        {
-          type: "https://surfingdog.ai/problems/invalid_input",
-          title: "Link expired",
-          status: 410,
-          code: "link_expired",
-          detail: "That sign-in link is no longer valid. Request a new one.",
-        },
-        410,
-        { "Content-Type": "application/problem+json" },
-      );
-    await deps.db.client.query({
-      sql: "UPDATE login_tokens SET used_at = ? WHERE hash = ?",
-      params: [now(), row.hash],
-      method: "run",
-    });
-    let [user] = await db(deps).select().from(schema.users).where(eq(schema.users.email, row.email));
+  /**
+   * Signs `email` in: their session, the cookie, and every other sign-in email still open for the
+   * address stops working. The first owner is created here, from the addresses allowed to.
+   */
+  const signIn = async (c: Context, email: string, redirect: string, form: boolean): Promise<Response> => {
+    let [user] = await deps.db.orm.select().from(schema.users).where(eq(schema.users.email, email));
     if (!user) {
-      const [anyUser] = await db(deps).select({ id: schema.users.id }).from(schema.users).limit(1);
-      if (anyUser || !(await mayBootstrap(deps, row.email)))
-        return c.json(
-          {
-            type: "https://surfingdog.ai/problems/not_allowed",
-            title: "Not allowed",
-            status: 403,
-            code: "not_allowed",
-            detail: "This address has no account here.",
-          },
-          403,
-          { "Content-Type": "application/problem+json" },
-        );
+      const [anyUser] = await deps.db.orm.select({ id: schema.users.id }).from(schema.users).limit(1);
+      if (anyUser || !(await mayBootstrap(deps, email))) {
+        return form
+          ? authPage(c, 403, {
+              title: "No account",
+              heading: "This address has no account here",
+              lines: ["Ask the owner of this inbox to add it."],
+            })
+          : forbidden(c, "This address has no account here.");
+      }
       const id = ulid();
-      await deps.db.orm
-        .insert(schema.users)
-        .values({ id, email: row.email, role: "owner", createdAt: now(), lastLoginAt: now() });
-      [user] = await db(deps).select().from(schema.users).where(eq(schema.users.id, id));
+      await deps.db.orm.insert(schema.users).values({ id, email, role: "owner", createdAt: now(), lastLoginAt: now() });
+      [user] = await deps.db.orm.select().from(schema.users).where(eq(schema.users.id, id));
     } else {
       await deps.db.client.query({
         sql: "UPDATE users SET last_login_at = ? WHERE id = ?",
@@ -234,6 +438,11 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
       });
     }
     if (!user) throw new Error("user vanished");
+    await deps.db.client.query({
+      sql: "UPDATE login_tokens SET used_at = ? WHERE email = ? AND kind = 'magic_link' AND used_at IS NULL",
+      params: [now(), email],
+      method: "run",
+    });
     const session = await createSession(deps.db, user.id, c.req.raw, now());
     // The address the owner opened their link at is the inbox's own, until they say otherwise.
     if (user.role === "owner" && deps.rememberOrigin) {
@@ -241,15 +450,148 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         console.error("sign-in: the Inbox address was not saved:", error instanceof Error ? error.message : error);
       });
     }
-    setCookie(c, SESSION_COOKIE, session.token, {
-      httpOnly: true,
-      secure: publicOrigin(c.req.raw, deps.baseUrl).startsWith("https:"),
-      sameSite: "Lax",
-      path: "/",
-      expires: new Date(session.expiresAt),
-    });
-    if (c.req.header("accept")?.includes("text/html")) return c.redirect(redirect);
+    setSessionCookie(c, deps.baseUrl, session);
+    if (form) return c.redirect(redirect, 303);
     return c.json({ ok: true, user: { id: user.id, email: user.email, role: user.role }, redirect });
+  };
+
+  /** A sign-in POST from anywhere but a page of this inbox is refused: nobody signs anyone in from afar. */
+  const crossSite = (c: Context, form: boolean): Response =>
+    form
+      ? authPage(c, 403, {
+          title: "Sign in",
+          heading: "Sign in from the page your link opened",
+          lines: ["This request came from another site, so nothing was done."],
+          link: { href: "/login", label: "Go to the sign-in page" },
+        })
+      : forbidden(c, "Sign in from this inbox's own pages.");
+
+  const expiredLink = (c: Context, form: boolean): Response =>
+    form
+      ? authPage(c, 410, {
+          title: "Link expired",
+          heading: "This sign-in link no longer works",
+          lines: ["It was used already, or it is more than 15 minutes old. Ask for a new one."],
+          link: { href: "/login", label: "Ask for a new sign-in email" },
+        })
+      : c.json(
+          {
+            type: "https://surfingdog.ai/problems/link_expired",
+            title: "Link expired",
+            status: 410,
+            code: "link_expired",
+            detail: "That sign-in link is no longer valid. Request a new one.",
+          },
+          410,
+          { "Content-Type": "application/problem+json" },
+        );
+
+  // The link in the email: a page that says what pressing its button does, and does nothing else.
+  app.get("/verify", async (c) => {
+    const token = c.req.query("token") ?? "";
+    const redirect = safeRedirect(c.req.query("redirect"));
+    const row = await openToken(deps.db, token, "magic_link", now());
+    if (!row) return expiredLink(c, true);
+    return authPage(c, 200, {
+      title: "Sign in",
+      heading: `Sign in to ${await businessName()}`,
+      lines: [`You are signing in as ${row.email}.`],
+      form: { action: "/auth/verify", fields: { token, redirect }, button: "Sign in" },
+    });
+  });
+
+  app.post("/verify", async (c) => {
+    const { fields, form } = await postedFields(c);
+    if (!sameOrigin(c.req.raw, deps.baseUrl)) return crossSite(c, form);
+    const row = await takeToken(deps.db, fields.token ?? "", "magic_link", now());
+    if (!row) return expiredLink(c, form);
+    return signIn(c, row.email, safeRedirect(fields.redirect), form);
+  });
+
+  // The code in the email, typed into the sign-in page.
+  app.post("/code", async (c) => {
+    const { fields, form } = await postedFields(c);
+    if (!sameOrigin(c.req.raw, deps.baseUrl)) return crossSite(c, form);
+    const email = emailOf(fields.email);
+    const code = (fields.code ?? "").replace(/\s+/g, "");
+    if (!email || !/^[0-9]{6}$/.test(code)) {
+      return c.json(
+        {
+          type: "https://surfingdog.ai/problems/invalid_input",
+          title: "Invalid input",
+          status: 422,
+          code: "invalid_input",
+          detail: "Send the email address and the six-digit code from the sign-in email.",
+          fields: [
+            ...(email ? [] : [{ path: "email", problem: "invalid", message: "not an email" }]),
+            ...(/^[0-9]{6}$/.test(code) ? [] : [{ path: "code", problem: "invalid", message: "six digits" }]),
+          ],
+        },
+        422,
+        { "Content-Type": "application/problem+json" },
+      );
+    }
+    const tries = await consume(deps.db, "auth", `code:${await hashKey(email)}`, now(), SIGN_IN_CODE_TRIES);
+    if (!tries.allowed) {
+      return tooManyRequests(
+        c,
+        "Too many tries at a code for this address today. Use the link in the sign-in email instead.",
+        tries.retryAfterSec,
+      );
+    }
+    const row = await takeCode(deps.db, email, code, now());
+    if (!row) {
+      return c.json(
+        {
+          type: "https://surfingdog.ai/problems/bad_code",
+          title: "Wrong code",
+          status: 422,
+          code: "bad_code",
+          detail:
+            "That code didn't work. A code works once, for 15 minutes, and stops after five wrong tries; the link in the same email still works.",
+        },
+        422,
+        { "Content-Type": "application/problem+json" },
+      );
+    }
+    return signIn(c, row.email, safeRedirect(fields.redirect), form);
+  });
+
+  // A host's handoff, right after it confirmed the owner: the same page, then the same POST.
+  app.get("/handoff", async (c) => {
+    const token = c.req.query("token") ?? "";
+    const row = await openToken(deps.db, token, "handoff", now());
+    if (!row || row.detail.origin !== publicOrigin(c.req.raw, deps.baseUrl)) {
+      return authPage(c, 410, {
+        title: "Link expired",
+        heading: "This link no longer works",
+        lines: ["It works once, within a minute. Sign in with your email instead."],
+        link: { href: "/login", label: "Sign in" },
+      });
+    }
+    return authPage(c, 200, {
+      title: "Open your inbox",
+      heading: `Open ${await businessName()}`,
+      lines: [`You are signing in as ${row.email}.`],
+      form: { action: "/auth/handoff", fields: { token }, button: "Open your inbox" },
+    });
+  });
+
+  app.post("/handoff", async (c) => {
+    const { fields, form } = await postedFields(c);
+    if (!sameOrigin(c.req.raw, deps.baseUrl)) return crossSite(c, form);
+    const row = await takeToken(deps.db, fields.token ?? "", "handoff", now(), publicOrigin(c.req.raw, deps.baseUrl));
+    if (!row) {
+      return form
+        ? authPage(c, 410, {
+            title: "Link expired",
+            heading: "This link no longer works",
+            lines: ["It works once, within a minute. Sign in with your email instead."],
+            link: { href: "/login", label: "Sign in" },
+          })
+        : expiredLink(c, false);
+    }
+    return signIn(c, row.email, "/", form);
   });
 
   app.get("/me", async (c) => {
@@ -261,7 +603,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
           title: "Not signed in",
           status: 401,
           code: "unauthorized",
-          detail: "Sign in with a magic link or a passkey.",
+          detail: "Sign in with the link or the code from a sign-in email.",
         },
         401,
         { "Content-Type": "application/problem+json" },
@@ -273,18 +615,43 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
     const user = await userFromCookie(deps.db, c.req.raw, now());
     if (user)
       await deps.db.client.query({ sql: "DELETE FROM sessions WHERE id = ?", params: [user.sessionId], method: "run" });
-    setCookie(c, SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+    clearSessionCookies(c, deps.baseUrl);
     return c.json({ ok: true });
   });
 
   return app;
 }
 
-function db(deps: SessionDeps) {
-  return deps.db.orm;
+/**
+ * Tries a sign-in code against every sign-in email still open for the address. The try is counted
+ * on each before the code is compared, in the one statement that also checks it has a try left, so
+ * guesses sent together cannot all read the same count; only the emails that statement counted the
+ * try on are compared, so one that already had its five stays shut even to the right code. The one
+ * it matches is used up at once.
+ */
+async function takeCode(db: Db, email: string, code: string, now: number): Promise<TokenRow | null> {
+  const { rows } = await db.client.query({
+    sql: `UPDATE login_tokens SET attempts = attempts + 1
+           WHERE email = ? AND kind = 'magic_link' AND used_at IS NULL AND expires_at > ?
+             AND code_hash IS NOT NULL AND attempts < ?
+         RETURNING hash, code_hash`,
+    params: [email, now, CODE_ATTEMPTS],
+    method: "all",
+  });
+  for (const r of rows) {
+    const hash = String(r[0]);
+    if ((await codeHash(hash, code)) !== String(r[1])) continue;
+    const { rows: taken } = await db.client.query({
+      sql: `UPDATE login_tokens SET used_at = ? WHERE hash = ? AND used_at IS NULL
+           RETURNING hash, email, user_id, detail`,
+      params: [now, hash],
+      method: "all",
+    });
+    return taken[0] ? tokenRow(taken[0]) : null;
+  }
+  return null;
 }
 
-/** Only same-origin paths may be redirect targets after sign-in. */
 /**
  * A path on this site, or `/`. Anyone can put a `redirect` into the link mailed to the owner, and a
  * browser reads `/\host` or `/<tab>/host` as `//host`, so the value is resolved the way a browser

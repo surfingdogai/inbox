@@ -9,6 +9,6 @@ INBOX_OWNER_EMAIL=
 # Empty, the inbox runs but stores no secret and issues no receipt.
 INBOX_SECRET_KEY=
 # The address the inbox emails from, like inbox@yourdomain.com. Its domain must be onboarded to
-# Cloudflare Email Sending on the same account (Workers Paid). Empty, or not onboarded yet: your
-# sign-in link is written to the Worker's logs instead.
+# Cloudflare Email Sending on the same account (Workers Paid). Empty: your sign-in email is written
+# to the Worker's logs instead. Set but not onboarded yet: nothing is sent, and the logs say why.
 MAIL_FROM=
