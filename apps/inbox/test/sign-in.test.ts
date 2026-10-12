@@ -93,6 +93,30 @@ describe("a sign-in link a mail scanner opens first", () => {
   });
 });
 
+describe("the address a sign-in link points at", () => {
+  // A server reached directly takes its host from the request, and anyone can ask for the owner's
+  // sign-in email: the link must not follow the host the asker wrote.
+  it("is the inbox's own once it has one, whatever host the request names", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: [OWNER] });
+    await askSignIn(app, ORIGIN, OWNER);
+    expect((await press(app, lastSignIn(mail, OWNER).link)).status).toBe(303);
+
+    expect((await askSignIn(app, "https://evil.example", OWNER)).status).toBe(200);
+    const { link } = lastSignIn(mail, OWNER);
+    expect(new URL(link).origin).toBe(ORIGIN);
+    expect(mail.sent.at(-1)?.text).not.toContain("evil.example");
+    expect((await press(app, link)).status).toBe(303);
+
+    // INBOX_PUBLIC_URL wins over both, from the first email on.
+    const fixed = logMailOut();
+    const pinned = createApp({ db: await freshDb(), mailOut: fixed, ownerEmails: [OWNER], baseUrl: ORIGIN });
+    await askSignIn(pinned, "https://evil.example", OWNER);
+    expect(new URL(lastSignIn(fixed, OWNER).link).origin).toBe(ORIGIN);
+  });
+});
+
 describe("the code in a sign-in email", () => {
   it("signs in once, instead of the link, and the link stops working", async () => {
     const db = await freshDb();

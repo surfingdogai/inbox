@@ -183,6 +183,25 @@ describe("changing the address the owner signs in with", () => {
     expect(await toldAt({ ...o, cookie: again })).toBe(OWNER);
   });
 
+  // Someone holding the owner's session and mailbox, on a server reached directly, could otherwise
+  // name a host of their own in the request, and the old address's undo link would go there.
+  it("mails its links at the inbox's own address, whatever host the request names", async () => {
+    const o = await signedIn();
+    const code = await stepUp(o);
+    const EVIL = "https://evil.example";
+    const asked = await o.app.request(`${EVIL}/auth/email`, {
+      method: "POST",
+      headers: { cookie: o.cookie, origin: EVIL, "content-type": "application/json" },
+      body: JSON.stringify({ email: NEW, code }),
+    });
+    expect(asked.status).toBe(200);
+    const confirm = lastLink(o.mail, NEW);
+    expect(new URL(confirm).origin).toBe(ORIGIN);
+    const form = formOf(await (await o.app.request(confirm)).text());
+    expect((await postForm(o.app, EVIL, form, { cookie: o.cookie })).status).toBe(200);
+    expect(new URL(lastLink(o.mail, OWNER)).origin).toBe(ORIGIN);
+  });
+
   it("can no longer be put back after seven days", async () => {
     const o = await signedIn();
     await post(o, "/auth/email", { email: NEW, code: await stepUp(o) });

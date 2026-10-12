@@ -193,6 +193,23 @@ export async function sendOwnerMail(deps: OwnerMailDeps, mail: OwnerMail): Promi
   }
 }
 
+/**
+ * The address the links in an owner's email point at: INBOX_PUBLIC_URL, else the Inbox address in
+ * Settings (the owner's first sign-in over https keeps it there), and only with neither the address
+ * the request came to. Anyone can ask for a sign-in email, and a server reached directly takes its
+ * host from whatever the asker wrote in the request: a link built from that would carry the owner's
+ * token to the asker's own host.
+ */
+export async function linkOrigin(
+  deps: { readonly db: Db; readonly baseUrl?: string | undefined },
+  request: Request,
+): Promise<string> {
+  if (deps.baseUrl) return new URL(deps.baseUrl).origin;
+  const saved = (await readSettings(deps.db)).notifications.appUrl;
+  if (saved && URL.canParse(saved)) return new URL(saved).origin;
+  return publicOrigin(request);
+}
+
 /** The answer when an owner's email could not be sent: the page says so, and offers the way round. */
 export function mailFailed(c: Context, detail: string): Response {
   return c.json(
@@ -388,7 +405,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         createdAt: now(),
       });
       const redirect = typeof body.redirect === "string" ? safeRedirect(body.redirect) : "/";
-      const origin = publicOrigin(c.req.raw, deps.baseUrl);
+      const origin = await linkOrigin(deps, c.req.raw);
       const link = `${origin}/auth/verify?token=${token}${redirect === "/" ? "" : `&redirect=${encodeURIComponent(redirect)}`}`;
       const name = await deps.businessName();
       try {

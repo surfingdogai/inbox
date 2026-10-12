@@ -3,12 +3,13 @@ import { DbError } from "@surfingdog/platform";
 import { type Context, Hono } from "hono";
 import { hashKey } from "./auth";
 import { type AuthPage, authPage } from "./auth-page";
-import { publicOrigin, sameOrigin } from "./origin";
+import { sameOrigin } from "./origin";
 import { problemResponse } from "./problem";
 import type { CallerEnv } from "./rest";
 import {
   emailOf,
   endSessions,
+  linkOrigin,
   mailFailed,
   type OwnerMailDeps,
   openToken,
@@ -229,7 +230,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
         method: "run",
       },
     ]);
-    const link = `${publicOrigin(c.req.raw, deps.baseUrl)}/auth/email/confirm?token=${token}`;
+    const link = `${await linkOrigin(deps, c.req.raw)}/auth/email/confirm?token=${token}`;
     try {
       await sendOwnerMail(deps, {
         what: "address change email",
@@ -330,7 +331,7 @@ export function ownerEmailRoutes(deps: OwnerEmailDeps): Hono<CallerEnv> {
       params: [await hashKey(undo), from, row.userId, JSON.stringify({ from, to }), now() + EMAIL_UNDO_TTL_MS, now()],
       method: "run",
     });
-    const undoLink = `${publicOrigin(c.req.raw, deps.baseUrl)}/auth/email/undo?token=${undo}`;
+    const undoLink = `${await linkOrigin(deps, c.req.raw)}/auth/email/undo?token=${undo}`;
     let told = true;
     try {
       await sendOwnerMail(deps, {
