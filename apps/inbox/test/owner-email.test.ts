@@ -86,6 +86,10 @@ describe("changing the address the owner signs in with", () => {
     expect((await post(o, "/auth/email", { email: NEW })).status).toBe(422);
     const forDownload = await stepUp(o, "download");
     expect((await post(o, "/auth/email", { email: NEW, code: forDownload })).status).toBe(422);
+    // Nor is there a code for something this inbox does not do: closing it is not built.
+    const unbuilt = await post(o, "/auth/step-up", { purpose: "close" });
+    expect(unbuilt.status).toBe(422);
+    expect(await unbuilt.json()).toMatchObject({ code: "invalid_input" });
     const code = await stepUp(o);
     const wrong = String((Number(code) + 1) % 1_000_000).padStart(6, "0");
     const refused = await post(o, "/auth/email", { email: NEW, code: wrong });

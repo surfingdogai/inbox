@@ -26,9 +26,8 @@ import {
 } from "./session";
 
 /**
- * Step-up codes. Before the owner changes the address they sign in with, takes a copy of the whole
- * inbox or closes it, a fresh six-digit code goes to the owner's address on file and has to come
- * back. A session alone is not enough for these: a browser left signed in, or a session cookie
+ * Step-up codes. Before the owner changes the address they sign in with, or takes a copy of the
+ * whole inbox, a fresh six-digit code goes to the owner's address on file and has to come back. A session alone is not enough for these: a browser left signed in, or a session cookie
  * someone copied, would otherwise be all it took to move an inbox away from its owner.
  *
  * One helper for every such action. `sendStepUp` sends the code (`POST /auth/step-up` does it for the
@@ -36,7 +35,7 @@ import {
  * `checkStepUp` with the code it was given, which uses it up. A code is for one purpose only: one
  * asked for to change the address opens nothing else.
  */
-export const STEP_UP_PURPOSES = ["email_change", "download", "close"] as const;
+export const STEP_UP_PURPOSES = ["email_change", "download"] as const;
 export type StepUpPurpose = (typeof STEP_UP_PURPOSES)[number];
 export const STEP_UP_TTL_MS = 10 * 60_000;
 /** Wrong tries at one code before it stops working. */
@@ -54,7 +53,6 @@ const DAY = 24 * HOUR;
 const DOING: Record<StepUpPurpose, string> = {
   email_change: "change the address you sign in with",
   download: "download a copy of your inbox",
-  close: "close your inbox",
 };
 
 export function isStepUpPurpose(value: unknown): value is StepUpPurpose {
