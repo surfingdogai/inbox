@@ -189,6 +189,8 @@ describe("shell.css", () => {
       "is-yes",
       "is-no",
       "sd-guide-line",
+      "sd-again",
+      "sd-again-form",
       "sd-handon",
       "sd-footcheck",
     ]) {

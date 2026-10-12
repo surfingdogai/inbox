@@ -1265,8 +1265,8 @@ textarea.sd-code {
 
 /* --- A check while it reads, and the result as a guide ----------- */
 /* The classes the network's live check page, result pages and leaderboards use from the site: the
-   rows a check streams as it reads, the chips for the files it found, a suggested step, the folded
-   "More", the two blocks to hand on, and the small form at a page's foot. Thin and quiet: hairlines, small type, the violet-blue accent for what was found, nothing
+   rows a check streams as it reads, the chips for the files it found, "Check again", a suggested
+   step, the folded "More", the texts to copy for the next step, and the small form at a page's foot. Thin and quiet: hairlines, small type, the violet-blue accent for what was found, nothing
    in the warm or alarm colours, and no motion under prefers-reduced-motion. Tokens only, no colour
    of their own. */
 
@@ -1391,7 +1391,7 @@ textarea.sd-code {
   overflow-wrap: anywhere;
 }
 
-/* "More", "What we read", "Hand it on": a <details> whose summary is one small line with a thin
+/* "More", "What we read", "Your next step": a <details> whose summary is one small line with a thin
    chevron, so it opens without a script. */
 /* biome-ignore lint/style/noDescendingSpecificity: a disclosure's summary is never the bar's menu summary, the one that outranks it above. */
 .sd-more > summary {
@@ -1467,8 +1467,25 @@ textarea.sd-code {
   color: var(--ink);
 }
 
-/* Hand it on: the message for whoever runs the website and the prompt for an AI, each folded, each a
-   text box to copy from. */
+/* Check again: under a result's name, when the site was last read, then the small button, or in
+   words when it may be pressed or why a fresh read can't start; on one line where it fits. */
+.sd-again {
+  margin-top: var(--sp-4);
+}
+.sd-again-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.sd-again .btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Your next step: the prompt to install the inbox with an AI, the prompt for an AI to help and the
+   message for whoever runs the website, each folded, each a text box to copy from, the one that fits
+   the business open. */
 .sd-handon {
   display: grid;
   gap: var(--sp-3);
