@@ -20,6 +20,8 @@ The step-by-step install is [install.md](https://surfingdog.ai/install.md). The 
 
 A plumber, a salon, a small shop with a contact form. Here the inbox is the front door for agents: they send messages, ask for quotes, book and order there, and the business answers from the owner app, with rules, or with its own AI.
 
+**What a score counts depends on the kind of business.** The Surfing Dog score weighs what matters for each kind: a salon is scored on bookings, a shop on orders and what follows them, not on messages. Messages and quote requests still help a shop's customers; they just don't change its score. Each result page says what the inbox would add for that business, in points where the score counts it.
+
 **Today** the inbox handles all five kinds of item (message, quote request, booking, order, refund). It answers availability from the business's services and opening hours, prices from its catalogue, and keeps every item's history. Rules, with presets for appointments, trades and shops, can confirm, reply and flag on their own. The owner's AI works inside limits the owner sets in code, not in a prompt ([Your limits](https://surfingdog.ai/docs/api/#your-limits)).
 
 ### A business that already has its tools
@@ -100,7 +102,7 @@ Give the inbox's line the manifest's own address, the one that ends in `/.well-k
 - **Doors listed in `llms.txt` alone.** Its `llms.txt` named an MCP server on a subdomain, a product feed, a stock API, a basket hand-off link and an order lookup. Our crawler saw that the file was there and read none of the doors in it. It reads such lines now, but a door that also sits in a machine-readable file (a server card, the manifest, an OpenAPI document) is found by more readers.
 - **Images on another platform's CDN.** The shop served product images from a large commerce platform's file CDN. A crawler, ours, took that as a sign the shop ran on that platform and went looking for that platform's agent checkout, which was not there. We fixed the crawler; the lesson for a business is to declare its doors outright, so nobody has to guess them from side signals.
 
-Then look from outside: [surfingdog.ai/check](https://surfingdog.ai/check) reads a site the way our crawler does and shows, for each thing an agent can do there, the door it found and when. Any checker will do; the point is to see what a stranger's agent sees.
+Then look from outside: [surfingdog.ai/check](https://surfingdog.ai/check) reads a site the way our crawler does and shows, for each thing an agent can do there, the door it found and when. After a change, open the site's result and press **Check again** (a fresh read can be asked for a few minutes after the last one), or have an AI call `check_business` with `fresh` set to true. Any checker will do; the point is to see what a stranger's agent sees.
 
 ## Let agents finish the job
 
@@ -124,11 +126,13 @@ This changes month by month. Check the sources at the end of this section before
 
 **Why an agent should not type a card number.** In many places, the EU (under PSD2), the UK and India among them, a card payment the customer starts needs strong authentication: a second step, such as a code, a passkey or the banking app. An agent filling in a card number at a checkout stalls at that step, or needs the person there anyway, and it holds a card number it should never see. What works is a credential made for agents: a token or a mandate the person approves once, usually with a passkey or their banking app, limited to a merchant, an amount or a period, which the agent presents and the payment provider checks.
 
+Whichever you choose, declare it where agents read it: a UCP profile lists it under its payment handlers, and a profile whose payment handlers are empty tells agents a person still pays.
+
 Options, a line each:
 
 - **Stripe Agentic Commerce Suite, with Shared Payment Tokens**: a scoped token an agent hands to the merchant without seeing the card. It implements the Agentic Commerce Protocol's (ACP) delegated payment and carries Mastercard Agent Pay and Visa Intelligent Commerce tokens. The short path for a business already on Stripe.
-- **Mollie**: supports ACP's delegated payment API, for European merchants.
-- **Adyen Agentic**: catalogue, basket and payment APIs for agent commerce, suited to larger merchants already on Adyen.
+- **Mollie**: has announced support for ACP's delegated payment API, for European merchants. Check that it is available on your account before you plan on it.
+- **Adyen Agentic**: catalogue, basket and payment APIs for agent commerce, suited to larger merchants already on Adyen. Check which countries and plans it covers.
 - **Mastercard Agent Pay and Visa Intelligent Commerce**: the card networks' own agent tokens, reached through the business's payment provider rather than directly, and opening region by region. In Europe, for example, Mastercard says every issuer is enabled for Agent Pay at network level, and Visa's Agentic Ready programme began there, the UK included, in March 2026, starting with banks.
 - **Pay by bank, with a mandate**: an account-to-account payment the payer can limit or revoke at any time, such as Pix Automático in Brazil, UPI AutoPay in India, PayTo in Australia, SEPA Direct Debit in Europe, and Direct Debit and Variable Recurring Payments in the UK. Whether a scheme lets an agent use a mandate differs from one to the next; in the UK, GoCardless has completed an agent-led pay-by-bank donation inside the FCA's AI Live Testing programme.
 - **x402 and stablecoins**: payments over HTTP 402, mostly in stablecoins. Niche for a consumer business today.
