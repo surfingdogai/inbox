@@ -585,7 +585,12 @@ describe("the trust page's animation", () => {
     pass: { r: number; over: number };
     row: { h: number; slots: number[]; notches: number };
     link: { x0: number; y0: number; bend: number; x1: number };
+    ask: string;
     road: string;
+    sign: string;
+    seals: { ib: number[]; ag: number[]; r: number };
+    inbox: { x: number; w: number };
+    net: { x: number };
     say: { phrases: string[] };
     at: {
       loop: number;
@@ -597,6 +602,7 @@ describe("the trust page's animation", () => {
       kept: number;
       slip: number;
       seal: number;
+      sign: number[];
       road: number[];
       notch: number;
       swap: number[];
@@ -641,6 +647,7 @@ describe("the trust page's animation", () => {
       A.kept,
       A.slip,
       A.seal,
+      ...A.sign,
       ...A.road,
       A.notch,
       ...A.swap,
@@ -648,8 +655,22 @@ describe("the trust page's animation", () => {
       ...A.coin,
     ];
     for (const m of marks) expect(m >= 0 && m < A.loop, String(m)).toBe(true);
-    // The story in order: ordered, kept, signed, sent, counted, reordered, settled, then the coin.
-    const story = [A.ask[0], A.item, A.kept, A.slip, A.seal, A.road[0], A.road[1], A.notch, A.swap[0], A.swap[1]];
+    // The story in order: ordered, kept, signed, counter-signed, sent, counted, reordered, settled,
+    // then the coin.
+    const story = [
+      A.ask[0],
+      A.item,
+      A.kept,
+      A.slip,
+      A.seal,
+      A.sign[0],
+      A.sign[1],
+      A.road[0],
+      A.road[1],
+      A.notch,
+      A.swap[0],
+      A.swap[1],
+    ];
     expect([...story].sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual(story);
     expect(A.settle[0]).toBeGreaterThan(A.swap[1] ?? 0);
     expect(A.coin[0]).toBeGreaterThan(A.settle[1] ?? 0);
@@ -702,7 +723,7 @@ describe("the trust page's animation", () => {
     expect(A.rest).toBeGreaterThan(A.kept);
     expect(A.rest).toBeGreaterThan(A.notch);
     expect(template).toContain('class="tf-item on res"');
-    expect(template).toContain('class="tf-slip signed"');
+    expect(template).toContain('class="tf-slip signed cosigned"');
     expect(template).toContain('"tf-notch on new"');
     expect(template).toContain('class={gained ? "tf-dir hit" : "tf-dir"}');
     expect(template).toContain("{say.phrases[restSay]}");
@@ -713,6 +734,69 @@ describe("the trust page's animation", () => {
     expect(script).toContain("seed.replaceWith(svg)");
     expect(script).toContain("let clock = A.rest;");
     expect(script).toMatch(/try \{\s*mount\(f\);\s*\} catch/);
+  });
+
+  it("has the customer's agent sign the receipt too: after the inbox, before it travels, on its own line", () => {
+    const G = geo();
+    const A = G.at;
+    // The captions, one per beat, in the order the story is told.
+    expect(G.say.phrases).toEqual([
+      "A business keeps its promise",
+      "Its inbox signs a receipt",
+      "The customer's AI signs it too",
+      "Just the receipt travels",
+      "Its record grows a notch",
+      "The order follows kept promises",
+      "Nobody can pay for a place",
+    ]);
+    const at = (p: RegExp) => {
+      const i = G.say.phrases.findIndex((x) => p.test(x));
+      expect(i, String(p)).toBeGreaterThan(-1);
+      return [A.say[i] ?? 0, A.say[i + 1] ?? A.loop] as const;
+    };
+    // The counter-sign beat comes after the inbox has signed and before the receipt sets off.
+    expect(A.sign[0]).toBeGreaterThan(A.seal);
+    expect(A.sign[1]).toBeGreaterThan(A.sign[0] ?? 0);
+    expect(A.road[0]).toBeGreaterThan(A.sign[1] ?? 0);
+    // Each beat happens under its own words: the inbox's seal, the agent's whole journey, the travel.
+    const [inboxFrom, inboxTo] = at(/inbox signs/);
+    expect(A.seal).toBeGreaterThanOrEqual(inboxFrom);
+    expect(A.seal).toBeLessThan(inboxTo);
+    const [coFrom, coTo] = at(/AI signs it too/);
+    expect(A.sign[0]).toBeGreaterThanOrEqual(coFrom);
+    expect(A.sign[1]).toBeLessThanOrEqual(coTo);
+    const [goFrom, goTo] = at(/receipt travels/);
+    expect(A.road[0]).toBeGreaterThanOrEqual(goFrom);
+    expect(A.road[1]).toBeLessThanOrEqual(goTo);
+    // The agent's seal leaves on the agent's own line, never reaches the network, and lands on the
+    // receipt's second seal where the receipt is born.
+    expect(G.sign.startsWith(G.ask)).toBe(true);
+    const xs = [...G.sign.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => Number(m[1]));
+    for (const x of xs) expect(x, String(x)).toBeLessThanOrEqual(G.inbox.x + G.inbox.w);
+    expect(Math.max(...xs)).toBeLessThan(G.net.x);
+    const birth = G.road.match(/^M(-?[\d.]+),(-?[\d.]+)/);
+    const landing = G.sign.match(/(-?[\d.]+),(-?[\d.]+)$/);
+    expect(Number(landing?.[1])).toBeCloseTo(Number(birth?.[1]) + (G.seals.ag[0] ?? 0), 6);
+    expect(Number(landing?.[2])).toBeCloseTo(Number(birth?.[2]) + (G.seals.ag[1] ?? 0), 6);
+    // Two seals that do not touch, inside the paper, on either side of its middle.
+    expect(G.seals.ag[0] ?? 0).toBeLessThan(0);
+    expect(G.seals.ib[0] ?? 0).toBeGreaterThan(0);
+    expect((G.seals.ib[0] ?? 0) - (G.seals.ag[0] ?? 0)).toBeGreaterThan(2 * G.seals.r);
+    // At rest the receipt carries both seals, filled: the inbox's in palm, the agent's in violet.
+    expect(A.rest).toBeGreaterThan(A.sign[1] ?? 0);
+    expect(A.rest).toBeLessThan(A.settle[1] ?? 0);
+    expect(template).toMatch(
+      /<g class="tf-slip signed cosigned"[\s\S]*?class="seal ib" \/>[\s\S]*?class="seal ag" \/>/,
+    );
+    expect(style).toMatch(/\.stf \.tf-slip\.signed \.seal\.ib \{\s*fill: var\(--tf-palm\);/);
+    expect(style).toMatch(/\.stf \.tf-slip\.cosigned \.seal\.ag \{\s*fill: var\(--tf-violet\);/);
+    // The machine follows the same path and fills the second seal as the agent's seal lands.
+    expect(script).toContain('E("path", { d: G.sign, class: "tf-guide" })');
+    expect(script).toContain('slip.classList.toggle("cosigned", t >= A.sign[1] && t < A.settle[1]);');
+    // And the screen reader hears it.
+    const words = visible(source);
+    expect(words).toMatch(/customer's agent signs the same receipt too/);
+    expect(words).toMatch(/carrying both\s+signatures/);
   });
 
   it("points the receipts' route at the bakery's listing wherever it is, at rest and in motion", () => {

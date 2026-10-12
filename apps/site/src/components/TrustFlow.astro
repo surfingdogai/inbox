@@ -2,39 +2,55 @@
 /**
  * The trust page's opening animation, "a kept promise". An AI agent orders from a bakery, directly:
  * the order travels the agent's own line to the bakery's inbox, and the network is not on it. The
- * bakery delivers, its inbox signs a receipt, and that receipt, and nothing else, travels to the
- * trust network: the message beside it stays in the inbox. The receipt lands on the bakery's
- * listing, the listing's record grows a notch, and the bakery moves up past a salon that has kept
- * fewer promises. Then a coin drops onto the network and falls away, and the order does not move.
+ * bakery delivers and its inbox signs a receipt (its seal fills in palm). Then the customer's agent
+ * signs that same receipt too: its seal leaves the agent along the agent's own line, comes in at the
+ * inbox's door and drops onto the receipt, where the second seal fills in the agent's violet. That
+ * receipt, with both seals, and nothing else, travels to the trust network: the message beside it
+ * stays in the inbox. The receipt lands on the bakery's listing, the listing's record grows a notch,
+ * and the bakery moves up past a salon that has kept fewer promises. Then a coin drops onto the
+ * network and falls away, and the order does not move.
+ *
+ * Why two seals: a record backed only by the business's own word is not ranked. What lifts a
+ * business is evidence someone other than the business confirms, starting with the customer's side
+ * counter-signing the receipt, so the receipt that travels and the one at rest always carry both.
  *
  * What is drawn is what the page says is live (src/lib/status.ts and the pills under "Today"):
- *  - receipts, live: the inbox signs one, and the network records it;
+ *  - receipts, live: the inbox signs one, the customer's AI can sign it too, and the network
+ *    records it;
  *  - ranking, live: the order reads kept promises, and nobody can pay for a place;
  *  - the record is a gentle meter of notches, as NetworkFlow draws it: no numbers, no stars,
  *    nothing that reads as anyone's real score. The per-listing track record (kept, late or
  *    broken), which the page marks "Being built", is not drawn;
- *  - customers' records are paused, so the agent carries no record of its own here;
+ *  - customers' records are paused, so the agent carries no record of its own here: it signs the
+ *    receipt, and that is all it does with it;
  *  - what a network receives is the receipt: no names, no messages, nothing of what was ordered.
- * The order goes from the agent to the business, never through the network. The bakery, the
- * salon and the clinic are illustrations, named by their kind so they can never be a real one.
+ * The order and the agent's signature go from the agent to the business, never through the
+ * network. The bakery, the salon and the clinic are illustrations, named by their kind so they can
+ * never be a real one.
  *
  * The timings are deliberate and live in GEO.at, where the tests read them; do not retune them by
  * accident.
- *  - One pass and one coda in a 13.4 s loop. The captions change at 0.20, 3.00, 4.50, 6.05, 7.50
- *    and 10.20 s, so they hold 2.8, 1.5, 1.55, 1.45, 2.7 and 3.4 s (the last one over the wrap).
- *    1.2 s is the shortest five words can be read in. Exactly one phrase is ever on screen: the
- *    strip has one text node, and a new phrase is written only after the old one has faded.
+ *  - One pass and one coda in a 15 s loop. The captions change at 0.20, 3.00, 4.40, 6.10, 7.65,
+ *    9.10 and 11.80 s, so they hold 2.8, 1.4, 1.7, 1.55, 1.45, 2.7 and 3.4 s (the last one over
+ *    the wrap). 1.2 s is the shortest five words can be read in; the six-word counter-sign phrase
+ *    gets 1.7. Exactly one phrase is ever on screen: the strip has one text node, and a new phrase
+ *    is written only after the old one has faded.
+ *  - The beats: the inbox's seal fills at 3.55 s; the agent wakes and its seal travels from 4.45
+ *    to 5.85 s and fills the second seal as it lands; only then, at 6.15 s, does the receipt set
+ *    off for the network. Everything after the counter-sign is the earlier 13.4 s piece moved
+ *    1.6 s later, so the rest of its rhythm is unchanged.
  *  - The directory goes back to where it started at the top of the loop, under the first phrase
  *    and while the eye is on the agent: it fades down, the rows take their old places and the new
  *    notch its old colour, and it fades back. Never under "Nobody can pay for a place", where a
  *    moving order would say the opposite of the words.
  *  - The coin falls with gravity (ease-in), meets the glass at the card's top edge, and falls
  *    away fading. Nothing in the directory moves while it does.
- *  - The piece starts from the picture at rest, 8.9 s into the loop: the order kept, the receipt
- *    docked on the bakery's listing, the new notch, the bakery on top. The first thing a visitor
- *    sees move is the receipt settling into the record. The receipts' route ends on the bakery's
- *    listing and goes where the listing goes, so at rest it points at the bakery, never at the
- *    row the bakery left; at the top of the loop it glides back down while the rows are faded.
+ *  - The piece starts from the picture at rest, 10.5 s into the loop: the order kept, the receipt
+ *    docked on the bakery's listing with both seals filled, the new notch, the bakery on top. The
+ *    first thing a visitor sees move is the receipt settling into the record. The receipts' route
+ *    ends on the bakery's listing and goes where the listing goes, so at rest it points at the
+ *    bakery, never at the row the bakery left; at the top of the loop it glides back down while
+ *    the rows are faded.
  *
  * Every static part is drawn once below, as a server-rendered SVG built from GEO, in that resting
  * frame. mount() clones it, adds the pieces that move and swaps the clone in whole, so there is
@@ -71,6 +87,12 @@ const GEO = {
   /** the receipt's whole journey: off the order's row, along the link, onto the listing, which is
       still in its first place while the receipt travels */
   road: "M236,160 L240,160 C268,160 268,192 296,192 L305,192",
+  /** the customer's signature: out of the agent along its own line to the inbox's door, then in
+      the groove above the order and down onto the receipt, to the seal the agent signs. It never
+      leaves the agent's line and the inbox, so the network is not on it either. */
+  sign: "M56,134 C80,134 72,160 96,160 C102,160 102,142 112,142 L223,142 C230,142 233,154 233,164.4",
+  /** the receipt's two seals, from its centre: the inbox's on the right, the agent's on the left */
+  seals: { ib: [3, 4.4], ag: [-3, 4.4], r: 2.6 },
   ports: [
     [96, 160],
     [240, 160],
@@ -99,6 +121,7 @@ const GEO = {
     phrases: [
       "A business keeps its promise",
       "Its inbox signs a receipt",
+      "The customer's AI signs it too",
       "Just the receipt travels",
       "Its record grows a notch",
       "The order follows kept promises",
@@ -107,24 +130,25 @@ const GEO = {
   },
   /** the timeline, in seconds into the loop */
   at: {
-    loop: 13.4,
-    rest: 8.9,
-    say: [0.2, 3.0, 4.5, 6.05, 7.5, 10.2],
+    loop: 15.0,
+    rest: 10.5,
+    say: [0.2, 3.0, 4.4, 6.1, 7.65, 9.1, 11.8],
     reset: [0.2, 1.2],
     ask: [0.35, 1.3],
     item: 1.5,
     kept: 2.4,
     slip: 3.05,
     seal: 3.55,
-    road: [4.55, 5.85],
-    notch: 6.05,
-    swap: [7.55, 8.45],
-    settle: [9.5, 9.9],
-    coin: [10.3, 11.0, 11.9],
+    sign: [4.45, 5.85],
+    road: [6.15, 7.45],
+    notch: 7.65,
+    swap: [9.15, 10.05],
+    settle: [11.1, 11.5],
+    coin: [11.9, 12.6, 13.5],
   },
 };
 
-const { agent, inbox, item, msg, net, row, say } = GEO;
+const { agent, inbox, item, msg, net, row, say, seals } = GEO;
 /* At rest the pass row has overtaken: it holds the slot above, and the one it passed holds its. */
 const slotAtRest = GEO.rows.map((_, i) => (i === GEO.pass.r ? GEO.pass.over : i === GEO.pass.over ? GEO.pass.r : i));
 const passY = row.slots[slotAtRest[GEO.pass.r] ?? 0] ?? 0;
@@ -251,11 +275,13 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     {GEO.ports.map(([x, y]) => <circle cx={x} cy={y} r="2.6" class="tf-port" />)}
     <circle cx={L.x1} cy={door} r="2.6" class="tf-port tf-door" />
 
-    <g class="tf-slip signed" transform={`translate(${GEO.dockX},${passY + row.h / 2})`}>
-      <rect x="-6.5" y="-8.5" width="13" height="17" rx="2.2" class="paper" />
-      <line x1="-3.4" y1="-4.4" x2="3.4" y2="-4.4" class="ln" />
-      <line x1="-3.4" y1="-1.4" x2="1.6" y2="-1.4" class="ln" />
-      <circle cx="2.4" cy="3.9" r="2.8" class="seal" />
+    <!-- at rest the receipt carries both seals: the inbox's, and the customer's agent's -->
+    <g class="tf-slip signed cosigned" transform={`translate(${GEO.dockX},${passY + row.h / 2})`}>
+      <rect x="-7" y="-9" width="14" height="18" rx="2.3" class="paper" />
+      <line x1="-3.6" y1="-4.9" x2="3.6" y2="-4.9" class="ln" />
+      <line x1="-3.6" y1="-1.9" x2="1.8" y2="-1.9" class="ln" />
+      <circle cx={seals.ib[0]} cy={seals.ib[1]} r={seals.r} class="seal ib" />
+      <circle cx={seals.ag[0]} cy={seals.ag[1]} r={seals.r} class="seal ag" />
     </g>
 
     <g class="tf-say">
@@ -267,10 +293,11 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     </g>
   </svg>
   <figcaption class="tf-sr">
-    An AI agent orders bread from a bakery, directly. The bakery delivers, and its inbox signs a receipt. Just the
-    receipt goes to the trust network, with no names, no messages and nothing of what was ordered. The bakery's record
-    grows a notch, and it moves up past a salon that has kept fewer promises. A coin dropped on the network falls away,
-    and the order does not move: nobody can pay for a place. The businesses are illustrations.
+    An AI agent orders bread from a bakery, directly. The bakery delivers, and its inbox signs a receipt. The
+    customer's agent signs the same receipt too, on its own line to the bakery. Just the receipt, carrying both
+    signatures, goes to the trust network, with no names, no messages and nothing of what was ordered. The bakery's
+    record grows a notch, and it moves up past a salon that has kept fewer promises. A coin dropped on the network falls
+    away, and the order does not move: nobody can pay for a place. The businesses are illustrations.
   </figcaption>
 </figure>
 
@@ -550,7 +577,8 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     }
   }
 
-  /* the receipt: paper, two lines, and the inbox's seal once it is signed */
+  /* the receipt: paper, two lines, and two seals, each a dashed ring until its side signs: the
+     inbox's in palm, then the customer's agent's in the agent's violet */
   .stf .tf-slip .paper {
     fill: color-mix(in srgb, var(--tf-palm) 10%, var(--tf-ground));
     stroke: var(--tf-ink3);
@@ -572,11 +600,16 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     transform-box: fill-box;
     transform-origin: 50% 50%;
   }
-  .stf .tf-slip.signed .seal {
+  .stf .tf-slip.signed .seal.ib {
     fill: var(--tf-palm);
     stroke: none;
   }
-  .stf .tf-slip.pop .seal {
+  .stf .tf-slip.cosigned .seal.ag {
+    fill: var(--tf-violet);
+    stroke: none;
+  }
+  .stf .tf-slip.pop .seal.ib,
+  .stf .tf-slip.copop .seal.ag {
     animation: stf-pop 0.6s var(--tf-ease);
   }
   @keyframes stf-pop {
@@ -594,6 +627,16 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
   /* the pieces that move */
   .stf .tf-dot {
     fill: var(--tf-violet);
+  }
+  /* the agent's seal on its way to the receipt: the seal itself, in a faint ring */
+  .stf .tf-ink .core {
+    fill: var(--tf-violet);
+  }
+  .stf .tf-ink .rim {
+    fill: none;
+    stroke: var(--tf-violet);
+    stroke-opacity: 0.35;
+    stroke-width: 1;
   }
   .stf .tf-coin .face {
     fill: color-mix(in srgb, var(--tf-sun) 55%, var(--tf-ground));
@@ -757,6 +800,8 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     ask: string;
     link: { x0: number; y0: number; bend: number; x1: number };
     road: string;
+    sign: string;
+    seals: { ib: number[]; ag: number[]; r: number };
     item: { x: number; y: number; w: number; h: number };
     inbox: { room: number };
     row: { x: number; h: number; slots: number[]; notchX: number; notchStep: number };
@@ -775,6 +820,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
       kept: number;
       slip: number;
       seal: number;
+      sign: [number, number];
       road: [number, number];
       notch: number;
       swap: [number, number];
@@ -867,8 +913,11 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
     const linkEl = one<SVGPathElement>(svg, ".tf-link");
     const doorEl = one<SVGCircleElement>(svg, ".tf-door");
 
-    /* the pieces made here: the order's dot, the coin and the glass's answer to it */
+    /* the pieces made here: the order's dot, the agent's seal on its way, the coin and the glass's
+       answer to it */
     const dot = E("circle", { r: 3.2, class: "tf-dot tf-off" });
+    const ink = E("g", { class: "tf-ink tf-off" });
+    ink.append(E("circle", { r: G.seals.r + 1.2, class: "rim" }), E("circle", { r: G.seals.r, class: "core" }));
     const coin = E("g", { class: "tf-coin tf-off" });
     const C = G.coin;
     coin.append(
@@ -877,16 +926,18 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
       E("circle", { r: C.r - 2.6, class: "rim" }),
     );
     const ripple = E("ellipse", { cx: C.x, cy: C.edge, rx: 14, ry: 3.2, class: "tf-ripple" });
-    svg.append(dot, ripple, coin);
+    svg.append(dot, ink, ripple, coin);
     /* unpainted guides the moving pieces follow */
     const askPath = E("path", { d: G.ask, class: "tf-guide" });
+    const signPath = E("path", { d: G.sign, class: "tf-guide" });
     const roadPath = E("path", { d: G.road, class: "tf-guide" });
-    svg.append(askPath, roadPath);
+    svg.append(askPath, signPath, roadPath);
 
     /* Anything that throws from here on leaves a drawn scene, not a hole. */
     seed.replaceWith(svg);
 
     const LASK = askPath.getTotalLength();
+    const LSIGN = signPath.getTotalLength();
     const LROAD = roadPath.getTotalLength();
     const birth = roadPath.getPointAtLength(0);
 
@@ -1035,10 +1086,24 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
         doorEl.setAttribute("cy", String(doorY));
       }
 
-      /* 3. its inbox signs a receipt, and just the receipt travels */
+      /* 3. its inbox signs a receipt */
       const signed = t >= A.seal && t < A.settle[1];
       if (live && crossed(prev, t, A.seal)) flash(slip, "pop", 640);
       slip.classList.toggle("signed", signed);
+
+      /* 4. the customer's agent signs it too: its seal comes along its own line, through the inbox's
+         door and down onto the receipt, where the second seal fills in the agent's colour */
+      if (live && crossed(prev, t, A.sign[0])) flash(agent, "wake", 640);
+      if (within(t, A.sign)) {
+        const v = prog(t, A.sign[0], A.sign[1]);
+        const p = signPath.getPointAtLength(eSine(v) * LSIGN);
+        ink.style.opacity = String(v < 0.12 ? v / 0.12 : 1);
+        put(ink, p.x, p.y);
+      } else off(ink);
+      if (live && crossed(prev, t, A.sign[1])) flash(slip, "copop", 640);
+      slip.classList.toggle("cosigned", t >= A.sign[1] && t < A.settle[1]);
+
+      /* 5. and just the receipt, with both seals, travels */
       msgG.classList.toggle("stay", t >= A.road[0] && t < A.road[1] + 0.3);
       if (t < A.slip || t >= A.settle[1]) {
         off(slip);
@@ -1061,7 +1126,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
         put(slip, lerp(G.dockX, notchX, u), passY + half, 1 - 0.4 * u);
       }
 
-      /* 4. the listing's record grows a notch */
+      /* 6. the listing's record grows a notch */
       if (live && crossed(prev, t, A.road[1])) flash(pass, "ping", 760);
       if (live && crossed(prev, t, A.notch)) flash(gain, "grow", 720);
       pass.classList.toggle("hit", t >= A.road[1] && t < A.settle[1]);
@@ -1069,7 +1134,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
       gain.classList.toggle("on", gained);
       gain.classList.toggle("new", gained);
 
-      /* 5. the order follows kept promises */
+      /* 7. the order follows kept promises */
       dirs.forEach((d, i) => {
         d.setAttribute("transform", `translate(${G.row.x},${lerp(restY(i), endY(i), moved)})`);
       });
@@ -1080,7 +1145,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
          and fades back, under the first phrase and while the eye is on the agent. */
       dirsG.style.opacity = within(t, A.reset) ? String(1 - 0.88 * Math.sin(Math.PI * prog(t, A.reset[0], A.reset[1]))) : "";
 
-      /* 6. a coin meets the glass and falls away; the order does not move */
+      /* 8. a coin meets the glass and falls away; the order does not move */
       const [c0, c1, c2] = A.coin;
       if (t >= c0 && t < c1) {
         const v = prog(t, c0, c1);
@@ -1122,7 +1187,7 @@ const restSay = GEO.at.say.filter((t) => t <= GEO.at.rest).length - 1;
       sayG.classList.remove("beat");
       agent.classList.remove("wake");
       ripple.classList.remove("hit");
-      slip.classList.remove("pop");
+      slip.classList.remove("pop", "copop");
       gain.classList.remove("grow");
       for (const d of dirs) d.classList.remove("ping");
     }
