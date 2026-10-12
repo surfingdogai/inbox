@@ -75,6 +75,8 @@ _agent-inbox.example.com. TXT "v=sdi1; manifest=https://inbox.example/.well-know
 
 The same URL will be cross-linked from the A2A card, the UCP profile, `llms.txt` and a `<link rel>` on the website as those adapters arrive.
 
+To see whether a reader finds your manifest from your main website, [check your website for AI agents](/check): the result names each door it found, and how.
+
 ## A live one
 
 The live instance's manifest is at [inbox.surfingdog.ai/.well-known/agent-inbox.json](https://inbox.surfingdog.ai/.well-known/agent-inbox.json).

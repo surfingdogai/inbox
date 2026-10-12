@@ -1,0 +1,258 @@
+---
+// Shopify and AI assistants: what each assistant does with a Shopify store, what Shopify publishes
+// on the store's own domain, what our check counts for it (agentic commerce readiness, by the
+// published rules) and what an owner can add. A page for one platform's owners, beside the eight
+// guides and outside their contract (PLATFORM_PAGES in src/lib/guides.ts). Its words about Shopify
+// and the assistants are in src/lib/shopify.ts, each with where we read it.
+import Faqs from "../../components/Faqs.astro";
+import GuideAnswer from "../../components/GuideAnswer.astro";
+import GuideCheck from "../../components/GuideCheck.astro";
+import Layout from "../../layouts/Layout.astro";
+import { faqPage } from "../../lib/faq";
+import { guideHref } from "../../lib/guides";
+import {
+  SHOPIFY,
+  SHOPIFY_AS_OF,
+  SHOPIFY_CHANNELS,
+  SHOPIFY_CHECKED,
+  SHOPIFY_DOORS,
+  SHOPIFY_FAQS,
+  SHOPIFY_SOURCES,
+} from "../../lib/shopify";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(`/guides/${SHOPIFY.slug}/`, site).toString();
+/** When this page was last read against Shopify's pages and the check's rules. */
+const MODIFIED = "2026-10-12";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: SHOPIFY.heading,
+    description: SHOPIFY.description,
+    abstract: SHOPIFY.answer,
+    datePublished: MODIFIED,
+    dateModified: MODIFIED,
+    author: { "@type": "Organization", name: "Surfing Dog", url: site },
+    publisher: { "@id": `${site}#org` },
+    isPartOf: { "@type": "CollectionPage", name: "Guides", url: new URL(guideHref(""), site).toString() },
+    about: { "@type": "Organization", name: "Shopify" },
+    image: new URL("/art/og-network-v1.png", site).toString(),
+    mainEntityOfPage: url,
+    url,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site },
+      { "@type": "ListItem", position: 2, name: "Guides", item: new URL(guideHref(""), site).toString() },
+      { "@type": "ListItem", position: 3, name: "Shopify and AI assistants", item: url },
+    ],
+  },
+  faqPage(SHOPIFY_FAQS, url),
+];
+const sources = Object.values(SHOPIFY_SOURCES);
+const doorSources = [
+  SHOPIFY_SOURCES.checkout,
+  SHOPIFY_SOURCES.order,
+  SHOPIFY_SOURCES.storefrontMcp,
+  SHOPIFY_SOURCES.agentsMd,
+];
+---
+
+<Layout title={`${SHOPIFY.title} · Surfing Dog`} description={SHOPIFY.description} type="article" ld={ld}>
+  <article class="wrap wrap-read section is-head guide" aria-labelledby="g-title">
+    <p class="eyebrow"><a href={guideHref("")}>Guides</a> · Shopify</p>
+    <h1 class="h-page" id="g-title">{SHOPIFY.heading}</h1>
+    <GuideAnswer text={SHOPIFY.answer} />
+
+    <div class="prose g-body">
+      <h2 id="assistants">What each assistant does with your store</h2>
+      <p>
+        Shopify calls it agentic storefronts: your products reach AI assistants through Shopify Catalog. It is on by
+        default for an eligible store, needs your terms of service, privacy policy and refund policy filled in, and each
+        channel can be switched off in your admin. Orders arrive in your Shopify admin like any other, and fulfilment,
+        returns and customer service stay with you (<a href={SHOPIFY_SOURCES.storefronts.href} rel="noopener"
+          >{SHOPIFY_SOURCES.storefronts.label}</a
+        >). What each one does, {SHOPIFY_AS_OF}:
+      </p>
+      <ul>
+        {
+          SHOPIFY_CHANNELS.map((c) => (
+            <li>
+              <b>{c.name}.</b> {c.does}{" "}
+              <span class="src">
+                ({c.sources.map((s, i) => <>{i > 0 && "; "}<a href={s.href} rel="noopener">{s.label}</a></>)})
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <h2 id="doors">What Shopify publishes on your domain</h2>
+      <p>Agents find these on your store's own address, with nothing for you to install:</p>
+      <ul>
+        {
+          SHOPIFY_DOORS.map((d) => (
+            <li>
+              <code>{d.path}</code>: {d.what}
+            </li>
+          ))
+        }
+      </ul>
+      <p class="src">
+        ({doorSources.map((src, i) => <>{i > 0 && "; "}<a href={src.href} rel="noopener">{src.label}</a></>)})
+      </p>
+
+      <h2 id="check">Agentic commerce readiness on Shopify: what our check counts</h2>
+      <p>
+        We read what your store publishes, and never place an order. Under the
+        <a href="/v1/score-rules">published rules</a> (version 2, amended on 12 October 2026), a Shopify store is scored
+        as a shop. When we can read your UCP profile and its server, these count:
+      </p>
+      <ul>
+        <li><b>Order and pay</b>: the UCP checkout, its <code>create_checkout</code> tool.</li>
+        <li><b>Catalogue and stock</b>: the UCP catalogue, such as <code>search_catalog</code>.</li>
+        <li><b>Track</b>: the UCP order capability.</li>
+        <li>
+          <b>Who you are</b>: <code>LocalBusiness</code> markup with your name, address and opening hours; selling through
+          UCP counts in place of the address.
+        </li>
+      </ul>
+      <p>These don't come with Shopify's doors, and they hold most of the points left:</p>
+      <ul>
+        <li>
+          <b>A way to ask you something</b>, before buying or when something goes wrong. Since 12 October it counts for
+          shops: about 14 of 100 points.
+        </li>
+        <li>
+          <b>Changing, cancelling, returning and a receipt</b> for an order: about 8 points each. Shopify's order tool reads
+          an order an agent placed; it doesn't change, cancel or return it.
+        </li>
+        <li>
+          <b>Cancelling a cart or a checkout</b> (<code>cancel_cart</code>, <code>cancel_checkout</code>): that isn't
+          cancelling an order, so it earns nothing.
+        </li>
+        <li>Pages made for people, such as your contact form, chat widget and order status page.</li>
+      </ul>
+
+      <h2 id="add">What you can add</h2>
+      <ul>
+        <li>
+          <b>A way to ask you something.</b> An A2A agent card, a <code>send_message</code> or
+          <code>create_support_ticket</code> tool on an MCP server on your domain, a support service your UCP profile
+          declares with its MCP server on your domain, or an agent inbox. Ask your helpdesk app whether it offers one.
+        </li>
+        <li>
+          <b>Order lookup, changes, cancelling, returns and receipts.</b> Tools such as <code>get_order_status</code>,
+          <code>update_order</code>, <code>cancel_order</code>, <code>request_return</code> and <code>get_invoice</code>,
+          on an MCP server or in an OpenAPI document on your domain; a lookup by order number and email is a simple start.
+          Ask your returns or order-tracking app whether it offers one. A request that a person at your shop approves
+          counts the same as one carried out at once.
+        </li>
+        <li>
+          <b>Your llms.txt, naming your doors.</b> If you replace Shopify's file with your own template, keep its UCP
+          lines, and add a line for each door you add.
+        </li>
+        <li>
+          <b>Surfing Dog Inbox (ours, open source)</b>, one option among apps for asking you something: free software
+          (MIT) you run at your own subdomain, where agents write to you and you answer from its app, from your helpdesk
+          through a bridge, or with your own AI. There's no hosted version yet. Orders placed in your Shopify checkout
+          stay in Shopify, so changing or returning them, or a receipt, needs a door there (<a href="/inbox/"
+            >how the inbox works</a
+          >).
+        </li>
+      </ul>
+      <p>
+        For any shop: <a href={guideHref("sell-through-ai-assistants")}>agentic commerce readiness</a> · <a
+          href={guideHref("ai-assistant-messages-and-quotes")}>messages and quotes</a
+        > · <a href={guideHref("llms-txt")}>what llms.txt does</a>.
+      </p>
+    </div>
+
+    <GuideCheck
+      examples={[{ href: "/leaderboard?can=order", label: "Businesses an agent can order from" }]}
+      title="Check your store"
+    />
+    <Faqs faqs={SHOPIFY_FAQS} />
+    <details class="sources">
+      <summary>Sources, read {SHOPIFY_CHECKED}</summary>
+      <ul>
+        {
+          sources.map((s) => (
+            <li>
+              <a class="link" href={s.href} rel="noopener">
+                {s.label}
+              </a>
+            </li>
+          ))
+        }
+        <li><a class="link" href="/v1/score-rules">Surfing Dog: the agentic score's rules</a></li>
+      </ul>
+    </details>
+  </article>
+</Layout>
+
+<style>
+  .guide {
+    padding-bottom: var(--section-y);
+  }
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  /* The same reading size as a guide's prose. */
+  .g-body {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .g-body > :global(p:first-child) {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  .g-body h2 {
+    font-size: var(--fs-section);
+  }
+  .g-body ul {
+    list-style: disc;
+  }
+  .g-body li::marker {
+    color: var(--ink-3);
+  }
+  .g-body b {
+    font-weight: 600;
+  }
+  .g-body :not(pre) > code {
+    padding: 0 4px;
+    border-color: transparent;
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+  }
+  .src {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .sources summary {
+    width: fit-content;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .sources summary:hover {
+    color: var(--ink-2);
+  }
+  .sources ul {
+    display: grid;
+    gap: var(--sp-1);
+    margin: var(--sp-2) 0 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+    font-size: var(--fs-fine);
+  }
+</style>

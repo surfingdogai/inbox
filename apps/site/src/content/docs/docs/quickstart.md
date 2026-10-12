@@ -171,3 +171,5 @@ curl -X POST https://<your-instance>/v1/owner/items/<item id>/transitions \
 ```
 
 The same operations are MCP tools at `/mcp` (public) and `/mcp/owner` (owner). See [Connect your AI](/docs/connect-your-ai/) and the [API](/docs/api/) page.
+
+Once your inbox answers at its own address and your website names it, [check your website for AI agents](/check): the check reads your site the way a customer's assistant would, and shows the doors it finds.

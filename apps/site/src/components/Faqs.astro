@@ -1,0 +1,57 @@
+---
+/**
+ * A page's questions, each folded until it is opened: the question is all a reader sees at first,
+ * and the answer is the same plain text the page's FAQPage data carries (src/lib/faq.ts).
+ */
+import type { Faq } from "../lib/faq";
+
+interface Props {
+  faqs: readonly Faq[];
+  /** The heading's id, for the section's label. */
+  id?: string;
+  title?: string;
+}
+const { faqs, id = "faq-h", title = "Questions" } = Astro.props;
+---
+
+<section class="faqs" aria-labelledby={id}>
+  <h2 class="h-section" id={id}>{title}</h2>
+  {
+    faqs.map((f) => (
+      <details class="faq">
+        <summary>{f.q}</summary>
+        <p>{f.a}</p>
+      </details>
+    ))
+  }
+</section>
+
+<style>
+  .faqs h2 {
+    margin-bottom: var(--sp-3);
+  }
+  .faq {
+    border-top: 1px solid var(--hairline);
+  }
+  .faq:last-child {
+    border-bottom: 1px solid var(--hairline);
+  }
+  .faq summary {
+    padding: var(--sp-3) 0;
+    font-size: var(--fs-body);
+    font-weight: 600;
+    line-height: var(--lh-ui);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .faq summary:hover {
+    color: var(--ink-2);
+  }
+  .faq p {
+    margin: 0;
+    padding: 0 0 var(--sp-4);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+</style>

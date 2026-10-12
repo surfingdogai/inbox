@@ -1,7 +1,8 @@
 ---
-// The guides' hub: what being ready for AI agents means, the five steps the network places a
-// business on, the doors that count, how the score is worked out (#score, from the published rules)
-// and the eight guides, each written for any business, anywhere.
+// The guides' hub, the AI agent readiness checklist: what being ready for AI agents means, the five
+// steps the network places a business on, the doors that count, how the score is worked out (#score,
+// from the published rules), the eight guides, each written for any business, anywhere, and the pages
+// for one platform's owners.
 import GuideAnswer from "../../components/GuideAnswer.astro";
 import GuideCheck from "../../components/GuideCheck.astro";
 import GuideList from "../../components/GuideList.astro";
@@ -81,10 +82,19 @@ const grades = SCORE_GRADES.map((g, i) =>
         with a script aren't seen, since our check never runs JavaScript.
       </p>
 
-      <h2 id="guides-h">The guides</h2>
-      <p>Each one says what an assistant needs, what the check counts, the ways to do it, and how to check it worked.</p>
+      <h2 id="guides-h">The checklist</h2>
+      <p>
+        Eight things to check, one guide each: what an assistant needs, what the check counts, the ways to do it, and how
+        to check it worked.
+      </p>
     </section>
     <GuideList />
+    <section class="prose hub-body" aria-label="Platforms">
+      <p>
+        On Shopify: <a href="/guides/shopify-ai-assistants/">Shopify and AI assistants</a>, what Shopify publishes for
+        your store and what's left to add.
+      </p>
+    </section>
 
     <section class="prose hub-body" aria-labelledby="score">
       <h2 id="score">How the score works</h2>

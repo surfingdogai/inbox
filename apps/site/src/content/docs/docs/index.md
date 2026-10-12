@@ -7,6 +7,8 @@ Surfing Dog Inbox is an open-source, self-hostable typed inbox for a business. I
 
 One codebase runs on Cloudflare Workers and on Node. One SQLite database holds everything the business owns. One discovery manifest at `/.well-known/agent-inbox.json` tells an agent where the REST, OpenAPI and MCP doors are.
 
+To see what an assistant can already do with your website, before you install anything or after, [check your website for AI agents](/check).
+
 ## Where things stand
 
 Written on 21 September 2026. The self-hostable inbox is under way and this page says what actually runs. Working today, on both runtimes:

@@ -38,6 +38,15 @@ export const guideHref = (slug: GuideSlug | "") => (slug ? `/guides/${slug}/` : 
 /** The checker, where every guide ends: a fresh read of the owner's site. */
 export const CHECK_HREF = "/check";
 
+/**
+ * Pages for one platform's owners, beside the guides and outside their contract: the network's
+ * result pages don't link them, so they may be added or renamed. Each is its own page under
+ * src/pages/guides/.
+ */
+export const PLATFORM_PAGES: readonly { readonly slug: string; readonly label: string }[] = [
+  { slug: "shopify-ai-assistants", label: "Shopify and AI assistants" },
+];
+
 /** What the leaderboards can list (the network's ?can= values), or the agent-ready as a whole. */
 export type Examples = { readonly href: string; readonly label: string };
 
@@ -138,10 +147,10 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: "sell-through-ai-assistants",
-    title: "Sell through AI assistants: checkout for ChatGPT, Gemini and others (UCP, ACP)",
+    title: "Agentic commerce readiness: sell through AI assistants",
     short: "Selling",
     description:
-      "How AI assistants place orders: UCP and ACP checkout, what your shop platform may publish for you, and the steps after: change, cancel, track, receipt, return.",
+      "Agentic commerce readiness for a shop: how ChatGPT, Gemini and other assistants order through UCP or ACP checkout, and the steps after: cancel, track, return.",
     answer:
       "An assistant can order from you when your shop publishes a checkout it can use, such as a UCP or ACP profile, or an order tool on your own domain. Then let it change, cancel and track the order, fetch a receipt and start a return.",
     options: [
@@ -159,6 +168,7 @@ export const GUIDES: readonly Guide[] = [
             href: "https://help.shopify.com/en/manual/online-sales-channels/agentic-storefronts",
           },
           { label: "Shopify: agent orders", href: "https://shopify.dev/docs/agents/orders" },
+          { label: "Shopify and AI assistants, in more detail", href: "/guides/shopify-ai-assistants/" },
           { label: "Wix: agentic commerce", href: "https://wix.com/blog/agentic-commerce-on-wix" },
         ],
       },
@@ -362,9 +372,9 @@ export const GUIDES: readonly Guide[] = [
 
 /** The hub at /guides/: what being ready means, the five steps, the doors, the score, the guides. */
 export const HUB = {
-  title: "What makes a business ready for AI agents",
+  title: "AI agent readiness checklist for small businesses",
   description:
-    "What a customer's AI assistant needs to ask, book, order or pay at a business: the five steps from listed to payable, how the score works, and eight guides.",
+    "An AI agent readiness checklist for small businesses: what a customer's assistant needs to ask, book, order or pay, how the score works, and eight guides.",
   answer:
     "A business is ready for AI agents when a customer's AI assistant can do something with it, not just read about it: ask a question, book, order or sign up, and later change or cancel. That takes a door: a machine address on its own domain.",
   examples: [READY] as readonly Examples[],

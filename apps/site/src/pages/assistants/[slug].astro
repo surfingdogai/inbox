@@ -1,9 +1,14 @@
 ---
-// One page per AI assistant: how its users' requests reach a business through its inbox, and how the
-// owner connects the same assistant to run the inbox. Every step and status is from lib/assistants.ts,
-// checked against the assistant's own help on the date it gives.
+// One page per AI assistant: first the owner's question (can it book or order with my business?),
+// answered with what it does today and where we read it, and a check of the owner's own site; then
+// how its users' requests reach a business through its inbox, and how the owner connects the same
+// assistant to run the inbox. Every step and status is from lib/assistants.ts, checked against the
+// assistant's own help on the date it gives.
+import Faqs from "../../components/Faqs.astro";
+import GuideCheck from "../../components/GuideCheck.astro";
 import Layout from "../../layouts/Layout.astro";
-import { ASSISTANTS, type Assistant, CHECKED } from "../../lib/assistants";
+import { ASSISTANTS, type Assistant, CHECKED, OWNER_AS_OF, OWNER_CHECKED } from "../../lib/assistants";
+import { faqPage } from "../../lib/faq";
 
 export function getStaticPaths() {
   return ASSISTANTS.map((a) => ({ params: { slug: a.slug }, props: { a } }));
@@ -18,7 +23,7 @@ const ld = [
     "@type": "TechArticle",
     headline: a.heading,
     description: a.description,
-    dateModified: "2026-09-30",
+    dateModified: "2026-10-12",
     about: { "@type": "SoftwareApplication", name: a.name, author: { "@type": "Organization", name: a.maker } },
     author: { "@type": "Organization", name: "Surfing Dog" },
     publisher: { "@type": "Organization", name: "Surfing Dog Lda" },
@@ -33,6 +38,7 @@ const ld = [
       { "@type": "ListItem", position: 2, name: a.name, item: url },
     ],
   },
+  faqPage(a.owner.faqs, url),
 ];
 ---
 
@@ -41,6 +47,34 @@ const ld = [
     <p class="eyebrow"><a class="link" href="/assistants/">Assistants</a> · {a.maker}</p>
     <h1 class="h-page" id="as-h">{a.heading}</h1>
     <p class="lede">{a.lede}</p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight owner" aria-labelledby="owner-h">
+    <h2 class="h-section" id="owner-h">{a.owner.question}</h2>
+    <p>
+      {a.short} books or buys through a door: a platform it works with, an app or connector, or a door on the
+      business's own website. With a browser it can sometimes get through pages made for people, but a form that
+      waits for an email, or a phone number, stops it. Our <a class="link" href="/check">free check of your website</a>
+      shows which doors yours offers.
+    </p>
+    <h3 class="h-sub">What {a.short} does, {OWNER_AS_OF}</h3>
+    <ul class="does">
+      {
+        a.owner.does.map((d) => (
+          <li>
+            {d.text}{" "}
+            <span class="src">
+              ({d.sources.map((src, i) => <>{i > 0 && "; "}<a class="link" href={src.href} rel="noopener">{src.label}</a></>)})
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="muted fine-print">
+      Read {OWNER_CHECKED} from each maker's own pages, or a report where we couldn't read them. One way to give {a.short}
+      a door is your own inbox, below; your booking system, shop platform or helpdesk may offer one too.
+    </p>
+    <GuideCheck examples={[]} title={`Check what ${a.short} can do with you`} />
   </section>
 
   <section class="section section-tight" aria-label="Two ways in">
@@ -94,6 +128,10 @@ const ld = [
     </p>
   </section>
 
+  <div class="wrap wrap-read section">
+    <Faqs faqs={a.owner.faqs} />
+  </div>
+
   <section class="wrap wrap-read section" aria-labelledby="next-h">
     <h2 class="h-section" id="next-h">Try it first</h2>
     <p>
@@ -145,5 +183,23 @@ const ld = [
   .wrap-read.section p + p,
   .wrap-read.section ul + p {
     margin-top: var(--sp-3);
+  }
+  .owner .h-sub {
+    margin-top: var(--sp-6);
+  }
+  .does {
+    display: grid;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+  .does li::marker {
+    color: var(--ink-3);
+  }
+  .src,
+  .fine-print {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
   }
 </style>

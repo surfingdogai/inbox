@@ -11,6 +11,7 @@ import {
   HUB,
   INBOX_WAY,
   LEVELS,
+  PLATFORM_PAGES,
   SCORE_GRADES,
   SCORE_GROUPS,
   wordCount,
@@ -101,7 +102,7 @@ describe("the guides", () => {
     expect(check).toContain('title = "Check it worked"');
     expect(check).toMatch(/<form class="g-form" method="post" action=\{CHECK_HREF\}>/);
     expect(check).toContain('name="url"');
-    expect(check).toMatch(/<a class="link" href=\{CHECK_HREF\}>the checker<\/a>/);
+    expect(check).toMatch(/<a class="link" href=\{CHECK_HREF\}>free AI agent readiness checker<\/a>/);
     const page = read("src/pages/guides/[slug].astro");
     expect(page).toContain("<GuideCheck examples={guide.examples} />");
     expect(page).toContain("<GuideOptions options={guide.options} />");
@@ -142,7 +143,10 @@ describe("the guides", () => {
       expect(text, name).not.toMatch(
         /\b(seamless(ly)?|effortless(ly)?|revolutionary|game.?chang\w*|supercharge\w*|cutting.?edge|world.?class|unlock\w*)\b/i,
       );
-      expect(text, name).not.toMatch(/Agent ?Readiness|AgentReady/i);
+      // "AI agent readiness checklist" is a plain description, in lower case; a product's name for a
+      // score, "Agent Readiness" in capitals or an "agent readiness score", is never ours to use.
+      expect(text, name).not.toMatch(/Agent ?Readiness|AgentReady/);
+      expect(text, name).not.toMatch(/agent ?readiness score|AgentReady/i);
     }
   });
 
@@ -206,6 +210,9 @@ describe("the guides", () => {
       const p = path.replace(/\?.*$/, "");
       if (proxied.some((r) => r.test(p))) return true;
       const guide = p.match(/^\/guides\/([a-z0-9-]+)\/$/)?.[1];
+      if (guide && PLATFORM_PAGES.some((pp) => pp.slug === guide)) {
+        return !anchor && existsSync(site(`src/pages/guides/${guide}.astro`));
+      }
       if (guide) {
         if (!(CONTRACT as string[]).includes(guide)) return false;
         return !anchor || idsOf(body(guide)).includes(anchor);
