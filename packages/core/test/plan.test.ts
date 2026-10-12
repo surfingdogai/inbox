@@ -226,6 +226,8 @@ describe("a setup plan", () => {
       preset: "appointments",
     });
     expect(r.sentences).toContain("Changes the service Corte: 30 minutes (was 45 minutes), on offer again.");
+    // A length the plan leaves out is the service's own.
+    expect((await caps.applySetupPlan(system, { services: [{ name: "Corte" }] })).changed).toBe(false);
     const services = await caps.setup.listServices(owner);
     expect(services.map((s) => [s.id, s.durationMin, s.active])).toEqual([[svc.id, 30, 1]]);
     const names = (await caps.setup.listRules(owner)).map((r) => r.name);

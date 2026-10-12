@@ -89,7 +89,13 @@ const planDirectorySchema = z
 const planServiceSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(1000).optional(),
-  duration_min: z.number().int().min(5).max(1440).default(60),
+  duration_min: z
+    .number()
+    .int()
+    .min(5)
+    .max(1440)
+    .optional()
+    .describe("How long it takes, in minutes. Left out, a new service takes 60 and one that exists keeps its own."),
   price: priceSchema
     .optional()
     .describe("Only a price the owner typed or confirmed. Left out, the service is priced on request."),
@@ -274,7 +280,7 @@ export async function applySetupPlan(
       steps.push({
         sentences: [
           check(
-            `Adds the service ${name}: ${minutes(wanted.duration_min)}, ${priceWords(price ?? null, currency)}.`,
+            `Adds the service ${name}: ${minutes(wanted.duration_min ?? 60)}, ${priceWords(price ?? null, currency)}.`,
             "services",
           ),
         ],
@@ -283,7 +289,7 @@ export async function applySetupPlan(
             caller,
             serviceInput.parse({
               name,
-              duration_min: wanted.duration_min,
+              duration_min: wanted.duration_min ?? 60,
               ...(wanted.description !== undefined ? { description: wanted.description } : {}),
               ...(price ? { price } : {}),
             }),
@@ -298,7 +304,7 @@ export async function applySetupPlan(
       active?: boolean;
     } = {};
     const what: string[] = [];
-    if (wanted.duration_min !== existing.durationMin) {
+    if (wanted.duration_min !== undefined && wanted.duration_min !== existing.durationMin) {
       patch.duration_min = wanted.duration_min;
       what.push(`${minutes(wanted.duration_min)} (was ${minutes(existing.durationMin)})`);
     }
