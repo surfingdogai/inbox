@@ -307,14 +307,19 @@ export interface EmailCopy {
   readonly priceToConfirm: string;
   /** An order line whose price is ours to set. */
   readonly lineToConfirm: string;
+  /**
+   * The acknowledgement a request gets unasked, at whatever address it gave. Its subjects are fixed
+   * words with nothing the request carried: whoever made the request chose the address, and must not
+   * choose a line that shows in a stranger's inbox in the business's name.
+   */
   readonly ack: Readonly<{
-    bookingSubject: Say;
+    bookingSubject: string;
     booking: Say;
     bookingNext: string;
-    orderSubject: Say;
+    orderSubject: string;
     order: string;
     orderNext: string;
-    quoteSubject: Say;
+    quoteSubject: string;
     quote: Say;
   }>;
   readonly proposed: Readonly<{
@@ -772,13 +777,13 @@ const EN: Copy = {
     priceToConfirm: "We will confirm the price with you.",
     lineToConfirm: "price to be confirmed",
     ack: {
-      bookingSubject: (v) => `We have your booking request: ${v.what}`,
+      bookingSubject: "We have your booking request",
       booking: (v) => `Thank you. We have your request for ${v.what} on ${v.when}.`,
       bookingNext: "We will confirm it or suggest another time soon.",
-      orderSubject: (v) => `We have your order: ${v.what}`,
+      orderSubject: "We have your order",
       order: "Thank you. We have your order:",
       orderNext: "We will confirm it soon.",
-      quoteSubject: (v) => `We have your request: ${v.what}`,
+      quoteSubject: "We have your request for a quote",
       quote: (v) => `Thank you. We have your request for a quote for ${v.what}. We will send you a price soon.`,
     },
     proposed: {
@@ -1369,13 +1374,13 @@ const PT: Copy = {
     priceToConfirm: "Vamos confirmar o preço consigo.",
     lineToConfirm: "preço a confirmar",
     ack: {
-      bookingSubject: (v) => `Recebemos o seu pedido de marcação: ${v.what}`,
+      bookingSubject: "Recebemos o seu pedido de marcação",
       booking: (v) => `Obrigado. Recebemos o seu pedido de ${v.what} para ${v.when}.`,
       bookingNext: "Vamos confirmar ou sugerir outra hora em breve.",
-      orderSubject: (v) => `Recebemos a sua encomenda: ${v.what}`,
+      orderSubject: "Recebemos a sua encomenda",
       order: "Obrigado. Recebemos a sua encomenda:",
       orderNext: "Vamos confirmá-la em breve.",
-      quoteSubject: (v) => `Recebemos o seu pedido: ${v.what}`,
+      quoteSubject: "Recebemos o seu pedido de orçamento",
       quote: (v) => `Obrigado. Recebemos o seu pedido de orçamento para ${v.what}. Vamos enviar-lhe um preço em breve.`,
     },
     proposed: {

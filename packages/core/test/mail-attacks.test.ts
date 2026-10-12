@@ -270,8 +270,8 @@ describe("the acknowledgement", () => {
     } as never);
     await s.drain(T0 + 2 * MIN);
     const [ack] = s.to("rita@example.com");
-    expect(ack?.subject).not.toMatch(/[\r\n]/);
-    expect(ack?.subject).toBe("We have your request: Wedding cake Bcc: all@example.com");
+    // The subject is fixed words: nothing the request carried reaches a mailbox's list of subjects.
+    expect(ack?.subject).toBe("We have your request for a quote");
     expect(ack?.text.split("\n")[0]).toBe("Hello Rita Your account is locked. Visit http://evil.example,");
     expect(ack?.text).toContain('a quote for "Wedding cake Bcc: all@example.com"');
     // The owner hears of it too: a subject with a line break would be refused by the mail service.
@@ -311,7 +311,8 @@ describe("a Portuguese customer", () => {
     expect(o.view.human).not.toMatch(/\band\b|\bmore\b/);
     await s.drain(T0 + 2 * MIN);
     const [ack] = s.to("rita@example.com");
-    expect(ack?.subject).toBe("Recebemos a sua encomenda: Bolo e mais 2 artigos");
+    expect(ack?.subject).toBe("Recebemos a sua encomenda");
+    expect(ack?.text).toContain("Bolo");
     expect(`${ack?.subject}\n${ack?.text}`).not.toMatch(/\band\b|\bmore\b/);
     // The owner's app keeps its own words.
     expect((await s.caps.getItem(owner(), { item_id: o.view.item.id })).item.subject).toBe("Bolo and 2 more");

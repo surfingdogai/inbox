@@ -470,7 +470,7 @@ function bodyOf(input: CustomerMailInput): Body {
       case "booking":
         return {
           template: "ack.booking",
-          subject: e.ack.bookingSubject(s()),
+          subject: e.ack.bookingSubject,
           blocks: [
             [
               e.ack.booking(v({ when: when(item.payload.startTime) })),
@@ -482,11 +482,11 @@ function bodyOf(input: CustomerMailInput): Body {
       case "order":
         return {
           template: "ack.order",
-          subject: e.ack.orderSubject(s()),
+          subject: e.ack.orderSubject,
           blocks: [[e.ack.order], orderLines(input, item), [e.ack.orderNext]],
         };
       case "quote_request":
-        return { template: "ack.quote", subject: e.ack.quoteSubject(s()), blocks: [[e.ack.quote(v())]] };
+        return { template: "ack.quote", subject: e.ack.quoteSubject, blocks: [[e.ack.quote(v())]] };
     }
   }
 
