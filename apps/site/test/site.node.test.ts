@@ -589,7 +589,8 @@ describe("the trust page's animation", () => {
     road: string;
     sign: string;
     seals: { ib: number[]; ag: number[]; r: number };
-    inbox: { x: number; w: number };
+    inbox: { x: number; y: number; w: number };
+    item: { y: number };
     net: { x: number };
     say: { phrases: string[] };
     at: {
@@ -758,6 +759,11 @@ describe("the trust page's animation", () => {
     expect(A.sign[0]).toBeGreaterThan(A.seal);
     expect(A.sign[1]).toBeGreaterThan(A.sign[0] ?? 0);
     expect(A.road[0]).toBeGreaterThan(A.sign[1] ?? 0);
+    // And the receipt, signed twice, holds still long enough to be seen, its second seal's pop
+    // (0.6 s) done before the receipt moves or the words change.
+    expect((A.road[0] ?? 0) - (A.sign[1] ?? 0)).toBeGreaterThanOrEqual(0.6);
+    expect((A.say[3] ?? 0) - (A.sign[1] ?? 0)).toBeGreaterThanOrEqual(0.6);
+    expect(style).toMatch(/\.stf \.tf-slip\.copop \.seal\.ag \{\s*animation: stf-pop 0\.6s /);
     // Each beat happens under its own words: the inbox's seal, the agent's whole journey, the travel.
     const [inboxFrom, inboxTo] = at(/inbox signs/);
     expect(A.seal).toBeGreaterThanOrEqual(inboxFrom);
@@ -774,6 +780,14 @@ describe("the trust page's animation", () => {
     const xs = [...G.sign.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => Number(m[1]));
     for (const x of xs) expect(x, String(x)).toBeLessThanOrEqual(G.inbox.x + G.inbox.w);
     expect(Math.max(...xs)).toBeLessThan(G.net.x);
+    // In the groove between the inbox's hairline and the order's row, the travelling seal and its
+    // faint ring clear both.
+    const groove = Number(G.sign.match(/L[\d.]+,([\d.]+)/)?.[1]);
+    const ring = Number(script.match(/r: G\.seals\.r \+ ([\d.]+), class: "rim"/)?.[1]);
+    const ringW = Number(style.match(/\.stf \.tf-ink \.rim \{[^}]*stroke-width: ([\d.]+);/)?.[1]);
+    const outer = G.seals.r + ring + ringW / 2;
+    expect(groove - outer, "the hairline").toBeGreaterThan(G.inbox.y + 36 + 0.5);
+    expect(groove + outer, "the order's row").toBeLessThan(G.item.y);
     const birth = G.road.match(/^M(-?[\d.]+),(-?[\d.]+)/);
     const landing = G.sign.match(/(-?[\d.]+),(-?[\d.]+)$/);
     expect(Number(landing?.[1])).toBeCloseTo(Number(birth?.[1]) + (G.seals.ag[0] ?? 0), 6);
@@ -781,7 +795,12 @@ describe("the trust page's animation", () => {
     // Two seals that do not touch, inside the paper, on either side of its middle.
     expect(G.seals.ag[0] ?? 0).toBeLessThan(0);
     expect(G.seals.ib[0] ?? 0).toBeGreaterThan(0);
-    expect((G.seals.ib[0] ?? 0) - (G.seals.ag[0] ?? 0)).toBeGreaterThan(2 * G.seals.r);
+    // A gap of at least 1.5 units, so even at a phone's width they read as two seals, not one dot.
+    expect((G.seals.ib[0] ?? 0) - (G.seals.ag[0] ?? 0) - 2 * G.seals.r).toBeGreaterThanOrEqual(1.5);
+    for (const [x, y] of [G.seals.ib, G.seals.ag]) {
+      expect(Math.abs(x ?? 0) + G.seals.r, "inside the paper's inner edge").toBeLessThanOrEqual(6.5);
+      expect((y ?? 0) + G.seals.r, "inside the paper's inner edge").toBeLessThanOrEqual(8.5);
+    }
     // At rest the receipt carries both seals, filled: the inbox's in palm, the agent's in violet.
     expect(A.rest).toBeGreaterThan(A.sign[1] ?? 0);
     expect(A.rest).toBeLessThan(A.settle[1] ?? 0);
@@ -790,6 +809,8 @@ describe("the trust page's animation", () => {
     );
     expect(style).toMatch(/\.stf \.tf-slip\.signed \.seal\.ib \{\s*fill: var\(--tf-palm\);/);
     expect(style).toMatch(/\.stf \.tf-slip\.cosigned \.seal\.ag \{\s*fill: var\(--tf-violet\);/);
+    // On the agent's line violet means only the signature: the order travels in its own tangerine.
+    expect(style).toMatch(/\.stf \.tf-dot \{\s*fill: var\(--tf-order\);/);
     // The machine follows the same path and fills the second seal as the agent's seal lands.
     expect(script).toContain('E("path", { d: G.sign, class: "tf-guide" })');
     expect(script).toContain('slip.classList.toggle("cosigned", t >= A.sign[1] && t < A.settle[1]);');
