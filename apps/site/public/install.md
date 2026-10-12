@@ -21,7 +21,8 @@ ordered; Step 5 lists exactly what a network receives. If the person asks, tell 
 - **Tools of its own already** (its own checkout, a booking system, a helpdesk, its own MCP server or
   API): read https://surfingdog.ai/setting-up-for-agents.md first. Set up only the doors nothing else
   handles, often messages and quote requests, and declare the ones it already has. The inbox cannot
-  take over orders placed in another system, so a shop with its own checkout keeps its orders there.
+  take over orders placed in another system: orders placed in a shop's own checkout stay there. A
+  shop can still choose to take agents' orders in the inbox (Step 3).
 
 **Advice before you start.** https://surfingdog.ai/setting-up-for-agents.md is guidance from a
 real installation: the inbox as a business's front door, or as a thin agent door in front of the
@@ -54,14 +55,27 @@ Ask, check, and write down the answers before Step 0. Each one has stopped a rea
    account, every later wrangler command stops with "More than one account available". Ask which
    account is the business's, then `export CLOUDFLARE_ACCOUNT_ID=<that account's id>` in the shell you
    install from, and keep it set until the end.
-3. **The plan.** The free plan runs the inbox; sending email needs Workers Paid. Ask whether they want
+3. **Where the domain's DNS is** (Path A). The inbox has to answer at a subdomain of the business's
+   own domain, such as `inbox.theirdomain.com`: agents and checkers start from the business's site,
+   and a door on another site, such as a `workers.dev` address, is one they don't read. A Worker can
+   take that subdomain when the domain is on the same Cloudflare account, and not otherwise. Check
+   the account's domains in the dashboard, or ask. If the domain is not there, tell the person and
+   let them choose:
+   - move the domain's DNS to Cloudflare (a DNS change: ask first, and carry over every record it has
+     now, its mail records above all);
+   - take Path B, on a server reachable at a subdomain of their own domain (one DNS record, added
+     wherever their DNS is);
+   - or run on `workers.dev` for now, knowing that checkers won't credit the inbox until it answers at
+     their own subdomain.
+4. **The plan.** The free plan runs the inbox; sending email needs Workers Paid. Ask whether they want
    email now.
-4. **The address it sends from**, if they want email. Ask which one, then check that nothing already
+5. **The address it sends from**, if they want email. Ask which one, then check that nothing already
    reads mail sent to it: look at the domain's Email Routing rules and its MX records, or ask. If mail
    to that address already goes to another system (a CRM, a sales tool, a ticket desk), customers'
    replies may land there: choose another address, such as `inbox@theirdomain.com`.
-5. **What the business already uses** for messages, bookings, orders and payments (see "Which way
-   fits" above), so you set up only the doors it will fulfil.
+6. **What the business already uses** for messages, bookings, orders and payments (see "Which way
+   fits" above), so you set up only the doors it will fulfil. A shop with a checkout already: ask
+   whether agents' orders should come into the inbox or stay in that checkout (Step 3).
 
 ---
 
@@ -160,9 +174,10 @@ Expect `{"ok":true,"version":"0.1.0"}`. Anything else: stop, show them the outpu
 
 ### A6. Their own subdomain
 
-Ask which subdomain they want. `inbox.theirdomain.com` is the convention. Then in the Cloudflare
-dashboard: **Workers & Pages → surfingdog-inbox → Settings → Domains & Routes → Add → Custom
-domain**. Cloudflare creates the DNS record and the certificate.
+Ask which subdomain they want. `inbox.theirdomain.com` is the convention. This needs the domain on
+the same Cloudflare account (preflight, item 3); if it is not, stop here and go back to the choice
+there. Then in the Cloudflare dashboard: **Workers & Pages → surfingdog-inbox → Settings → Domains &
+Routes → Add → Custom domain**. Cloudflare creates the DNS record and the certificate.
 
 Or add it to `wrangler.jsonc` and redeploy:
 
@@ -390,11 +405,18 @@ has opening hours, `order` once a product is active, and `quote_request` with ei
 fits the business, and nothing else:
 
 - **Takes bookings** (a salon, a clinic, a trade, a restaurant's tables): services with their hours.
-- **A shop that takes orders through the inbox**: its products, or a product feed. The customer pays
-  by a link to the shop's own checkout.
-- **A shop whose orders go through its own checkout**: leave products out, so the inbox does not
-  offer a second way to order. To take bulk or trade enquiries, add a service priced by quote; the
-  inbox then takes quote requests too.
+- **A shop that takes orders through the inbox**: its products, or a product feed. For each order the
+  business sends a payment link from its own payment provider (`request_payment` with a
+  `paymentUrl`, from the owner app or over the API), and the customer pays there. This is what lets
+  agents order, cancel, track and start a return through the inbox, and what a result page counts
+  for it.
+- **A shop that keeps orders in its existing checkout**: leave products out, so the inbox does not
+  offer a second way to order. Ordering, and what follows an order, then counts through a door in
+  that checkout, not through the inbox. To take bulk or trade enquiries, add a service priced by
+  quote; the inbox then takes quote requests too.
+
+A shop with a checkout already chooses between those two: ask the person, and don't decide for
+them.
 
 ---
 
@@ -526,6 +548,7 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
 - A network says "not reachable" in `/v1/owner/networks` → it is down or the address is wrong; the
   inbox keeps retrying on its own and sends it everything it missed once it answers.
 - "More than one account available" from wrangler → `export CLOUDFLARE_ACCOUNT_ID` (preflight, 2).
+- The custom domain can't be added → the domain is not on this Cloudflare account (preflight, 3).
 - The owner's address is wrong → set `INBOX_OWNER_EMAIL` again (`secret put`, or `.env` and a restart
   on their own server), then sign in at `/login` with the right one.
 
