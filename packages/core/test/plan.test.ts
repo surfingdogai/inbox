@@ -294,6 +294,20 @@ describe("a setup plan", () => {
     expect((await readSettings(db)).doorsElsewhere).toEqual([]);
   });
 
+  it("keeps a shop's orders in its own checkout, and says so", async () => {
+    const { db, caps } = await setup();
+    const CHECKOUT = "https://shop.example.com/";
+    const r = await caps.applySetupPlan(system, {
+      profile: { name: "Maré Surf Shop" },
+      preset: "shop",
+      doors: ["message"],
+      doors_elsewhere: [{ door: "order", url: CHECKOUT }],
+    });
+    expect(r.sentences).toContain("Orders stay in your own checkout.");
+    expect(r.doors.on).not.toContain("order");
+    expect((await readSettings(db)).doorsElsewhere).toEqual([{ itemType: "order", url: CHECKOUT }]);
+  });
+
   it("refuses a door kept elsewhere that is not a booking or an order, or not on a public host, and a time zone it does not know", async () => {
     const { caps } = await setup();
     await expect(
