@@ -476,6 +476,12 @@ export type UpdateBusinessOutput = z.infer<typeof updateBusinessOutputSchema>;
 /** `check_business`: check one business's website, or read the result of a check already made. */
 export const checkBusinessInputSchema = z.object({
   url: z.string().min(1).max(2048).describe("The business's website, as a URL or a bare domain like salon.example."),
+  fresh: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Read the site again rather than answer the stored result: for a business that just changed its site. Allowed a few minutes after the last read; before that, the stored result is answered with when to ask again.",
+    ),
 });
 export type CheckBusinessInput = z.infer<typeof checkBusinessInputSchema>;
 

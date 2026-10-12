@@ -15,7 +15,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "How do I check my business?",
-    a: 'Paste your website at <a href="/check">surfingdog.ai/check</a>, or ask your AI to call the <code>check_business</code> tool with your address. A new check usually takes a few minutes. The result is at surfingdog.ai/b/ followed by your domain, for example surfingdog.ai/b/salon.example.',
+    a: 'Paste your website at <a href="/check">surfingdog.ai/check</a>, or ask your AI to call the <code>check_business</code> tool with your address. The result is at surfingdog.ai/b/ followed by your domain, for example surfingdog.ai/b/salon.example. Changed something since? Press Check again on your result.',
   },
   {
     q: "What is the agentic score?",
@@ -59,7 +59,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: "How often is a business checked?",
-    a: "Our crawler reads a site on its ordinary schedule. A check you ask for runs within a daily budget, usually in minutes, and the same site can be checked again after a day.",
+    a: "Our crawler reads a site on its ordinary schedule. A check you ask for reads the site within a daily budget, and the same site can be checked again a few minutes after its last read: open its result and press Check again, or have an AI call <code>check_business</code> with <code>fresh</code> set to true.",
   },
   {
     q: "When should an AI call check_business?",

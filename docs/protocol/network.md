@@ -546,7 +546,7 @@ is open to every origin, without credentials.
 | `list_attributes` (0.2, optional) | none | `GET /v1/attributes` |
 | `register_business` (0.2, optional) | the business, its doors and a proof (§4.12) | the status, the card, what was dropped |
 | `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
-| `check_business` (0.3, optional) | `url`: a website or a bare domain | a check's result (§4.13) |
+| `check_business` (0.3, optional) | `url`: a website or a bare domain; `fresh`: read it again | a check's result (§4.13) |
 
 Protocol 0.2: `search_businesses` takes `attributes`, `country`, `price_band`, `accepts`,
 `requestable`, `door_type`, `level`, `has_inbox`, `source` and `order`, as `GET /v1/businesses` does
@@ -559,8 +559,10 @@ ones are `MCP_OPTIONAL_TOOL_NAMES`. `list_attributes` is read-only like the othe
 
 Spec 0.3: `check_business` (in `MCP_OPTIONAL_TOOL_NAMES`) checks how far an agent can go with one
 business's website and answers `GET /b/{domain}.json`'s shape (`schemas/mcp-check-business-*.json`).
-It may queue a read of the site within the network's daily budget, so it is annotated not read-only,
-not destructive, idempotent and open-world; calling it again with the same URL reads the result.
+It may start a read of the site within the network's daily budget, so it is annotated not read-only,
+not destructive, idempotent and open-world; calling it again with the same URL reads the result. A
+recent result is answered as it is; `fresh: true` asks for a new read, which a network allows a few
+minutes after the last one and otherwise answers the stored result with when to ask again.
 Checking a site is not claiming it, and never touches a listing. `update_business` takes
 `score_page: "hidden" | "shown"`, which needs the claim token or a proof as `set` does, and answers
 it back.
