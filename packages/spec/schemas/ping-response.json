@@ -132,7 +132,8 @@
         "score": {
           "type": "number",
           "minimum": 0,
-          "maximum": 1
+          "maximum": 1,
+          "description": "What its record scores, its own word included."
         },
         "tier": {
           "type": "string",
@@ -140,7 +141,7 @@
         },
         "ranked": {
           "type": "boolean",
-          "description": "score_int ≥ 4000 (building): sorts before the newcomers' shuffle."
+          "description": "score_int ≥ 4000 (building): sorts before the newcomers' shuffle; from rules version 8 only with verified evidence."
         }
       },
       "required": ["score", "tier", "ranked"]

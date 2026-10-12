@@ -45,12 +45,14 @@ import {
   rankingV5Schema,
   rankingV6Schema,
   rankingV7Schema,
+  rankingV8Schema,
   readRankingDocument,
   receiptAckPayloadV2Schema,
   receiptPayloadV2Schema,
   registerBusinessInputSchema,
   registerBusinessOutputSchema,
   reportRequestSchema,
+  reputationSchema,
   rulesOf,
   SCORE_FORMULA_V1,
   SCORE_FORMULA_V2,
@@ -812,6 +814,10 @@ describe("what an inbox reads from a network's answers", () => {
       [409, "nonce_reused"],
       [400, undefined],
       [422, "ack_bad_signature"],
+      // Version 7 as amended (ADR-017 A4.6): the same receipt always meets the same arrival.
+      [422, "v2_required"],
+      [422, "due_too_far"],
+      [422, "end_too_far"],
     ] as const) {
       expect(isRetriedPublication(status, code), `${status} ${code}`).toBe(false);
     }
@@ -1420,6 +1426,60 @@ describe("protocol 0.2: rules version 7 and the order", () => {
     // No newcomer left: the order goes on.
     const one = placeNewcomers(order.map((e) => ({ ...e, newcomer: e.ref === "c" })));
     expect(one.map((p) => p.entry.ref).join("")).toBe("abcdefghijkl");
+  });
+});
+
+describe("rules version 8: version 7 amended before it took effect (ADR-017 Amendment 4)", () => {
+  it("keeps every member of version 7 and adds what the amendment publishes", () => {
+    for (const k of Object.keys(rankingV7Schema.shape)) expect(Object.keys(rankingV8Schema.shape), k).toContain(k);
+    for (const k of Object.keys(rankingV7Schema.shape.order.shape))
+      expect(Object.keys(rankingV8Schema.shape.order.shape), k).toContain(k);
+    expect(Object.keys(rankingV8Schema.shape.order.shape)).toContain("reach_1_after_days");
+    expect(Object.keys(rankingV8Schema.shape.order.shape.newcomers.shape)).toEqual(
+      expect.arrayContaining(["every", "who", "how", "days", "group", "per_group_per_hour", "turn"]),
+    );
+    expect(Object.keys(rankingV8Schema.shape.score.shape)).toContain("shown");
+    expect(Object.keys(rankingV8Schema.shape.verified.shape)).toContain("unknown");
+    // The bounds on what a network takes are published with version 8; version 7's document stays as published.
+    expect(Object.keys(rankingV7Schema.shape)).not.toContain("intake");
+    expect(Object.keys(rankingV8Schema.shape.intake.shape).sort()).toEqual([
+      "business_notice_from",
+      "claims",
+      "due_days_max",
+      "due_from",
+      "end_after_due_days_max",
+      "refused",
+    ]);
+    // A version 8 document is a version this package knows; version 9 is the first it reads leniently.
+    const bare = { status: "announced", effective_at: "2026-10-23T00:00:00Z", summary: "…", next: null };
+    expect(readRankingDocument({ ...bare, version: 8 }).ok).toBe(false);
+    expect(readRankingDocument({ ...bare, version: 9 }).ok).toBe(true);
+  });
+
+  it("a record on the business's own word alone shows its counts and no score; one with verified evidence its score", () => {
+    const base = { tier: "new", kept: 50, broken: 0, customers: 0, verified_share: 0, rules: 8 } as const;
+    const selfReported = { ...base, ranked: false, open: 3, self_reported: true };
+    expect(reputationSchema.safeParse(selfReported).success).toBe(true);
+    expect("score" in reputationSchema.parse(selfReported)).toBe(false);
+    const verified = { ...base, ranked: true, score: 0.9682, tier: "trusted", customers: 12, verified_share: 0.2 };
+    expect(reputationSchema.safeParse({ ...verified, open: 0 }).success).toBe(true);
+    // Before version 8 every listing's reputation has its score, and nothing more.
+    expect(reputationSchema.safeParse({ ...verified, rules: 7 }).success).toBe(true);
+    const card = businessCardSchema.shape.standing.unwrap();
+    expect(
+      card.safeParse({
+        tier: "new",
+        ranked: false,
+        in_words:
+          "Its record so far is its own word: 50 promises kept, 0 promises broken and 3 promises still open. " +
+          "It is ranked once someone other than the business confirms part of it.",
+        kept: 50,
+        broken: 0,
+        open: 3,
+        self_reported: true,
+      }).success,
+    ).toBe(true);
+    expect(card.safeParse({ tier: "trusted", ranked: true, in_words: "…", verified_share: 1.5 }).success).toBe(false);
   });
 });
 

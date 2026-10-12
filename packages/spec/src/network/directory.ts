@@ -8,15 +8,43 @@ import { outcomeCodeSchema } from "./receipts";
  * any customer is ever returned.
  */
 
-/** A listing's reputation, from the last nightly snapshot (present once the ranked order is in force). */
+/**
+ * A listing's reputation, from the last nightly snapshot (present once the ranked order is in force). From rules
+ * version 8 (ADR-017 Amendment 4) a record no part of which is verified evidence is self-reported: it shows its
+ * counts, `kept`, `broken` and `open`, and no `score`, and it is neither ranked nor above `new`.
+ */
 export const reputationSchema = z.object({
-  ranked: z.boolean().describe("score ≥ 0.40 (building): sorts before the daily shuffle."),
-  score: z.number().min(0).max(1),
+  ranked: z
+    .boolean()
+    .describe(
+      "score ≥ 0.40 (building): sorts before the daily shuffle; from rules version 8 only with verified evidence (verified_share > 0).",
+    ),
+  score: z
+    .number()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe(
+      "Absent from rules version 8 when self_reported: a record that rests on the business's own word alone has no score.",
+    ),
   tier: tierSchema,
   kept: z.int().min(0),
   broken: z.int().min(0),
+  open: z
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "From rules version 8: its promises still open (issued, not yet closed by an outcome and not unclosed). Never scored.",
+    ),
   customers: z.int().min(0).describe("Distinct customers (§5.3)."),
   verified_share: z.number().min(0).max(1).describe("The share of weight from verified evidence."),
+  self_reported: z
+    .boolean()
+    .optional()
+    .describe(
+      "From rules version 8, true when no part of the record is verified evidence: not ranked, tier new, no score, and its counts are the business's own word.",
+    ),
   rules: z.int().min(1).describe("The rules version that ordered this listing."),
   rules_url: z.url().optional(),
 });

@@ -128,7 +128,35 @@
         },
         "in_words": {
           "type": "string",
-          "description": "The tier in one plain sentence; never a mark against the business."
+          "description": "The tier in one plain sentence, or a self-reported record's counts; never a mark against the business."
+        },
+        "kept": {
+          "description": "From rules version 8: the kept outcomes the night scored.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "broken": {
+          "description": "From rules version 8: the broken outcomes the night scored.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "open": {
+          "description": "From rules version 8: its promises still open.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "self_reported": {
+          "description": "From rules version 8: its record rests on its own word alone, so it is not ranked and has no score; in_words says its counts.",
+          "type": "boolean"
+        },
+        "verified_share": {
+          "description": "From rules version 8, when not self_reported: the share of its record someone other than the business confirmed.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": ["tier", "ranked", "in_words"]

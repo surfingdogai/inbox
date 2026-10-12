@@ -197,7 +197,28 @@ export const businessCardSchema = z.object({
     .object({
       tier: tierSchema,
       ranked: z.boolean().describe("Its record puts it before the daily shuffle."),
-      in_words: z.string().describe("The tier in one plain sentence; never a mark against the business."),
+      in_words: z
+        .string()
+        .describe(
+          "The tier in one plain sentence, or a self-reported record's counts; never a mark against the business.",
+        ),
+      kept: z.int().min(0).optional().describe("From rules version 8: the kept outcomes the night scored."),
+      broken: z.int().min(0).optional().describe("From rules version 8: the broken outcomes the night scored."),
+      open: z.int().min(0).optional().describe("From rules version 8: its promises still open."),
+      self_reported: z
+        .boolean()
+        .optional()
+        .describe(
+          "From rules version 8: its record rests on its own word alone, so it is not ranked and has no score; in_words says its counts.",
+        ),
+      verified_share: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe(
+          "From rules version 8, when not self_reported: the share of its record someone other than the business confirmed.",
+        ),
     })
     .optional()
     .describe("From the last nightly count of the promises it kept; absent while the directory's order is neutral."),

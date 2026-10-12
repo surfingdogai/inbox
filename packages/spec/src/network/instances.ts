@@ -132,11 +132,18 @@ export const contestCaseSchema = z.object({
 });
 export type ContestCase = z.infer<typeof contestCaseSchema>;
 
-/** The business's own standing in the last nightly snapshot. */
+/**
+ * The business's own standing in the last nightly snapshot. Only the business sees it, so it keeps its score even
+ * when, from rules version 8, its listing shows none because no part of its record is verified evidence.
+ */
 export const businessStandingSchema = z.object({
-  score: z.number().min(0).max(1),
+  score: z.number().min(0).max(1).describe("What its record scores, its own word included."),
   tier: tierSchema,
-  ranked: z.boolean().describe("score_int ≥ 4000 (building): sorts before the newcomers' shuffle."),
+  ranked: z
+    .boolean()
+    .describe(
+      "score_int ≥ 4000 (building): sorts before the newcomers' shuffle; from rules version 8 only with verified evidence.",
+    ),
 });
 
 /**

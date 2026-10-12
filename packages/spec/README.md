@@ -11,7 +11,9 @@ or network:
   the published rules — described for people in [`docs/protocol/network.md`](../../docs/protocol/network.md),
 - the tools a network offers assistants at `/mcp` (ADR-017 A2.7): what each takes and answers,
 - protocol 0.2: doors, readiness levels, listing fields, entries a network found on businesses'
-  own websites, claims (`register_business`, `update_business`) and rules version 7,
+  own websites, claims (`register_business`, `update_business`) and rules version 7, with
+  version 8, version 7 amended before it took effect (ADR-017 Amendment 4): a record on the
+  business's own word alone shows its counts and no score, and the bounds on what a network takes,
 - 0.3 (optional for a network): capabilities and the agentic score (`check_business`, the score's
   published rules, result pages and leaderboards), and the discovery documents an agent reads to find a network,
 - 0.3.1: the manifest's optional `doors_elsewhere`, the kinds of request a business takes somewhere

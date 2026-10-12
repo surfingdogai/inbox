@@ -302,12 +302,77 @@ export const rankingOrderV7Schema = rankingV6Schema.shape.order.extend({
   sources: z.string(),
 });
 
+/**
+ * What a member's receipts must also meet once version 7 is in force, as amended on 12 October 2026 (ADR-017
+ * Amendment 4, A4.6): claims v2 only, `due` within `due_days_max` of the later of `iat` and the arrival, `end`
+ * within `end_after_due_days_max` of `due`, and a business's notice measured from the arrival. A refusal is `422`
+ * with `v2_required`, `due_too_far` or `end_too_far`, and final. Version 8's document publishes it; version 7's
+ * stays as it was published.
+ */
+export const rankingIntakeSchema = z.object({
+  claims: z.string().describe("Claims v2 only: what a v1 receipt meets, and the v1 promises held from before."),
+  due_days_max: z
+    .record(z.string(), z.int().min(1))
+    .describe("By item type (booking, order, refund): how many days after the later of iat and arrival due may be."),
+  due_from: z.string().describe("What the bound on due counts from: the later of iat and the arrival."),
+  end_after_due_days_max: days.describe("How many days after due a booking's end may be."),
+  business_notice_from: z
+    .string()
+    .describe("What a business's notice is measured from: the arrival, on the network's clock, not iat."),
+  refused: z.string().describe("The refusals' codes, and that they are final."),
+});
+
 export const rankingV7Schema = rankingV6Schema.extend({
   version: z.literal(7),
   rules: z.literal("0.2.0").describe('The rules name, "0.2.0".'),
   order: rankingOrderV7Schema,
 });
 export type RankingV7 = z.infer<typeof rankingV7Schema>;
+
+/**
+ * Version 8: network rules 0.2.1, version 7 amended before it took effect (ADR-017 Amendment 4, 12 October 2026).
+ * Version 7's shape and numbers, with: a record ranks only with verified evidence (`tiers.ranked`,
+ * `order.within_reach`, `verified_evidence` on the business tiers), and one that rests on the business's own word
+ * alone shows its counts and no score (`score.shown`); every row that names no person is one anonymous customer
+ * (`weights.repeat.pair`); reach 1 only after answering `order.reach_1_after_days` (30) without a break; relations a
+ * network cannot see are unknown (`verified.unknown`); every member is a newcomer for its first 90 days, ranked or
+ * not, and at most `order.newcomers.per_group_per_hour` newcomer of a relations group has its turn in an hour's order
+ * (`order.newcomers.group`, `order.newcomers.turn`); and the intake bounds (`intake`). Published by its own notice:
+ * in force the moment a network publishes it when no more than one business is a member of it then, otherwise at
+ * 00:00 UTC on the sixteenth day after; never before version 7 takes effect.
+ */
+export const rankingOrderV8Schema = rankingOrderV7Schema.extend({
+  reach_1_after_days: days.describe("How long a member's inbox answers without a break before it is in reach 1."),
+  newcomers: rankingOrderV7Schema.shape.newcomers.extend({
+    group: z.string().describe("Which newcomers share a turn: a relations component, or every member unknown."),
+    per_group_per_hour: z.int().min(1).describe("How many newcomers of one group have their turn in an hour's order."),
+    turn: z.string().describe("Whose turn it is in a group: the lowest hourly key."),
+  }),
+});
+
+const tierRuleV8Schema = tierRuleSchema.extend({
+  verified_evidence: z
+    .boolean()
+    .optional()
+    .describe("The tier also needs verified_share > 0: part of the record someone other than the business confirmed."),
+});
+
+export const rankingV8Schema = rankingV7Schema.extend({
+  version: z.literal(8),
+  rules: z.literal("0.2.1").describe('The rules name, "0.2.1".'),
+  order: rankingOrderV8Schema,
+  score: rankingScoreSchema.extend({
+    shown: z.string().describe("When a listing shows a score, and what a self-reported record shows instead."),
+  }),
+  verified: rankingVerifiedSchema.extend({
+    unknown: z.string().describe("Whose relations the network cannot see, and what that changes."),
+  }),
+  tiers: rankingTiersSchema.extend({
+    business: z.object({ trusted: tierRuleV8Schema, building: tierRuleV8Schema, new: z.string() }),
+  }),
+  intake: rankingIntakeSchema,
+});
+export type RankingV8 = z.infer<typeof rankingV8Schema>;
 
 /** Version 2: the neutral order during the redesign (22 September 2026). */
 export const rankingV2Schema = z.object({
@@ -325,6 +390,7 @@ export type RankingV2 = z.infer<typeof rankingV2Schema>;
 export const rankingV1Schema = z.looseObject({ version: z.literal(1), status: z.literal("withdrawn") });
 
 export const rankingDocumentSchema = z.discriminatedUnion("version", [
+  rankingV8Schema,
   rankingV7Schema,
   rankingV6Schema,
   rankingV5Schema,
@@ -340,7 +406,7 @@ export type RankingDocument = z.infer<typeof rankingDocumentSchema>;
  * `effective_at`, `summary` and `next`, and reads the receipt claims as `claimsFromVersion` says.
  */
 export const rankingFutureSchema = z.looseObject({
-  version: z.int().min(8),
+  version: z.int().min(9),
   status: z.enum(["announced", "in_force", "retired"]),
   effective_at: timestampSchema,
   summary: z.string(),
