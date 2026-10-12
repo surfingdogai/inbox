@@ -40,6 +40,7 @@ import {
   serviceInput,
   setClosuresInput,
   setFloorsInput,
+  setupPlanSchema,
   setWeeklyInput,
   suggestTimeInput,
   testRuleInput,
@@ -1134,6 +1135,30 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
       if (!key.success) return hook({ success: false, error: key.error }, c) as Response;
       const input = { ...c.req.valid("json"), preset: key.data };
       return once(c, "rules.preset", input, async (caller) => ({ items: await caps.setup.applyPreset(caller, input) }));
+    },
+  );
+  app.post(
+    "/setup/plan",
+    owner({
+      tags: ["setup"],
+      summary: "Apply a setup plan, or say in sentences what it would do",
+      description:
+        "A business's setup as read from its site and checked by its owner: profile, opening hours, closed days, services (matched by name), the rules for its kind of business, and its public profile, kept out of every directory. Each part is written only when it differs, so applying the same plan again changes nothing. With dry_run=true nothing is written and the answer says what applying would do. A price goes in only with price_confirmed; a plan never holds products, feeds or legal details. Applying is the owner's in person (signed in, or a full owner key): never the owner's AI, never an integration key.",
+      responses: json("What it does", R.setupPlanResultSchema),
+      write: true,
+    }),
+    validator(
+      "query",
+      z.object({ dry_run: boolQuery.default(false).describe("Say what applying would do, and write nothing.") }),
+      hook,
+    ),
+    validator("json", setupPlanSchema, hook),
+    async (c) => {
+      const plan = c.req.valid("json");
+      if (c.req.valid("query").dry_run) {
+        return c.json(await caps.applySetupPlan(c.get("caller"), plan, { dryRun: true }));
+      }
+      return once(c, "setup.plan", plan, (caller) => caps.applySetupPlan(caller, plan));
     },
   );
   app.post(

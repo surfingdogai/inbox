@@ -10,7 +10,7 @@ import { allFloors, type FloorView, floorStatement } from "../negotiation/catalo
 import { describeAction, summarizeRule } from "../rules/describe";
 import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
-import { PRESETS, presetFor } from "../rules/presets";
+import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets";
 import { geoTermsProblem, isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
 import { type Action, type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
@@ -504,11 +504,18 @@ export class SetupCapabilities {
     }));
   }
 
-  async applyPreset(caller: Caller, input: S.ApplyPresetInput): Promise<RuleView[]> {
+  async applyPreset(
+    caller: Caller,
+    input: Omit<S.ApplyPresetInput, "confirm"> & { readonly confirm?: PresetConfirm | undefined },
+  ): Promise<RuleView[]> {
     requireOwner(caller);
     const now = nowOf(caller);
     // Rules are saved with their words: a reply goes out in the business's first language.
-    const preset = presetFor(input.preset, customerLang(null, (await businessFacts(this.db)).languages));
+    const preset = presetFor(
+      input.preset,
+      customerLang(null, (await businessFacts(this.db)).languages),
+      input.confirm ?? "rules",
+    );
     await this.db.batch([
       ...(input.replace ? [{ sql: "DELETE FROM rules", method: "run" as const }] : []),
       ...preset.map((r) => ({
@@ -736,7 +743,7 @@ function skuTaken(error: unknown): unknown {
   return error;
 }
 
-function validTimezone(tz: string): boolean {
+export function validTimezone(tz: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
     return true;
@@ -746,12 +753,12 @@ function validTimezone(tz: string): boolean {
 }
 
 /** A service price that names an amount: what only the owner publishes. */
-function hasAmount(price: { value?: number | undefined } | null | undefined): boolean {
+export function hasAmount(price: { value?: number | undefined } | null | undefined): boolean {
   return typeof price?.value === "number";
 }
 
 /** A service price, compared as it prices: its model, amount, currency (the business's when unsaid) and basis. */
-function servicePriceKey(
+export function servicePriceKey(
   price: { model: string; value?: number | undefined; currency?: string | undefined; per?: string | undefined } | null,
   currency: string,
 ): string {

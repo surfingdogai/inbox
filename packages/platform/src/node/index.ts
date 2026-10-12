@@ -1,5 +1,17 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { DbError, normalizeParams, type RawResult, type SqliteClient, type Statement, toDbError } from "../db";
+import {
+  DbError,
+  normalizeParams,
+  type RawResult,
+  type Snapshot,
+  type SqliteClient,
+  type SqliteSnapshot,
+  type Statement,
+  toDbError,
+} from "../db";
 
 export * from "./outbound";
 
@@ -97,5 +109,53 @@ export function nodeSqliteClient(path: string, options: NodeSqliteOptions = {}):
       cache.clear();
       db.close();
     },
+  };
+}
+
+/**
+ * A copy of a `node:sqlite` database for its owner to take away (`SqliteSnapshot`). `VACUUM INTO`
+ * writes a consistent copy while the inbox keeps serving; the copy is opened on its own, in the
+ * rollback journal so it stays one file, `strip` runs on it, and `VACUUM` rebuilds it so what was
+ * removed is gone from its pages too. Until `strip` has run the copy holds everything the database
+ * does, so it is made in a directory of its own that only this process's user can open, under `dir`
+ * (the system's temporary directory unless the host names another), and removed whatever happens.
+ */
+export function nodeSnapshot(client: NodeSqliteClient, dir: string = tmpdir()): SqliteSnapshot {
+  return async (strip): Promise<Snapshot> => {
+    const own = mkdtempSync(join(dir, "inbox-copy-"));
+    const file = join(own, "inbox.db");
+    try {
+      client.raw.prepare("VACUUM INTO ?").run(file);
+      const copy = new DatabaseSync(file);
+      let tables: { name: string; rows: number }[];
+      try {
+        copy.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF;");
+        copy.exec("BEGIN IMMEDIATE");
+        try {
+          for (const sql of strip) copy.exec(sql);
+          copy.exec("COMMIT");
+        } catch (error) {
+          copy.exec("ROLLBACK");
+          throw error;
+        }
+        copy.exec("VACUUM");
+        const names = copy
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+          .all() as { name: string }[];
+        tables = names.map(({ name }) => ({
+          name,
+          rows: Number(
+            (copy.prepare(`SELECT count(*) AS n FROM "${name.replaceAll('"', '""')}"`).get() as { n: number }).n,
+          ),
+        }));
+      } finally {
+        copy.close();
+      }
+      return { bytes: new Uint8Array(readFileSync(file)), tables };
+    } catch (error) {
+      throw toDbError(error);
+    } finally {
+      rmSync(own, { recursive: true, force: true });
+    }
   };
 }

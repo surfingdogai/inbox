@@ -1,10 +1,11 @@
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
 import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
-import type { MailOut } from "@surfingdog/platform";
+import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
 import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
+import { downloadRoutes } from "./download";
 import { ingestEmail } from "./email";
 import { frontHomePage, frontPage, hasOwnerSession } from "./front-page";
 import { agentFromRequest } from "./identity";
@@ -34,6 +35,7 @@ export * from "./access";
 export * from "./auth";
 export * from "./auth-page";
 export * from "./customer-page";
+export * from "./download";
 export * from "./email";
 export * from "./feeds/index";
 export * from "./front-page";
@@ -87,6 +89,8 @@ export interface DoorDeps {
   readonly sharedLimits?: LimitTable | undefined;
   /** Told each time the owner's sign-in address changes, or is put back (owner-email.ts). */
   readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
+  /** Copies the database for a download (Node: `nodeSnapshot`). Absent, a download answers 501. */
+  readonly snapshot?: SqliteSnapshot | undefined;
 }
 
 /**
@@ -409,6 +413,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     return c.json(result, result.outcome === "rejected" ? 422 : 200);
   });
   app.route("/v1/owner", ownerRest(deps.caps));
+  // After the owner routes, so their check (an owner principal, its scopes) runs on these first.
+  app.route(
+    "/v1/owner",
+    downloadRoutes({ ...ownerMail, caps: deps.caps, version: deps.version, snapshot: deps.snapshot }),
+  );
   app.route("/v1", publicRest(deps.caps));
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
   // holding the link can open it, so every request takes a token, and a POST one from its own class.

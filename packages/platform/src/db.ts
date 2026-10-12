@@ -74,3 +74,17 @@ export function toDbError(error: unknown): DbError {
   const { code, constraint } = classifySqliteMessage(message);
   return new DbError(code, message, constraint === undefined ? { cause: error } : { cause: error, constraint });
 }
+
+/**
+ * A copy of the whole database for its owner to take away: the live database copied as it stands
+ * (`VACUUM INTO`), the `strip` statements run on the copy, the copy rebuilt so nothing they removed
+ * is left in its free pages, and its bytes, with the rows each of its tables holds. Only a runtime
+ * whose database is a file of its own has one (Node, `node/index.ts`); D1 copies a database with
+ * `wrangler d1 export` instead.
+ */
+export type SqliteSnapshot = (strip: readonly string[]) => Promise<Snapshot>;
+
+export interface Snapshot {
+  readonly bytes: Uint8Array;
+  readonly tables: readonly { readonly name: string; readonly rows: number }[];
+}

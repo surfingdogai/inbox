@@ -51,4 +51,5 @@ What a link in an email does when it is opened, and what reaches a log, changed:
   to the new one, confirmed in a browser signed in as that owner. The old address is then told, with
   a link that puts it back for seven days and signs out every session. A host is told through
   `onOwnerEmailChange`; a server's operator can run `set-owner-email` instead. The same step-up
-  helper (`sendStepUp`, `checkStepUp`) is for anything else that moves an inbox away from its owner.
+  helper (`sendStepUp`, `checkStepUp`) guards a download, and anything else that moves an inbox away
+  from its owner.

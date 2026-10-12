@@ -1,4 +1,15 @@
-import { type Db, maskEmail, randomToken, sixDigits, WriteError } from "@surfingdog/core";
+import {
+  type Caller,
+  type Db,
+  isOwnerInPerson,
+  maskEmail,
+  randomToken,
+  readSettings,
+  schema,
+  sixDigits,
+  WriteError,
+} from "@surfingdog/core";
+import { asc, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { hashKey } from "./auth";
 import { sameOrigin } from "./origin";
@@ -21,8 +32,9 @@ import {
  * someone copied, would otherwise be all it took to move an inbox away from its owner.
  *
  * One helper for every such action. `sendStepUp` sends the code (`POST /auth/step-up` does it for the
- * owner app), and the action's own route calls `checkStepUp` with the code it was given, which uses
- * it up. A code is for one purpose only: one asked for to change the address opens nothing else.
+ * owner app, `POST /v1/owner/download/code` for a download), and the action's own route calls
+ * `checkStepUp` with the code it was given, which uses it up. A code is for one purpose only: one
+ * asked for to change the address opens nothing else.
  */
 export const STEP_UP_PURPOSES = ["email_change", "download", "close"] as const;
 export type StepUpPurpose = (typeof STEP_UP_PURPOSES)[number];
@@ -187,6 +199,60 @@ export async function ownerInPerson(
     return forbidden(c, "Do this from the owner app.");
   }
   return user;
+}
+
+/**
+ * The same owner in person, as the owner's API sees them (a download): signed in to the owner app, or
+ * with a full owner key from the command line. Never the owner's AI and never a key handed to another
+ * system.
+ */
+export function requireStepUpCaller(caller: Caller, what: string): void {
+  if (isOwnerInPerson(caller) && caller.actor.channel !== "mcp_owner") return;
+  throw new WriteError(
+    "not_allowed",
+    `Only the owner can ${what}, signed in to the owner app, with a code sent to their email. Nothing was done.`,
+    { details: { reason: "owner_in_person", ask_owner: true } },
+  );
+}
+
+/**
+ * Whose code it is, for a caller of the owner's API: the person signed in, or the owner a full owner
+ * key was made for; for a key that names nobody, the owner whose address is the owner email in
+ * Settings, else the first owner. A person signed in as staff gets no code: what a step-up guards is
+ * the owner's.
+ */
+export async function stepUpOwner(db: Db, caller: Caller): Promise<{ id: string; email: string }> {
+  const userId = caller.principal?.userId;
+  if (userId) {
+    const [user] = await db.orm
+      .select({ id: schema.users.id, email: schema.users.email, role: schema.users.role })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    if (user && user.role !== "owner") {
+      throw new WriteError("not_allowed", "Only the owner can do this, signed in as the owner. Nothing was done.", {
+        details: { reason: "owner_only" },
+      });
+    }
+    if (user) return { id: user.id, email: user.email };
+    throw noOwner();
+  }
+  const set = (await readSettings(db)).notifications.ownerEmail?.toLowerCase();
+  const owners = await db.orm
+    .select({ id: schema.users.id, email: schema.users.email })
+    .from(schema.users)
+    .where(eq(schema.users.role, "owner"))
+    .orderBy(asc(schema.users.createdAt));
+  const owner = owners.find((u) => u.email.toLowerCase() === set) ?? owners[0];
+  if (!owner) throw noOwner();
+  return owner;
+}
+
+function noOwner(): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "There is no owner here to send a code to yet: sign in to the owner app once first.",
+    { details: { reason: "no_owner_address" } },
+  );
 }
 
 /** `POST /auth/step-up` `{ purpose }`: a fresh code to the owner's address, for the owner app. */

@@ -54,6 +54,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /rules/presets": [READ_SETUP, "setup:run"],
   "POST /rules/presets/:key": ["setup:run"],
   "POST /rules/test": [READ_SETUP, "setup:run"],
+  // A dry run only reads; applying is the owner's in person, checked by the capability whatever the scopes.
+  "POST /setup/plan": [READ_SETUP, "setup:run"],
   "POST /rules": ["setup:run"],
   "PATCH /rules/:id": ["setup:run"],
   "DELETE /rules/:id": ["setup:run"],
@@ -77,6 +79,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /api-keys": ["keys:write"],
   "DELETE /api-keys/:id": ["keys:write"],
   "DELETE /connected-apps/:id": ["keys:write"],
+  // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.
+  "POST /download/code": ["*"],
+  "POST /download": ["*"],
 };
 
 export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {

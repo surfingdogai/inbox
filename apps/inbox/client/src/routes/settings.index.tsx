@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { DownloadInbox } from "../components/DownloadInbox";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
@@ -73,6 +74,7 @@ function GeneralPage() {
           onReload={reload}
         />
       )}
+      <DownloadInbox />
     </>
   );
 }
