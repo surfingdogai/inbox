@@ -1,4 +1,5 @@
 import { authHeaders } from "./auth";
+import { attachmentName } from "./download";
 import type {
   AddFeedBody,
   Availability,
@@ -159,6 +160,32 @@ async function call<T>(method: string, path: string, opts: CallOptions = {}): Pr
   throw new ApiProblem(problem);
 }
 
+/** A call the inbox answers with a file: the file and the name it gives it, or the problem, as `call`. */
+async function file(path: string, body: unknown): Promise<{ blob: Blob; filename: string }> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(path, window.location.origin), {
+      method: "POST",
+      headers: { accept: "application/zip", "content-type": "application/json", ...authHeaders() },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiProblem({
+      type: "about:blank",
+      title: "Unreachable",
+      status: 0,
+      code: "network",
+      detail: "Could not reach the inbox. Check the server is running, then try again.",
+    });
+  }
+  if (res.ok)
+    return { blob: await res.blob(), filename: attachmentName(res.headers.get("content-disposition"), "inbox.zip") };
+  const problem = await problemFrom(res);
+  if (res.status === 401) unauthorizedHandler?.();
+  throw new ApiProblem(problem);
+}
+
 const item = (id: string) => `/v1/owner/items/${encodeURIComponent(id)}`;
 const customerPath = (partyId: string) => `/v1/owner/customers/${encodeURIComponent(partyId)}`;
 
@@ -193,6 +220,10 @@ export const api = {
   // ---- one customer: their data, networks off, erasure ----
   customer: (partyId: string) => call<CustomerSummary>("GET", customerPath(partyId)),
   exportCustomer: (partyId: string) => call<unknown>("GET", `${customerPath(partyId)}/export`),
+  /** Six digits to the owner's own address, which a download needs. */
+  downloadCode: () => call<{ sent_to: string; expires_at: string }>("POST", "/v1/owner/download/code", { body: {} }),
+  /** The whole inbox as a zip, for the code just emailed. */
+  downloadInbox: (code: string) => file("/v1/owner/download", { code }),
   stopNetworks: (partyId: string, itemId?: string) =>
     call<CustomerSummary>("POST", `${customerPath(partyId)}/networks-off`, {
       body: itemId ? { item_id: itemId } : {},

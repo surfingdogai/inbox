@@ -20,7 +20,7 @@ import {
   type MailOut,
   resendMailOut,
 } from "@surfingdog/platform";
-import { nodeSqliteClient } from "@surfingdog/platform/node";
+import { nodeSnapshot, nodeSqliteClient } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
@@ -49,7 +49,8 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 mkdirSync(path.dirname(file), { recursive: true });
-const db = createDb(nodeSqliteClient(file));
+const client = nodeSqliteClient(file);
+const db = createDb(client);
 const publicUrl = publicUrlFrom(process.env.INBOX_PUBLIC_URL);
 const from = senderFrom(process.env.MAIL_FROM, process.env.MAIL_FROM_NAME);
 
@@ -134,6 +135,8 @@ const { app, runner, prepare } = createInbox({
   ownerEmails,
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
+  // The owner can download the inbox: a copy of this file, without who is signed in or any secret.
+  snapshot: nodeSnapshot(client),
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail

@@ -1,10 +1,11 @@
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
 import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
-import type { MailOut } from "@surfingdog/platform";
+import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
 import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
+import { downloadRoutes } from "./download";
 import { ingestEmail } from "./email";
 import { frontHomePage, frontPage, hasOwnerSession } from "./front-page";
 import { agentFromRequest } from "./identity";
@@ -31,6 +32,7 @@ import { authRoutes } from "./session";
 export * from "./access";
 export * from "./auth";
 export * from "./customer-page";
+export * from "./download";
 export * from "./email";
 export * from "./feeds/index";
 export * from "./front-page";
@@ -45,6 +47,7 @@ export * from "./responses";
 export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
+export * from "./step-up";
 export * from "./untrusted";
 export * from "./webhooks/index";
 
@@ -77,6 +80,8 @@ export interface DoorDeps {
   readonly limits?: LimitTable | undefined;
   /** Buckets every caller shares, taken after the caller's own (a public demo sets `DEMO_SHARED`). */
   readonly sharedLimits?: LimitTable | undefined;
+  /** Copies the database for a download (Node: `nodeSnapshot`). Absent, a download answers 501. */
+  readonly snapshot?: SqliteSnapshot | undefined;
 }
 
 /** The longest idempotency key a door accepts, header or field. */
@@ -383,6 +388,19 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     return c.json(result, result.outcome === "rejected" ? 422 : 200);
   });
   app.route("/v1/owner", ownerRest(deps.caps));
+  // After the owner routes, so their check (an owner principal, its scopes) runs on these first.
+  app.route(
+    "/v1/owner",
+    downloadRoutes({
+      db: deps.db,
+      caps: deps.caps,
+      mailOut: deps.mailOut,
+      version: deps.version,
+      snapshot: deps.snapshot,
+      baseUrl: deps.baseUrl,
+      now: deps.now,
+    }),
+  );
   app.route("/v1", publicRest(deps.caps));
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
   // holding the link can open it, so every request takes a token, and a POST one from its own class.

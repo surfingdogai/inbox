@@ -43,7 +43,7 @@ import {
   readSettings,
   VERSION,
 } from "@surfingdog/core";
-import { ensureMigrated, logMailOut, type MailOut } from "@surfingdog/platform";
+import { ensureMigrated, logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
@@ -96,6 +96,11 @@ export interface AppDeps {
    * and seeded every night, and `/demo/live` shows what is happening. Absent, none of this exists.
    */
   readonly demo?: DemoOptions | undefined;
+  /**
+   * Copies the database for the owner to download (`POST /v1/owner/download`): Node passes
+   * `nodeSnapshot`. Absent (D1), a download answers 501 and says how to copy the database instead.
+   */
+  readonly snapshot?: SqliteSnapshot | undefined;
 }
 
 export interface Inbox {
@@ -375,6 +380,8 @@ export function createInbox(deps: AppDeps): Inbox {
     mailOut: ownerMail,
     limits: demo ? DEMO_LIMITS : undefined,
     sharedLimits: demo ? DEMO_SHARED : undefined,
+    // A demo is wiped every night and holds strangers' requests: nobody downloads it.
+    snapshot: demo ? undefined : deps.snapshot,
     businessName: async () => (await caps.getBusinessProfile()).name,
     appShell: deps.appShell,
     fetchClientMetadata: deps.fetchClientMetadata,

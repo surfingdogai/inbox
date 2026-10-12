@@ -73,5 +73,6 @@ export { mergeSettings } from "./settings/merge";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { servicePriceText } from "./util/money";
+export { crc32, type ZipFile, zip } from "./util/zip";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

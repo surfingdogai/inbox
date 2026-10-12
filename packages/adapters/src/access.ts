@@ -79,6 +79,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /api-keys": ["keys:write"],
   "DELETE /api-keys/:id": ["keys:write"],
   "DELETE /connected-apps/:id": ["keys:write"],
+  // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.
+  "POST /download/code": ["*"],
+  "POST /download": ["*"],
 };
 
 export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
