@@ -13,7 +13,10 @@ or network:
 - protocol 0.2: doors, readiness levels, listing fields, entries a network found on businesses'
   own websites, claims (`register_business`, `update_business`) and rules version 7,
 - 0.3 (optional for a network): capabilities and the agentic score (`check_business`, the score's
-  published rules, result pages and leaderboards), and the discovery documents an agent reads to find a network.
+  published rules, result pages and leaderboards), and the discovery documents an agent reads to find a network,
+- 0.3.1: the manifest's optional `doors_elsewhere`, the kinds of request a business takes somewhere
+  else and where, read with `readDoorsElsewhere` (`vectors/doors-elsewhere.json`). A manifest
+  without it reads as before.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
