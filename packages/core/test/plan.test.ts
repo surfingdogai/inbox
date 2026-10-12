@@ -76,7 +76,10 @@ const salon: SetupPlanInput = {
 };
 
 describe("a setup plan", () => {
-  it("says what it would do and writes nothing, then does exactly that, then nothing the second time", async () => {
+  // The first database a file opens in workerd takes a while to load the runtime's modules.
+  it("says what it would do and writes nothing, then does exactly that, then nothing the second time", {
+    timeout: 60_000,
+  }, async () => {
     const { db, caps } = await setup();
     const dry = await caps.applySetupPlan(owner, salon, { dryRun: true });
     expect(dry).toMatchObject({ dry_run: true, changed: true });
