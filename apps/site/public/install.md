@@ -14,6 +14,15 @@ Joining a network (Step 5) is optional and separate: a network lists the busines
 and records the receipts the inbox signs, with no names, no messages and nothing of what was
 ordered; Step 5 lists exactly what a network receives. If the person asks, tell them this plainly.
 
+**Which way fits this business.** Ask the person before anything else:
+
+- **Nothing for agents yet** (a website, a contact form, a phone): the inbox becomes its front door
+  for agents. Follow this file from Step 0.
+- **Tools of its own already** (its own checkout, a booking system, a helpdesk, its own MCP server or
+  API): read https://surfingdog.ai/setting-up-for-agents.md first. Set up only the doors nothing else
+  handles, often messages and quote requests, and declare the ones it already has. The inbox cannot
+  take over orders placed in another system, so a shop with its own checkout keeps its orders there.
+
 **Advice before you start.** https://surfingdog.ai/setting-up-for-agents.md is guidance from a
 real installation: the inbox as a business's front door, or as a thin agent door in front of the
 helpdesk, booking system or checkout it already has; deciding what handles each door; making doors
@@ -31,6 +40,28 @@ the two paths below you are taking and what it will cost them. Do not begin unti
 - Anything that costs money, changes DNS, or sends mail on their behalf: ask first, in plain
   words, and wait.
 - At the end, run the final checklist and show the person its output.
+
+---
+
+## Before you start: a preflight
+
+Ask, check, and write down the answers before Step 0. Each one has stopped a real installation.
+
+1. **The owner's email address.** Ask the person which address signs in as the owner. Never take it
+   from a file, a git config or another project: only that address can sign in, and a wrong one
+   means setting the secret again later.
+2. **Which Cloudflare account** (Path A). Run `npx wrangler whoami`. If it lists more than one
+   account, every later wrangler command stops with "More than one account available". Ask which
+   account is the business's, then `export CLOUDFLARE_ACCOUNT_ID=<that account's id>` in the shell you
+   install from, and keep it set until the end.
+3. **The plan.** The free plan runs the inbox; sending email needs Workers Paid. Ask whether they want
+   email now.
+4. **The address it sends from**, if they want email. Ask which one, then check that nothing already
+   reads mail sent to it: look at the domain's Email Routing rules and its MX records, or ask. If mail
+   to that address already goes to another system (a CRM, a sales tool, a ticket desk), customers'
+   replies may land there: choose another address, such as `inbox@theirdomain.com`.
+5. **What the business already uses** for messages, bookings, orders and payments (see "Which way
+   fits" above), so you set up only the doors it will fulfil.
 
 ---
 
@@ -81,7 +112,10 @@ npx wrangler queues create surfingdog-inbox-jobs
 ```
 
 `d1 create` prints a `database_id`. Put it in `wrangler.jsonc` in place of the zeros. This is the
-only hand edit in this path.
+only hand edit in this path, so check it: the `uuid` that `npx wrangler d1 list --json` gives for
+`surfingdog-inbox` must be the `database_id` in `wrangler.jsonc`. If `d1 create` says the database
+already exists (a second run), do not create another: take its id from `d1 list`. A queue that
+already exists is fine as it is.
 
 ### A4. Secrets
 
@@ -92,14 +126,15 @@ secrets and the receipt-signing key at rest; without it the inbox issues no rece
 openssl rand -base64 32 | npx wrangler secret put INBOX_SECRET_KEY
 ```
 
-Ask the person which email address should be able to sign in as the owner, then:
+Use the owner's address the person gave you in the preflight, never one found in a file:
 
 ```bash
 printf 'THEIR_EMAIL' | npx wrangler secret put INBOX_OWNER_EMAIL
 ```
 
-If they want email now, ask which address the inbox should send from. Its domain must be onboarded
-to Email Sending on the same account (`npx wrangler email sending list` shows which are). Then:
+If they want email now, use the sending address you checked in the preflight. Its domain must be
+onboarded to Email Sending on the same account (`npx wrangler email sending list` shows which are).
+Then:
 
 ```bash
 printf 'inbox@theirdomain.com' | npx wrangler secret put MAIL_FROM
@@ -340,12 +375,26 @@ Without it, sign-in links are written to the log and other email is not sent. Th
 Do this through the owner app at `/settings`, or over the API. The inbox answers agents from what
 is in here, so it is worth doing properly. Ask the person for each; do not invent any of it.
 
-1. **Profile** — name, timezone, currency, languages.
+1. **Profile** — name, timezone, currency, languages, and the business's own website. Set the website
+   as the directory profile's `url` (a settings write, as in Step 2:
+   `{"directory":{"url":"https://theirdomain.com"}}`): the inbox's manifest then names the business,
+   which is how readers tie the inbox to its site.
 2. **Services** — what can be booked: duration, buffers, capacity, price.
 3. **Opening hours** — and any closures.
 4. **Products** — what can be ordered. If their shop publishes a product feed, connect it instead
    and the catalogue fills itself: Settings → Integrations → Connect a feed.
 5. **Rules** — start from a preset (`appointments`, `trades`, `shop`) and change it with them.
+
+The inbox offers agents only what it has the means to do: `message` always, `booking` once a service
+has opening hours, `order` once a product is active, and `quote_request` with either. So set up what
+fits the business, and nothing else:
+
+- **Takes bookings** (a salon, a clinic, a trade, a restaurant's tables): services with their hours.
+- **A shop that takes orders through the inbox**: its products, or a product feed. The customer pays
+  by a link to the shop's own checkout.
+- **A shop whose orders go through its own checkout**: leave products out, so the inbox does not
+  offer a second way to order. To take bulk or trade enquiries, add a service priced by quote; the
+  inbox then takes quote requests too.
 
 ---
 
@@ -421,6 +470,24 @@ ping is signed, and `standing` then shows the business's own standing at each ne
 
 ---
 
+## Step 6. Let the business's own site point to the inbox
+
+Agents and checkers start from the business's own domain, not from the inbox's subdomain. Add a line
+to `https://theirdomain.com/llms.txt` (create the file if there is none) with the manifest's own
+address, the one that ends in `/.well-known/agent-inbox.json`:
+
+```markdown
+## For AI agents
+
+- Inbox for messages, quotes and bookings: https://inbox.theirdomain.com/.well-known/agent-inbox.json
+```
+
+Name only what the inbox offers for this business. Ask the person before you change their website;
+if someone else runs it, give them the line to add. More ways to make doors findable are in
+https://surfingdog.ai/setting-up-for-agents.md, "Make every door findable".
+
+---
+
 ## Final checklist
 
 Run all of these and show the person the output.
@@ -444,6 +511,11 @@ Then tell the person:
 - which networks, if any, the inbox reports to, and what each one receives;
 - what is not set up yet, naming each thing, rather than implying everything is done.
 
+Then look from outside, the way a stranger's agent would: open
+`https://surfingdog.ai/b/theirdomain.com` and press **Check again** (a fresh read can be asked for a
+few minutes after the last one), or ask any MCP client connected to `https://surfingdog.ai/mcp` to
+call `check_business` with `fresh` set to true. Show the person what changed. Any checker will do.
+
 ## If something breaks
 
 - `/healthz` fails → the process is not running, or the proxy is not reaching it.
@@ -453,5 +525,18 @@ Then tell the person:
 - A version conflict on settings → read the current settings and retry with the version it gives.
 - A network says "not reachable" in `/v1/owner/networks` → it is down or the address is wrong; the
   inbox keeps retrying on its own and sends it everything it missed once it answers.
+- "More than one account available" from wrangler → `export CLOUDFLARE_ACCOUNT_ID` (preflight, 2).
+- The owner's address is wrong → set `INBOX_OWNER_EMAIL` again (`secret put`, or `.env` and a restart
+  on their own server), then sign in at `/login` with the right one.
+
+## Running it again, or taking it down
+
+- **Again**: every step can be run a second time. A database or a queue that already exists is kept
+  (take the database's id from `npx wrangler d1 list`); `secret put` replaces a secret's value; a
+  settings write is a merge, so send only what changes.
+- **Taking it down**, only when the person asks, since deleting the database deletes every item and
+  receipt: on Cloudflare, `npx wrangler delete`, then `npx wrangler d1 delete surfingdog-inbox` and
+  `npx wrangler queues delete surfingdog-inbox-jobs`; on their own server, `systemctl disable --now
+  inbox` and remove `/opt/inbox`. Remove the inbox's line from their `llms.txt` too.
 
 Documentation: https://surfingdog.ai/docs/ · Source: https://github.com/surfingdogai/inbox
