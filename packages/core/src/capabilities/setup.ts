@@ -22,6 +22,7 @@ import {
   rules as rulesTable,
   services,
 } from "../schema/tables";
+import { type HostPolicy, SET_BY_HOST } from "../settings/policy";
 import { readSettings } from "../settings/schema";
 import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
@@ -74,7 +75,11 @@ type ServiceRow = typeof services.$inferSelect;
 type ProductRow = typeof products.$inferSelect;
 
 export class SetupCapabilities {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    /** The host's policy, as it is attached now (`settings/policy.ts`): it may hold the profile's domain. */
+    private readonly policy: () => HostPolicy | null = () => null,
+  ) {}
 
   // ---- profile ----------------------------------------------------------------
 
@@ -89,6 +94,19 @@ export class SetupCapabilities {
       throw new WriteError("invalid_input", `unknown time zone ${input.timezone}`, {
         fields: [{ path: "timezone", problem: "invalid", message: "use an IANA name like Europe/Lisbon" }],
       });
+    }
+    // The domain the profile names is published as the business's: where a host holds it, nobody
+    // names another here, the owner included. Sending it back as it is changes nothing.
+    const held = this.policy()?.profileDomain;
+    if (held !== undefined && input.domain !== undefined && (input.domain?.toLowerCase() ?? null) !== held) {
+      throw new WriteError(
+        "not_allowed",
+        `domain is ${SET_BY_HOST}: nobody can change it here, the owner included. Nothing was changed.`,
+        {
+          details: { reason: "set_by_host" },
+          fields: [{ path: "domain", problem: "invalid", message: SET_BY_HOST }],
+        },
+      );
     }
     const now = nowOf(caller);
     const current = await this.profile();
@@ -116,6 +134,23 @@ export class SetupCapabilities {
       method: "run",
     });
     return next;
+  }
+
+  /**
+   * Writes the domain a host's policy holds over the profile, when it names another; true when it
+   * wrote. Only the domain: a profile never saved keeps reading its name and languages from the
+   * settings, and is given the time zone and currency it reads now.
+   */
+  async holdDomain(domain: string | null, now: number): Promise<boolean> {
+    const current = await this.profile();
+    if ((current.domain?.toLowerCase() ?? null) === domain) return false;
+    await this.db.client.query({
+      sql: `INSERT INTO business (id, name, domain, timezone, currency, languages, created_at, updated_at) VALUES ('self', '', ?, ?, ?, NULL, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET domain = excluded.domain, updated_at = excluded.updated_at`,
+      params: [domain, current.timezone, current.currency, now, now],
+      method: "run",
+    });
+    return true;
   }
 
   private async profile(): Promise<Profile> {

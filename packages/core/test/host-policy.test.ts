@@ -236,6 +236,35 @@ describe("a host's policy", () => {
     await refused(caps.updateSettings(owner, { doc: { email: { replyTo: "hello@oficinamare.pt" } } }), ["email"]);
   });
 
+  // The profile's domain is published as the business's (GET /v1/business, the profile tool): an
+  // inbox no site links to names none, and nobody names one of their own choosing.
+  it("holds the profile's domain: none until the site links to the inbox, the site's once it does", async () => {
+    const { caps } = await setup(POLICY, async (c) => {
+      await c.setup.updateProfile(owner, { domain: "oficinamare.pt" });
+    });
+    expect(await caps.applyHostPolicy(T0)).toBe(true);
+    expect((await caps.getBusinessProfile()).domain).toBeNull();
+    const domainRefused = async (who: Caller, domain: string) => {
+      const e = await caps.setup.updateProfile(who, { domain }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(e, `${domain} was written`).toBeInstanceOf(WriteError);
+      expect((e as WriteError).details?.reason).toBe("set_by_host");
+      expect((e as WriteError).fields?.[0]).toMatchObject({ path: "domain", message: SET_BY_HOST });
+    };
+    for (const who of [owner, ownerKey, integration, ai, system]) await domainRefused(who, "nhs.uk");
+    // Everything else in the profile is still the owner's, and the domain sent back as it is is no change.
+    await caps.setup.updateProfile(owner, { name: "Oficina Maré", domain: null });
+    expect(await caps.getBusinessProfile()).toMatchObject({ name: "Oficina Maré", domain: null });
+
+    caps.attachPolicy(hostPolicyFor({ address: ADDRESS, site: "https://www.oficinamare.pt" }));
+    expect(await caps.applyHostPolicy(T0 + 1)).toBe(true);
+    expect(await caps.getBusinessProfile()).toMatchObject({ name: "Oficina Maré", domain: "oficinamare.pt" });
+    await domainRefused(owner, "nhs.uk");
+    expect(await caps.applyHostPolicy(T0 + 2)).toBe(false);
+  });
+
   it("is nothing at all for an inbox run without one", async () => {
     const { db, caps } = await setup(null);
     expect(await caps.applyHostPolicy(T0)).toBe(false);

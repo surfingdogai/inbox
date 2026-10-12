@@ -166,6 +166,15 @@ describe("an inbox under a host's policy", () => {
     expect(s.integrations.webhooks.allowPrivateTargets).toBe(false);
     expect(s.identity.extraAuthorities).toEqual([]);
     expect(Object.values(s.networks).every((n) => !n.enabled)).toBe(true);
+    // Nor does the profile name a domain the host has not seen link to the inbox.
+    for (const key of [ownerKey, zapierKey]) {
+      const res = await app.request(
+        req("PUT", "/v1/owner/profile", { domain: "nhs.uk" }, { authorization: `Bearer ${key}` }),
+      );
+      expect(res.status).toBe(403);
+      expect(await res.text()).toContain("set by your host");
+    }
+    expect(await (await app.request(req("GET", "/v1/business"))).json()).toMatchObject({ domain: null });
     // What the host does not hold is still the owner's.
     const ok = await app.request(
       req(

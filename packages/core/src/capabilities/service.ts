@@ -324,12 +324,18 @@ export class Capabilities {
 
   /**
    * Writes what the host's policy sets over the stored settings, when they differ from it, past the
-   * policy's own lock and with what any write does after (a network switched off is told). True when
-   * it wrote. A write that loses a race with another is read again and tried once more.
+   * policy's own lock and with what any write does after (a network switched off is told), and the
+   * profile's domain when it holds one. True when it wrote. A write that loses a race with another
+   * is read again and tried once more.
    */
   async applyHostPolicy(now: number = Date.now()): Promise<boolean> {
     const policy = this.policy;
     if (!policy) return false;
+    const domain = policy.profileDomain === undefined ? false : await this.setup.holdDomain(policy.profileDomain, now);
+    return (await this.applyForcedSettings(policy, now)) || domain;
+  }
+
+  private async applyForcedSettings(policy: HostPolicy, now: number): Promise<boolean> {
     const host: Caller = {
       actor: { kind: "system", id: "host", channel: "system" },
       tier: "verified_principal",
@@ -404,7 +410,7 @@ export class Capabilities {
      */
     outbound?: { readonly fetch?: typeof fetch | undefined; readonly privateFetch?: typeof fetch | undefined },
   ) {
-    this.setup = new SetupCapabilities(db);
+    this.setup = new SetupCapabilities(db, () => this.policy);
     this.feeds = new FeedCapabilities(db);
     this.secrets = secrets;
     this.webhooks = new WebhookCapabilities(

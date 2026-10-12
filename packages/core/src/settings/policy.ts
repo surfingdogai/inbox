@@ -24,6 +24,12 @@ import { isPlainObject, parseStoredSettings, SETTINGS_KEYS, type Settings } from
 export interface HostPolicy {
   readonly forced?: SettingsPatch | ((current: Settings) => SettingsPatch) | undefined;
   readonly locked?: readonly string[] | undefined;
+  /**
+   * The domain the business's profile names (`PUT /profile`; `GET /v1/business` and the profile tool
+   * publish it), when the host holds it: written over the profile as the forced settings are, and
+   * nobody changes it here. `null` names none. Absent, the profile's domain is the owner's.
+   */
+  readonly profileDomain?: string | null | undefined;
 }
 
 /** A settings write's document: sections and keys to set, `null` to remove one. */
@@ -40,9 +46,10 @@ export const SET_BY_HOST = "set by your host";
  *   as well), the address every link points at, calls to private addresses (off), more hosts an
  *   agent's signature may name (none), where security reports go, and the owner's address, which
  *   changes only through the owner's own confirmed change, never a settings write.
- * - Until the site links to it: every network off, out of every directory, and no website named.
- * - Once it does: the website is the site; the networks and the directories stay as they were, and
- *   are the owner's to switch on.
+ * - Until the site links to it: every network off, out of every directory, and no website named,
+ *   in the settings or in the profile's domain.
+ * - Once it does: the website is the site, and the profile's domain is its host; the networks and
+ *   the directories stay as they were, and are the owner's to switch on.
  */
 export function hostPolicyFor(o: { readonly address: string; readonly site: string | null }): HostPolicy {
   const linked = o.site !== null;
@@ -59,6 +66,7 @@ export function hostPolicyFor(o: { readonly address: string; readonly site: stri
           }),
     }),
     locked: ["email", "notifications.ownerEmail", "security.contact", ...(linked ? [] : ["networks"])],
+    profileDomain: o.site === null ? null : new URL(o.site).hostname.replace(/^www\./, ""),
   };
 }
 
@@ -72,6 +80,10 @@ export function checkHostPolicy(policy: HostPolicy): void {
     if (parts.some((p) => p.length === 0) || !SETTINGS_KEYS.has(parts[0] ?? "")) {
       throw new Error(`host policy: "${path}" is not a setting`);
     }
+  }
+  const domain = policy.profileDomain;
+  if (typeof domain === "string" && !/^[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain)) {
+    throw new Error(`host policy: profileDomain "${domain}" is not a lower-case hostname`);
   }
   const forced = policy.forced;
   if (forced !== undefined && typeof forced !== "function") {
