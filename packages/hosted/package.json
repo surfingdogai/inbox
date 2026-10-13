@@ -1,0 +1,32 @@
+{
+  "name": "@surfingdog/hosted",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Many inboxes on one machine: a router that finds each inbox by the name it is asked for, shards that keep them open, and a signed admin API for whoever runs them.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "tsx src/main.ts",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/hosted.mjs --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --log-level=warning"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@surfingdog/adapters": "workspace:*",
+    "@surfingdog/core": "workspace:*",
+    "@surfingdog/inbox": "workspace:*",
+    "@surfingdog/platform": "workspace:*",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
