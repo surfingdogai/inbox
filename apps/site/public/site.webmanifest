@@ -1,7 +1,7 @@
 {
   "name": "Surfing Dog",
   "short_name": "Surfing Dog",
-  "description": "Your inbox for people and AI agents.",
+  "description": "Find businesses AI agents can message, book or buy from.",
   "start_url": "/",
   "display": "browser",
   "background_color": "#f6f5ff",

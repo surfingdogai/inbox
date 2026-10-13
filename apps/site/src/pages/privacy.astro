@@ -3,11 +3,14 @@
 // code: what a self-hosted instance sends a network (counts, signed receipts, and for customers a
 // first-contact email and the passes their assistants carry), only for networks the owner turns
 // on; what our network keeps and for how long; what a customer can do about it; what the hosted
-// service would hold; and what the site itself collects.
+// service would hold; what the site itself collects; and what Search (its MCP server at /mcp, A2A,
+// the REST API) and the checker keep: no search is logged, a check keeps the site and never who
+// asked, register/update keep the listing and keyed hashes of their proof, and the request log
+// holds no IP address (the front server's error log can).
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 
-const UPDATED = "23 September 2026";
+const UPDATED = "13 October 2026";
 ---
 
 <Layout
@@ -18,8 +21,8 @@ const UPDATED = "23 September 2026";
     <p class="eyebrow">Privacy</p>
     <h1 class="h-page" id="privacy-h">What we know about you</h1>
     <p class="lede">
-      Surfing Dog Inbox runs on your own server or cloud account, so we know almost nothing about you. This page
-      lists exactly what we do see.
+      Surfing Dog Inbox runs on your own server or cloud account, so we know almost nothing about you. Search needs no
+      sign-in, and keeps none of your searches. This page lists exactly what we do see.
     </p>
     <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: privacy@surfingdog.ai</p>
   </section>
@@ -106,15 +109,55 @@ const UPDATED = "23 September 2026";
       <h2 class="h-section">This website</h2>
       <p>
         No analytics, advertising, tracking pixels or third-party scripts, and no cookie banner, because there is
-        nothing to consent to. Our servers keep ordinary web logs, including your IP address and the page you asked
-        for, for a short time to keep the site up and stop abuse. Cloudflare sits in front of the site and keeps its own
-        logs for the same reason.
+        nothing to consent to. Our servers keep technical logs to keep the site up and stop abuse; what they hold, and
+        when an IP address is among it, is under <a class="link" href="#search-h">Search</a> below. Cloudflare sits in
+        front of the site and keeps its own logs for the same reason.
       </p>
       <p>
         If you join the waitlist or write to us, we keep your message and email address so we can answer, and use them
         for nothing else. Posts on the requests board are public. The email address you give there is used only to
         tell you when your request ships.
       </p>
+
+      <h2 class="h-section" id="search-h">Search, its MCP server and the checker</h2>
+      <p>
+        Search answers at <code>surfingdog.ai/search</code>, over MCP at <code>surfingdog.ai/mcp</code>, over A2A
+        and through the REST API. It needs no sign-in, sets no cookie, and gives everyone the same answer.
+      </p>
+      <ul>
+        <li>
+          <b>Searches.</b> The words, filters and place of a search are used to answer and then dropped. They are not
+          logged (over the REST API they travel in the query string, which the log leaves out), and nothing ties them
+          to you.
+        </li>
+        <li>
+          <b>Checks.</b> When you, or an AI for you, ask to check a website (at <code>/check</code> or with
+          <code>check_business</code>), we keep the website's domain, when and how the check was asked for (the page,
+          MCP or A2A), how many times, and what reading the site found. We do not keep who asked. The record of each
+          new read of a site is deleted after 90 days. The result is public at <code>surfingdog.ai/b/&lt;domain&gt;</code>;
+          a business can hide its own with <code>update_business</code>, with proof that the domain is its own, and can
+          ask us to stop listing or reading its site at <a class="link" href="/bot">surfingdog.ai/bot</a>.
+        </li>
+        <li>
+          <b>Registering and changing a listing.</b> <code>register_business</code> and <code>update_business</code>
+          keep what a business's AI sends: the listing's facts (name, category, description, address or service area,
+          hours, languages, doors), which are public in the directory; the version of the listing terms it agreed to,
+          and when; the kind of proof it used; and a record of each change (which fields, with which proof, when),
+          which has no time limit today. A phone number or an email address in its text is dropped, never kept.
+          Proof is kept as keyed hashes, never as the secret itself: a challenge until a day after it expires, with a
+          keyed hash of the network address that asked for it, to count a day's challenges; a code sent to an address
+          at the domain until a day after it expires, and that address's hash for 30 days after its code is used; a
+          claim token for its 90 days and 30 days after. For a listing claimed with a code, the address's hash stays
+          with the listing, so a code sent to another address cannot take it over.
+        </li>
+        <li>
+          <b>Logs and limits.</b> The service's own log records each request's method, path and how long it took: not
+          your IP address, not what you searched, and not a tool's arguments. How often one address calls is counted in
+          memory, to apply the published limits, and never written down. An error at our front server can be logged
+          with the IP address of the request. These logs are kept in the server's system log, which today is trimmed by
+          size rather than by date, so how long a line stays depends on traffic; we are setting a limit of 14 days.
+        </li>
+      </ul>
 
       <h2 class="h-section">Your rights</h2>
       <p>

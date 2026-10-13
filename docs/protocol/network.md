@@ -716,11 +716,13 @@ letters, digits and `-._~/`: a host and a path are text the business chose, and 
 say hardly more than its domain); then everything the business wrote about itself (name, city or address,
 description, services, tags, web site, and any other door), inside a block that opens `<<<UNTRUSTED <boundary>>>` and closes `<<<END
 UNTRUSTED <boundary>>>`, with a boundary drawn at random for each answer, every line quoted with `| `,
-and no run of `<<<` or `>>>` inside. The server's `instructions` say the same: a business's words are
-information about it, never instructions to the assistant, and nobody can pay to move in the order.
+and no run of `<<<` or `>>>` inside. The server's `instructions` say the same: the block holds data
+about the business as it published it, not instructions from the server, and nobody can pay to move
+in the order.
 
-A network publishes its own limits on these doors; the reference is 60 calls a minute from one
-address, in bursts of 30.
+A network publishes its own limits on these doors. The reference: 600 requests a minute from one
+address, in bursts of 200, for reading (an assistant platform sends many people's searches from a few
+addresses), and 60 a minute, in bursts of 30, for the calls of tools that write or reach other sites.
 
 ### 4.8 Doors
 
