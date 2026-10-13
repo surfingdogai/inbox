@@ -22,6 +22,12 @@ import {
   delegationRequestSchema,
   delegationResponseSchema,
   directoryRulesSchema,
+  doorIncidentAnsweredSchema,
+  doorIncidentAnswerSchema,
+  doorReportClassesVocabSchema,
+  doorReportSchema,
+  doorReportsRequestSchema,
+  doorReportsResponseSchema,
   getBusinessInputSchema,
   getBusinessOutputSchema,
   instanceRegistrationRequestSchema,
@@ -62,6 +68,8 @@ import {
   registerBusinessInputSchema,
   registerBusinessOutputSchema,
   reportAnswerSchema,
+  reportDoorInputSchema,
+  reportDoorOutputSchema,
   reportFiledSchema,
   reportRequestSchema,
   scoreRulesSchema,
@@ -79,8 +87,9 @@ import {
  * schemas with `z.toJSONSchema` (`packages/core/scripts/gen-network-vectors.ts`). Each describes
  * what may be sent (a member with a default may be left out), and none forbids members it does not
  * name: a receiver ignores what it does not know, so a network can add a field without breaking
- * anyone. Cross-field rules (an outcome's `out` and `ref`, "exactly one of") cannot be said in JSON
- * Schema; the Zod schemas and the vectors hold them.
+ * anyone. The exception is a door report (§4.15): its body is strict, and a member it does not name
+ * is refused, so its schemas say `additionalProperties: false`. Cross-field rules (an outcome's `out`
+ * and `ref`, "exactly one of") cannot be said in JSON Schema; the Zod schemas and the vectors hold them.
  */
 export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> = {
   manifest: { schema: manifestSchema, title: "Discovery manifest (/.well-known/agent-inbox.json)" },
@@ -192,6 +201,20 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "mcp-check-business-output": {
     schema: checkBusinessOutputSchema,
     title: "MCP check_business: structuredContent",
+  },
+  "mcp-report-door-input": { schema: reportDoorInputSchema, title: "MCP report_door: arguments" },
+  "mcp-report-door-output": { schema: reportDoorOutputSchema, title: "MCP report_door: structuredContent" },
+  "door-report": { schema: doorReportSchema, title: "One door report: how one use of a door went (§4.15)" },
+  "door-reports-request": { schema: doorReportsRequestSchema, title: "POST /v1/door-reports (strict JSON)" },
+  "door-reports-response": { schema: doorReportsResponseSchema, title: "POST /v1/door-reports: 202" },
+  "door-incident-answer": { schema: doorIncidentAnswerSchema, title: "POST /v1/door-incidents/{id}" },
+  "door-incident-answered": {
+    schema: doorIncidentAnsweredSchema,
+    title: "POST /v1/door-incidents/{id}: 200",
+  },
+  "door-report-classes": {
+    schema: doorReportClassesVocabSchema,
+    title: "The door report classes (vocab/door-report-classes.json)",
   },
   capabilities: { schema: capabilitiesVocabSchema, title: "The capability vocabulary (vocab/capabilities.json)" },
   "score-rules": { schema: scoreRulesSchema, title: "GET /v1/score-rules: the agentic score's rules" },

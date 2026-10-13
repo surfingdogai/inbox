@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/door-incidents/{id}",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "const": "fixed"
+    }
+  },
+  "required": ["state"]
+}

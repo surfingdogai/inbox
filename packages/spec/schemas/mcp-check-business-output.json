@@ -577,6 +577,31 @@
       },
       "required": ["state", "in_words"],
       "description": "A member's track record, from the same nightly count as its standing and shown under the same rules: the promises it kept and broke, and when. From rules version 8, one that rests on the business's own word is self_reported: its counts, with no score and no count of customers. Only what its state can say is present; a business that is not a member has none."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "The MCP tool that takes door reports: report_door."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The same over REST: POST <network>/v1/door-reports."
+        },
+        "guide": {
+          "type": "string",
+          "format": "uri",
+          "description": "How to report, for an agent: <network>/report.md."
+        },
+        "reward": {
+          "type": "string",
+          "description": "What the agent gets for reporting, in one sentence."
+        }
+      },
+      "required": ["tool", "url", "guide", "reward"],
+      "description": "Report how each use of a door went, done or not: see the guide."
     }
   },
   "required": ["domain", "url", "state", "indexable"]

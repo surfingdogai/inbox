@@ -1,9 +1,9 @@
 {
   "name": "@surfingdog/spec",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
   "license": "MIT",
-  "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, network calls \u2014 schemas and test vectors.",
+  "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, network calls, door reports \u2014 schemas, vocabularies and test vectors.",
   "exports": {
     ".": "./src/index.ts",
     "./vocab/*": "./vocab/*",

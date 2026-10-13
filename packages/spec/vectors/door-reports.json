@@ -1,0 +1,2382 @@
+{
+  "description": "Door reports (protocol §4.15) and the network's own reads of a door (§4.8). calls: a POST /v1/door-reports body (body, or raw text, or repeat: a report count times; pad: that many spaces after it) read at now against the doors the network shows for each domain (a member's inbox under type inbox at its address and at each of its endpoints, mcp and rest, as a card gives them; a door found on a site at its own URL), and the answer: 400 malformed or 413 too_large for the whole call, or each report kept (with at to the minute) or ignored with why, the first that applies. effects: what one report taken can do, by its proof and source. reads: what one read of a door concludes. states: the one door state machine over a door type's reads, at now. intents: each (source, intent) counts once, the last result winning. Written by hand; checked on Node and workerd by packages/spec/test/door-reports.test.ts against readDoorReports, doorReportEffect, classifyDoorRead, doorStatusAfter and countedIntents from @surfingdog/spec.",
+  "now": 1791892800,
+  "doors": {
+    "bakery.example": [
+      {
+        "type": "inbox",
+        "url": "https://bakery.example"
+      },
+      {
+        "type": "inbox",
+        "url": "https://bakery.example/mcp"
+      },
+      {
+        "type": "inbox",
+        "url": "https://bakery.example/v1"
+      }
+    ],
+    "shop.example": [
+      {
+        "type": "mcp",
+        "url": "https://shop.example/mcp"
+      }
+    ],
+    "salon.example": [
+      {
+        "type": "platform:bookings",
+        "url": "https://bookings.example/salon"
+      }
+    ]
+  },
+  "calls": [
+    {
+      "name": "a booking that worked, unsigned: kept, its time to the minute",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 0,
+            "at": 1791892740
+          }
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "name": "one use of each kind at an inbox's REST door, which needs no tool",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/v1"
+            },
+            "op": "book",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "aaaaaaaa",
+            "result": "refused",
+            "class": "slot_taken"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/v1"
+            },
+            "op": "book",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "bbbbbbbb",
+            "result": "invalid",
+            "class": "client.invalid_params"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/v1"
+            },
+            "op": "message",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cccccccc",
+            "result": "info",
+            "class": "escalation"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example"
+            },
+            "op": "book",
+            "at": 1791892777,
+            "intent": "dddddddd",
+            "result": "fail",
+            "class": "tcp.timed_out"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/v1"
+            },
+            "op": "order",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "eeeeeeee",
+            "result": "fail",
+            "class": "operation.tool_error"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 0,
+            "at": 1791892740
+          },
+          {
+            "i": 1,
+            "at": 1791892740
+          },
+          {
+            "i": 2,
+            "at": 1791892740
+          },
+          {
+            "i": 3,
+            "at": 1791892740
+          },
+          {
+            "i": 4,
+            "at": 1791892740
+          }
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "name": "an MCP server the network found on a business's own site",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "shop.example",
+            "door": {
+              "type": "mcp",
+              "url": "https://shop.example/mcp"
+            },
+            "op": "order",
+            "tool": "add_to_cart",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "shop-001",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 0,
+            "at": 1791892740
+          }
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "name": "a door on a booking platform, as the listing shows it",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "salon.example",
+            "door": {
+              "type": "platform:bookings",
+              "url": "https://bookings.example/salon"
+            },
+            "op": "book",
+            "tool": "book",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "salon-01",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 0,
+            "at": 1791892740
+          }
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "name": "five tries of one attempt: only the last counts, and its result wins",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892500,
+            "ms": 1840,
+            "intent": "retry-0001",
+            "result": "fail",
+            "class": "http.error"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892560,
+            "ms": 1840,
+            "intent": "retry-0001",
+            "result": "fail",
+            "class": "http.error"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892620,
+            "ms": 1840,
+            "intent": "retry-0001",
+            "result": "fail",
+            "class": "http.error"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892680,
+            "ms": 1840,
+            "intent": "retry-0001",
+            "result": "fail",
+            "class": "http.error"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892770,
+            "ms": 1840,
+            "intent": "retry-0001",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 4,
+            "at": 1791892740
+          }
+        ],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "superseded"
+          },
+          {
+            "i": 1,
+            "why": "superseded"
+          },
+          {
+            "i": 2,
+            "why": "superseded"
+          },
+          {
+            "i": 3,
+            "why": "superseded"
+          }
+        ]
+      }
+    },
+    {
+      "name": "doors the network does not list are ignored, each on its own",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "nowhere.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0001",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp?session=1"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0002",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp#tools"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0003",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "mcp",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0004",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "http://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0005",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp/"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0006",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "door-0007",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 6,
+            "at": 1791892740
+          }
+        ],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "unknown_door"
+          },
+          {
+            "i": 1,
+            "why": "unknown_door"
+          },
+          {
+            "i": 2,
+            "why": "unknown_door"
+          },
+          {
+            "i": 3,
+            "why": "unknown_door"
+          },
+          {
+            "i": 4,
+            "why": "unknown_door"
+          },
+          {
+            "i": 5,
+            "why": "unknown_door"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an op outside the capability vocabulary is ignored",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "teleport",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "op-00001",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "cancel",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "op-00002",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 1,
+            "at": 1791892740
+          }
+        ],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "unknown_op"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a class must be one an agent reports, of that result; ok carries none",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0001",
+            "result": "ok",
+            "class": "slot_taken"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0002",
+            "result": "fail"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0003",
+            "result": "refused",
+            "class": "tcp.timed_out"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0004",
+            "result": "fail",
+            "class": "protocol.unsigned_answer"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0005",
+            "result": "fail",
+            "class": "made.up"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0006",
+            "result": "invalid",
+            "class": "client.rate_limited"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "cls-0007",
+            "result": "fail",
+            "class": "protocol.version"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 5,
+            "at": 1791892740
+          },
+          {
+            "i": 6,
+            "at": 1791892740
+          }
+        ],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "bad_class"
+          },
+          {
+            "i": 1,
+            "why": "bad_class"
+          },
+          {
+            "i": 2,
+            "why": "bad_class"
+          },
+          {
+            "i": 3,
+            "why": "bad_class"
+          },
+          {
+            "i": 4,
+            "why": "bad_class"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a report is at most 7 days old and at most a minute ahead of the network's clock",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791287999,
+            "ms": 1840,
+            "intent": "time-001",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791288000,
+            "ms": 1840,
+            "intent": "time-002",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892860,
+            "ms": 1840,
+            "intent": "time-003",
+            "result": "ok"
+          },
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892861,
+            "ms": 1840,
+            "intent": "time-004",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 1,
+            "at": 1791288000
+          },
+          {
+            "i": 2,
+            "at": 1791892860
+          }
+        ],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "bad_time"
+          },
+          {
+            "i": 3,
+            "why": "bad_time"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the first reason that applies is the one given",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "nowhere.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "teleport",
+            "tool": "create_booking",
+            "at": 1791896400,
+            "ms": 1840,
+            "intent": "first-01",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [],
+        "ignored": [
+          {
+            "i": 0,
+            "why": "unknown_door"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a token rides along as it came, until the network checks tokens",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "tok-0001",
+            "result": "fail",
+            "class": "protocol.internal",
+            "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InNkaS1kb29yK2p3dCJ9.eyJ2IjoxfQ.c2lnbmF0dXJl"
+          }
+        ]
+      },
+      "expect": {
+        "status": 202,
+        "kept": [
+          {
+            "i": 0,
+            "at": 1791892740
+          }
+        ],
+        "ignored": []
+      }
+    },
+    {
+      "name": "a report carrying email is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "email": "rita@example.com"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying pass is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "pass": "sdpass1_network.example_aaaaaaaaaaaaaaaa_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying trace is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "trace": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying person is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "person": "Rita"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying phone is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "phone": "+351 912 345 678"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying name is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "name": "Rita Silva"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying address is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "address": "Rua 1"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying message is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "message": "hello"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying body is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "body": "{}"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying ip is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "ip": "203.0.113.7"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying item_id is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "item_id": "itm_123"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying reason is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "reason": "it broke"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a report carrying Domain is refused whole",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "Domain": "bakery.example"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a member the call does not name, at the top",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ],
+        "agent": "x"
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a member a door does not name",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "mcp",
+              "url": "https://bakery.example/mcp",
+              "method": "tools/call"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a member named twice",
+      "raw": "{\"v\":1,\"reports\":[{\"domain\":\"bakery.example\",\"door\":{\"type\":\"mcp\",\"url\":\"https://bakery.example/mcp\"},\"op\":\"book\",\"at\":1791892777,\"intent\":\"5mQ2c1Kc8Qx\",\"result\":\"ok\",\"result\":\"fail\"}]}",
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a member named twice, the second time escaped",
+      "raw": "{\"v\":1,\"\\u0076\":1,\"reports\":[]}",
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "version 2",
+      "body": {
+        "v": 2,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "no version",
+      "body": {
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "no reports",
+      "body": {
+        "v": 1,
+        "reports": []
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "not JSON",
+      "raw": "v=1&reports=",
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a time as a string",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": "1791892800",
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a tool in capitals",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "createBooking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "an intent too short",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "abc",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "ms over ten minutes",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 600001,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "a result outside the five",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "maybe"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "an op missing",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "expect": {
+        "status": 400,
+        "code": "malformed"
+      }
+    },
+    {
+      "name": "101 reports",
+      "repeat": {
+        "count": 101,
+        "report": {
+          "domain": "bakery.example",
+          "door": {
+            "type": "inbox",
+            "url": "https://bakery.example/mcp"
+          },
+          "op": "book",
+          "tool": "create_booking",
+          "at": 1791892777,
+          "ms": 1840,
+          "intent": "5mQ2c1Kc8Qx",
+          "result": "ok"
+        }
+      },
+      "expect": {
+        "status": 413,
+        "code": "too_large"
+      }
+    },
+    {
+      "name": "a token over 1 KB",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok",
+            "token": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.c"
+          }
+        ]
+      },
+      "expect": {
+        "status": 413,
+        "code": "too_large"
+      }
+    },
+    {
+      "name": "over 128 KB, padding included",
+      "body": {
+        "v": 1,
+        "reports": [
+          {
+            "domain": "bakery.example",
+            "door": {
+              "type": "inbox",
+              "url": "https://bakery.example/mcp"
+            },
+            "op": "book",
+            "tool": "create_booking",
+            "at": 1791892777,
+            "ms": 1840,
+            "intent": "5mQ2c1Kc8Qx",
+            "result": "ok"
+          }
+        ]
+      },
+      "pad": 131072,
+      "expect": {
+        "status": 413,
+        "code": "too_large"
+      }
+    }
+  ],
+  "effects": [
+    {
+      "name": "unsigned, the door did not answer: a count, and it may make the network look",
+      "source": {
+        "signature": "none",
+        "token": false,
+        "independent": false
+      },
+      "report": {
+        "result": "fail",
+        "class": "tcp.timed_out"
+      },
+      "expect": {
+        "proof": "none",
+        "counts": "counter",
+        "confirm_read": true,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "unsigned, a tool error: a count, nothing more",
+      "source": {
+        "signature": "none",
+        "token": false,
+        "independent": false
+      },
+      "report": {
+        "result": "fail",
+        "class": "operation.tool_error"
+      },
+      "expect": {
+        "proof": "none",
+        "counts": "counter",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a self-held key without standing: a count",
+      "source": {
+        "signature": "key",
+        "token": false,
+        "independent": false
+      },
+      "report": {
+        "result": "fail",
+        "class": "dns.name_not_resolved"
+      },
+      "expect": {
+        "proof": "signature",
+        "counts": "counter",
+        "confirm_read": true,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a self-held key with standing: its confirm read goes first",
+      "source": {
+        "signature": "key",
+        "token": false,
+        "independent": true
+      },
+      "report": {
+        "result": "fail",
+        "class": "tcp.refused"
+      },
+      "expect": {
+        "proof": "signature",
+        "counts": "counter",
+        "confirm_read": true,
+        "priority": true,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a platform signed it: a row, private",
+      "source": {
+        "signature": "platform",
+        "token": false,
+        "independent": false
+      },
+      "report": {
+        "result": "ok"
+      },
+      "expect": {
+        "proof": "signature",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a door token, from a source that is not independent: a row, private",
+      "source": {
+        "signature": "key",
+        "token": true,
+        "independent": false
+      },
+      "report": {
+        "result": "fail",
+        "class": "protocol.internal"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a door token, unsigned: a row, private",
+      "source": {
+        "signature": "none",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "fail",
+        "class": "protocol.internal"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a door-signed failure from an independent source counts toward the public line",
+      "source": {
+        "signature": "platform",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "fail",
+        "class": "protocol.internal"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": true
+      }
+    },
+    {
+      "name": "an operation failure too",
+      "source": {
+        "signature": "platform",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "fail",
+        "class": "operation.failed"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": true
+      }
+    },
+    {
+      "name": "a door-signed success never goes public",
+      "source": {
+        "signature": "platform",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "ok"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "a refusal is the door working, never a failure",
+      "source": {
+        "signature": "platform",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "refused",
+        "class": "slot_taken"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "the agent's own fault is kept privately, per tool",
+      "source": {
+        "signature": "platform",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "invalid",
+        "class": "client.invalid_params"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    },
+    {
+      "name": "needing a person is information",
+      "source": {
+        "signature": "key",
+        "token": true,
+        "independent": true
+      },
+      "report": {
+        "result": "info",
+        "class": "person"
+      },
+      "expect": {
+        "proof": "token",
+        "counts": "row",
+        "confirm_read": false,
+        "priority": false,
+        "public_line": false
+      }
+    }
+  ],
+  "reads": [
+    {
+      "name": "an MCP server card that parses",
+      "observation": {
+        "status": 200,
+        "ms": 180,
+        "parses": true,
+        "control": "good"
+      },
+      "expect": "good"
+    },
+    {
+      "name": "the should-fail read's typed refusal is a good answer",
+      "observation": {
+        "status": 404,
+        "ms": 90,
+        "parses": true,
+        "control": "good"
+      },
+      "expect": "good"
+    },
+    {
+      "name": "no answer within 10 seconds",
+      "observation": {
+        "status": 200,
+        "ms": 10001,
+        "parses": true
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "the name did not resolve",
+      "observation": {
+        "error": "dns"
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "connection refused",
+      "observation": {
+        "error": "tcp_refused"
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "connection reset",
+      "observation": {
+        "error": "tcp_reset"
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "connection timed out",
+      "observation": {
+        "error": "tcp_timeout"
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "TLS failed",
+      "observation": {
+        "error": "tls"
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "a 502",
+      "observation": {
+        "status": 502,
+        "ms": 300,
+        "parses": false
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "a 500 with a JSON-RPC body still is a server error",
+      "observation": {
+        "status": 500,
+        "ms": 300,
+        "parses": true
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "an HTML page where a tools list should be",
+      "observation": {
+        "status": 200,
+        "ms": 200,
+        "parses": false
+      },
+      "expect": "failed"
+    },
+    {
+      "name": "403: our read was refused, never a failure",
+      "observation": {
+        "status": 403,
+        "ms": 50,
+        "parses": false
+      },
+      "expect": "blocked"
+    },
+    {
+      "name": "429: asked to slow down, never a failure",
+      "observation": {
+        "status": 429,
+        "ms": 50,
+        "parses": false
+      },
+      "expect": "blocked"
+    },
+    {
+      "name": "a 503 challenge page",
+      "observation": {
+        "status": 503,
+        "ms": 80,
+        "challenge": true,
+        "parses": false
+      },
+      "expect": "blocked"
+    },
+    {
+      "name": "a challenge page on 200",
+      "observation": {
+        "status": 200,
+        "ms": 80,
+        "challenge": true,
+        "parses": false
+      },
+      "expect": "blocked"
+    },
+    {
+      "name": "robots.txt disallows the read",
+      "observation": {
+        "robots_disallow": true
+      },
+      "expect": "blocked"
+    },
+    {
+      "name": "the control read failed: the result is thrown away",
+      "observation": {
+        "error": "tcp_timeout",
+        "control": "failed"
+      },
+      "expect": "discarded"
+    },
+    {
+      "name": "the control read was blocked: thrown away too",
+      "observation": {
+        "status": 200,
+        "parses": true,
+        "control": "blocked"
+      },
+      "expect": "discarded"
+    }
+  ],
+  "states": [
+    {
+      "name": "no reads: live",
+      "reads": [],
+      "now": 1791892800,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "three failed probes over 30 minutes: failing from the third",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791030600,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791032400,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1791030600
+      }
+    },
+    {
+      "name": "three failed probes within 20 minutes: still live",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791030000,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791032400,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "a fourth, later, makes it failing",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791030000,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791033300,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791036000,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1791033300
+      }
+    },
+    {
+      "name": "one good read in between starts the count again",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "good"
+        },
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791036000,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791039600,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "one good read makes a failing door live",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791046800,
+          "by": "probe",
+          "result": "good"
+        }
+      ],
+      "now": 1791050400,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "failed reads more than 7 days apart do not add up",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791633601,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791637200,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791720000,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "three reads in 7 days, the first and last days apart",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "crawl",
+          "result": "failed"
+        },
+        {
+          "at": 1791288000,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791547200,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791633600,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1791547200
+      }
+    },
+    {
+      "name": "blocked reads never lower a door, nor reset the count",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "blocked"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791030000,
+          "by": "probe",
+          "result": "blocked"
+        },
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791036000,
+          "by": "probe",
+          "result": "blocked"
+        }
+      ],
+      "now": 1791039600,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "blocked between failures: the failures still count",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "blocked"
+        },
+        {
+          "at": 1791030000,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791036000,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1791032400
+      }
+    },
+    {
+      "name": "a public check read never lowers a door",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "check",
+          "result": "failed"
+        },
+        {
+          "at": 1791030600,
+          "by": "check",
+          "result": "failed"
+        },
+        {
+          "at": 1791032400,
+          "by": "check",
+          "result": "failed"
+        },
+        {
+          "at": 1791036000,
+          "by": "check",
+          "result": "failed"
+        }
+      ],
+      "now": 1791039600,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "but its good read lifts one",
+      "reads": [
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791036000,
+          "by": "check",
+          "result": "good"
+        }
+      ],
+      "now": 1791039600,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "30 days failing: gone",
+      "reads": [
+        {
+          "at": 1788436800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1788437700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1788440400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1789300800,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791032400,
+      "expect": {
+        "status": "gone",
+        "failing_since": 1788440400
+      }
+    },
+    {
+      "name": "a day short of it: still failing",
+      "reads": [
+        {
+          "at": 1788523200,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1788524100,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1788526800,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791028800,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1788526800
+      }
+    },
+    {
+      "name": "a gone door that answers again is live",
+      "reads": [
+        {
+          "at": 1787572800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1787573700,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1787576400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "good"
+        }
+      ],
+      "now": 1791032400,
+      "expect": {
+        "status": "live",
+        "failing_since": null
+      }
+    },
+    {
+      "name": "reads arrive out of order: taken in time order",
+      "reads": [
+        {
+          "at": 1791032400,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791028800,
+          "by": "probe",
+          "result": "failed"
+        },
+        {
+          "at": 1791029700,
+          "by": "probe",
+          "result": "failed"
+        }
+      ],
+      "now": 1791036000,
+      "expect": {
+        "status": "failing",
+        "failing_since": 1791032400
+      }
+    }
+  ],
+  "intents": {
+    "name": "each source and attempt counts once, and its last result wins",
+    "reports": [
+      {
+        "source": "key:A",
+        "intent": "attempt-1",
+        "result": "fail"
+      },
+      {
+        "source": "key:A",
+        "intent": "attempt-1",
+        "result": "ok"
+      },
+      {
+        "source": "key:B",
+        "intent": "attempt-1",
+        "result": "fail"
+      },
+      {
+        "source": "key:A",
+        "intent": "attempt-2",
+        "result": "refused"
+      },
+      {
+        "source": "key:A",
+        "intent": "attempt-1",
+        "result": "fail"
+      }
+    ],
+    "expect": [
+      {
+        "source": "key:B",
+        "intent": "attempt-1",
+        "result": "fail"
+      },
+      {
+        "source": "key:A",
+        "intent": "attempt-2",
+        "result": "refused"
+      },
+      {
+        "source": "key:A",
+        "intent": "attempt-1",
+        "result": "fail"
+      }
+    ]
+  }
+}

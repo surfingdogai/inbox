@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { timestampSchema } from "./common";
+import { reportHintSchema, timestampSchema } from "./common";
 import { doorTypeSchema, levelNameSchema, trackRecordSchema } from "./directory";
 
 /**
@@ -626,6 +626,7 @@ export const checkResultSchema = z.object({
   badge: z.object({ svg: z.url(), snippet: z.string() }).optional(),
   owner: z.object({ claim: z.string(), hide: z.string(), opt_out: z.string() }).optional(),
   track_record: trackRecordSchema.optional(),
+  report: reportHintSchema.optional(),
 });
 export type CheckResult = z.infer<typeof checkResultSchema>;
 

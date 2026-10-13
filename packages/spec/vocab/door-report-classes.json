@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "name": "Surfing Dog door report classes",
+  "results": [
+    {
+      "id": "ok",
+      "says": "The door did what was asked. A report of ok carries no class."
+    },
+    {
+      "id": "refused",
+      "says": "An honest no, like a slot already taken: the door working, never a failure."
+    },
+    {
+      "id": "invalid",
+      "says": "The agent's own fault: input the door cannot take, an unknown id, no access, a rate limit."
+    },
+    {
+      "id": "fail",
+      "says": "The door's fault, or no answer at all."
+    },
+    {
+      "id": "info",
+      "says": "The door needs a person."
+    }
+  ],
+  "phases": [
+    {
+      "id": "reach",
+      "results": ["fail"],
+      "does": "It may make the network read the door itself, at most twice a day per door for reports nobody can tell apart; it never counts by itself."
+    },
+    {
+      "id": "protocol",
+      "results": ["fail"],
+      "does": "It counts only with a door token that says error."
+    },
+    {
+      "id": "operation",
+      "results": ["fail", "refused"],
+      "does": "A failure counts only with a door token that says error. A refusal is the door working, never a failure."
+    },
+    {
+      "id": "needs_human",
+      "results": ["info"],
+      "does": "Information only."
+    },
+    {
+      "id": "client",
+      "results": ["invalid"],
+      "does": "Kept privately, per tool, for the business: never public, never counted."
+    }
+  ],
+  "classes": [
+    {
+      "id": "dns.name_not_resolved",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The door's host name did not resolve."
+    },
+    {
+      "id": "dns.failed",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The name lookup failed for another reason."
+    },
+    {
+      "id": "tcp.timed_out",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The connection timed out."
+    },
+    {
+      "id": "tcp.refused",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The connection was refused."
+    },
+    {
+      "id": "tcp.reset",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The connection was reset."
+    },
+    {
+      "id": "tls.cert.invalid",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The certificate was not valid for the host."
+    },
+    {
+      "id": "tls.failed",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The secure connection failed for another reason."
+    },
+    {
+      "id": "http.error",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The door answered with a server error (5xx).",
+      "http": "5xx"
+    },
+    {
+      "id": "http.response.invalid",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The answer was not valid HTTP."
+    },
+    {
+      "id": "abandoned",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The answer stopped before it was complete."
+    },
+    {
+      "id": "timeout",
+      "phase": "reach",
+      "result": "fail",
+      "says": "No answer in time.",
+      "http": "408"
+    },
+    {
+      "id": "operation.timeout",
+      "phase": "reach",
+      "result": "fail",
+      "says": "The operation started and never finished."
+    },
+    {
+      "id": "protocol.internal",
+      "phase": "protocol",
+      "result": "fail",
+      "says": "The door answered an internal error.",
+      "jsonrpc": [-32603]
+    },
+    {
+      "id": "protocol.advertised_missing",
+      "phase": "protocol",
+      "result": "fail",
+      "says": "A method or tool the door advertises was not found.",
+      "jsonrpc": [-32601],
+      "a2a": [-32004]
+    },
+    {
+      "id": "protocol.version",
+      "phase": "protocol",
+      "result": "fail",
+      "says": "The door refused the protocol version it advertises.",
+      "mcp": [-32022],
+      "a2a": [-32009]
+    },
+    {
+      "id": "protocol.invalid_answer",
+      "phase": "protocol",
+      "result": "fail",
+      "says": "The answer did not follow the door's own protocol."
+    },
+    {
+      "id": "operation.tool_error",
+      "phase": "operation",
+      "result": "fail",
+      "says": "The tool answered with an error."
+    },
+    {
+      "id": "operation.failed",
+      "phase": "operation",
+      "result": "fail",
+      "says": "The operation failed at the door."
+    },
+    {
+      "id": "operation.internal",
+      "phase": "operation",
+      "result": "fail",
+      "says": "The operation hit the door's own error."
+    },
+    {
+      "id": "payment_failed",
+      "phase": "operation",
+      "result": "fail",
+      "says": "The door's payment step failed."
+    },
+    {
+      "id": "slot_taken",
+      "phase": "operation",
+      "result": "refused",
+      "says": "The time asked for was taken."
+    },
+    {
+      "id": "out_of_stock",
+      "phase": "operation",
+      "result": "refused",
+      "says": "What was asked for is out of stock."
+    },
+    {
+      "id": "item_unavailable",
+      "phase": "operation",
+      "result": "refused",
+      "says": "What was asked for is not offered now."
+    },
+    {
+      "id": "outside_limits",
+      "phase": "operation",
+      "result": "refused",
+      "says": "Outside what the business takes."
+    },
+    {
+      "id": "wrong_state",
+      "phase": "operation",
+      "result": "refused",
+      "says": "Not possible in the item's current state."
+    },
+    {
+      "id": "customer_side",
+      "phase": "operation",
+      "result": "refused",
+      "says": "Refused for a reason on the customer's side (a declined payment, an address, eligibility)."
+    },
+    {
+      "id": "escalation",
+      "phase": "needs_human",
+      "result": "info",
+      "says": "The door handed the request to a person."
+    },
+    {
+      "id": "auth",
+      "phase": "needs_human",
+      "result": "info",
+      "says": "The door needs the person to sign in."
+    },
+    {
+      "id": "person",
+      "phase": "needs_human",
+      "result": "info",
+      "says": "The door needs the person to act (3-D Secure)."
+    },
+    {
+      "id": "client.invalid_params",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The agent sent arguments the tool cannot take.",
+      "jsonrpc": [-32602]
+    },
+    {
+      "id": "client.parse_error",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The agent sent JSON that does not parse.",
+      "jsonrpc": [-32700]
+    },
+    {
+      "id": "client.invalid_request",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The agent sent a request that is not valid JSON-RPC.",
+      "jsonrpc": [-32600]
+    },
+    {
+      "id": "client.mcp_headers",
+      "phase": "client",
+      "result": "invalid",
+      "says": "An MCP header the request needs was missing or disagreed with the body.",
+      "mcp": [-32020]
+    },
+    {
+      "id": "client.mcp_refused",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The MCP server refused what the request declared.",
+      "mcp": [-32021]
+    },
+    {
+      "id": "client.http",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The door answered 4xx, other than 408 and 429.",
+      "http": "4xx"
+    },
+    {
+      "id": "client.rate_limited",
+      "phase": "client",
+      "result": "invalid",
+      "says": "The door asked to slow down.",
+      "http": "429"
+    }
+  ],
+  "network_only": [
+    {
+      "id": "protocol.unsigned_answer",
+      "from": "The network's own read of a made-up item: the door's refusal carried no door token."
+    },
+    {
+      "id": "protocol.signed_mismatch",
+      "from": "An answer body an agent sent that does not say what the door's token says."
+    }
+  ]
+}

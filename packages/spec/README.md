@@ -19,6 +19,12 @@ or network:
 - 0.3.1: the manifest's optional `doors_elsewhere`, the kinds of request a business takes somewhere
   else and where, read with `readDoorsElsewhere` (`vectors/doors-elsewhere.json`). A manifest
   without it reads as before.
+- 0.4 (optional for a network): door reports, how an agent says each use of a business's door went,
+  done or not (`POST /v1/door-reports`, the `report_door` tool, a strict body that can carry nothing
+  about a person), the classes they use (`vocab/door-report-classes.json`), the `doors` block a signed
+  ping's answer gives the business, the `report` hint on a network's answers, and how a network's
+  own reads move a door between live, failing and gone (`readDoorReports`, `doorReportEffect`,
+  `classifyDoorRead`, `doorStatusAfter`; `vectors/door-reports.json`).
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -36,6 +42,7 @@ implementations:
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
+| `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
 its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door
@@ -46,6 +53,8 @@ with a business, from finding it to a refund) and `vocab/score-rules-v2.json` th
 rules, version 2, in force from 7 October 2026, as `GET /v1/score-rules` serves them
 (`vocab/score-rules-v1.json` is version 1, retired, at `?version=1`); `doors.json` version 2 adds the
 `experimental` door types, which count toward the score and never toward a level.
+`vocab/door-report-classes.json` (0.4) lists the classes a door report may carry, by phase and
+result, with the JSON-RPC, MCP, A2A and HTTP codes each one stands for.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by

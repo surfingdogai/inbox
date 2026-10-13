@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP report_door: structuredContent",
+  "type": "object",
+  "properties": {
+    "accepted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "i": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "proof": {
+            "type": "string",
+            "enum": ["none", "signature", "token"]
+          },
+          "counts": {
+            "type": "string",
+            "enum": ["counter", "row"]
+          }
+        },
+        "required": ["i", "proof", "counts"]
+      }
+    },
+    "ignored": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "i": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "why": {
+            "type": "string",
+            "enum": ["unknown_door", "unknown_op", "bad_class", "bad_time", "superseded", "over_limit"]
+          }
+        },
+        "required": ["i", "why"]
+      }
+    },
+    "next": {
+      "type": "string",
+      "description": "One plain sentence: what the network does with these reports."
+    }
+  },
+  "required": ["accepted", "ignored", "next"]
+}

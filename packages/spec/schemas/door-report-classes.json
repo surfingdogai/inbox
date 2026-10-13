@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The door report classes (vocab/door-report-classes.json)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "name": {
+      "type": "string"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["ok", "refused", "invalid", "fail", "info"]
+          },
+          "says": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "says"]
+      }
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["reach", "protocol", "operation", "needs_human", "client"]
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["ok", "refused", "invalid", "fail", "info"]
+            }
+          },
+          "does": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "results", "does"]
+      }
+    },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "enum": ["reach", "protocol", "operation", "needs_human", "client"]
+          },
+          "result": {
+            "type": "string",
+            "enum": ["ok", "refused", "invalid", "fail", "info"]
+          },
+          "says": {
+            "type": "string"
+          },
+          "jsonrpc": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "mcp": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "a2a": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "http": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "phase", "result", "says"]
+      }
+    },
+    "network_only": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "from"]
+      }
+    }
+  },
+  "required": ["version", "name", "results", "phases", "classes", "network_only"]
+}

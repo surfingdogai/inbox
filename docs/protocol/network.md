@@ -2,7 +2,10 @@
 
 Protocol 0.2 (October 2026). Everything in 0.2 is additive: a 0.1 network and a 0.1 inbox keep working.
 Spec 0.3 adds, all of it optional for a network and none of it read by an inbox, capabilities and the
-agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3).
+agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3). Spec 0.4
+adds, optional for a network, door reports (§4.15): agents say how each use of a door went, and the
+business sees it in its signed ping's answer; and it writes down how a network's own reads move a
+door (§4.8).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -41,17 +44,21 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
 | The agentic score's rules, version 2 as amended on 8 and 12 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
 | The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
+| Door report classes | [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json) (§4.15) |
+| Door reports, and the network's own reads of a door | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (§4.8, §4.15) |
 
 ## 1. Conventions
 
 - HTTPS only. A network is named by its origin, `https://<host>` on port 443 with no path; `<host>`
   is lowercase punycode and is the host inside every key and pass it issues.
 - Bodies are JSON, UTF-8. Times are RFC 3339 in UTC. Unix times in receipts are seconds.
-- A request body is at most 64 KB; no message in this protocol comes near it. A network refuses a
-  larger one with `413 too_large`, and may set a lower limit on a call and refuse a body over that
-  one the same way. `413` is final: the same body sent again gets the same answer.
+- A request body is at most 64 KB; no message in this protocol comes near it, except door reports
+  (§4.15), at most 128 KB. A network refuses a larger one with `413 too_large`, and may set a lower
+  limit on a call and refuse a body over that one the same way. `413` is final: the same body sent
+  again gets the same answer.
 - **Unknown members are ignored**, by both sides. A network may add a field to any answer; an inbox
-  must not fail on it. The JSON Schemas therefore never forbid extra members.
+  must not fail on it. The JSON Schemas therefore never forbid extra members, except in a door
+  report's body (§4.15), which is strict so that nothing about a person travels in it by mistake.
 - Errors are RFC 9457 problem documents (`application/problem+json`) with a `code` (§9). A `400`
   may have none. A refused acknowledgement's code is prefixed `ack_`.
 - Rate limits answer `429` with `rate_limited` or `too_many_receipts`.
@@ -221,6 +228,9 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `GET /b/{domain}`, `GET /b/{domain}.json` (0.3, MAY) | none | → a check's result page, or its JSON (§4.13) | `check-result` |
 | `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&page=` → businesses where an agent can book, order or sign up above the rest, then by agentic score (§4.13) | `leaderboard` |
 | `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
+| `POST /v1/door-reports` (0.4, MAY) | optional sdi-agent/1 or Web Bot Auth | `{v: 1, reports}` → `202 {accepted, ignored, next}` (§4.15) | `door-reports-*`, `door-report` |
+| `POST /v1/door-incidents/{id}` (0.4, MAY) | sdi-instance/1 | `{state: "fixed"}` → `{id, state, check_queued}` (§4.15) | `door-incident-*` |
+| `GET /report.md` (0.4, with door reports) | none | → how an agent reports, in plain words (§4.15) | |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
 | `POST /v1/persons` | sdi-instance/1 | `{request_id, email, agent?}` → `201` | `persons-*` |
 | `POST /v1/presentations` | sdi-instance/1 | one of `pass`, `key`, `agent_key` → `200` | `presentations-*` |
@@ -290,7 +300,9 @@ again, and the regular fetch comes all the same.
   the last nightly snapshot, and whether it is listed (§4.5). From rules version 8 `standing.ranked`
   is false, and `tier` is `new`, while the business's record rests on its own word (less than a
   fifth of it kept outcomes a verified acknowledgement backs); its `score` is still there, since
-  only the business sees it (ADR-017 A4.1).
+  only the business sees it (ADR-017 A4.1). From spec 0.4 a network that takes door reports adds
+  `doors`: how agents got on at the business's own doors, and what the network's own reads saw
+  (§4.15).
   Anyone can ping for any domain, so only the domain's own signature sees this.
 - **A signature that fails** (or one by another listed domain) is a ping all the same: `204` with
   `Sdi-Signature: invalid; reason="<code>"`.
@@ -666,6 +678,7 @@ is open to every origin, without credentials.
 | `register_business` (0.2, optional) | the business, its doors and a proof (§4.12) | the status, the card, what was dropped |
 | `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
 | `check_business` (0.3, optional) | `url`: a website or a bare domain; `fresh`: read it again | a check's result (§4.13) |
+| `report_door` (0.4, optional) | `POST /v1/door-reports`'s body (§4.15) | its `202` answer |
 
 Protocol 0.2: `search_businesses` takes `attributes`, `country`, `price_band`, `accepts`,
 `requestable`, `door_type`, `level`, `has_inbox`, `source` and `order`, as `GET /v1/businesses` does
@@ -685,6 +698,12 @@ minutes after the last one and otherwise answers the stored result with when to 
 Checking a site is not claiming it, and never touches a listing. `update_business` takes
 `score_page: "hidden" | "shown"`, which needs the claim token or a proof as `set` does, and answers
 it back.
+
+Spec 0.4: `report_door` (in `MCP_OPTIONAL_TOOL_NAMES`) takes an agent's door reports (§4.15), the
+body of `POST /v1/door-reports` as its arguments (`schemas/mcp-report-door-*.json`), and answers its
+`202`. It asks for no signature. It records what it is told and may make the network read a door, so
+it is annotated not read-only, not destructive, idempotent (an attempt counts once, however often it
+is sent) and open-world. A report it refuses whole is a result with `isError: true` and the reason.
 
 Their `inputSchema` and `outputSchema` are `schemas/mcp-*.json` word for word, and every tool is
 annotated read-only, idempotent and closed-world. `search_businesses` is `GET /v1/businesses` with
@@ -759,8 +778,8 @@ declares, shows or delivers to them, and `network-check` fails a network that li
 
 A door shows `{type, url, level, status, kinds, src, protocol?, checked_at?}`:
 
-- `status` is `live` or `failing`. A door that failed 3 checks in 7 days is `failing`, counts for
-  nothing in the order and takes no requests; 30 days failing, it is `gone` and no longer shown.
+- `status` is `live` or `failing`, from the network's own reads alone (below). A failing door counts
+  for nothing in the order and takes no requests; 30 days failing, it is `gone` and no longer shown.
 - `kinds` are what an AI can do through it: `ask`, `quote`, `book`, `order`, `pay`. `src` says where
   they come from: `declared` by the business (its inbox's `item_types`, a UCP or ACP manifest, an A2A
   card's skills, a door declared at registration or in a manifest), or `seen` (an MCP server's tool
@@ -778,6 +797,43 @@ level, and does not show it. A claim proved by `code` (§4.12) declares no door 
 **Probing reads and never acts.** For MCP servers at 2026-07-28 or later a network reads the server
 card or calls `tools/list` only, and calls `initialize` for older versions alone. It never makes a
 `tools/call`, a write call, an A2A `message/send`, a checkout, a form submission or a login.
+
+**The network's own reads.** Only a network's own reads move a door between live, failing and gone.
+Nothing an agent reports does (§4.15), and nothing anyone else says. Each read is one request, signed
+as the network signs its other reads, and kept to what the probing rule above allows:
+
+| Read | When | What it asks |
+|---|---|---|
+| Daily | once a day, for the doors of members and of claimed listings | the MCP server card or `tools/list`, the A2A card, the manifest; for an inbox door, also `GET /v1/business` |
+| Confirm | when an agent reports the door down (§4.15) | the same single request, for that door |
+| Recovery | after a failed read: 15 minutes, 1 hour and 4 hours later, then daily while it fails | the same |
+| Should-fail | daily, for inbox doors | `GET /v1/items/<an id made up for the read>` over REST, which a working inbox refuses with a typed problem; never an MCP `tools/call` |
+
+Any other door is read at the network's normal crawl, plus at most 2 confirm reads a day when agents
+report trouble there. In the same minute as a read, the network reads a door it knows works through
+the same route; when that control read does not come back good, the result is thrown away. A read
+concludes one of three things:
+
+- **failed**: no answer (the name does not resolve; the connection is refused, reset or times out;
+  TLS fails; nothing within 10 seconds), a 5xx that is not a challenge page, or an answer that does
+  not parse as the door's protocol;
+- **blocked**: robots.txt disallows the read, or the door answered 403, 429 or a challenge page.
+  Blocked is never a failure: it never lowers a door, and only the business hears of it, as "our
+  check was blocked";
+- **good**: anything else.
+
+**One state machine**, for every read the network makes, scheduled or crawled: a door is `failing`
+after 3 failed reads in 7 days, the first and the last at least 30 minutes apart, with no good read
+between them; `live` again after one good read; `gone` after 30 days failing. A blocked read changes
+nothing. A read anyone may ask for (a result page's "Check again", `check_business` with `fresh`) only
+ever adds: its good read lifts a door, and its failure never lowers one. A door's history follows its
+type, not its URL: the network keeps it by domain and door type, and carries it over a change of URL
+for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (`reads`,
+`states`) pins this down.
+
+The network spends little on any one door: at most one read per door and one per host in 10 minutes,
+at most 12 reads of a door a day, and at most 2 a day made by reports nobody can tell apart (§4.15).
+Recovery reads go first.
 
 ### 4.9 Readiness levels
 
@@ -1144,6 +1200,138 @@ So an agent or a model can find a network's doors without being told, a network 
 Tool descriptions say plainly what the directory is and when to use it. They never tell an agent to
 call the network every time.
 
+### 4.15 Door reports (spec 0.4, MAY)
+
+A network MAY take **door reports**: an agent says how each use of a business's door went, done or
+not, in one call. A report measures a machine: did the door answer, was the operation done, refused
+or failed, did it need a person, and how long it took. It is never about a person, and it never shows
+that a promise was kept: receipts do that (§4.2). Reports are measurements, not reviews
+([ADR-019](../adr/019-door-reports.md)).
+
+`POST /v1/door-reports`, or the MCP tool `report_door` (§4.7) with the same body as its arguments and
+the same answer as its `structuredContent`:
+
+```json
+{"v": 1, "reports": [{
+  "domain": "bakery.example",
+  "door": {"type": "mcp", "url": "https://bakery.example/mcp"},
+  "op": "book", "tool": "create_booking",
+  "at": 1791892777, "ms": 1840, "intent": "5mQ2c1Kc8Qx",
+  "result": "fail", "class": "tcp.timed_out"
+}]}
+```
+
+→ `202 {accepted: [{i, proof, counts}], ignored: [{i, why}], next}`.
+
+**Signing is optional.** A call may be signed sdi-agent/1 with a self-held key (no pass is needed),
+signed with Web Bot Auth, or not signed at all, and each is accepted. A signature only says whose
+reports they are; it never makes a report count for more than its proof allows (below).
+
+**Strict JSON.** Unlike every other call (§1), this body is strict. A member the schemas
+(`schemas/door-reports-request.json`, `schemas/door-report.json`) do not name, at any level and in any
+letter case, or a member named twice, makes the whole call `400 malformed`, as does a value of the
+wrong type or outside its pattern. So nothing about a person can travel by mistake: no pass, key,
+email, name, phone, address, message, body, IP address, item id, free-text reason or trace is ever
+taken. A call is at most 100 reports and 128 KB, and a token at most 1 KB; over that, `413 too_large`.
+
+| Member | Rule |
+|---|---|
+| `domain`, `door {type, url}` | A door the network shows for that domain, its type and URL exactly as shown: one of the listing's `doors`, or, for a member's inbox, type `inbox` with the inbox's address or one of the endpoints a card gives (`inbox.mcp`, `inbox.rest`). The URL carries no query or fragment. Else `unknown_door`. |
+| `op` | What was attempted, from the capability vocabulary (§4.13). Else `unknown_op`. |
+| `tool` | Optional: the tool or operation called at the door, lowercase, at most 64 of `a-z`, `0-9`, `_`, `.`, `-`. |
+| `at` | Unix seconds, kept to the minute: at most 7 days old and at most 60 seconds ahead of the network's clock. Else `bad_time`. |
+| `ms` | Optional: how long the door took to answer, at most 600000. Private. |
+| `intent` | 8 to 32 base64url characters, one per attempt with all its retries. A source's attempt counts once, and its last result wins. |
+| `result`, `class` | `ok`, with no class; or `refused`, `invalid`, `fail` or `info`, with a class of that result. Else `bad_class`. |
+| `token` | Optional: the door's signed outcome token from its answer, as it came. A token that verifies decides the outcome, op and tool; a network that does not check tokens keeps the report as one without. |
+
+Each report is taken or ignored on its own. An ignored one is in `ignored` with the first reason that
+applies, in this order: `unknown_door`, `unknown_op`, `bad_class`, `bad_time`; then `superseded`, when
+a later report in the same call is the same attempt, and `over_limit`, when its source sent more than
+its share today. Every other report is in `accepted`, with `proof`, what proved it (`token`, a door
+token that verified; else `signature`, a signature that verified; else `none`), and `counts`, what the
+network kept (`row` or `counter`, both private). `next` says in one sentence what the network does
+with them.
+
+**Classes** ([`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json))
+are reused, never invented:
+
+| Phase | Result | Classes | What a report of it can do |
+|---|---|---|---|
+| reach | `fail` | Network Error Logging's names: `dns.name_not_resolved`, `dns.failed`, `tcp.timed_out`, `tcp.refused`, `tcp.reset`, `tls.cert.invalid`, `tls.failed`, `http.error`, `http.response.invalid`, `abandoned`; and `timeout`, `operation.timeout` | It may make the network read the door (§4.8). It never counts by itself. |
+| protocol | `fail` | `protocol.internal` (−32603), `protocol.advertised_missing` (−32601; A2A −32004), `protocol.version` (MCP −32022; A2A −32009), `protocol.invalid_answer` | It counts only with a door token that says the door erred. |
+| operation | `fail` | `operation.tool_error`, `operation.failed`, `operation.internal`, `payment_failed` | The same. |
+| operation | `refused` | `slot_taken`, `out_of_stock`, `item_unavailable`, `outside_limits`, `wrong_state`, `customer_side` | A refusal is the door working, never a failure. |
+| needs_human | `info` | `escalation`, `auth`, `person` | Information only. |
+| client | `invalid` | `client.invalid_params` (−32602), `client.parse_error` (−32700), `client.invalid_request` (−32600), `client.mcp_headers` (MCP −32020), `client.mcp_refused` (MCP −32021), `client.http` (4xx other than 408 and 429), `client.rate_limited` (every 429) | Kept privately, per tool, for the business ("agents sent `create_booking` arguments it cannot take 14 times"). Never public, never counted. |
+
+A declined payment, an address the business does not deliver to and an eligibility refusal are all
+`customer_side`: a report says nothing about the customer. `protocol.unsigned_answer` and
+`protocol.signed_mismatch` are the network's own, from its reads; an agent never reports them.
+
+**What a report can do.** No report changes anything public on its own. Only the network's own reads
+move a door (§4.8), and every report reaches the business, privately.
+
+| | No door token | A door token that verified |
+|---|---|---|
+| Nobody signed | A daily count per door, class and proof. A reach failure may make the network read the door, at most twice a day per door. | A row, private. |
+| A self-held key, or a platform not independent of the business | The same, with the platform's origin kept (a platform-signed report is kept as a row). | A row, private. |
+| An independent source | The same, and its confirm read goes ahead of the queue. | A row. A failure counts toward the door's public failures line. |
+
+A platform origin is **independent** of a business when it serves a Web Bot Auth key directory on its
+own origin, its registrable domain is neither the business's nor in the business's relations (§4.4),
+and it has sent door-signed reports for at least 30 days at 5 or more members unrelated to each other
+and to it. A self-held key has **standing** when receipts at 3 or more members name it as the agent
+that carried the item, within 90 days, at members that are ranked on evidence this key did not
+produce, that have been members for 90 days or more, and that sit in distinct relations components
+and address blocks. A call nobody signed is never independent. Said plainly: no key has standing and
+no platform is independent yet, since both need doors that sign their answers and receipts that name
+agents. The door token's format, and the public failures line it makes possible, are specified with
+the token itself; until then a network checks no token, and no report counts toward anything public.
+
+`vectors/door-reports.json` pins the reading of a call (`calls`), what each report can do (`effects`)
+and how a source's attempts count (`intents`).
+
+**Limits.** The reference values: 60 calls a minute from one address, in bursts of 60 (then `429
+rate_limited`); 1,000 reports a day from one self-held key and 50 at one door; 100,000 a day from one
+platform origin and 5,000 at one door (beyond them, `over_limit`); at most 10,000 rows per door a day,
+70% of them kept for door-signed reports from independent sources, 20% for other door-signed ones and
+10% for platform-signed reports without a token. Reports nobody can tell apart are only ever counted,
+under a cap of their own, so they cannot crowd out the rest. A network learns at most one new platform
+directory a minute from one address, keeps at most 5,000 platform origins, and forgets one unseen for
+90 days.
+
+**What a network keeps.** Reports are pseudonymous, with no person and no content. Counts per door,
+day, class and proof. Rows only for door-signed and platform-signed reports, each holding when it
+arrived, the door, `op` and `tool`, `at` to the minute, `ms`, the result and class, a platform's origin,
+the source as a keyed hash that changes every 30 days, and the hash of a token's id. Rows are kept 30
+days, and only daily totals after that. A key is never shown to anyone, and a platform is named to a
+business only when 5 or more distinct sources from it reported there in the period. A self-held key's
+hash, with times and domains, may still be personal data of the person behind the agent, so an agent
+tells its person that it reports how doors answer (for-agents.md §5).
+
+**What the business sees.** A signed ping's `200` (§4.1) carries `doors`
+([`schemas/ping-response.json`](../../packages/spec/schemas/ping-response.json)): for each of its
+doors, the network's own last read (`good`, `failed` or `blocked`) and the door's state; what agents
+reported over 7 and 30 days, by op, tool, result, class and proof (`token`: signed by the business's
+door; `none`: agents the network cannot tell apart), counts to the day; the platforms with 5 or more
+sources; open incidents to the hour, each with when it may first show publicly; `trouble`, the doors
+where 5 or more reports nobody can tell apart, from 3 or more address blocks in 24 hours, say the door
+is down while the network's own reads see it answer; and one plain line to fix each class there is
+trouble with. The business is emailed only when an incident opens, from the network's own reads or
+from door-signed failures of independent sources: at most one email a day per address, and no digest.
+A claimed listing that is not a member is emailed only once it asks to be (`update_business`); an
+unclaimed one never is. `POST /v1/door-incidents/{id}`, signed sdi-instance/1 by the business, with
+`{"state": "fixed"}` answers `200 {id, state, check_queued}`, and the network reads the door again.
+
+**Telling agents.** Every answer of a network that takes door reports carries `report: {tool, url,
+guide, reward}`: `search_businesses`, `get_business`, `check_business`, `GET /v1/businesses`, `GET
+/v1/businesses/{domain}` and `GET /b/{domain}.json`. `guide` is `<network>/report.md`, an agent's guide
+like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server card and the A2A card.
+`reward` says what is true: reports make the network read doors again, so an agent's searches send it
+to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
+that reports.
+
 ## 5. Persons and passes
 
 ### 5.1 First contact: `POST /v1/persons` (sdi-instance/1)
@@ -1400,6 +1588,9 @@ the refund machine.
   categories list, by slug. It publishes a street address only when the owner entered one, and says
   plainly, where the owner enters it, that the directory shows it: someone who works from home
   leaves it empty.
+- Shows the owner, per network, the `doors` a signed ping's `200` carries (§4.15): how agents got on
+  at its doors, what the network's own reads saw, and what to fix. It reads the block leniently: a
+  part it cannot read is left out, and the rest of the answer counts as before.
 - Lets the owner choose whether the business is in the directory. A change is sent to every network
   as `POST /v1/instances/{domain}/listing`, retried until answered; an inbox without a receipt key
   publishes it in its manifest's `directory` instead. It shows the owner the `listing` a signed ping

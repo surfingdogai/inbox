@@ -7,6 +7,7 @@ import {
   tierSchema,
   timestampSchema,
 } from "./common";
+import { pingDoorsSchema } from "./doors";
 
 /**
  * An inbox and a network (ADR-017 §7.1, §7.3): registration, the hourly ping and its answer, and the
@@ -172,6 +173,11 @@ export const signedPingResponseSchema = z.object({
       "The business's standing in the last nightly snapshot; absent from a directory-level network (§10), which keeps none.",
     ),
   listing: listingStateSchema.optional().describe("Whether the business is in the directory (A2.3–A2.4)."),
+  doors: pingDoorsSchema
+    .optional()
+    .describe(
+      "How agents got on at the business's own doors, and what the network's own reads saw (§4.15); absent from a network that takes no door reports.",
+    ),
 });
 
 /**

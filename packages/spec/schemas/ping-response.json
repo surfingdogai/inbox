@@ -181,6 +181,198 @@
         }
       },
       "required": ["listed", "delisted_at", "dormant_since"]
+    },
+    "doors": {
+      "description": "How agents got on at the business's own doors, and what the network's own reads saw (§4.15); absent from a network that takes no door reports.",
+      "type": "object",
+      "properties": {
+        "as_of": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+          "description": "The last day the counts include, in UTC."
+        },
+        "doors": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["live", "failing", "gone"],
+                "description": "From the network's own reads only."
+              },
+              "checked": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "result": {
+                        "type": "string",
+                        "enum": ["good", "failed", "blocked"]
+                      },
+                      "at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "description": "To the hour."
+                      }
+                    },
+                    "required": ["result", "at"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The network's own last read of this door; blocked: its read was refused (403, 429, a challenge)."
+              },
+              "reports": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "proof": {
+                      "type": "string",
+                      "enum": ["token", "none"],
+                      "description": "token: signed by your door; none: agents the network cannot tell apart."
+                    },
+                    "result": {
+                      "type": "string",
+                      "enum": ["ok", "refused", "invalid", "fail", "info"]
+                    },
+                    "class": {
+                      "type": "string"
+                    },
+                    "d7": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "In the 7 days to as_of."
+                    },
+                    "d30": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "In the 30 days to as_of."
+                    }
+                  },
+                  "required": ["op", "proof", "result", "d7", "d30"]
+                }
+              },
+              "platforms": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Agent platforms' origins with 5 or more distinct sources reporting here in 30 days."
+              }
+            },
+            "required": ["type", "url", "status", "checked", "reports", "platforms"]
+          }
+        },
+        "incidents": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "class": {
+                "type": "string"
+              },
+              "opened_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "To the hour."
+              },
+              "reproduced": {
+                "type": "boolean",
+                "description": "Whether the network's own read saw it too."
+              },
+              "public_from": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "When it may first show publicly, if it still holds then; null when it never will."
+              }
+            },
+            "required": ["id", "type", "url", "class", "opened_at", "reproduced", "public_from"]
+          },
+          "description": "Open incidents, from the network's own reads or from door-signed failures of independent sources."
+        },
+        "trouble": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "since": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "description": "To the hour."
+              }
+            },
+            "required": ["type", "url", "since"]
+          },
+          "description": "Doors agents report trouble at that the network's own reads do not see."
+        },
+        "fixes": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "class": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["class", "text"]
+          },
+          "description": "One plain line per class there is trouble with: what to fix."
+        }
+      },
+      "required": ["as_of", "doors", "incidents", "trouble", "fixes"]
     }
   },
   "required": ["ok", "rules", "next_rules", "reports", "contests"]

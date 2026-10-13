@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/door-reports (strict JSON)",
+  "type": "object",
+  "properties": {
+    "v": {
+      "type": "number",
+      "const": 1
+    },
+    "reports": {
+      "minItems": 1,
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]{1,253}$",
+            "description": "The business's domain, as the network lists it."
+          },
+          "door": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^[a-z0-9:_-]{1,48}$",
+                "description": "The door's type as the network shows it: inbox for a member's inbox; mcp, a2a, openapi, api, … or platform:<name>."
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "description": "The door's URL exactly as the network shows it; for an inbox, the address used: inbox.url, inbox.mcp or inbox.rest."
+              }
+            },
+            "required": ["type", "url"],
+            "additionalProperties": false
+          },
+          "op": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "What was attempted, from the capability vocabulary (vocab/capabilities.json): book, order, message, …"
+          },
+          "tool": {
+            "description": "The tool or operation called at the door, in lowercase.",
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]{1,64}$"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "When, in Unix seconds; the network keeps it to the minute."
+          },
+          "ms": {
+            "description": "How long the door took to answer, in milliseconds.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{8,32}$",
+            "description": "8 to 32 base64url characters, one per attempt with all its retries: an attempt counts once."
+          },
+          "result": {
+            "type": "string",
+            "enum": ["ok", "refused", "invalid", "fail", "info"]
+          },
+          "class": {
+            "description": "Why, from vocab/door-report-classes.json: required unless the result is ok, and absent when it is.",
+            "type": "string",
+            "pattern": "^[a-z0-9_.]{1,64}$"
+          },
+          "token": {
+            "description": "The door's signed outcome token from its answer, when it gave one, as it came.",
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+          }
+        },
+        "required": ["domain", "door", "op", "at", "intent", "result"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["v", "reports"],
+  "additionalProperties": false
+}

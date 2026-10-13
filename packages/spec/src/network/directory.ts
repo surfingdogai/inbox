@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { closureDaysSchema, profileServiceSchema, weeklyHoursSchema } from "../base";
-import { tierSchema, timestampSchema } from "./common";
+import { reportHintSchema, tierSchema, timestampSchema } from "./common";
 import { outcomeCodeSchema } from "./receipts";
 
 /**
@@ -353,6 +353,7 @@ export const listingDetailSchema = listingSchema.extend({
     .array(listingFactSchema)
     .optional()
     .describe("Every displayed value of an entry that is not a member, with its source and date (§4.11)."),
+  report: reportHintSchema.optional(),
 });
 export type ListingDetail = z.infer<typeof listingDetailSchema>;
 
@@ -434,6 +435,7 @@ export const businessesQuerySchema = z.object({
 export const businessesResponseSchema = z.object({
   businesses: z.array(listingSchema),
   next_cursor: z.string().nullable(),
+  report: reportHintSchema.optional(),
 });
 export type BusinessesResponse = z.infer<typeof businessesResponseSchema>;
 

@@ -581,6 +581,31 @@
       },
       "required": ["version", "url"],
       "description": "The rules that ordered these businesses (GET /v1/ranking?version=N)."
+    },
+    "report": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "The MCP tool that takes door reports: report_door."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The same over REST: POST <network>/v1/door-reports."
+        },
+        "guide": {
+          "type": "string",
+          "format": "uri",
+          "description": "How to report, for an agent: <network>/report.md."
+        },
+        "reward": {
+          "type": "string",
+          "description": "What the agent gets for reporting, in one sentence."
+        }
+      },
+      "required": ["tool", "url", "guide", "reward"],
+      "description": "Report how each use of a door went, done or not: see the guide."
     }
   },
   "required": ["businesses", "next_cursor", "rules"]

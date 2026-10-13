@@ -73,6 +73,20 @@ export const rulesRefSchema = z.object({
   effective_at: timestampSchema,
 });
 
+/**
+ * The hint every answer of a network that takes door reports carries (§4.15): where to report how a
+ * use of a door went, the guide, and why it is worth it to the agent.
+ */
+export const reportHintSchema = z
+  .object({
+    tool: z.string().describe("The MCP tool that takes door reports: report_door."),
+    url: z.url().describe("The same over REST: POST <network>/v1/door-reports."),
+    guide: z.url().describe("How to report, for an agent: <network>/report.md."),
+    reward: z.string().describe("What the agent gets for reporting, in one sentence."),
+  })
+  .describe("Report how each use of a door went, done or not: see the guide.");
+export type ReportHint = z.infer<typeof reportHintSchema>;
+
 /** Rules announced and not yet in force (§11): published at least 15 days ahead. */
 export const nextRulesSchema = z.object({
   version: z.int().min(1),

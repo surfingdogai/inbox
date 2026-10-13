@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "POST /v1/door-incidents/{id}: 200",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "const": "fixed"
+    },
+    "check_queued": {
+      "type": "boolean",
+      "description": "Whether the network queued a read of the door to confirm it."
+    }
+  },
+  "required": ["id", "state", "check_queued"]
+}

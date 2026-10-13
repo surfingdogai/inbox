@@ -21,6 +21,8 @@
   the co-signed receipt proves it, with logs. The consumer review publishes after the window even
   if the business never co-signs or reviews. Negatives are removed only for documented fraud, with
   a takedown log and a statement of reasons. Agent-filed reviews need the human's confirmation.
+  (Door reports, an agent's measurement of how a business's machine door answered, are not reviews:
+  [ADR-019](019-door-reports.md).)
   Ranking parameters and their relative importance are disclosed to consumers and, in the business
   terms, to businesses; sponsored placement is labelled. Statements of reasons and 30-day notice
   before delisting a business.

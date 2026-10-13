@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { profileServiceSchema } from "../base";
 import { checkResultSchema } from "./capabilities";
-import { tierSchema, timestampSchema } from "./common";
+import { reportHintSchema, tierSchema, timestampSchema } from "./common";
 import {
   attributesResponseSchema,
   categoriesResponseSchema,
@@ -29,13 +29,15 @@ export const MCP_TOOL_NAMES = ["search_businesses", "get_business", "list_catego
 /**
  * Tools a network may also offer (protocol 0.2): `list_attributes`, read-only; `register_business` and `update_business`,
  * which a business's own AI calls to register, claim, correct or remove its listing (§4.12); `check_business`, which
- * checks how far an agent can go with one business's website and gives its agentic score (§4.13).
+ * checks how far an agent can go with one business's website and gives its agentic score (§4.13); `report_door`, which
+ * takes an agent's reports of how its uses of businesses' doors went, done or not (§4.15).
  */
 export const MCP_OPTIONAL_TOOL_NAMES = [
   "list_attributes",
   "register_business",
   "update_business",
   "check_business",
+  "report_door",
 ] as const;
 
 /** `search_businesses`: `GET /v1/businesses` for an assistant, in the same order and with the same filters. */
@@ -245,6 +247,7 @@ export const searchBusinessesOutputSchema = z.object({
   rules: z
     .object({ version: z.int().min(1), url: z.url() })
     .describe("The rules that ordered these businesses (GET /v1/ranking?version=N)."),
+  report: reportHintSchema.optional(),
 });
 export type SearchBusinessesOutput = z.infer<typeof searchBusinessesOutputSchema>;
 
@@ -269,6 +272,7 @@ export const getBusinessOutputSchema = businessCardSchema.extend({
     .optional()
     .describe("Every displayed value of an entry that is not a member, with its source and date."),
   rules: z.object({ version: z.int().min(1), url: z.url() }).optional(),
+  report: reportHintSchema.optional(),
 });
 export type GetBusinessOutput = z.infer<typeof getBusinessOutputSchema>;
 
