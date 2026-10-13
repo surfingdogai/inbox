@@ -6,6 +6,7 @@
 // service would hold; and what the site itself collects.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const UPDATED = "23 September 2026";
 ---
@@ -92,16 +93,28 @@ const UPDATED = "23 September 2026";
       </p>
 
       <h2 class="h-section">If we host it for you</h2>
-      <p>
-        Hosting is not open yet. When it opens, you will be the controller of the data your customers send you, and we
-        will be your processor. We will hold it on our own servers in the European Union and use it only to run the
-        service for you. For your own account, your address, your billing and how you use the service, we will be the
-        controller.
-      </p>
-      <p>
-        You will be able to export everything as a file, and delete everything, from the software without asking us.
-        A written processing agreement will be part of the terms before the first customer is onboarded.
-      </p>
+      {
+        HOSTED_PILOT_OPEN ? (
+          <p>
+            You are the controller of the data your customers send your hosted inbox, and we are your processor, under
+            the <a class="link" href="/hosted/processing/">processing agreement</a>. For your own account we are the
+            controller: the <a class="link" href="/hosted/privacy/">hosted privacy notice</a> says what we keep and why.
+          </p>
+        ) : (
+          <>
+            <p>
+              Hosting is not open yet. When it opens, you will be the controller of the data your customers send you, and
+              we will be your processor. We will hold it on our own servers in the European Union and use it only to run
+              the service for you. For your own account, your address, your billing and how you use the service, we will
+              be the controller.
+            </p>
+            <p>
+              You will be able to export everything as a file, and delete everything, from the software without asking
+              us. A written processing agreement will be part of the terms before the first customer is onboarded.
+            </p>
+          </>
+        )
+      }
 
       <h2 class="h-section">This website</h2>
       <p>

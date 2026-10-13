@@ -16,6 +16,7 @@ import {
   SCORE_GROUPS,
   wordCount,
 } from "../src/lib/guides";
+import { HOSTED_LINE } from "../src/lib/hosted";
 
 /**
  * The guides at /guides/: every address the network's result pages link to answers, each guide ends
@@ -187,7 +188,8 @@ describe("the guides", () => {
       expect(rows[0]?.way, g.slug).toBe(INBOX_WAY);
       expect(rows[0]?.what, g.slug).toMatch(/MIT/);
       expect(rows[0]?.what, g.slug).toMatch(/about \$5 a month/);
-      expect(rows[0]?.what, g.slug).toMatch(/no hosted version yet/);
+      // Hosting, as the pilot's switch says it (src/lib/hosted.ts): "no hosted version yet" while closed.
+      expect(rows[0]?.what, g.slug).toContain(HOSTED_LINE);
       // It is a row of the table, never a row on its own: other ways sit beside it.
       expect(g.options.length, g.slug).toBeGreaterThanOrEqual(3);
     }

@@ -2,6 +2,7 @@
 // apps/site/src/pages/technical.astro
 // Everything a developer needs in one place, so the rest of the navigation can stay about the business.
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const REPO = "https://github.com/surfingdogai/inbox";
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
@@ -96,13 +97,21 @@ const ways = [
     label: "Read the quickstart",
     external: false,
   },
-  {
-    title: "Hosted by us",
-    text: "We will run it for you, one database per business. Not open yet.",
-    href: "/inbox/#run",
-    label: "Join the waitlist",
-    external: false,
-  },
+  HOSTED_PILOT_OPEN
+    ? {
+        title: "Hosted by us",
+        text: "We run it for you, at an address on your own domain. Free during the pilot.",
+        href: "/hosted/",
+        label: "Get your agent inbox",
+        external: false,
+      }
+    : {
+        title: "Hosted by us",
+        text: "We will run it for you, one database per business. Not open yet.",
+        href: "/inbox/#run",
+        label: "Join the waitlist",
+        external: false,
+      },
 ];
 ---
 

@@ -2,6 +2,7 @@
 // The terms. Two different things are covered and they are kept apart on purpose: the software,
 // which is MIT and carries the licence's terms, and the services we run, which are ours.
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const UPDATED = "8 October 2026";
 ---
@@ -65,12 +66,28 @@ const UPDATED = "8 October 2026";
         withdraw them. If something goes down, we fix it because we use it too. No contract obliges us to.
       </p>
 
-      <h2 class="h-section">Hosting, when it opens</h2>
-      <p>
-        Paid hosting is not open yet. When it opens, it will have its own agreement covering what a paid service needs
-        and this page leaves out: what the service promises, what it costs, how to leave and take your data with you,
-        and a written data processing agreement. Nothing on this page is an offer to sell anything.
-      </p>
+      {
+        HOSTED_PILOT_OPEN ? (
+          <>
+            <h2 class="h-section">Hosting</h2>
+            <p>
+              The hosted inbox, free during its pilot, has its own terms: the{" "}
+              <a class="link" href="/hosted/terms/">hosted inbox terms</a>, with their{" "}
+              <a class="link" href="/hosted/processing/">processing agreement</a> and{" "}
+              <a class="link" href="/hosted/acceptable-use/">acceptable use rules</a>.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 class="h-section">Hosting, when it opens</h2>
+            <p>
+              Paid hosting is not open yet. When it opens, it will have its own agreement covering what a paid service
+              needs and this page leaves out: what the service promises, what it costs, how to leave and take your data
+              with you, and a written data processing agreement. Nothing on this page is an offer to sell anything.
+            </p>
+          </>
+        )
+      }
 
       <h2 class="h-section">Liability</h2>
       <p>

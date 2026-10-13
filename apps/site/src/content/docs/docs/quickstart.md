@@ -105,7 +105,7 @@ The commands above run inside the container, for example `docker exec inbox node
 
 ## Hosted by us
 
-Hosted tenancy is not open yet: the same software on our own servers, one database per business, email in and out, backups, one-click connectors and the network bundled. Leave your address on the [waitlist](/inbox/#run) and we will write when it opens.
+Hosting is not open yet. When its pilot opens, we will run the same software for you on our own servers: you set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Leave your address on the [waitlist](/inbox/#run) and we will write when it opens.
 
 ## First calls
 
