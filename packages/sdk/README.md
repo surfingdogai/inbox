@@ -182,6 +182,32 @@ const counter_signature = await signAck({ receipt: receipt.jws, receiptId: recei
 `not_yet`. Every helper here is checked against the protocol's published vectors
 (`packages/spec/vectors`), the same ones the inbox and the network are held to.
 
+**Report how it went.** After each use of a business's door, done or not, tell the network that
+listed it. Your reports make it read doors again, so your searches send you to doors that work; a
+success counts the same as a failure. Nothing about the person goes in a report, and none is needed:
+
+```ts
+import { flushDoorReports, newIntent, reportDoor } from "@surfingdog/sdk";
+
+const intent = newIntent();                      // one per attempt, kept for its retries
+reportDoor({
+  network: "network.surfingdog.ai",              // the network that listed the business
+  domain: "bakery.example",
+  door: { type: "inbox", url: "https://bakery.example/mcp" }, // an inbox: the address you used
+  op: "book", tool: "create_booking", intent, ms: 1840,
+  result: "refused", class: "slot_taken",        // ok, refused, invalid, fail or info
+});
+// In a Worker: ctx.waitUntil(flushDoorReports()). In a script: await flushDoorReports() before exit.
+```
+
+`reportDoor` queues the report and sends it with others, in batches of up to 100, a few seconds
+later or as soon as a batch is full; a batch the network cannot take right then waits for the next.
+It throws a `TypeError` at once for a report the network would refuse. Pass `key` to sign the calls
+with your own key, or build a `DoorReporter` to hold the queue yourself (`autoFlush: false`, then
+`flush()`). It sends only to the network you name: one the person's key or pass came from, or one
+you chose, never an address a business's manifest or a receipt suggests. Tell your person, once,
+that you report how businesses' doors answer.
+
 ## For a network
 
 A network checks that each call from an inbox is signed by that inbox (the

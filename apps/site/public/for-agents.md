@@ -90,15 +90,59 @@ items there, as before; keep presenting it, or use the access token.
 
 A code works for about ten minutes and a few tries; if it expires, ask for another.
 
-## 5. Acknowledge receipts, and report only what happened
+## 5. Report how it went, every time
 
-When a business issues a receipt on your item (a booking confirmed, an order accepted, a change you
-both agreed, a refund owed, and how each ended), counter-sign it: `acknowledge_receipt` (MCP) or
+After each use of a business's door, done or not, tell the network that listed it how it went. It is
+one call, and it needs no signature, pass or account: the MCP tool `report_door`, or
+`POST https://<network>/v1/door-reports`. The network's own guide is at `https://<network>/report.md`.
+
+```json
+{"v": 1, "reports": [{
+  "domain": "bakery.example",
+  "door": {"type": "inbox", "url": "https://bakery.example/mcp"},
+  "op": "book", "tool": "create_booking",
+  "at": 1791892777, "ms": 1840, "intent": "5mQ2c1Kc8Qx",
+  "result": "ok"
+}]}
+```
+
+- `domain` and `door` exactly as the network gave them: for a business's inbox, type `inbox` with the
+  address you used (the card's `inbox.mcp`, `inbox.rest` or `inbox.url`); for any other door, its
+  `type` and `url` from the listing's `doors`. `op` is what you tried (`book`, `order`, `message`,
+  `cancel`, …, from the capability vocabulary), `tool` the tool you called, in lowercase, `at` when
+  (Unix seconds) and `ms` how long the door took.
+- `result` is `ok`; `refused`, an honest no (`slot_taken`, `out_of_stock`); `invalid`, your own
+  mistake (`client.invalid_params`, `client.rate_limited`); `fail`, the door's fault or no answer
+  (`tcp.timed_out`, `protocol.internal`, `operation.tool_error`); or `info`, it needs your person
+  (`escalation`, `auth`, `person`). Every result but `ok` takes one of those classes
+  (`vocab/door-report-classes.json` in `@surfingdog/spec` lists them all). A declined payment is
+  `customer_side`: never say why about your person.
+- `intent` is 8 to 32 random base64url characters, the same for an attempt and all its retries, so
+  the attempt counts once.
+- When the door's answer carried a signed outcome token, send it as `token`, as it came. Keep it as
+  well: it is your proof of what the business answered.
+- Up to 100 reports in one call. Send nothing else: no pass, key, email, name, phone, address,
+  message, item id or reason. A report carrying any of it is refused whole.
+
+**Why it is worth it to you.** Your reports make the network read doors again, so your searches send
+you to doors that work. A success counts the same as a failure. Nothing you report goes public by
+itself, and the business never learns which agent reported.
+
+**Tell your person,** once, that you report how businesses' doors answer: only whether the door
+worked, never anything about them.
+
+The MIT library `@surfingdog/sdk` does it for you: `reportDoor()` collects reports and sends them in
+batches on its own.
+
+**Acknowledge receipts, and report a broken promise only when it happened.** When a business issues
+a receipt on your item (a booking confirmed, an order accepted, a change you both agreed, a refund
+owed, and how each ended), counter-sign it: `acknowledge_receipt` (MCP) or
 `POST /v1/items/{id}/receipt-ack` with `counter_signature`. A broken promise may be reported to the
 network, signed, and only when it really happened: that includes a lawful withdrawal, a claim for
 faulty goods, or a return the business refused with nothing repaid (`order.refund_refused`, on
-networks whose rules are version 6 or later; acknowledging that the goods came does not stop it). Both count as verified evidence only when signed
-(step 7).
+networks whose rules are version 6 or later; acknowledging that the goods came does not stop it).
+Both count as verified evidence only when signed (step 7). A door report is not one of these: it says
+how the door answered, never whether a promise was kept.
 
 ## 6. What you must never do
 

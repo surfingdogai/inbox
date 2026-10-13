@@ -4,7 +4,8 @@
  * Two halves, both WebCrypto only:
  * - for a business's own systems: the webhook verifier and the event types (ADR-015);
  * - for a customer's agent (ADR-017 §8.4): hold a person's pass or key, sign requests
- *   (`sdi-agent/1`), delegate the agent's key at setup, verify receipts and counter-sign them;
+ *   (`sdi-agent/1`), delegate the agent's key at setup, verify receipts and counter-sign them, and
+ *   report how each use of a business's door went (`reportDoor`, network protocol §4.15);
  * - for anyone building an inbox or a network (the network protocol): sign a call to a network
  *   (`sdi-instance/1`) and check one, and issue receipts.
  *
@@ -21,6 +22,15 @@ export {
   passRefOf,
   sdiPassHeader,
 } from "./agent/credentials.js";
+export type { DoorReporterOptions, DoorReportInput, DoorReportsAnswer, DoorResult } from "./agent/doors.js";
+export {
+  DoorReporter,
+  doorReportBody,
+  flushDoorReports,
+  MAX_PENDING_DOOR_REPORTS,
+  newIntent,
+  reportDoor,
+} from "./agent/doors.js";
 export type { AgentKey, AgentKeyInput, AgentPrivateJwk, AgentPublicJwk } from "./agent/keys.js";
 export { generateAgentKey, thumbprint } from "./agent/keys.js";
 export { delegate, NetworkCallError, networkUrl, passFromKey, requestSignInCode, signIn } from "./agent/network.js";
@@ -86,4 +96,4 @@ export {
   WebhookVerificationError,
 } from "./webhooks/verify.js";
 
-export const SDK_VERSION = "0.2.0";
+export const SDK_VERSION = "0.3.0";
