@@ -233,6 +233,12 @@
                 ],
                 "description": "The network's own last read of this door; blocked: its read was refused (403, 429, a challenge)."
               },
+              "not_reproduced": {
+                "description": "In the 7 days to as_of, how many reads the network made because agents reported this door down that found it answering.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
               "reports": {
                 "maxItems": 500,
                 "type": "array",

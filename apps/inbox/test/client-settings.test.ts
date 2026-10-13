@@ -303,6 +303,7 @@ describe("Settings → Networks", () => {
           url: "https://demo.example.com/mcp",
           status: "live",
           checked: { result: "good", at: "2026-09-23T09:00:00Z" },
+          not_reproduced: 2,
           reports: [
             { op: "book", tool: "create_booking", proof: "none", result: "ok", d7: 12, d30: 40 },
             {
@@ -366,6 +367,7 @@ describe("Settings → Networks", () => {
         "What failed in the last 30 days: 2 connection timed out.",
         "Agents sent create_booking arguments it cannot take 14 times in 30 days.",
         "Agents from agents.example.net used it.",
+        "Agents reported it down; the network checked it 2 times for that in 7 days and found it answering.",
       ],
     });
     expect(panel?.doors[1]?.check.tone).toBe("warning");

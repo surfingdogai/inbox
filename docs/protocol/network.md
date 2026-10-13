@@ -826,7 +826,9 @@ concludes one of three things:
 after 3 failed reads in 7 days, the first and the last at least 30 minutes apart, with no good read
 between them; `live` again after one good read; `gone` after 30 days failing. A blocked read changes
 nothing. A read anyone may ask for (a result page's "Check again", `check_business` with `fresh`) only
-ever adds: its good read lifts a door, and its failure never lowers one. A door's history follows its
+ever adds: its good read lifts a door, and its failure never lowers one. A network MAY count a crawl's
+failed read only for doors it does not read one request at a time (a platform's page, a declared API):
+for a door its own reads cover, a crawl that does not find it answering asks for a confirm read instead. A door's history follows its
 type, not its URL: the network keeps it by domain and door type, and carries it over a change of URL
 for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (`reads`,
 `states`) pins this down.
@@ -1312,7 +1314,8 @@ tells its person that it reports how doors answer (for-agents.md §5).
 
 **What the business sees.** A signed ping's `200` (§4.1) carries `doors`
 ([`schemas/ping-response.json`](../../packages/spec/schemas/ping-response.json)): for each of its
-doors, the network's own last read (`good`, `failed` or `blocked`) and the door's state; what agents
+doors, the network's own last read (`good`, `failed` or `blocked`) and the door's state; how many of
+the reads agents' reports asked for found the door answering in 7 days (`not_reproduced`); what agents
 reported over 7 and 30 days, by op, tool, result, class and proof (`token`: signed by the business's
 door; `none`: agents the network cannot tell apart), counts to the day; the platforms with 5 or more
 sources; open incidents to the hour, each with when it may first show publicly; `trouble`, the doors

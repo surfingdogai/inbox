@@ -340,6 +340,13 @@ export const pingDoorsSchema = z.object({
           .object({ result: z.enum(["good", "failed", "blocked"]), at: hourTimestamp })
           .nullable()
           .describe("The network's own last read of this door; blocked: its read was refused (403, 429, a challenge)."),
+        not_reproduced: z
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "In the 7 days to as_of, how many reads the network made because agents reported this door down that found it answering.",
+          ),
         reports: z
           .array(
             z.object({

@@ -387,6 +387,12 @@ export function doorPanel(n: NetworkView, now: number = Date.now(), locale?: str
     if (door.platforms.length > 0) {
       lines.push(`Agents from ${door.platforms.map(hostOf).join(", ")} used it.`);
     }
+    const notReproduced = door.not_reproduced ?? 0;
+    if (notReproduced > 0) {
+      lines.push(
+        `Agents reported it down; the network checked it ${notReproduced} time${notReproduced === 1 ? "" : "s"} for that in 7 days and found it answering.`,
+      );
+    }
     if (lines.length === 0) lines.push("No agent has reported on it in the last 30 days.");
     return { title, check, lines };
   });

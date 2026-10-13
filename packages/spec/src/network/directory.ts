@@ -201,6 +201,16 @@ export const cardDoorSchema = z.object({
   src: z.enum(["declared", "seen"]).describe("declared: the business said so; seen: read from the door's own tools."),
   protocol: z.string().max(40).optional().describe('The protocol it speaks, for type "other" only.'),
   checked_at: timestampSchema.optional(),
+  checked: z
+    .object({
+      status: z.enum(["answered", "failing", "could_not_check"]),
+      at: timestampSchema,
+      by: z.literal("network"),
+    })
+    .optional()
+    .describe(
+      "A member's inbox door, on its detail: what the network's own reads last found in the past 24 hours (§4.8). answered; failing; could_not_check, the door refused the read (403, 429, a challenge page), so the business's signed ping alone says it answers. Absent when the network made no read.",
+    ),
 });
 export type CardDoor = z.infer<typeof cardDoorSchema>;
 
