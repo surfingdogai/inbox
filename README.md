@@ -17,6 +17,9 @@ it, shows no names and is wiped every night.
 
 The same with curl, step by step: https://surfingdog.ai/try/
 
+How ready is a business for AI agents today? The [free AI agent readiness checker](https://surfingdog.ai/check)
+reads any website the way a customer's assistant would and shows what it can do there, and what to add.
+
 ## Install
 
 **Node** 22.16+, 24 or 26. One process and one SQLite file.
