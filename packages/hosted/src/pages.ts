@@ -165,20 +165,25 @@ export function securityTxt(o: { readonly host: string; readonly contact: string
   };
 }
 
-/** "Report this inbox": where to write, with this inbox's address already in the subject. */
-export function reportPage(o: { readonly host: string; readonly abuse: string }): Answer {
+/**
+ * "Report this inbox": where to write, with this inbox's address already in the subject, and the
+ * report form when the operator runs one (`form`, an https address that is given the host).
+ */
+export function reportPage(o: {
+  readonly host: string;
+  readonly abuse: string;
+  readonly form?: string | undefined;
+}): Answer {
   const subject = encodeURIComponent(`Report: https://${o.host}`);
   const mailto = `mailto:${o.abuse}?subject=${subject}`;
-  return {
-    status: 200,
-    headers: { ...PAGE_HEADERS },
-    body: page(
-      "Report this inbox",
-      [
-        `To report this inbox (https://${escapeHtml(o.host)}) for spam, impersonation, illegal content or anything else, write to <a href="${escapeHtml(mailto)}">${escapeHtml(o.abuse)}</a>.`,
-        "Say what you saw, and when.",
-      ],
-      [],
-    ),
-  };
+  const lines = [
+    `To report this inbox (https://${escapeHtml(o.host)}) for spam, impersonation, illegal content or anything else, write to <a href="${escapeHtml(mailto)}">${escapeHtml(o.abuse)}</a>.`,
+  ];
+  if (o.form) {
+    const url = new URL(o.form);
+    url.searchParams.set("host", o.host);
+    lines.push(`Or use the <a href="${escapeHtml(url.toString())}">report form</a>.`);
+  }
+  lines.push("Say what you saw, and when.");
+  return { status: 200, headers: { ...PAGE_HEADERS }, body: page("Report this inbox", lines, []) };
 }

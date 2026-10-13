@@ -45,6 +45,8 @@ export interface RouterOptions {
   readonly securityContact: string;
   /** Where "Report this inbox" sends people: an email address. */
   readonly abuseContact: string;
+  /** A report form the operator runs, linked from the report page with the host given (https). */
+  readonly reportForm?: string | undefined;
   /** The key the control plane signs admin calls with (`HOSTED_ADMIN_KEY`), used again towards shards. */
   readonly adminKey: string;
   /** The header the server in front puts the client's address in (default `cf-connecting-ip`). */
@@ -114,7 +116,8 @@ export function createRouter(o: RouterOptions): {
     if (reads && path === SECURITY_TXT_PATH) {
       return send(res, securityTxt({ host, contact: o.securityContact, now: now() }), noindex, head);
     }
-    if (reads && path === REPORT_PATH) return send(res, reportPage({ host, abuse: o.abuseContact }), noindex, head);
+    if (reads && path === REPORT_PATH)
+      return send(res, reportPage({ host, abuse: o.abuseContact, form: o.reportForm }), noindex, head);
     if (reads && path === ROBOTS_PATH && r.kind === "slug") return send(res, robotsTxt(), noindex, head);
     const d = decide(r, {
       method,

@@ -23,7 +23,7 @@ import { parseMasterKeys } from "./keys";
  * - `HOSTED_MASTER_KEY`: what every inbox's own key is derived from (comma-separated, newest first).
  * - `HOSTED_DATA_DIR`: the inboxes' files and the shared ledger.
  * - `HOSTED_SECURITY_CONTACT`, `HOSTED_ABUSE_CONTACT`: where security reports and reports about an
- *   inbox go.
+ *   inbox go. `HOSTED_REPORT_FORM` (optional): an https report form, linked with the inbox's host.
  * - `HOSTED_OPEN_PER_SHARD` (default 64), `HOSTED_MAX_TENANT_MB` (default 200).
  * - `HOSTED_SHARD_HEAP_MB`: a cap on each shard's JavaScript heap when `all` starts them (the
  *   service manager's memory limit is the hard one).
@@ -44,6 +44,7 @@ export interface HostedConfig {
   readonly dataDir: string;
   readonly securityContact: string;
   readonly abuseContact: string;
+  readonly reportForm: string | undefined;
   readonly openPerShard: number;
   readonly maxTenantBytes: number;
   readonly shardHeapMb: number | undefined;
@@ -91,6 +92,17 @@ export function readConfig(env: Record<string, string | undefined>): HostedConfi
   if (maxMb === null) problems.push("HOSTED_MAX_TENANT_MB is a positive whole number");
   const heap = env.HOSTED_SHARD_HEAP_MB?.trim() ? positiveInt(env.HOSTED_SHARD_HEAP_MB, 0) : undefined;
   if (heap === null) problems.push("HOSTED_SHARD_HEAP_MB is a positive whole number");
+  const reportForm = env.HOSTED_REPORT_FORM?.trim() || undefined;
+  if (reportForm !== undefined) {
+    let ok = false;
+    try {
+      const u = new URL(reportForm);
+      ok = u.protocol === "https:" && u.search === "" && u.hash === "" && normalizeHost(u.hostname) !== null;
+    } catch {
+      ok = false;
+    }
+    if (!ok) problems.push("HOSTED_REPORT_FORM is an https address with no query, like https://example.com/report");
+  }
   const deny = outboundDenyFrom(env.INBOX_OUTBOUND_DENY);
   if (deny.bad.length > 0) problems.push(`INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range`);
   const config = {
@@ -106,6 +118,7 @@ export function readConfig(env: Record<string, string | undefined>): HostedConfi
     dataDir: need("HOSTED_DATA_DIR"),
     securityContact: need("HOSTED_SECURITY_CONTACT"),
     abuseContact: need("HOSTED_ABUSE_CONTACT"),
+    reportForm,
     openPerShard: open ?? 64,
     maxTenantBytes: (maxMb ?? 200) * 1024 * 1024,
     shardHeapMb: heap ?? undefined,

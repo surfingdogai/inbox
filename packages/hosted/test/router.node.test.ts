@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { reportPage } from "../src/pages";
 import { namesBusiness, PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -234,8 +235,19 @@ describe("what the router answers itself", () => {
       const report = await rt.http(host, "GET", "/report-inbox");
       expect(report.status).toBe(200);
       expect(report.text).toContain("abuse@example.net");
+      expect(report.text).not.toContain("report form");
       expect(namesBusiness(report.text)).toBe(false);
     }
+  });
+
+  it("links the operator's report form, with the inbox's host, when there is one", () => {
+    const page = reportPage({
+      host: "inbox.salon.example",
+      abuse: "abuse@example.net",
+      form: "https://reports.example.net/report",
+    });
+    expect(page.body).toContain('href="https://reports.example.net/report?host=inbox.salon.example"');
+    expect(page.body).toContain("abuse@example.net");
   });
 
   it("400 for a Host that is not a name, 404 for names that are no tenant, and never /internal or /admin", async () => {

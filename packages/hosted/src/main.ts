@@ -14,6 +14,7 @@ import { socketControlPlane } from "./control-plane";
 import { isTenantId } from "./host";
 import { runtimeKey } from "./keys";
 import { Ledger } from "./ledger";
+import { migrateCheck } from "./migrate-check";
 import { installRedaction } from "./redact";
 import { CachedResolver } from "./resolver";
 import { serveRouter, serveShard } from "./server";
@@ -28,6 +29,7 @@ import { startWatchdog } from "./watchdog";
  *   all                    the router, with every shard as a child process started again when it ends
  *                          (for running it without a service manager, and in development)
  *   maintenance-off <id>   lets an inbox out of maintenance
+ *   migrate-check <file>   brings a copy of an inbox's file to this release's schema, or fails
  *
  * Every setting comes from the environment (config.ts).
  */
@@ -54,6 +56,7 @@ async function runRouter(c: HostedConfig): Promise<void> {
     shardAdminSocket: (n) => shardAdminSocket(c, n),
     securityContact: c.securityContact,
     abuseContact: c.abuseContact,
+    reportForm: c.reportForm,
     adminKey: c.adminKey,
     socket: c.routerSocket,
     adminSocket: c.adminSocket,
@@ -166,7 +169,20 @@ if (command === "router") {
   ledger.clearMaintenance(arg);
   ledger.close();
   console.log(`${arg} is out of maintenance`);
+} else if (command === "migrate-check") {
+  // Needs no settings: a deploy runs it on a copy of each inbox's file before any shard restarts.
+  if (!arg) {
+    console.error("usage: migrate-check <file>");
+    process.exit(2);
+  }
+  try {
+    const { from, to } = await migrateCheck(arg);
+    console.log(`${arg}: schema ${from} → ${to}`);
+  } catch (error) {
+    console.error(`${arg}: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
 } else {
-  console.error("usage: router | shard <n> | all | maintenance-off <tenant id>");
+  console.error("usage: router | shard <n> | all | maintenance-off <tenant id> | migrate-check <file>");
   process.exit(2);
 }

@@ -5,7 +5,7 @@ import { ulid } from "@surfingdog/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ControlPlane } from "../src/control-plane";
 import { CachedResolver } from "../src/resolver";
-import { NonceCache, SKEW_SECONDS, signHeaders, verifySigned } from "../src/sign";
+import { NonceCache, SKEW_SECONDS, signature, signHeaders, verifySigned } from "../src/sign";
 import { socketRequest } from "../src/sockets";
 import type { ResolveAnswer } from "../src/types";
 import { ADMIN_KEY, newSlug, OWNER, PARENT, policyOf, type Runtime, salon, startRuntime } from "./harness";
@@ -20,6 +20,26 @@ describe("signed calls (C8.0)", () => {
     target,
     headers: { get: (n: string) => h[n] ?? null },
     body: b,
+  });
+
+  it("signs byte for byte as the other side does, with the configured string as the key", () => {
+    // Fixed vectors: whoever calls this API keeps the same ones in its own tests.
+    const vectorKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const nonce = "00112233445566778899aabbccddeeff";
+    const enc = (s: string) => new TextEncoder().encode(s);
+    expect(
+      signature(vectorKey, "GET", "/internal/v1/resolve?host=inbox.salon.example", "1760346000", nonce, enc("")),
+    ).toBe("v1=81cf3fb585a641548f716452a5e0c62c72700fb3208038670014368a99d5f7b2");
+    expect(
+      signature(
+        vectorKey,
+        "PUT",
+        "/internal/v1/hosted-hosts/inbox.salon.example",
+        "1760346000",
+        nonce,
+        enc('{"domain":"salon.example"}'),
+      ),
+    ).toBe("v1=b5e77f5ed811709d4ade4b5da8c2f1d4cf89eba4e00c3a241883bae36f25098b");
   });
 
   it("takes a request signed over its method, target, time, nonce and body, once", () => {

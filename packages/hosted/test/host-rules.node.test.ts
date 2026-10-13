@@ -339,5 +339,14 @@ describe("settings from the environment", () => {
     expect(() => readConfig({ ...env, HOSTED_MASTER_KEY: "short" })).toThrow(/HOSTED_MASTER_KEY/);
     expect(() => readConfig({ ...env, INBOX_OUTBOUND_DENY: "203.0.113.300" })).toThrow(/INBOX_OUTBOUND_DENY/);
     expect(() => readConfig({ ...env, HOSTED_SHARDS: "0" })).toThrow(/HOSTED_SHARDS/);
+    expect(() => readConfig({ ...env, HOSTED_REPORT_FORM: "http://reports.example.net/report" })).toThrow(
+      /HOSTED_REPORT_FORM/,
+    );
+    expect(() => readConfig({ ...env, HOSTED_REPORT_FORM: "https://reports.example.net/report?x=1" })).toThrow(
+      /HOSTED_REPORT_FORM/,
+    );
+    expect(readConfig({ ...env, HOSTED_REPORT_FORM: "https://reports.example.net/report" }).reportForm).toBe(
+      "https://reports.example.net/report",
+    );
   });
 });
