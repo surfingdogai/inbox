@@ -208,6 +208,113 @@
           },
           "required": ["tier", "ranked", "in_words"]
         },
+        "track_record": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": ["held", "none", "pending", "gathering", "shown"],
+              "description": "held: a new member's 30 days after it joins, when nothing is counted; none: no receipts yet; pending: receipts the next nightly count reaches; gathering: fewer closed promises, or customers, than threshold; shown: the record."
+            },
+            "in_words": {
+              "type": "string",
+              "description": "The record in one or two plain sentences, with how much of it the customer's side confirmed."
+            },
+            "as_of": {
+              "description": "The nightly count it is from (00:00 UTC).",
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "held_until": {
+              "description": "held: the night its record is counted from.",
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "closed": {
+              "description": "gathering and shown: kept plus broken.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "customers": {
+              "description": "gathering and shown: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "kept": {
+              "description": "shown.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "broken": {
+              "description": "shown: closed as not kept by the business or by a customer's report that stands, left open 9 days past due, or a refund paid late.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unclosed": {
+              "description": "shown, of broken: left open 9 days past due (promise.unclosed).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "refunds_late": {
+              "description": "shown, of broken: refunds paid late (refund.late).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "from": {
+              "description": "shown: the earliest day of the evidence counted, at 00:00 UTC (a day, never the moment of a promise).",
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "to": {
+              "description": "shown: the latest day of the evidence counted, at 00:00 UTC (a day, never the moment of a promise).",
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+            },
+            "confirmed": {
+              "description": "shown: how many the customer's side confirmed (verified evidence); the rest are the business's own signed receipts.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "confirmable": {
+              "description": "shown: whether this network can confirm any yet (a recognised platform's agent key, or an established person's).",
+              "type": "boolean"
+            },
+            "threshold": {
+              "description": "What a record shows from.",
+              "type": "object",
+              "properties": {
+                "closed": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "customers": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["closed", "customers"]
+            },
+            "rules_url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": ["state", "in_words"],
+          "description": "A member's track record, from the same nightly count as its standing: the promises it kept and broke, from how many customers and when. Only what its state can say is present; a business that is not a member has none."
+        },
         "listing_url": {
           "type": "string",
           "format": "uri",

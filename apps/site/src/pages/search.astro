@@ -90,6 +90,11 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
         <div class="r-tags" data-tags></div>
         <p class="r-takes" data-takes></p>
         <p class="r-found" data-found></p>
+        <p class="r-record" data-record hidden>
+          <span class="r-meter" data-record-meter aria-hidden="true" hidden><i></i></span>
+          <span data-record-text></span>
+          <a class="link" data-record-link></a>
+        </p>
       </li>
     </template>
   </section>
@@ -206,6 +211,34 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
   :global(.r-takes) {
     color: var(--ink-2);
   }
+  :global(.r-record) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-3);
+    align-items: center;
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.r-record[hidden]),
+  :global(.r-meter[hidden]) {
+    display: none;
+  }
+  /* Kept against broken, never red: kept is the success tone from the left, broken is ink at half. */
+  :global(.r-meter) {
+    display: inline-flex;
+    width: 96px;
+    height: 3px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--ink-2) 45%, transparent);
+  }
+  :global(.r-meter i) {
+    height: 100%;
+    background: var(--c-success);
+  }
   :global(.r-takes:empty),
   :global(.r-found:empty),
   :global(.r-tags:empty) {
@@ -254,6 +287,7 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
 
 <script>
   import { looksLikeAddress } from "../lib/ask";
+  import { type RecordView, recordNote, recordView } from "../lib/record";
   import { resultView } from "../lib/results";
 
   const host = document.querySelector<HTMLElement>("[data-results]");
@@ -327,6 +361,10 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
       }
       let shown = 0;
       const count = el("p", "r-count");
+      // Said once, under the list: whose word a count is when the customer's side did not confirm it.
+      const unconfirmed = el("p", "r-note");
+      unconfirmed.hidden = true;
+      const records: RecordView[] = [];
       const ul = el("ul", "r-list");
       const addRows = (items: unknown[]) => {
         for (const raw of items) {
@@ -347,9 +385,28 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
           set("[data-found]", v.found);
           const tags = node.querySelector<HTMLElement>("[data-tags]");
           if (tags) for (const t of v.tags) tags.append(el("span", t.on ? "r-tag is-on" : "r-tag", t.text));
+          const rec = recordView(raw);
+          const recEl = node.querySelector<HTMLElement>("[data-record]");
+          if (rec && recEl) {
+            set("[data-record-text]", rec.text);
+            const link = node.querySelector<HTMLAnchorElement>("[data-record-link]");
+            if (link) {
+              link.textContent = rec.link;
+              link.href = rec.href;
+            }
+            const meter = node.querySelector<HTMLElement>("[data-record-meter]");
+            if (meter && rec.kept !== undefined) {
+              meter.querySelector("i")?.style.setProperty("width", `${Math.round(rec.kept * 1000) / 10}%`);
+              meter.hidden = false;
+            }
+            records.push(rec);
+            recEl.hidden = false;
+          }
           ul.append(node);
           shown++;
         }
+        unconfirmed.textContent = recordNote(records);
+        unconfirmed.hidden = unconfirmed.textContent === "";
       };
       const setCount = (more: boolean) => {
         count.textContent = `${shown}${more ? "+" : ""} ${shown === 1 && !more ? "business" : "businesses"}, in the directory's order.`;
@@ -360,7 +417,7 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
       addRows(list);
       let cursor = cursorOf(body);
       setCount(cursor !== "");
-      out.push(count, ul);
+      out.push(count, ul, unconfirmed);
 
       // The next page of the same search, in the same order, on request.
       const moreP = el("p", "r-more");

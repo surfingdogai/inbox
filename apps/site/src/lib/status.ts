@@ -9,6 +9,8 @@
  * Release order: checker, crawler and crawled are live from the network's wave 1.5 (POST /check,
  * found listings in search, and the "directory" block of GET /v1/stats). The site that says so ships
  * only after that network is deployed, and after `GET /v1/stats` answers with a "directory" block.
+ * The same for reliability: it is live once the network's listings carry `track_record` and its
+ * /b/<domain> pages show it, so this site ships after that network.
  */
 export type State = "live" | "building" | "coming";
 
@@ -25,7 +27,7 @@ export const STATE_LABEL: Record<State, string> = {
 };
 
 /** The date this list was last checked against the running network. */
-export const UPDATED = "10 Oct 2026";
+export const UPDATED = "12 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
   {
@@ -47,8 +49,9 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: "reliability",
-    label: "A track record on each listing (promises kept, late or broken), once enough receipts come in",
-    state: "building",
+    label:
+      "A track record on each member's listing: promises kept and broken, from how many customers and over which dates, once enough have closed",
+    state: "live",
   },
   {
     id: "protocol",

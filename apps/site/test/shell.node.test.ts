@@ -193,6 +193,9 @@ describe("shell.css", () => {
       "sd-again-form",
       "sd-handon",
       "sd-footcheck",
+      // a member's track record
+      "sd-record",
+      "sd-record-meter",
     ]) {
       expect(css, cls).toMatch(new RegExp(`\\.${cls}[\\s,.:{\\[>]`));
     }
@@ -225,6 +228,18 @@ describe("shell.css", () => {
       }
     }
     expect(moving).toBeGreaterThan(0);
+  });
+
+  it("draws a track record in the success tone against ink, never an alarm colour, with tabular counts", () => {
+    const parts = read("shell/parts.css");
+    const at = parts.indexOf("/* --- A member's track record");
+    expect(at).toBeGreaterThan(0);
+    const section = parts.slice(at, parts.indexOf("/* --- ", at + 8)).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(section).toMatch(/\.sd-record-meter i\s*\{[^}]*width:\s*var\(--w, 0%\)[^}]*var\(--c-success\)/);
+    expect(section).toMatch(/\.sd-record-meter\s*\{[^}]*var\(--ink-2\)/);
+    expect(section).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|sun|warning)(?:-ink)?\b/);
+    expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i);
+    expect(section).toMatch(/\.sd-record\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
   });
 
   it("names no red anywhere in parts.css: every colour written out is ink, white, black or a cool hue", () => {

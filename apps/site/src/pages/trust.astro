@@ -34,7 +34,7 @@ const steps = [
   },
   {
     h: "Both sides sign the promise",
-    p: "When a business confirms a booking, accepts an order or owes a refund, its inbox signs a receipt, and the customer's agent can counter-sign it. When the promise closes, kept, late or broken, another receipt says so. A customer is named by a code nobody can trace back to them. The network records these receipts: no names, no messages, nothing of what was ordered.",
+    p: "When a business confirms a booking, accepts an order or owes a refund, its inbox signs a receipt, and the customer's agent can counter-sign it. When the promise closes, kept or broken, another receipt says so: a refund paid late is broken, and so is a promise left open long past its date. A customer is named by a code nobody can trace back to them. The network records these receipts: no names, no messages, nothing of what was ordered.",
   },
   {
     h: "The order reads the record",
@@ -119,9 +119,15 @@ const now = capabilities.filter((c) => ids.includes(c.id));
           ))
         }
       </ul>
-      <p class="hint" data-record>
-        Track records fill in as receipts arrive: the more bookings and orders close, the more each listing shows.
+      <p class="hint">
+        A member's track record is on its page (surfingdog.ai/b/ then its domain) and in its listing for agents:
+        promises kept and broken, from how many customers, over which dates and under which rules, counted each night.
+        It shows once at least 5 promises from at least 3 customers have closed, and not in the 30 days after a
+        business joins; until then the page says how many have closed so far. Kept promises rest on the business's own
+        signed receipts: a customer's counter-signature is stored with them, but the network cannot check one until it
+        recognises an assistant platform's key or a customer's record is established.
       </p>
+      <p class="hint" data-record hidden></p>
       <p class="more">
         <a class="link" href="/docs/receipts/">Receipts, in detail</a>
         <span aria-hidden="true">·</span>
@@ -247,7 +253,7 @@ const now = capabilities.filter((c) => ids.includes(c.id));
     nextEl.textContent = line.next;
     nextEl.hidden = !line.next;
   });
-  // Once receipts exist, say how many; until then the sentence about records filling in stands.
+  // Once receipts exist, say how many; until then the line stays hidden.
   void get("/v1/stats").then((s) => {
     if (!record || !s || typeof s !== "object") return;
     const o = s as Record<string, unknown>;
@@ -255,6 +261,7 @@ const now = capabilities.filter((c) => ids.includes(c.id));
     const acked = typeof o.receipts_acknowledged === "number" ? o.receipts_acknowledged : 0;
     if (issued <= 0) return;
     const fmt = new Intl.NumberFormat("en");
-    record.textContent = `So far: ${fmt.format(issued)} receipt${issued === 1 ? "" : "s"} signed, ${fmt.format(acked)} counter-signed by the customer's agent. Records fill in as more promises close.`;
+    record.textContent = `So far: ${fmt.format(issued)} promise${issued === 1 ? "" : "s"} signed by businesses' inboxes, ${fmt.format(acked)} counter-signed by the customer's agent.`;
+    record.hidden = false;
   });
 </script>

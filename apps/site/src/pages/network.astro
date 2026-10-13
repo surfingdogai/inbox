@@ -1,7 +1,7 @@
 ---
 // apps/site/src/pages/network.astro
 // The network, explained for a busy owner or an agent developer in about a minute: what it is,
-// how joining works, how the track record works (promises kept or broken), what leaves an inbox, and
+// how joining works, how the track record works (promises kept, broken or still open; live for businesses, paused for customers), what leaves an inbox, and
 // that anyone can run one. LiveMetrics carries the live numbers, so the fetch, the fallback and the
 // refresh live in one place. Its note says what an instance reports "is set out below", so it has
 // to sit above the "What leaves your inbox" section. The top is a two-column hero like the home
@@ -46,12 +46,15 @@ const principles = [
   },
   {
     title: "Both ways",
-    text: "What a verified customer's agent signs already counts more than a business's own word. Recent months weigh most, and nothing is ever forgotten. Once customer records start, a good customer's word will count more when judging a business, and a good business's when judging a customer.",
+    text: "What a customer's agent signs counts more than a business's own word once the network can check it, through a platform key it recognises or a customer whose record is established; neither exists yet, so today every kept promise is the business's own word. Recent months weigh most, and nothing is ever forgotten. Once customer records start, a good customer's word will count more when judging a business, and a good business's when judging a customer.",
   },
 ];
 
 const visibility = [
-  { k: "A business's record", v: "Public, in the directory, with the version of the rules it was scored under." },
+  {
+    k: "A business's record",
+    v: "Public, on its listing: a count of how its promises ended, from its first receipt; its score, counted each night, with the version of the rules it was scored under; and its track record (kept and broken, from how many customers, over which dates) once at least 5 promises from at least 3 customers have closed.",
+  },
   {
     k: "A customer's record",
     v: "Not scored yet. Once it is, a business sees it only when the customer's agent shows it.",

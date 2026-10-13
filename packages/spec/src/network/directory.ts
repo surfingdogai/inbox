@@ -63,6 +63,73 @@ export const reputationSchema = z.object({
 });
 export type Reputation = z.infer<typeof reputationSchema>;
 
+/**
+ * A member's track record (§4.3): what its reputation was computed from, in counts and words, from
+ * the same nightly snapshot. It shows only past a new member's hold (R31) and once `threshold` is
+ * met; each state carries only what it can say. Never on an entry that is not a member.
+ */
+export const trackRecordSchema = z
+  .object({
+    state: z
+      .enum(["held", "none", "pending", "gathering", "shown"])
+      .describe(
+        "held: a new member's 30 days after it joins, when nothing is counted; none: no receipts yet; pending: receipts the next nightly count reaches; gathering: fewer closed promises, or customers, than threshold; shown: the record.",
+      ),
+    in_words: z
+      .string()
+      .describe("The record in one or two plain sentences, with how much of it the customer's side confirmed."),
+    as_of: timestampSchema.optional().describe("The nightly count it is from (00:00 UTC)."),
+    held_until: timestampSchema.optional().describe("held: the night its record is counted from."),
+    closed: z.int().min(0).optional().describe("gathering and shown: kept plus broken."),
+    customers: z
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "gathering and shown: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
+      ),
+    kept: z.int().min(0).optional().describe("shown."),
+    broken: z
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "shown: closed as not kept by the business or by a customer's report that stands, left open 9 days past due, or a refund paid late.",
+      ),
+    unclosed: z.int().min(0).optional().describe("shown, of broken: left open 9 days past due (promise.unclosed)."),
+    refunds_late: z.int().min(0).optional().describe("shown, of broken: refunds paid late (refund.late)."),
+    from: timestampSchema
+      .optional()
+      .describe(
+        "shown: the earliest day of the evidence counted, at 00:00 UTC (a day, never the moment of a promise).",
+      ),
+    to: timestampSchema
+      .optional()
+      .describe("shown: the latest day of the evidence counted, at 00:00 UTC (a day, never the moment of a promise)."),
+    confirmed: z
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "shown: how many the customer's side confirmed (verified evidence); the rest are the business's own signed receipts.",
+      ),
+    confirmable: z
+      .boolean()
+      .optional()
+      .describe(
+        "shown: whether this network can confirm any yet (a recognised platform's agent key, or an established person's).",
+      ),
+    threshold: z
+      .object({ closed: z.int().min(1), customers: z.int().min(1) })
+      .optional()
+      .describe("What a record shows from."),
+    rules_url: z.url().optional(),
+  })
+  .describe(
+    "A member's track record, from the same nightly count as its standing: the promises it kept and broke, from how many customers and when. Only what its state can say is present; a business that is not a member has none.",
+  );
+export type TrackRecord = z.infer<typeof trackRecordSchema>;
+
 /** A listing's address (ADR-017 A2.5): the street only when the business's inbox published one. */
 export const listingAddressSchema = z.object({
   street: z.string().optional(),
@@ -255,6 +322,7 @@ export const listingSchema = z.object({
     .optional()
     .describe('The first 16 hex digits of SHA-256("<YYYY-MM-DD>:<business uuid>"): a string, never a number.'),
   reputation: reputationSchema.optional(),
+  track_record: trackRecordSchema.optional(),
   ...listingAdditionsShape,
 });
 export type Listing = z.infer<typeof listingSchema>;

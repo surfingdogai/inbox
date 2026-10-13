@@ -23,7 +23,7 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: connectors (coming), hosted tenancy, and the track record each network listing shows: promises kept, broken or still open (being built). Every page in these docs says whether a feature is live.
+Still to come: connectors (coming), hosted tenancy, and customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
 
 ## Pages
 

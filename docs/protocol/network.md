@@ -2,7 +2,7 @@
 
 Protocol 0.2 (October 2026). Everything in 0.2 is additive: a 0.1 network and a 0.1 inbox keep working.
 Spec 0.3 adds, all of it optional for a network and none of it read by an inbox, capabilities and the
-agentic score (§4.13) and the discovery documents (§4.14).
+agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -355,17 +355,52 @@ published no hours), `services [{name, type}]`, `geo? {lat, lng}`,
 `software? {version, runtime}`, `receipts {issued, acknowledged, customers?, last_at?}` (promises
 only), `answering`, `online` (the same), `not_answering_since`, and, once the ranked order is in
 force, `rank_pos`, `rank_shuffle` (a 16-hex-digit **string**) and `reputation {ranked, score, tier,
-kept, broken, customers, verified_share, rules, rules_url}`. From rules version 8 `reputation` also
-has `open` (v2 promises issued, not yet closed by an outcome and not unclosed) and
-`verified_kept_share` (the share of the record's weight that is kept outcomes a verified
-acknowledgement backs), and a record less than a fifth of which is such outcomes rests on the
-business's own word and is **self-reported**: `self_reported: true`, `ranked: false`, tier `new`, **no `score`**
-and no `customers`, so what is shown is its counts, as the business's own word (ADR-017 A4.1).
-`receipts.acknowledged` then counts the receipts an acknowledgement the network verified backs
-(any acknowledgement checks out against the key in its own header), and `receipts.customers`, on
-the detail, is absent for a self-reported record. Nothing about any customer is ever returned. `GET /v1/businesses/{domain}` adds `outcomes`,
-a count for every outcome code in §6. Only listed businesses are returned; the detail of a
-business that left the directory, or was set aside, is `404`, and the problem's `detail` says which.
+kept, broken, customers, verified_share, rules, rules_url}`, and a member's `track_record` (below).
+From rules version 8 `reputation` also has `open` (v2 promises issued, not yet closed by an outcome
+and not unclosed) and `verified_kept_share` (the share of the record's weight that is kept outcomes
+a verified acknowledgement backs), and a record less than a fifth of which is such outcomes rests on
+the business's own word and is **self-reported**: `self_reported: true`, `ranked: false`, tier
+`new`, **no `score`** and no `customers`, so what is shown is its counts, as the business's own word
+(ADR-017 A4.1). `receipts.acknowledged` then counts the receipts an acknowledgement the network
+verified backs (any acknowledgement checks out against the key in its own header), and
+`receipts.customers`, on the detail, is absent for a self-reported record. Nothing about any
+customer is ever returned. `GET /v1/businesses/{domain}` adds `outcomes`, a count for every outcome
+code in §6. Only listed businesses are returned; the detail of a business that left the directory,
+or was set aside, is `404`, and the problem's `detail` says which.
+
+**The track record** (spec 0.3) is what a member's reputation was computed from, in counts and
+words, from the same nightly snapshot, so the record, the score and the order always agree:
+`track_record {state, in_words, as_of?, held_until?, closed?, customers?, kept?, broken?, unclosed?,
+refunds_late?, from?, to?, confirmed?, confirmable?, threshold? {closed, customers}, rules_url?}`. Every
+state carries `in_words`, `threshold` and `rules_url`, and `as_of` once a nightly count has a row for
+the business; beyond that, only what it can say:
+
+| `state` | When | Also carries |
+|---|---|---|
+| `held` | a new member's 30 days (R31): nothing is counted yet | `held_until`, the night its record is counted from |
+| `none` | no receipts | — |
+| `pending` | receipts no nightly count has reached yet | — |
+| `gathering` | counted, below the threshold | `closed`, `customers` |
+| `shown` | the record | everything else |
+
+A record shows once at least `threshold.closed` promises have closed, kept or broken, from at least
+`threshold.customers` distinct customers; the reference is **5 from 3**. Five is the smallest whole
+count at which a record of nothing but kept promises can reach the trusted line (0.75 needs 4.93
+units), and below three customers one customer counted three times over (R7) could make up the whole
+record. Customers are told apart by R7's pair (the customer's mailbox when the network knows it, else
+the receipt's `sub`), so `customers` here is not `reputation.customers`, which counts only customers
+the network can tell apart across businesses (§5.3). `kept` and `broken` are the reputation's; of the
+broken, `unclosed` were left open 9 days past due (`promise.unclosed`) and `refunds_late` were refunds
+paid late (`refund.late`). There is no "late" for a booking or an order: a promise is kept or broken.
+`from` and `to` are the earliest and latest days of the counted outcomes, each at 00:00 UTC (the day,
+never the moment of any one customer's promise), and `as_of` the night they were counted. `confirmed`
+is how many are verified evidence (ADR-017 §4), and `confirmable` whether this network can confirm
+any: it is `false` while `recognised_platforms` is empty and the night the record is from established
+no person (none is while customers are not scored, A2.10), and then every count is the business's own
+signed receipts, which `in_words` says in place of a share. What was confirmed stays counted and said
+even when nothing more can be. Nothing in it orders anything. An entry that is
+not a member has no `track_record`. The reference network shows the same record on its page for the
+domain, `/b/{domain}`.
 
 The order and the cursor are ADR-017 §6; `ordering.json` holds the shuffle (the first 16 hex digits
 of `SHA-256("<YYYY-MM-DD>:<business uuid>")`), one full snapshot's order and the cursors (base64url
@@ -649,18 +684,19 @@ hours), `answering`, `inbox {url, mcp?, rest?, openapi?}` (`https://<domain>` an
 customers that are https, on a host name, with no user, written as RFC 3986 writes a URI (ASCII only:
 anything else percent-encoded) and holding no space, control character or hidden character: the
 schemas say `format: uri`, and a client that checks it refuses a whole answer for one door that is
-not), `standing? {tier, ranked, in_words}` and `listing_url`. `in_words` says a
-tier in one plain sentence and is never a mark against a business: no standing yet is said to be
-where every business starts, which it is. From rules version 8 `standing` also has `kept`, `broken`
-and `open`, and then either `verified_share` and `verified_kept_share` or, for a record on the
-business's own word, `self_reported: true`: `in_words` then says those counts as the business's own word instead of a
+not), `standing? {tier, ranked, in_words}`, a member's `track_record?` as its listing gives it
+(§4.3), and `listing_url`. `in_words` says a tier, or a record, in plain sentences and is never a
+mark against a business: no standing yet is said to be where every business starts, which it is.
+From rules version 8 `standing` also has `kept`, `broken` and `open`, and then either
+`verified_share` and `verified_kept_share` or, for a record on the business's own word,
+`self_reported: true`: `in_words` then says those counts as the business's own word instead of a
 tier, and the card carries no score (§4.4).
 
 Each result also carries its content as one text block, for assistants that read only text: first,
 in the network's own words, what the network knows (the order and the rules it follows, and for each
-business its domain, categories, distance, today's hours, what it takes, its standing and where to
-book, naming a door only when it is on the business's own domain, or one label of at most 12
-characters under it, with no port, query or fragment and a plain path of at most 64 characters,
+business its domain, categories, distance, today's hours, what it takes, its standing, its track
+record's `in_words` and where to book, naming a door only when it is on the business's own domain,
+or one label of at most 12 characters under it, with no port, query or fragment and a plain path of at most 64 characters,
 letters, digits and `-._~/`: a host and a path are text the business chose, and so kept short they
 say hardly more than its domain); then everything the business wrote about itself (name, city or address,
 description, services, tags, web site, and any other door), inside a block that opens `<<<UNTRUSTED <boundary>>>` and closes `<<<END
@@ -1024,7 +1060,11 @@ lists or changes a listing. Its result is `GET /b/{domain}` (a page) and `GET /b
 (`schemas/check-result.json`): the state (`not_checked`, `queued`, `checking`, `scoring`, `done`,
 `blocked`, `failed`, `hidden`, `not_checkable`), and when done the score, the grade, the profile,
 the six lead answers each with its door and date, every capability, the fixes, a plain message the
-owner can hand to whoever runs the site, and the rank.
+owner can hand to whoever runs the site, and the rank. For a domain the directory lists as a member,
+a result that is `done`, `not_checked`, `blocked` or `failed` also carries the member's `track_record`
+exactly as its listing gives it (§4.3);
+the page draws a shown record as a thin meter of kept against broken, with the counts in words, and
+never puts it in the rank, which is the agentic score's.
 
 **Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`)
 orders, on every board: **whether an agent can book, order or sign up here (yes, then partly, then no

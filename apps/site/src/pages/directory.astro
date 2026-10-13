@@ -47,12 +47,18 @@ import Layout from "../layouts/Layout.astro";
             <span class="s" data-takes></span>
             <span class="s" data-receipts></span>
           </div>
+          <p class="rec" data-record hidden>
+            <span class="rec-meter" data-record-meter aria-hidden="true" hidden><i></i></span>
+            <span data-record-text></span>
+            <a class="link" data-record-link></a>
+          </p>
           <div class="links">
             <a class="link" data-site rel="noopener">Their page</a>
             <a class="link" data-manifest rel="noopener">Manifest</a>
           </div>
         </div>
       </template>
+      <p class="fine rec-note" data-record-note hidden></p>
 
       <template data-none-template>
         <div class="state">
@@ -124,6 +130,38 @@ import Layout from "../layouts/Layout.astro";
     align-items: center;
     justify-self: end;
   }
+  .listing .rec {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    gap: var(--sp-1) var(--sp-3);
+    align-items: center;
+    margin: 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .listing .rec[hidden],
+  .rec-meter[hidden],
+  .rec-note[hidden] {
+    display: none;
+  }
+  /* Kept against broken, never red: kept is the success tone from the left, broken is ink at half. */
+  .rec-meter {
+    display: inline-flex;
+    width: 96px;
+    height: 3px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--ink-2) 45%, transparent);
+  }
+  .rec-meter i {
+    height: 100%;
+    background: var(--c-success);
+  }
+  .rec-note {
+    margin-top: var(--sp-3);
+  }
   .listing .links {
     display: flex;
     grid-column: 1 / -1;
@@ -141,6 +179,8 @@ import Layout from "../layouts/Layout.astro";
 </style>
 
 <script>
+  import { type RecordView, recordNote, recordView } from "../lib/record";
+
   const NETWORK = "https://network.surfingdog.ai";
   const host = document.querySelector<HTMLElement>("[data-dir]");
   const tpl = document.querySelector<HTMLTemplateElement>("[data-entry-template]");
@@ -161,6 +201,7 @@ import Layout from "../layouts/Layout.astro";
       const data = (await res.json()) as { businesses?: Array<Record<string, unknown>> };
       const list = data.businesses ?? [];
       host.replaceChildren();
+      const records: RecordView[] = [];
       if (list.length === 0) {
         host.appendChild(none.content.cloneNode(true));
         return;
@@ -186,12 +227,36 @@ import Layout from "../layouts/Layout.astro";
           "[data-receipts]",
           issued > 0 ? `${issued} receipt${issued === 1 ? "" : "s"}${acked > 0 ? `, ${acked} counter-signed` : ""}` : "",
         );
+        const rec = recordView(b);
+        const recEl = node.querySelector<HTMLElement>("[data-record]");
+        if (rec && recEl) {
+          set("[data-record-text]", rec.text);
+          const link = node.querySelector<HTMLAnchorElement>("[data-record-link]");
+          if (link) {
+            link.textContent = rec.link;
+            link.href = rec.href;
+          }
+          const meter = node.querySelector<HTMLElement>("[data-record-meter]");
+          if (meter && rec.kept !== undefined) {
+            const kept = Math.round(rec.kept * 1000) / 10;
+            meter.querySelector("i")?.style.setProperty("width", `${kept}%`);
+            meter.hidden = false;
+          }
+          records.push(rec);
+          recEl.hidden = false;
+        }
         const site = node.querySelector<HTMLAnchorElement>("[data-site]");
         if (site) site.href = `https://${domain}`;
         const manifest = node.querySelector<HTMLAnchorElement>("[data-manifest]");
         const mf = typeof b.manifest_url === "string" ? b.manifest_url : `https://${domain}/.well-known/agent-inbox.json`;
         if (manifest) manifest.href = mf;
         host.appendChild(node);
+      }
+      // Said once, under the list: whose word a count is when the customer's side did not confirm it.
+      const note = document.querySelector<HTMLElement>("[data-record-note]");
+      if (note) {
+        note.textContent = recordNote(records);
+        note.hidden = note.textContent === "";
       }
     } catch {
       host.replaceChildren();

@@ -12,6 +12,7 @@ import {
   listingFactSchema,
   listingHoursSchema,
   proofLabelSchema,
+  trackRecordSchema,
 } from "./directory";
 import { outcomeCodeSchema } from "./receipts";
 
@@ -228,6 +229,7 @@ export const businessCardSchema = z.object({
     })
     .optional()
     .describe("From the last nightly count of the promises it kept; absent while the directory's order is neutral."),
+  track_record: trackRecordSchema.optional(),
   listing_url: z.url().describe("Its full listing on this network (GET /v1/businesses/{domain})."),
   ...listingAdditionsShape,
   human_contact_only: z

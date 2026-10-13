@@ -15,6 +15,7 @@ import {
   READY_HREF,
   readDirectory,
 } from "../src/lib/ask";
+import { OWN_WORD_NOTE, recordNote, recordView, UNCONFIRMED_NOTE } from "../src/lib/record";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
 import { capabilities, leastOf, stateOf } from "../src/lib/status";
@@ -61,6 +62,7 @@ const NEW_OR_CHANGED = [
   "src/lib/results.ts",
   "src/lib/rules.ts",
   "src/components/TrustFlow.astro",
+  "src/lib/record.ts",
 ];
 
 describe("the checker's pages and components", () => {
@@ -922,9 +924,10 @@ describe("the trust page's animation", () => {
     expect(stateOf("receipts")).toBe("live");
     expect(stateOf("ranking")).toBe("live");
     expect(capabilities.find((c) => c.id === "ranking")?.label).toMatch(/nobody can pay/i);
-    // Not drawn: the per-listing track record (kept, late or broken) is being built, and customers'
-    // records are paused, so the agent carries no record and no listing says late or broken.
-    expect(stateOf("reliability")).not.toBe("live");
+    // Not drawn: the per-listing track record is live, but its counts are words on the listing's
+    // page (kept, broken, still open), never a picture; customers' records are paused, so the agent
+    // carries no record, and no listing here says late or broken.
+    expect(stateOf("reliability")).toBe("live");
     const words = visible(source);
     expect(words).not.toMatch(/track record|\blate\b|\bbroken\b|\bscore|\bstars?\b|\brating/i);
     expect(template).not.toMatch(/tf-pip|class="pip/);
@@ -939,5 +942,183 @@ describe("the trust page's animation", () => {
     // No external requests: the only address is the SVG namespace.
     expect([...source.matchAll(/https?:\/\/[^\s"'`)]+/g)].map((m) => m[0])).toEqual(["http://www.w3.org/2000/svg"]);
     expect(script).not.toMatch(/\bfetch\(|XMLHttpRequest|import\(/);
+  });
+});
+
+describe("the track record", () => {
+  const member = (extra: Record<string, unknown>) => ({
+    domain: "salon.example.com",
+    name: "Salon",
+    source: "member",
+    manifest_url: "https://salon.example.com/.well-known/agent-inbox.json",
+    receipts: { issued: 12, acknowledged: 0 },
+    ...extra,
+  });
+  // A member's track_record as the network gives it (docs/protocol/network.md §4.3).
+  const threshold = { closed: 5, customers: 3 };
+  const record = (extra: Record<string, unknown>) => ({
+    state: "shown",
+    in_words: "",
+    as_of: "2026-10-12T00:00:00Z",
+    closed: 12,
+    customers: 5,
+    kept: 9,
+    broken: 3,
+    unclosed: 1,
+    refunds_late: 1,
+    from: "2026-03-04T10:00:00Z",
+    to: "2026-10-09T18:00:00Z",
+    confirmed: 0,
+    confirmable: false,
+    threshold,
+    rules_url: "https://network.example.com/v1/ranking?version=6",
+    ...extra,
+  });
+
+  it("is live on the status list, in words that promise no lateness the network does not count", () => {
+    expect(stateOf("reliability")).toBe("live");
+    const label = capabilities.find((c) => c.id === "reliability")?.label ?? "";
+    expect(label).toMatch(/kept and broken/);
+    expect(label).not.toMatch(/\blate\b|\b(yet|coming|being built|will)\b/i);
+  });
+
+  it("the trust page says where it shows, the threshold, the held 30 days, and that no counter-signature is checked", () => {
+    const text = visible(read("src/pages/trust.astro")).replace(/\s+/g, " ");
+    expect(text).not.toMatch(/kept, late or broken/);
+    expect(text).toMatch(/a refund paid late is broken/);
+    expect(text).toMatch(/surfingdog\.ai\/b\//);
+    expect(text).toMatch(/at least 5 promises from at least 3 customers have closed/);
+    expect(text).toMatch(/not in the 30 days after a business joins/);
+    expect(text).toMatch(/the network cannot check one until it recognises an assistant platform's key/);
+    for (const path of ["src/content/docs/docs/index.md", "src/content/docs/docs/receipts.md"]) {
+      const doc = read(path).replace(/\s+/g, " ");
+      expect(doc, path).toMatch(/track record/);
+      expect(doc, path).not.toMatch(/reviews and reputation \(coming\)/);
+    }
+    expect(read("src/content/docs/docs/receipts.md")).toMatch(/at least 5 promises from at least 3 customers/);
+    // The network page no longer says a counter-signature counts today, when none can be checked.
+    expect(read("src/pages/network.astro")).not.toMatch(/verified customer's agent signs already counts/);
+    // What a business's record makes public, and when: the outcome counts and the score from the
+    // start, the track record once the threshold is met. It never understates what is published.
+    const network = read("src/pages/network.astro").replace(/\s+/g, " ");
+    expect(network).toMatch(/a count of how its promises ended, from its first receipt/);
+    expect(network).toMatch(/its score, counted each night, with the version of the rules/);
+    expect(network).toMatch(/once at least 5 promises from at least 3 customers have closed/);
+    expect(network).not.toMatch(/Public, on its listing once enough promises have closed/);
+  });
+
+  it("shows nothing for an entry that is not a member, and one calm line for a member with no receipts", () => {
+    expect(recordView(null)).toBeNull();
+    expect(recordView({ domain: "shop.example.com", source: "found", found: {} })).toBeNull();
+    expect(recordView({ domain: "shop.example.com", source: "registered" })).toBeNull();
+    const none = recordView(member({ receipts: { issued: 0, acknowledged: 0 } }));
+    expect(none?.text).toBe("A track record appears once its inbox sends signed receipts.");
+    expect(none?.href).toBe("/docs/receipts/");
+    expect(none?.link).toBe("How receipts work");
+    expect(none?.kept).toBeUndefined();
+    expect(recordView(member({ track_record: { state: "none", in_words: "", threshold } }))?.text).toBe(none?.text);
+    // A member with receipts and no record from the network: nothing is made up.
+    expect(recordView(member({}))).toBeNull();
+  });
+
+  it("says a new member's 30 days are held, with the date its record is counted from", () => {
+    const held = recordView(
+      member({ track_record: { state: "held", in_words: "", held_until: "2026-10-22T00:00:00Z", threshold } }),
+    );
+    expect(held?.text).toBe(
+      "A new member's receipts are held for 30 days; its track record is counted from 22 Oct 2026.",
+    );
+    expect(held?.href).toBe("/b/salon.example.com");
+    expect(held?.kept).toBeUndefined();
+    const pending = recordView(member({ track_record: { state: "pending", in_words: "", threshold } }));
+    // Pending promises only a count, not a record: the next count may still be below the threshold.
+    expect(pending?.text).toBe("Its receipts are counted for a track record at the next nightly count.");
+    expect(pending?.text).not.toMatch(/shows/);
+  });
+
+  it("below the threshold, says how many have closed so far, from how many customers, and draws no meter", () => {
+    const gathering = (closed: number, customers: number) =>
+      recordView(member({ track_record: { state: "gathering", in_words: "", closed, customers, threshold } }));
+    expect(gathering(4, 2)?.text).toBe(
+      "Not enough receipts yet for a track record (4 closed so far, from 2 customers).",
+    );
+    expect(gathering(4, 2)?.kept).toBeUndefined();
+    expect(gathering(1, 1)?.text).toBe(
+      "Not enough receipts yet for a track record (1 closed so far, from 1 customer).",
+    );
+    expect(gathering(0, 0)?.text).toBe("Not enough receipts yet for a track record (none closed so far).");
+  });
+
+  it("above it, counts kept and broken with why, customers and dates, and the kept share for the meter", () => {
+    const shown = recordView(member({ track_record: record({}) }));
+    expect(shown?.text).toBe(
+      "9 kept · 3 broken (1 left open 9 days past due, 1 refund paid late) · from 5 customers · 4 Mar 2026 – 9 Oct 2026",
+    );
+    expect(shown?.kept).toBe(0.75);
+    expect(shown?.link).toBe("Track record");
+    expect(shown?.href).toBe("/b/salon.example.com");
+    expect(shown?.confirmable).toBe(false);
+    const clean = recordView(
+      member({
+        track_record: record({ kept: 1200, broken: 0, unclosed: 0, refunds_late: 0, to: "2026-03-04T23:00:00Z" }),
+      }),
+    );
+    expect(clean?.text).toBe("1,200 kept · 0 broken · from 5 customers · 4 Mar 2026");
+    expect(clean?.kept).toBe(1);
+    // Counts that are not whole numbers the network sent are not shown at all.
+    expect(recordView(member({ track_record: record({ kept: "9" }) }))).toBeNull();
+    expect(recordView(member({ track_record: record({ state: "unknown" }) }))).toBeNull();
+  });
+
+  it("never shows a confirmed share, says a confirmed count of the closed, and says once under a list whose word the rest is", () => {
+    // Nothing can be confirmed yet: no count is said, and the list says why.
+    const none = recordView(member({ track_record: record({ confirmable: false, confirmed: 0 }) }));
+    expect(none?.text).not.toMatch(/confirmed/);
+    expect(none?.note).toBe(UNCONFIRMED_NOTE);
+    // It could be confirmed and none is: the list still says the counts are the business's own word.
+    const notYet = recordView(member({ track_record: record({ confirmable: true, confirmed: 0 }) }));
+    expect(notYet?.text).not.toMatch(/confirmed/);
+    expect(notYet?.note).toBe(OWN_WORD_NOTE);
+    // Some confirmed: how many of the closed, and the rest is the business's own word.
+    const some = recordView(member({ track_record: record({ confirmable: true, confirmed: 2 }) }));
+    expect(some?.confirmable).toBe(true);
+    expect(some?.text).toMatch(/· 2 of 12 confirmed by the customer's side$/);
+    expect(some?.text).not.toMatch(/%/);
+    expect(some?.note).toBe(OWN_WORD_NOTE);
+    // Confirmed before nothing more could be (customer scoring paused): still said, never "cannot".
+    const paused = recordView(member({ track_record: record({ confirmable: false, confirmed: 2 }) }));
+    expect(paused?.text).toMatch(/· 2 of 12 confirmed by the customer's side$/);
+    expect(paused?.note).toBe(OWN_WORD_NOTE);
+    // All confirmed: nothing is the business's own word, and no note.
+    const all = recordView(member({ track_record: record({ confirmable: true, confirmed: 12 }) }));
+    expect(all?.text).toMatch(/· all 12 confirmed by the customer's side$/);
+    expect(all?.note).toBeUndefined();
+    // Lines that are not a record need no note.
+    const held = recordView(
+      member({ track_record: { state: "held", in_words: "", held_until: "2026-10-22T00:00:00Z", threshold } }),
+    );
+    expect(held?.note).toBeUndefined();
+    // Under a list: the strongest note any row needs, once.
+    expect(recordNote([])).toBe("");
+    expect(recordNote([held, all, null])).toBe("");
+    expect(recordNote([all, some])).toBe(OWN_WORD_NOTE);
+    expect(recordNote([some, none, notYet])).toBe(UNCONFIRMED_NOTE);
+    expect(UNCONFIRMED_NOTE).toMatch(/cannot check one/);
+    for (const note of [UNCONFIRMED_NOTE, OWN_WORD_NOTE]) {
+      expect(note).not.toMatch(/\b(first|only|verified)\b|%/i);
+      expect(note).toMatch(/business's own signed receipt/);
+    }
+    for (const path of ["src/pages/directory.astro", "src/pages/search.astro"]) {
+      const page = read(path);
+      expect(page, path).toContain("recordView(");
+      expect(page, path).toContain("recordNote(records)");
+      // The meter is drawn for the eye only: its words are printed beside it.
+      expect(page, path).toMatch(/data-record-meter aria-hidden="true"/);
+      expect(page, path).not.toMatch(/data-record-meter role="img"|aria-label", rec\.text/);
+      // The note is never hidden just because a record could be confirmed.
+      expect(page, path).not.toMatch(/rec\.confirmable\)/);
+      expect(page, path).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|warning)\b/);
+      expect(page, path).toMatch(/var\(--c-success\)/);
+    }
   });
 });
