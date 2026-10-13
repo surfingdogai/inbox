@@ -47,10 +47,14 @@ export interface RouterOptions {
   readonly abuseContact: string;
   /** A report form the operator runs, linked from the report page with the host given (https). */
   readonly reportForm?: string | undefined;
-  /** The key the control plane signs admin calls with (`HOSTED_ADMIN_KEY`), used again towards shards. */
+  /** The key the control plane signs admin calls with (`HOSTED_ADMIN_KEY`); checked here, never sent on. */
   readonly adminKey: string;
+  /** The key the router signs the calls it passes on to shards with (`HOSTED_SHARD_KEY`). */
+  readonly shardKey: string;
   /** The header the server in front puts the client's address in (default `cf-connecting-ip`). */
   readonly clientAddressHeader?: string | undefined;
+  /** The header the server in front says the visitor's scheme in, as `{"scheme":"http"}` (default `cf-visitor`). */
+  readonly visitorSchemeHeader?: string | undefined;
   /** How long a shard may take to start answering (default 65 s, past the inbox's own minute). */
   readonly shardTimeoutMs?: number | undefined;
   readonly now?: (() => number) | undefined;
@@ -69,6 +73,18 @@ const HOP_BY_HOP = new Set([
   "upgrade",
 ]);
 
+/** Whether the server in front says the visitor came over plain http (`{"scheme":"http"}`). */
+export function overPlainHttp(visitor: string | string[] | undefined): boolean {
+  const v = Array.isArray(visitor) ? visitor[0] : visitor;
+  return typeof v === "string" && /"scheme"\s*:\s*"http"/.test(v);
+}
+
+/** The inbox's own cookies from a Cookie header (`sdi_*`, `__Host-sdi_*`), or "" when none. */
+export function inboxCookies(header: string | string[]): string {
+  const all = (Array.isArray(header) ? header.join("; ") : header).split(/;\s*/);
+  return all.filter((c) => /^(__Host-)?sdi_[A-Za-z0-9_]*=/.test(c)).join("; ");
+}
+
 function send(res: ServerResponse, a: Answer, extra: Record<string, string> = {}, head = false): void {
   if (res.headersSent) {
     res.destroy();
@@ -85,6 +101,7 @@ export function createRouter(o: RouterOptions): {
   const now = o.now ?? Date.now;
   const log = o.log ?? ((line: string) => console.log(line));
   const clientHeader = (o.clientAddressHeader ?? "cf-connecting-ip").toLowerCase();
+  const visitorHeader = (o.visitorSchemeHeader ?? "cf-visitor").toLowerCase();
 
   const handlePublic = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const method = (req.method ?? "GET").toUpperCase();
@@ -98,10 +115,35 @@ export function createRouter(o: RouterOptions): {
     const path = url.pathname;
     const target = `${path}${url.search}`;
     const cls = classifyHost(host, o.parent);
-    const noindex: Record<string, string> = cls.kind === "slug" ? { "x-robots-tag": "noindex, nofollow" } : {};
+    // Headers every answer for this host carries: noindex on a slug host; on a business's own name,
+    // https from now on (for that name alone: the rest of the business's domain is its own).
+    const noindex: Record<string, string> =
+      cls.kind === "slug"
+        ? { "x-robots-tag": "noindex, nofollow" }
+        : cls.kind === "own"
+          ? { "strict-transport-security": "max-age=31536000" }
+          : {};
     // Never routed, through any name.
     if (cls.kind === "none" || path === "/internal" || path.startsWith("/internal/") || path.startsWith("/admin/")) {
       return send(res, notFound(html), noindex, head);
+    }
+    // Over https only: the server in front says how the visitor came. A read moves to https; a write
+    // is refused, never sent on in the clear.
+    if (overPlainHttp(req.headers[visitorHeader])) {
+      if (method === "GET" || method === "HEAD") {
+        return send(
+          res,
+          { status: 308, headers: { location: `https://${host}${target}`, "cache-control": "no-store" }, body: "" },
+          noindex,
+          head,
+        );
+      }
+      return send(
+        res,
+        { status: 400, headers: { "content-type": "text/plain; charset=utf-8" }, body: "Use https.\n" },
+        noindex,
+        head,
+      );
     }
     let found: Awaited<ReturnType<CachedResolver["lookup"]>>;
     try {
@@ -192,6 +234,13 @@ export function createRouter(o: RouterOptions): {
       if (value === undefined || HOP_BY_HOP.has(k) || connection.includes(k)) continue;
       // Nobody outside sets these: the router's own, and the proxy headers it writes itself.
       if (k.startsWith("x-sd-") || k.startsWith("x-forwarded-") || k === "forwarded" || k === "x-real-ip") continue;
+      // Only the inbox's own cookies go on: the cookies a business's site (or another service under
+      // the same parent) sets for its whole domain are none of the inbox's business.
+      if (k === "cookie") {
+        const kept = inboxCookies(value);
+        if (kept) headers.cookie = kept;
+        continue;
+      }
       headers[k] = value;
     }
     const client = req.headers[clientHeader];
@@ -262,13 +311,13 @@ export function createRouter(o: RouterOptions): {
     ...extra,
   });
 
-  /** One admin call passed on to a shard, signed with the same key, its answer passed back. */
+  /** One admin call passed on to a shard, signed again with the shards' key, its answer passed back. */
   const toShard = async (shard: number, method: string, target: string, body: Uint8Array) => {
     const res = await socketRequest(o.shardAdminSocket(shard), {
       method,
       target,
       headers: {
-        ...signHeaders(o.adminKey, method, target, body),
+        ...signHeaders(o.shardKey, method, target, body),
         ...(body.byteLength ? { "content-type": "application/json" } : {}),
       },
       body: body.byteLength ? body : undefined,

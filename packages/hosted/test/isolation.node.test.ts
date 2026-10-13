@@ -157,6 +157,7 @@ describe("a stalled shard holds up its own inboxes only", () => {
       securityContact: "security@example.net",
       abuseContact: "abuse@example.net",
       adminKey: "k".repeat(40),
+      shardKey: "s".repeat(40),
       shardTimeoutMs: 2_000,
       log: () => {},
     });

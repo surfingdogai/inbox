@@ -5,6 +5,7 @@ import {
   ConfigError,
   type HostedConfig,
   ledgerPath,
+  type Role,
   readConfig,
   shardAdminSocket,
   shardSocket,
@@ -36,9 +37,9 @@ import { startWatchdog } from "./watchdog";
 
 installRedaction();
 
-function config(): HostedConfig {
+function config(role: Role): HostedConfig {
   try {
-    return readConfig(process.env);
+    return readConfig(process.env, role);
   } catch (error) {
     console.error(error instanceof ConfigError ? error.message : String(error));
     process.exit(2);
@@ -46,7 +47,7 @@ function config(): HostedConfig {
 }
 
 async function runRouter(c: HostedConfig): Promise<void> {
-  const controlPlane = socketControlPlane({ socketPath: c.cpSocket, key: c.cpKey, shards: c.shards });
+  const controlPlane = socketControlPlane({ socketPath: c.cpSocket, key: c.cpRouterKey, shards: c.shards });
   const resolver = new CachedResolver({ controlPlane, parent: c.parent });
   const listening = await serveRouter({
     parent: c.parent,
@@ -58,6 +59,7 @@ async function runRouter(c: HostedConfig): Promise<void> {
     abuseContact: c.abuseContact,
     reportForm: c.reportForm,
     adminKey: c.adminKey,
+    shardKey: c.shardKey,
     socket: c.routerSocket,
     adminSocket: c.adminSocket,
   });
@@ -81,7 +83,7 @@ async function runShard(c: HostedConfig, index: number): Promise<void> {
     shards: c.shards,
     dataDir: c.dataDir,
     masterKeys: c.masterKeys,
-    controlPlane: socketControlPlane({ socketPath: c.cpSocket, key: c.cpKey, shards: c.shards }),
+    controlPlane: socketControlPlane({ socketPath: c.cpSocket, key: c.cpShardKey, shards: c.shards }),
     ledger,
     transport: transportFrom(process.env),
     fetchImpl: pinnedFetch({ deny: [...c.deny] }),
@@ -94,7 +96,7 @@ async function runShard(c: HostedConfig, index: number): Promise<void> {
   const listening = await serveShard(shard, {
     socket: shardSocket(c, index),
     adminSocket: shardAdminSocket(c, index),
-    adminKey: c.adminKey,
+    shardKey: c.shardKey,
   });
   const jobs = setInterval(() => {
     shard
@@ -148,9 +150,9 @@ async function runAll(c: HostedConfig): Promise<void> {
 
 const [command, arg] = process.argv.slice(2);
 if (command === "router") {
-  await runRouter(config());
+  await runRouter(config("router"));
 } else if (command === "shard") {
-  const c = config();
+  const c = config("shard");
   const index = Number(arg);
   if (!Number.isInteger(index) || index < 0 || index >= c.shards) {
     console.error(`usage: shard <n>, n from 0 to ${c.shards - 1}`);
@@ -158,9 +160,9 @@ if (command === "router") {
   }
   await runShard(c, index);
 } else if (command === "all") {
-  await runAll(config());
+  await runAll(config("all"));
 } else if (command === "maintenance-off") {
-  const c = config();
+  const c = config("tool");
   if (!isTenantId(arg)) {
     console.error("usage: maintenance-off <tenant id>");
     process.exit(2);

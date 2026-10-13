@@ -19,8 +19,11 @@ import { parseMasterKeys } from "./keys";
  * - `HOSTED_ROUTER_SOCKET`, `HOSTED_ADMIN_SOCKET`: the router's public and admin sockets.
  * - `HOSTED_SHARD_SOCKET_DIR`: where the shards' sockets go (default: beside the router's).
  * - `HOSTED_CP_SOCKET`: the control plane's socket.
- * - `HOSTED_ADMIN_KEY` (control plane → runtime), `HOSTED_CP_KEY` (runtime → control plane).
- * - `HOSTED_MASTER_KEY`: what every inbox's own key is derived from (comma-separated, newest first).
+ * - One key for each caller and direction, each process reading only its own: `HOSTED_ADMIN_KEY`
+ *   (control plane → router), `HOSTED_SHARD_KEY` (router → shards), `HOSTED_CP_ROUTER_KEY` (router →
+ *   control plane) and `HOSTED_CP_SHARD_KEY` (shards → control plane).
+ * - `HOSTED_MASTER_KEY`: what every inbox's own key is derived from (comma-separated, newest first);
+ *   the shards' alone.
  * - `HOSTED_DATA_DIR`: the inboxes' files and the shared ledger.
  * - `HOSTED_SECURITY_CONTACT`, `HOSTED_ABUSE_CONTACT`: where security reports and reports about an
  *   inbox go. `HOSTED_REPORT_FORM` (optional): an https report form, linked with the inbox's host.
@@ -39,7 +42,9 @@ export interface HostedConfig {
   readonly shardSocketDir: string;
   readonly cpSocket: string;
   readonly adminKey: string;
-  readonly cpKey: string;
+  readonly shardKey: string;
+  readonly cpRouterKey: string;
+  readonly cpShardKey: string;
   readonly masterKeys: readonly string[];
   readonly dataDir: string;
   readonly securityContact: string;
@@ -65,25 +70,41 @@ const positiveInt = (value: string | undefined, fallback: number): number | null
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-export function readConfig(env: Record<string, string | undefined>): HostedConfig {
+/**
+ * Which process reads the settings: each needs (and is given) only its own keys. `tool` is a
+ * command run by hand on an inbox's files (`maintenance-off`).
+ */
+export type Role = "router" | "shard" | "all" | "tool";
+
+export function readConfig(env: Record<string, string | undefined>, role: Role = "all"): HostedConfig {
   const problems: string[] = [];
-  const need = (name: string): string => {
+  const router = role === "router" || role === "all";
+  const shard = role === "shard" || role === "all";
+  const need = (name: string, needed = true): string => {
     const value = env[name]?.trim();
-    if (!value) problems.push(`${name} is not set`);
+    if (!value && needed) problems.push(`${name} is not set`);
     return value ?? "";
   };
-  const parent = normalizeHost(need("HOSTED_SLUG_PARENT"));
+  const parent = normalizeHost(need("HOSTED_SLUG_PARENT", role !== "tool"));
   if (env.HOSTED_SLUG_PARENT && !parent) problems.push("HOSTED_SLUG_PARENT is not a host name");
   const shards = positiveInt(env.HOSTED_SHARDS, 4);
   if (shards === null || shards > 64) problems.push("HOSTED_SHARDS is a whole number from 1 to 64");
-  const routerSocket = need("HOSTED_ROUTER_SOCKET");
-  const adminKey = need("HOSTED_ADMIN_KEY");
-  const cpKey = need("HOSTED_CP_KEY");
-  if (adminKey && adminKey.length < 32) problems.push("HOSTED_ADMIN_KEY is shorter than 32 characters");
-  if (cpKey && cpKey.length < 32) problems.push("HOSTED_CP_KEY is shorter than 32 characters");
-  if (adminKey && adminKey === cpKey)
-    problems.push("HOSTED_ADMIN_KEY and HOSTED_CP_KEY are the same: one key per direction");
-  const masterKeys = parseMasterKeys(need("HOSTED_MASTER_KEY"));
+  const routerSocket = need("HOSTED_ROUTER_SOCKET", router);
+  const keys = {
+    HOSTED_ADMIN_KEY: need("HOSTED_ADMIN_KEY", router),
+    HOSTED_SHARD_KEY: need("HOSTED_SHARD_KEY", router || shard),
+    HOSTED_CP_ROUTER_KEY: need("HOSTED_CP_ROUTER_KEY", router),
+    HOSTED_CP_SHARD_KEY: need("HOSTED_CP_SHARD_KEY", shard),
+  };
+  const seen = new Map<string, string>();
+  for (const [name, value] of Object.entries(keys)) {
+    if (!value) continue;
+    if (value.length < 32) problems.push(`${name} is shorter than 32 characters`);
+    const other = seen.get(value);
+    if (other) problems.push(`${other} and ${name} are the same: one key for each caller and direction`);
+    seen.set(value, name);
+  }
+  const masterKeys = parseMasterKeys(need("HOSTED_MASTER_KEY", shard || role === "tool"));
   if (masterKeys[0] !== undefined && masterKeys[0].length < 32)
     problems.push("HOSTED_MASTER_KEY is shorter than 32 characters");
   const open = positiveInt(env.HOSTED_OPEN_PER_SHARD, 64);
@@ -105,19 +126,23 @@ export function readConfig(env: Record<string, string | undefined>): HostedConfi
   }
   const deny = outboundDenyFrom(env.INBOX_OUTBOUND_DENY);
   if (deny.bad.length > 0) problems.push(`INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range`);
+  const shardSocketDir = env.HOSTED_SHARD_SOCKET_DIR?.trim() || (routerSocket ? dirname(routerSocket) : "");
+  if (!shardSocketDir && (router || shard)) problems.push("HOSTED_SHARD_SOCKET_DIR is not set");
   const config = {
     parent: parent ?? "",
     shards: shards ?? 4,
     routerSocket,
-    adminSocket: need("HOSTED_ADMIN_SOCKET"),
-    shardSocketDir: env.HOSTED_SHARD_SOCKET_DIR?.trim() || (routerSocket ? dirname(routerSocket) : ""),
-    cpSocket: need("HOSTED_CP_SOCKET"),
-    adminKey,
-    cpKey,
+    adminSocket: need("HOSTED_ADMIN_SOCKET", router),
+    shardSocketDir,
+    cpSocket: need("HOSTED_CP_SOCKET", router || shard),
+    adminKey: keys.HOSTED_ADMIN_KEY,
+    shardKey: keys.HOSTED_SHARD_KEY,
+    cpRouterKey: keys.HOSTED_CP_ROUTER_KEY,
+    cpShardKey: keys.HOSTED_CP_SHARD_KEY,
     masterKeys,
-    dataDir: need("HOSTED_DATA_DIR"),
-    securityContact: need("HOSTED_SECURITY_CONTACT"),
-    abuseContact: need("HOSTED_ABUSE_CONTACT"),
+    dataDir: need("HOSTED_DATA_DIR", shard || role === "tool"),
+    securityContact: need("HOSTED_SECURITY_CONTACT", router),
+    abuseContact: need("HOSTED_ABUSE_CONTACT", router),
     reportForm,
     openPerShard: open ?? 64,
     maxTenantBytes: (maxMb ?? 200) * 1024 * 1024,

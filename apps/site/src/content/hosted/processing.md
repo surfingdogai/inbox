@@ -40,7 +40,7 @@ What is in place today, as it is:
 You authorise these sub-processors. Each is bound by the same duties, and we answer for them.
 
 - **Our edge network.** Carries every request to and from your inbox (it ends the encrypted connection), delivers the email your inbox sends, and stores our encrypted backups. A company based in the United States, with servers worldwide.
-- **The company that rents us our servers.** Runs the machines that hold your inbox's database. Its servers are in Germany.
+- **The company that rents us our servers.** Runs the machines that hold your inbox's database. Where they are: see the [hosted terms](/hosted/terms/).
 
 The companies are named in the copy of this agreement we send you when you confirm your inbox, and on request. We tell you by email at least 30 days before adding or replacing a sub-processor. You may object; if we cannot meet your objection, you may leave before the change, and download everything before you go.
 

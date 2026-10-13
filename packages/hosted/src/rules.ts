@@ -42,7 +42,9 @@ export interface RouterRequest {
  * closing tenant came from decides what it is otherwise; a closing one is read-only on top.
  *
  * A slug host never serves agents. Below level 2 it serves the owner allowlist; at level 2 an owner
- * page redirects (308) to the inbox's own name and everything else is 404, saying where it is now.
+ * page redirects (308) to the inbox's own name and everything else is 404, saying where it is now,
+ * except while that name is lost (its record went, within the grace): the owner cannot reach it
+ * there, so the slug host serves the owner allowlist again.
  * An own host is everything at level 2, the owner allowlist after its DNS was lost, and a guard
  * while the certificate is issued.
  */
@@ -66,6 +68,7 @@ export function decide(r: Resolved, req: RouterRequest): Decision {
   }
 
   if (r.kind === "slug") {
+    if (r.level === 2 && r.ownHostState === "lost") return ownerOnly();
     if (r.level === 2) {
       const moved = r.ownHost ? `https://${r.ownHost}` : undefined;
       // The owner's pages move to the inbox's own name. Sign-in links and the API do not follow:

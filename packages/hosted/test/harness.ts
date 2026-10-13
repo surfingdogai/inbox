@@ -22,6 +22,8 @@ import { levelOf, type PolicyPayload, type TenantState } from "../src/types";
 export const PARENT = "example.net";
 export const MASTER = "test-master-key-0123456789abcdef0123456789";
 export const ADMIN_KEY = "test-admin-key-0123456789abcdef0123456789";
+/** The key the router signs again with towards the shards; never the control plane's. */
+export const SHARD_KEY = "test-shard-key-0123456789abcdef0123456789";
 export const OWNER = "owner@example.com";
 
 export const salon: SetupPlanInput = {
@@ -48,6 +50,8 @@ export interface FakeTenant {
   ownHost: string | null;
   /** Whether the own host resolves (its hostname is issuing, active or lost). */
   ownResolves: boolean;
+  /** Whether the own host's record went (lost, within the grace): its address is the slug host again. */
+  ownLost?: boolean;
   state: TenantState;
   prevState: TenantState | null;
   version: number;
@@ -75,7 +79,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     state: t.state,
     level,
     agents: live ? "open" : "closed",
-    address: level === 2 && t.ownHost ? `https://${t.ownHost}` : `https://${t.slugHost}`,
+    address: level === 2 && t.ownHost && !t.ownLost ? `https://${t.ownHost}` : `https://${t.slugHost}`,
     site: level === 2 ? `https://${t.domain}` : null,
     owner_email: OWNER,
     mail: {
@@ -116,6 +120,7 @@ export class FakeControlPlane implements ControlPlane {
             level,
             slugHost: t.slugHost,
             ownHost: t.ownHost,
+            ownHostState: t.ownLost ? "lost" : t.ownResolves ? "active" : null,
             canonicalHost: level === 2 && t.ownHost ? t.ownHost : t.slugHost,
             agents: t.state === "live" ? "open" : "closed",
             policyVersion: t.version,
@@ -183,7 +188,7 @@ export interface Runtime {
   setState(
     t: FakeTenant,
     state: TenantState,
-    o?: { ownResolves?: boolean; prevState?: TenantState | null },
+    o?: { ownResolves?: boolean; prevState?: TenantState | null; ownLost?: boolean },
   ): Promise<void>;
   /** Signs the owner in at `host` by a handoff; returns the session cookie. */
   signIn(t: FakeTenant, host: string): Promise<string>;
@@ -247,7 +252,7 @@ export async function startRuntime(
     await shard.start();
     shards.push(shard);
     listening.push(
-      await serveShard(shard, { socket: shardSocket(i), adminSocket: shardAdminSocket(i), adminKey: ADMIN_KEY }),
+      await serveShard(shard, { socket: shardSocket(i), adminSocket: shardAdminSocket(i), shardKey: SHARD_KEY }),
     );
   }
   const resolver = new CachedResolver({ controlPlane: cp, parent: PARENT });
@@ -262,6 +267,7 @@ export async function startRuntime(
       securityContact: "security@example.net",
       abuseContact: "abuse@example.net",
       adminKey: ADMIN_KEY,
+      shardKey: SHARD_KEY,
       socket: routerSocket,
       adminSocket: join(dir, "a.sock"),
       log: () => {},
@@ -373,6 +379,7 @@ export async function startRuntime(
       else t.prevState = s.prevState ?? null;
       t.state = state;
       if (s.ownResolves !== undefined) t.ownResolves = s.ownResolves;
+      if (s.ownLost !== undefined) t.ownLost = s.ownLost;
       t.version++;
       await push(t);
     },

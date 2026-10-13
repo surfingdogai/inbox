@@ -318,12 +318,37 @@ describe("settings from the environment", () => {
     HOSTED_ADMIN_SOCKET: "/run/x/admin.sock",
     HOSTED_CP_SOCKET: "/run/x/cp.sock",
     HOSTED_ADMIN_KEY: "a".repeat(40),
-    HOSTED_CP_KEY: "b".repeat(40),
+    HOSTED_SHARD_KEY: "e".repeat(40),
+    HOSTED_CP_ROUTER_KEY: "b".repeat(40),
+    HOSTED_CP_SHARD_KEY: "f".repeat(40),
     HOSTED_MASTER_KEY: `${"c".repeat(40)},${"d".repeat(40)}`,
     HOSTED_DATA_DIR: "/var/lib/x",
     HOSTED_SECURITY_CONTACT: "security@example.net",
     HOSTED_ABUSE_CONTACT: "abuse@example.net",
   };
+
+  it("asks each process for its own keys only", () => {
+    const routerEnv = { ...env, HOSTED_MASTER_KEY: "", HOSTED_CP_SHARD_KEY: "", HOSTED_DATA_DIR: "" };
+    expect(readConfig(routerEnv, "router")).toMatchObject({
+      adminKey: env.HOSTED_ADMIN_KEY,
+      cpShardKey: "",
+      masterKeys: [],
+    });
+    expect(() => readConfig({ ...routerEnv, HOSTED_ADMIN_KEY: "" }, "router")).toThrow(/HOSTED_ADMIN_KEY is not set/);
+    const shardEnv = {
+      ...env,
+      HOSTED_ADMIN_KEY: "",
+      HOSTED_CP_ROUTER_KEY: "",
+      HOSTED_ROUTER_SOCKET: "",
+      HOSTED_ADMIN_SOCKET: "",
+      HOSTED_SECURITY_CONTACT: "",
+      HOSTED_ABUSE_CONTACT: "",
+      HOSTED_SHARD_SOCKET_DIR: "/run/x/shards",
+    };
+    expect(readConfig(shardEnv, "shard")).toMatchObject({ adminKey: "", cpShardKey: env.HOSTED_CP_SHARD_KEY });
+    expect(() => readConfig({ ...shardEnv, HOSTED_MASTER_KEY: "" }, "shard")).toThrow(/HOSTED_MASTER_KEY is not set/);
+    expect(() => readConfig({ ...shardEnv, HOSTED_SHARD_SOCKET_DIR: "" }, "shard")).toThrow(/HOSTED_SHARD_SOCKET_DIR/);
+  });
 
   it("reads them with their defaults, the shards' sockets beside the router's", () => {
     const c = readConfig(env);
@@ -335,7 +360,8 @@ describe("settings from the environment", () => {
 
   it("refuses to start on a missing setting, one key for both directions, a short key or a mistyped range", () => {
     expect(() => readConfig({ ...env, HOSTED_SLUG_PARENT: "" })).toThrow(/HOSTED_SLUG_PARENT is not set/);
-    expect(() => readConfig({ ...env, HOSTED_CP_KEY: env.HOSTED_ADMIN_KEY })).toThrow(/one key per direction/);
+    expect(() => readConfig({ ...env, HOSTED_CP_ROUTER_KEY: env.HOSTED_ADMIN_KEY })).toThrow(/one key for each caller/);
+    expect(() => readConfig({ ...env, HOSTED_CP_SHARD_KEY: env.HOSTED_SHARD_KEY })).toThrow(/one key for each caller/);
     expect(() => readConfig({ ...env, HOSTED_MASTER_KEY: "short" })).toThrow(/HOSTED_MASTER_KEY/);
     expect(() => readConfig({ ...env, INBOX_OUTBOUND_DENY: "203.0.113.300" })).toThrow(/INBOX_OUTBOUND_DENY/);
     expect(() => readConfig({ ...env, HOSTED_SHARDS: "0" })).toThrow(/HOSTED_SHARDS/);

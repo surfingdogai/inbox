@@ -20,7 +20,7 @@ These terms are between Surfing Dog Lda, a company registered in Portugal ("we")
 - You need a domain of your own: not an address on another company's platform domain.
 - You add one DNS record (a CNAME) for the hostname you chose, pointing to the target we show you. The target is unique to your inbox. You add it yourself or have whoever runs your DNS add it.
 - The record is how we know the domain is yours. Add it for a domain you control or are allowed to use for your business, and no other.
-- Keep the record in place while you use the service. If it is removed or changed, your inbox keeps working for 72 hours; after that it stops taking requests from agents until the record is back. Putting it back is all it takes.
+- Keep the record in place while you use the service. If it is removed or changed, agents can't reach your inbox at that name. Put it back within 72 hours and nothing else changes; after that your inbox stops taking requests from agents until the record is back. Putting it back is all it takes.
 - One live inbox per domain. When an inbox goes live on a domain, any other inbox for the same domain that is not live yet is closed, and its owner is told.
 - An inbox that is not live 30 days after you confirmed it is closed. We remind you before that, and you can ask once for 30 more days.
 

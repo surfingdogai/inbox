@@ -8,7 +8,7 @@ import { CachedResolver } from "../src/resolver";
 import { NonceCache, SKEW_SECONDS, signature, signHeaders, verifySigned } from "../src/sign";
 import { socketRequest } from "../src/sockets";
 import type { ResolveAnswer } from "../src/types";
-import { ADMIN_KEY, newSlug, OWNER, PARENT, policyOf, type Runtime, salon, startRuntime } from "./harness";
+import { ADMIN_KEY, newSlug, OWNER, PARENT, policyOf, type Runtime, SHARD_KEY, salon, startRuntime } from "./harness";
 
 /** The admin API (C8.1), signed calls (C8.0), and the resolver's cache (C1.3). */
 
@@ -153,9 +153,17 @@ describe("the admin API (C8.1)", () => {
     expect((await socketRequest(socket, { method: "GET", target, headers })).status).toBe(401);
     const other = signHeaders("test-cp-key-0123456789abcdef0123456789abcd", "GET", target);
     expect((await socketRequest(socket, { method: "GET", target, headers: other })).status).toBe(401);
-    // A shard's own admin socket checks the signature too.
+    // A shard's own admin socket checks the signature too, with the shards' key: the control
+    // plane's admin key, which no shard holds, is refused there.
     const shardAdmin = join(rt.dir, "s0a.sock");
     expect((await socketRequest(shardAdmin, { method: "GET", target })).status).toBe(401);
+    const asControlPlane = signHeaders(ADMIN_KEY, "GET", target);
+    expect((await socketRequest(shardAdmin, { method: "GET", target, headers: asControlPlane })).status).toBe(401);
+    const asRouter = signHeaders(SHARD_KEY, "GET", target);
+    expect((await socketRequest(shardAdmin, { method: "GET", target, headers: asRouter })).status).toBe(200);
+    // And the router takes nothing signed with the shards' key.
+    const fromShard = signHeaders(SHARD_KEY, "GET", target);
+    expect((await socketRequest(socket, { method: "GET", target, headers: fromShard })).status).toBe(401);
   });
 
   it("creates a tenant once: the same call again is 200, another slug for it is 409", async () => {

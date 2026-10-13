@@ -19,15 +19,16 @@ export interface Listening {
 }
 
 /**
- * A shard on its two sockets: requests the router passes on, and admin calls, each checked as
- * signed with the admin key. Both sockets are for this runtime's own user only (0600).
+ * A shard on its two sockets: requests the router passes on, and admin calls the router passes on,
+ * each checked as signed with the shards' key (the router signs again with it; a shard never holds
+ * the control plane's admin key). Both sockets are for this runtime's own user only (0600).
  */
 export async function serveShard(
   shard: Shard,
   o: {
     readonly socket: string;
     readonly adminSocket: string;
-    readonly adminKey: string;
+    readonly shardKey: string;
     readonly now?: (() => number) | undefined;
   },
 ): Promise<Listening> {
@@ -51,7 +52,7 @@ export async function serveShard(
       };
       if (!body) return reply(413, { code: "too_large", status: 413, detail: "At most 1 MB." });
       const checked = verifySigned(
-        o.adminKey,
+        o.shardKey,
         nonces,
         { method, target, headers: { get: (n) => (req.headers[n] as string | undefined) ?? null }, body },
         now(),

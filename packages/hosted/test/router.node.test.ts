@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { reportPage } from "../src/pages";
+import { inboxCookies } from "../src/router";
 import { namesBusiness, PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -149,6 +150,30 @@ describe("going live", () => {
     expect((await rt.http(t.ownHost ?? "", "GET", "/v1/owner/services", { headers: { cookie } })).status).toBe(200);
   });
 
+  it("serves the owner at the slug host while the own name is lost, and never an agent", async () => {
+    const t = await rt.createTenant();
+    await rt.setState(t, "live", { ownResolves: true });
+    // The record went: within the grace the inbox is still live, and its address is the slug host again.
+    await rt.setState(t, "live", { ownResolves: true, ownLost: true });
+    const shell = await rt.http(t.slugHost, "GET", "/settings/services");
+    expect(shell.status).toBe(200);
+    expect(shell.text).toContain("Owner app");
+    expect(shell.headers["x-robots-tag"]).toBe("noindex, nofollow");
+    const cookie = await rt.signIn(t, t.slugHost);
+    const services = await rt.http(t.slugHost, "GET", "/v1/owner/services", { headers: { cookie } });
+    expect(services.status).toBe(200);
+    for (const [method, path] of AGENT_PATHS) {
+      const r = await rt.http(t.slugHost, method, path, {
+        headers: { "content-type": "application/json", accept: "application/json" },
+        ...(method === "POST" ? { body: "{}" } : {}),
+      });
+      expect(r.status, `lost ${method} ${path}`).toBe(404);
+    }
+    // The record back: the slug host sends the owner to the own name again.
+    await rt.setState(t, "live", { ownResolves: true, ownLost: false });
+    expect((await rt.http(t.slugHost, "GET", "/settings")).status).toBe(308);
+  });
+
   it("closes the doors again when the record is lost for good, and owner-only is back at the own host", async () => {
     const t = await rt.createTenant();
     await rt.setState(t, "live", { ownResolves: true });
@@ -266,6 +291,38 @@ describe("what the router answers itself", () => {
     for (const path of ["/internal/v1/resolve?host=x", "/admin/v1/health"]) {
       expect((await rt.http(t.ownHost ?? "", "GET", path)).status).toBe(404);
     }
+  });
+
+  it("passes on the inbox's own cookies only, moves plain http to https, and says https on own names", async () => {
+    const t = await rt.createTenant();
+    await rt.setState(t, "live", { ownResolves: true });
+    const cookie = await rt.signIn(t, t.ownHost ?? "");
+    // The business's own cookies for its domain sit beside the inbox's: the inbox still sees its own.
+    const me = await rt.http(t.ownHost ?? "", "GET", "/auth/me", {
+      headers: { cookie: `_ga=GA1.2.3; shop_session=abc; ${cookie}; theme=dark` },
+    });
+    expect(me.status).toBe(200);
+    expect(inboxCookies(`_ga=GA1.2.3; shop_session=abc; ${cookie}; sdi_session=x; theme=dark`)).toBe(
+      `${cookie}; sdi_session=x`,
+    );
+    expect(inboxCookies("_ga=1; session=2")).toBe("");
+    const manifest = await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json");
+    expect(manifest.headers["strict-transport-security"]).toBe("max-age=31536000");
+    expect((await rt.http(t.slugHost, "GET", "/robots.txt")).headers["strict-transport-security"]).toBeUndefined();
+    const plain = await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json?x=1", {
+      headers: { "cf-visitor": '{"scheme":"http"}' },
+    });
+    expect(plain.status).toBe(308);
+    expect(plain.headers.location).toBe(`https://${t.ownHost}/.well-known/agent-inbox.json?x=1`);
+    const write = await rt.http(t.ownHost ?? "", "POST", "/v1/messages", {
+      headers: { "cf-visitor": '{"scheme":"http"}', "content-type": "application/json" },
+      body: JSON.stringify({ body: "hello" }),
+    });
+    expect(write.status).toBe(400);
+    const secure = await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json", {
+      headers: { "cf-visitor": '{"scheme":"https"}' },
+    });
+    expect(secure.status).toBe(200);
   });
 
   it("sets the tenant itself: an X-SD header from outside reaches nobody", async () => {

@@ -29,6 +29,11 @@ export interface Resolved {
   readonly slugHost: string;
   /** The business's own name for it, once chosen; null before. */
   readonly ownHost: string | null;
+  /**
+   * Where that own name stands, when the control plane says (`issuing`, `active`, `lost`…): while it
+   * is `lost` (its record went, within the grace) the owner is served at the slug host again.
+   */
+  readonly ownHostState?: string | null | undefined;
   /** `ownHost` at level 2, else `slugHost`. */
   readonly canonicalHost: string;
   /** Open only while the tenant is live. */
@@ -135,6 +140,7 @@ const resolveWireSchema = z.looseObject({
   prev_state: state.nullable().optional(),
   slug_host: host,
   own_host: host.nullable().optional(),
+  own_host_state: z.string().max(32).nullable().optional(),
   policy_version: z.number().int().min(0),
   shard: z.number().int().min(0).optional(),
   ttl_seconds: z.number().int().min(0).optional(),
@@ -196,6 +202,7 @@ export function parseResolveAnswer(
       level,
       slugHost: w.slug_host,
       ownHost,
+      ownHostState: w.own_host_state ?? null,
       canonicalHost: level === 2 && ownHost ? ownHost : w.slug_host,
       agents: w.state === "live" ? "open" : "closed",
       policyVersion: w.policy_version,
