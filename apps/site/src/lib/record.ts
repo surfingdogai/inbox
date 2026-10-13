@@ -7,15 +7,24 @@
  *
  * The states: `held` (a new member's 30 days, R31, until `held_until`), `none` (no receipts),
  * `pending` (receipts the nightly count has not reached), `gathering` (counted, under the listing's
- * `threshold`: `closed` and `customers` only), `shown` (the record). How many the customer's side
- * confirmed is said as a count of the closed promises, never as a share; whatever it did not confirm
- * is the business's own signed receipts, and a list says so once, under it (`recordNote`).
+ * `threshold`: `closed`, and `customers` unless self-reported), `shown` (the record). From rules
+ * version 8 a record less than a fifth of which is kept promises the customer's side confirmed is
+ * `self_reported`: the business's own word, said as its counts (kept, broken, still open) with no
+ * meter, no score and no customers, and labelled so. How many the customer's side confirmed is said
+ * as a count of the closed promises, never as a share; whatever it did not confirm is the business's
+ * own word, and a list says so once, under it (`recordNote`).
  */
 export interface RecordView {
   /** One line in plain words. */
   text: string;
-  /** Kept as a share of closed promises, 0 to 1, when the record is shown; the meter's width. */
+  /**
+   * Kept as a share of closed promises, 0 to 1, when the record is shown and does not rest on the
+   * business's own word; the meter's width. A self-reported record has none: no meter, nothing that
+   * reads as a score.
+   */
   kept?: number;
+  /** The record rests on the business's own word (`self_reported`), and its line says so. */
+  selfReported?: boolean;
   /** Where to read more: the member's page on the network's site, or how receipts work. */
   href: string;
   /** The link's words. */
@@ -33,10 +42,13 @@ export interface RecordView {
 
 /** Said once under a list that shows a record, while the network cannot check a customer's side. */
 export const UNCONFIRMED_NOTE =
-  "A kept promise rests on the business's own signed receipt: the network stores a customer's counter-signature, but cannot check one until it recognises an assistant platform's key or a customer's record is established.";
+  "Every count is the business's own word: the network stores a customer's counter-signature, but cannot check one until it recognises an assistant platform's key or a customer's record is established.";
 
 /** Said once under a list that shows a record some of whose counts the customer's side did not confirm. */
-export const OWN_WORD_NOTE = "Counts not confirmed by the customer's side are the business's own signed receipts.";
+export const OWN_WORD_NOTE = "Counts not confirmed by the customer's side are the business's own word.";
+
+/** What a self-reported record's line begins with, as its page on the network's site labels it. */
+export const SELF_REPORTED = "Self-reported";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -86,6 +98,7 @@ export function recordView(raw: unknown): RecordView | null {
 
   const r = obj(b.track_record);
   if (!r) return issued === 0 ? none : null;
+  const own = r.self_reported === true;
   const at = (text: string): RecordView => ({ text, href, link, confirmable: false });
   switch (str(r.state)) {
     case "none":
@@ -103,11 +116,14 @@ export function recordView(raw: unknown): RecordView | null {
     case "gathering": {
       const closed = count(r.closed);
       const customers = count(r.customers);
-      if (closed === null || customers === null) return null;
+      // A self-reported record has no count of customers: the business chooses who they are.
+      if (closed === null || (!own && customers === null)) return null;
+      const so =
+        own || customers === null ? "on the business's own word" : `from ${plural(customers, "customer", "customers")}`;
       return at(
         closed === 0
           ? "Not enough receipts yet for a track record (none closed so far)."
-          : `Not enough receipts yet for a track record (${n(closed)} closed so far, from ${plural(customers, "customer", "customers")}).`,
+          : `Not enough receipts yet for a track record (${n(closed)} closed so far, ${so}).`,
       );
     }
     case "shown":
@@ -119,7 +135,7 @@ export function recordView(raw: unknown): RecordView | null {
   const kept = count(r.kept);
   const broken = count(r.broken);
   const customers = count(r.customers);
-  if (kept === null || broken === null || customers === null || kept + broken === 0) return null;
+  if (kept === null || broken === null || (!own && customers === null) || kept + broken === 0) return null;
   const parts = [`${n(kept)} kept`, `${n(broken)} broken`];
   const unclosed = count(r.unclosed) ?? 0;
   const late = count(r.refunds_late) ?? 0;
@@ -128,7 +144,11 @@ export function recordView(raw: unknown): RecordView | null {
     late > 0 ? plural(late, "refund paid late", "refunds paid late") : "",
   ].filter(Boolean);
   if (why.length > 0) parts[1] = `${parts[1]} (${why.join(", ")})`;
-  parts.push(`from ${plural(customers, "customer", "customers")}`);
+  // From rules version 8: its promises still open, as the network counts them.
+  const open = count(r.open);
+  if (open !== null) parts.push(`${n(open)} still open`);
+  if (own) parts.unshift(SELF_REPORTED);
+  else if (customers !== null) parts.push(`from ${plural(customers, "customer", "customers")}`);
   const when = span(str(r.from), str(r.to));
   if (when) parts.push(when);
   // What the customer's side confirmed stays said even when nothing more can be (customer scoring
@@ -143,7 +163,9 @@ export function recordView(raw: unknown): RecordView | null {
         : `${n(confirmed)} of ${n(closed)} confirmed by the customer's side`,
     );
   }
-  const view: RecordView = { text: parts.join(" · "), kept: kept / closed, href, link, confirmable };
+  const view: RecordView = own
+    ? { text: parts.join(" · "), selfReported: true, href, link, confirmable }
+    : { text: parts.join(" · "), kept: kept / closed, href, link, confirmable };
   if (confirmed < closed) view.note = !confirmable && confirmed === 0 ? UNCONFIRMED_NOTE : OWN_WORD_NOTE;
   return view;
 }

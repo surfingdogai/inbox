@@ -978,7 +978,9 @@ describe("the track record", () => {
   it("is live on the status list, in words that promise no lateness the network does not count", () => {
     expect(stateOf("reliability")).toBe("live");
     const label = capabilities.find((c) => c.id === "reliability")?.label ?? "";
-    expect(label).toMatch(/kept and broken/);
+    expect(label).toMatch(/kept, broken and still open/);
+    // Rules version 8: a record on the business's own word shows no score until a fifth is confirmed.
+    expect(label).toMatch(/the business's own word, with no score, until its customers confirm a fifth of it/);
     expect(label).not.toMatch(/\blate\b|\b(yet|coming|being built|will)\b/i);
   });
 
@@ -987,23 +989,34 @@ describe("the track record", () => {
     expect(text).not.toMatch(/kept, late or broken/);
     expect(text).toMatch(/a refund paid late is broken/);
     expect(text).toMatch(/surfingdog\.ai\/b\//);
-    expect(text).toMatch(/at least 5 promises from at least 3 customers have closed/);
+    expect(text).toMatch(/once at least 5 promises have closed/);
+    expect(text).not.toMatch(/from at least 3 customers/);
     expect(text).toMatch(/not in the 30 days after a business joins/);
-    expect(text).toMatch(/the network cannot check one until it recognises an assistant platform's key/);
+    // Rules version 8: a record on the business's own word is its counts, no score, no customers.
+    expect(text).toMatch(/Until its customers confirm at least a fifth of it, a record is self-reported/);
+    expect(text).toMatch(/with no score and no count of customers, and it is not ranked/);
+    expect(text).toMatch(/today it cannot check one: it needs an assistant platform's key it recognises/);
+    expect(text).toMatch(/0\.40 and its customers confirmed at least a fifth of it/);
     for (const path of ["src/content/docs/docs/index.md", "src/content/docs/docs/receipts.md"]) {
       const doc = read(path).replace(/\s+/g, " ");
       expect(doc, path).toMatch(/track record/);
       expect(doc, path).not.toMatch(/reviews and reputation \(coming\)/);
     }
-    expect(read("src/content/docs/docs/receipts.md")).toMatch(/at least 5 promises from at least 3 customers/);
+    const receipts = read("src/content/docs/docs/receipts.md").replace(/\s+/g, " ");
+    expect(receipts).toMatch(/It shows once at least 5 promises have closed/);
+    expect(receipts).toMatch(/is \*\*self-reported\*\*: the business's own word, shown as its counts, with no score/);
+    expect(receipts).toMatch(/today there is neither, so every track record is self-reported/);
     // The network page no longer says a counter-signature counts today, when none can be checked.
     expect(read("src/pages/network.astro")).not.toMatch(/verified customer's agent signs already counts/);
     // What a business's record makes public, and when: the outcome counts and the score from the
     // start, the track record once the threshold is met. It never understates what is published.
     const network = read("src/pages/network.astro").replace(/\s+/g, " ");
     expect(network).toMatch(/a count of how its promises ended, from its first receipt/);
-    expect(network).toMatch(/its score, counted each night, with the version of the rules/);
-    expect(network).toMatch(/once at least 5 promises from at least 3 customers have closed/);
+    expect(network).toMatch(
+      /as its own word, with no score, until its customers confirm at least a fifth of its record/,
+    );
+    expect(network).toMatch(/once at least 5 promises have closed/);
+    expect(network).not.toMatch(/its score, counted each night/);
     expect(network).not.toMatch(/Public, on its listing once enough promises have closed/);
   });
 
@@ -1047,6 +1060,50 @@ describe("the track record", () => {
       "Not enough receipts yet for a track record (1 closed so far, from 1 customer).",
     );
     expect(gathering(0, 0)?.text).toBe("Not enough receipts yet for a track record (none closed so far).");
+    // Rules version 8: a self-reported record has no count of customers, and says whose word it is.
+    const own = (closed: number) =>
+      recordView(
+        member({
+          track_record: { state: "gathering", in_words: "", closed, self_reported: true, threshold: { closed: 5 } },
+        }),
+      );
+    expect(own(2)?.text).toBe(
+      "Not enough receipts yet for a track record (2 closed so far, on the business's own word).",
+    );
+    expect(own(0)?.text).toBe("Not enough receipts yet for a track record (none closed so far).");
+    expect(own(2)?.kept).toBeUndefined();
+    // A record that is not self-reported and names no customers is not made up.
+    expect(recordView(member({ track_record: { state: "gathering", in_words: "", closed: 2, threshold } }))).toBeNull();
+  });
+
+  it("from rules version 8, a self-reported record is its counts and still open, labelled, with no meter and no customers", () => {
+    const own = recordView(
+      member({
+        track_record: record({ self_reported: true, customers: undefined, open: 2, threshold: { closed: 5 } }),
+      }),
+    );
+    expect(own?.text).toBe(
+      "Self-reported · 9 kept · 3 broken (1 left open 9 days past due, 1 refund paid late) · 2 still open · 4 Mar 2026 – 9 Oct 2026",
+    );
+    expect(own?.selfReported).toBe(true);
+    expect(own?.kept).toBeUndefined();
+    expect(own?.text).not.toMatch(/customer|%|\d\.\d|score/);
+    expect(own?.note).toBe(UNCONFIRMED_NOTE);
+    // Confirmed in part, still on its own word: how many of the closed, never a share.
+    const some = recordView(
+      member({
+        track_record: record({ self_reported: true, customers: undefined, open: 0, confirmable: true, confirmed: 1 }),
+      }),
+    );
+    expect(some?.text).toMatch(/^Self-reported · .* · 0 still open · .* · 1 of 12 confirmed by the customer's side$/);
+    expect(some?.note).toBe(OWN_WORD_NOTE);
+    // A fifth confirmed: not self-reported, so its customers and the meter, and still open beside them.
+    const fifth = recordView(member({ track_record: record({ open: 2, confirmable: true, confirmed: 3 }) }));
+    expect(fifth?.text).toBe(
+      "9 kept · 3 broken (1 left open 9 days past due, 1 refund paid late) · 2 still open · from 5 customers · 4 Mar 2026 – 9 Oct 2026 · 3 of 12 confirmed by the customer's side",
+    );
+    expect(fifth?.kept).toBe(0.75);
+    expect(fifth?.selfReported).toBeUndefined();
   });
 
   it("above it, counts kept and broken with why, customers and dates, and the kept share for the meter", () => {
@@ -1106,7 +1163,7 @@ describe("the track record", () => {
     expect(UNCONFIRMED_NOTE).toMatch(/cannot check one/);
     for (const note of [UNCONFIRMED_NOTE, OWN_WORD_NOTE]) {
       expect(note).not.toMatch(/\b(first|only|verified)\b|%/i);
-      expect(note).toMatch(/business's own signed receipt/);
+      expect(note).toMatch(/business's own word/);
     }
     for (const path of ["src/pages/directory.astro", "src/pages/search.astro"]) {
       const page = read(path);

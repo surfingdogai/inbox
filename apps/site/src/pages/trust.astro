@@ -38,7 +38,7 @@ const steps = [
   },
   {
     h: "The order reads the record",
-    p: "Among answering businesses, a record of kept promises sets the order once it reaches 0.40; the less evidence, the more cautious the record. Everyone else takes turns in a shuffle that changes once a day and that anyone can reproduce.",
+    p: "Among answering businesses, a record of kept promises sets the order once it reaches 0.40 and its customers confirmed at least a fifth of it; the less evidence, the more cautious the record. Everyone else takes turns in a shuffle that changes once a day and that anyone can reproduce.",
   },
   {
     h: "Nobody can pay for a place",
@@ -121,11 +121,12 @@ const now = capabilities.filter((c) => ids.includes(c.id));
       </ul>
       <p class="hint">
         A member's track record is on its page (surfingdog.ai/b/ then its domain) and in its listing for agents:
-        promises kept and broken, from how many customers, over which dates and under which rules, counted each night.
-        It shows once at least 5 promises from at least 3 customers have closed, and not in the 30 days after a
-        business joins; until then the page says how many have closed so far. Kept promises rest on the business's own
-        signed receipts: a customer's counter-signature is stored with them, but the network cannot check one until it
-        recognises an assistant platform's key or a customer's record is established.
+        promises kept, broken and still open, over which dates and under which rules, counted each night. It shows once
+        at least 5 promises have closed, and not in the 30 days after a business joins; until then the page says how
+        many have closed so far. Until its customers confirm at least a fifth of it, a record is self-reported: the
+        business's own word, shown as its counts, with no score and no count of customers, and it is not ranked. A
+        promise counts as confirmed when the network can check the customer's counter-signature, and today it cannot
+        check one: it needs an assistant platform's key it recognises, or a customer whose record is established.
       </p>
       <p class="hint" data-record hidden></p>
       <p class="more">

@@ -65,8 +65,12 @@ export type Reputation = z.infer<typeof reputationSchema>;
 
 /**
  * A member's track record (§4.3): what its reputation was computed from, in counts and words, from
- * the same nightly snapshot. It shows only past a new member's hold (R31) and once `threshold` is
- * met; each state carries only what it can say. Never on an entry that is not a member.
+ * the same nightly snapshot and shown under the same rules. It shows only past a new member's hold
+ * (R31) and once `threshold` is met; each state carries only what it can say. From rules version 8
+ * (ADR-017 A4.1) a record that rests on the business's own word is `self_reported`, as its
+ * reputation is: its counts and no score, and never how many customers, since the business chooses
+ * who they are. `confirmed` counts only kept outcomes a verified acknowledgement backs. Never on an
+ * entry that is not a member.
  */
 export const trackRecordSchema = z
   .object({
@@ -77,16 +81,24 @@ export const trackRecordSchema = z
       ),
     in_words: z
       .string()
-      .describe("The record in one or two plain sentences, with how much of it the customer's side confirmed."),
+      .describe(
+        "The record in one or two plain sentences, with how many of its closed promises the customer's side confirmed; the rest are the business's own word.",
+      ),
     as_of: timestampSchema.optional().describe("The nightly count it is from (00:00 UTC)."),
     held_until: timestampSchema.optional().describe("held: the night its record is counted from."),
+    self_reported: z
+      .boolean()
+      .optional()
+      .describe(
+        "gathering and shown, from rules version 8: the record rests on the business's own word (less than a fifth of it is kept outcomes a verified acknowledgement backs, as its reputation's self_reported), so it has no customers, and its threshold none.",
+      ),
     closed: z.int().min(0).optional().describe("gathering and shown: kept plus broken."),
     customers: z
       .int()
       .min(0)
       .optional()
       .describe(
-        "gathering and shown: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
+        "gathering and shown, unless self_reported: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
       ),
     kept: z.int().min(0).optional().describe("shown."),
     broken: z
@@ -96,6 +108,11 @@ export const trackRecordSchema = z
       .describe(
         "shown: closed as not kept by the business or by a customer's report that stands, left open 9 days past due, or a refund paid late.",
       ),
+    open: z
+      .int()
+      .min(0)
+      .optional()
+      .describe("shown, from rules version 8: its v2 promises still open (reputation.open)."),
     unclosed: z.int().min(0).optional().describe("shown, of broken: left open 9 days past due (promise.unclosed)."),
     refunds_late: z.int().min(0).optional().describe("shown, of broken: refunds paid late (refund.late)."),
     from: timestampSchema
@@ -111,22 +128,24 @@ export const trackRecordSchema = z
       .min(0)
       .optional()
       .describe(
-        "shown: how many the customer's side confirmed (verified evidence); the rest are the business's own signed receipts.",
+        "shown: how many of the closed are kept outcomes a verified acknowledgement backs, confirmed by the customer's side (a customer's report is not a confirmation); the rest are the business's own word.",
       ),
     confirmable: z
       .boolean()
       .optional()
       .describe(
-        "shown: whether this network can confirm any yet (a recognised platform's agent key, or an established person's).",
+        "shown: whether this network can verify any acknowledgement yet (a recognised platform's agent key, or an established person's).",
       ),
     threshold: z
-      .object({ closed: z.int().min(1), customers: z.int().min(1) })
+      .object({ closed: z.int().min(1), customers: z.int().min(1).optional() })
       .optional()
-      .describe("What a record shows from."),
+      .describe(
+        "What a record shows from: closed promises, from customers distinct customers; a self_reported record is not asked for customers, and has none here.",
+      ),
     rules_url: z.url().optional(),
   })
   .describe(
-    "A member's track record, from the same nightly count as its standing: the promises it kept and broke, from how many customers and when. Only what its state can say is present; a business that is not a member has none.",
+    "A member's track record, from the same nightly count as its standing and shown under the same rules: the promises it kept and broke, and when. From rules version 8, one that rests on the business's own word is self_reported: its counts, with no score and no count of customers. Only what its state can say is present; a business that is not a member has none.",
   );
 export type TrackRecord = z.infer<typeof trackRecordSchema>;
 

@@ -218,7 +218,7 @@
             },
             "in_words": {
               "type": "string",
-              "description": "The record in one or two plain sentences, with how much of it the customer's side confirmed."
+              "description": "The record in one or two plain sentences, with how many of its closed promises the customer's side confirmed; the rest are the business's own word."
             },
             "as_of": {
               "description": "The nightly count it is from (00:00 UTC).",
@@ -232,6 +232,10 @@
               "format": "date-time",
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
+            "self_reported": {
+              "description": "gathering and shown, from rules version 8: the record rests on the business's own word (less than a fifth of it is kept outcomes a verified acknowledgement backs, as its reputation's self_reported), so it has no customers, and its threshold none.",
+              "type": "boolean"
+            },
             "closed": {
               "description": "gathering and shown: kept plus broken.",
               "type": "integer",
@@ -239,7 +243,7 @@
               "maximum": 9007199254740991
             },
             "customers": {
-              "description": "gathering and shown: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
+              "description": "gathering and shown, unless self_reported: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
@@ -252,6 +256,12 @@
             },
             "broken": {
               "description": "shown: closed as not kept by the business or by a customer's report that stands, left open 9 days past due, or a refund paid late.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "open": {
+              "description": "shown, from rules version 8: its v2 promises still open (reputation.open).",
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
@@ -281,17 +291,17 @@
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
             },
             "confirmed": {
-              "description": "shown: how many the customer's side confirmed (verified evidence); the rest are the business's own signed receipts.",
+              "description": "shown: how many of the closed are kept outcomes a verified acknowledgement backs, confirmed by the customer's side (a customer's report is not a confirmation); the rest are the business's own word.",
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
             },
             "confirmable": {
-              "description": "shown: whether this network can confirm any yet (a recognised platform's agent key, or an established person's).",
+              "description": "shown: whether this network can verify any acknowledgement yet (a recognised platform's agent key, or an established person's).",
               "type": "boolean"
             },
             "threshold": {
-              "description": "What a record shows from.",
+              "description": "What a record shows from: closed promises, from customers distinct customers; a self_reported record is not asked for customers, and has none here.",
               "type": "object",
               "properties": {
                 "closed": {
@@ -305,7 +315,7 @@
                   "maximum": 9007199254740991
                 }
               },
-              "required": ["closed", "customers"]
+              "required": ["closed"]
             },
             "rules_url": {
               "type": "string",
@@ -313,7 +323,7 @@
             }
           },
           "required": ["state", "in_words"],
-          "description": "A member's track record, from the same nightly count as its standing: the promises it kept and broke, from how many customers and when. Only what its state can say is present; a business that is not a member has none."
+          "description": "A member's track record, from the same nightly count as its standing and shown under the same rules: the promises it kept and broke, and when. From rules version 8, one that rests on the business's own word is self_reported: its counts, with no score and no count of customers. Only what its state can say is present; a business that is not a member has none."
         },
         "listing_url": {
           "type": "string",

@@ -369,22 +369,32 @@ code in §6. Only listed businesses are returned; the detail of a business that 
 or was set aside, is `404`, and the problem's `detail` says which.
 
 **The track record** (spec 0.3) is what a member's reputation was computed from, in counts and
-words, from the same nightly snapshot, so the record, the score and the order always agree:
-`track_record {state, in_words, as_of?, held_until?, closed?, customers?, kept?, broken?, unclosed?,
-refunds_late?, from?, to?, confirmed?, confirmable?, threshold? {closed, customers}, rules_url?}`. Every
-state carries `in_words`, `threshold` and `rules_url`, and `as_of` once a nightly count has a row for
-the business; beyond that, only what it can say:
+words, from the same nightly snapshot and shown under the same rules, so the record, the reputation
+and the order always agree: `track_record {state, in_words, as_of?, held_until?, self_reported?,
+closed?, customers?, kept?, broken?, open?, unclosed?, refunds_late?, from?, to?, confirmed?,
+confirmable?, threshold? {closed, customers?}, rules_url?}`. Every state carries `in_words`,
+`threshold` and `rules_url`, and `as_of` once a nightly count has a row for the business; beyond
+that, only what it can say:
 
 | `state` | When | Also carries |
 |---|---|---|
 | `held` | a new member's 30 days (R31): nothing is counted yet | `held_until`, the night its record is counted from |
 | `none` | no receipts | — |
 | `pending` | receipts no nightly count has reached yet | — |
-| `gathering` | counted, below the threshold | `closed`, `customers` |
+| `gathering` | counted, below the threshold | `closed`, and `customers` or `self_reported` |
 | `shown` | the record | everything else |
 
-A record shows once at least `threshold.closed` promises have closed, kept or broken, from at least
-`threshold.customers` distinct customers; the reference is **5 from 3**. Five is the smallest whole
+From rules version 8 a record less than a fifth of which is kept outcomes a verified acknowledgement
+backs rests on the business's own word, as its `reputation` does (ADR-017 A4.1): it is
+**self-reported**, `self_reported: true`, and shows its counts in words (`kept`, `broken` and `open`,
+its v2 promises still open) with **no score, nothing that reads as one, and no `customers`**, since
+the business chooses who they are (A4.2 counts every row of a business that names none of them as
+one anonymous customer). Its `in_words` begins "Self-reported track record", and the reference
+network's page labels it "Self-reported" and draws no meter.
+
+A record shows once at least `threshold.closed` promises have closed, kept or broken, and, unless it
+is self-reported, from at least `threshold.customers` distinct customers; the reference is **5**,
+**from 3**, and a self-reported record's `threshold` has no `customers`. Five is the smallest whole
 count at which a record of nothing but kept promises can reach the trusted line (0.75 needs 4.93
 units), and below three customers one customer counted three times over (R7) could make up the whole
 record. Customers are told apart by R7's pair (the customer's mailbox when the network knows it, else
@@ -393,14 +403,16 @@ the network can tell apart across businesses (§5.3). `kept` and `broken` are th
 broken, `unclosed` were left open 9 days past due (`promise.unclosed`) and `refunds_late` were refunds
 paid late (`refund.late`). There is no "late" for a booking or an order: a promise is kept or broken.
 `from` and `to` are the earliest and latest days of the counted outcomes, each at 00:00 UTC (the day,
-never the moment of any one customer's promise), and `as_of` the night they were counted. `confirmed`
-is how many are verified evidence (ADR-017 §4), and `confirmable` whether this network can confirm
-any: it is `false` while `recognised_platforms` is empty and the night the record is from established
-no person (none is while customers are not scored, A2.10), and then every count is the business's own
-signed receipts, which `in_words` says in place of a share. What was confirmed stays counted and said
-even when nothing more can be. Nothing in it orders anything. An entry that is
-not a member has no `track_record`. The reference network shows the same record on its page for the
-domain, `/b/{domain}`.
+never the moment of any one customer's promise), and `as_of` the night they were counted.
+`confirmed` is how many of the closed are kept outcomes a verified acknowledgement backs, what
+`verified_kept_share` weighs: a customer's report that stands is verified evidence, but against the
+business, and never a confirmation of its record. `confirmable` says whether this network can verify
+any acknowledgement: it is `false` while `recognised_platforms` is empty and the night the record is
+from established no person (none is while customers are not scored, A2.10). Whatever was not
+confirmed is the business's own word, which `in_words` says in place of a share. What was confirmed
+stays counted and said even when nothing more can be. Nothing in it orders anything. An entry that
+is not a member has no `track_record`. The reference network shows the same record on its page for
+the domain, `/b/{domain}`.
 
 The order and the cursor are ADR-017 §6; `ordering.json` holds the shuffle (the first 16 hex digits
 of `SHA-256("<YYYY-MM-DD>:<business uuid>")`), one full snapshot's order and the cursors (base64url
@@ -690,12 +702,13 @@ mark against a business: no standing yet is said to be where every business star
 From rules version 8 `standing` also has `kept`, `broken` and `open`, and then either
 `verified_share` and `verified_kept_share` or, for a record on the business's own word,
 `self_reported: true`: `in_words` then says those counts as the business's own word instead of a
-tier, and the card carries no score (§4.4).
+tier, and the card carries no score (§4.4), nor does its `track_record`.
 
 Each result also carries its content as one text block, for assistants that read only text: first,
 in the network's own words, what the network knows (the order and the rules it follows, and for each
 business its domain, categories, distance, today's hours, what it takes, its standing, its track
-record's `in_words` and where to book, naming a door only when it is on the business's own domain,
+record's `in_words` (in place of a self-reported standing's, when the record is shown: the same counts,
+said once) and where to book, naming a door only when it is on the business's own domain,
 or one label of at most 12 characters under it, with no port, query or fragment and a plain path of at most 64 characters,
 letters, digits and `-._~/`: a host and a path are text the business chose, and so kept short they
 say hardly more than its domain); then everything the business wrote about itself (name, city or address,

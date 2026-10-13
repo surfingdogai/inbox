@@ -50,7 +50,7 @@ export const capabilities: readonly Capability[] = [
   {
     id: "reliability",
     label:
-      "A track record on each member's listing: promises kept and broken, from how many customers and over which dates, once enough have closed",
+      "A track record on each member's listing: promises kept, broken and still open, over which dates, once enough have closed; the business's own word, with no score, until its customers confirm a fifth of it",
     state: "live",
   },
   {
