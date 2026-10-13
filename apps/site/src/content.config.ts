@@ -6,8 +6,9 @@ import { z } from "astro/zod";
 
 /**
  * Starlight's docs (src/content/docs, served under /docs), the blog (src/content/blog, one
- * Markdown file per post, rendered by src/pages/blog) and the guides (src/content/guides, rendered by
- * src/pages/guides).
+ * Markdown file per post, rendered by src/pages/blog), the guides (src/content/guides, rendered by
+ * src/pages/guides) and the hosted pilot's pages (src/content/hosted, rendered by src/pages/hosted
+ * only while the pilot is open: src/lib/hosted.ts).
  */
 export const collections = {
   docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
@@ -18,6 +19,27 @@ export const collections = {
   guides: defineCollection({
     loader: glob({ pattern: "*.md", base: "./src/content/guides" }),
     schema: z.object({}).strict(),
+  }),
+  /**
+   * The hosted pilot: its page (index.md, at /hosted/) and its terms, one Markdown file each. None is
+   * generated while HOSTED_PILOT_OPEN is false. A page whose `reviewed` is false says that a lawyer
+   * has not reviewed it yet.
+   */
+  hosted: defineCollection({
+    loader: glob({ pattern: "*.md", base: "./src/content/hosted" }),
+    schema: z
+      .object({
+        title: z.string(),
+        description: z.string(),
+        eyebrow: z.string(),
+        /** The date the text last changed, as the page prints it ("13 October 2026"). */
+        updated: z.string(),
+        /** Where the page sits in the list of hosted pages. */
+        order: z.number().int(),
+        /** True only once a lawyer has read this text. */
+        reviewed: z.boolean().default(false),
+      })
+      .strict(),
   }),
   blog: defineCollection({
     loader: glob({ pattern: "**/[^_]*.md", base: "./src/content/blog" }),

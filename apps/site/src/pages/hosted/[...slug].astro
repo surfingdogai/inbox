@@ -1,0 +1,93 @@
+---
+// The hosted pilot's pages: /hosted/ (what it is) and its terms, from src/content/hosted. While the
+// pilot is closed (src/lib/hosted.ts) no page is generated at all, so nothing here can be read as
+// an offer before the service works; `astro dev` still shows them, for review.
+import { type CollectionEntry, getCollection, render } from "astro:content";
+import Layout from "../../layouts/Layout.astro";
+import { HOSTED_PILOT_OPEN } from "../../lib/hosted";
+
+export async function getStaticPaths() {
+  if (!HOSTED_PILOT_OPEN && !import.meta.env.DEV) return [];
+  const pages = (await getCollection("hosted")).sort((a, b) => a.data.order - b.data.order);
+  return pages.map((page) => ({
+    params: { slug: page.id === "index" ? undefined : page.id },
+    props: { page, pages },
+  }));
+}
+
+const { page, pages } = Astro.props as { page: CollectionEntry<"hosted">; pages: CollectionEntry<"hosted">[] };
+const { Content } = await render(page);
+const href = (p: CollectionEntry<"hosted">) => (p.id === "index" ? "/hosted/" : `/hosted/${p.id}/`);
+const isTerms = page.id !== "index";
+---
+
+<Layout title={`${page.data.title} · Surfing Dog`} description={page.data.description} image="/art/og-inbox-v1.png">
+  <section class="wrap wrap-read section is-head" aria-labelledby="hosted-h">
+    <p class="eyebrow">{page.data.eyebrow}</p>
+    <h1 class="h-page" id="hosted-h">{page.data.title}</h1>
+    <p class="lede">{page.data.description}</p>
+    {
+      isTerms && (
+        <p class="fine">Last updated {page.data.updated}. Surfing Dog Lda, Portugal. Questions: hello@surfingdog.ai</p>
+      )
+    }
+  </section>
+
+  <section class="section" aria-label={page.data.title}>
+    <div class="wrap wrap-read prose">
+      <Content />
+
+      {
+        isTerms && !page.data.reviewed && (
+          <div class="glass card" style="margin-top: var(--sp-6)">
+            <h3 class="h-card">Where this stands</h3>
+            <p class="card-text">
+              We wrote this ourselves, and a lawyer has not reviewed it yet. This note comes off the page once one has.
+            </p>
+          </div>
+        )
+      }
+
+      <nav class="hosted-nav" aria-label="The hosted pilot">
+        <ul>
+          {
+            pages.map((p) => (
+              <li>
+                {p.id === page.id ? (
+                  <span aria-current="page">{p.data.title}</span>
+                ) : (
+                  <a class="link" href={href(p)}>
+                    {p.data.title}
+                  </a>
+                )}
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .hosted-nav {
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--hairline);
+  }
+  .hosted-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-ui);
+  }
+  .hosted-nav li + li {
+    margin: 0;
+  }
+  .hosted-nav [aria-current] {
+    color: var(--ink-3);
+  }
+</style>

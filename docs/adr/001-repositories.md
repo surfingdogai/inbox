@@ -18,3 +18,11 @@ it for free, and its geo data sits next to the map's.
 
 ## Consequences
 Two repos to release in step; the spec package is the contract between them. Local path `~/surfingdog-inbox`.
+
+## Amendment (13 Oct 2026): the layout as it is
+
+The package list above was the plan. The repository has `apps/{inbox,site,email-gateway}` and
+`packages/{core,platform,spec,sdk,ui,adapters,network-check}`. `channels`, `connectors` and `ai` did not
+become packages: the doors, email included, live in `adapters`, and connectors are designed in ADR-014
+and ADR-015.
+`packages/hosted`, the hosted runtime, is planned in ADR-003, Amendment 1.

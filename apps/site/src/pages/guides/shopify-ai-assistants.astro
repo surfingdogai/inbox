@@ -10,6 +10,7 @@ import GuideCheck from "../../components/GuideCheck.astro";
 import Layout from "../../layouts/Layout.astro";
 import { faqPage } from "../../lib/faq";
 import { guideHref } from "../../lib/guides";
+import { HOSTED_LINE } from "../../lib/hosted";
 import {
   SHOPIFY,
   SHOPIFY_AS_OF,
@@ -168,7 +169,7 @@ const doorSources = [
         <li>
           <b>Surfing Dog Inbox (ours, open source)</b>, one option among apps for asking you something: free software
           (MIT) you run at your own subdomain, where agents write to you and you answer from its app, from your helpdesk
-          through a bridge, or with your own AI. There's no hosted version yet. Orders placed in your Shopify checkout
+          through a bridge, or with your own AI. {HOSTED_LINE} Orders placed in your Shopify checkout
           stay in Shopify, so changing or returning them, or a receipt, needs a door there (<a href="/inbox/"
             >how the inbox works</a
           >).
