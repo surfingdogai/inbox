@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { ulid } from "../src/ids";
-import { backoffMs, createRunner, JobRunner, LEASE_MS } from "../src/jobs/index";
+import { backoffMs, createRunner, JobRunner, LEASE_MS, nextDueAt } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { jobs, outboundMail, services, users } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
@@ -54,6 +54,30 @@ describe("JobRunner", () => {
     const second = await runner.runDue(db, { now: T0 + backoffMs(1) + 1 });
     expect(second).toEqual({ claimed: 2, done: 0, failed: 1, dead: 1, released: 0 }); // flaky dies at attempt 2; "later" (no handler, 8 attempts) requeues
     expect(calls).toBe(2);
+  });
+
+  it("says when the next job falls due, a running one's at the end of its lease, and null when none waits", async () => {
+    const db = await setup();
+    expect(await nextDueAt(db)).toBeNull();
+    await db.orm.insert(jobs).values([
+      { id: ulid(), kind: "later", payload: {}, runAt: T0 + 60_000, createdAt: T0 },
+      { id: ulid(), kind: "done", payload: {}, runAt: T0 - 60_000, status: "done", createdAt: T0 },
+      { id: ulid(), kind: "dead", payload: {}, runAt: T0 - 60_000, status: "dead", createdAt: T0 },
+    ]);
+    expect(await nextDueAt(db)).toBe(T0 + 60_000);
+    await db.orm.insert(jobs).values({
+      id: ulid(),
+      kind: "stuck",
+      payload: {},
+      runAt: T0,
+      status: "running",
+      leaseUntil: T0 + 30_000,
+      createdAt: T0,
+    });
+    // Claimed again only once its lease has run out: `lease_until < now`.
+    expect(await nextDueAt(db)).toBe(T0 + 30_001);
+    await db.orm.insert(jobs).values({ id: ulid(), kind: "now", payload: {}, runAt: T0 - 5_000, createdAt: T0 });
+    expect(await nextDueAt(db)).toBe(T0 - 5_000);
   });
 
   it("runs each lane beside the others, and hands back what a lane had no time to start", async () => {

@@ -4,6 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
+  "exports": {
+    "./app": "./src/app.ts",
+    "./doors": "./src/doors.ts",
+    "./env": "./src/env.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/node.ts",
     "dev:client": "vite",

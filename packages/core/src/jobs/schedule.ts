@@ -24,3 +24,19 @@ export async function pruneJobs(db: Db, olderThanMs: number, now = Date.now()): 
   });
   return r.changes;
 }
+
+/**
+ * When `runDue` would next find work: the earliest a queued job falls due, or a running one's lease
+ * runs out (a run that stopped without settling frees its job then), whichever is later for each
+ * job. Null when nothing waits. A host that keeps many inboxes closed asks this as it closes one,
+ * and opens it again only then, instead of running every inbox's jobs every second.
+ */
+export async function nextDueAt(db: Db): Promise<number | null> {
+  const { rows } = await db.client.query({
+    sql: `SELECT MIN(MAX(run_at, COALESCE(lease_until + 1, 0))) FROM jobs WHERE status IN ('queued', 'running')`,
+    params: [],
+    method: "all",
+  });
+  const value = rows[0]?.[0];
+  return value === null || value === undefined ? null : Number(value);
+}

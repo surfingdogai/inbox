@@ -10,7 +10,7 @@ import { defineConfig } from "vite";
  */
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-/** The doors the server answers; in dev they are proxied to it (`pnpm dev`). Same list as src/node.ts. */
+/** The doors the server answers; in dev they are proxied to it (`pnpm dev`). Same list as src/doors.ts. */
 const API_PATHS = [
   "/v1",
   "/mcp",

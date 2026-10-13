@@ -27,12 +27,13 @@ describe("node:sqlite", () => {
 describe("the doors each host answers first", () => {
   const read = (file: string) => readFileSync(path.resolve(import.meta.dirname, file), "utf8");
   it("include the customer's page everywhere", () => {
-    expect(read("../src/node.ts")).toMatch(/const DOOR_PREFIXES = \[[^\]]*"\/c"/);
+    expect(read("../src/doors.ts")).toMatch(/const DOOR_PREFIXES = \[[^\]]*"\/c"/);
+    expect(read("../src/node.ts")).toMatch(/import \{ isDoor \} from "\.\/doors"/);
     expect(read("../vite.config.ts")).toMatch(/const API_PATHS = \[[^\]]*"\/c\/"/);
     expect(read("../../../wrangler.jsonc")).toMatch(/"run_worker_first": \[[^\]]*"\/c\/\*"/);
   });
   it("include the demo's live view everywhere", () => {
-    expect(read("../src/node.ts")).toMatch(/const DOOR_PREFIXES = \[[^\]]*"\/demo"/);
+    expect(read("../src/doors.ts")).toMatch(/const DOOR_PREFIXES = \[[^\]]*"\/demo"/);
     expect(read("../vite.config.ts")).toMatch(/const API_PATHS = \[[^\]]*"\/demo\/"/);
     expect(read("../../../wrangler.jsonc")).toMatch(/"run_worker_first": \[[^\]]*"\/demo\/\*"/);
   });
