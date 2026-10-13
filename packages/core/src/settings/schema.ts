@@ -613,6 +613,7 @@ const sections = {
        * A first-time customer's code for their assistant (ADR-017 §2.1): a day after their first
        * booking or order, an email of its own with the code and one line about the booking network.
        * Off, no email carries it; the assistant still gets what it needs in the answer to its request.
+       * Only for a network that hands this inbox the code: one that emails the code itself sends none.
        */
       emailKey: z
         .boolean()

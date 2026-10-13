@@ -6,10 +6,12 @@ import { itemPresentationStatement, linkStatements } from "./match";
 import type { IssueResult } from "./types";
 
 /**
- * A first contact's answers (ADR-017 §2.1), per network, in `pending_identity`. On `201` the key
- * and the first pass are sealed by the secret box: the pass so the status door can hand it back,
- * the key until it goes to the customer in an email of its own, a day after they first booked or
- * ordered, and then it is gone. Every row is deleted seven days after it was made.
+ * A first contact's answers (ADR-017 §2.1), per network, in `pending_identity`. On `201` the first
+ * pass is sealed by the secret box so the status door can hand it back. A network that emails the
+ * person's key itself sends none, and nothing more waits; from one that leaves that email to the
+ * business, the key is sealed too, until it goes to the customer in an email of its own, a day
+ * after they first booked or ordered, and then it is gone. Every row is deleted seven days after
+ * it was made.
  *
  * The customer most often does not know any of this exists: they wrote to a business. So the key
  * reaches them in the business's own words, a code for their assistant with one line about the
@@ -42,7 +44,9 @@ export async function issuanceStatements(
   for (const r of results) {
     switch (r.outcome) {
       case "issued": {
-        const keyEnc = await box.seal("person-secret", sealId(itemId, r.network, "key"), r.key);
+        // No key from a network that emails it itself: nothing waits for an email of ours.
+        const keyEnc =
+          r.key === undefined ? null : await box.seal("person-secret", sealId(itemId, r.network, "key"), r.key);
         const passEnc = await box.seal("person-secret", sealId(itemId, r.network, "pass"), r.pass);
         out.push({
           sql: `INSERT INTO pending_identity (item_id, network, state, key_enc, pass_enc, attempts, last_error, created_at, updated_at)

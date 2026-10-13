@@ -47,9 +47,10 @@ token in the `X-Access-Token` header (or the `access_token` field of a POST), an
 ## 3. Keep the pass you get back
 
 A person's first booking or order at a business, with an email in `contact.email`, gets them a key
-from each network the business uses that has verified the business's inbox: the business emails it
-to them a day later, in an email of its own. A test request (`x-sandbox: 1`) asks no network. You
-get their first pass in the answer:
+from each network the business uses that has verified the business's inbox: the network emails it to
+them in the business's name (a network that leaves that email to the business has the business send
+it a day later). A test request (`x-sandbox: 1`) asks no network. You get their first pass in the
+answer:
 
 ```json
 "identity": {

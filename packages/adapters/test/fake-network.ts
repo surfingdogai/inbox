@@ -49,6 +49,11 @@ export function fakeNetwork(opts: {
   instanceDomain: string;
   /** Overrides an answer: return a Response to use it instead. */
   intercept?: (path: string, body: Record<string, unknown> | null, n: number) => Response | undefined;
+  /**
+   * Whether a first contact's answer carries the key, for the business to email (by default it
+   * does); false is a network that emails the key to the person itself and sends none.
+   */
+  sendsKey?: boolean;
 }) {
   const persons: FakePerson[] = [];
   const requests = new Map<string, { status: number; body: unknown; email: string }>();
@@ -149,7 +154,7 @@ export function fakeNetwork(opts: {
       }
       const made = addPerson(email);
       const answer = {
-        key: made.key,
+        ...(opts.sendsKey === false ? {} : { key: made.key }),
         pass: made.pass,
         presentation: presentationId(),
         ppid: ppidOf(made.person),

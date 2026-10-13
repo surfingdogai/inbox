@@ -67,9 +67,11 @@ const UPDATED = "13 October 2026";
           <b>A new customer's email address</b>, when a customer books or orders with an email and their assistant
           carries no pass. With it go your reference for that booking or order and the name of their assistant
           (and a fingerprint of its public key, and its platform, when it signs). The network uses the address to give the customer a
-          <b>key</b>, a secret that lets any business on that network recognise them later; your inbox emails the key
-          to the customer as one line in your name, a code for their assistant, and names no network. Turn the line
-          off under Customers you already know; turn the key off for a network with "Give first-time customers a key".
+          <b>key</b>, a secret that lets any business on that network recognise them later. The network emails the key
+          to the customer itself, as one line in your name, a code for their assistant, naming no network, and keeps
+          the address only until then. A network that leaves that email to your inbox has your inbox send it; turn
+          that line off under Customers you already know. Turn the key off for a network with "Give first-time
+          customers a key".
         </li>
         <li>
           <b>A pass or a key the customer's assistant carries</b>, only to the network that issued it, with the

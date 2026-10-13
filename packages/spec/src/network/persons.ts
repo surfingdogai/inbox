@@ -71,9 +71,17 @@ export const personIssuanceRequestSchema = z.object({
 });
 export type PersonIssuanceRequest = z.infer<typeof personIssuanceRequestSchema>;
 
-/** `201`: the key (sent to the person by email), the first pass (back to the agent), and the presentation. */
+/**
+ * `201`: the first pass (back to the agent) and the presentation. The key goes to the person by
+ * email: a network that emails it itself, in the business's name, sends none, so the business never
+ * holds it; a network that leaves the email to the business sends it here.
+ */
 export const personIssuedSchema = z.object({
-  key: keyStringSchema,
+  key: keyStringSchema
+    .optional()
+    .describe(
+      "A person's key: sdkey1_<network host>_<id>_<secret>, issued once. Only from a network that leaves the key email to the business; a network that emails the key to the person itself sends none.",
+    ),
   pass: passStringSchema,
   presentation: presentationIdSchema,
   ppid: ppidSchema,

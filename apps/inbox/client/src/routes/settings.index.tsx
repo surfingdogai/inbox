@@ -1058,8 +1058,9 @@ function SettingsForm({
         </Switch>
         <div className="hint">
           A day after their first booking or order, a short email of its own, in your name: the code, and one line with
-          a link to a page on this inbox that explains the booking network. Off, no email carries it; an assistant still
-          gets what it needs when it books.
+          a link to a page on this inbox that explains the booking network. Off, no email of this inbox carries it; an
+          assistant still gets what it needs when it books. A network that emails the code itself sends that email in
+          your name whatever this says, and never gives the code to this inbox.
         </div>
       </section>
 

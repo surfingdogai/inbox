@@ -461,7 +461,8 @@ they switch on receives, in these words:
   address, so the network can say whether it knows them;
 - unless they switch it off ("Give first-time customers a key", or `"issue": false`), a first-time
   customer's email address with their first booking or order, so the network can give them a key;
-  the network keeps only a keyed hash of the address, and the inbox emails the key to the customer.
+  the network keeps a keyed hash of the address, and emails the key to the customer itself, in the
+  business's name (a network that leaves that email to the inbox has the inbox send it).
 
 Full detail: https://surfingdog.ai/privacy.
 

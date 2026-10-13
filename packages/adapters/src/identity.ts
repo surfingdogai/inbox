@@ -96,7 +96,8 @@ const presentedSchema = z.looseObject({
   email_match: z.enum(["proven", "unproven", "no"]).optional(),
 });
 const issuedSchema = z.looseObject({
-  key: z.string().max(200),
+  // None from a network that emails the person's key itself: the business never holds it.
+  key: z.string().max(200).optional(),
   pass: z.string().max(200),
   presentation: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
   ppid: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
@@ -350,15 +351,19 @@ export function createIdentityPort(deps: IdentityDeps): IdentityPort {
             const parsed = issuedSchema.safeParse(safeJson(res.text));
             if (!parsed.success) return { network, outcome: "refused", error: "the network's answer did not parse" };
             const d = parsed.data;
-            // The key rides on an email from the business and the pass goes to the agent: each must be
-            // exactly this network's key or pass, never text of the network's choosing.
-            if (!isCredentialOf(d.key, "key", network) || !isCredentialOf(d.pass, "pass", network)) {
+            // The pass goes to the agent, and a key, when the network leaves its email to the business,
+            // rides on an email from the business: each must be exactly this network's key or pass,
+            // never text of the network's choosing. A network that emails the key itself sends none.
+            if (
+              (d.key !== undefined && !isCredentialOf(d.key, "key", network)) ||
+              !isCredentialOf(d.pass, "pass", network)
+            ) {
               return { network, outcome: "refused", error: "the network's key or pass is not one of its own" };
             }
             return {
               network,
               outcome: "issued",
-              key: d.key,
+              ...(d.key !== undefined ? { key: d.key } : {}),
               pass: d.pass,
               presentation: {
                 network,
@@ -736,7 +741,8 @@ async function fetchDirectoryWithin(
  * A first contact the request could not finish (§2.1): asked again, with the same `request_id`, so
  * the network replays its answer if it gave one. No answer: again, backing off to six hours; the
  * network's daily limit: again tomorrow; after seven days, given up. The pass the network then
- * issues is handed back by the status door, and the key rides on the next email to the customer.
+ * issues is handed back by the status door; a key, from a network that leaves its email to the
+ * business, rides on the next email to the customer.
  */
 export function identityIssueHandler(deps: IdentityDeps & { port: IdentityPort }): JobHandler {
   return async (job, { db, now }) => {

@@ -79,7 +79,11 @@ export type IssueResult =
   | {
       readonly network: string;
       readonly outcome: "issued";
-      readonly key: string;
+      /**
+       * The person's key, for this inbox to email them: only from a network that leaves that email
+       * to the business. A network that emails the key itself sends none, and nothing waits here.
+       */
+      readonly key?: string | undefined;
       readonly pass: string;
       readonly presentation: Presentation;
     }

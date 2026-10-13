@@ -65,6 +65,8 @@ async function setup(
     /** Whether the network has verified this inbox (its ping went through): by default it has. */
     verified?: boolean;
     host?: string;
+    /** false: a network that emails the person's key itself, and sends this inbox none. */
+    sendsKey?: boolean;
   } = {},
 ) {
   const host = opts.host ?? HOST;
@@ -98,6 +100,7 @@ async function setup(
     keys: async () => (await caps.receipts.jwks()).keys as PublicJwk[],
     instanceDomain: "inbox.example.com",
     ...(opts.intercept ? { intercept: opts.intercept } : {}),
+    ...(opts.sendsKey === false ? { sendsKey: false } : {}),
   });
   const deps = { db, caps, baseUrl: ISS, version: "0.0.0", fetchImpl: fake.fetchImpl, timeoutMs: 1_000 };
   const port = createIdentityPort(deps);
@@ -284,6 +287,63 @@ describe("a first contact (§2.1)", () => {
     });
     await s.drain(T0 + 8 * DAY);
     expect(await rows(s.db, "SELECT COUNT(*) FROM pending_identity")).toEqual([[0]]);
+  });
+
+  it("works without a key when the network emails it itself: the agent gets its pass, and no email of ours carries a code", async () => {
+    const s = await setup({ sendsKey: false });
+    const r = await s.book(agent(T0));
+    const itemId = r.view.item.id;
+    expect(r.identity).toMatchObject({ recognised: "none", networks: [{ network: NET, state: "issued" }] });
+    expect(r.identity?.passes).toHaveLength(1);
+    expect(r.identity?.passes[0]?.pass).toMatch(/^sdpass1_net\.example\.com_[a-z2-7]{16}_[a-z2-7]{32}$/);
+    // The pass is sealed for the status door; no key waits for an email, and the person is linked as ever.
+    expect(
+      await rows(s.db, "SELECT state, key_enc, pass_enc IS NOT NULL FROM pending_identity WHERE item_id = ?", [itemId]),
+    ).toEqual([["issued", null, 1]]);
+    const links = await rows(s.db, "SELECT party_id, network FROM person_links");
+    expect(links).toEqual([[r.view.item.partyId, NET]]);
+    const status = await s.caps.getItemStatus(agent(T0 + MIN), { item_id: itemId, access_token: r.accessToken });
+    expect(status.identity.passes).toEqual(r.identity?.passes);
+
+    // A day on, and the week through: no email of ours carries a code, and none is the code's own.
+    for (const [at, key] of [
+      [T0 + DAY + MIN, "sweep-no-key-1"],
+      [T0 + 8 * DAY, "sweep-no-key-2"],
+    ] as const) {
+      await s.db.client.query({
+        sql: "INSERT INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at) VALUES (?, 'lifecycle_sweep', '{}', ?, 'queued', 0, 8, ?, ?)",
+        params: [ulid(), at, key, T0],
+        method: "run",
+      });
+      await s.drain(at);
+    }
+    const toRita = s.mail.sent.filter((m) => m.to.includes("rita@example.com"));
+    expect(toRita[0]?.subject).toBe("We have your booking request");
+    for (const m of toRita) {
+      expect(m.subject).not.toBe(DISCLOSURE.en.keySubject);
+      expect(m.text).not.toContain("sdkey1_");
+      expect(m.text).not.toContain(DISCLOSURE.en.keyLine);
+    }
+    expect(await rows(s.db, "SELECT COUNT(*) FROM outbound_mail WHERE template = 'key'")).toEqual([[0]]);
+    expect(await rows(s.db, "SELECT COUNT(*) FROM pending_identity")).toEqual([[0]]);
+  });
+
+  it("asks again without a key after no answer, and the agent still gets its pass from the status door", async () => {
+    const s = await setup({
+      sendsKey: false,
+      intercept: (path, _body, n) =>
+        path === "/v1/persons" && n === 1 ? new Response(null, { status: 503 }) : undefined,
+    });
+    const r = await s.book(agent(T0));
+    expect(r.identity).toMatchObject({ passes: [], networks: [{ network: NET, state: "pending" }] });
+    await s.drain(T0 + 2 * MIN);
+    expect(await rows(s.db, "SELECT state, key_enc FROM pending_identity")).toEqual([["issued", null]]);
+    const status = await s.caps.getItemStatus(agent(T0 + HOUR), {
+      item_id: r.view.item.id,
+      access_token: r.accessToken,
+    });
+    expect(status.identity.passes).toHaveLength(1);
+    expect(status.identity.passes[0]?.pass).toMatch(/^sdpass1_net\.example\.com_/);
   });
 
   it("tells the agent to present the person's pass when the network knows them, and asks no more that day", async () => {

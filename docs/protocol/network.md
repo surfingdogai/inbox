@@ -1345,13 +1345,25 @@ that reports.
 normalised (§2.1: refused is `400 bad_payload`, "no email, no issuance"); `agent` is optional, and
 its `label` names the first pass. Answers:
 
-- `201 {key, pass, presentation, ppid, person}`: a new person. The inbox emails the key to the
-  customer and hands the pass back to the carrying agent.
+- `201 {pass, presentation, ppid, person}`: a new person. The inbox hands the pass back to the
+  carrying agent. The person's key is not in the answer: the network emails it to the address
+  itself, so the business never holds it (below). A network that leaves that email to the business
+  also sends `key`, which the inbox then emails the customer (§7).
 - `409 person_exists`: the network already knows a person with this address. Nothing is handed
   out; the agent must present the person's own pass or key (recoverable by email).
 - `429 rate_limited`: the business's 50 issuances of the last 24 hours are used.
-- The same `request_id` again, within 7 days, gets the same answer (`201` with the same key and
-  pass, or `409`); with a different email it is `400 bad_payload`.
+- The same `request_id` again, within 7 days, gets the same answer (`201` with the same pass, or
+  `409`); with a different email it is `400 bad_payload`.
+
+**The key email.** The network keeps the new key and the address it was given sealed, never in
+the clear, and sends the key once a receipt from the same business names the person (`per`, §4):
+one short message in the business's name, from the network's own mail address, with no word of
+the network's, linking to its page for people (`/me`, §5.3) and to "Not you?". That page asks
+before it acts; then no key email goes to that mailbox again and the key it carried stops working.
+At most one key email goes to a mailbox in 30 days (plus-tags and Gmail dots folded, so another
+spelling of it is the same mailbox), within a daily cap across all businesses. Without such a
+receipt within 7 days nothing is sent, and the sealed key and address are deleted; the person can
+get a code from `/me` whenever they like.
 
 ### 5.2 Presenting: `POST /v1/presentations` (sdi-instance/1)
 
@@ -1606,8 +1618,10 @@ the refund machine.
   then does a pass whose hash it linked to a customer stand in, with the standing last returned.
 - Retries a first contact the request could not finish with the same `request_id` (the network
   replays its answer), backing off to six hours; after a `429` the next day; for seven days.
-- Seals a first contact's key and pass with its secret key, emails the key to the customer with
-  the first email it sends them (or alone within a day), and deletes both within seven days.
+- Seals a first contact's pass with its secret key, and the key too when a network sends one
+  (§5.1), which it emails to the customer in an email of its own a day after their first booking
+  or order; it deletes both within seven days. For a network that emails the key itself, it emails
+  no code.
 - When a customer stops (the page the key email links to, or the owner for them), sends every
   network holding anything about them `POST /v1/unlinks` with their `ppid`s and kept presentation
   ids, retried with the same `request_id` like a first contact. After that it sends nothing about
