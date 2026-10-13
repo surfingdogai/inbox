@@ -98,7 +98,7 @@ export const trackRecordSchema = z
       .min(0)
       .optional()
       .describe(
-        "gathering and shown, unless self_reported: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else the receipt's sub). Not reputation.customers, which counts only customers this network can tell apart.",
+        "gathering and shown, unless self_reported: the distinct customers the closed promises came from, as its receipts name them (the customer's mailbox when known, else, before rules version 8, the receipt's sub; from rules version 8 a sub that names no person is never a customer, and every receipt at a business that names nobody is one anonymous customer). Not reputation.customers, which counts only customers this network can tell apart.",
       ),
     kept: z.int().min(0).optional().describe("shown."),
     broken: z

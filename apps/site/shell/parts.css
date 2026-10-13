@@ -1267,8 +1267,9 @@ textarea.sd-code {
 /* Promises kept against broken as one thin meter, never red: kept is the success tone from the left,
    broken is ink at half after it, so the two read apart by tone and by place. The meter has no number
    of its own and is hidden from a screen reader: the counts are the words under it, in .sd-record.
-   The page sets the kept share as --w on the meter's <i> (whole percent). Below the threshold, or for
-   a business without receipts, there is no meter, only one calm line. */
+   The page sets the kept share as --w on the meter's <i> (whole percent). Below the threshold, for a
+   business without receipts, or for a self-reported record (rules version 8), there is no meter: only
+   words. */
 .sd-record-meter {
   display: block;
   width: 100%;

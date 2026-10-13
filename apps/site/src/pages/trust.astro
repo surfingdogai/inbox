@@ -254,15 +254,16 @@ const now = capabilities.filter((c) => ids.includes(c.id));
     nextEl.textContent = line.next;
     nextEl.hidden = !line.next;
   });
-  // Once receipts exist, say how many; until then the line stays hidden.
+  // Once receipts exist, say how many; until then the line stays hidden. Only what the inboxes
+  // signed: a counter-signature counts as the customer's side only once the network can check it,
+  // which today it cannot, and /v1/stats counts unchecked ones until rules version 8.
   void get("/v1/stats").then((s) => {
     if (!record || !s || typeof s !== "object") return;
     const o = s as Record<string, unknown>;
     const issued = typeof o.receipts_issued === "number" ? o.receipts_issued : 0;
-    const acked = typeof o.receipts_acknowledged === "number" ? o.receipts_acknowledged : 0;
     if (issued <= 0) return;
     const fmt = new Intl.NumberFormat("en");
-    record.textContent = `So far: ${fmt.format(issued)} promise${issued === 1 ? "" : "s"} signed by businesses' inboxes, ${fmt.format(acked)} counter-signed by the customer's agent.`;
+    record.textContent = `So far: ${fmt.format(issued)} promise${issued === 1 ? "" : "s"} signed by businesses' inboxes.`;
     record.hidden = false;
   });
 </script>

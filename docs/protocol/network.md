@@ -397,9 +397,11 @@ is self-reported, from at least `threshold.customers` distinct customers; the re
 **from 3**, and a self-reported record's `threshold` has no `customers`. Five is the smallest whole
 count at which a record of nothing but kept promises can reach the trusted line (0.75 needs 4.93
 units), and below three customers one customer counted three times over (R7) could make up the whole
-record. Customers are told apart by R7's pair (the customer's mailbox when the network knows it, else
-the receipt's `sub`), so `customers` here is not `reputation.customers`, which counts only customers
-the network can tell apart across businesses (§5.3). `kept` and `broken` are the reputation's; of the
+record. Customers are told apart by R7's pair (the customer's mailbox when the network knows it,
+else, before rules version 8, the receipt's `sub`; from rules version 8 a `sub` that names no person
+is never a customer, and every receipt at a business that names nobody is one anonymous customer,
+A4.2), so `customers` here is not `reputation.customers`, which counts only customers the network
+can tell apart across businesses (§5.3). `kept` and `broken` are the reputation's; of the
 broken, `unclosed` were left open 9 days past due (`promise.unclosed`) and `refunds_late` were refunds
 paid late (`refund.late`). There is no "late" for a booking or an order: a promise is kept or broken.
 `from` and `to` are the earliest and latest days of the counted outcomes, each at 00:00 UTC (the day,
@@ -1076,8 +1078,9 @@ the six lead answers each with its door and date, every capability, the fixes, a
 owner can hand to whoever runs the site, and the rank. For a domain the directory lists as a member,
 a result that is `done`, `not_checked`, `blocked` or `failed` also carries the member's `track_record`
 exactly as its listing gives it (§4.3);
-the page draws a shown record as a thin meter of kept against broken, with the counts in words, and
-never puts it in the rank, which is the agentic score's.
+the page draws a shown record that is not self-reported as a thin meter of kept against broken, with
+the counts in words; a self-reported one as its counts in words, labelled "Self-reported", with no
+meter; and never puts either in the rank, which is the agentic score's.
 
 **Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`)
 orders, on every board: **whether an agent can book, order or sign up here (yes, then partly, then no
