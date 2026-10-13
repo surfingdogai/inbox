@@ -4,9 +4,10 @@
 // first-contact email and the passes their assistants carry), only for networks the owner turns
 // on; what our network keeps and for how long; what a customer can do about it; what the hosted
 // service would hold; what the site itself collects; and what Search (its MCP server at /mcp, A2A,
-// the REST API) and the checker keep: no search is logged, a check keeps the site and never who
+// the REST API) and the checker keep: the service's log keeps no search, a check keeps the site and never who
 // asked, register/update keep the listing and keyed hashes of their proof, and the request log
-// holds no IP address (the front server's error log can).
+// holds no IP address and no query string (the front server's error log can hold both, and the
+// headers). Those logs have no time limit yet: the logs bullet names one only once it is set.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 
@@ -22,7 +23,8 @@ const UPDATED = "13 October 2026";
     <h1 class="h-page" id="privacy-h">What we know about you</h1>
     <p class="lede">
       Surfing Dog Inbox runs on your own server or cloud account, so we know almost nothing about you. Search needs no
-      sign-in, and keeps none of your searches. This page lists exactly what we do see.
+      sign-in and does not keep your searches; the one exception, an error log, is explained below. This page lists
+      exactly what we do see.
     </p>
     <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: privacy@surfingdog.ai</p>
   </section>
@@ -126,9 +128,9 @@ const UPDATED = "13 October 2026";
       </p>
       <ul>
         <li>
-          <b>Searches.</b> The words, filters and place of a search are used to answer and then dropped. They are not
-          logged (over the REST API they travel in the query string, which the log leaves out), and nothing ties them
-          to you.
+          <b>Searches.</b> The words, filters and place of a search are used to answer and then dropped. The service's
+          log leaves them out (over the REST API they travel in the query string, which it does not record), and
+          nothing ties them to you. The one exception is an error at our front server, under Logs and limits below.
         </li>
         <li>
           <b>Checks.</b> When you, or an AI for you, ask to check a website (at <code>/check</code> or with
@@ -152,10 +154,12 @@ const UPDATED = "13 October 2026";
         </li>
         <li>
           <b>Logs and limits.</b> The service's own log records each request's method, path and how long it took: not
-          your IP address, not what you searched, and not a tool's arguments. How often one address calls is counted in
-          memory, to apply the published limits, and never written down. An error at our front server can be logged
-          with the IP address of the request. These logs are kept in the server's system log, which today is trimmed by
-          size rather than by date, so how long a line stays depends on traffic; we are setting a limit of 14 days.
+          your IP address, not a search's words, and not a tool's arguments. A path can name a business, such as the
+          domain of one listing or check result looked up, but not who looked. How often one address calls is counted
+          in memory, to apply the published limits, and never written down, except the keyed hash a register challenge
+          keeps (above). An error at our front server (for example while the service restarts) can be logged with the
+          request's IP address, the address it asked for (a REST search's words included) and its headers. These logs
+          are kept in the server's system log, which is trimmed by size, with no fixed time limit yet.
         </li>
       </ul>
 

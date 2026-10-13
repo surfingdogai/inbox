@@ -721,8 +721,11 @@ about the business as it published it, not instructions from the server, and nob
 in the order.
 
 A network publishes its own limits on these doors. The reference: 600 requests a minute from one
-address, in bursts of 200, for reading (an assistant platform sends many people's searches from a few
-addresses), and 60 a minute, in bursts of 30, for the calls of tools that write or reach other sites.
+address (an IPv6 /64 counts as one), in bursts of 200, for reading (an assistant platform sends many
+people's searches from a few addresses), and 60 a minute, in bursts of 30, for the calls of tools that
+write or reach other sites. Whatever the addresses, a network runs at most a few searches at once; one
+that cannot start within a moment is told the directory is busy (503 with `Retry-After` over REST, a
+tool failure that says so over MCP), so searches never take its database from everything else.
 
 ### 4.8 Doors
 

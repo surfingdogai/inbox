@@ -45,7 +45,7 @@ export const searchBusinessesInputSchema = z.object({
     .max(80)
     .optional()
     .describe(
-      'A few words about what the business does or where, like "haircut alfama" or "padaria". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead.',
+      'A few words about what the business does or where, like "florist" or "coffee singapore". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead.',
     ),
   near: z
     .object({
@@ -192,7 +192,7 @@ export const businessCardSchema = z.object({
     })
     .optional()
     .describe(
-      "The business's own inbox: go there to book, order or ask. This directory takes nothing. Present whenever has_inbox is true or absent.",
+      "The business's own inbox, where it takes bookings, orders and questions; this server takes no bookings or orders. Present whenever has_inbox is true or absent.",
     ),
   standing: z
     .object({

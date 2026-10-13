@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "query": {
-      "description": "A few words about what the business does or where, like \"haircut alfama\" or \"padaria\". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like \"open\" or \"near me\" belong in open_now and near instead.",
+      "description": "A few words about what the business does or where, like \"florist\" or \"coffee singapore\". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like \"open\" or \"near me\" belong in open_now and near instead.",
       "type": "string",
       "maxLength": 80
     },

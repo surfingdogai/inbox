@@ -54,7 +54,9 @@ const examples = [
     call: 'search_businesses {"query": "coffee singapore"}',
     note: "a town in the words finds a business whose site names it",
   },
-  { call: 'check_business {"url": "surfingdog.ai"}', note: "what an agent can do on a website" },
+  // A business in the directory whose check is done and public (/b/kokoroaster.com), the same site the
+  // agent card's example checks. Surfing Dog's own domain is refused by the check, so it is never the example.
+  { call: 'check_business {"url": "kokoroaster.com"}', note: "what an agent can do on a business's website" },
 ];
 
 const doors = [
@@ -128,9 +130,10 @@ const doors = [
         <div>
           <dt>Limits</dt>
           <dd>
-            From one address: 600 requests a minute, in bursts of 200. Calls of <code>check_business</code>,
-            <code>register_business</code> and <code>update_business</code> also count against 60 a minute, in bursts
-            of 30. A request is at most 16 KB, and a page at most 20 businesses.
+            From one address (an IPv6 /64 counts as one): 600 requests a minute, in bursts of 200. Calls of
+            <code>check_business</code>, <code>register_business</code> and <code>update_business</code> also count
+            against 60 a minute, in bursts of 30. A request is at most 16 KB, and a page at most 20 businesses. When
+            many searches arrive at once, a search may answer that the directory is busy: try again in a few seconds.
           </dd>
         </div>
         <div>
