@@ -24,12 +24,14 @@ export {
 } from "./agent/credentials.js";
 export type { DoorReporterOptions, DoorReportInput, DoorReportsAnswer, DoorResult } from "./agent/doors.js";
 export {
+  DEFAULT_REPORT_NETWORK,
   DoorReporter,
   doorReportBody,
   flushDoorReports,
   MAX_PENDING_DOOR_REPORTS,
   newIntent,
   reportDoor,
+  reportNetwork,
 } from "./agent/doors.js";
 export type { AgentKey, AgentKeyInput, AgentPrivateJwk, AgentPublicJwk } from "./agent/keys.js";
 export { generateAgentKey, thumbprint } from "./agent/keys.js";

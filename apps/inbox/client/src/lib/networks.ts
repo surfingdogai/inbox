@@ -348,6 +348,17 @@ export interface DoorPanel {
 }
 
 /**
+ * What an incident's public_from means for the listing: shown already when that day has come (the
+ * network sets it to the day the incident opened when the door's state is public at once), a
+ * condition on a later day, and nothing when the network shows nothing of it yet.
+ */
+function publicWords(publicFrom: string | null | undefined, asOf: string, locale?: string): string {
+  if (!publicFrom) return "";
+  if (publicFrom <= asOf) return " It shows on your listing as failing.";
+  return ` If it still holds on ${dayWords(publicFrom, locale)}, it shows on your listing.`;
+}
+
+/**
  * "How agents got on": what a network's answer to the last signed ping said about the business's own
  * doors (network protocol §4.15), in the owner's words. Each count says what proved it: signed by the
  * business's own door, or from agents the network cannot tell apart; the network's own check is said
@@ -400,7 +411,7 @@ export function doorPanel(n: NetworkView, now: number = Date.now(), locale?: str
     ...d.incidents.map((i) => ({
       line: `${doorLabel(i.type)}: ${classWords(i.class)}, since ${when(i.opened_at)}. ${
         i.reproduced ? "The network's own check saw it too." : "The network's own check has not seen it."
-      }${i.public_from ? ` If it still holds on ${dayWords(i.public_from, locale)}, it shows on your listing.` : ""}`,
+      }${publicWords(i.public_from, d.as_of, locale)}`,
       tone: "danger" as NetworkTone,
     })),
     ...d.trouble.map((t) => ({

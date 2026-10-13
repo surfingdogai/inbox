@@ -804,19 +804,22 @@ as the network signs its other reads, and kept to what the probing rule above al
 
 | Read | When | What it asks |
 |---|---|---|
-| Daily | once a day, for the doors of members and of claimed listings | the MCP server card or `tools/list`, the A2A card, the manifest; for an inbox door, also `GET /v1/business` |
-| Confirm | when an agent reports the door down (§4.15) | the same single request, for that door |
-| Recovery | after a failed read: 15 minutes, 1 hour and 4 hours later, then daily while it fails | the same |
-| Should-fail | daily, for inbox doors | `GET /v1/items/<an id made up for the read>` over REST, which a working inbox refuses with a typed problem; never an MCP `tools/call` |
+| Daily | once a day, for the doors of members and of claimed listings (the daily set) | the MCP server card or `tools/list`, the A2A card, the manifest; for a member's inbox, the door its manifest names for agents, wherever it is: `GET <rest>/business` at its REST door, else `tools/list` at its MCP door |
+| Confirm | when an agent reports the door down (§4.15); for a door of the daily set, also when the network's crawl does not find it answering | the same single request, for that door |
+| Recovery | after a failed read of a door of the daily set: 15 minutes, 1 hour and 4 hours later, then daily while it fails | the same |
+| Should-fail | daily, for a member's inbox with a REST door | `GET <rest>/items/<an id made up for the read>`, which a working inbox refuses with a typed problem; never an MCP `tools/call` |
 
-Any other door is read at the network's normal crawl, plus at most 2 confirm reads a day when agents
-report trouble there. In the same minute as a read, the network reads a door it knows works through
-the same route; when that control read does not come back good, the result is thrown away. A read
-concludes one of three things:
+Any other door (a business the network found and nobody claimed) is read at the network's normal
+crawl, plus at most 2 confirm reads a day when agents report trouble there, and has no recovery
+reads. In the same minute as a read, the network reads a door it knows works through the same route;
+when that control read does not come back good, the result is thrown away. A read concludes one of
+three things:
 
 - **failed**: no answer (the name does not resolve; the connection is refused, reset or times out;
   TLS fails; nothing within 10 seconds), a 5xx that is not a challenge page, or an answer that does
-  not parse as the door's protocol;
+  not parse as the door's protocol. An inbox's doors are public and answer where its manifest says
+  they are, so for an inbox a redirect, or a 401 that is not the inbox's own typed refusal, fails
+  the read too;
 - **blocked**: robots.txt disallows the read, or the door answered 403, 429 or a challenge page.
   Blocked is never a failure: it never lowers a door, and only the business hears of it, as "our
   check was blocked";
@@ -826,16 +829,20 @@ concludes one of three things:
 after 3 failed reads in 7 days, the first and the last at least 30 minutes apart, with no good read
 between them; `live` again after one good read; `gone` after 30 days failing. A blocked read changes
 nothing. A read anyone may ask for (a result page's "Check again", `check_business` with `fresh`) only
-ever adds: its good read lifts a door, and its failure never lowers one. A network MAY count a crawl's
-failed read only for doors it does not read one request at a time (a platform's page, a declared API):
-for a door its own reads cover, a crawl that does not find it answering asks for a confirm read instead. A door's history follows its
-type, not its URL: the network keeps it by domain and door type, and carries it over a change of URL
-for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (`reads`,
-`states`) pins this down.
+ever adds: its good read lifts a door, and its failure never lowers one. A crawl's failed read counts
+for a door the network does not read every day (a business it found and nobody claimed, a platform's
+page, a declared API); for a door of the daily set, a crawl that does not find it answering asks for
+a confirm read instead, while the network's own reads are being made (a network whose reads have
+stopped counts the crawl's again, so a door whose server is gone never stays live). A door's history
+follows its type, not its URL: the network keeps it by domain and door type, and carries it over a
+change of URL for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json)
+(`reads`, `states`) pins this down.
 
 The network spends little on any one door: at most one read per door and one per host in 10 minutes,
 at most 12 reads of a door a day, and at most 2 a day made by reports nobody can tell apart (§4.15).
-Recovery reads go first.
+The daily set is read first, its recovery reads before all; reads of other doors take at most half of
+a day's reads, and those agents' reports ask for at most a quarter, so no stream of reports can take
+the reads of members' doors. A read thrown away or never answered takes nothing from the day's reads.
 
 ### 4.9 Readiness levels
 
@@ -1260,7 +1267,7 @@ are reused, never invented:
 
 | Phase | Result | Classes | What a report of it can do |
 |---|---|---|---|
-| reach | `fail` | Network Error Logging's names: `dns.name_not_resolved`, `dns.failed`, `tcp.timed_out`, `tcp.refused`, `tcp.reset`, `tls.cert.invalid`, `tls.failed`, `http.error`, `http.response.invalid`, `abandoned`; and `timeout`, `operation.timeout` | It may make the network read the door (§4.8). It never counts by itself. |
+| reach | `fail` | Network Error Logging's names: `dns.name_not_resolved`, `dns.failed`, `tcp.timed_out`, `tcp.refused`, `tcp.reset`, `tls.cert.invalid`, `tls.failed`, `http.error`, `http.response.invalid`, `abandoned`; and `timeout`, `operation.timeout` | It may make the network read the door (§4.8), for a door it reads itself. It never counts by itself. |
 | protocol | `fail` | `protocol.internal` (−32603), `protocol.advertised_missing` (−32601; A2A −32004), `protocol.version` (MCP −32022; A2A −32009), `protocol.invalid_answer` | It counts only with a door token that says the door erred. |
 | operation | `fail` | `operation.tool_error`, `operation.failed`, `operation.internal`, `payment_failed` | The same. |
 | operation | `refused` | `slot_taken`, `out_of_stock`, `item_unavailable`, `outside_limits`, `wrong_state`, `customer_side` | A refusal is the door working, never a failure. |
@@ -1294,45 +1301,59 @@ the token itself; until then a network checks no token, and no report counts tow
 `vectors/door-reports.json` pins the reading of a call (`calls`), what each report can do (`effects`)
 and how a source's attempts count (`intents`).
 
-**Limits.** The reference values: 60 calls a minute from one address, in bursts of 60 (then `429
+**Limits.** The reference values: 60 calls a minute from one address (an IPv6 address's /64), in
+bursts of 60, and 300 a minute from one address block (an IPv4 /24, an IPv6 /48) (then `429
 rate_limited`); 1,000 reports a day from one self-held key and 50 at one door; 100,000 a day from one
-platform origin and 5,000 at one door (beyond them, `over_limit`); at most 10,000 rows per door a day,
-70% of them kept for door-signed reports from independent sources, 20% for other door-signed ones and
-10% for platform-signed reports without a token. Reports nobody can tell apart are only ever counted,
-under a cap of their own, so they cannot crowd out the rest. A network learns at most one new platform
-directory a minute from one address, keeps at most 5,000 platform origins, and forgets one unseen for
-90 days.
+platform (all the origins of one registrable domain together) and 5,000 at one door (beyond them,
+`over_limit`); keys and platforms each have their own pool. Reports kept only as counts (unsigned or
+key-signed) are at most 20,000 a day from one address block, then under a cap across the network, so
+they cannot crowd out the rest; a report that would make a new count, or a new row, once the
+network's day of them is spent is `over_limit` too. At most 10,000 rows per door a day, 70% of them
+kept for door-signed reports from independent sources, 20% for other door-signed ones and 10% for
+platform-signed reports without a token. Reports from one address block ask for at most 50 of the
+network's reads a day, whatever doors they name. A network fetches a platform's directory at most
+once a minute, learns at most one new platform a minute from one address block, does not fetch again
+for an hour a directory it could not read, keeps at most 2 origins of one registrable domain and
+5,000 registrable domains, and forgets a platform unseen for 90 days, or seen once and whose reports
+left no row for a week.
 
-**What a network keeps.** Reports are pseudonymous, with no person and no content. Counts per door,
-day, class and proof. Rows only for door-signed and platform-signed reports, each holding when it
-arrived, the door, `op` and `tool`, `at` to the minute, `ms`, the result and class, a platform's origin,
-the source as a keyed hash that changes every 30 days, and the hash of a token's id. Rows are kept 30
-days, and only daily totals after that. A key is never shown to anyone, and a platform is named to a
-business only when 5 or more distinct sources from it reported there in the period. A self-held key's
+**What a network keeps.** Reports are pseudonymous, with no person and no content. Counts per door (its
+domain, type and the host of its URL), day, op, result, class and proof, and per tool only for a
+client's own faults at a tool the network saw the door list. Rows only for door-signed and
+platform-signed reports, each holding when it arrived, the door, `op` and `tool`, `at` to the minute,
+`ms`, the result and class, a platform's origin, the source as a keyed hash that changes every 30
+days, and the hash of a token's id. Rows are kept 30 days; counts by op and tool 30 days, then by
+result, class and proof alone. A key is never shown to anyone, and a platform is named to a business
+only when 5 or more distinct sources (keys) from it reported there within one 30-day period of the
+source hash, over 7 days or more. A self-held key's
 hash, with times and domains, may still be personal data of the person behind the agent, so an agent
 tells its person that it reports how doors answer (for-agents.md §5).
 
 **What the business sees.** A signed ping's `200` (§4.1) carries `doors`
-([`schemas/ping-response.json`](../../packages/spec/schemas/ping-response.json)): for each of its
-doors, the network's own last read (`good`, `failed` or `blocked`) and the door's state; how many of
-the reads agents' reports asked for found the door answering in 7 days (`not_reproduced`); what agents
-reported over 7 and 30 days, by op, tool, result, class and proof (`token`: signed by the business's
-door; `none`: agents the network cannot tell apart), counts to the day; the platforms with 5 or more
-sources; open incidents to the hour, each with when it may first show publicly; `trouble`, the doors
-where 5 or more reports nobody can tell apart, from 3 or more address blocks in 24 hours, say the door
-is down while the network's own reads see it answer; and one plain line to fix each class there is
-trouble with. The business is emailed only when an incident opens, from the network's own reads or
-from door-signed failures of independent sources: at most one email a day per address, and no digest.
-A claimed listing that is not a member is emailed only once it asks to be (`update_business`); an
-unclaimed one never is. `POST /v1/door-incidents/{id}`, signed sdi-instance/1 by the business, with
-`{"state": "fixed"}` answers `200 {id, state, check_queued}`, and the network reads the door again.
+([`schemas/ping-response.json`](../../packages/spec/schemas/ping-response.json)), of its own doors
+only: its inbox, the doors of its own domain, and on a site its domain shares with others (a shared
+host) only the doors on its own host or under it, never another business's. For each, the network's
+own last read (`good`, `failed` or `blocked`) and the door's state; how many of the reads agents'
+reports asked for found the door answering in 7 days (`not_reproduced`); what agents reported over 7
+and 30 days, by op, tool, result, class and proof (`token`: signed by the business's door; `none`:
+agents the network cannot tell apart), counts to the day, the most counted first, at most 50 lines a
+door; the platforms with 5 or more sources over 7 days; open incidents to the hour, one per door,
+each with when it shows publicly (`public_from`: from when it opened, as the door's state is public
+then; none while the door's state is not yet shown); `trouble`, the doors where 5 or more reports
+without a door token, from 3 or more address blocks in 24 hours, say the door is down while the
+network's own reads see it answer; and one plain line to fix each class there is trouble with. A
+member is emailed only when an incident opens, from the network's own reads or from door-signed
+failures of independent sources: at most one email a day per address, and no digest. A claimed
+listing that is not a member is not emailed yet; an unclaimed one never is. `POST
+/v1/door-incidents/{id}`, signed sdi-instance/1 by the business, with `{"state": "fixed"}` answers
+`200 {id, state, check_queued}`, and the network reads the door again as soon as its pace allows.
 
 **Telling agents.** Every answer of a network that takes door reports carries `report: {tool, url,
 guide, reward}`: `search_businesses`, `get_business`, `check_business`, `GET /v1/businesses`, `GET
 /v1/businesses/{domain}` and `GET /b/{domain}.json`. `guide` is `<network>/report.md`, an agent's guide
 like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server card and the A2A card.
-`reward` says what is true: reports make the network read doors again, so an agent's searches send it
-to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
+`reward` says what is true: reports may make the network read doors again (at most twice a day per
+door, for the doors it reads itself), so an agent's searches send it to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
 that reports.
 
 ## 5. Persons and passes
@@ -1341,32 +1362,39 @@ that reports.
 
 ```json
 { "request_id": "01M34AVYNXTNSE2RC495H3W8QS", "email": "rita@example.com",
-  "agent": { "label": "Example Assistant", "jkt": "…", "directory": "https://…" } }
+  "agent": { "label": "Example Assistant", "jkt": "…", "directory": "https://…" },
+  "key_email": "network" }
 ```
 
 `request_id` is 1–64 of `[A-Za-z0-9._:-]` (the inbox sends the item id); `email` is required and
 normalised (§2.1: refused is `400 bad_payload`, "no email, no issuance"); `agent` is optional, and
-its `label` names the first pass. Answers:
+its `label` names the first pass. `key_email` is optional: `"network"` asks the network to email the
+person's key itself (any other value is `400 bad_payload`). Answers:
 
-- `201 {pass, presentation, ppid, person}`: a new person. The inbox hands the pass back to the
-  carrying agent. The person's key is not in the answer: the network emails it to the address
-  itself, so the business never holds it (below). A network that leaves that email to the business
-  also sends `key`, which the inbox then emails the customer (§7).
+- `201 {key?, pass, presentation, ppid, person}`: a new person. The inbox hands the pass back to the
+  carrying agent. A network sends `key` unless the inbox asked for `key_email: "network"`: then the
+  key is not in the answer, and the network emails it to the address itself, so the business never
+  holds it (below). An inbox that did not ask, or a network that does not know `key_email` (it
+  ignores the member, §1), gets `key`, which the inbox then emails the customer (§7); an older inbox
+  keeps working unchanged.
 - `409 person_exists`: the network already knows a person with this address. Nothing is handed
   out; the agent must present the person's own pass or key (recoverable by email).
 - `429 rate_limited`: the business's 50 issuances of the last 24 hours are used.
 - The same `request_id` again, within 7 days, gets the same answer (`201` with the same pass, or
   `409`); with a different email it is `400 bad_payload`.
 
-**The key email.** The network keeps the new key and the address it was given sealed, never in
-the clear, and sends the key once a receipt from the same business names the person (`per`, §4):
-one short message in the business's name, from the network's own mail address, with no word of
-the network's, linking to its page for people (`/me`, §5.3) and to "Not you?". That page asks
-before it acts; then no key email goes to that mailbox again and the key it carried stops working.
-At most one key email goes to a mailbox in 30 days (plus-tags and Gmail dots folded, so another
-spelling of it is the same mailbox), within a daily cap across all businesses. Without such a
-receipt within 7 days nothing is sent, and the sealed key and address are deleted; the person can
-get a code from `/me` whenever they like.
+**The key email.** For an inbox that asked, the network keeps the new key and the address it was
+given sealed, never in the clear, and sends the key once a receipt from the same business names the
+person (`per`, §4): one short message in the business's name, from the network's own mail address,
+with no other word of the network's (the code and the links carry its address), linking to its page
+for people (`/me`, §5.3) and to "Not you?". The business is named by its name and its verified
+domain ("Bakery (bakery.example)"), or by its domain alone when its name could pass for an address, a
+link or a phone number. "Not you?" asks before it acts; then no key email goes to that mailbox again
+and the key it carried stops working. At most one key email goes to a mailbox in 30 days (plus-tags
+and Gmail dots folded, so another spelling of it is the same mailbox), within a daily cap across all
+businesses, of which one business takes at most a fixed share (50 a day). Without such a receipt
+within 7 days nothing is sent, and the sealed key and address are deleted; the person can get a code
+from `/me` whenever they like.
 
 ### 5.2 Presenting: `POST /v1/presentations` (sdi-instance/1)
 

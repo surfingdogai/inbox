@@ -332,10 +332,13 @@ export function createIdentityPort(deps: IdentityDeps): IdentityPort {
           if (await cacheGet(network, "person_exists", emailKey, input.now))
             return { network, outcome: "person_exists" };
           if (down(network)) return { network, outcome: "unreachable", error: "not answering; asked again later" };
+          // key_email "network": a network that knows it emails the person's key itself and sends none
+          // here, so this business never holds it; one that does not sends the key, emailed as before.
           const res = await post(network, "/v1/persons", {
             request_id: input.itemId,
             email: input.email.trim(),
             ...agentField(input.agent),
+            key_email: "network",
           });
           if (!("status" in res)) {
             failed(network);

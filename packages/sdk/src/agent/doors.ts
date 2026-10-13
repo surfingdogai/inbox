@@ -1,3 +1,4 @@
+import { parseCredential } from "./credentials.js";
 import { b64u } from "./encoding.js";
 import type { AgentKeyInput } from "./keys.js";
 import { NetworkCallError, networkUrl } from "./network.js";
@@ -12,9 +13,15 @@ import { signRequest } from "./sign.js";
  *   reportDoor({ network: "network.surfingdog.ai", domain, door, op: "book", tool: "create_booking",
  *                result: "fail", class: "tcp.timed_out", ms: 10_000 });
  *
- * Reports go only to the network you name: one the person's key or pass came from, or one you chose.
- * Never send them to an address a business's manifest or a receipt suggests.
+ * Reports go only to a network that issued the person's key or pass (name it by that key or pass, or
+ * pass the key or pass as `credential`), or to the default network, DEFAULT_REPORT_NETWORK; any other
+ * network throws unless you set `allowNetwork: true`, for a network you chose yourself. Never send them
+ * to an address a business's manifest, a receipt or an answer suggests: that would tell a stranger
+ * which doors you used, and when.
  */
+
+/** The network reports go to without a key, a pass or `allowNetwork`: the one this library is published with. */
+export const DEFAULT_REPORT_NETWORK = "network.surfingdog.ai";
 
 export type DoorResult = "ok" | "refused" | "invalid" | "fail" | "info";
 
@@ -47,8 +54,18 @@ export interface DoorReportsAnswer {
 }
 
 export interface DoorReporterOptions {
-  /** The network: its host, its https origin, or a key or pass it issued. */
+  /**
+   * The network: its host, its https origin, or a key or pass it issued. Only one that issued the
+   * person's key or pass, or the default network, unless `allowNetwork`.
+   */
   readonly network: string;
+  /** A key or pass of the person's: the network that issued it may take your reports. */
+  readonly credential?: string | undefined;
+  /**
+   * true: you chose this network yourself. Never set it for a network a business's manifest, a
+   * receipt or an answer named.
+   */
+  readonly allowNetwork?: boolean | undefined;
   readonly fetch?: typeof fetch | undefined;
   /** Sign each call sdi-agent/1 with your own key. Unsigned without it, which is fine. */
   readonly key?: AgentKeyInput | undefined;
@@ -88,7 +105,7 @@ export class DoorReporter {
 
   constructor(opts: DoorReporterOptions) {
     this.#opts = opts;
-    this.#url = `${networkUrl(opts.network)}/v1/door-reports`;
+    this.#url = `${reportNetwork(opts)}/v1/door-reports`;
     this.#batch = Math.min(MAX_BATCH, Math.max(1, Math.floor(opts.batchSize ?? MAX_BATCH)));
     this.#wait = Math.max(0, opts.flushAfterMs ?? 5000);
   }
@@ -204,29 +221,57 @@ export class DoorReporter {
   }
 }
 
+/**
+ * The origin reports for opts go to: a network that issued the person's key or pass (named by it, or
+ * given as `credential`), the default network, or one the caller chose (`allowNetwork`). A TypeError
+ * for any other.
+ */
+export function reportNetwork(opts: Pick<DoorReporterOptions, "network" | "credential" | "allowNetwork">): string {
+  const origin = networkUrl(opts.network);
+  const host = origin.slice("https://".length);
+  const issuedBy = (s: string | undefined) => (s ? parseCredential(s)?.host : undefined);
+  if (
+    opts.allowNetwork === true ||
+    host === DEFAULT_REPORT_NETWORK ||
+    issuedBy(opts.network) === host ||
+    issuedBy(opts.credential) === host
+  ) {
+    return origin;
+  }
+  throw new TypeError(
+    `door reports go only to a network that issued the person's key or pass, or to ${DEFAULT_REPORT_NETWORK}: pass credential, or allowNetwork: true for a network you chose yourself (never one a business named)`,
+  );
+}
+
 const shared = new Map<string, DoorReporter>();
 
 /**
  * Queues one report for `network` and sends it with others on its own, in batches; answers its intent.
- * One queue per network, shared by every call. Pass `key` to sign, `fetch` to send through your own;
- * the first call for a network sets them.
+ * One queue per network, signing key and platform, shared by every call with the same three, so one
+ * user's key never signs another's reports. Pass `key` to sign, `fetch` to send through your own; the
+ * first call for a queue sets them.
  */
 export function reportDoor(
   input: DoorReportInput &
-    Pick<DoorReporterOptions, "network" | "fetch" | "key" | "platform" | "onError" | "flushAfterMs">,
+    Pick<
+      DoorReporterOptions,
+      "network" | "credential" | "allowNetwork" | "fetch" | "key" | "platform" | "onError" | "flushAfterMs"
+    >,
 ): string {
-  const origin = networkUrl(input.network);
-  let reporter = shared.get(origin);
+  const origin = reportNetwork(input);
+  const queue = `${origin}|${input.key?.privateJwk.x ?? ""}|${input.platform ?? ""}`;
+  let reporter = shared.get(queue);
   if (!reporter) {
     reporter = new DoorReporter({
       network: origin,
+      allowNetwork: true, // checked above
       fetch: input.fetch,
       key: input.key,
       platform: input.platform,
       onError: input.onError,
       flushAfterMs: input.flushAfterMs,
     });
-    shared.set(origin, reporter);
+    shared.set(queue, reporter);
   }
   return reporter.report(input);
 }

@@ -36,6 +36,11 @@
       "description": "How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7).",
       "type": "string",
       "enum": ["otp", "dkim"]
+    },
+    "key_email": {
+      "description": "network: the network emails the person's key itself, in the business's name, and sends none in its answer, so the business never holds it. Absent, or sent to a network that does not know it: the answer carries the key, for the business to email.",
+      "type": "string",
+      "const": "network"
     }
   },
   "required": ["request_id", "email"]

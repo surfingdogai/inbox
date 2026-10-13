@@ -125,8 +125,8 @@ one call, and it needs no signature, pass or account: the MCP tool `report_door`
 - Up to 100 reports in one call. Send nothing else: no pass, key, email, name, phone, address,
   message, item id or reason. A report carrying any of it is refused whole.
 
-**Why it is worth it to you.** Your reports make the network read doors again, so your searches send
-you to doors that work. A success counts the same as a failure. Nothing you report goes public by
+**Why it is worth it to you.** Your reports may make the network read doors again (at most twice a day
+per door, for the doors it reads itself), so your searches send you to doors that work. A success counts the same as a failure. Nothing you report goes public by
 itself, and the business never learns which agent reported.
 
 **Tell your person,** once, that you report how businesses' doors answer: only whether the door

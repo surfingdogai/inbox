@@ -68,19 +68,26 @@ export const personIssuanceRequestSchema = z.object({
     .enum(["otp", "dkim"])
     .optional()
     .describe("How this business proved the address: its one-time code, or authenticated mail (ADR-017 A1.7)."),
+  key_email: z
+    .literal("network")
+    .optional()
+    .describe(
+      "network: the network emails the person's key itself, in the business's name, and sends none in its answer, so the business never holds it. Absent, or sent to a network that does not know it: the answer carries the key, for the business to email.",
+    ),
 });
 export type PersonIssuanceRequest = z.infer<typeof personIssuanceRequestSchema>;
 
 /**
  * `201`: the first pass (back to the agent) and the presentation. The key goes to the person by
- * email: a network that emails it itself, in the business's name, sends none, so the business never
- * holds it; a network that leaves the email to the business sends it here.
+ * email: when the inbox asked for it (`key_email: "network"`), a network that emails it itself, in
+ * the business's name, sends none, so the business never holds it; otherwise the network sends it
+ * here, for the business to email.
  */
 export const personIssuedSchema = z.object({
   key: keyStringSchema
     .optional()
     .describe(
-      "A person's key: sdkey1_<network host>_<id>_<secret>, issued once. Only from a network that leaves the key email to the business; a network that emails the key to the person itself sends none.",
+      "A person's key: sdkey1_<network host>_<id>_<secret>, issued once. Sent unless the inbox asked the network to email it (key_email network) and the network does; a network that emails the key to the person itself then sends none.",
     ),
   pass: passStringSchema,
   presentation: presentationIdSchema,

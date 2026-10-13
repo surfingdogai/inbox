@@ -294,6 +294,9 @@ describe("a first contact (§2.1)", () => {
     const r = await s.book(agent(T0));
     const itemId = r.view.item.id;
     expect(r.identity).toMatchObject({ recognised: "none", networks: [{ network: NET, state: "issued" }] });
+    // It asked the network to email the key (a network that does not know key_email sends the key
+    // as before, and the inbox emails it: the tests above).
+    expect(s.net.calls.find((c) => c.path === "/v1/persons")?.body).toMatchObject({ key_email: "network" });
     expect(r.identity?.passes).toHaveLength(1);
     expect(r.identity?.passes[0]?.pass).toMatch(/^sdpass1_net\.example\.com_[a-z2-7]{16}_[a-z2-7]{32}$/);
     // The pass is sealed for the status door; no key waits for an email, and the person is linked as ever.

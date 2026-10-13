@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DOOR_REPORT_CLASSES, doorReportSchema, readDoorReports } from "../../spec/src/index";
 import {
+  DEFAULT_REPORT_NETWORK,
   DoorReporter,
   type DoorReportInput,
   doorReportBody,
@@ -9,6 +10,7 @@ import {
   NetworkCallError,
   newIntent,
   reportDoor,
+  reportNetwork,
 } from "../src/index";
 
 /**
@@ -84,7 +86,13 @@ describe("doorReportBody", () => {
 describe("DoorReporter", () => {
   it("sends what waits in batches of 100, each a call the protocol takes", async () => {
     const net = network();
-    const r = new DoorReporter({ network: "network.example", fetch: net.fetch, autoFlush: false, now: () => NOW });
+    const r = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: net.fetch,
+      autoFlush: false,
+      now: () => NOW,
+    });
     for (let n = 0; n < 250; n++) r.report({ ...base, ms: n });
     expect(net.calls).toHaveLength(0);
     const last = await r.flush();
@@ -97,7 +105,13 @@ describe("DoorReporter", () => {
 
   it("sends on its own, by default, a moment after a report waits", async () => {
     const net = network();
-    const r = new DoorReporter({ network: "network.example", fetch: net.fetch, flushAfterMs: 5, now: () => NOW });
+    const r = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: net.fetch,
+      flushAfterMs: 5,
+      now: () => NOW,
+    });
     r.report(base);
     r.report({ ...base, result: "fail", class: "tcp.timed_out" });
     expect(net.calls).toHaveLength(0);
@@ -107,7 +121,13 @@ describe("DoorReporter", () => {
 
   it("sends at once when a batch is full", async () => {
     const net = network();
-    const r = new DoorReporter({ network: "network.example", fetch: net.fetch, batchSize: 3, flushAfterMs: 60_000 });
+    const r = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: net.fetch,
+      batchSize: 3,
+      flushAfterMs: 60_000,
+    });
     for (let n = 0; n < 3; n++) r.report(base);
     await vi.waitFor(() => expect(net.calls).toHaveLength(1));
     expect(r.pending).toBe(0);
@@ -115,7 +135,7 @@ describe("DoorReporter", () => {
 
   it("keeps a batch the network could not take now, and drops one it refused whole", async () => {
     const busy = network((n) => new Response(null, { status: n === 1 ? 503 : 202 }));
-    const r = new DoorReporter({ network: "network.example", fetch: busy.fetch, autoFlush: false });
+    const r = new DoorReporter({ network: "network.example", allowNetwork: true, fetch: busy.fetch, autoFlush: false });
     r.report(base);
     await expect(r.flush()).rejects.toBeInstanceOf(NetworkCallError);
     expect(r.pending).toBe(1);
@@ -128,7 +148,12 @@ describe("DoorReporter", () => {
           status: 400,
         }),
     );
-    const r2 = new DoorReporter({ network: "network.example", fetch: refused.fetch, autoFlush: false });
+    const r2 = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: refused.fetch,
+      autoFlush: false,
+    });
     r2.report(base);
     await expect(r2.flush()).rejects.toMatchObject({ status: 400, code: "malformed" });
     expect(r2.pending).toBe(0);
@@ -139,6 +164,7 @@ describe("DoorReporter", () => {
     const errors: unknown[] = [];
     const r = new DoorReporter({
       network: "network.example",
+      allowNetwork: true,
       fetch: down.fetch,
       flushAfterMs: 1,
       onError: (e) => errors.push(e),
@@ -151,10 +177,21 @@ describe("DoorReporter", () => {
   it("signs sdi-agent/1 with the agent's own key when given one, and not otherwise", async () => {
     const net = network();
     const key = await generateAgentKey();
-    const signed = new DoorReporter({ network: "network.example", fetch: net.fetch, autoFlush: false, key });
+    const signed = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: net.fetch,
+      autoFlush: false,
+      key,
+    });
     signed.report(base);
     await signed.flush();
-    const plain = new DoorReporter({ network: "network.example", fetch: net.fetch, autoFlush: false });
+    const plain = new DoorReporter({
+      network: "network.example",
+      allowNetwork: true,
+      fetch: net.fetch,
+      autoFlush: false,
+    });
     plain.report(base);
     await plain.flush();
     expect(Object.keys(net.calls[0]?.headers ?? {})).toEqual(
@@ -163,14 +200,24 @@ describe("DoorReporter", () => {
     expect(Object.keys(net.calls[1]?.headers ?? {})).not.toContain("Signature");
   });
 
-  it("sends only to the network it is given, named as a host, an origin, or a key or pass it issued", () => {
-    expect(() => new DoorReporter({ network: "https://evil.example/collect" })).toThrow(TypeError);
-    expect(() => new DoorReporter({ network: "not a host" })).toThrow(TypeError);
-    const fromPass = new DoorReporter({
-      network: "sdpass1_network.example_aaaaaaaaaaaaaaaa_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      autoFlush: false,
-    });
-    expect(fromPass.pending).toBe(0);
+  it("sends only to a network that issued the person's key or pass, the default one, or one chosen", () => {
+    const pass = "sdpass1_network.example_aaaaaaaaaaaaaaaa_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    expect(() => new DoorReporter({ network: "https://evil.example/collect", allowNetwork: true })).toThrow(TypeError);
+    expect(() => new DoorReporter({ network: "not a host", allowNetwork: true })).toThrow(TypeError);
+    // A network a business's manifest or a receipt named: refused, even beside the person's pass for another.
+    expect(() => new DoorReporter({ network: "collector.example" })).toThrow(/issued the person's key or pass/);
+    expect(() => new DoorReporter({ network: "collector.example", credential: pass })).toThrow(TypeError);
+    expect(() => reportDoor({ ...base, network: "collector.example" })).toThrow(TypeError);
+    for (const ok of [
+      { network: pass },
+      { network: "network.example", credential: pass },
+      { network: "https://network.example", credential: pass },
+      { network: DEFAULT_REPORT_NETWORK },
+      { network: "collector.example", allowNetwork: true },
+    ]) {
+      expect(new DoorReporter({ ...ok, autoFlush: false }).pending, JSON.stringify(ok)).toBe(0);
+    }
+    expect(reportNetwork({ network: pass })).toBe("https://network.example");
   });
 });
 
@@ -178,12 +225,37 @@ describe("reportDoor", () => {
   it("queues per network and flushDoorReports sends them all", async () => {
     const a = network();
     const b = network();
-    reportDoor({ ...base, network: "a.network.example", fetch: a.fetch, flushAfterMs: 60_000 });
-    reportDoor({ ...base, network: "https://a.network.example", fetch: a.fetch });
-    reportDoor({ ...base, network: "b.network.example", fetch: b.fetch, flushAfterMs: 60_000 });
+    reportDoor({ ...base, network: "a.network.example", allowNetwork: true, fetch: a.fetch, flushAfterMs: 60_000 });
+    reportDoor({ ...base, network: "https://a.network.example", allowNetwork: true, fetch: a.fetch });
+    reportDoor({ ...base, network: "b.network.example", allowNetwork: true, fetch: b.fetch, flushAfterMs: 60_000 });
     await flushDoorReports();
     expect(a.calls).toHaveLength(1);
     expect((JSON.parse(a.calls[0]?.body ?? "{}") as { reports: unknown[] }).reports).toHaveLength(2);
     expect(b.calls[0]?.url).toBe("https://b.network.example/v1/door-reports");
+  });
+
+  it("keeps one queue per signing key: one user's key never signs another's reports", async () => {
+    const net = network();
+    const [k1, k2] = [await generateAgentKey(), await generateAgentKey()];
+    const send = (key: typeof k1) =>
+      reportDoor({
+        ...base,
+        network: "c.network.example",
+        allowNetwork: true,
+        fetch: net.fetch,
+        key,
+        flushAfterMs: 60_000,
+      });
+    send(k1);
+    send(k2);
+    send(k1);
+    reportDoor({ ...base, network: "c.network.example", allowNetwork: true, fetch: net.fetch, flushAfterMs: 60_000 });
+    await flushDoorReports();
+    const byKey = new Map<string, number>();
+    for (const c of net.calls) {
+      const keyid = /keyid="([^"]+)"/.exec(c.headers["Signature-Input"] ?? "")?.[1] ?? "unsigned";
+      byKey.set(keyid, (byKey.get(keyid) ?? 0) + (JSON.parse(c.body) as { reports: unknown[] }).reports.length);
+    }
+    expect(Object.fromEntries(byKey)).toEqual({ [k1.thumbprint]: 2, [k2.thumbprint]: 1, unsigned: 1 });
   });
 });

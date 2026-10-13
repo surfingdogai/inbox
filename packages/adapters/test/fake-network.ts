@@ -50,8 +50,9 @@ export function fakeNetwork(opts: {
   /** Overrides an answer: return a Response to use it instead. */
   intercept?: (path: string, body: Record<string, unknown> | null, n: number) => Response | undefined;
   /**
-   * Whether a first contact's answer carries the key, for the business to email (by default it
-   * does); false is a network that emails the key to the person itself and sends none.
+   * Whether a first contact's answer carries the key, for the business to email: by default it does,
+   * as a network before key_email does whatever the inbox asks; false is a network that emails the
+   * key to the person itself when the inbox asks it to (key_email "network") and then sends none.
    */
   sendsKey?: boolean;
 }) {
@@ -154,7 +155,7 @@ export function fakeNetwork(opts: {
       }
       const made = addPerson(email);
       const answer = {
-        ...(opts.sendsKey === false ? {} : { key: made.key }),
+        ...(opts.sendsKey === false && body.key_email === "network" ? {} : { key: made.key }),
         pass: made.pass,
         presentation: presentationId(),
         ppid: ppidOf(made.person),

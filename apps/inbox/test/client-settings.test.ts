@@ -375,6 +375,21 @@ describe("Settings → Networks", () => {
     expect(panel?.doors[1]?.lines).toEqual(["No agent has reported on it in the last 30 days."]);
     expect(panel?.alerts.map((a) => a.tone)).toEqual(["danger", "warning"]);
     expect(panel?.alerts[0]?.line).toContain("If it still holds on 29 Sept, it shows on your listing.");
+    // Public from the day it opened, as the network's own reads are: shown already, not a condition.
+    const shown = doorPanel(
+      { ...base, doors: { ...doors, incidents: [{ ...doors.incidents[0], public_from: "2026-09-22" }] } as never },
+      now,
+      "en-GB",
+    );
+    expect(shown?.alerts[0]?.line).toContain("It shows on your listing as failing.");
+    expect(shown?.alerts[0]?.line).not.toContain("If it still holds");
+    // None: the network shows nothing of it yet.
+    const unshown = doorPanel(
+      { ...base, doors: { ...doors, incidents: [{ ...doors.incidents[0], public_from: null }] } as never },
+      now,
+      "en-GB",
+    );
+    expect(unshown?.alerts[0]?.line).not.toMatch(/listing/);
     expect(panel?.alerts[1]?.line).toContain("that the network's own check does not see");
     expect(panel?.fixes).toEqual(["Your MCP server refuses the protocol version it advertises."]);
     // Nothing in it names an agent's key, a person or an address.

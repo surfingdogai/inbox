@@ -37,8 +37,10 @@ beside both, and needs its own place, so that it is not read as either.
    hash, separated by purpose and changed every 30 days; standing in a table of its own, the only place
    a key meets receipts; rows for 30 days, then daily totals.
 5. **The business never learns who reported.** It sees counts to the day and incidents to the hour,
-   never a key, and a platform's origin only when 5 or more distinct sources from it reported in the
-   period. A business cannot single out an agent, or the person behind it, to retaliate against.
+   never a key, and a platform's origin only when 5 or more distinct sources (keys) from it reported
+   within one period of the source hash, over 7 days or more. It sees only its own doors, never
+   another business's on a host they share. A business cannot single out an agent, or the person
+   behind it, to retaliate against.
 6. **Said honestly.** Door reports are called pseudonymous, never "no personal data": a self-held key's
    keyed hash, with times and the domains it reported on, may be personal data of the person behind the
    agent. The guide for agents asks every agent to tell its person that it reports how doors answer.

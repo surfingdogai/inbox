@@ -380,7 +380,9 @@ export const pingDoorsSchema = z.object({
         reproduced: z.boolean().describe("Whether the network's own read saw it too."),
         public_from: dayString
           .nullable()
-          .describe("When it may first show publicly, if it still holds then; null when it never will."),
+          .describe(
+            "When it shows publicly: the day it opened when the door's state is public at once (the network's own reads), else the day it will show if it still holds then; null while the network shows nothing of it.",
+          ),
       }),
     )
     .max(50)

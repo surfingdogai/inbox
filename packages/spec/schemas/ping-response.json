@@ -330,7 +330,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "When it may first show publicly, if it still holds then; null when it never will."
+                "description": "When it shows publicly: the day it opened when the door's state is public at once (the network's own reads), else the day it will show if it still holds then; null while the network shows nothing of it."
               }
             },
             "required": ["id", "type", "url", "class", "opened_at", "reproduced", "public_from"]
