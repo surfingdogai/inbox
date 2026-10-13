@@ -3,6 +3,7 @@ import {
   actionNote,
   inputKindFor,
   isoToLocal,
+  lateCloseNote,
   localToIso,
   networkNote,
   orderActions,
@@ -120,6 +121,41 @@ describe("client actions", () => {
     expect(networkNote("payment_failed", order("awaiting_payment"), now)).toMatch(/at half against the customer/);
     expect(networkNote("record_charge_back", order("completed"), now)).toMatch(/charge-back/);
     expect(networkNote("confirm", booking("requested", "2026-09-24T10:00:00Z"), now)).toBeNull();
+  });
+
+  it("warns that a cancellation recorded for the customer close to the date counts against the business", () => {
+    const now = Date.parse("2026-10-13T12:00:00Z");
+    const booking = (startTime: string) =>
+      ({
+        type: "booking",
+        state: "confirmed",
+        payload: { reservationFor: { serviceId: "s", name: "x" }, startTime, endTime: startTime },
+      }) as unknown as Item;
+    const soon = booking("2026-10-15T11:00:00Z");
+    expect(lateCloseNote("record_cancel", booking("2026-10-15T13:00:00Z"), [], now)).toBeNull();
+    expect(lateCloseNote("record_cancel", soon, ["record_cancel"], now)).toEqual({
+      text: "A cancellation you record for the customer within 48 hours of the start counts at half against you at networks, like a cancellation of your own, unless the customer confirms it was theirs.",
+      instead: null,
+    });
+    const offered = lateCloseNote("record_cancel", soon, ["record_cancel", "record_cancel_late"], now);
+    expect(offered?.instead).toBe("record_cancel_late");
+    expect(offered?.text).toMatch(/record a late cancellation instead\.$/);
+    // A withdrawal is never late: it is said, and nothing else is offered.
+    const withdrawal = lateCloseNote("record_withdrawal", soon, ["record_cancel_late"], now);
+    expect(withdrawal?.text).toMatch(/^A withdrawal/);
+    expect(withdrawal?.instead).toBeNull();
+    // After the start too, and for an order by its delivery date; never without one.
+    expect(lateCloseNote("record_cancel", booking("2026-10-12T09:00:00Z"), [], now)).not.toBeNull();
+    const order = (when?: string) =>
+      ({
+        type: "order",
+        state: "accepted",
+        payload: when ? { delivery: { method: "delivery", when } } : {},
+      }) as unknown as Item;
+    expect(lateCloseNote("record_cancel", order("2026-10-14T09:00:00Z"), [], now)?.text).toContain("the delivery date");
+    expect(lateCloseNote("record_cancel", order(), [], now)).toBeNull();
+    expect(lateCloseNote("record_cancel_late", soon, [], now)).toBeNull();
+    expect(lateCloseNote("cancel_by_business", soon, [], now)).toBeNull();
   });
 
   it("reads a price the way it was typed: a comma is a decimal mark, never a reason to save it as free", () => {

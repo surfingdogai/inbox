@@ -319,4 +319,12 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS `login_tokens_user` ON `login_tokens` (`user_id`, `kind`, `created_at`);",
     ],
   },
+  {
+    version: 22,
+    name: "0021_door_reports",
+    statements: [
+      "-- Door reports (network protocol §4.15): how agents got on at the business's own doors, and what the\n-- network's own reads saw, as a network's answer to a signed ping last said it (its `doors` block,\n-- JSON, read leniently), and when. Counts, states and plain lines only: no customer, no agent and no\n-- key is ever in it.\nALTER TABLE `network_status` ADD `doors` text;",
+      "ALTER TABLE `network_status` ADD `doors_at` integer;",
+    ],
+  },
 ];

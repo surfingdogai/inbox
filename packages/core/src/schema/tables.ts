@@ -672,6 +672,12 @@ export const networkStatus = sqliteTable("network_status", {
    */
   listed: integer("listed"),
   listedAt: integer("listed_at"),
+  /**
+   * How agents got on at the business's own doors, and what the network's own reads saw, as its
+   * answer to a signed ping last said it (`doors`, protocol §4.15, JSON), and when.
+   */
+  doors: text("doors"),
+  doorsAt: integer("doors_at"),
   updatedAt: updatedAt(),
 });
 

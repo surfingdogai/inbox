@@ -1,8 +1,12 @@
 import type { Statement } from "@surfingdog/platform";
+import type { PingDoors } from "@surfingdog/spec";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { DEFAULT_NETWORK, enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
 import { jobStatement } from "../write/common";
+import { storedPingDoors } from "./doors";
+
+export { networkDoorsStatement, readPingDoors, storedPingDoors } from "./doors";
 
 /**
  * Several networks (ADR-017 §8.1, R23): the job kinds, their dedupe keys, the rows that say what
@@ -312,6 +316,9 @@ export interface NetworkStatusRow {
   /** What the network was last told of the directory (1 listed, 0 not), or null when never; and when. */
   readonly listed: number | null;
   readonly listedAt: number | null;
+  /** How agents got on at the business's doors, as the network's answer to a signed ping last said it; and when. */
+  readonly doors: PingDoors | null;
+  readonly doorsAt: number | null;
 }
 
 /**
@@ -334,7 +341,7 @@ export interface BusinessStanding {
 export type PingSignature = "verified" | "unsigned" | "ignored" | "refused" | `invalid: ${string}`;
 
 const STATUS_COLUMNS =
-  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims, listed, listed_at";
+  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims, listed, listed_at, doors, doors_at";
 
 export async function readNetworkStatus(db: Db, network: string): Promise<NetworkStatusRow | undefined> {
   const { rows } = await db.client.query({
@@ -656,6 +663,8 @@ function statusOf(r: readonly unknown[]): NetworkStatusRow {
     claims: n(r[17]),
     listed: n(r[18]),
     listedAt: n(r[19]),
+    doors: storedPingDoors(r[20]),
+    doorsAt: n(r[21]),
   };
 }
 
@@ -709,6 +718,11 @@ export interface NetworkView {
   readonly standing: (BusinessStanding & { readonly at: string }) | null;
   /** What became of the last ping's signature (`PingSignature`); null before the first ping. */
   readonly ping_signature: string | null;
+  /**
+   * How agents got on at the business's own doors, and what the network's own reads saw (protocol
+   * §4.15), as its answer to the last signed ping that carried it said it, and when: null until one did.
+   */
+  readonly doors: (PingDoors & { readonly at: string }) | null;
   /**
    * What it has been sent. `held` are queued receipts waiting for the network to take the rules
    * that read them: acceptances and outcomes (claims v2, version 3), agreed changes and refunds
@@ -793,6 +807,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
       standing:
         s?.standing && s.standingAt !== null ? { ...s.standing, at: new Date(s.standingAt).toISOString() } : null,
       ping_signature: s?.pingSignature ?? null,
+      doors: s?.doors && s.doorsAt !== null ? { ...s.doors, at: new Date(s.doorsAt).toISOString() } : null,
       receipts: tally.get(origin) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
     };
   });

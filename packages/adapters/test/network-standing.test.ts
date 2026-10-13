@@ -212,6 +212,66 @@ describe("the signed ping", () => {
     expect(await s.view()).toMatchObject({ ping_signature: "unsigned", standing: null });
   });
 
+  it("keeps how agents got on at the doors, read leniently, and the last one when a ping brings none", async () => {
+    const doors = {
+      as_of: "2026-09-22",
+      doors: [
+        {
+          type: "mcp",
+          url: "https://demo.example.com/mcp",
+          status: "live",
+          checked: { result: "good", at: "2026-09-22T09:00:00Z" },
+          reports: [
+            { op: "book", tool: "create_booking", proof: "none", result: "ok", d7: 12, d30: 40 },
+            { op: "book", proof: "none", result: "fail", class: "tcp.timed_out", d7: -1, d30: 2 },
+            {
+              op: "book",
+              tool: "create_booking",
+              proof: "none",
+              result: "invalid",
+              class: "client.invalid_params",
+              d7: 3,
+              d30: 14,
+            },
+          ],
+          platforms: ["https://agents.example.net", 7],
+          surprise: "a member we do not know",
+        },
+        { type: "mcp", status: "live" },
+      ],
+      incidents: [{ id: "inc_1" }],
+      trouble: [],
+      fixes: [{ class: "tls.cert.invalid", text: "Renew the certificate on this host." }],
+    };
+    let carry = true;
+    const s = await setup((verified) =>
+      verified
+        ? Response.json({
+            ok: true,
+            rules: { version: 9, effective_at: "2026-09-22T00:00:00Z" },
+            next_rules: null,
+            reports: [],
+            contests: [],
+            standing: { score: 0.5, tier: "building", ranked: true },
+            ...(carry ? { doors } : {}),
+          })
+        : new Response(null, { status: 204 }),
+    );
+    await s.ping(T0);
+    const first = (await s.view())?.doors;
+    expect(first?.at).toBe(new Date(T0).toISOString());
+    expect(first?.doors).toHaveLength(1);
+    // The count that does not read is left out; the rest of the door, and of the block, is kept.
+    expect(first?.doors[0]?.reports.map((r) => r.result)).toEqual(["ok", "invalid"]);
+    expect(first?.doors[0]?.platforms).toEqual(["https://agents.example.net"]);
+    expect(first?.incidents).toEqual([]);
+    expect(first?.fixes).toEqual([{ class: "tls.cert.invalid", text: "Renew the certificate on this host." }]);
+    expect((await s.view())?.standing).toMatchObject({ tier: "building", ranked: true });
+    carry = false;
+    await s.ping(T0 + 3_600_000);
+    expect((await s.view())?.doors?.at).toBe(new Date(T0).toISOString());
+  });
+
   it("does not take a standing from an answer that does not parse", async () => {
     const s = await setup((verified) =>
       verified

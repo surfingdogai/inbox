@@ -21,6 +21,7 @@ import {
   NETWORK_RECEIPT_KIND,
   type NetworkJobPayload,
   type NetworkReceiptPayload,
+  networkDoorsStatement,
   networkFailureStatement,
   networkListedStatement,
   networkPingSignatureStatement,
@@ -45,6 +46,7 @@ import {
   type ReceiptStage,
   type Registration,
   readNetworkStatus,
+  readPingDoors,
   readSettings,
   reportsTo,
   type Settings,
@@ -406,14 +408,16 @@ function pingAnswerStatements(network: string, now: number, ping: PingResult): S
   return [
     networkPingSignatureStatement(network, now, "verified", answer.standing),
     networkRulesStatement(network, now, answer.rules),
+    ...(answer.doors ? [networkDoorsStatement(network, now, answer.doors)] : []),
   ];
 }
 
 /**
- * A signed ping's `200`, read leniently: the standing and the two rules numbers. Reports and
- * contests are in it too; answering them from the inbox is not built yet, and a network settles
- * them without an answer (a report is disputed automatically when the inbox recorded the
- * customer's own broken outcome).
+ * A signed ping's `200`, read leniently: the standing, the two rules numbers, and how agents got on
+ * at the business's doors (`doors`, protocol §4.15), which the owner sees per network; a block that
+ * does not read is left out and the rest counts. Reports and contests are in it too; answering them
+ * from the inbox is not built yet, and a network settles them without an answer (a report is
+ * disputed automatically when the inbox recorded the customer's own broken outcome).
  */
 const signedPingAnswerSchema = z.looseObject({
   rules: z.looseObject({ version: z.int().min(1) }),
@@ -429,11 +433,13 @@ const signedPingAnswerSchema = z.looseObject({
       ranked: z.boolean().catch(false),
     })
     .optional(),
+  doors: z.unknown().optional(),
 });
 
 function signedPingAnswer(text: string): {
   standing: { tier: "new" | "building" | "trusted"; score: number; ranked: boolean } | null;
   rules: { version: number; next: number | null; nextAt: number | null };
+  doors: ReturnType<typeof readPingDoors>;
 } | null {
   let parsed: unknown;
   try {
@@ -452,6 +458,7 @@ function signedPingAnswer(text: string): {
       next: doc.data.next_rules?.version ?? null,
       nextAt: Number.isFinite(at) ? at : null,
     },
+    doors: readPingDoors(doc.data.doors),
   };
 }
 

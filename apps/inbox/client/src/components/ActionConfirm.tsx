@@ -6,6 +6,7 @@ import {
   type ButtonTone,
   inputKindFor,
   isoToLocal,
+  lateCloseNote,
   localToIso,
   moneyMajor,
   networkNote,
@@ -30,8 +31,10 @@ export function ActionConfirm({
   pending,
   error,
   showTitle = true,
+  alternatives = [],
   onSubmit,
   onCancel,
+  onSwitch,
 }: {
   transition: Transition;
   tone: ButtonTone;
@@ -40,8 +43,11 @@ export function ActionConfirm({
   pending: boolean;
   error: ApiProblem | null;
   showTitle?: boolean | undefined;
+  /** The item's other transitions, so a better fitting one can be offered instead. */
+  alternatives?: readonly Transition[] | undefined;
   onSubmit: (input: Record<string, unknown> | undefined) => void;
   onCancel: () => void;
+  onSwitch?: ((t: Transition) => void) | undefined;
 }) {
   const kind = inputKindFor(
     transition.event,
@@ -247,6 +253,12 @@ export function ActionConfirm({
   );
   const problem = local ?? error?.detail ?? null;
   const consequence = networkNote(transition.event, item);
+  const late = lateCloseNote(
+    transition.event,
+    item,
+    alternatives.map((t) => t.event),
+  );
+  const lateInstead = late?.instead ? alternatives.find((t) => t.event === late.instead) : undefined;
   const meaning = actionNote(transition.event, item, (iso) => formatDateTime(iso), {
     minNoticeMin: settings.data?.doc.booking.minNoticeMin ?? 0,
     now: Date.now(),
@@ -257,6 +269,16 @@ export function ActionConfirm({
       {showTitle && <h3>{transition.label}</h3>}
       {meaning && <p className="hint">{meaning}</p>}
       {consequence && <p className="hint">{consequence}</p>}
+      {late && (
+        <p className="hint" role="note">
+          {late.text}{" "}
+          {lateInstead && onSwitch && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onSwitch(lateInstead)}>
+              {lateInstead.label}
+            </button>
+          )}
+        </p>
+      )}
 
       {kind === "agreed" && (
         <div>

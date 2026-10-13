@@ -238,3 +238,206 @@ export function emailWords(n: Pick<NetworkView, "receives_emails" | "registratio
   if (n.receives_emails && n.registration !== "registered") return null;
   return `Customers' email addresses go to this network only once it has verified your inbox. Verified: ${n.registration === "registered" ? "yes" : "not yet"}.`;
 }
+
+// ---- How agents got on (network protocol §4.15) -----------------------------------------------
+
+type Doors = NonNullable<NetworkView["doors"]>;
+type DoorCounts = Doors["doors"][number];
+
+/** The words for a door type, as the owner knows its doors. */
+function doorLabel(type: string): string {
+  if (type.startsWith("platform:")) return `${type.slice("platform:".length)} door`;
+  const known: Record<string, string> = {
+    inbox: "Inbox door",
+    mcp: "MCP door",
+    a2a: "A2A door",
+    openapi: "OpenAPI door",
+    api: "API door",
+    ucp: "UCP door",
+    acp: "ACP door",
+    nlweb: "NLWeb door",
+  };
+  return known[type] ?? `${type} door`;
+}
+
+/** What went wrong, in a few plain words; the class itself for one this page does not know. */
+const CLASS_WORDS: Record<string, string> = {
+  "dns.name_not_resolved": "name did not resolve",
+  "dns.failed": "name lookup failed",
+  "tcp.timed_out": "connection timed out",
+  "tcp.refused": "connection refused",
+  "tcp.reset": "connection reset",
+  "tls.cert.invalid": "certificate not valid",
+  "tls.failed": "secure connection failed",
+  "http.error": "server error",
+  "http.response.invalid": "answer was not valid HTTP",
+  abandoned: "answer cut off",
+  timeout: "no answer in time",
+  "operation.timeout": "never finished",
+  "protocol.internal": "internal error",
+  "protocol.advertised_missing": "an advertised tool was missing",
+  "protocol.version": "protocol version refused",
+  "protocol.invalid_answer": "answer did not follow the protocol",
+  "protocol.unsigned_answer": "answers not signed",
+  "operation.tool_error": "tool error",
+  "operation.failed": "operation failed",
+  "operation.internal": "internal error in the operation",
+  payment_failed: "payment step failed",
+  slot_taken: "time taken",
+  out_of_stock: "out of stock",
+  item_unavailable: "not offered now",
+  outside_limits: "outside your limits",
+  wrong_state: "not possible at that stage",
+  customer_side: "on the customer's side",
+  escalation: "handed to a person",
+  auth: "sign-in needed",
+  person: "the customer had to act",
+  "client.invalid_params": "arguments it cannot take",
+  "client.parse_error": "JSON that does not parse",
+  "client.invalid_request": "requests that are not valid JSON-RPC",
+  "client.mcp_headers": "requests with MCP headers missing or wrong",
+  "client.mcp_refused": "requests the MCP server refused",
+  "client.http": "requests it answered with 4xx",
+  "client.rate_limited": "too many requests",
+};
+
+export function classWords(cls: string): string {
+  return CLASS_WORDS[cls] ?? cls;
+}
+
+const RESULT_WORDS: Record<string, string> = {
+  ok: "done",
+  refused: "refused",
+  fail: "failed",
+  info: "needed a person",
+  invalid: "the agents' own mistakes",
+};
+
+/** "12 done, 2 refused, 1 failed" for one window, or null when there was nothing. */
+function tally(rows: DoorCounts["reports"], window: "d7" | "d30"): string | null {
+  const by = new Map<string, number>();
+  for (const r of rows) by.set(r.result, (by.get(r.result) ?? 0) + r[window]);
+  const parts = ["ok", "refused", "fail", "info", "invalid"].flatMap((k) => {
+    const n = by.get(k) ?? 0;
+    return n > 0 ? [`${n} ${RESULT_WORDS[k]}`] : [];
+  });
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** "the last 30 days: 2 connection timed out, 1 server error": what failed, most first. */
+function failures(rows: DoorCounts["reports"]): string | null {
+  const by = new Map<string, number>();
+  for (const r of rows)
+    if (r.result === "fail" && r.class && r.d30 > 0) by.set(r.class, (by.get(r.class) ?? 0) + r.d30);
+  const list = [...by].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${n} ${classWords(c)}`);
+  return list.length > 0 ? `What failed in the last 30 days: ${list.join(", ")}.` : null;
+}
+
+export interface DoorPanel {
+  /** "Counts to 12 Oct. Said 3 min ago." */
+  readonly said: string;
+  readonly doors: readonly {
+    readonly title: string;
+    readonly check: { readonly line: string; readonly tone: NetworkTone };
+    readonly lines: readonly string[];
+  }[];
+  /** Open incidents and trouble the network's own reads do not see. */
+  readonly alerts: readonly { readonly line: string; readonly tone: NetworkTone }[];
+  /** What to fix, in the network's own plain lines. */
+  readonly fixes: readonly string[];
+}
+
+/**
+ * "How agents got on": what a network's answer to the last signed ping said about the business's own
+ * doors (network protocol §4.15), in the owner's words. Each count says what proved it: signed by the
+ * business's own door, or from agents the network cannot tell apart; the network's own check is said
+ * apart. Null while no network has said anything.
+ */
+export function doorPanel(n: NetworkView, now: number = Date.now(), locale?: string): DoorPanel | null {
+  const d = n.doors;
+  if (!n.enabled || !d) return null;
+  const when = (iso: string) => sinceWords(iso, now, locale);
+  const doors = d.doors.map((door) => {
+    const title = `${doorLabel(door.type)} · ${shortUrl(door.url)}`;
+    const check = checkLine(door, when);
+    const lines: string[] = [];
+    for (const [proof, label] of [
+      ["token", "Signed by your door"],
+      ["none", "Agents the network cannot tell apart"],
+    ] as const) {
+      const rows = door.reports.filter((r) => r.proof === proof);
+      const week = tally(rows, "d7");
+      const month = tally(rows, "d30");
+      if (month) lines.push(`${label}: ${week ?? "nothing"} in the last 7 days; ${month} in 30.`);
+    }
+    const failed = failures(door.reports);
+    if (failed) lines.push(failed);
+    const faults = new Map<string, number>();
+    for (const r of door.reports) {
+      if (r.result !== "invalid" || r.d30 === 0) continue;
+      const key = `${r.tool ?? r.op}\u0000${r.class ?? ""}`;
+      faults.set(key, (faults.get(key) ?? 0) + r.d30);
+    }
+    for (const [key, count] of faults) {
+      const [what, cls] = key.split("\u0000") as [string, string];
+      lines.push(
+        `Agents sent ${what} ${cls ? classWords(cls) : "requests it could not take"} ${count} time${count === 1 ? "" : "s"} in 30 days.`,
+      );
+    }
+    if (door.platforms.length > 0) {
+      lines.push(`Agents from ${door.platforms.map(hostOf).join(", ")} used it.`);
+    }
+    if (lines.length === 0) lines.push("No agent has reported on it in the last 30 days.");
+    return { title, check, lines };
+  });
+  const alerts = [
+    ...d.incidents.map((i) => ({
+      line: `${doorLabel(i.type)}: ${classWords(i.class)}, since ${when(i.opened_at)}. ${
+        i.reproduced ? "The network's own check saw it too." : "The network's own check has not seen it."
+      }${i.public_from ? ` If it still holds on ${dayWords(i.public_from, locale)}, it shows on your listing.` : ""}`,
+      tone: "danger" as NetworkTone,
+    })),
+    ...d.trouble.map((t) => ({
+      line: `Agents report trouble at your ${doorLabel(t.type)} that the network's own check does not see, since ${when(t.since)}.`,
+      tone: "warning" as NetworkTone,
+    })),
+  ];
+  return {
+    said: `Counts to ${dayWords(d.as_of, locale)}. Said ${agoWords(d.at, now)}.`,
+    doors,
+    alerts,
+    fixes: d.fixes.map((f) => f.text),
+  };
+}
+
+function checkLine(door: DoorCounts, when: (iso: string) => string): { line: string; tone: NetworkTone } {
+  if (door.status === "gone") {
+    return { line: "Gone: the network's check has failed for 30 days, and it no longer shows it.", tone: "danger" };
+  }
+  const c = door.checked;
+  if (door.status === "failing") {
+    return {
+      line: `Failing: the network's check could not use it${c ? ` (last tried ${when(c.at)})` : ""}. It counts for nothing until a check works.`,
+      tone: "danger",
+    };
+  }
+  if (!c) return { line: "Not checked by the network yet.", tone: "neutral" };
+  if (c.result === "good") return { line: `It answered the network's check, ${when(c.at)}.`, tone: "success" };
+  if (c.result === "blocked") {
+    return {
+      line: `The network's check was blocked, ${when(c.at)} (a 403, a 429 or a challenge page). That is never a failure, but the network cannot vouch for the door while it is blocked.`,
+      tone: "warning",
+    };
+  }
+  return { line: `The network's check failed, ${when(c.at)}; it tries again soon.`, tone: "warning" };
+}
+
+/** The door's host and path, without the scheme: "bakery.example/mcp". */
+function shortUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname === "/" ? "" : u.pathname}`;
+  } catch {
+    return url;
+  }
+}

@@ -192,6 +192,7 @@ describe("the manifest", () => {
           level: "full",
           standing: null,
           ping_signature: null,
+          doors: null,
           receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
         },
       ],

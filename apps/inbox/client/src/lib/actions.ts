@@ -337,3 +337,37 @@ export function networkNote(event: string, item: Item, now: number = Date.now())
   }
   return null;
 }
+
+/**
+ * A cancellation or a withdrawal the owner records for the customer, within 48 hours of when the
+ * promise was due (a booking's start, an order's delivery date): networks count it at half against
+ * the business, like a cancellation of its own, unless the customer confirms it was theirs (rules
+ * version 9). A withdrawal in time is never refused and never late (ADR-018 §8), so it is only said;
+ * a cancellation the customer made too late under the booking's policy is offered as a late
+ * cancellation when the item can take one. Null when it is earlier, or not that kind of record.
+ */
+export function lateCloseNote(
+  event: string,
+  item: Item,
+  available: readonly string[] = [],
+  now: number = Date.now(),
+): { readonly text: string; readonly instead: "record_cancel_late" | null } | null {
+  if (event !== "record_cancel" && event !== "record_withdrawal") return null;
+  const at =
+    item.type === "booking"
+      ? item.payload.startTime
+      : item.type === "order"
+        ? (item.payload as { delivery?: { when?: string } }).delivery?.when
+        : undefined;
+  const due = at ? Date.parse(at) : Number.NaN;
+  if (!Number.isFinite(due) || now < due - 48 * 3_600_000) return null;
+  const what = event === "record_withdrawal" ? "A withdrawal" : "A cancellation";
+  const from = item.type === "booking" ? "the start" : "the delivery date";
+  const instead = event === "record_cancel" && available.includes("record_cancel_late") ? "record_cancel_late" : null;
+  return {
+    text: `${what} you record for the customer within 48 hours of ${from} counts at half against you at networks, like a cancellation of your own, unless the customer confirms it was theirs.${
+      instead ? " If they cancelled too late under your cancellation policy, record a late cancellation instead." : ""
+    }`,
+    instead,
+  };
+}

@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type NetworkView, parseStoredSettings 
 import { describe, expect, it } from "vitest";
 import {
   agoWords,
+  doorPanel,
   emailWords,
   networkStatus,
   parseNetworkOrigin,
@@ -214,6 +215,7 @@ describe("Settings → Networks", () => {
     level: "full",
     standing: null,
     ping_signature: null,
+    doors: null,
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
@@ -288,6 +290,94 @@ describe("Settings → Networks", () => {
     expect(rulesWords(rules(6, null, true))).toBe(
       "Rules version 6: it gets how each booking and order ended, the changes agreed to them, and refunds.",
     );
+  });
+
+  it("says how agents got on at the doors, each count with what proved it, and the network's own check apart", () => {
+    expect(doorPanel(base, now)).toBeNull();
+    const doors: NonNullable<NetworkView["doors"]> = {
+      at: "2026-09-23T14:27:00Z",
+      as_of: "2026-09-22",
+      doors: [
+        {
+          type: "mcp",
+          url: "https://demo.example.com/mcp",
+          status: "live",
+          checked: { result: "good", at: "2026-09-23T09:00:00Z" },
+          reports: [
+            { op: "book", tool: "create_booking", proof: "none", result: "ok", d7: 12, d30: 40 },
+            {
+              op: "book",
+              tool: "create_booking",
+              proof: "none",
+              result: "refused",
+              class: "slot_taken",
+              d7: 2,
+              d30: 5,
+            },
+            { op: "book", proof: "none", result: "fail", class: "tcp.timed_out", d7: 0, d30: 2 },
+            {
+              op: "book",
+              tool: "create_booking",
+              proof: "none",
+              result: "invalid",
+              class: "client.invalid_params",
+              d7: 3,
+              d30: 14,
+            },
+          ],
+          platforms: ["https://agents.example.net"],
+        },
+        {
+          type: "inbox",
+          url: "https://demo.example.com/.well-known/agent-inbox.json",
+          status: "live",
+          checked: { result: "blocked", at: "2026-09-22T09:00:00Z" },
+          reports: [],
+          platforms: [],
+        },
+      ],
+      incidents: [
+        {
+          id: "inc_1",
+          type: "mcp",
+          url: "https://demo.example.com/mcp",
+          class: "protocol.version",
+          opened_at: "2026-09-22T10:00:00Z",
+          reproduced: false,
+          public_from: "2026-09-29",
+        },
+      ],
+      trouble: [
+        { type: "inbox", url: "https://demo.example.com/.well-known/agent-inbox.json", since: "2026-09-23T08:00:00Z" },
+      ],
+      fixes: [{ class: "protocol.version", text: "Your MCP server refuses the protocol version it advertises." }],
+    };
+    const panel = doorPanel({ ...base, doors }, now, "en-GB");
+    expect(panel?.said).toBe("Counts to 22 Sept. Said 3 min ago.");
+    // The time is the browser's own; the day the counts run to is UTC's.
+    expect(panel?.doors[0]?.check).toEqual({
+      line: expect.stringMatching(/^It answered the network's check, \d\d:\d\d\.$/),
+      tone: "success",
+    });
+    expect(panel?.doors[0]).toMatchObject({
+      title: "MCP door · demo.example.com/mcp",
+      lines: [
+        "Agents the network cannot tell apart: 12 done, 2 refused, 3 the agents' own mistakes in the last 7 days; 40 done, 5 refused, 2 failed, 14 the agents' own mistakes in 30.",
+        "What failed in the last 30 days: 2 connection timed out.",
+        "Agents sent create_booking arguments it cannot take 14 times in 30 days.",
+        "Agents from agents.example.net used it.",
+      ],
+    });
+    expect(panel?.doors[1]?.check.tone).toBe("warning");
+    expect(panel?.doors[1]?.check.line).toMatch(/blocked.*never a failure/);
+    expect(panel?.doors[1]?.lines).toEqual(["No agent has reported on it in the last 30 days."]);
+    expect(panel?.alerts.map((a) => a.tone)).toEqual(["danger", "warning"]);
+    expect(panel?.alerts[0]?.line).toContain("If it still holds on 29 Sept, it shows on your listing.");
+    expect(panel?.alerts[1]?.line).toContain("that the network's own check does not see");
+    expect(panel?.fixes).toEqual(["Your MCP server refuses the protocol version it advertises."]);
+    // Nothing in it names an agent's key, a person or an address.
+    expect(JSON.stringify(panel)).not.toMatch(/@|sdpass|sdkey/);
+    expect(doorPanel({ ...base, enabled: false, doors }, now)).toBeNull();
   });
 
   it("says your own standing at a network, and why it is not shown when it is not", () => {

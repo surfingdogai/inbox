@@ -7,6 +7,8 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, problemOf } from "../lib/api";
 import {
+  type DoorPanel,
+  doorPanel,
   emailWords,
   hostOf,
   MAX_NETWORKS,
@@ -190,6 +192,7 @@ function NetworkLine({
   const counts = n.share.receipts && (n.enabled || n.receipts.published > 0) ? receiptWords(n.receipts) : [];
   const rules = n.enabled ? rulesWords(n.rules) : null;
   const standing = standingWords(n);
+  const doors = doorPanel(n);
   const emails = n.enabled ? emailWords(n) : null;
   return (
     <div className={clsx("catalogue-row row-glass", !n.enabled && "is-archived")}>
@@ -208,6 +211,7 @@ function NetworkLine({
             Your standing here: {standing.line}
           </div>
         )}
+        {doors && <AgentsGotOn panel={doors} />}
         {rules && <div className="hint">{rules}</div>}
         {n.enabled && n.level === "directory" && (
           <div className="hint">
@@ -310,5 +314,47 @@ function AddNetwork({
         </div>
       </Field>
     </form>
+  );
+}
+
+/**
+ * How agents got on at the business's own doors, as this network last said it (protocol §4.15):
+ * folded away until opened, since it is detail. Open when something needs the owner.
+ */
+function AgentsGotOn({ panel }: { panel: DoorPanel }) {
+  const urgent = panel.alerts.length > 0 || panel.doors.some((d) => d.check.tone === "danger");
+  return (
+    <details className="net-doors" open={urgent}>
+      <summary className="s">
+        How agents got on <span className="hint">· {panel.said}</span>
+      </summary>
+      {panel.alerts.map((a) => (
+        <div key={a.line} className="s net-status">
+          <i className={clsx("dot", `dot-${a.tone}`)} aria-hidden="true" />
+          {a.line}
+        </div>
+      ))}
+      {panel.doors.map((d) => (
+        <div key={d.title} className="net-door">
+          <div className="s mono">{d.title}</div>
+          <div className="s net-status">
+            <i className={clsx("dot", d.check.tone !== "neutral" && `dot-${d.check.tone}`)} aria-hidden="true" />
+            {d.check.line}
+          </div>
+          {d.lines.map((line) => (
+            <div key={line} className="hint">
+              {line}
+            </div>
+          ))}
+        </div>
+      ))}
+      {panel.fixes.length > 0 && (
+        <ul className="net-fixes hint">
+          {panel.fixes.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }

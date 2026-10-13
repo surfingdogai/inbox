@@ -123,8 +123,10 @@ export function ItemDetailView({
       pending={transition.isPending}
       error={transition.error ? problemOf(transition.error) : null}
       showTitle={!phone}
+      alternatives={transitions}
       onSubmit={(input) => run(pending, input)}
       onCancel={() => setPending(null)}
+      onSwitch={pick}
     />
   );
 

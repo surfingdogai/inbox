@@ -781,6 +781,23 @@ a {
 .net-issue {
   margin-top: 10px;
 }
+/* How agents got on: folded under the network, a few quiet lines per door. */
+.net-doors {
+  margin-top: 8px;
+}
+.net-doors summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.net-door {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--hairline);
+}
+.net-fixes {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
 .net-add {
   display: flex;
   gap: 10px;
