@@ -12,6 +12,8 @@
  * The same for reliability: it is live once the network's listings carry `track_record` and its
  * /b/<domain> pages show it, so this site ships after that network.
  */
+import { HOSTED_STATUS } from "./hosted";
+
 export type State = "live" | "building" | "coming";
 
 export interface Capability {
@@ -83,7 +85,8 @@ export const capabilities: readonly Capability[] = [
   },
   { id: "fan-out", label: "One request to up to three businesses, agent to agent", state: "coming" },
   { id: "rules-doors", label: "Ranking rules for other doors", state: "coming" },
-  { id: "hosted", label: "A hosted inbox", state: "coming" },
+  // Its words and state follow the pilot's one switch (src/lib/hosted.ts).
+  { id: "hosted", ...HOSTED_STATUS },
 ];
 
 /** The state of one capability; a missing id is a typo, so it fails the build rather than lying. */

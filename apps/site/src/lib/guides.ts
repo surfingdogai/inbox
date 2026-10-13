@@ -11,6 +11,8 @@
  * our own inbox as one labelled option, in the three guides where it fits, and nowhere else.
  */
 
+import { HOSTED_LINE } from "./hosted";
+
 /** Every guide's address under /guides/, in the order the hub lists them. */
 export const GUIDE_SLUGS = [
   "ai-assistant-bookings",
@@ -87,8 +89,7 @@ const ACP: GuideLink = { label: "ACP", href: "https://www.agenticcommerce.dev" }
 
 /** The inbox's name wherever a guide lists it: whose it is, and that it is open source. */
 export const INBOX_WAY = "Surfing Dog Inbox (ours, open source)";
-const INBOX_COST =
-  "On Cloudflare the free plan runs it, and sending email needs a paid Workers plan, about $5 a month; or run it on your own server. There's no hosted version yet.";
+const INBOX_COST = `On Cloudflare the free plan runs it, and sending email needs a paid Workers plan, about $5 a month; or run it on your own server. ${HOSTED_LINE}`;
 const INBOX_LINKS: readonly GuideLink[] = [
   { label: "How it works", href: "/inbox/" },
   { label: "Install it", href: "/install/" },

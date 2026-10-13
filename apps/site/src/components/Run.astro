@@ -1,4 +1,6 @@
 ---
+import { HOSTED_PILOT_OPEN, START_URL } from "../lib/hosted";
+
 const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
@@ -37,31 +39,53 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
         </div>
       </article>
 
-      <article class="glass card lift way">
-        <div class="way-head">
-          <h3 class="h-card">Hosted by us</h3>
-          <span class="pill">Coming</span>
-        </div>
-        <p class="card-text">
-          We'll run it for you, with email and backups included. Leave your address and we'll write when it opens.
-        </p>
-        <form class="foot wait" method="post" action={WAITLIST} data-waitlist>
-          <label class="label" for="wait-email">Email</label>
-          <div class="wait-row">
-            <input
-              class="input"
-              id="wait-email"
-              name="email"
-              type="email"
-              autocomplete="email"
-              required
-              placeholder="you@yourbusiness.com"
-            />
-            <button class="btn btn-primary" type="submit">Join the waitlist</button>
-          </div>
-          <p class="hint" data-waitlist-status aria-live="polite"></p>
-        </form>
-      </article>
+      {
+        HOSTED_PILOT_OPEN && (
+          <article class="glass card lift way">
+            <div class="way-head">
+              <h3 class="h-card">Hosted by us</h3>
+              <span class="pill">Pilot</span>
+            </div>
+            <p class="card-text">
+              We run it for you, at an address on your own domain. Set it up from your website's check result, then add
+              one DNS record. Free during the pilot.
+            </p>
+            <div class="foot">
+              <a class="btn btn-primary" href={START_URL}>Get your agent inbox</a>
+              <p class="hint"><a class="link" href="/hosted/">How it works</a></p>
+            </div>
+          </article>
+        )
+      }
+      {
+        !HOSTED_PILOT_OPEN && (
+          <article class="glass card lift way">
+            <div class="way-head">
+              <h3 class="h-card">Hosted by us</h3>
+              <span class="pill">Coming</span>
+            </div>
+            <p class="card-text">
+              We'll run it for you, with email and backups included. Leave your address and we'll write when it opens.
+            </p>
+            <form class="foot wait" method="post" action={WAITLIST} data-waitlist>
+              <label class="label" for="wait-email">Email</label>
+              <div class="wait-row">
+                <input
+                  class="input"
+                  id="wait-email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  required
+                  placeholder="you@yourbusiness.com"
+                />
+                <button class="btn btn-primary" type="submit">Join the waitlist</button>
+              </div>
+              <p class="hint" data-waitlist-status aria-live="polite"></p>
+            </form>
+          </article>
+        )
+      }
     </div>
   </div>
 </section>

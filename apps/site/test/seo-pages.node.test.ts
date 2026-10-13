@@ -277,7 +277,8 @@ describe("the owners' pages", () => {
     // Our inbox is one labelled option among others, and says what it doesn't do for a Shopify order.
     expect(text).toContain("<b>Surfing Dog Inbox (ours, open source)</b>, one option among apps");
     expect(text).toContain("Orders placed in your Shopify checkout stay in Shopify");
-    expect(text).toContain("There's no hosted version yet.");
+    // Hosting is the pilot switch's own sentence (src/lib/hosted.ts), never a second copy of it.
+    expect(text).toContain("{HOSTED_LINE} Orders placed");
   });
 
   it("link to the checker in their own words, and every link they make on this site goes somewhere", () => {

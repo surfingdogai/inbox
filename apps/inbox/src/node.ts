@@ -23,6 +23,7 @@ import {
 import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
+import { isDoor } from "./doors";
 import { listFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 import { NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
@@ -185,21 +186,6 @@ if (demo) {
   }
   console.log("Demo mode: the shop is seeded, nobody but the owner is emailed, and it is wiped every night.");
 }
-
-/** The doors answer these first; everything else that is not a file is the app. Same list as vite.config.ts. */
-const DOOR_PREFIXES = [
-  "/v1",
-  "/mcp",
-  "/auth",
-  "/oauth",
-  "/openapi.json",
-  "/healthz",
-  "/.well-known",
-  "/c",
-  "/p",
-  "/demo",
-];
-const isDoor = (p: string) => DOOR_PREFIXES.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
 
 const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");
 if (existsSync(clientDir)) {
