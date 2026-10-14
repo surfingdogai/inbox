@@ -155,7 +155,7 @@ describe("the hosted pilot's words", () => {
   });
 
   it("state the servers' country on the hosted terms, and nowhere else", () => {
-    expect(body(`${HOSTED_DIR}/terms.md`)).toContain("stored on our servers in Germany");
+    expect(body(`${HOSTED_DIR}/terms.md`)).toContain("stored in the European Union and nowhere else");
     const allowed = new Set([site(`${HOSTED_DIR}/terms.md`)]);
     const files = [...walk(site("src")), ...walk(repo("docs")), ...walk(site("public"))];
     for (const f of files) {
