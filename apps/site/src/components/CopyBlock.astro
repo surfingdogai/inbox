@@ -4,10 +4,13 @@
  * selectable, so it works with no script), and a copy button that appears only where the clipboard
  * is there to use (src/lib/copy.ts). An address is set in monospace; words to say to an AI are set
  * in the body font, as words. An optional second way to say it waits behind a small disclosure.
- * Every button is named for what it copies, so three "Copy" buttons never sound the same.
+ * Every button is named for what it copies, so three "Copy" buttons never sound the same. A `lead`
+ * comes before all of it: another way to the same thing, one sentence and a link.
  */
 interface Props {
   title: string;
+  /** Another way to the same thing, said before the line to copy: one sentence and its link. */
+  lead?: { text: string; link: { label: string; href: string } } | null;
   what: string;
   value: string;
   /** true when the value is an address (monospace); words to say to an AI are not. */
@@ -17,11 +20,17 @@ interface Props {
   more?: { href: string; label: string };
 }
 
-const { title, what, value, address = false, alt, more } = Astro.props;
+const { title, lead, what, value, address = false, alt, more } = Astro.props;
 ---
 
 <div class="cb">
-  <h2 class="cb-title">{title}</h2>
+  <h2 class="cb-title">{title}</h2>{
+    lead && (
+      <p class="cb-what">
+        {lead.text} <a class="link" href={lead.link.href}>{lead.link.label}</a>
+      </p>
+    )
+  }
   <p class="cb-what">{what}</p>
   <div class="cb-row">
     {address ? <code class="cb-text cb-addr">{value}</code> : <p class="cb-text cb-words">{value}</p>}

@@ -4,12 +4,16 @@
  * or it has no door yet. Each card carries its state from src/lib/status.ts. The three door marks
  * are thin line icons that each do one small thing once, when the cards scroll in: the open door swings, the
  * scanned door's ring goes out twice, the third door is drawn in by a dashed line. The resting
- * frame is the finished drawing, and nothing loops.
+ * frame is the finished drawing, and nothing loops. The third card follows the hosted pilot's switch
+ * (src/lib/hosted.ts): once it is open, the hosted inbox comes before setting it up yourself. Its
+ * closed words keep their line breaks as they were, so the closed page is built exactly as before.
  */
+import { HOSTED_NO_DOOR } from "../lib/hosted";
 import { stateOf } from "../lib/status";
 import StatusPill from "./StatusPill.astro";
 
 const BOT = "https://network.surfingdog.ai/bot";
+const { pills, card, price } = HOSTED_NO_DOOR;
 ---
 
 <section class="section" id="businesses" aria-labelledby="businesses-h" data-reveal>
@@ -72,20 +76,39 @@ const BOT = "https://network.surfingdog.ai/bot";
             <path class="floor" d="M4 25h20"></path>
           </svg>
           <span class="pills">
-            <StatusPill state={stateOf("inbox")} text="Live: self-host" />
-            <StatusPill state={stateOf("hosted")} text="Coming: hosted" />
+            <StatusPill state={stateOf(pills[0].id)} text={pills[0].text} />
+            <StatusPill state={stateOf(pills[1].id)} text={pills[1].text} />
           </span>
         </div>
         <h3 class="h-card">No door yet?</h3>
-        <p class="card-text">
+        {
+          card ? (
+            <p class="card-text">{card.text}</p>
+          ) : (
+            <p class="card-text">
           Get the open-source inbox. It runs at your own address, and agents write to you there. Your AI can set it up
           from one line.
-        </p>
-        <p class="foot"><a class="btn btn-secondary btn-sm" href="/install/">Tell your AI to set it up</a></p>
+            </p>
+          )
+        }
+        {
+          card ? (
+            <p class="foot">
+              <a class="btn btn-secondary btn-sm" href={card.cta.href}>
+                {card.cta.label}
+              </a>{" "}
+              <a class="link" href={card.also.href}>
+                {card.also.label}
+              </a>
+            </p>
+          ) : (
+            <p class="foot"><a class="btn btn-secondary btn-sm" href="/install/">Tell your AI to set it up</a></p>
+          )
+        }
       </article>
     </div>
 
-    <p class="mono price">Listing: free · Rank: never for sale · Inbox: free to self-host · Hosted: coming</p>
+    <p class="mono price">Listing: free · Rank: never for sale · {price}</p>
   </div>
 </section>
 

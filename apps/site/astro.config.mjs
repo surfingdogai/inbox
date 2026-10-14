@@ -4,6 +4,8 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
+import { HOSTED_LLMS } from "./src/lib/hosted.ts";
+import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
 
 const GITHUB = "https://github.com/surfingdogai/inbox";
 
@@ -24,6 +26,9 @@ export default defineConfig({
   // Keep the pre-7 whitespace rules: inline elements separated by a newline keep their space.
   compressHTML: true,
   integrations: [
+    // Docs written in two versions, one for each state of the hosted pilot, keep the one the switch
+    // says (src/lib/hosted-markdown.ts).
+    hostedPilotMarkdown(),
     // Starlight adds this integration itself when it is missing; given here, it also lists the
     // network's sitemap in sitemap-index.xml.
     sitemap({ customSitemaps: [NETWORK_SITEMAP] }),
@@ -89,14 +94,14 @@ export default defineConfig({
           // `curl https://surfingdog.ai/v1/stats | jq .directory` is not null (see src/lib/status.ts).
           details: [
             "Search: find businesses an AI agent can reach, with the doors each one opens, whatever software opens them: MCP, A2A, UCP, ACP, an API, or Surfing Dog Inbox. Over MCP at https://surfingdog.ai/mcp, over REST at https://surfingdog.ai/v1/businesses?q=<words>, or in a browser at https://surfingdog.ai/search?q=<words>. Live counts (agent-ready businesses, and how many take messages, bookings, orders and payment or have a catalogue) are in the directory block of https://surfingdog.ai/v1/stats. Connecting to it (transport, tools, limits, examples): https://surfingdog.ai/about/#connect.",
-            "Inbox: the business's own inbox, open source (MIT), for bookings, orders, quote requests and messages over REST, MCP and email. It runs on the business's own subdomain (for example inbox.yourbusiness.com), on its Cloudflare account or its own server, or hosted by Surfing Dog at that address, free during the pilot (https://app.surfingdog.ai/start). Its manifest and doors live on the business's domain and name the business, and customers and their agents write to the business there, directly. Installing it does not put a business on Surfing Dog: Surfing Dog is not in the middle of a message, a booking, an order or a payment, and the business can leave any time with its data, which is in its own database. To install it, an AI follows https://surfingdog.ai/install.md. About it: https://surfingdog.ai/inbox.",
+            `Inbox: the business's own inbox, open source (MIT), for bookings, orders, quote requests and messages over REST, MCP and email. It runs on the business's own subdomain (for example inbox.yourbusiness.com), ${HOSTED_LLMS.where}. Its manifest and doors live on the business's domain and name the business, and customers and their agents write to the business there, directly. Installing it does not put a business on Surfing Dog: Surfing Dog is not in the middle of a message, a booking, an order or a payment, and the business can leave any time with its data, which is in its own database. ${HOSTED_LLMS.get} About it: https://surfingdog.ai/inbox.`,
             "Trust network: optional and separate from the inbox; joining is the business's choice. It lists the business in the directory and records the receipts its inbox signs (bookings confirmed, orders accepted, and how they ended), with no names, no messages and nothing of what was ordered; everything a network receives is listed at https://surfingdog.ai/network#shared. Inboxes check in with signed hourly pings, businesses and agents sign receipts for what was promised, and the directory's order reads kept promises. Nobody can pay for a place. The rules are versioned at https://surfingdog.ai/v1/ranking, the version in force and the next one announced. About it: https://surfingdog.ai/trust.",
             "Setting a business up for agents: guidance from a real installation, recommendations and not rules (a business may use other tools and other ways). The inbox as a business's front door, or as a thin agent door in front of the helpdesk (Intercom, Zendesk, Salesforce, HubSpot, Freshdesk), booking system, checkout or own AI it already has; deciding what handles each door; making doors findable; the full journey after an order or a booking; how agents pay; bridges to helpdesks and chat apps. Plain Markdown for an AI: https://surfingdog.ai/setting-up-for-agents.md; the same page for people: https://surfingdog.ai/docs/setting-up-for-agents/.",
             "Check a business: https://surfingdog.ai/check, or the MCP tool check_business. Results: https://surfingdog.ai/b/<domain>. Agentic score rules, versioned: https://surfingdog.ai/v1/score-rules.",
             "Guides, for any business anywhere and no vendor in particular: what makes a business ready for AI agents, and how to let a customer's AI assistant book, order, message or ask for a quote, and pay; publishing hours, prices and terms as data; making agent doors findable; what llms.txt does and doesn't; robots.txt and content signals. Each says what the check counts and ends with a way to check the change worked: https://surfingdog.ai/guides/.",
             "Leaderboards by category and place, the businesses where an agent can book, order or sign up above the rest, then by agentic score, separate from the directory's search order: https://surfingdog.ai/leaderboard.",
             "Discovery for agents: https://surfingdog.ai/.well-known/ai-catalog.json (ARD), the MCP server card at https://surfingdog.ai/.well-known/mcp/server-card.json and the A2A agent card at https://surfingdog.ai/.well-known/agent-card.json.",
-            "The protocol is open: anyone can run a network. Everything is MIT: the inbox server, the example network, network-check, and @surfingdog/sdk on npm. Self-host the inbox today; a hosted inbox is not open yet.",
+            `The protocol is open: anyone can run a network. Everything is MIT: the inbox server, the example network, network-check, and @surfingdog/sdk on npm. ${HOSTED_LLMS.open}`,
             "Every inbox publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. A business's inbox answers at its own address; our demo instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
           ].join("\n\n"),
           optionalLinks: [

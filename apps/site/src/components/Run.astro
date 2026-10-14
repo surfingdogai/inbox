@@ -1,7 +1,11 @@
 ---
-import { HOSTED_PILOT_OPEN, START_URL } from "../lib/hosted";
+/**
+ * The ways to run the inbox, at /inbox/#run. While the hosted pilot is closed (src/lib/hosted.ts),
+ * hosting is the last card and holds the waitlist; once it is open, it is the first card and the
+ * one primary button, and the two ways to run it yourself follow.
+ */
+import { DEPLOY_URL, HOSTED_PILOT_OPEN, HOSTED_RUN, START_URL } from "../lib/hosted";
 
-const DEPLOY = "https://deploy.workers.cloudflare.com/?url=https://github.com/surfingdogai/inbox";
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
 
@@ -11,35 +15,14 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
       <div>
         <p class="eyebrow">Run it</p>
         <h2 class="h-section" id="run-h">Three ways to run</h2>
-        <p class="lede">
+        <p class="lede">{HOSTED_RUN.lede}
           On Cloudflare or your own server, your data stays in your account or on your machine. Joining the network
           is optional.
         </p>
       </div>
     </div>
 
-    <div class="grid-cards ways" data-reveal="stagger">
-      <article class="glass card lift way">
-        <h3 class="h-card">Deploy to Cloudflare</h3>
-        <p class="card-text">
-          One click on your Cloudflare account sets it up and asks for three values. You can start free.
-          Sending email needs Workers Paid or a Resend key.
-        </p>
-        <div class="foot">
-          <a class="btn btn-primary" href={DEPLOY} rel="noopener">Deploy to Cloudflare</a>
-        </div>
-      </article>
-
-      <article class="glass card lift way">
-        <h3 class="h-card">Your own server</h3>
-        <p class="card-text">One process and one SQLite file, on Node 22.16 or newer. A one-line install is coming.</p>
-        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">Coming</span></pre>
-        <div class="foot">
-          <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
-        </div>
-      </article>
-
-      {
+    <div class="grid-cards ways" data-reveal="stagger">{
         HOSTED_PILOT_OPEN && (
           <article class="glass card lift way">
             <div class="way-head">
@@ -57,6 +40,27 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
           </article>
         )
       }
+      <article class="glass card lift way">
+        <h3 class="h-card">Deploy to Cloudflare</h3>
+        <p class="card-text">
+          One click on your Cloudflare account sets it up and asks for three values. You can start free.
+          Sending email needs Workers Paid or a Resend key.
+        </p>
+        <div class="foot">
+          <a class={HOSTED_RUN.deployClass} href={DEPLOY_URL} rel="noopener">Deploy to Cloudflare</a>
+        </div>
+      </article>
+
+      <article class="glass card lift way">
+        <h3 class="h-card">Your own server</h3>
+        <p class="card-text">One process and one SQLite file, on Node 22.16 or newer. A one-line install is coming.</p>
+        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">Coming</span></pre>
+        <div class="foot">
+          <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
+        </div>
+      </article>
+
+      {/* While the pilot is open its card leads the grid, above. */}
       {
         !HOSTED_PILOT_OPEN && (
           <article class="glass card lift way">

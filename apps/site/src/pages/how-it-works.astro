@@ -10,6 +10,7 @@ import HowFlow from "../components/HowFlow.astro";
 import Shot from "../components/Shot.astro";
 import StepArt from "../components/StepArt.astro";
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_HOW } from "../lib/hosted";
 
 const contents = [
   { href: "#arrives", label: "What arrives" },
@@ -102,7 +103,7 @@ const safety = [
 const steps = [
   {
     title: "Pick where it runs",
-    text: "Deploy to your own Cloudflare account in one click, or run it on your own server. We will also host it for you once that opens.",
+    text: HOSTED_HOW,
     href: "/inbox/#run",
     cta: "See the three ways",
   },

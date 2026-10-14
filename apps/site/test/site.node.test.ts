@@ -15,7 +15,6 @@ import {
   READY_HREF,
   readDirectory,
 } from "../src/lib/ask";
-import { HOSTED_PILOT_OPEN } from "../src/lib/hosted";
 import { OWN_WORD_NOTE, recordNote, recordView, UNCONFIRMED_NOTE } from "../src/lib/record";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
@@ -346,7 +345,7 @@ describe("the home page and the three products", () => {
     // It does not: the inbox runs at the business's own address and nobody sits in the middle.
     const faq = visible(read("src/pages/faq.astro"));
     expect(faq).toContain('q: "Does my business move onto Surfing Dog?"');
-    expect(faq).toMatch(/a: 'No\. Surfing Dog Inbox is open-source software/);
+    expect(faq).toMatch(/a:\s*["']No\. Surfing Dog Inbox is open-source software/);
     expect(faq).toContain("Surfing Dog is not in the middle of a message, a booking, an order or a payment");
     const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
     expect(opening).toContain("**The inbox is the business's own.**");
@@ -401,11 +400,9 @@ describe("the home page and the three products", () => {
     const products = read("src/components/Products.astro");
     expect(products).toContain('state: leastOf("search", "directory", "checker")');
     expect(leastOf("search", "directory", "checker")).toBe("live");
-    // Hosting is live exactly while the pilot is open (src/lib/hosted.ts).
-    expect(leastOf("search", "hosted")).toBe(HOSTED_PILOT_OPEN ? "live" : "coming");
-    expect(leastOf("search", "reliability", "hosted")).toBe(
-      stateOf("reliability") === "live" && HOSTED_PILOT_OPEN ? "live" : "coming",
-    );
+    // Against a part that stays coming whichever way the hosted pilot's switch is (src/lib/hosted.ts).
+    expect(leastOf("search", "fan-out")).toBe("coming");
+    expect(leastOf("search", "reliability", "fan-out")).toBe("coming");
     // Nothing live says it is not yet.
     for (const c of capabilities) {
       if (c.state === "live") expect(c.label, c.id).not.toMatch(/\b(yet|coming|being built|will)\b/i);

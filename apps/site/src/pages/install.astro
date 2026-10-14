@@ -1,8 +1,11 @@
 ---
 // The install page. Its whole job is to hand one line to the person so their AI does the work,
 // and the instructions the AI reads are a plain file at /install.md, not this page: a page is
-// for a person, a file is what an agent can fetch and follow.
+// for a person, a file is what an agent can fetch and follow. Once the hosted pilot opens
+// (src/lib/hosted.ts), the page's head offers the hosted inbox before the line. The closed lede
+// keeps its line breaks as they were, so the closed page is built exactly as before.
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_INSTALL } from "../lib/hosted";
 
 const PROMPT =
   "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
@@ -18,11 +21,24 @@ const REPO = "https://github.com/surfingdogai/inbox";
 >
   <section class="wrap wrap-read section is-head" id="install" aria-labelledby="install-h">
     <p class="eyebrow">Install</p>
-    <h1 class="h-page" id="install-h">Let your AI do it</h1>
+    <h1 class="h-page" id="install-h">{HOSTED_INSTALL?.title ?? "Let your AI do it"}</h1>
+    {
+      HOSTED_INSTALL ? (
+        <>
+          <p class="lede">{HOSTED_INSTALL.lede}</p>
+          <p>
+            <a class="btn btn-primary" href={HOSTED_INSTALL.cta.href}>
+              {HOSTED_INSTALL.cta.label}
+            </a>
+          </p>
+        </>
+      ) : (
     <p class="lede">
       You do not have to read any of this. Give the line below to Claude, ChatGPT, Codex, Grok or whatever you use,
       and it will set the whole thing up: the server, your subdomain, email in, and your first sign-in.
     </p>
+      )
+    }
   </section>
 
   <section class="section" aria-labelledby="prompt-h">

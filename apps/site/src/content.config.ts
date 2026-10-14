@@ -3,6 +3,7 @@ import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
+import { hostedDocsData } from "./lib/hosted-markdown";
 
 /**
  * Starlight's docs (src/content/docs, served under /docs), the blog (src/content/blog, one
@@ -11,7 +12,17 @@ import { z } from "astro/zod";
  * only while the pilot is open: src/lib/hosted.ts).
  */
 export const collections = {
-  docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  /**
+   * A docs page may also give the description it has once the hosted pilot is open
+   * (`hostedOpen.description`); its body marks its two versions itself (src/lib/hosted-markdown.ts).
+   */
+  docs: defineCollection({
+    loader: docsLoader(),
+    schema: (context) =>
+      docsSchema({ extend: z.object({ hostedOpen: z.object({ description: z.string() }).strict().optional() }) })(
+        context,
+      ).transform((data) => hostedDocsData(data)),
+  }),
   /**
    * A guide's prose, one Markdown file per slug and nothing in its frontmatter: its title, answer,
    * options and examples are in src/lib/guides.ts, which the hub, the pages and the tests all read.

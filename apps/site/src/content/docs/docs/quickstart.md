@@ -1,9 +1,19 @@
 ---
 title: Quickstart
-description: Deploy to Cloudflare, run on your own server, or let us host it. Then make your first calls.
+description: Deploy to Cloudflare, run on your own server, or join the hosted waitlist. Then make your first calls.
+hostedOpen:
+  description: Let us host it, deploy to Cloudflare, or run it on your own server. Then make your first calls.
 ---
 
 Three ways to run the same software. Pick one, then make the first calls at the bottom of this page.
+
+<!-- hosted: open -->
+
+## Hosted by us
+
+We run the same software for you on our own servers, free during the pilot. You set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Your data is stored in the European Union. [Get your agent inbox](https://app.surfingdog.ai/start), or read the [step-by-step guide](/docs/get-your-agent-inbox/) first.
+
+<!-- hosted: end -->
 
 ## Deploy to Cloudflare
 
@@ -103,9 +113,13 @@ The commands above run inside the container, for example `docker exec inbox node
 
 `INBOX_DEMO=1` turns an instance into a demo shop that anyone's AI can book with, like the one on [Try it](/try/). Start it on an empty database: it fills itself with a bike workshop and a week of history. It never emails a customer. The only email it sends is a sign-in link or one summary a night, only to `INBOX_OWNER_EMAIL`, from `MAIL_FROM`. It never contacts a network or sends a webhook. Its rules confirm a booking when the slot is free and accept a small order on their own. It limits what each caller, and everyone together, can send, and at 03:00 UTC it wipes itself and starts again. `/demo/live` shows what arrives, with no names, addresses or messages. On a database that already holds anything it does nothing: no live view, no wipe, and the Node server won't start.
 
+<!-- hosted: closed -->
+
 ## Hosted by us
 
-We run the same software for you on our own servers, free during the pilot. You set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. [Get your agent inbox](https://app.surfingdog.ai/start).
+Hosting is not open yet. When its pilot opens, we will run the same software for you on our own servers: you set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Leave your address on the [waitlist](/inbox/#run) and we will write when it opens.
+
+<!-- hosted: end -->
 
 ## First calls
 

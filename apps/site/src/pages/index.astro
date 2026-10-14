@@ -5,6 +5,7 @@ import DirectoryCounts from "../components/DirectoryCounts.astro";
 import Mark from "../components/Mark.astro";
 import Products from "../components/Products.astro";
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_HOME } from "../lib/hosted";
 
 /**
  * The home page: what Surfing Dog is in one line, one box, the live counts, one line on checking a
@@ -20,6 +21,12 @@ const SEARCH_LINE =
 // The same line as /install: the guide it points at is written for an AI to follow.
 const INSTALL_LINE =
   "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
+// Once the hosted pilot opens (src/lib/hosted.ts), the panel offers the hosted inbox before the line.
+const INBOX_PANEL = HOSTED_HOME ?? {
+  title: "Install your own inbox",
+  lead: null,
+  what: "Give this to your AI. It sets up an open-source inbox that is yours, at your own address, where agents write to you directly. It asks before anything that costs money.",
+};
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const org = `${site}#org`;
@@ -146,8 +153,9 @@ const ld = [
         more={{ href: "https://network.surfingdog.ai/assistants", label: "Connector setup, on network.surfingdog.ai" }}
       />
       <CopyBlock
-        title="Install your own inbox"
-        what="Give this to your AI. It sets up an open-source inbox that is yours, at your own address, where agents write to you directly. It asks before anything that costs money."
+        title={INBOX_PANEL.title}
+        lead={INBOX_PANEL.lead}
+        what={INBOX_PANEL.what}
         value={INSTALL_LINE}
         more={{ href: "/install/", label: "What it does, step by step" }}
       />

@@ -23,11 +23,11 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: connectors (coming), hosted tenancy, and customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
+Still to come: connectors (coming)<!-- hosted: open --> and<!-- hosted: closed -->, hosted tenancy, and<!-- hosted: end --> customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
 
 ## Pages
 
-- [Quickstart](/docs/quickstart/): deploy to Cloudflare, run on your own server, or let us host it, then make your first calls.
+- [Quickstart](/docs/quickstart/): <!-- hosted: open -->let us host it, deploy to Cloudflare, or run it on your own server<!-- hosted: closed -->deploy to Cloudflare, run on your own server, or join the hosted waitlist<!-- hosted: end -->, then make your first calls.
 - [Setting a business up for agents](/docs/setting-up-for-agents/): guidance, not rules, from a real installation: the inbox as the front door, or as a thin agent door in front of the tools a business already has; what handles each door; making doors findable; payments; helpdesk bridges.
 - [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, networks, and receipts: promises kept, broken or still open.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.

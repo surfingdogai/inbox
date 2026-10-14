@@ -3,9 +3,9 @@ title: Self-hosted vs hosted
 description: The same software either way. What you run, what we run, and what each one includes.
 ---
 
-The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. Hosted is not open yet; until it is, self-host.
+The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. <!-- hosted: open -->Hosted is free during the pilot.<!-- hosted: closed -->Hosted is not open yet; until it is, self-host.<!-- hosted: end -->
 
-| | Deploy to Cloudflare | Your own server | Hosted by us (pilot, not open yet) |
+| | Deploy to Cloudflare | Your own server | Hosted by us (pilot<!-- hosted: closed -->, not open yet<!-- hosted: end -->) |
 | --- | --- | --- | --- |
 | Runs on | Cloudflare Workers on your account: D1, Queues, cron | Node 22.16 or newer (Bun later) on any machine, `node:sqlite` | Our own servers, Node runtime, one SQLite file per business |
 | Set-up | The Deploy button provisions everything and asks for three values | Build the server bundle, run one process, put Caddy or nginx in front | From your website's check result: check what we read, confirm with a code, then add one DNS record |
