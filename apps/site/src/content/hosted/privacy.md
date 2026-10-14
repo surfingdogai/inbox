@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted pilot
-updated: 13 October 2026
+updated: 14 October 2026
 order: 3
 ---
 
@@ -27,7 +27,17 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 
 ## Who else sees it
 
-Our edge network and email provider carry the codes and notices we send you, and the company that rents us our servers holds the database. The [processing agreement](/hosted/processing/) describes them. We sell nothing and share nothing else.
+Our edge network carries every request to the service and the codes and notices we send you, runs the bot check on the sign-up form, and holds your hostname so that it can route your inbox's traffic. It can do this from its locations outside the European Union. It also keeps its own records, which can be kept outside the European Union: of requests (addresses, times and the pages asked for), to run and protect its network, and of the email it delivers (sender, recipient, subject and whether it arrived) for about a month, with a list of addresses that bounced or reported mail as spam.
+
+The company that rents us our servers holds the database, in the European Union, and our backups of it are stored in the European Union. The [processing agreement](/hosted/processing/) describes both companies.
+
+When your website's own data does not say what your business is, a language-model company may read a short digest of its public pages, with contact details taken out, to help fill in your starting details. It can be outside the European Union. You check every value before it is used.
+
+Public DNS resolvers answer our checks of your hostname. A certificate authority issues the certificate for it, and, as for every certificate, your hostname is then listed in public certificate logs.
+
+Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union.
+
+We sell nothing and share nothing else.
 
 ## Your rights
 

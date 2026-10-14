@@ -7,8 +7,9 @@ import { stateOf } from "../src/lib/status";
 /**
  * The hosted pilot's copy, checked without a build: one switch decides whether any of it is
  * public, and everything that depends on the switch agrees with it; the words make no claim the
- * pilot cannot keep; the servers' country is said on the hosted terms and nowhere else; and the
- * DNS guide covers every provider the Connect screen knows.
+ * pilot cannot keep; the inbox and its backups are stored in the European Union, and what the edge
+ * carries and keeps elsewhere is said; the servers' country is said on the hosted terms and nowhere
+ * else; and the DNS guide covers every provider the Connect screen knows.
  */
 const site = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 const repo = (path: string) => fileURLToPath(new URL(`../../../${path}`, import.meta.url));
@@ -113,6 +114,43 @@ describe("the hosted pilot's words", () => {
     for (const [path, text] of texts) {
       const words = new Set(text.toLowerCase().split(/[^a-z0-9]+/));
       for (const w of privateWords) expect(words.has(w), `${path}: a private word`).toBe(false);
+    }
+  });
+
+  it("say the inbox and its backups are stored in the European Union, and what the edge keeps and carries elsewhere", () => {
+    const terms = body(`${HOSTED_DIR}/terms.md`);
+    expect(terms).toContain("its backups are stored in the European Union");
+    expect(terms).toContain("Your inbox and its backups are stored in the European Union and nowhere else.");
+    expect(terms).toContain("which can be outside the European Union");
+    expect(terms).toContain("it also keeps its own records of requests (addresses, times and the pages asked for)");
+    expect(terms).toContain(
+      "It keeps a record of each email (sender, recipient, subject and whether it arrived) for about a month",
+    );
+    const processing = body(`${HOSTED_DIR}/processing.md`);
+    expect(processing).toContain("Your inbox and its backups are stored in the European Union and nowhere else");
+    expect(processing).toContain("It also stores our encrypted backups; those are in the European Union.");
+    expect(processing).toContain("Apart from what you send elsewhere yourself");
+    expect(processing).toContain("what can pass outside the European Union is what travels through our edge network");
+    expect(processing).toContain(
+      "The edge network also keeps its own records, which can be kept outside the European Union",
+    );
+    expect(processing).toContain("Do not send us your customers' personal data by email");
+    const privacy = body(`${HOSTED_DIR}/privacy.md`);
+    expect(privacy).toContain("our backups of it are stored in the European Union");
+    expect(privacy).toContain("It can do this from its locations outside the European Union.");
+    expect(privacy).toContain("It also keeps its own records, which can be kept outside the European Union");
+    expect(privacy).toContain("a language-model company may read a short digest of its public pages");
+    expect(privacy).toContain("public certificate logs");
+    expect(privacy).toContain("which may store it outside the European Union");
+    for (const path of COPY) {
+      // Not everything stays in the EU at rest: the edge keeps records and the email's delivery log.
+      expect(body(path), path).not.toMatch(/at rest, it stays|stays there at rest/i);
+      // Only the hosted backups are encrypted; the owner's data is also in backups that are not.
+      expect(body(path), path).not.toMatch(/encrypted backups of it/i);
+      // Where a provider keeps things is said as "the European Union", never in the provider's own
+      // words; those words are private (they would name the provider), so they are checked through
+      // SITE_PRIVATE_WORDS below, and only the neutral ones here.
+      expect(body(path), path).not.toMatch(/data.?cent(er|re)/i);
     }
   });
 

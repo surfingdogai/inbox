@@ -2,7 +2,7 @@
 title: Processing agreement
 description: How we process your customers' personal data for you when we run your inbox (GDPR article 28).
 eyebrow: Terms · hosted pilot
-updated: 13 October 2026
+updated: 14 October 2026
 order: 2
 ---
 
@@ -32,19 +32,30 @@ What is in place today, as it is:
 - Encrypted connections from the visitor to our edge network, and from the edge network to our servers, where the edge checks our certificate. The edge network ends the visitor's connection and can see requests in transit.
 - Secrets your inbox stores (connection credentials, webhook secrets, the key that signs receipts) are sealed with a key unique to your inbox, kept outside its database. Sign-in sessions, API keys and tokens are stored as hashes, never as they are.
 - Outbound calls from your inbox (webhooks, for example) reach public addresses and never our own servers or private networks.
-- Hourly backups, encrypted on our servers before they are stored anywhere else.
+- Hourly backups, encrypted on our servers before they are stored anywhere else, and stored in the European Union.
 - The servers' disks are not encrypted during the pilot. That is why health and other special-category businesses wait.
 
 ## 5. Sub-processors
 
 You authorise these sub-processors. Each is bound by the same duties, and we answer for them.
 
-- **Our edge network.** Carries every request to and from your inbox (it ends the encrypted connection), delivers the email your inbox sends, and stores our encrypted backups. A company based in the United States, with servers worldwide.
+- **Our edge network.** Carries every request to and from your inbox (it ends the encrypted connection, at one of its locations near the sender), delivers the email your inbox sends, and keeps its own records of both (section 6). It also stores our encrypted backups; those are in the European Union. A company based in the United States, with servers worldwide.
 - **The company that rents us our servers.** Runs the machines that hold your inbox's database. Where they are: see the [hosted terms](/hosted/terms/).
 
 The companies are named in the copy of this agreement we send you when you confirm your inbox, and on request. We tell you by email at least 30 days before adding or replacing a sub-processor. You may object; if we cannot meet your objection, you may leave before the change, and download everything before you go.
 
-## 6. Transfers outside the EU
+## 6. Where the data stays, and transfers outside the EU
+
+Your inbox and its backups are stored in the European Union and nowhere else: the database on our servers, and its encrypted backups.
+
+Apart from what you send elsewhere yourself (webhooks, connections and networks you switch on, and the email your inbox writes to your customers), what can pass outside the European Union is what travels through our edge network: requests to and from your inbox, and the email your inbox sends, on their way. Its locations around the world carry them; they are not where your inbox is kept.
+
+The edge network also keeps its own records, which can be kept outside the European Union:
+
+- of requests to your inbox: addresses, times and the pages asked for, to run and protect its network;
+- of the email your inbox sends: sender, recipient, subject and whether it arrived, for about a month, and a list of addresses that bounced or reported mail as spam.
+
+Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union. Do not send us your customers' personal data by email: to ask about one customer, name the item in your inbox, and to hand data over, use your inbox's export.
 
 Our edge network's company is in the United States. Transfers to it rely on the EU–US Data Privacy Framework or on standard contractual clauses in its data processing terms.
 

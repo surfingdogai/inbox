@@ -5,7 +5,8 @@ clarification "we host for them but in our server, not Cloudflare")
 
 ## Decision
 - Hosted tenants run on our own server with the Inbox's **Node runtime**, **one SQLite
-  file per tenant**, Litestream replication to object storage, behind Caddy and Cloudflare.
+  file per tenant**, hourly encrypted snapshots to object storage in the European Union (Litestream
+  replication possibly later; see Amendment 1), behind Caddy and Cloudflare.
 - The **Go network app is the control plane**: businesses/tenants, plans, Stripe billing,
   hostnames. The Node process resolves `hostname → tenant` from it with an in-process cache.
 - Hostnames: `surfingdog.ai` (site, docs, directory), `app.surfingdog.ai` (owner app),

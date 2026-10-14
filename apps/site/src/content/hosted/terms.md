@@ -2,7 +2,7 @@
 title: Hosted inbox terms
 description: The terms for an inbox we run for you during the pilot, on your own domain.
 eyebrow: Terms · hosted pilot
-updated: 13 October 2026
+updated: 14 October 2026
 order: 1
 ---
 
@@ -32,9 +32,10 @@ These terms are between Surfing Dog Lda, a company registered in Portugal ("we")
 
 ## 4. Where your data is, and backups
 
-- Your inbox's data is stored on our servers in Germany.
-- Requests to your inbox pass through our edge network, which ends the encrypted connection and forwards each request to our servers over a new encrypted connection. The email your inbox sends is delivered by the same provider. The [processing agreement](/hosted/processing/) lists who processes what, and where.
-- We back up every inbox every hour. Backups are encrypted on our servers before they are stored anywhere else. If we have to restore your inbox, it goes back to its state at the last backup, at most one hour earlier; requests that arrived after it may be lost, and we tell you which hour it went back to.
+- Your inbox's data is stored on our servers in Germany, and its backups are stored in the European Union. Your inbox and its backups are stored in the European Union and nowhere else.
+- Requests to your inbox pass through our edge network on their way. It ends the encrypted connection at one of its locations near the sender, which can be outside the European Union, and forwards each request to our servers over a new encrypted connection. To run and protect its network, it also keeps its own records of requests (addresses, times and the pages asked for), which can be kept outside the European Union.
+- The email your inbox sends is delivered by the same provider, through the same network. It keeps a record of each email (sender, recipient, subject and whether it arrived) for about a month, and a list of addresses that bounced or reported mail as spam; these can be kept outside the European Union. The [processing agreement](/hosted/processing/) lists who processes what, and where.
+- We back up every inbox every hour. Backups are encrypted on our servers, then stored in the European Union. If we have to restore your inbox, it goes back to its state at the last backup, at most one hour earlier; requests that arrived after it may be lost, and we tell you which hour it went back to.
 - During the pilot we promise no uptime figure. We watch the service, tell you about outages that affect you, and say what happened.
 
 ## 5. Changes to how your inbox behaves
