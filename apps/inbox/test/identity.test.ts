@@ -170,6 +170,9 @@ describe("people at the doors", () => {
     expect(again.structuredContent.identity.passes).toEqual([]);
     expect(again.structuredContent.accessToken).toBeUndefined();
     expect(again.content[0]?.text ?? "").not.toContain(pass);
+    // And it is told so, in words as well: the token is gone, and what to tell the person.
+    expect((again.structuredContent as { accessTokenWithheld?: boolean }).accessTokenWithheld).toBe(true);
+    expect(again.content[0]?.text ?? "").toContain("The access token was in the first answer only");
     expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(1);
   });
 
@@ -299,6 +302,7 @@ describe("people at the doors", () => {
     const theirs = (await stranger.json()) as Created;
     expect(theirs.view.item.id).toBe(item);
     expect(theirs.accessToken).toBeUndefined();
+    expect((theirs as { accessTokenWithheld?: boolean }).accessTokenWithheld).toBe(true);
     expect(theirs.identity.passes).toEqual([]);
     // Without one, a copy.
     const bare = await make(body);

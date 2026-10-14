@@ -77,7 +77,7 @@ export interface McpDeps {
 export const PUBLIC_INSTRUCTIONS = [
   "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
   "For a booking: check_availability, then create_booking with an idempotency_key you generate and keep.",
-  "Keep the access_token in a create result: it is the only way to read (get_item_status) or cancel that item later.",
+  "Keep the access_token in a create result: it is shown once, and it is the only way to read (get_item_status) or cancel that item later.",
   "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
   "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
   "When get_item_status shows an offer (another time, a quote, or changes to an order), relay offer.human as the business said it; accept only on your person's clear yes to the summary: accept_offer with its terms_sha and offer_id. Otherwise decline_offer, or make_offer with only what they would change (suggest_time for another time). A price of their own is their answer only where get_business_profile says price_negotiable; otherwise it goes to a person at the business, and what it proposed still stands. When it waits for details, send them with provide_details.",
@@ -135,8 +135,17 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>): Pr
   }
 }
 
-const humanOf = (r: { view: { human: string }; accessToken?: string | undefined; replayed?: boolean }) =>
-  `${r.view.human}${r.accessToken ? ` Access token (keep it): ${r.accessToken}.` : ""}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}`;
+/** Said when a retry's answer leaves out the access token the first answer carried (`accessTokenWithheld`). */
+export const TOKEN_WITHHELD_NOTE =
+  "The access token was in the first answer only, and a retry does not show it again unless signed by your own agent key that made the item. If that answer was lost, this item cannot be read or cancelled from here: tell your person the request reached the business, and that to change or cancel it they contact the business.";
+
+const humanOf = (r: {
+  view: { human: string };
+  accessToken?: string | undefined;
+  accessTokenWithheld?: true | undefined;
+  replayed?: boolean;
+}) =>
+  `${r.view.human}${r.accessToken ? ` Access token (keep it): ${r.accessToken}.` : ""}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}${r.accessTokenWithheld ? ` ${TOKEN_WITHHELD_NOTE}` : ""}`;
 
 /** The owner's side of `humanOf`: the sentence without the subject a customer may have written (`untrusted.ts`). */
 const ownerHumanOf = (r: {

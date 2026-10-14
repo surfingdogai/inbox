@@ -45,7 +45,12 @@ const post = (path: string, body: unknown, headers: Record<string, string> = {})
     body: JSON.stringify(body),
   });
 
-type Created = { view: { item: { id: string } }; accessToken?: string; identity?: { passes: unknown[] } };
+type Created = {
+  view: { item: { id: string } };
+  accessToken?: string;
+  accessTokenWithheld?: boolean;
+  identity?: { passes: unknown[] };
+};
 
 describe("an anonymous caller's fingerprint (security review)", () => {
   it("never hands another person's access token to a retry from the same address and user agent", async () => {
@@ -64,6 +69,9 @@ describe("an anonymous caller's fingerprint (security review)", () => {
     const replayed = (await again.json()) as Created;
     expect(replayed.view.item.id).toBe(created.view.item.id);
     expect(replayed.accessToken).toBeUndefined();
+    // Said, so an assistant that lost the first answer knows the token is gone, not that there was none.
+    expect(replayed.accessTokenWithheld).toBe(true);
+    expect(created.accessTokenWithheld).toBeUndefined();
     expect(JSON.stringify(replayed)).not.toContain(created.accessToken as string);
     expect(replayed.identity?.passes ?? []).toEqual([]);
 

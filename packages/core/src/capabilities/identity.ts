@@ -124,8 +124,10 @@ export class IdentityCapabilities {
         ...(localParty ? { localParty } : {}),
       },
     });
+    // A retry found only now, while this request was presenting (two copies at once, or a copy
+    // that arrived while the first was still being written): answered as any other retry.
     if (result.replayed) {
-      return { ...result, identity: await this.answer(result.view.item.id, {}, audienceOf(caller)) };
+      return { ...result, identity: await this.answer(result.view.item.id, {}, retryAudience(caller, result)) };
     }
     let issued: IssueResult[] = [];
     // The create may have found the customer stopped where the door could not (the party it joined):

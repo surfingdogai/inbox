@@ -54,7 +54,9 @@ export interface RouterOptions {
   /**
    * The header the server in front puts the client's address in (default `cf-connecting-ip`). The
    * router trusts it as given: the server in front must overwrite it on every request, from the
-   * edge's own CF-Connecting-IP, so that no visitor can choose it.
+   * edge's own CF-Connecting-IP, and take connections only from the edge's own pulls for the zone
+   * (an origin-pull client certificate of the zone's own CA, nothing proxied over plain http), so
+   * that no visitor, and no Worker sending from the edge's ranges, can choose it.
    */
   readonly clientAddressHeader?: string | undefined;
   /** The header the server in front says the visitor's scheme in, as `{"scheme":"http"}` (default `cf-visitor`). */
@@ -254,7 +256,9 @@ export function createRouter(o: RouterOptions): {
     // The caller's address, for the inbox's limits and its anonymous callers: whatever the server in
     // front wrote in this header, and only as good as that server makes it. It must come from the
     // edge's own CF-Connecting-IP (the edge overwrites what a visitor sends there), never from the
-    // left end of X-Forwarded-For, which the edge appends to and the visitor writes.
+    // left end of X-Forwarded-For, which the edge appends to and the visitor writes; and only on a
+    // connection that carried the zone's origin-pull certificate, since a Worker's subrequest comes
+    // from the edge's ranges too and may set CF-Connecting-IP to anything (`clientAddressHeader`).
     const client = req.headers[clientHeader];
     const address = typeof client === "string" ? client.split(",")[0]?.trim() : undefined;
     delete headers["cf-connecting-ip"];

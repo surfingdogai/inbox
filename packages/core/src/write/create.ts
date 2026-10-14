@@ -81,6 +81,12 @@ export interface CreateResult {
    * retry's answer carries it again only when the retry is signed by the key the item was made with.
    */
   readonly accessToken?: string | undefined;
+  /**
+   * On a retry: the first answer carried an access token, and this one does not, since the retry was
+   * not signed by the key the item was made with. Said, so an assistant that lost the first answer
+   * knows the token is gone rather than that there never was one.
+   */
+  readonly accessTokenWithheld?: true | undefined;
   readonly replayed: boolean;
   /** Who the inbox takes the customer for (ADR-017 §8.4); the public doors add it. */
   readonly identity?: IdentityAnswer | undefined;
@@ -359,11 +365,12 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
 
 /**
  * A retry of a create, answered from what was stored. The access token goes back only to a retry
- * signed by the key the item was made with. Nothing else tells two anonymous callers apart: the scope
- * a retry is looked up in is a fingerprint of the request's address and user agent, which many people
- * share (one address behind a carrier's NAT, one browser's user agent) and a caller can choose, so
- * anyone who sent the same key and body from it would otherwise get the token, and with it the item's
- * whole thread. An unsigned retry gets the answer without it: the token is shown once.
+ * signed by the agent's own key the item was made with. Nothing else tells two anonymous callers
+ * apart: the scope a retry is looked up in is a fingerprint of the request's address and user agent,
+ * which many people share (one address behind a carrier's NAT, an assistant platform's servers) and a
+ * caller can choose, so anyone who sent the same key and body from it would otherwise get the token,
+ * and with it the item's whole thread. Any other retry gets the answer without it, and is told so
+ * (`accessTokenWithheld`): the token is shown once.
  */
 async function replay(
   db: Db,
@@ -375,15 +382,21 @@ async function replay(
     throw new WriteError("idempotency_mismatch", "this idempotency key was already used with a different request");
   }
   const stored = hit.response as { view: ItemView; accessToken?: string };
-  const token =
-    stored.accessToken && (await sameSigner(db, caller, stored.view.item.id)) ? stored.accessToken : undefined;
-  return { view: stored.view, ...(token ? { accessToken: token } : {}), replayed: true };
+  if (!stored.accessToken) return { view: stored.view, replayed: true };
+  if (await sameSigner(db, caller, stored.view.item.id)) {
+    return { view: stored.view, accessToken: stored.accessToken, replayed: true };
+  }
+  return { view: stored.view, accessTokenWithheld: true, replayed: true };
 }
 
-/** Whether the caller's verified signature is by the key the item was made with. */
+/**
+ * Whether the caller's verified signature is by the key the item was made with, and that key is the
+ * agent's own. A platform's key (Web Bot Auth: a key its directory lists) signs for every user of the
+ * platform, who also share its addresses and its user agent, so it tells none of them apart.
+ */
 async function sameSigner(db: Db, caller: Caller, itemId: string): Promise<boolean> {
   const agent = caller.agent;
-  if (!agent || agent.level === "none" || !agent.thumbprint) return false;
+  if (!agent || agent.level === "none" || !agent.thumbprint || agent.platform) return false;
   const { rows } = await db.client.query({
     sql: "SELECT agent_thumbprint FROM items WHERE id = ?",
     params: [itemId],

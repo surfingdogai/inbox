@@ -16,15 +16,22 @@ import type { Db } from "@surfingdog/core";
  * −1 with every request and never earns a token back; one that pauses recovers after two tokens'
  * worth of quiet instead of one. A burst is fine, a flood stays shut.
  *
- * The client address is CF-Connecting-IP when present. Cloudflare's edge overwrites that header, so
- * a client cannot forge it there — but only if the origin cannot be reached around Cloudflare, and
- * only if every proxy between the edge and the inbox passes Cloudflare's value on or sets the header
- * from it. A proxy that rewrites CF-Connecting-IP from the left end of X-Forwarded-For hands the
- * choice back to the client: Cloudflare appends to an X-Forwarded-For the client sent, it does not
- * replace it. A proxy that passes the client's own CF-Connecting-IP through, with no Cloudflare in
- * front, does the same. Without the header it is the first X-Forwarded-For hop, which a client CAN
- * forge. An instance exposed directly should firewall its origin to its proxy, which is advice worth
- * taking anyway.
+ * The client address is CF-Connecting-IP when present. Cloudflare's edge overwrites that header on
+ * a visitor's request, so a visitor cannot forge it there; an inbox running on Workers reads it from
+ * the edge itself. An inbox on its own server behind Cloudflare has more to hold:
+ *
+ * - The origin must take only the edge's own pulls for its zone: an origin-pull client certificate
+ *   of the zone's own CA required on every connection, and nothing proxied over plain http. An
+ *   allow-list of the edge's ranges is not enough: a Worker's subrequest leaves from those same
+ *   ranges, and a Worker may set CF-Connecting-IP to anything (Cloudflare's own docs say so).
+ * - Every proxy between the edge and the inbox must pass the edge's value on, or set the header
+ *   from it. One that rewrites it from the left end of X-Forwarded-For hands the choice back to the
+ *   client: the edge appends to an X-Forwarded-For the client sent, it does not replace it.
+ *
+ * With no Cloudflare in front, a proxy must drop a CF-Connecting-IP the client sent
+ * (`header_up -CF-Connecting-IP` in Caddy). Without the header the address is the first
+ * X-Forwarded-For hop, which a client CAN forge unless the proxy in front sets it from the
+ * connection (Caddy does, unless told to trust the hop before it).
  */
 export interface Limit {
   readonly capacity: number;

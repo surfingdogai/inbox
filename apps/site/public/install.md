@@ -281,9 +281,15 @@ Caddy gets a certificate on its own:
 
 ```
 inbox.theirdomain.com {
-  reverse_proxy localhost:8787
+  reverse_proxy localhost:8787 {
+    header_up -CF-Connecting-IP
+  }
 }
 ```
+
+The inbox limits callers by `CF-Connecting-IP` when a request has it, else by the address Caddy
+puts first in `X-Forwarded-For` (the one it connected from). With nothing in front of Caddy, a
+caller could send a `CF-Connecting-IP` of its choosing, so the proxy drops it.
 
 Verify from outside the server:
 

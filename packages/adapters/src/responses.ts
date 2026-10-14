@@ -326,6 +326,12 @@ export const createResultSchema = z.object({
     .string()
     .optional()
     .describe("Shown once, to an anonymous creator: keep it to read or cancel the item."),
+  accessTokenWithheld: z
+    .literal(true)
+    .optional()
+    .describe(
+      "On a retry (replayed): the first answer carried an access token, and a retry gets it again only when signed by the agent's own key that made the item. Without it this item cannot be read or cancelled through these doors; the business still has it.",
+    ),
   replayed: z.boolean(),
   identity: identityAnswerSchema.optional(),
 });
