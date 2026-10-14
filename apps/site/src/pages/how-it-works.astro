@@ -10,7 +10,7 @@ import HowFlow from "../components/HowFlow.astro";
 import Shot from "../components/Shot.astro";
 import StepArt from "../components/StepArt.astro";
 import Layout from "../layouts/Layout.astro";
-import { HOSTED_HOW } from "../lib/hosted";
+import { HOSTED_HOW, HOSTED_HOW_DATA } from "../lib/hosted";
 
 const contents = [
   { href: "#arrives", label: "What arrives" },
@@ -68,7 +68,9 @@ const reasons = [
   },
   {
     title: "Your customers stay yours",
-    text: "Their details live in your own database, and the inbox only sends them where you tell it to.",
+    text:
+      HOSTED_HOW_DATA?.customers ??
+      "Their details live in your own database, and the inbox only sends them where you tell it to.",
   },
 ];
 
@@ -90,8 +92,10 @@ const safety = [
     text: "A rule can confirm callers with a verified account and pass anonymous ones to you.",
   },
   {
-    title: "Your data stays with you",
-    text: "It lives in one database on your Cloudflare account or your own server. If you join a network, it gets hourly counts and receipts, never names or messages.",
+    title: HOSTED_HOW_DATA?.data.title ?? "Your data stays with you",
+    text:
+      HOSTED_HOW_DATA?.data.text ??
+      "It lives in one database on your Cloudflare account or your own server. If you join a network, it gets hourly counts and receipts, never names or messages.",
   },
   {
     title: "Receipts are signed by you",

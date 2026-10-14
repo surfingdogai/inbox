@@ -2,7 +2,8 @@
 /**
  * The ways to run the inbox, at /inbox/#run. While the hosted pilot is closed (src/lib/hosted.ts),
  * hosting is the last card and holds the waitlist; once it is open, it is the first card and the
- * one primary button, and the two ways to run it yourself follow.
+ * one primary button, and the two ways to run it yourself follow. Each card's foot holds only its
+ * button, so the three buttons line up.
  */
 import { DEPLOY_URL, HOSTED_PILOT_OPEN, HOSTED_RUN, START_URL } from "../lib/hosted";
 
@@ -15,10 +16,16 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
       <div>
         <p class="eyebrow">Run it</p>
         <h2 class="h-section" id="run-h">Three ways to run</h2>
-        <p class="lede">{HOSTED_RUN.lede}
+        {
+          HOSTED_RUN.lede ? (
+            <p class="lede">{HOSTED_RUN.lede}</p>
+          ) : (
+        <p class="lede">
           On Cloudflare or your own server, your data stays in your account or on your machine. Joining the network
           is optional.
         </p>
+          )
+        }
       </div>
     </div>
 
@@ -30,12 +37,11 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
               <span class="pill">Pilot</span>
             </div>
             <p class="card-text">
-              We run it for you, at an address on your own domain. Set it up from your website's check result, then add
-              one DNS record. Free during the pilot.
+              We run it for you at your own address, like inbox.yourbusiness.com. You add one DNS record. Free during
+              the pilot. <a class="link" href="/hosted/">How it works</a>
             </p>
             <div class="foot">
               <a class="btn btn-primary" href={START_URL}>Get your agent inbox</a>
-              <p class="hint"><a class="link" href="/hosted/">How it works</a></p>
             </div>
           </article>
         )

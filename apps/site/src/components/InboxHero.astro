@@ -1,14 +1,14 @@
 ---
 /**
- * The inbox's own hero, on /inbox. The home page now opens on the network (Hero.astro). Its first
- * button follows the hosted pilot's switch (src/lib/hosted.ts): Deploy to Cloudflare while it is
- * closed; once it is open, the hosted inbox, with running it yourself beside it and one line under
- * the lede.
+ * The inbox's own hero, on /inbox. The home page now opens on the network (Hero.astro). It follows
+ * the hosted pilot's switch (src/lib/hosted.ts): while it is closed, its lede and Deploy to
+ * Cloudflare; once it is open, a lede that says we host it, the hosted inbox as the first button,
+ * running it yourself as a quiet link after the two buttons, and the pilot's terms in one fine line.
  */
 import { HOSTED_HERO } from "../lib/hosted";
 import HeroFlow from "./HeroFlow.astro";
 
-const { primary, secondary, note } = HOSTED_HERO;
+const { primary, also, lede, note } = HOSTED_HERO;
 ---
 
 <section class="hero wrap" aria-labelledby="hero-h">
@@ -17,21 +17,27 @@ const { primary, secondary, note } = HOSTED_HERO;
     <h1 class="hero-title" id="hero-h">
       Get AI bookings, orders and messages.
     </h1>
+    {
+      lede ? (
+        <p class="hero-sub">{lede}</p>
+      ) : (
     <p class="hero-sub">
       Soon your customers' AI agents will book and order for them. Surfing Dog Inbox is open-source software you run at
       your own address, like inbox.yourbusiness.com: those requests come straight to you, and your rules answer the
       routine ones.
-    </p>{note && <p class="fine">{note}</p>}
+    </p>
+      )
+    }
     <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href={primary.href} rel={primary.rel}>{primary.label}</a>{
-        secondary && (
-          <a class="btn btn-secondary btn-lg" href={secondary.href}>
-            {secondary.label}
+      <a class="btn btn-primary btn-lg" href={primary.href} rel={primary.rel}>{primary.label}</a>
+      <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>{
+        also && (
+          <a class="btn btn-ghost btn-lg" href={also.href}>
+            {also.label}
           </a>
         )
       }
-      <a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>
-    </div>
+    </div>{note && <p class="fine">{note}</p>}
     <p class="hero-position">
       <span class="u-line" aria-hidden="true"></span>
       <span>Automated AI relations, with your own AI answering.</span>

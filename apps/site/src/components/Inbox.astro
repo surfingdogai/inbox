@@ -1,11 +1,18 @@
 ---
+import { HOSTED_INBOX_POINTS } from "../lib/hosted";
 import Shot from "./Shot.astro";
 
-/** `phase` marks a point that is not shipped yet; every point below is live today. */
+/**
+ * `phase` marks a point that is not shipped yet; every point below is live today. Where it runs and
+ * the ways in follow the hosted pilot's switch (src/lib/hosted.ts): once it is open, they say the
+ * hosted case too.
+ */
 const points: { title: string; text: string; phase?: string }[] = [
   {
     title: "Yours, at your address",
-    text: "It runs on your own subdomain, on your Cloudflare account or your own server. Customers and their agents write to you there, and Surfing Dog is not in the middle of a message, a booking, an order or a payment. Your data is in your own database, so you can leave whenever you like.",
+    text:
+      HOSTED_INBOX_POINTS?.yours ??
+      "It runs on your own subdomain, on your Cloudflare account or your own server. Customers and their agents write to you there, and Surfing Dog is not in the middle of a message, a booking, an order or a payment. Your data is in your own database, so you can leave whenever you like.",
   },
   {
     title: "Each request has a type",
@@ -13,7 +20,9 @@ const points: { title: string; text: string; phase?: string }[] = [
   },
   {
     title: "Many ways in, one list",
-    text: "Agents reach you through a REST API, MCP or email, and it all lands in one list. Your own AI connects over a separate owner MCP.",
+    text:
+      HOSTED_INBOX_POINTS?.waysIn ??
+      "Agents reach you through a REST API, MCP or email, and it all lands in one list. Your own AI connects over a separate owner MCP.",
   },
   {
     title: "A signed receipt",

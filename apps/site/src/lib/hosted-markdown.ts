@@ -9,7 +9,8 @@
  * blocks (each on its own line, with a blank line around it) and inside a line or a table cell.
  * Before anything is rendered the version for the other state is dropped, and the markers with it,
  * so a page says one thing, and while the pilot is closed it renders as it did before the markers.
- * A marker left open, or one this file does not know, stops the build.
+ * A marker left open, one this file does not know, or one that shares its block with text (a line
+ * that starts with a marker and goes on) stops the build.
  *
  * A docs page's description is frontmatter, which Markdown plugins do not reach: a page gives the
  * description it has while the pilot is open as `hostedOpen.description`, and `hostedDocsData`
@@ -26,12 +27,23 @@ export interface MdNode {
 }
 
 const MARKER = /^<!--\s*hosted:\s*([a-z]+)\s*-->$/;
+const ANY_MARKER = /<!--\s*hosted:/;
 
-/** The marker an HTML node is, if it is one. */
+/**
+ * The marker an HTML node is, if it is one. A node that holds a marker and anything else (a marker
+ * that starts a line with text after it, which Markdown reads as one block of raw HTML) stops the
+ * build, since neither of its versions could be dropped and the page would say both.
+ */
 function markerOf(node: MdNode): "open" | "closed" | "end" | null {
   if (node.type !== "html" || typeof node.value !== "string") return null;
-  const m = node.value.trim().match(MARKER);
-  if (!m) return null;
+  const value = node.value.trim();
+  if (!ANY_MARKER.test(value)) return null;
+  const m = value.match(MARKER);
+  if (!m) {
+    throw new Error(
+      `hosted-markdown: a marker must stand alone, on its own line with a blank line around it, or sit inside a line: "${value.slice(0, 80)}"`,
+    );
+  }
   const word = m[1];
   if (word === "open" || word === "closed" || word === "end") return word;
   throw new Error(`hosted-markdown: unknown marker "${node.value.trim()}"`);

@@ -5,11 +5,11 @@
  * is there to use (src/lib/copy.ts). An address is set in monospace; words to say to an AI are set
  * in the body font, as words. An optional second way to say it waits behind a small disclosure.
  * Every button is named for what it copies, so three "Copy" buttons never sound the same. A `lead`
- * comes before all of it: another way to the same thing, one sentence and a link.
+ * comes before all of it: another way to the same thing, one sentence and its own small button.
  */
 interface Props {
   title: string;
-  /** Another way to the same thing, said before the line to copy: one sentence and its link. */
+  /** Another way to the same thing, said before the line to copy: one sentence and its button. */
   lead?: { text: string; link: { label: string; href: string } } | null;
   what: string;
   value: string;
@@ -26,9 +26,14 @@ const { title, lead, what, value, address = false, alt, more } = Astro.props;
 <div class="cb">
   <h2 class="cb-title">{title}</h2>{
     lead && (
-      <p class="cb-what">
-        {lead.text} <a class="link" href={lead.link.href}>{lead.link.label}</a>
-      </p>
+      <>
+        <p class="cb-what">{lead.text}</p>
+        <p>
+          <a class="btn btn-secondary btn-sm" href={lead.link.href}>
+            {lead.link.label}
+          </a>
+        </p>
+      </>
     )
   }
   <p class="cb-what">{what}</p>

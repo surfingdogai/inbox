@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   DEPLOY_URL,
@@ -7,10 +8,14 @@ import {
   HOSTED_HERO,
   HOSTED_HOME,
   HOSTED_HOW,
+  HOSTED_HOW_DATA,
+  HOSTED_INBOX_LD,
+  HOSTED_INBOX_POINTS,
   HOSTED_INSTALL,
   HOSTED_LINE,
   HOSTED_LLMS,
   HOSTED_NO_DOOR,
+  HOSTED_OWNERSHIP,
   HOSTED_PILOT_OPEN,
   HOSTED_RUN,
   HOSTED_STATUS,
@@ -18,9 +23,13 @@ import {
   hostedHero,
   hostedHome,
   hostedHow,
+  hostedHowData,
+  hostedInboxLd,
+  hostedInboxPoints,
   hostedInstall,
   hostedLlms,
   hostedNoDoor,
+  hostedOwnership,
   hostedRun,
   START_URL,
 } from "../src/lib/hosted";
@@ -90,6 +99,17 @@ describe("the hosted pilot's switch", () => {
       expect(HOSTED_STATUS.label).toBe("A hosted inbox");
     }
     expect(START_URL).toBe("https://app.surfingdog.ai/start");
+  });
+
+  it("opens only while the hosted terms say the inbox and its backups are stored in the European Union", () => {
+    // The open words say so (the /inbox hero, how it works, the quickstart), so the terms must too.
+    // That the backups are really there (eu-storage deployed) is on the flip's list in hosted.ts.
+    expect(read("src/lib/hosted.ts")).toContain("eu-storage is deployed");
+    if (HOSTED_PILOT_OPEN) {
+      expect(body(`${HOSTED_DIR}/terms.md`)).toContain(
+        "Your inbox and its backups are stored in the European Union and nowhere else.",
+      );
+    }
   });
 
   it("generates no hosted page while closed, and the waitlist stays until it opens", () => {
@@ -308,32 +328,56 @@ describe("hosted first, once the pilot is open", () => {
     expect(HOSTED_NO_DOOR).toEqual(hostedNoDoor(HOSTED_PILOT_OPEN));
     expect(HOSTED_HOW).toBe(hostedHow(HOSTED_PILOT_OPEN));
     expect(HOSTED_LLMS).toEqual(hostedLlms(HOSTED_PILOT_OPEN));
+    expect(HOSTED_INBOX_POINTS).toEqual(hostedInboxPoints(HOSTED_PILOT_OPEN));
+    expect(HOSTED_OWNERSHIP).toEqual(hostedOwnership(HOSTED_PILOT_OPEN));
+    expect(HOSTED_INBOX_LD).toBe(hostedInboxLd(HOSTED_PILOT_OPEN));
+    expect(HOSTED_HOW_DATA).toEqual(hostedHowData(HOSTED_PILOT_OPEN));
   });
 
   it("the /inbox hero: the hosted inbox first while open, Deploy to Cloudflare while closed", () => {
     const open = hostedHero(true);
     expect(open.primary).toEqual({ label: "Get your agent inbox", href: START_URL });
-    expect(open.secondary).toEqual({ label: "Run it yourself", href: "#run" });
-    expect(open.note).toBe(
-      "Or we host it for you at that address, free during the pilot. Your data is stored in the European Union.",
-    );
+    expect(open.also).toEqual({ label: "Or run it yourself", href: "#run" });
+    // The lede says we host it; the fine line carries only the terms.
+    expect(open.lede).toContain("We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com");
+    expect(open.lede).not.toMatch(/you run/);
+    expect(open.note).toBe("Free during the pilot. Your inbox and its backups are stored in the European Union.");
     const closed = hostedHero(false);
     expect(closed.primary).toEqual({ label: "Deploy to Cloudflare", href: DEPLOY_URL, rel: "noopener" });
-    expect(closed.secondary).toBeNull();
+    expect(closed.also).toBeNull();
+    expect(closed.lede).toBeNull();
     expect(closed.note).toBeNull();
-    // The hero draws its buttons and its line from them, and keeps "Try it with your AI" either way.
+    // The hero draws its lede, buttons and line from them, keeps "Try it with your AI" either way, and
+    // keeps two buttons: running it yourself is a quiet one after them.
     const hero = read("src/components/InboxHero.astro");
     expect(hero).toContain("= HOSTED_HERO;");
+    expect(hero).toContain('<p class="hero-sub">{lede}</p>');
+    expect(hero).toContain("Surfing Dog Inbox is open-source software you run at");
     expect(hero).toContain("href={primary.href} rel={primary.rel}>{primary.label}</a>");
-    expect(hero).toContain("href={secondary.href}");
+    expect(hero).toContain('<a class="btn btn-ghost btn-lg" href={also.href}>');
     expect(hero).toContain("{note && <p");
     expect(hero).toContain('<a class="btn btn-secondary btn-lg" href="/try/">Try it with your AI</a>');
+    expect(hero.indexOf("/try/")).toBeLessThan(hero.indexOf("href={also.href}"));
+    expect(hero.match(/btn-lg/g)?.length).toBe(3);
     expect(hero).not.toContain(DEPLOY_URL);
-    // "Run it yourself" lands on the ways to run, where Deploy to Cloudflare still is.
+    // "Or run it yourself" lands on the ways to run, where Deploy to Cloudflare still is.
     const run = read("src/components/Run.astro");
     expect(read("src/pages/inbox.astro")).toContain("<Run />");
     expect(run).toContain('id="run"');
     expect(run).toContain("href={DEPLOY_URL}");
+  });
+
+  it("the points on /inbox: where it runs and the ways in say the hosted case while open", () => {
+    const open = hostedInboxPoints(true);
+    expect(open?.yours).toContain("hosted by us or on your own Cloudflare account or server");
+    expect(open?.yours).toContain("You can download everything it holds and leave whenever you like.");
+    // A hosted inbox takes no email in during the pilot (docs/self-hosted-vs-hosted).
+    expect(open?.waysIn).toContain("by email when you run it yourself");
+    expect(hostedInboxPoints(false)).toBeNull();
+    const inbox = read("src/components/Inbox.astro");
+    expect(inbox).toContain("HOSTED_INBOX_POINTS?.yours ??");
+    expect(inbox).toContain("HOSTED_INBOX_POINTS?.waysIn ??");
+    expect(read("src/content/docs/docs/self-hosted-vs-hosted.md")).toContain("| Email in |");
   });
 
   it("the ways to run: the hosted card leads while open, and holds the waitlist at the end while closed", () => {
@@ -346,29 +390,42 @@ describe("hosted first, once the pilot is open", () => {
     expect(openCard).toBeLessThan(deploy);
     expect(deploy).toBeLessThan(server);
     expect(server).toBeLessThan(closedCard);
-    expect(run).toContain("{HOSTED_RUN.lede}");
+    expect(run).toContain('<p class="lede">{HOSTED_RUN.lede}</p>');
     expect(run).toContain("class={HOSTED_RUN.deployClass}");
     expect(hostedRun(true)).toEqual({
-      lede: "We host it for you, or you run it yourself.",
+      lede: "We host it for you, or you run it on your Cloudflare account or your own server. Joining the network is optional.",
       deployClass: "btn btn-secondary",
     });
-    expect(hostedRun(false)).toEqual({ lede: "", deployClass: "btn btn-primary" });
+    expect(hostedRun(false)).toEqual({ lede: null, deployClass: "btn btn-primary" });
+    // Each card's foot holds only its button, so the three line up at the bottom.
+    const hostedCard = run.slice(openCard, deploy);
+    expect(hostedCard).toContain('<a class="link" href="/hosted/">How it works</a>\n            </p>');
+    expect(hostedCard).not.toContain('class="hint"');
+    expect(hostedCard).not.toMatch(/check result/);
   });
 
   it("the home page, /install, the FAQ, /search and how it works: hosted first while open, today's words while closed", () => {
     const home = hostedHome(true);
-    expect(home?.title).toBe("Get your own inbox");
+    expect(home?.title).toBe("Your own inbox");
+    expect(home?.lead.text).toBe("We host it for you at inbox.yourbusiness.com, free during the pilot.");
     expect(home?.lead.link.href).toBe(START_URL);
+    expect(read("src/components/CopyBlock.astro")).toContain(
+      '<a class="btn btn-secondary btn-sm" href={lead.link.href}>',
+    );
     expect(home?.what).toMatch(/^Or give this to your AI/);
     expect(hostedHome(false)).toBeNull();
     expect(read("src/pages/index.astro")).toContain('title: "Install your own inbox",');
 
     const install = hostedInstall(true);
-    expect(install?.title).toBe("Get your inbox");
-    expect(install?.lede).toMatch(/^We host it at your own address, free during the pilot\. Or give the line below/);
+    expect(install?.title).toBe("Your own inbox");
+    expect(install?.lede).toBe("We host it for you at inbox.yourbusiness.com, free during the pilot.");
     expect(install?.cta.href).toBe(START_URL);
+    expect(install?.promptEyebrow).toBe("Or let your AI set it up");
     expect(hostedInstall(false)).toBeNull();
-    expect(read("src/pages/install.astro")).toContain('{HOSTED_INSTALL?.title ?? "Let your AI do it"}');
+    const installPage = read("src/pages/install.astro");
+    expect(installPage).toContain('{HOSTED_INSTALL?.title ?? "Let your AI do it"}');
+    expect(installPage).toContain('{HOSTED_INSTALL?.promptEyebrow ?? "Step one, and often the only step"}');
+    expect(installPage).toContain('id="prompt-h"');
 
     expect(hostedFaq(true)).toMatch(/^where we host it for you, free during the pilot, or you run it/);
     expect(hostedFaq(false)).toBe(
@@ -377,9 +434,14 @@ describe("hosted first, once the pilot is open", () => {
     expect(read("src/pages/faq.astro")).toContain("HOSTED_FAQ +");
 
     const door = hostedNoDoor(true);
-    expect(door.pills.map((p) => p.id)).toEqual(["hosted", "inbox"]);
+    expect(door.pills).toEqual([{ id: "hosted", text: "Live" }]);
     expect(door.card?.cta.href).toBe(START_URL);
-    expect(door.card?.also.href).toBe("/install/");
+    // Setting it up yourself is a link in the card's words, to the line for your AI.
+    expect(door.card?.link).toEqual({ label: "your AI sets it up", href: "/install/#prompt-h" });
+    expect(`${door.card?.before} ${door.card?.link.label} ${door.card?.after}`).toBe(
+      "Get the inbox at your own address, and agents write to you there. We host it, free during the pilot, or your AI sets it up from one line.",
+    );
+    expect(read("src/components/ForBusinesses.astro")).toContain("{pills[1] && <StatusPill");
     expect(door.price).toBe("Hosted inbox: free during the pilot · Self-host: free");
     const shut = hostedNoDoor(false);
     expect(shut.pills).toEqual([
@@ -392,13 +454,65 @@ describe("hosted first, once the pilot is open", () => {
     for (const open of BOTH) {
       for (const p of hostedNoDoor(open).pills) {
         const state = p.id === "hosted" ? (open ? "live" : "coming") : "live";
-        expect(p.text.startsWith(state === "live" ? "Live:" : "Coming:"), p.text).toBe(true);
+        expect(p.text.startsWith(state === "live" ? "Live" : "Coming"), p.text).toBe(true);
       }
     }
 
     expect(hostedHow(true)).toMatch(/^We host it for you at your own address, free during the pilot\./);
     expect(hostedHow(false)).toContain("We will also host it for you once that opens.");
     expect(read("src/pages/how-it-works.astro")).toContain("text: HOSTED_HOW,");
+    const data = hostedHowData(true);
+    expect(data?.data.title).toBe("Your data stays yours");
+    expect(data?.data.text).toMatch(/^Hosted by us, it and its backups are kept in the European Union/);
+    expect(data?.data.text).toContain("Run yourself, it lives on your Cloudflare account or your own server.");
+    expect(data?.customers).not.toMatch(/database/);
+    expect(hostedHowData(false)).toBeNull();
+    const how = read("src/pages/how-it-works.astro");
+    expect(how).toContain('HOSTED_HOW_DATA?.data.title ?? "Your data stays with you"');
+    expect(how).toContain("HOSTED_HOW_DATA?.customers ??");
+  });
+
+  it("the structured data on / and /inbox: hosted or run yourself while open, today's words while closed", () => {
+    expect(hostedInboxLd(true)).toMatch(
+      /^An open-source inbox at a business's own address, hosted by Surfing Dog or run/,
+    );
+    expect(hostedInboxLd(true)).not.toContain("not in the middle");
+    expect(hostedInboxLd(false)).toMatch(/^An open-source inbox a business runs itself/);
+    expect(hostedInboxLd(false)).toMatch(/Surfing Dog is not in the middle\.$/);
+    for (const page of ["src/pages/index.astro", "src/pages/inbox.astro"]) {
+      expect(read(page), page).toContain("description: HOSTED_INBOX_LD,");
+    }
+  });
+
+  it("never say Surfing Dog is out of the middle of an inbox it hosts", () => {
+    // Out of the middle is true only of an inbox the business runs itself: a hosted one runs on our
+    // servers. So in the open words every sentence that says it names running it yourself.
+    const open = JSON.stringify([
+      hostedHero(true),
+      hostedInboxPoints(true),
+      hostedRun(true),
+      hostedHome(true),
+      hostedInstall(true),
+      hostedFaq(true),
+      hostedOwnership(true),
+      hostedInboxLd(true),
+      hostedNoDoor(true),
+      hostedHow(true),
+      hostedHowData(true),
+      hostedLlms(true),
+    ]);
+    expect(open).not.toMatch(/does not put (a|the) business on Surfing Dog/);
+    const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /not in the middle/.test(t));
+    expect(sentences.length).toBeGreaterThan(0);
+    for (const t of sentences) expect(t, t).toMatch(/runs? it (yourself|itself)/);
+    // The pages read these words rather than their own.
+    expect(read("src/pages/faq.astro")).toContain("HOSTED_OWNERSHIP.faq +");
+    expect(read("src/pages/faq.astro")).not.toContain("not in the middle");
+    expect(read("astro.config.mjs")).toContain(`\${HOSTED_OWNERSHIP.llms}`);
+    expect(read("astro.config.mjs")).not.toContain("not in the middle");
+    expect(hostedOwnership(false).faq).toBe(
+      "Surfing Dog is not in the middle of a message, a booking, an order or a payment, and your data is in your own database, so you can leave whenever you like.",
+    );
   });
 
   it("llms.txt: hosted first while open, not open yet while closed", () => {
@@ -407,19 +521,27 @@ describe("hosted first, once the pilot is open", () => {
     expect(hostedLlms(false).where).toContain("a hosted option is not open yet");
     expect(hostedLlms(false).open).toBe("Self-host the inbox today; a hosted inbox is not open yet.");
     const config = read("astro.config.mjs");
-    for (const key of ["where", "get", "open"]) expect(config).toContain(`\${HOSTED_LLMS.${key}}`);
+    for (const key of ["summary", "where", "get", "open"]) expect(config).toContain(`\${HOSTED_LLMS.${key}}`);
+    expect(hostedLlms(true).summary).toContain("hosted by us or run by the business itself");
+    expect(hostedLlms(false).summary).toMatch(
+      /^open-source software a business runs itself.*Surfing Dog is not in the middle$/,
+    );
   });
 
   it("say what is true while open, and nothing the pilot does not promise", () => {
     for (const open of BOTH) {
       const words = JSON.stringify([
         hostedHero(open),
+        hostedInboxPoints(open),
         hostedRun(open),
         hostedHome(open),
         hostedInstall(open),
         hostedFaq(open),
+        hostedOwnership(open),
+        hostedInboxLd(open),
         hostedNoDoor(open),
         hostedHow(open),
+        hostedHowData(open),
         hostedLlms(open),
       ]);
       expect(words).not.toMatch(/free forever|forever free|\b(first|only)\b|guarantee/i);
@@ -446,9 +568,10 @@ describe("the docs, in both states", () => {
   const QUICKSTART = read("src/content/docs/docs/quickstart.md");
   const VS = read("src/content/docs/docs/self-hosted-vs-hosted.md");
   const OVERVIEW = read("src/content/docs/docs/index.md");
+  const SETUP = read("src/content/docs/docs/setting-up-for-agents.md");
 
   it("mark every version with an open part or a closed one, and close each", () => {
-    for (const source of [QUICKSTART, VS, OVERVIEW]) {
+    for (const source of [QUICKSTART, VS, OVERVIEW, SETUP]) {
       let part: string | null = null;
       for (const [, word] of source.matchAll(/<!-- hosted: ([a-z]+) -->/g)) {
         expect(["open", "closed", "end"]).toContain(word);
@@ -466,7 +589,7 @@ describe("the docs, in both states", () => {
     expect(open.indexOf("## Hosted by us")).toBeLessThan(open.indexOf("## Deploy to Cloudflare"));
     expect(open).toContain(`[Get your agent inbox](${START_URL})`);
     expect(open).toContain("free during the pilot");
-    expect(open).toContain("Your data is stored in the European Union.");
+    expect(open).toContain("Your inbox and its backups are stored in the European Union.");
     expect(open).not.toMatch(/waitlist|not open yet/);
     const closed = version(QUICKSTART, false);
     expect(closed.indexOf("## Hosted by us")).toBeGreaterThan(closed.indexOf("## Your own server"));
@@ -501,6 +624,17 @@ describe("the docs, in both states", () => {
     );
     expect(version(OVERVIEW, false)).toContain("or join the hosted waitlist, then make your first calls.");
     for (const doc of [QUICKSTART, VS, OVERVIEW]) expect(version(doc, true)).not.toMatch(/waitlist|not open yet/);
+  });
+
+  it("setting up for agents: out of the middle only when the business runs it itself, while open", () => {
+    const closed = version(SETUP, false);
+    expect(closed).toContain(
+      "at its own subdomain, on its own Cloudflare account or its own server. Customers and their agents write to the business there. Surfing Dog is not in the middle of a message, a booking, an order or a payment. Joining a network",
+    );
+    const open = version(SETUP, true);
+    expect(open).toContain("at its own subdomain, hosted by us or on its own Cloudflare account or server.");
+    expect(open).toContain("When the business runs it itself, Surfing Dog is not in the middle");
+    expect(open).not.toMatch(/\. Surfing Dog is not in the middle/);
   });
 });
 
@@ -543,11 +677,53 @@ describe("the Markdown plugin", () => {
     expect(JSON.stringify(kept(tree, false))).not.toContain("hosted:");
   });
 
-  it("stops the build on a part left open or a marker it does not know", () => {
+  it("stops the build on a part left open, a marker it does not know, or one that shares its block", () => {
     const open = { type: "root", children: [html("<!-- hosted: open -->"), text("x")] };
     expect(() => hostedDrops(open, true, () => {})).toThrow(/without its <!-- hosted: end -->/);
     const unknown = { type: "root", children: [html("<!-- hosted: maybe -->")] };
     expect(() => hostedDrops(unknown, true, () => {})).toThrow(/unknown marker/);
+    // A line that starts with a marker and goes on is one block of raw HTML: both versions would show.
+    const glued = {
+      type: "root",
+      children: [html("<!-- hosted: open -->Open.<!-- hosted: closed -->Closed.<!-- hosted: end -->")],
+    };
+    for (const state of [true, false]) {
+      expect(() => hostedDrops(glued, state, () => {})).toThrow(/a marker must stand alone/);
+    }
+  });
+
+  it("renders every page with markers through the site's own Markdown parser, one version and no marker left", async () => {
+    // Sätteri, as Astro's Markdown processor loads it (astro → @astrojs/markdown-satteri → satteri).
+    const fromAstro = createRequire(createRequire(import.meta.url).resolve("astro/package.json"));
+    const fromProcessor = createRequire(fromAstro.resolve("@astrojs/markdown-satteri"));
+    const { markdownToHtml } = (await import(pathToFileURL(fromProcessor.resolve("satteri")).href)) as {
+      markdownToHtml: (
+        source: string,
+        options: { mdastPlugins: unknown[]; features: { gfm: boolean } },
+      ) => { html: string };
+    };
+    const render = (source: string, open: boolean) =>
+      markdownToHtml(source.replace(/^---\n[\s\S]*?\n---\n/, ""), {
+        mdastPlugins: [hostedMarkdownPlugin(open)],
+        features: { gfm: true },
+      }).html;
+
+    const marked = walk(site("src/content")).filter(
+      (f) => f.endsWith(".md") && readFileSync(f, "utf8").includes("<!-- hosted:"),
+    );
+    expect(marked.length).toBeGreaterThanOrEqual(4);
+    for (const file of marked) {
+      const source = readFileSync(file, "utf8");
+      for (const open of [true, false]) expect(render(source, open), file).not.toMatch(/<!--\s*hosted:/);
+    }
+    const quickstart = read("src/content/docs/docs/quickstart.md");
+    expect(render(quickstart, true)).toContain(START_URL);
+    expect(render(quickstart, false)).not.toContain(START_URL);
+    expect(render(quickstart, false)).toContain("Hosting is not open yet.");
+
+    // The shape that used to slip through: the parser makes it one HTML block, and the build stops.
+    const glued = "Before.\n\n<!-- hosted: open -->Open.<!-- hosted: closed -->Closed.<!-- hosted: end -->\n";
+    for (const open of [true, false]) expect(() => render(glued, open)).toThrow(/a marker must stand alone/);
   });
 
   it("runs first, and changes its name with the switch so a build after a flip renders every page again", () => {

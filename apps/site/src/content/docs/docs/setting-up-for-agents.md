@@ -39,7 +39,7 @@ How it hands things over **today**: signed [webhooks](/docs/webhooks/), the [own
 
 ### Either way
 
-The inbox is the business's own software: open source (MIT), at its own subdomain, on its own Cloudflare account or its own server. Customers and their agents write to the business there. Surfing Dog is not in the middle of a message, a booking, an order or a payment. Joining a network is optional and separate: a network lists the business and records the receipts its inbox signs, and [install.md, Step 5](/install.md) lists everything a network receives.
+The inbox is the business's own software: open source (MIT), at its own subdomain, <!-- hosted: open -->hosted by us or on its own Cloudflare account or server<!-- hosted: closed -->on its own Cloudflare account or its own server<!-- hosted: end -->. Customers and their agents write to the business there. <!-- hosted: open -->When the business runs it itself, Surfing Dog is not in the middle of a message, a booking, an order or a payment; when we host it, it runs on our servers, and the business can download all its data and leave any time.<!-- hosted: closed -->Surfing Dog is not in the middle of a message, a booking, an order or a payment.<!-- hosted: end --> Joining a network is optional and separate: a network lists the business and records the receipts its inbox signs, and [install.md, Step 5](/install.md) lists everything a network receives.
 
 ## Decide what handles each door
 

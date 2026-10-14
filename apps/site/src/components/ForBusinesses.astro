@@ -5,8 +5,9 @@
  * are thin line icons that each do one small thing once, when the cards scroll in: the open door swings, the
  * scanned door's ring goes out twice, the third door is drawn in by a dashed line. The resting
  * frame is the finished drawing, and nothing loops. The third card follows the hosted pilot's switch
- * (src/lib/hosted.ts): once it is open, the hosted inbox comes before setting it up yourself. Its
- * closed words keep their line breaks as they were, so the closed page is built exactly as before.
+ * (src/lib/hosted.ts): once it is open, it has one pill and the hosted inbox's button, and setting
+ * it up yourself is a link in its words. Its closed words keep their line breaks as they were, so
+ * the closed page is built exactly as before.
  */
 import { HOSTED_NO_DOOR } from "../lib/hosted";
 import { stateOf } from "../lib/status";
@@ -77,13 +78,15 @@ const { pills, card, price } = HOSTED_NO_DOOR;
           </svg>
           <span class="pills">
             <StatusPill state={stateOf(pills[0].id)} text={pills[0].text} />
-            <StatusPill state={stateOf(pills[1].id)} text={pills[1].text} />
+            {pills[1] && <StatusPill state={stateOf(pills[1].id)} text={pills[1].text} />}
           </span>
         </div>
         <h3 class="h-card">No door yet?</h3>
         {
           card ? (
-            <p class="card-text">{card.text}</p>
+            <p class="card-text">
+              {card.before} <a class="link" href={card.link.href}>{card.link.label}</a> {card.after}
+            </p>
           ) : (
             <p class="card-text">
           Get the open-source inbox. It runs at your own address, and agents write to you there. Your AI can set it up
@@ -96,9 +99,6 @@ const { pills, card, price } = HOSTED_NO_DOOR;
             <p class="foot">
               <a class="btn btn-secondary btn-sm" href={card.cta.href}>
                 {card.cta.label}
-              </a>{" "}
-              <a class="link" href={card.also.href}>
-                {card.also.label}
               </a>
             </p>
           ) : (

@@ -2,8 +2,9 @@
 // The install page. Its whole job is to hand one line to the person so their AI does the work,
 // and the instructions the AI reads are a plain file at /install.md, not this page: a page is
 // for a person, a file is what an agent can fetch and follow. Once the hosted pilot opens
-// (src/lib/hosted.ts), the page's head offers the hosted inbox before the line. The closed lede
-// keeps its line breaks as they were, so the closed page is built exactly as before.
+// (src/lib/hosted.ts), the page's head offers the hosted inbox and its button, and the line for
+// your AI follows as the other way. The closed lede keeps its line breaks as they were, so the
+// closed page is built exactly as before.
 import Layout from "../layouts/Layout.astro";
 import { HOSTED_INSTALL } from "../lib/hosted";
 
@@ -45,7 +46,7 @@ const REPO = "https://github.com/surfingdogai/inbox";
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Step one, and often the only step</p>
+          <p class="eyebrow">{HOSTED_INSTALL?.promptEyebrow ?? "Step one, and often the only step"}</p>
           <h2 class="h-section" id="prompt-h">Paste this to your AI</h2>
         </div>
       </div>

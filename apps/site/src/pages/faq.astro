@@ -1,10 +1,10 @@
 ---
 // The questions owners and agents ask, answered in plain words. Each answer is written once, as
 // HTML for the page; the FAQPage structured data takes the same text with the tags removed, so the
-// two can never say different things. Examples use .example domains. Where the inbox runs follows
-// the hosted pilot's switch (src/lib/hosted.ts): hosted first once it is open.
+// two can never say different things. Examples use .example domains. Where the inbox runs, and who
+// is in the middle, follow the hosted pilot's switch (src/lib/hosted.ts): hosted first once it is open.
 import Layout from "../layouts/Layout.astro";
-import { HOSTED_FAQ } from "../lib/hosted";
+import { HOSTED_FAQ, HOSTED_OWNERSHIP } from "../lib/hosted";
 
 const faqs: { q: string; a: string }[] = [
   {
@@ -16,7 +16,9 @@ const faqs: { q: string; a: string }[] = [
     a:
       "No. Surfing Dog Inbox is open-source software (MIT) that is yours: it runs on your own subdomain, like inbox.salon.example, " +
       HOSTED_FAQ +
-      '. You can run it, change it and build on it; nothing you build has to be shared. Its manifest and its doors for agents, MCP and REST, live on your domain and name your business, and your customers and their agents write to you there, directly. Surfing Dog is not in the middle of a message, a booking, an order or a payment, and your data is in your own database, so you can leave whenever you like. Joining the network is a separate choice: it lists you in the directory and records the receipts your inbox signs (bookings confirmed, orders accepted, and how they ended), with no names, no messages and nothing of what was ordered. Everything a network receives is listed on <a href="/network/#shared">the network page</a>. The directory lists businesses whatever software they use: MCP, A2A, UCP, ACP, an API, or Surfing Dog Inbox.',
+      ". You can run it, change it and build on it; nothing you build has to be shared. Its manifest and its doors for agents, MCP and REST, live on your domain and name your business, and your customers and their agents write to you there, directly. " +
+      HOSTED_OWNERSHIP.faq +
+      ' Joining the network is a separate choice: it lists you in the directory and records the receipts your inbox signs (bookings confirmed, orders accepted, and how they ended), with no names, no messages and nothing of what was ordered. Everything a network receives is listed on <a href="/network/#shared">the network page</a>. The directory lists businesses whatever software they use: MCP, A2A, UCP, ACP, an API, or Surfing Dog Inbox.',
   },
   {
     q: "How do I check my business?",

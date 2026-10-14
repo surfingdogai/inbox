@@ -11,14 +11,14 @@ import Run from "../components/Run.astro";
 import UseCases from "../components/UseCases.astro";
 import Why from "../components/Why.astro";
 import Layout from "../layouts/Layout.astro";
+import { HOSTED_INBOX_LD } from "../lib/hosted";
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const ld = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "Surfing Dog Inbox",
-  description:
-    "An open-source inbox a business runs itself, at its own address, on its own Cloudflare account or server: people and AI agents send bookings, orders, quote requests and messages straight to the business over MCP, REST or email, and the business's rules answer them or pass them to a person. Surfing Dog is not in the middle.",
+  description: HOSTED_INBOX_LD,
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   url: new URL("/inbox/", site).toString(),

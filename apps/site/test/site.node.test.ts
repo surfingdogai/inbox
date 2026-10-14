@@ -15,6 +15,7 @@ import {
   READY_HREF,
   readDirectory,
 } from "../src/lib/ask";
+import { hostedOwnership } from "../src/lib/hosted";
 import { OWN_WORD_NOTE, recordNote, recordView, UNCONFIRMED_NOTE } from "../src/lib/record";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
@@ -342,17 +343,24 @@ describe("the home page and the three products", () => {
 
   it("the inbox is the business's own, and the network is a separate choice that records receipts", () => {
     // An assistant read the site and concluded that installing the inbox puts a business on Surfing Dog.
-    // It does not: the inbox runs at the business's own address and nobody sits in the middle.
+    // It does not: the inbox runs at the business's own address and nobody sits in the middle. Once
+    // the hosted pilot opens, that is said of an inbox the business runs itself (src/lib/hosted.ts).
     const faq = visible(read("src/pages/faq.astro"));
     expect(faq).toContain('q: "Does my business move onto Surfing Dog?"');
     expect(faq).toMatch(/a:\s*["']No\. Surfing Dog Inbox is open-source software/);
-    expect(faq).toContain("Surfing Dog is not in the middle of a message, a booking, an order or a payment");
+    expect(faq).toContain("HOSTED_OWNERSHIP.faq +");
+    for (const open of [true, false]) {
+      expect(hostedOwnership(open).faq).toContain(
+        "Surfing Dog is not in the middle of a message, a booking, an order or a payment",
+      );
+    }
     const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
     expect(opening).toContain("**The inbox is the business's own.**");
     expect(opening).toContain("does not put the business on Surfing Dog");
     expect(opening).toMatch(/Joining a network \(Step 5\) is optional and separate/);
     const llms = read("astro.config.mjs");
-    expect(llms).toContain("Installing it does not put a business on Surfing Dog");
+    expect(llms).toContain(`\${HOSTED_OWNERSHIP.llms}`);
+    expect(hostedOwnership(false).llms).toContain("Installing it does not put a business on Surfing Dog");
     expect(llms).toContain("https://surfingdog.ai/network#shared");
     // The short version of what a network gets never says it gets nothing about customers: the
     // detailed list (install.md Step 5, /network#shared) includes a first-time customer's email.
