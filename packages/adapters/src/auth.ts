@@ -183,6 +183,11 @@ export async function callerFromRequest(
       now,
     };
   }
+  // A fingerprint, not an identity: many people share one address and one user agent (a carrier's
+  // NAT, an assistant platform's servers), and a caller chooses its own user agent. It names the
+  // caller in the history and scopes its idempotency keys; it never opens an item. A retry is
+  // answered only to the item's owner (its access token, or the party a key or pass names), and a
+  // create's retry gets the access token back only when signed by the key that made it.
   const ip =
     request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
   const ua = request.headers.get("user-agent") ?? "";

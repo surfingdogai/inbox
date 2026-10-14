@@ -172,20 +172,29 @@ async function attempt_(
 ): Promise<TransitionResult> {
   const now = nowOf(caller);
   const idem = caller.idempotency;
+  const load = async () => {
+    const [found] = await db.orm.select().from(items).where(eq(items.id, input.itemId));
+    if (!found) throw new WriteError("not_found", "no such item");
+    return found;
+  };
+  // A customer's retry is answered only to the item's owner, as its first try was. The scope a retry
+  // is looked up in proves nothing: for a caller without a key it is a fingerprint of the request's
+  // address and user agent, which many people share and a caller can choose. The item's access
+  // token, or the party a pass or a key names, is what makes the item theirs.
+  const owned = isCustomer(caller) ? await load() : undefined;
+  if (owned) await assertOwnership(caller, owned.partyId, owned.accessTokenHash);
   if (idem) {
     const hit = await findIdempotent(db, idem);
     if (hit) return replay(hit, requestHash);
   }
 
-  const [row] = await db.orm.select().from(items).where(eq(items.id, input.itemId));
-  if (!row) throw new WriteError("not_found", "no such item");
+  const row = owned ?? (await load());
   const item = rowToItem(row);
   if (input.expectedVersion !== undefined && item.version !== input.expectedVersion) {
     throw new WriteError("version_conflict", "the item changed since you read it", {
       details: { currentVersion: item.version },
     });
   }
-  if (isCustomer(caller)) await assertOwnership(caller, row.partyId, row.accessTokenHash);
 
   const settings = await readSettings(db);
   // The item's offers (ADR-018 §1); an item from before offers had a table gets the one it holds.

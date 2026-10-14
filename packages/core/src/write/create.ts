@@ -76,7 +76,10 @@ const BUSINESS_FIELDS = ["paymentRef", "paidAmount", "paymentUrl", "fulfilledAt"
 
 export interface CreateResult {
   readonly view: ItemView;
-  /** Capability secret for anonymous creators: lets them read and cancel this item. Shown once. */
+  /**
+   * Capability secret for anonymous creators: lets them read and cancel this item. Shown once: a
+   * retry's answer carries it again only when the retry is signed by the key the item was made with.
+   */
   readonly accessToken?: string | undefined;
   readonly replayed: boolean;
   /** Who the inbox takes the customer for (ADR-017 §8.4); the public doors add it. */
@@ -101,7 +104,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const requestHash = idem ? await hashJson({ op: "create", scope: idem.scope, input: hashed }) : undefined;
   if (idem) {
     const hit = await findIdempotent(db, idem);
-    if (hit) return replay(hit, requestHash);
+    if (hit) return replay(db, caller, hit, requestHash);
   }
   // A customer is answered in the business's words: its language (theirs, when they gave one) and
   // its time zone.
@@ -349,15 +352,43 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     await db.batch(statements);
   } catch (error) {
     const hit = await diagnoseFailure(db, error, { idem, requestHash });
-    return replay(hit, requestHash);
+    return replay(db, caller, hit, requestHash);
   }
   return { view, accessToken, replayed: false };
 }
 
-function replay(hit: { requestHash: string; response: unknown }, requestHash: string | undefined): CreateResult {
+/**
+ * A retry of a create, answered from what was stored. The access token goes back only to a retry
+ * signed by the key the item was made with. Nothing else tells two anonymous callers apart: the scope
+ * a retry is looked up in is a fingerprint of the request's address and user agent, which many people
+ * share (one address behind a carrier's NAT, one browser's user agent) and a caller can choose, so
+ * anyone who sent the same key and body from it would otherwise get the token, and with it the item's
+ * whole thread. An unsigned retry gets the answer without it: the token is shown once.
+ */
+async function replay(
+  db: Db,
+  caller: Caller,
+  hit: { requestHash: string; response: unknown },
+  requestHash: string | undefined,
+): Promise<CreateResult> {
   if (hit.requestHash !== requestHash) {
     throw new WriteError("idempotency_mismatch", "this idempotency key was already used with a different request");
   }
   const stored = hit.response as { view: ItemView; accessToken?: string };
-  return { view: stored.view, accessToken: stored.accessToken, replayed: true };
+  const token =
+    stored.accessToken && (await sameSigner(db, caller, stored.view.item.id)) ? stored.accessToken : undefined;
+  return { view: stored.view, ...(token ? { accessToken: token } : {}), replayed: true };
+}
+
+/** Whether the caller's verified signature is by the key the item was made with. */
+async function sameSigner(db: Db, caller: Caller, itemId: string): Promise<boolean> {
+  const agent = caller.agent;
+  if (!agent || agent.level === "none" || !agent.thumbprint) return false;
+  const { rows } = await db.client.query({
+    sql: "SELECT agent_thumbprint FROM items WHERE id = ?",
+    params: [itemId],
+    method: "all",
+  });
+  const made = rows[0]?.[0];
+  return typeof made === "string" && made === agent.thumbprint;
 }

@@ -51,7 +51,11 @@ export interface RouterOptions {
   readonly adminKey: string;
   /** The key the router signs the calls it passes on to shards with (`HOSTED_SHARD_KEY`). */
   readonly shardKey: string;
-  /** The header the server in front puts the client's address in (default `cf-connecting-ip`). */
+  /**
+   * The header the server in front puts the client's address in (default `cf-connecting-ip`). The
+   * router trusts it as given: the server in front must overwrite it on every request, from the
+   * edge's own CF-Connecting-IP, so that no visitor can choose it.
+   */
   readonly clientAddressHeader?: string | undefined;
   /** The header the server in front says the visitor's scheme in, as `{"scheme":"http"}` (default `cf-visitor`). */
   readonly visitorSchemeHeader?: string | undefined;
@@ -60,6 +64,9 @@ export interface RouterOptions {
   readonly now?: (() => number) | undefined;
   readonly log?: ((line: string) => void) | undefined;
 }
+
+/** https only, for a year, for the name that was asked for: never `includeSubDomains`. */
+const HSTS = "max-age=31536000";
 
 const HOP_BY_HOP = new Set([
   "connection",
@@ -115,13 +122,14 @@ export function createRouter(o: RouterOptions): {
     const path = url.pathname;
     const target = `${path}${url.search}`;
     const cls = classifyHost(host, o.parent);
-    // Headers every answer for this host carries: noindex on a slug host; on a business's own name,
-    // https from now on (for that name alone: the rest of the business's domain is its own).
+    // Headers every answer for this host carries: on a slug host, noindex and https from now on; on a
+    // business's own name, https from now on. Each for that name alone, never its subdomains: the
+    // rest of a business's domain is its own, and the parent's other names are not the router's.
     const noindex: Record<string, string> =
       cls.kind === "slug"
-        ? { "x-robots-tag": "noindex, nofollow" }
+        ? { "x-robots-tag": "noindex, nofollow", "strict-transport-security": HSTS }
         : cls.kind === "own"
-          ? { "strict-transport-security": "max-age=31536000" }
+          ? { "strict-transport-security": HSTS }
           : {};
     // Never routed, through any name.
     if (cls.kind === "none" || path === "/internal" || path.startsWith("/internal/") || path.startsWith("/admin/")) {
@@ -243,6 +251,10 @@ export function createRouter(o: RouterOptions): {
       }
       headers[k] = value;
     }
+    // The caller's address, for the inbox's limits and its anonymous callers: whatever the server in
+    // front wrote in this header, and only as good as that server makes it. It must come from the
+    // edge's own CF-Connecting-IP (the edge overwrites what a visitor sends there), never from the
+    // left end of X-Forwarded-For, which the edge appends to and the visitor writes.
     const client = req.headers[clientHeader];
     const address = typeof client === "string" ? client.split(",")[0]?.trim() : undefined;
     delete headers["cf-connecting-ip"];

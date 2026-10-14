@@ -158,12 +158,18 @@ describe("people at the doors", () => {
     expect(text.endsWith(`Keep this pass for Rita: ${pass} (network ${HOST}).`)).toBe(true);
     // Said to the assistant, and nothing it is asked to pass on to Rita about keys or networks.
     expect(text).not.toMatch(/Tell Rita|comes by email/);
-    // The same request again: the same item, the same pass, and no second first contact.
+    // The same request again: the same item and no second first contact. Not the pass, nor the
+    // access token: an unsigned caller is known only by its address and user agent, which others
+    // share, so they are shown once (a retry signed by the key that made the item gets them again).
     const again = (await client.callTool({ name: "create_booking", arguments: args })) as {
+      content: { text: string }[];
       structuredContent: Created & { replayed?: boolean };
     };
     expect(again.structuredContent.replayed).toBe(true);
-    expect(again.structuredContent.identity.passes).toEqual(r.structuredContent.identity.passes);
+    expect(again.structuredContent.view.item.id).toBe(r.structuredContent.view.item.id);
+    expect(again.structuredContent.identity.passes).toEqual([]);
+    expect(again.structuredContent.accessToken).toBeUndefined();
+    expect(again.content[0]?.text ?? "").not.toContain(pass);
     expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(1);
   });
 
@@ -237,7 +243,9 @@ describe("people at the doors", () => {
     const first = await s.app.request(new Request(`${ORIGIN}/v1/bookings`, { method: "POST", ...good }));
     expect(first.status).toBe(201);
     expect(first.headers.get("sdi-signature")).toBeNull();
-    const item = ((await first.json()) as Created).view.item.id;
+    const made = (await first.json()) as Created;
+    const item = made.view.item.id;
+    expect(made.accessToken).toBeTruthy();
     const [row] = (
       await s.db.client.query({
         sql: "SELECT agent_level, agent_thumbprint FROM items WHERE id = ?",
@@ -253,10 +261,45 @@ describe("people at the doors", () => {
     });
     expect(events.rows).toEqual([["signed_agent"]]);
 
-    // The same signed request again, with its idempotency key: a retry, answered as the first was.
+    // The same signed request again, with its idempotency key: a retry, answered as the first was,
+    // its access token and passes included, since the key that made the item signed it.
     const retry = await s.app.request(new Request(`${ORIGIN}/v1/bookings`, { method: "POST", ...good }));
     expect(retry.status).toBe(200);
     expect(retry.headers.get("idempotent-replayed")).toBe("true");
+    const again = (await retry.json()) as Created;
+    expect(again.accessToken).toBe(made.accessToken);
+    expect(again.identity.passes).toEqual(made.identity.passes);
+    // Another key, the same body and idempotency key, from the same address and user agent: a new
+    // signature, so not a copy, but not the key that made the item: no token, and no pass.
+    const other = await generateKeyPair();
+    const otherJwk = { kty: "OKP", crv: "Ed25519", x: other.publicJwk.x };
+    let otherBinary = "";
+    for (const b of new TextEncoder().encode(JSON.stringify(otherJwk))) otherBinary += String.fromCharCode(b);
+    const otherCreated = Math.floor(Date.now() / 1000);
+    const otherSigned = await signRequest({
+      method: "POST",
+      url: `${ORIGIN}/v1/bookings`,
+      body,
+      headers: { "Sdi-Agent-Key": `sig1=:${btoa(otherBinary)}:`, "Idempotency-Key": "k-1" },
+      covered: [{ name: "sdi-agent-key", key: "sig1" }],
+      keyid: await thumbprint(otherJwk),
+      privateJwk: other.privateJwk,
+      tag: TAG_AGENT,
+      created: otherCreated,
+      expires: otherCreated + 60,
+    });
+    const stranger = await s.app.request(
+      new Request(`${ORIGIN}/v1/bookings`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...otherSigned.headers },
+        body,
+      }),
+    );
+    expect(stranger.status).toBe(200);
+    const theirs = (await stranger.json()) as Created;
+    expect(theirs.view.item.id).toBe(item);
+    expect(theirs.accessToken).toBeUndefined();
+    expect(theirs.identity.passes).toEqual([]);
     // Without one, a copy.
     const bare = await make(body);
     expect((await s.app.request(new Request(`${ORIGIN}/v1/bookings`, { method: "POST", ...bare }))).status).toBe(201);

@@ -308,7 +308,21 @@ describe("what the router answers itself", () => {
     expect(inboxCookies("_ga=1; session=2")).toBe("");
     const manifest = await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json");
     expect(manifest.headers["strict-transport-security"]).toBe("max-age=31536000");
-    expect((await rt.http(t.slugHost, "GET", "/robots.txt")).headers["strict-transport-security"]).toBeUndefined();
+    // A slug host says https from now on too, for itself alone: every answer, the 404 for a slug
+    // nobody holds included, and never for the parent's other names.
+    expect((await rt.http(t.slugHost, "GET", "/robots.txt")).headers["strict-transport-security"]).toBe(
+      "max-age=31536000",
+    );
+    expect((await rt.http(t.slugHost, "GET", "/admin/v1/health")).headers["strict-transport-security"]).toBe(
+      "max-age=31536000",
+    );
+    const nobody = await rt.http(`quiet-nobody-zz22.${PARENT}`, "GET", "/");
+    expect(nobody.status).toBe(404);
+    expect(nobody.headers["strict-transport-security"]).toBe("max-age=31536000");
+    expect((await rt.http(PARENT, "GET", "/")).headers["strict-transport-security"]).toBeUndefined();
+    expect(
+      (await rt.http(`inbox.not-a-slug.${PARENT}`, "GET", "/")).headers["strict-transport-security"],
+    ).toBeUndefined();
     const plain = await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json?x=1", {
       headers: { "cf-visitor": '{"scheme":"http"}' },
     });

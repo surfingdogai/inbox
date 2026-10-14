@@ -81,7 +81,7 @@ export class IdentityCapabilities {
     const agent = caller.agent ?? NO_AGENT;
     if (caller.idempotency && (await findIdempotent(this.db, caller.idempotency))) {
       const replayed = await createItem(this.db, caller, input);
-      return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, audienceOf(caller)) };
+      return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, retryAudience(caller, replayed)) };
     }
     // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
     // all for a test item: it emails nobody and contacts no network (the founder, 23 September 2026).
@@ -578,6 +578,17 @@ export type PassAudience = "creator" | "presenter" | "business";
 /** A create's answer goes to whoever made it: the customer, or the business itself. */
 function audienceOf(caller: Caller): PassAudience {
   return isCustomer(caller) ? "creator" : "business";
+}
+
+/**
+ * Who a retry of a create is answered as. The item's first passes go back with its access token, to
+ * a retry signed by the key the item was made with (`createItem` decides), or to a caller a key or a
+ * pass already names; an unsigned anonymous retry is known only by its address and user agent, which
+ * many people share, and gets no pass it does not hold.
+ */
+function retryAudience(caller: Caller, replayed: CreateResult): PassAudience {
+  if (!isCustomer(caller)) return "business";
+  return caller.actor.partyId || replayed.accessToken ? "creator" : "presenter";
 }
 
 /**
