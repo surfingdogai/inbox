@@ -1318,6 +1318,11 @@ textarea.sd-code {
 .sd-live-row:first-child {
   border-top: 0;
 }
+/* Once the whole result has been written under it, the live read steps aside: the page reads as
+   the result alone, not the progress and then the result under a second copy of the same heading. */
+section[aria-labelledby="live-h"]:has(~ section[aria-labelledby="result-h"]) {
+  display: none;
+}
 @keyframes sd-in {
   from {
     opacity: 0;
