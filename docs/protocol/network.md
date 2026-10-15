@@ -473,7 +473,7 @@ of them only leaves businesses out:
 | `accepts` | comma-separated kinds (`ask`, `quote`, `book`, `order`, `pay`) and payment tokens, at most 8: its live doors take every kind and it accepts every payment |
 | `requestable` | `ask` or `quote`: a live door that declared that kind |
 | `door_type` | comma-separated door types (§4.8), `platform` for any platform, at most 5: a live door of any of them |
-| `level` | at that level or above (§4.9); `orderable` is `bookable`; below `askable` nothing is listed yet |
+| `level` | at that level or above (§4.9); `bookable` and `orderable` are one rung: `bookable` asks for a live door that takes bookings, `orderable` for one that takes orders; below `askable` nothing is listed yet |
 | `has_inbox` | `true`: with an inbox door; `false`: without one |
 | `source` | comma-separated `member`, `registered`, `found`: any of them |
 | `order` | `rank`, the published order (the default), or `nearest`, by distance, which needs `near` |
@@ -855,11 +855,14 @@ A business's level is the highest level among its live doors.
 | `listed` | known to exist; human contact only | no agent door |
 | `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
 | `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
-| `bookable` (or `orderable`) | a door can book, or create an order or a cart | inbox booking or order; UCP or ACP checkout; declared MCP or API write operations |
+| `bookable` | a door can book | inbox booking; declared MCP or API booking operations |
+| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product or Offer markup with a price, or another door of its own that takes orders); declared MCP or API order operations |
 | `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
 
 Levels come from the network's own probes; what a business declares is a hint until a probe confirms
-it. A door behind a customer account never raises a level. **Agent-ready** means `askable` or above.
+it. A door behind a customer account never raises a level. A UCP or ACP profile on a site that shows
+nothing for sale (no Product or Offer markup with a price, no other door that takes orders) raises it
+no higher than `readable`: a website platform may serve one on every site it hosts. **Agent-ready** means `askable` or above.
 A network lists businesses below `askable` only after its own checks for that (a working claim,
 correction and removal, and the fields each jurisdiction asks for); until then a filter below
 `askable` returns nothing. A network never shows a number for a level, only its name.
