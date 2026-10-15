@@ -10,7 +10,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { outboundMail, services, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * A test item is a rehearsal (the founder, 23 September 2026): it emails nobody — not the customer, not
@@ -67,6 +67,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const caps = confirming(
     new Capabilities(db, createSecretBox(["sandbox-test-instance-key-0123456789"]), "https://inbox.example"),
   );

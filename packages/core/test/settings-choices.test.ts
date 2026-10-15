@@ -1,7 +1,7 @@
 import { runMigrations } from "@surfingdog/platform";
 import { profileHoursSchema } from "@surfingdog/spec";
 import { beforeAll, describe, expect, it } from "vitest";
-import { findSlots } from "../src/capabilities/availability";
+import { findSlots, slotOffered } from "../src/capabilities/availability";
 import { offeredItemTypes } from "../src/capabilities/directory";
 import { Capabilities } from "../src/capabilities/service";
 import {
@@ -297,7 +297,8 @@ describe("opening hours that run to midnight", () => {
   it("a read says whether the business has saved hours, not only what bookings fall back to", async () => {
     const { caps } = await setup();
     const before = await caps.setup.getAvailability(owner);
-    expect(before.weekly_set).toBe(false);
+    // Nothing saved is no hours: never a week the inbox made up.
+    expect(before).toMatchObject({ weekly_set: false, weekly: {} });
     await caps.setup.setWeekly(owner, { weekly: ALWAYS });
     const after = await caps.setup.getAvailability(owner);
     expect(after).toMatchObject({ weekly_set: true, weekly: ALWAYS });
@@ -360,5 +361,164 @@ describe("the profile", () => {
     expect((await own.caps.setup.getProfile(owner)).domain_held).toBe(false);
     const hosted = await setup({ policy: { address: "https://inbox.example.com", site: null } });
     expect((await hosted.caps.setup.getProfile(owner)).domain_held).toBe(true);
+  });
+
+  it("says where a hosted business joined from, and where it connects, and nothing of it otherwise", async () => {
+    const own = await setup();
+    expect(await own.caps.setup.getProfile(owner)).not.toHaveProperty("home");
+    const connect = "https://app.example.com/t/tn_1/connect";
+    const waiting = await setup({
+      policy: { address: "https://x.example.net", site: null, domain: "salaorosa.pt", connectUrl: connect },
+    });
+    expect((await waiting.caps.setup.getProfile(owner)).home).toEqual({
+      domain: "salaorosa.pt",
+      linked: false,
+      connect_url: connect,
+    });
+    const live = await setup({
+      policy: { address: "https://inbox.salaorosa.pt", site: "https://salaorosa.pt", domain: "salaorosa.pt" },
+    });
+    expect((await live.caps.setup.getProfile(owner)).home).toEqual({
+      domain: "salaorosa.pt",
+      linked: true,
+      connect_url: null,
+    });
+  });
+});
+
+describe("nothing is booked that nobody opened", () => {
+  const booking = (serviceId: string, name: string) => ({
+    payload: {
+      reservationFor: { serviceId, name },
+      startTime: "2026-10-15T10:00:00Z", // a Thursday
+      endTime: "2026-10-15T11:00:00Z",
+    },
+    contact: { name: "Rita", email: "rita@example.com" },
+  });
+  const window = (serviceId: string) => ({
+    service_id: serviceId,
+    from: "2026-10-15T00:00:00Z",
+    to: "2026-10-22T00:00:00Z",
+  });
+
+  it("a service with no hours saved offers no time and takes no agent's booking", async () => {
+    const { db, caps } = await setup();
+    const svc = await caps.setup.createService(owner, serviceInput.parse({ name: "Botox", duration_min: 60 }));
+    expect((await caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request"]);
+    // No made-up week: the slot search finds nothing, and no single time is offered.
+    const { slots } = await findSlots(db, {
+      serviceId: svc.id,
+      from: "2026-10-15T00:00:00Z",
+      to: "2026-10-22T00:00:00Z",
+      timezone: "Europe/Lisbon",
+      now: T0,
+      minNoticeMin: 0,
+    });
+    expect(slots).toEqual([]);
+    expect(
+      await slotOffered(db, {
+        serviceId: svc.id,
+        start: Date.parse("2026-10-15T10:00:00Z"),
+        end: Date.parse("2026-10-15T11:00:00Z"),
+        timezone: "Europe/Lisbon",
+        exceptItemId: "",
+      }),
+    ).toBe(false);
+    // An agent is refused, for times and for a booking, with what it can do instead.
+    for (const write of [
+      () => caps.createBooking(agent, booking(svc.id, "Botox")),
+      () => caps.checkAvailability(window(svc.id), { now: T0, caller: agent }),
+    ]) {
+      const e = await refusal(write());
+      expect(e.code).toBe("not_allowed");
+      expect(e.details).toMatchObject({ reason: "booking_not_offered", item_type: "booking" });
+      expect(e.message).toContain("Nothing was written");
+    }
+    // Once the owner saves hours, the same booking is taken.
+    await caps.setup.setWeekly(owner, { weekly: { thu: [["09:00", "18:00"]] } });
+    expect((await caps.getBusinessProfile()).item_types).toContain("booking");
+    expect((await caps.checkAvailability(window(svc.id), { now: T0, caller: agent })).slots.length).toBeGreaterThan(0);
+    const made = await caps.createBooking(agent, booking(svc.id, "Botox"));
+    expect("view" in made && made.view.item.type).toBe("booking");
+  });
+
+  it("a service asked for a price is never booked, by an agent or a person, whatever the hours", async () => {
+    const { db, caps } = await setup();
+    const svc = await caps.setup.createService(
+      owner,
+      serviceInput.parse({ name: "Boiler repair", price: { model: "quote" } }),
+    );
+    await caps.setup.setWeekly(owner, { weekly: ALWAYS });
+    // Asked about: the request for a price is open, the booking door is not.
+    expect((await caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request"]);
+    expect(await offeredItemTypes(db)).toEqual(["message", "quote_request"]);
+    for (const who of [agent, visitor]) {
+      const e = await refusal(caps.createBooking(who, booking(svc.id, "Boiler repair")));
+      expect(e.code).toBe("invalid_input");
+      expect(e.details).toMatchObject({ reason: "quote_only", service_id: svc.id });
+      expect(e.message).toContain("send a request for a price instead");
+    }
+    const times = await refusal(caps.checkAvailability(window(svc.id), { now: T0 }));
+    expect(times.details).toMatchObject({ reason: "quote_only" });
+    expect(
+      await slotOffered(db, {
+        serviceId: svc.id,
+        start: Date.parse("2026-10-15T10:00:00Z"),
+        end: Date.parse("2026-10-15T11:00:00Z"),
+        timezone: "Europe/Lisbon",
+        exceptItemId: "",
+      }),
+    ).toBe(false);
+    // A plan's dry run says the same as the inbox once it is applied.
+    const dry = await caps.applySetupPlan(owner, { doors: ["booking", "quote_request"] }, { dryRun: true });
+    expect(dry.doors.on).toEqual(["message", "quote_request"]);
+    expect(dry.doors.missing).toEqual([
+      {
+        door: "booking",
+        why: "Booking turns on once a service is booked at a time, not asked for a price.",
+        needs: "service",
+      },
+    ]);
+    // A service booked at a time, beside it, opens the door; the quote one still is not booked.
+    await caps.setup.createService(owner, serviceInput.parse({ name: "Visit", duration_min: 60 }));
+    expect((await caps.getBusinessProfile()).item_types).toEqual(["message", "quote_request", "booking"]);
+    const still = await refusal(caps.createBooking(agent, booking(svc.id, "Boiler repair")));
+    expect(still.details).toMatchObject({ reason: "quote_only" });
+  });
+});
+
+describe("what a plan read and left for the owner", () => {
+  it("suggests services only a model read, never on offer, and leaves out the ones already there", async () => {
+    const { db, caps } = await setup();
+    await caps.setup.createService(owner, serviceInput.parse({ name: "Corte", duration_min: 30 }));
+    const result = await caps.applySetupPlan(system, {
+      suggested_services: [{ name: "Corte" }, { name: "Cor" }, { name: "Penteado" }],
+    });
+    expect(result.sentences).toContain("Suggests services to add: Cor, Penteado. None is on offer until you add it.");
+    expect((await readSettings(db)).setup.suggestions.services).toEqual([{ name: "Cor" }, { name: "Penteado" }]);
+    // Suggested is not offered: only the service the owner added is listed.
+    expect((await caps.setup.listServices(owner)).map((s) => s.name)).toEqual(["Corte"]);
+  });
+
+  it("fills an empty legal country from the country the site gave, and never replaces one", async () => {
+    const { db, caps } = await setup();
+    const source = {
+      source_url: "https://salaorosa.pt/",
+      checked_at: "2026-10-12T10:00:00Z",
+      confidence: "declared" as const,
+    };
+    const result = await caps.applySetupPlan(system, {
+      directory: { address: { addressLocality: "Porto", addressCountry: "PT" } },
+      sources: { "directory.address": source },
+    });
+    expect(result.sentences).toContain("Sets the country you sell under to PT.");
+    const settings = await readSettings(db);
+    expect(settings.commerce.legal.country).toBe("PT");
+    // Where it came from, so the owner app can say so until the owner saves it.
+    expect(settings.setup.sources["commerce.legal.country"]).toMatchObject({ source_url: "https://salaorosa.pt/" });
+
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "ES" } } } });
+    await caps.applySetupPlan(system, { directory: { address: { addressCountry: "PT" } } });
+    expect((await readSettings(db)).commerce.legal.country).toBe("ES");
   });
 });

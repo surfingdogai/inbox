@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // would prove only that we agree with ourselves.
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { type App, createApp, createInbox, type Inbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * The doors onto ADR-015 step two: /v1/owner/webhooks, /v1/owner/deliveries and the developer
@@ -364,6 +364,7 @@ describe("end to end: from a booking to a signed request on someone else's serve
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     const ownerKey = (await createApiKey(db, { kind: "owner", name: "e2e" })).key;
     const auth = { authorization: `Bearer ${ownerKey}` };
 

@@ -1,15 +1,28 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { type FormEvent, useRef, useState } from "react";
-import { CountrySelect, CurrencySelect, LanguagePicker, SourceTag, TimeZoneSelect } from "../components/Choosers";
+import { ChevronRight } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  CountrySelect,
+  CurrencySelect,
+  DurationPicker,
+  LanguagePicker,
+  MoneyInput,
+  SourceTag,
+  Stepper,
+  TimeZonePicker,
+} from "../components/Choosers";
 import { DownloadInbox } from "../components/DownloadInbox";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
+import { session } from "../lib/auth";
 import { currencyNote } from "../lib/currencies";
-import { doorSwitchDoc, doorViews, needsWords } from "../lib/doors";
+import { doorSwitchDoc, doorViews, waitWords } from "../lib/doors";
+import { DURATION_PRESETS } from "../lib/durations";
 import { emailLangOf, mailBannerLines } from "../lib/format";
-import { languagesToSave } from "../lib/languages";
+import { countryOfZone } from "../lib/geo";
+import { languageName, languagesToSave } from "../lib/languages";
 import {
   qk,
   useAvailability,
@@ -30,14 +43,15 @@ export const Route = createFileRoute("/settings/")({
   component: GeneralPage,
 });
 
-/** A settings write the page makes on its own (a switch, the description), and what comes of it. */
+/** A settings write the page makes on its own (a door's switch), and what comes of it. */
 type PatchSettings = (doc: Record<string, unknown>, done?: () => void) => void;
 
 /**
- * What agents can do, who the business is (its own row) and the settings document (versioned), each
- * saved on its own. The switches and the description write small patches to the settings while the
- * long form below may hold edits: the form follows those versions (its own page's writes), so its
- * save is not refused as a change made somewhere else, and a change truly made elsewhere still is.
+ * What agents can do (three switches, saved as they are pressed), who the business is and how it
+ * takes bookings; the rest folded under Advanced. One bar saves every change on the page, and shows
+ * only while there is one. The switches write small patches while the page may hold edits: the form
+ * follows the versions its own patches made, so its save is not refused as a change made somewhere
+ * else, and a change truly made elsewhere still is.
  */
 function GeneralPage() {
   const profile = useProfile();
@@ -71,6 +85,7 @@ function GeneralPage() {
     void qc.invalidateQueries({ queryKey: qk.settings }).then(() => setFormKey((k) => k + 1));
   };
   const patchProblem = patch.error ? problemOf(patch.error) : null;
+  const failed = profile.isError ? profile.error : settings.isError ? settings.error : null;
   return (
     <>
       {saved && <Toast tone="success" text={saved} onDismiss={() => setSaved(null)} />}
@@ -88,42 +103,24 @@ function GeneralPage() {
       )}
       <MailBanner />
       {settings.data && <DoorsCard doc={settings.data.doc} pending={patch.isPending} onPatch={patchSettings} />}
-      {profile.isPending && <Loading />}
-      {profile.isError && (
+      {(profile.isPending || settings.isPending) && <Loading />}
+      {failed && (
         <div className="card glass">
           <ErrorState
-            title="Could not load the business profile"
-            text={problemOf(profile.error).detail}
-            onRetry={() => void profile.refetch()}
+            title="Could not load the settings"
+            text={problemOf(failed).detail}
+            onRetry={() => void Promise.all([profile.refetch(), settings.refetch()])}
           />
         </div>
       )}
       {profile.data && settings.data && (
-        <ProfileForm
-          key={`${JSON.stringify({ ...profile.data, item_types: null })}|${settings.data.doc.directory.description}|${JSON.stringify(settings.data.doc.setup.sources)}`}
-          initial={profile.data}
-          settings={settings.data.doc}
-          onPatch={patchSettings}
-          onSaved={() => setSaved("Business saved.")}
-        />
-      )}
-      {settings.isPending && <Loading />}
-      {settings.isError && (
-        <div className="card glass">
-          <ErrorState
-            title="Could not load the settings"
-            text={problemOf(settings.error).detail}
-            onRetry={() => void settings.refetch()}
-          />
-        </div>
-      )}
-      {settings.data && (
-        <SettingsForm
+        <GeneralForm
           key={formKey}
+          profile={profile.data}
           initial={settings.data}
           expectedVersion={expectedFor}
           onSaved={() => {
-            setSaved("Settings saved.");
+            setSaved("Saved.");
             setFormKey((k) => k + 1);
           }}
           onReload={reload}
@@ -135,8 +132,8 @@ function GeneralPage() {
 }
 
 /**
- * What is wrong with email, when something is: no mail service (every email only goes to the log and
- * shows as not sent), no address to send from, or no links in the emails. Nothing when all is well.
+ * What is wrong with email, when something is: no mail service, no address to send from, or no links
+ * in the emails. Nothing when all is well, as on every hosted inbox, whose host sends its mail.
  */
 function MailBanner() {
   const mail = useMailStatus();
@@ -163,8 +160,9 @@ function Loading() {
 // ---- what agents can do ---------------------------------------------------------------------
 
 /**
- * Three switches, one line each. A booking switched on waits for a service and opening hours, and
- * says so with the way there; bookings taken at another site say where, and can come back here.
+ * Three switches, one line each, saved as they are pressed. A booking switched on that cannot open
+ * yet shows as waiting, says for what, and links the way there; bookings taken at another site say
+ * where, and can come back here.
  */
 function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending: boolean; onPatch: PatchSettings }) {
   // The owner's own read of the doors: the public one answers no agent until the inbox is connected.
@@ -177,7 +175,7 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
   const views = doorViews({
     doors: doc.doors,
     itemTypes: profile.data.item_types,
-    hasService: (services.data?.items ?? []).some((s) => s.active === 1),
+    hasService: (services.data?.items ?? []).some((s) => s.active === 1 && s.price?.model !== "quote"),
     hasHours: Boolean(a && ((a.weekly_set && windows(a.weekly)) || a.overrides.some((o) => windows(o.weekly)))),
     doorsElsewhere: doc.doorsElsewhere,
   });
@@ -187,47 +185,55 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
         What agents can do
       </h3>
       <ul className="door-list">
-        {views.map((v) => (
-          <li key={v.key} className="door-row">
-            <Switch
-              checked={v.on}
-              disabled={pending || Boolean(v.elsewhere)}
-              onChange={(on) => onPatch(doorSwitchDoc(v.key, on))}
-            >
-              {v.label}
-            </Switch>
-            {v.needs && (
-              <span className="door-note">
-                {needsWords(v.needs)} {v.needs !== "hours" && <Link to="/settings/services">Add a service</Link>}
-                {v.needs === "service_and_hours" && " · "}
-                {v.needs !== "service" && <Link to="/settings/availability">Set hours</Link>}
-              </span>
-            )}
-            {v.elsewhere && (
-              <span className="door-note">
-                Booked at {v.elsewhere}.{" "}
-                <button
-                  type="button"
-                  className="linkish"
-                  disabled={pending}
-                  onClick={() =>
-                    onPatch({ doorsElsewhere: doc.doorsElsewhere.filter((d) => d.itemType !== "booking") })
-                  }
-                >
-                  Take bookings here
-                </button>
-              </span>
-            )}
-            {v.key === "message" && !v.on && <span className="door-note">Email still reaches you.</span>}
-          </li>
-        ))}
+        {views.map((v) => {
+          const why = v.needs ? `door-${v.key}-why` : undefined;
+          return (
+            <li key={v.key} className="door-row">
+              <Switch
+                checked={v.on}
+                pending={Boolean(v.needs)}
+                describedBy={why}
+                disabled={pending || Boolean(v.elsewhere)}
+                onChange={(on) => onPatch(doorSwitchDoc(v.key, on))}
+              >
+                <span>
+                  {v.label}
+                  {v.needs && <span className="door-wait"> · {waitWords(v.needs)}</span>}
+                </span>
+              </Switch>
+              {v.needs && (
+                <span className="door-note" id={why}>
+                  {v.needs !== "hours" && <Link to="/settings/services">Add a service</Link>}
+                  {v.needs === "service_and_hours" && <span aria-hidden="true"> · </span>}
+                  {v.needs !== "service" && <Link to="/settings/availability">Set hours</Link>}
+                </span>
+              )}
+              {v.elsewhere && (
+                <span className="door-note">
+                  Booked at {v.elsewhere}.{" "}
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={pending}
+                    onClick={() =>
+                      onPatch({ doorsElsewhere: doc.doorsElsewhere.filter((d) => d.itemType !== "booking") })
+                    }
+                  >
+                    Take bookings here
+                  </button>
+                </span>
+              )}
+              {v.key === "message" && !v.on && <span className="door-note">Email still reaches you.</span>}
+            </li>
+          );
+        })}
       </ul>
       {views.every((v) => !v.open) && <p className="hint">Agents can't reach you at all.</p>}
     </section>
   );
 }
 
-// ---- the business row ---------------------------------------------------------------------
+// ---- the page's one form ----------------------------------------------------------------------
 
 interface ProfileDraft {
   readonly name: string;
@@ -242,242 +248,130 @@ interface ProfileDraft {
 }
 
 const DESCRIPTION_MAX = 500;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-function ProfileForm({
-  initial,
-  settings,
-  onPatch,
-  onSaved,
-}: {
-  initial: Profile;
-  settings: SettingsDoc["doc"];
-  onPatch: PatchSettings;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState<ProfileDraft>({
-    name: initial.name,
-    description: settings.directory.description,
-    domain: initial.domain ?? "",
-    timezone: initial.timezone,
-    currency: initial.currency,
-    emailLang: emailLangOf(initial.languages),
-    languages: [...initial.languages],
-  });
-  const save = useSaveProfile();
-  const services = useServices();
-  const products = useProducts();
-  const problem = save.error ? problemOf(save.error) : null;
-  const set = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
-  const sources = settings.setup.sources;
-  const held = initial.domain_held;
-  const prices = [
-    ...(services.data?.items ?? []).flatMap((s) =>
-      s.price && s.price.model !== "quote" && s.price.value !== undefined ? [{ currency: s.price.currency }] : [],
-    ),
-    ...(products.data?.items ?? []).map((p) => ({ currency: p.price.currency })),
-  ];
-  const note = currencyNote(form.currency, initial.currency, prices);
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (save.isPending) return;
-    const name = form.name.trim();
-    save.mutate(
-      {
-        // An empty name is left as it is, so the rest can still be saved.
-        ...(name ? { name } : {}),
-        ...(held ? {} : { domain: form.domain.trim() ? form.domain.trim().toLowerCase() : null }),
-        timezone: form.timezone,
-        currency: form.currency,
-        // Reordered only when the email language changed: the business's own order is kept.
-        languages: languagesToSave(form.languages, form.emailLang, form.emailLang !== emailLangOf(initial.languages)),
-      },
-      {
-        onSuccess: () => {
-          const description = form.description.trim();
-          const doc: Record<string, unknown> = {
-            ...(description !== settings.directory.description ? { directory: { description } } : {}),
-            ...(clearSources(
-              sources,
-              "profile.name",
-              "profile.currency",
-              "profile.languages",
-              "profile.timezone",
-              "directory.description",
-            ) ?? {}),
-          };
-          if (Object.keys(doc).length) onPatch(doc, onSaved);
-          else onSaved();
-        },
-      },
-    );
-  };
-  return (
-    <form className="card glass stack" onSubmit={submit}>
-      <h3 className="sec">Business</h3>
-      {problem && !problem.fields?.length && (
-        <Toast tone="danger" text="The business was not saved." sub={problem.detail} />
-      )}
-      <div className="settings-grid">
-        <div>
-          <div className="label-line">
-            <label className="label" htmlFor="p-name">
-              Name
-            </label>
-            <SourceTag source={sourceNote(sources, "profile.name")} />
-          </div>
-          <input
-            id="p-name"
-            className="input"
-            value={form.name}
-            autoComplete="organization"
-            onChange={(e) => set("name", e.target.value)}
-          />
-          {problem?.field("name") ? (
-            <div className="hint error" role="alert">
-              {problem.field("name")}
-            </div>
-          ) : (
-            !form.name.trim() && <div className="hint">Agents and customers see it.</div>
-          )}
-        </div>
-        <Field
-          id="p-domain"
-          label="Website"
-          optional={!held}
-          error={problem?.field("domain")}
-          hint={
-            held
-              ? form.domain
-                ? "Set by your host."
-                : "Your host sets it once your website links to your inbox."
-              : "Where agents find you, like example.com."
-          }
-        >
-          <input
-            id="p-domain"
-            className="input"
-            inputMode="url"
-            spellCheck={false}
-            readOnly={held}
-            aria-readonly={held || undefined}
-            placeholder={held ? "Not linked yet" : "example.com"}
-            value={form.domain}
-            onChange={(e) => set("domain", e.target.value)}
-          />
-        </Field>
-        <div className="wide">
-          <div className="label-line">
-            <label className="label" htmlFor="p-desc">
-              Description
-            </label>
-            <span className="opt">· optional</span>
-            <SourceTag source={sourceNote(sources, "directory.description")} />
-          </div>
-          <textarea
-            id="p-desc"
-            className="input"
-            rows={2}
-            maxLength={DESCRIPTION_MAX}
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-          />
-          <div className="hint count">
-            A sentence or two, in public. {form.description.length}/{DESCRIPTION_MAX}
-          </div>
-        </div>
-        <Field id="p-tz" label="Time zone" error={problem?.field("timezone")} hint="Hours and bookings are in it.">
-          <TimeZoneSelect id="p-tz" value={form.timezone} onChange={(v) => set("timezone", v)} />
-        </Field>
-        <div>
-          <div className="label-line">
-            <label className="label" htmlFor="p-currency">
-              Currency
-            </label>
-            <SourceTag source={sourceNote(sources, "profile.currency")} />
-          </div>
-          <CurrencySelect id="p-currency" value={form.currency} onChange={(v) => set("currency", v)} />
-          {problem?.field("currency") ? (
-            <div className="hint error" role="alert">
-              {problem.field("currency")}
-            </div>
-          ) : (
-            note && <div className="hint">{note}</div>
-          )}
-        </div>
-        <div className="wide">
-          <div className="label-line">
-            <label className="label" htmlFor="p-langs">
-              Languages you speak
-            </label>
-            <SourceTag source={sourceNote(sources, "profile.languages")} />
-          </div>
-          <LanguagePicker id="p-langs" value={form.languages} onChange={(v) => set("languages", v)} />
-          {problem?.field("languages") && (
-            <div className="hint error" role="alert">
-              {problem.field("languages")}
-            </div>
-          )}
-        </div>
-        <Field id="p-email-lang" label="Customers' emails are in" hint="Unless their assistant asks for the other one.">
-          <select
-            id="p-email-lang"
-            className="input"
-            value={form.emailLang}
-            onChange={(e) => set("emailLang", e.target.value === "pt" ? "pt" : "en")}
-          >
-            <option value="en">English</option>
-            <option value="pt">Português</option>
-          </select>
-        </Field>
-      </div>
-      <div className="rowx">
-        <button type="submit" className="btn btn-primary" disabled={save.isPending}>
-          {save.isPending && <span className="spinner" aria-hidden="true" />}
-          Save business
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// ---- the settings document ------------------------------------------------------------------
-// The form and what a save sends live in lib/settings.ts, where they are tested.
-
-function SettingsForm({
+/**
+ * Who the business is and how it takes bookings, then Advanced. Everything here is saved by the one
+ * bar at the bottom of the screen: the business's row first (`PUT /profile`), then one settings write
+ * with the rest, so a save never half happens on the page's side.
+ */
+function GeneralForm({
+  profile,
   initial,
   expectedVersion,
   onSaved,
   onReload,
 }: {
+  profile: Profile;
   initial: SettingsDoc;
-  /** The version a save is made against, from the one the form was opened at (`GeneralPage`). */
   expectedVersion: (loaded: number) => number;
   onSaved: () => void;
   onReload: () => void;
 }) {
-  const [form, setForm] = useState<SettingsFormState>(() => toSettingsForm(initial.doc, initial.redacted ?? []));
+  const doc = initial.doc;
+  const [startProfile] = useState<ProfileDraft>(() => ({
+    name: profile.name,
+    description: doc.directory.description,
+    domain: profile.domain ?? "",
+    timezone: profile.timezone,
+    currency: profile.currency,
+    emailLang: emailLangOf(profile.languages),
+    languages: [...profile.languages],
+  }));
+  const [startForm] = useState<SettingsFormState>(() => toSettingsForm(doc, initial.redacted ?? []));
+  const [draft, setDraft] = useState(startProfile);
+  const [form, setForm] = useState(startForm);
   const [loaded] = useState(initial.version);
   const locked = initial.locked ?? [];
   /** Whether the host holds this setting: shown as it is, never changed here. */
   const held = (path: string) => locked.some((l) => path === l || path.startsWith(`${l}.`));
-  const save = useSaveSettings();
-  const problem = save.error ? problemOf(save.error) : null;
+  /** An inbox someone runs for the business: buying is not part of it, nor the host's own knobs. */
+  const hosted = held("email") || profile.home !== undefined;
+  const saveProfile = useSaveProfile();
+  const saveSettings = useSaveSettings();
+  const [problemFrom, setProblemFrom] = useState<"profile" | "settings" | null>(null);
+  const problem =
+    problemFrom === "profile" && saveProfile.error
+      ? problemOf(saveProfile.error)
+      : problemFrom === "settings" && saveSettings.error
+        ? problemOf(saveSettings.error)
+        : null;
   const conflict = problem?.code === "version_conflict";
+  const busy = saveProfile.isPending || saveSettings.isPending;
+  const profileDirty = !same(draft, startProfile);
+  const formDirty = !same(form, startForm);
+  const dirty = profileDirty || formDirty;
+  const setP = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
   const set = <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
-  const field = (path: string) => problem?.field(path);
-  // A list's error names the entry ("identity.extraAuthorities.1"): shown on the list's one field.
-  const listField = (path: string) => field(path) ?? problem?.fields?.find((f) => f.path.includes(`${path}.`))?.message;
+  const field = (path: string) => (problemFrom === "settings" ? problem?.field(path) : undefined);
+  const pfield = (path: string) => (problemFrom === "profile" ? problem?.field(path) : undefined);
+  const listField = (path: string) =>
+    field(path) ??
+    (problemFrom === "settings" ? problem?.fields?.find((f) => f.path.includes(`${path}.`))?.message : undefined);
+  const sources = doc.setup.sources;
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (save.isPending) return;
-    save.mutate({ doc: toSettingsDoc(form), expected_version: expectedVersion(loaded) }, { onSuccess: onSaved });
+  // Leaving with changes asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const save = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (busy || !dirty) return;
+    setProblemFrom(null);
+    try {
+      if (profileDirty) {
+        setProblemFrom("profile");
+        const name = draft.name.trim();
+        await saveProfile.mutateAsync({
+          // An empty name is left as it is, so the rest can still be saved.
+          ...(name ? { name } : {}),
+          ...(profile.domain_held ? {} : { domain: draft.domain.trim() ? draft.domain.trim().toLowerCase() : null }),
+          timezone: draft.timezone,
+          currency: draft.currency,
+          // Reordered only when the email language changed: the business's own order is kept.
+          languages: languagesToSave(draft.languages, draft.emailLang, draft.emailLang !== startProfile.emailLang),
+        });
+      }
+      const description = draft.description.trim();
+      const next: Record<string, unknown> = {
+        ...(formDirty ? toSettingsDoc(form) : {}),
+        ...(description !== doc.directory.description ? { directory: { description } } : {}),
+      };
+      // Saved by the owner: what was read and what they saved, they have checked.
+      const checked = clearSources(
+        sources,
+        ...(profileDirty
+          ? ["profile.name", "profile.currency", "profile.languages", "profile.timezone", "directory.description"]
+          : []),
+        ...(form.legalCountry !== startForm.legalCountry ? ["commerce.legal.country"] : []),
+      );
+      if (checked) next.setup = checked.setup;
+      if (Object.keys(next).length) {
+        setProblemFrom("settings");
+        await saveSettings.mutateAsync({ doc: next, expected_version: expectedVersion(loaded) });
+      }
+      setProblemFrom(null);
+      onSaved();
+    } catch {
+      // The problem is shown from the mutation's own error, beside its field.
+    }
+  };
+  const discard = () => {
+    setDraft(startProfile);
+    setForm(startForm);
+    setProblemFrom(null);
+    saveProfile.reset();
+    saveSettings.reset();
   };
 
   return (
-    <form className="stack" onSubmit={submit}>
+    <form className="stack general" onSubmit={(e) => void save(e)}>
       {conflict && (
         <Toast
           tone="danger"
@@ -491,492 +385,694 @@ function SettingsForm({
         />
       )}
       {problem && !conflict && !problem.fields?.length && (
-        <Toast tone="danger" text="The settings were not saved." sub={problem.detail} />
+        <Toast tone="danger" text="That was not saved." sub={problem.detail} />
       )}
+      <BusinessCard
+        profile={profile}
+        draft={draft}
+        set={setP}
+        sources={sources}
+        hosted={hosted}
+        field={pfield}
+        descriptionError={field("directory.description")}
+      />
+      <BookingsCard form={form} set={set} field={field} />
+      <Advanced>
+        <AdvancedSections
+          form={form}
+          set={set}
+          field={field}
+          listField={listField}
+          held={held}
+          hosted={hosted}
+          currency={draft.currency}
+          timezone={draft.timezone}
+          sources={sources}
+          home={profile.home}
+        />
+      </Advanced>
+      {dirty && (
+        <section className="savebar glass-strong" aria-label="Unsaved changes">
+          <span className="savebar-text">Unsaved changes</span>
+          <button type="button" className="btn btn-ghost" onClick={discard} disabled={busy}>
+            Discard
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy && <span className="spinner" aria-hidden="true" />}
+            Save changes
+          </button>
+        </section>
+      )}
+    </form>
+  );
+}
 
-      <section className="card glass">
-        <h3 className="sec">Bookings and orders</h3>
-        <div className="settings-grid">
-          <Field
-            id="s-cancel"
-            label="Cancellation window (minutes)"
-            error={field("booking.cancellationWindowMin")}
-            hint="Customers can cancel a confirmed booking until this long before it starts."
-          >
-            <input
-              id="s-cancel"
-              className="input"
-              type="number"
-              min={0}
-              step={1}
-              value={form.cancellationWindowMin}
-              onChange={(e) => set("cancellationWindowMin", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-notice"
-            label="Minimum notice (minutes)"
-            error={field("booking.minNoticeMin")}
-            hint="Customers can no longer book a time online this close to it. You can still book it yourself; nobody books a time that has started."
-          >
-            <input
-              id="s-notice"
-              className="input"
-              type="number"
-              min={0}
-              max={10080}
-              step={1}
-              value={form.minNoticeMin}
-              onChange={(e) => set("minNoticeMin", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-expire"
-            label="Auto-expire after (hours)"
-            error={field("booking.autoExpireHours")}
-            hint="Requests nobody answered expire after this long."
-          >
-            <input
-              id="s-expire"
-              className="input"
-              type="number"
-              min={1}
-              step={1}
-              value={form.autoExpireHours}
-              onChange={(e) => set("autoExpireHours", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-limit"
-            label="Order approval limit"
-            optional
-            error={field("orders.maxValueWithoutApprovalMinor")}
-            hint="Orders above this amount are for a person to approve; empty means no limit."
-          >
-            <input
-              id="s-limit"
-              className="input"
-              inputMode="decimal"
-              value={form.approvalLimit}
-              onChange={(e) => set("approvalLimit", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-late"
-            label="After the cancellation window"
-            error={field("booking.lateCancellation")}
-            hint="Record a late cancellation, or refuse it and send the customer to you. Networks weigh one only when it comes under 48 hours before the start."
-          >
-            <select
-              id="s-late"
-              className="input"
-              value={form.lateCancellation}
-              onChange={(e) => set("lateCancellation", e.target.value === "refuse" ? "refuse" : "record")}
-            >
-              <option value="record">Take it, recorded as late</option>
-              <option value="refuse">Refuse it</option>
-            </select>
-          </Field>
-          <Field
-            id="s-complete"
-            label="Completed automatically after (hours)"
-            error={field("booking.autoCompleteHours")}
-            hint="After a confirmed booking ends, this long for you to mark a no-show; then it counts as completed. Either can be corrected once until then."
-          >
-            <input
-              id="s-complete"
-              className="input"
-              type="number"
-              min={1}
-              max={168}
-              step={1}
-              value={form.autoCompleteHours}
-              onChange={(e) => set("autoCompleteHours", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-pay"
-            label="Unpaid orders lapse after (days)"
-            error={field("orders.payDays")}
-            hint="Days after you ask for payment. The order stays open for you; networks see it closed, counted against nobody."
-          >
-            <input
-              id="s-pay"
-              className="input"
-              type="number"
-              min={1}
-              max={90}
-              step={1}
-              value={form.payDays}
-              onChange={(e) => set("payDays", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-due"
-            label="Orders are due within (days)"
-            error={field("orders.dueDays")}
-            hint="For an order with no delivery time: when networks expect it fulfilled, counted from when you accepted it."
-          >
-            <input
-              id="s-due"
-              className="input"
-              type="number"
-              min={1}
-              max={365}
-              step={1}
-              value={form.dueDays}
-              onChange={(e) => set("dueDays", e.target.value)}
-            />
-          </Field>
-          <div className="wide">
-            <Switch checked={form.holdOnPropose} onChange={(v) => set("holdOnPropose", v)}>
-              Hold the slot while a proposed time is pending
-            </Switch>
+// ---- the business ---------------------------------------------------------------------------
+
+function BusinessCard({
+  profile,
+  draft,
+  set,
+  sources,
+  hosted,
+  field,
+  descriptionError,
+}: {
+  profile: Profile;
+  draft: ProfileDraft;
+  set: <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => void;
+  sources: SettingsDoc["doc"]["setup"]["sources"];
+  hosted: boolean;
+  field: (path: string) => string | undefined;
+  descriptionError: string | undefined;
+}) {
+  const services = useServices();
+  const products = useProducts();
+  const prices = [
+    ...(services.data?.items ?? []).flatMap((s) =>
+      s.price && s.price.model !== "quote" && s.price.value !== undefined ? [{ currency: s.price.currency }] : [],
+    ),
+    ...(hosted ? [] : (products.data?.items ?? []).map((p) => ({ currency: p.price.currency }))),
+  ];
+  const note = currencyNote(draft.currency, profile.currency, prices);
+  // The language customers' emails can be in: the chosen ones the inbox writes in.
+  const mailable = (["en", "pt"] as const).filter((c) =>
+    draft.languages.some((l) => l.toLowerCase().split(/[-_]/)[0] === c),
+  );
+  const emailOptions: ("en" | "pt")[] = mailable.length ? [...mailable] : ["en", "pt"];
+  if (!emailOptions.includes(draft.emailLang)) emailOptions.push(draft.emailLang);
+  return (
+    <section className="card glass stack" aria-labelledby="business-title">
+      <h3 className="sec" id="business-title">
+        Business
+      </h3>
+      <div className="grid2 business-grid">
+        <div>
+          <div className="label-line">
+            <label className="label" htmlFor="p-name">
+              Name
+            </label>
+            <SourceTag source={sourceNote(sources, "profile.name")} />
           </div>
-          <Field
+          <input
+            id="p-name"
+            className="input"
+            value={draft.name}
+            autoComplete="organization"
+            aria-invalid={field("name") ? true : undefined}
+            onChange={(e) => set("name", e.target.value)}
+          />
+          {field("name") ? (
+            <div className="hint error" role="alert">
+              {field("name")}
+            </div>
+          ) : (
+            !draft.name.trim() && <div className="hint">Agents and customers see it.</div>
+          )}
+        </div>
+        <WebsiteField
+          profile={profile}
+          value={draft.domain}
+          onChange={(v) => set("domain", v)}
+          error={field("domain")}
+        />
+        <div>
+          <div className="label-line">
+            <label className="label" htmlFor="p-tz">
+              Time zone
+            </label>
+            <SourceTag source={sourceNote(sources, "profile.timezone")} />
+          </div>
+          <TimeZonePicker
+            id="p-tz"
+            value={draft.timezone}
+            onChange={(v) => set("timezone", v)}
+            describedBy="p-tz-hint"
+          />
+          {field("timezone") ? (
+            <div className="hint error" role="alert">
+              {field("timezone")}
+            </div>
+          ) : (
+            <div className="hint" id="p-tz-hint">
+              Hours and bookings use this time zone.
+            </div>
+          )}
+        </div>
+        <div>
+          <div className="label-line">
+            <label className="label" htmlFor="p-currency">
+              Currency
+            </label>
+            <SourceTag source={sourceNote(sources, "profile.currency")} />
+          </div>
+          <CurrencySelect id="p-currency" value={draft.currency} onChange={(v) => set("currency", v)} />
+          {field("currency") ? (
+            <div className="hint error" role="alert">
+              {field("currency")}
+            </div>
+          ) : (
+            note && <div className="hint">{note}</div>
+          )}
+        </div>
+        <div className="wide">
+          <div className="label-line">
+            <label className="label" htmlFor="p-desc">
+              Description
+            </label>
+            <span className="opt">· optional</span>
+            <SourceTag source={sourceNote(sources, "directory.description")} />
+          </div>
+          <textarea
+            id="p-desc"
+            className="input autogrow"
+            rows={2}
+            maxLength={DESCRIPTION_MAX}
+            value={draft.description}
+            onChange={(e) => set("description", e.target.value)}
+          />
+          <div className="hint-row">
+            <span className={descriptionError ? "hint error" : "hint"}>
+              {descriptionError ?? "A sentence or two, in public."}
+            </span>
+            <span className="hint count">
+              {draft.description.length}/{DESCRIPTION_MAX}
+            </span>
+          </div>
+        </div>
+        <div className="wide">
+          <div className="label-line">
+            <label className="label" htmlFor="p-langs">
+              Languages you speak
+            </label>
+            <SourceTag source={sourceNote(sources, "profile.languages")} />
+          </div>
+          <LanguagePicker id="p-langs" value={draft.languages} onChange={(v) => set("languages", v)} />
+          {field("languages") && (
+            <div className="hint error" role="alert">
+              {field("languages")}
+            </div>
+          )}
+        </div>
+        <Field
+          id="p-email-lang"
+          label="Customers' emails are in"
+          hint="Unless they write in another of your languages."
+        >
+          <select
+            id="p-email-lang"
+            className="input"
+            value={draft.emailLang}
+            onChange={(e) => set("emailLang", e.target.value === "pt" ? "pt" : "en")}
+          >
+            {emailOptions.map((c) => (
+              <option key={c} value={c}>
+                {languageName(c)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The business's website. Its own to type on an inbox it runs itself; on one a host runs for it, the
+ * site it joined from, as text, with whether the inbox is connected to it yet and the way to do it.
+ */
+function WebsiteField({
+  profile,
+  value,
+  onChange,
+  error,
+}: {
+  profile: Profile;
+  value: string;
+  onChange: (v: string) => void;
+  error: string | undefined;
+}) {
+  const home = profile.home;
+  if (profile.domain_held) {
+    const domain = profile.domain ?? home?.domain ?? "";
+    const connected = home ? home.linked : Boolean(profile.domain);
+    return (
+      <div>
+        <span className="label">Website</span>
+        <p className="readonly-line">
+          {domain ? <span className="mono-soft">{domain}</span> : <span>No website yet</span>}
+          <span className="readonly-sep" aria-hidden="true">
+            ·
+          </span>
+          <span className={connected ? "readonly-ok" : "readonly-wait"}>
+            {connected ? "connected to your inbox" : "not connected yet"}
+          </span>
+          {!connected && home?.connect_url && (
+            <a className="readonly-action" href={home.connect_url}>
+              Connect
+            </a>
+          )}
+        </p>
+        <div className="hint">Set when you joined.</div>
+      </div>
+    );
+  }
+  return (
+    <Field id="p-domain" label="Website" optional error={error} hint="Where agents find you, like example.com.">
+      <input
+        id="p-domain"
+        className="input"
+        inputMode="url"
+        spellCheck={false}
+        placeholder="example.com"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Field>
+  );
+}
+
+// ---- bookings -------------------------------------------------------------------------------
+
+type SetForm = <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) => void;
+
+function BookingsCard({
+  form,
+  set,
+  field,
+}: {
+  form: SettingsFormState;
+  set: SetForm;
+  field: (path: string) => string | undefined;
+}) {
+  return (
+    <section className="card glass stack" aria-labelledby="bookings-title">
+      <h3 className="sec" id="bookings-title">
+        Bookings
+      </h3>
+      <div className="grid2">
+        <DurationPicker
+          id="s-cancel"
+          legend="Customers can cancel up to"
+          unit="min"
+          presets={DURATION_PRESETS.cancellation}
+          value={form.cancellationWindowMin}
+          onChange={(v) => set("cancellationWindowMin", v)}
+          hint="Before a confirmed booking starts."
+          error={field("booking.cancellationWindowMin")}
+        />
+        <DurationPicker
+          id="s-notice"
+          legend="Booked at least"
+          unit="min"
+          max={10080}
+          presets={DURATION_PRESETS.notice}
+          value={form.minNoticeMin}
+          onChange={(v) => set("minNoticeMin", v)}
+          hint="Ahead of the time, online. You can still book it yourself."
+          error={field("booking.minNoticeMin")}
+        />
+        <DurationPicker
+          id="s-expire"
+          legend="Requests nobody answers expire after"
+          unit="h"
+          min={1}
+          presets={DURATION_PRESETS.holdHours}
+          value={form.autoExpireHours}
+          onChange={(v) => set("autoExpireHours", v)}
+          error={field("booking.autoExpireHours")}
+        />
+        <Field
+          id="s-late"
+          label="A cancellation after that"
+          error={field("booking.lateCancellation")}
+          hint="Late ones are kept on the record."
+        >
+          <select
+            id="s-late"
+            className="input"
+            value={form.lateCancellation}
+            onChange={(e) => set("lateCancellation", e.target.value === "refuse" ? "refuse" : "record")}
+          >
+            <option value="record">Take it, marked late</option>
+            <option value="refuse">Refuse it, and send them to you</option>
+          </select>
+        </Field>
+      </div>
+    </section>
+  );
+}
+
+// ---- advanced -------------------------------------------------------------------------------
+
+/** Everything else, folded until asked for. */
+function Advanced({ children }: { children: ReactNode }) {
+  return (
+    <details className="card glass advanced">
+      <summary className="disclosure">
+        <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
+        <span className="disclosure-open">Fewer options</span>
+        <span className="disclosure-closed">Advanced</span>
+      </summary>
+      <div className="stack advanced-body">{children}</div>
+    </details>
+  );
+}
+
+function SubSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="subsection" aria-label={title}>
+      <h4 className="subsec">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function AdvancedSections({
+  form,
+  set,
+  field,
+  listField,
+  held,
+  hosted,
+  currency,
+  timezone,
+  sources,
+  home,
+}: {
+  form: SettingsFormState;
+  set: SetForm;
+  field: (path: string) => string | undefined;
+  listField: (path: string) => string | undefined;
+  held: (path: string) => boolean;
+  hosted: boolean;
+  currency: string;
+  timezone: string;
+  sources: SettingsDoc["doc"]["setup"]["sources"];
+  home: Profile["home"];
+}) {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void session().then((u) => live && setEmail(u?.email ?? null));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const zoneCountry = countryOfZone(timezone);
+  return (
+    <>
+      <SubSection title="More on bookings">
+        <div className="grid2">
+          <DurationPicker
+            id="s-complete"
+            legend="Counted as done after"
+            unit="h"
+            min={1}
+            max={168}
+            presets={DURATION_PRESETS.completeHours}
+            value={form.autoCompleteHours}
+            onChange={(v) => set("autoCompleteHours", v)}
+            hint="Once it ends: time to mark a no-show."
+            error={field("booking.autoCompleteHours")}
+          />
+          <Stepper
             id="s-holds"
             label="Times held per customer"
+            min={0}
+            max={10}
+            value={form.maxHolds}
+            onChange={(v) => set("maxHolds", v)}
+            hint="Proposed times kept for them at once."
             error={field("booking.maxHolds")}
-            hint="At most this many proposed times held at once for one customer; past it a time goes out unheld, theirs if still free."
-          >
-            <input
-              id="s-holds"
-              className="input"
-              type="number"
-              min={0}
-              max={10}
-              step={1}
-              value={form.maxHolds}
-              onChange={(e) => set("maxHolds", e.target.value)}
-            />
-          </Field>
+          />
+          <div className="wide">
+            <Switch checked={form.holdOnPropose} onChange={(v) => set("holdOnPropose", v)}>
+              Hold a time you propose until they answer
+            </Switch>
+          </div>
         </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Offers and answers</h3>
-        <div className="settings-grid">
-          <Field
+      <SubSection title="Requests for a price">
+        <div className="grid2">
+          <DurationPicker
             id="s-offer-hours"
-            label="What you propose holds for (hours)"
+            legend="What you propose holds for"
+            unit="h"
+            min={1}
+            max={2160}
+            presets={DURATION_PRESETS.holdHours}
+            value={form.offerValidHours}
+            onChange={(v) => set("offerValidHours", v)}
             error={field("negotiation.offerValidHours")}
-            hint="A quote or changes to an order sent without a date. What your AI or a rule proposes holds at most this long. A time you propose holds until its start, less the minimum notice."
-          >
-            <input
-              id="s-offer-hours"
-              className="input"
-              type="number"
-              min={1}
-              max={2160}
-              step={1}
-              value={form.offerValidHours}
-              onChange={(e) => set("offerValidHours", e.target.value)}
-            />
-          </Field>
-          <Field
+          />
+          <DurationPicker
             id="s-counter-hours"
-            label="Orders and quote requests lapse after (hours)"
+            legend={hosted ? "Unanswered requests lapse after" : "Unanswered orders and requests lapse after"}
+            unit="h"
+            min={1}
+            max={2160}
+            presets={DURATION_PRESETS.holdHours}
+            value={form.counterValidHours}
+            onChange={(v) => set("counterValidHours", v)}
             error={field("negotiation.counterValidHours")}
-            hint="An order or a quote request nobody answered, after it came in or the customer last answered; the customer is told."
-          >
-            <input
-              id="s-counter-hours"
-              className="input"
-              type="number"
-              min={1}
-              max={2160}
-              step={1}
-              value={form.counterValidHours}
-              onChange={(e) => set("counterValidHours", e.target.value)}
-            />
-          </Field>
-          <Field
+          />
+          <Stepper
             id="s-rounds"
-            label="Rounds before you answer yourself"
+            label="Back and forth before you answer"
+            min={1}
+            max={10}
+            value={form.maxRounds}
+            onChange={(v) => set("maxRounds", v)}
+            hint="Then it comes to you."
             error={field("negotiation.maxRounds")}
-            hint="Back and forth on one request. Past it your AI and rules propose nothing more, and a customer's next suggestion comes to you as their message."
-          >
-            <input
-              id="s-rounds"
-              className="input"
-              type="number"
-              min={1}
-              max={10}
-              step={1}
-              value={form.maxRounds}
-              onChange={(e) => set("maxRounds", e.target.value)}
-            />
-          </Field>
+          />
           <div className="wide">
             <Switch checked={form.binding} onChange={(v) => set("binding", v)}>
               What I propose binds me until it lapses
             </Switch>
-            <div className="hint">
-              Off, each time, quote or change says it is subject to your confirmation, and you can withdraw it before
-              the customer answers.
-            </div>
           </div>
         </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Prices, and what your AI may agree to</h3>
-        <div className="settings-grid">
+      <SubSection title="Prices, and what your AI may agree to">
+        <div className="grid2">
           <div className="wide">
             <Switch checked={form.priceCounters} onChange={(v) => set("priceCounters", v)}>
               Customers may suggest a price of their own
             </Switch>
-            <div className="hint">
-              Off, a price they suggest comes to you as their message and what you proposed stands. On, it is their
-              answer, for you to take or answer; your AI and rules take one only at or above your lowest price, never
-              haggle.
-            </div>
           </div>
-          <Field
+          <Stepper
             id="s-ai-discount"
-            label="Discount your AI and rules may give (%)"
+            label="Discount your AI may give"
+            min={0}
+            max={50}
+            suffix="%"
+            value={form.aiDiscountPct}
+            onChange={(v) => set("aiDiscountPct", v)}
+            hint="Never under your lowest price."
             error={field("negotiation.ai.maxDiscountPct")}
-            hint="Off the customer's price, never under the lowest price you set for a product or service. 0: none."
-          >
-            <input
-              id="s-ai-discount"
-              className="input"
-              type="number"
-              min={0}
-              max={50}
-              step={1}
-              value={form.aiDiscountPct}
-              onChange={(e) => set("aiDiscountPct", e.target.value)}
-            />
-          </Field>
-          <Field
+          />
+          <DurationPicker
             id="s-ai-shift"
-            label="How far from the time asked they may propose (hours)"
+            legend="Another time it may propose, within"
+            unit="h"
+            max={720}
+            presets={DURATION_PRESETS.shiftHours}
+            value={form.aiTimeShiftHours}
+            onChange={(v) => set("aiTimeShiftHours", v)}
+            hint="Of the time asked for. Always a free time."
             error={field("negotiation.ai.maxTimeShiftMin")}
-            hint="Always a free time. Further than this, what they would propose is kept as a draft for you."
-          >
-            <input
-              id="s-ai-shift"
-              className="input"
-              type="number"
-              min={0}
-              max={720}
-              step={1}
-              value={form.aiTimeShiftHours}
-              onChange={(e) => set("aiTimeShiftHours", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-ai-delay"
-            label="Days later than asked they may deliver"
-            error={field("negotiation.ai.maxDelayDays")}
-            hint="For changes to an order. 0: never later than the customer asked."
-          >
-            <input
+          />
+          {!hosted && (
+            <DurationPicker
               id="s-ai-delay"
-              className="input"
-              type="number"
-              min={0}
+              legend="Delivery later than asked, up to"
+              unit="days"
               max={90}
-              step={1}
+              presets={DURATION_PRESETS.delayDays}
               value={form.aiDelayDays}
-              onChange={(e) => set("aiDelayDays", e.target.value)}
+              onChange={(v) => set("aiDelayDays", v)}
+              error={field("negotiation.ai.maxDelayDays")}
             />
-          </Field>
-          <Field
-            id="s-ai-refund"
-            label="Refund they may agree with nothing sent back, per order, up to"
-            optional
-            error={field("negotiation.ai.maxRefundMinor")}
-            hint="Empty: never. Refunding itself is always yours, or your till's."
-          >
-            <input
+          )}
+          {!hosted && (
+            <Field
               id="s-ai-refund"
-              className="input"
-              inputMode="decimal"
-              value={form.aiRefundMax}
-              onChange={(e) => set("aiRefundMax", e.target.value)}
-            />
-          </Field>
+              label="Refund it may agree with nothing sent back"
+              optional
+              error={field("negotiation.ai.maxRefundMinor")}
+              hint="Per order."
+            >
+              <MoneyInput
+                id="s-ai-refund"
+                currency={currency}
+                placeholder="Never"
+                value={form.aiRefundMax}
+                onChange={(v) => set("aiRefundMax", v)}
+              />
+            </Field>
+          )}
           <div className="wide">
             <Switch checked={form.aiPricesCustom} onChange={(v) => set("aiPricesCustom", v)}>
-              My AI and rules may price what the catalogue does not
+              My AI may price what my list does not
             </Switch>
-            <div className="hint">
-              A quote, a line of their own, a longer booking. Off, they draft it for you. Outside any of these limits
-              nothing is sent: you find a draft on the item, to send as it is, change, or drop.
-            </div>
           </div>
         </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Changes to what was agreed</h3>
-        <div className="settings-grid">
-          <Field
+      <SubSection title="Changes to what was agreed">
+        <div className="grid2">
+          <Stepper
             id="s-changes"
-            label="Changes per booking or order"
+            label={hosted ? "Changes per booking" : "Changes per booking or order"}
+            min={0}
+            max={3}
+            value={form.maxChanges}
+            onChange={(v) => set("maxChanges", v)}
             error={field("negotiation.changes.maxPerItem")}
-            hint="Once agreed, at most this many (3 at most). Past it, a customer's request comes to you as their message."
-          >
-            <input
-              id="s-changes"
-              className="input"
-              type="number"
-              min={0}
-              max={3}
-              step={1}
-              value={form.maxChanges}
-              onChange={(e) => set("maxChanges", e.target.value)}
-            />
-          </Field>
-          <Field
+          />
+          <DurationPicker
             id="s-change-cutoff"
-            label="Customers' changes need you from (minutes before)"
-            optional
+            legend="Only you accept a change from"
+            unit="min"
+            presets={DURATION_PRESETS.cutoff}
+            value={form.changeCutoffMin}
+            onChange={(v) => set("changeCutoffMin", v)}
+            hint="Before the booking."
             error={field("negotiation.changes.customerCutoffMin")}
-            hint="After this, only you accept a customer's change to a booking, not your AI or a rule. Empty means the cancellation window."
-          >
-            <input
-              id="s-change-cutoff"
-              className="input"
-              type="number"
-              min={0}
-              step={1}
-              value={form.changeCutoffMin}
-              onChange={(e) => set("changeCutoffMin", e.target.value)}
-            />
-          </Field>
+          />
           <div className="wide">
             <Switch checked={form.aiAcceptsChanges} onChange={(v) => set("aiAcceptsChanges", v)}>
-              My AI and rules may accept a customer's change
+              My AI may accept a customer's change
             </Switch>
-            <div className="hint">
-              To a free time before the cutoff, at your prices; never one that changes a price.
-            </div>
           </div>
           <div className="wide">
             <Switch checked={form.aiProposesChanges} onChange={(v) => set("aiProposesChanges", v)}>
-              My AI and rules may ask customers for a change
+              My AI may ask customers for a change
             </Switch>
-            <div className="hint">
-              Another time, other quantities or a delivery date; if the customer says no, it stays as agreed.
-            </div>
           </div>
         </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Returns, and who you are</h3>
-        <div className="settings-grid">
-          <Field
-            id="s-return-days"
-            label="Days to change their mind"
-            error={field("returns.days")}
-            hint="From delivery, or from booking for a service they paid for. The law gives 14 at least; more is your own policy."
-          >
-            <input
+      {!hosted && (
+        <SubSection title="Orders and returns">
+          <div className="grid2">
+            <Field
+              id="s-limit"
+              label="Orders above this wait for you"
+              optional
+              error={field("orders.maxValueWithoutApprovalMinor")}
+            >
+              <MoneyInput
+                id="s-limit"
+                currency={currency}
+                placeholder="No limit"
+                value={form.approvalLimit}
+                onChange={(v) => set("approvalLimit", v)}
+              />
+            </Field>
+            <DurationPicker
+              id="s-pay"
+              legend="Unpaid orders lapse after"
+              unit="days"
+              min={1}
+              max={90}
+              presets={DURATION_PRESETS.orderDays}
+              value={form.payDays}
+              onChange={(v) => set("payDays", v)}
+              error={field("orders.payDays")}
+            />
+            <DurationPicker
+              id="s-due"
+              legend="Orders are due within"
+              unit="days"
+              min={1}
+              max={365}
+              presets={DURATION_PRESETS.orderDays}
+              value={form.dueDays}
+              onChange={(v) => set("dueDays", v)}
+              hint="When none was asked for."
+              error={field("orders.dueDays")}
+            />
+            <DurationPicker
               id="s-return-days"
-              className="input"
-              type="number"
+              legend="Days to change their mind"
+              unit="days"
               min={14}
               max={365}
-              step={1}
+              presets={DURATION_PRESETS.returnDays}
               value={form.returnDays}
-              onChange={(e) => set("returnDays", e.target.value)}
+              onChange={(v) => set("returnDays", v)}
+              hint="14 at least, by law."
+              error={field("returns.days")}
             />
-          </Field>
-          <Field
-            id="s-postage"
-            label="Sending things back is paid by"
-            error={field("returns.postage")}
-            hint="Faulty goods always come back at your cost."
-          >
-            <select
-              id="s-postage"
-              className="input"
-              value={form.returnPostage}
-              onChange={(e) => set("returnPostage", e.target.value === "business" ? "business" : "customer")}
-            >
-              <option value="customer">The customer</option>
-              <option value="business">You</option>
-            </select>
-          </Field>
-          <Field
-            id="s-refund-days"
-            label="You refund within (days)"
-            error={field("returns.refundDays")}
-            hint="Once nothing more has to come back; 14 at most. A withdrawal is refunded within 14 days of the customer's notice."
-          >
-            <input
+            <Stepper
               id="s-refund-days"
-              className="input"
-              type="number"
+              label="You refund within"
+              suffix="days"
               min={1}
               max={14}
-              step={1}
               value={form.refundDays}
-              onChange={(e) => set("refundDays", e.target.value)}
+              onChange={(v) => set("refundDays", v)}
+              error={field("returns.refundDays")}
             />
-          </Field>
-          <Field
-            id="s-respond"
-            label="You answer a return within (hours)"
-            error={field("returns.respondHours")}
-            hint="Customers are told this when they ask to send something back."
-          >
-            <input
+            <DurationPicker
               id="s-respond"
-              className="input"
-              type="number"
+              legend="You answer a return within"
+              unit="h"
               min={1}
               max={336}
-              step={1}
+              presets={DURATION_PRESETS.respondHours}
               value={form.respondHours}
-              onChange={(e) => set("respondHours", e.target.value)}
+              onChange={(v) => set("respondHours", v)}
+              error={field("returns.respondHours")}
             />
-          </Field>
-          <Field
-            id="s-sells-to"
-            label="You sell to"
-            error={field("commerce.customers")}
-            hint="Unless only businesses, customers confirm the price before they order, and may withdraw."
-          >
-            <select
-              id="s-sells-to"
-              className="input"
-              value={form.sellsTo}
-              onChange={(e) =>
-                set(
-                  "sellsTo",
-                  e.target.value === "businesses"
-                    ? "businesses"
-                    : e.target.value === "consumers"
-                      ? "consumers"
-                      : "both",
-                )
-              }
-            >
-              <option value="both">Anyone</option>
-              <option value="consumers">Consumers</option>
-              <option value="businesses">Businesses only</option>
-            </select>
-          </Field>
-          <div className="wide">
-            <Switch checked={form.aiApprovesReturns} onChange={(v) => set("aiApprovesReturns", v)}>
-              My AI and rules may approve a return inside my policy
-            </Switch>
-            <div className="hint">
-              With the goods coming back; never paying a refund, refusing a return or keeping part.
+            <Field id="s-postage" label="Sending back is paid by" error={field("returns.postage")}>
+              <select
+                id="s-postage"
+                className="input"
+                value={form.returnPostage}
+                onChange={(e) => set("returnPostage", e.target.value === "business" ? "business" : "customer")}
+              >
+                <option value="customer">The customer</option>
+                <option value="business">You</option>
+              </select>
+            </Field>
+            <Field id="s-sells-to" label="You sell to" error={field("commerce.customers")}>
+              <select
+                id="s-sells-to"
+                className="input"
+                value={form.sellsTo}
+                onChange={(e) =>
+                  set(
+                    "sellsTo",
+                    e.target.value === "businesses"
+                      ? "businesses"
+                      : e.target.value === "consumers"
+                        ? "consumers"
+                        : "both",
+                  )
+                }
+              >
+                <option value="both">Anyone</option>
+                <option value="consumers">Consumers</option>
+                <option value="businesses">Businesses only</option>
+              </select>
+            </Field>
+            <div className="wide">
+              <Switch checked={form.aiApprovesReturns} onChange={(v) => set("aiApprovesReturns", v)}>
+                My AI may approve a return inside my policy
+              </Switch>
             </div>
           </div>
-          <Field
-            id="s-legal-name"
-            label="Legal name"
-            optional
-            error={field("commerce.legal.legalName")}
-            hint="Every confirmation says who customers are buying from."
-          >
+        </SubSection>
+      )}
+
+      <SubSection title="Who you are">
+        <div className="grid2">
+          <Field id="s-legal-name" label="Legal name" optional error={field("commerce.legal.legalName")}>
             <input
               id="s-legal-name"
               className="input"
@@ -984,87 +1080,105 @@ function SettingsForm({
               onChange={(e) => set("legalName", e.target.value)}
             />
           </Field>
-          <Field id="s-legal-address" label="Address" optional error={field("commerce.legal.address")}>
-            <input
-              id="s-legal-address"
-              className="input"
-              value={form.legalAddress}
-              onChange={(e) => set("legalAddress", e.target.value)}
+          <div>
+            <div className="label-line">
+              <label className="label" htmlFor="s-legal-country">
+                Country
+              </label>
+              <SourceTag source={sourceNote(sources, "commerce.legal.country")} />
+            </div>
+            <CountrySelect
+              id="s-legal-country"
+              value={form.legalCountry}
+              suggest={zoneCountry}
+              onChange={(v) => set("legalCountry", v)}
             />
-          </Field>
-          <Field
-            id="s-legal-country"
-            label="Country"
-            optional
-            error={field("commerce.legal.country")}
-            hint="The consumer law you sell under, its words and its holidays."
-          >
-            <CountrySelect id="s-legal-country" value={form.legalCountry} onChange={(v) => set("legalCountry", v)} />
-          </Field>
-          <Field id="s-legal-email" label="Email" optional error={field("commerce.legal.email")}>
-            <input
-              id="s-legal-email"
-              className="input"
-              type="email"
-              value={form.legalEmail}
-              onChange={(e) => set("legalEmail", e.target.value)}
-            />
-          </Field>
-          <Field id="s-legal-phone" label="Phone" optional error={field("commerce.legal.phone")}>
-            <input
-              id="s-legal-phone"
-              className="input"
-              value={form.legalPhone}
-              onChange={(e) => set("legalPhone", e.target.value)}
-            />
-          </Field>
+            {field("commerce.legal.country") ? (
+              <div className="hint error" role="alert">
+                {field("commerce.legal.country")}
+              </div>
+            ) : (
+              <div className="hint">Its consumer law, words and holidays.</div>
+            )}
+          </div>
           <Field id="s-vat" label="VAT number" optional error={field("commerce.legal.vatId")}>
             <input id="s-vat" className="input" value={form.vatId} onChange={(e) => set("vatId", e.target.value)} />
           </Field>
-          <Field
-            id="s-complaints"
-            label="Where customers can complain"
-            optional
-            error={field("commerce.legal.complaintsUrl")}
-            hint="A web address; in Portugal, your Livro de Reclamações page. A refused return points to it."
-          >
-            <input
-              id="s-complaints"
-              className="input"
-              type="url"
-              value={form.complaintsUrl}
-              onChange={(e) => set("complaintsUrl", e.target.value)}
-            />
-          </Field>
+          {!hosted && (
+            <>
+              <Field id="s-legal-address" label="Address" optional error={field("commerce.legal.address")}>
+                <input
+                  id="s-legal-address"
+                  className="input"
+                  value={form.legalAddress}
+                  onChange={(e) => set("legalAddress", e.target.value)}
+                />
+              </Field>
+              <Field id="s-legal-email" label="Email" optional error={field("commerce.legal.email")}>
+                <input
+                  id="s-legal-email"
+                  className="input"
+                  type="email"
+                  value={form.legalEmail}
+                  onChange={(e) => set("legalEmail", e.target.value)}
+                />
+              </Field>
+              <Field id="s-legal-phone" label="Phone" optional error={field("commerce.legal.phone")}>
+                <input
+                  id="s-legal-phone"
+                  className="input"
+                  type="tel"
+                  value={form.legalPhone}
+                  onChange={(e) => set("legalPhone", e.target.value)}
+                />
+              </Field>
+              <Field
+                id="s-complaints"
+                label="Where customers can complain"
+                optional
+                error={field("commerce.legal.complaintsUrl")}
+                hint={
+                  form.legalCountry === "PT"
+                    ? "Your Livro de Reclamações page."
+                    : "A web address where customers can complain."
+                }
+              >
+                <input
+                  id="s-complaints"
+                  className="input"
+                  type="url"
+                  value={form.complaintsUrl}
+                  onChange={(e) => set("complaintsUrl", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Notifications and email</h3>
-        {held("email") && held("notifications.ownerEmail") && held("notifications.appUrl") ? (
+      <SubSection title="Notifications and email">
+        {held("email") && held("notifications.ownerEmail") ? (
           <HeldList
             rows={[
-              ["Tell me at", form.ownerEmail || "The address you sign in with"],
-              ["Inbox address", form.appUrl],
-              ["Send from", form.fromAddress],
-              ["Sender name", form.fromName],
-              ["Customers reply to", form.replyTo],
+              ["Tell me at", form.ownerEmail || email || ""],
+              ["Inbox address", home && !home.linked ? "Not connected yet" : form.appUrl.replace(/^https:\/\//, "")],
+              ["Sends as", form.fromName],
             ]}
           />
         ) : (
-          <div className="settings-grid">
+          <div className="grid2">
             <Field
               id="s-owner-email"
               label="Tell me at"
               optional
               error={field("notifications.ownerEmail")}
-              hint="Where new items and replies are announced. Empty means the address you sign in with."
+              hint={email ? `Empty: ${email}.` : "Empty: the address you sign in with."}
             >
               <input
                 id="s-owner-email"
                 className="input"
-                readOnly={held("notifications.ownerEmail")}
                 type="email"
+                placeholder={email ?? ""}
                 value={form.ownerEmail}
                 onChange={(e) => set("ownerEmail", e.target.value)}
               />
@@ -1074,13 +1188,14 @@ function SettingsForm({
               label="Inbox address"
               optional
               error={field("notifications.appUrl")}
-              hint="Used in email links and receipts, like https://inbox.example.com. Filled in when you first sign in. Networks also know your inbox by it."
+              hint="In email links and receipts."
             >
               <input
                 id="s-app-url"
                 className="input"
                 readOnly={held("notifications.appUrl")}
                 type="url"
+                placeholder="https://inbox.example.com"
                 value={form.appUrl}
                 onChange={(e) => set("appUrl", e.target.value)}
               />
@@ -1090,16 +1205,11 @@ function SettingsForm({
               label="Send from"
               optional
               error={field("email.fromAddress")}
-              hint={
-                form.fromAddress.trim()
-                  ? "Emails to your customers come from this address, in your name."
-                  : "Emails to your customers come from this address. Without one they are not sent, unless your server has an address of its own; each item shows whether its emails went out."
-              }
+              hint={form.fromAddress.trim() ? "In your name." : "Without one, emails are not sent."}
             >
               <input
                 id="s-from"
                 className="input"
-                readOnly={held("email.fromAddress")}
                 type="email"
                 value={form.fromAddress}
                 onChange={(e) => set("fromAddress", e.target.value)}
@@ -1109,7 +1219,6 @@ function SettingsForm({
               <input
                 id="s-from-name"
                 className="input"
-                readOnly={held("email.fromName")}
                 value={form.fromName}
                 onChange={(e) => set("fromName", e.target.value)}
               />
@@ -1119,16 +1228,11 @@ function SettingsForm({
               label="Customers reply to"
               optional
               error={field("email.replyTo")}
-              hint={
-                form.replyTo.trim() || form.inboundSecretSet || form.inboundSecret.trim()
-                  ? "Usually the business mailbox."
-                  : "Usually the business mailbox. Customers' replies do not reach you yet: set this, or inbound email below."
-              }
+              hint="Usually the business mailbox."
             >
               <input
                 id="s-reply"
                 className="input"
-                readOnly={held("email.replyTo")}
                 type="email"
                 value={form.replyTo}
                 onChange={(e) => set("replyTo", e.target.value)}
@@ -1139,201 +1243,138 @@ function SettingsForm({
               label="Inbound email secret"
               optional
               error={field("email.inboundSecret")}
-              hint={
-                form.inboundSecretSet
-                  ? "A secret is set. It is never shown again; type a new one to replace it, or leave this empty to keep it."
-                  : "At least 16 characters; sent by your mail provider's webhook in X-Inbox-Email-Secret."
-              }
+              hint={form.inboundSecretSet ? "Set. Type a new one to replace it." : "16 characters at least."}
             >
               <input
                 id="s-inbound"
                 className="input"
-                readOnly={held("email.inboundSecret")}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder={form.inboundSecretSet ? "Set; type a new one to replace it" : ""}
+                placeholder={form.inboundSecretSet ? "Set" : ""}
                 value={form.inboundSecret}
                 onChange={(e) => set("inboundSecret", e.target.value)}
               />
             </Field>
             {form.inboundSecretSet && (
-              <Switch checked={form.removeInboundSecret} onChange={(v) => set("removeInboundSecret", v)}>
-                Remove the inbound email secret: inbound email stops until a new one is set
-              </Switch>
+              <div className="wide">
+                <Switch checked={form.removeInboundSecret} onChange={(v) => set("removeInboundSecret", v)}>
+                  Remove the inbound email secret
+                </Switch>
+              </div>
             )}
           </div>
         )}
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Customers you already know</h3>
-        <p className="hint">
-          When someone gives the email of a customer you know and nothing proves it is them, their assistant can ask for
-          a six-digit code sent to that address. Until the code comes back they are served as a new customer, never
-          refused, and they see nothing of the other customer's bookings or orders.
-        </p>
-        <div className="settings-grid">
-          <Field
-            id="s-code-minutes"
-            label="A code works for (minutes)"
-            error={field("customers.otp.ttlMinutes")}
-            hint="From 1 to 60."
-          >
-            <input
-              id="s-code-minutes"
-              className="input"
-              type="number"
-              min={1}
-              max={60}
-              step={1}
-              value={form.codeMinutes}
-              onChange={(e) => set("codeMinutes", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-code-tries"
-            label="Wrong tries per code"
-            error={field("customers.otp.attempts")}
-            hint="After these the code stops working; a new one can be asked for."
-          >
-            <input
-              id="s-code-tries"
-              className="input"
-              type="number"
-              min={1}
-              max={10}
-              step={1}
-              value={form.codeAttempts}
-              onChange={(e) => set("codeAttempts", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-code-sends"
-            label="Codes to one address per hour"
-            error={field("customers.otp.sendsPerHour")}
-            hint="So nobody can fill a customer's mailbox with codes."
-          >
-            <input
-              id="s-code-sends"
-              className="input"
-              type="number"
-              min={1}
-              max={10}
-              step={1}
-              value={form.codesPerHour}
-              onChange={(e) => set("codesPerHour", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-code-sends-day"
-            label="Codes to one address per day"
-            error={field("customers.otp.sendsPerDay")}
-            hint="From 1 to 50."
-          >
-            <input
-              id="s-code-sends-day"
-              className="input"
-              type="number"
-              min={1}
-              max={50}
-              step={1}
-              value={form.codesPerDay}
-              onChange={(e) => set("codesPerDay", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-code-tries-day"
-            label="Tries at a code per address per day"
-            error={field("customers.otp.guessesPerDay")}
-            hint="Right or wrong, over every code sent there, so nobody can guess their way in over the day."
-          >
-            <input
-              id="s-code-tries-day"
-              className="input"
-              type="number"
-              min={1}
-              max={100}
-              step={1}
-              value={form.triesPerDay}
-              onChange={(e) => set("triesPerDay", e.target.value)}
-            />
-          </Field>
-          <Field
-            id="s-hosts"
-            label="Other addresses of this inbox"
-            optional
-            error={listField("identity.extraAuthorities")}
-            hint={
-              held("identity.extraAuthorities")
-                ? "Set by your host."
-                : "Hosts this inbox also answers on, like an old domain, comma-separated. An assistant's signature names the host it was made for; one made for these still counts. Usually empty."
-            }
-          >
-            <input
-              id="s-hosts"
-              className="input"
-              readOnly={held("identity.extraAuthorities")}
-              spellCheck={false}
-              autoCapitalize="none"
-              placeholder={held("identity.extraAuthorities") ? "None" : "old.example.com"}
-              value={form.extraHosts}
-              onChange={(e) => set("extraHosts", e.target.value)}
-            />
-          </Field>
+      <SubSection title="Customers you already know">
+        <div className="grid2">
+          <div className="wide">
+            <Switch checked={form.emailKey} onChange={(v) => set("emailKey", v)}>
+              Send a new customer a code for their assistant
+            </Switch>
+            <div className="hint">A day after their first booking, in your name.</div>
+          </div>
+          {!hosted && (
+            <>
+              <DurationPicker
+                id="s-code-minutes"
+                legend="A code works for"
+                unit="min"
+                min={1}
+                max={60}
+                presets={DURATION_PRESETS.codeMinutes}
+                value={form.codeMinutes}
+                onChange={(v) => set("codeMinutes", v)}
+                error={field("customers.otp.ttlMinutes")}
+              />
+              <Stepper
+                id="s-code-tries"
+                label="Wrong tries per code"
+                min={1}
+                max={10}
+                value={form.codeAttempts}
+                onChange={(v) => set("codeAttempts", v)}
+                error={field("customers.otp.attempts")}
+              />
+              <Stepper
+                id="s-code-sends"
+                label="Codes to one address an hour"
+                min={1}
+                max={10}
+                value={form.codesPerHour}
+                onChange={(v) => set("codesPerHour", v)}
+                error={field("customers.otp.sendsPerHour")}
+              />
+              <Stepper
+                id="s-code-sends-day"
+                label="Codes to one address a day"
+                min={1}
+                max={50}
+                value={form.codesPerDay}
+                onChange={(v) => set("codesPerDay", v)}
+                error={field("customers.otp.sendsPerDay")}
+              />
+              <Stepper
+                id="s-code-tries-day"
+                label="Tries at a code a day"
+                min={1}
+                max={100}
+                value={form.triesPerDay}
+                onChange={(v) => set("triesPerDay", v)}
+                error={field("customers.otp.guessesPerDay")}
+              />
+              <Field
+                id="s-hosts"
+                label="Other addresses of this inbox"
+                optional
+                error={listField("identity.extraAuthorities")}
+                hint="Like an old domain, comma-separated. Usually empty."
+              >
+                <input
+                  id="s-hosts"
+                  className="input"
+                  readOnly={held("identity.extraAuthorities")}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  placeholder="old.example.com"
+                  value={form.extraHosts}
+                  onChange={(e) => set("extraHosts", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
-        <Switch checked={form.emailKey} onChange={(v) => set("emailKey", v)}>
-          Email a new customer a code for their assistant
-        </Switch>
-        <div className="hint">
-          A day after their first booking or order, a short email of its own, in your name: the code, and one line with
-          a link to a page on this inbox that explains the booking network. Off, no email of this inbox carries it; an
-          assistant still gets what it needs when it books. A network that emails the code itself sends that email in
-          your name whatever this says, and never gives the code to this inbox.
-        </div>
-      </section>
+      </SubSection>
 
-      <section className="card glass">
-        <h3 className="sec">Receipts</h3>
-        <ReceiptsStatus />
-      </section>
+      {!hosted && (
+        <SubSection title="Receipts">
+          <ReceiptsStatus />
+        </SubSection>
+      )}
 
-      <section className="card glass">
-        <h3 className="sec">Test mode</h3>
+      <SubSection title="Testing">
         <Switch checked={form.testMode} onChange={(v) => set("testMode", v)}>
           Test mode
         </Switch>
-        <div className="hint">
-          While it is on, every new item is a sandbox item and the inbox shows sandbox items instead of real ones.
-        </div>
-      </section>
-
-      <div className="rowx">
-        <button type="submit" className="btn btn-primary" disabled={save.isPending}>
-          {save.isPending && <span className="spinner" aria-hidden="true" />}
-          Save settings
-        </button>
-        <span className="hint">Version {initial.version}</span>
-      </div>
-    </form>
+        <div className="hint">New items are sandbox items, and the inbox shows only those.</div>
+      </SubSection>
+    </>
   );
 }
 
-/** Settings the host holds, shown as they are: nothing here to change. */
+/** Settings the host holds, shown as they are. */
 function HeldList({ rows }: { rows: readonly (readonly [string, string])[] }) {
   return (
-    <>
-      <dl className="fields held">
-        {rows
-          .filter(([, value]) => value)
-          .map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value || "—"}</dd>
-            </div>
-          ))}
-      </dl>
-      <p className="hint">Set by your host.</p>
-    </>
+    <dl className="held-list">
+      {rows
+        .filter(([, value]) => value)
+        .map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+    </dl>
   );
 }
 
@@ -1350,20 +1391,11 @@ function ReceiptsStatus() {
     <div className="stack">
       {r.ready ? (
         <div className="hint">
-          Issuing receipts as <span className="mono">{r.issuer}</span>. A booking gets one when it is confirmed, an
-          order when it is accepted or paid, and each another for how it ended; the customer's assistant can
-          counter-sign them.
+          Signed as <span className="mono">{r.issuer}</span>: {r.issued} issued, {r.acknowledged} counter-signed.
         </div>
       ) : (
         <div className="hint">Not issuing receipts. {r.reason}</div>
       )}
-      <div className="rowx">
-        <span className="pill pill-xs">{r.issued} issued</span>
-        <span className="pill pill-xs">{r.acknowledged} counter-signed</span>
-        <span className="pill pill-xs">
-          {r.keys} signing key{r.keys === 1 ? "" : "s"}
-        </span>
-      </div>
     </div>
   );
 }

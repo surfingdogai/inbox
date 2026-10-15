@@ -6,7 +6,7 @@ import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 // The published verifier, by path (published on its own, deliberately not a dependency of this app).
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb } from "./harness";
+import { confirmed, freshDb, openWeekdays } from "./harness";
 
 /**
  * What an existing integration sees after people and outcomes arrive (ADR-017 §2.5, R18): a
@@ -42,6 +42,7 @@ async function setup(mode: NetworkMode, opts: { webhooks?: boolean } = {}) {
     createdAt: now,
     updatedAt: now,
   });
+  await openWeekdays(db);
   let inboxRef: ReturnType<typeof createInbox> | null = null;
   const net = fakeNetwork({
     host: HOST,

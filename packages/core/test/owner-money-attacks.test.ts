@@ -8,7 +8,7 @@ import type { RuleDefinition } from "../src/rules/schema";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The ways round "time yes, money no" (the founder, 23 September 2026) that the owner's AI could take
@@ -72,6 +72,7 @@ async function setup() {
       service(svc.fixed, { model: "fixed", value: 10_000, currency: "EUR" }),
       service(svc.from, { model: "from", value: 2_000, currency: "EUR" }),
     ]);
+  await openWeekdays(db);
   const caps = confirming(new Capabilities(db));
   const book = (serviceId: string, hour: number, extra: Record<string, unknown> = {}, who: Caller = customer) =>
     caps.createBooking(who, {

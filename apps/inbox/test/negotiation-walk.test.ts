@@ -4,7 +4,7 @@ import { type Db, networkSuccessStatement, schema, ulid } from "@surfingdog/core
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb, futureDay } from "./harness";
+import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * Negotiation walked end to end (ADR-018, Amendments 1 to 6), through the whole app as it runs, on a
@@ -130,6 +130,7 @@ async function setup(lang: Lang, opts: { network?: boolean } = {}) {
     createdAt: now,
     updatedAt: now,
   });
+  await openWeekdays(db);
   const chain = ulid();
   await db.orm.insert(schema.products).values({
     id: chain,

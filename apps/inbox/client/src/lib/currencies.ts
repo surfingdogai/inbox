@@ -1,3 +1,5 @@
+import { countryOfZone, currencyOfCountry } from "./geo";
+
 /**
  * Currencies as the owner picks one: the common ones first, each with its symbol and its name
  * (`€ EUR — Euro`), then every other one prices here can be in. Every amount in this inbox is kept in
@@ -168,36 +170,19 @@ export function currencyNote(
   return null;
 }
 
-/** Where each of the common currencies is the money, by ISO 3166 region. */
-const REGION_CURRENCY: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(
-    "AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK AD MC SM VA ME XK".split(" ").map((r) => [r, "EUR"]),
-  ),
-  GB: "GBP",
-  US: "USD",
-  CA: "CAD",
-  AU: "AUD",
-  BR: "BRL",
-  CH: "CHF",
-  LI: "CHF",
-  PL: "PLN",
-  SE: "SEK",
-  NO: "NOK",
-  DK: "DKK",
-  CZ: "CZK",
-  MX: "MXN",
-  IN: "INR",
-  ZA: "ZAR",
-  NZ: "NZD",
-  SG: "SGD",
-};
-
-/** The currency this browser's own region suggests (`pt-PT` → EUR, `en-GB` → GBP), else EUR. */
-export function guessCurrency(languages: readonly string[]): string {
+/**
+ * The currency to start from: the money of the country the business's time zone is in (Europe/Lisbon
+ * → EUR, whatever language the browser speaks), else of this browser's own region (`pt-PT` → EUR,
+ * `en-GB` → GBP), else EUR. Only one prices here can be in.
+ */
+export function guessCurrency(languages: readonly string[], zone?: string | null): string {
+  const fromZone = currencyOfCountry(countryOfZone(zone));
+  if (fromZone && offeredCurrency(fromZone)) return fromZone;
   for (const tag of languages) {
     try {
       const region = new Intl.Locale(tag).maximize().region;
-      if (region && REGION_CURRENCY[region]) return REGION_CURRENCY[region] as string;
+      const money = currencyOfCountry(region);
+      if (money && offeredCurrency(money)) return money;
     } catch {
       // Not a tag this browser reads: the next one.
     }

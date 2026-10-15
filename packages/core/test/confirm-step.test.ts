@@ -7,7 +7,7 @@ import { offerRows } from "../src/negotiation/offers";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, idempotencyKeys, items, products, services } from "../src/schema/tables";
 import { type Caller, WriteError, withIdempotencyKey } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The confirm step (ADR-018 §5; CRD art. 8(2)): a consumer's booking or order that carries a price
@@ -63,6 +63,7 @@ async function setup(doc: Record<string, unknown> = {}) {
     },
     { id: free, name: "Check-up", durationMin: 30, price: { model: "fixed", value: 0 }, createdAt: T0, updatedAt: T0 },
   ]);
+  await openWeekdays(db);
   const chain = ulid();
   const cheese = ulid();
   await db.orm.insert(products).values([

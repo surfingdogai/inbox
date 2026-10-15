@@ -1,10 +1,11 @@
-import { type FormEvent, useId, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { parseMajor } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
 import { type ServiceDraft, serviceDraft, serviceWrite } from "../lib/catalogue";
 import type { ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
-import { LengthPicker, MoneyInput } from "./Choosers";
-import { Field, Switch } from "./Form";
+import { LengthPicker, MoneyInput, Stepper } from "./Choosers";
+import { Field, FormActions, Switch } from "./Form";
 
 /** A lowest price as typed: minor units, null for none, undefined when it is not a price. */
 function floorOf(typed: string): number | null | undefined {
@@ -50,32 +51,55 @@ function Choice<T extends string>({
   );
 }
 
+/** "More options" folded, "Fewer options" open, with the chevron that turns. */
+export function MoreOptions({ children }: { children: ReactNode }) {
+  return (
+    <details className="details more">
+      <summary className="disclosure">
+        <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
+        <span className="disclosure-open">Fewer options</span>
+        <span className="disclosure-closed">More options</span>
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 /**
  * A service: its name, whether it is booked or asked about, its length from the usual ones, and a
  * price in the business's currency, or none ("on request"). The rest — exact or starting at, per
- * person, the lowest price, buffers, how often slots start, how many at once, its place in lists —
- * is under More.
+ * person, the lowest price, buffers, how often slots start, bookings per slot — is under More
+ * options. Its place in lists is set in the list itself, by moving it up or down.
  */
 export function ServiceEditor({
   initial,
+  prefill,
   floor,
   currency,
+  priceCounters,
   pending,
   error,
   onSubmit,
   onCancel,
 }: {
   initial: ServiceRow | undefined;
+  /** A new service started from a suggestion: its name. */
+  prefill?: { readonly name: string } | undefined;
   /** Its lowest price now, in minor units. */
   floor?: number | null | undefined;
   currency: string;
+  /** Whether customers may suggest a price of their own at all (General): only then is it asked per service. */
+  priceCounters: boolean;
   pending: boolean;
   error: ApiProblem | null;
   /** The row's fields, and its lowest price when the owner changed it (null clears it). */
   onSubmit: (body: ServiceBody, floor?: number | null) => void;
   onCancel: () => void;
 }) {
-  const [f, setF] = useState<ServiceDraft>(() => serviceDraft(initial, floor));
+  const [f, setF] = useState<ServiceDraft>(() => ({
+    ...serviceDraft(initial, floor),
+    ...(prefill && !initial ? { name: prefill.name } : {}),
+  }));
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]) => setF((d) => ({ ...d, [key]: value }));
   const id = useId();
@@ -153,8 +177,7 @@ export function ServiceEditor({
           </Switch>
         </div>
       </div>
-      <details className="details more">
-        <summary>More</summary>
+      <MoreOptions>
         <div className="settings-grid">
           {priced && (
             <Choice
@@ -238,57 +261,39 @@ export function ServiceEditor({
             </Field>
           )}
           {book && (
-            <Field
+            <Stepper
               id={`${id}-capacity`}
-              label="At the same time"
+              label="Bookings per slot"
+              min={1}
+              max={100}
+              value={f.capacity}
+              onChange={(v) => set("capacity", v)}
               error={err("capacity")}
-              hint="Bookings that can share one slot."
-            >
-              <input
-                id={`${id}-capacity`}
-                className="input"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={100}
-                value={f.capacity}
-                onChange={(e) => set("capacity", e.target.value)}
-              />
-            </Field>
-          )}
-          <Field id={`${id}-sort`} label="Place in lists" error={err("sort")} hint="Lower comes first.">
-            <input
-              id={`${id}-sort`}
-              className="input"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={f.sort}
-              onChange={(e) => set("sort", e.target.value)}
             />
-          </Field>
-          <div className="wide">
-            <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
-              Customers may suggest a price for it
-            </Switch>
-            <div className="hint">Only while you take customers' own prices (General). Off, one goes to you.</div>
-          </div>
+          )}
+          {priceCounters && (
+            <div className="wide">
+              <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
+                Customers may suggest a price for it
+              </Switch>
+            </div>
+          )}
         </div>
-      </details>
+      </MoreOptions>
       {(local || (error && !error.fields?.length)) && (
         <p className="hint error" role="alert">
           {local ?? error?.detail}
         </p>
       )}
-      <div className="rowx">
+      <FormActions>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
+          {initial ? "Keep as is" : "Cancel"}
+        </button>
         <button type="submit" className="btn btn-primary" disabled={pending}>
           {pending && <span className="spinner" aria-hidden="true" />}
           {initial ? "Save service" : "Add service"}
         </button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
-          Keep as is
-        </button>
-      </div>
+      </FormActions>
     </form>
   );
 }
@@ -434,15 +439,15 @@ export function ProductEditor({
           {local ?? error?.detail}
         </p>
       )}
-      <div className="rowx">
+      <FormActions>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
+          {initial ? "Keep as is" : "Cancel"}
+        </button>
         <button type="submit" className="btn btn-primary" disabled={pending}>
           {pending && <span className="spinner" aria-hidden="true" />}
           {initial ? "Save product" : "Add product"}
         </button>
-        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
-          Keep as is
-        </button>
-      </div>
+      </FormActions>
     </form>
   );
 }

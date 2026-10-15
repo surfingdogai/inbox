@@ -197,6 +197,8 @@ describe("setup: rules", () => {
   it("applies presets, edits with optimistic versions, summarises in words and tests against a real item", async () => {
     const { caps } = await setup();
     await caps.setup.updateProfile(owner, { timezone: "Europe/Lisbon" });
+    // Inside opening hours only where the business set some.
+    await caps.setup.setWeekly(owner, { weekly: { mon: [["09:00", "18:00"]] } });
     const svc = await caps.setup.createService(owner, {
       name: "Full service",
       duration_min: 60,

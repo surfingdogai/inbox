@@ -8,7 +8,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, jobs, services, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The customer's doors, attacked: what a hostile assistant, a careless owner's AI or a confused
@@ -56,6 +56,7 @@ async function setup(): Promise<{ db: Db; caps: Capabilities; svc: string }> {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   return {
     db,
     caps: confirming(new Capabilities(db, createSecretBox(["customer-attacks-test-secret-0123456789"]))),

@@ -23,7 +23,7 @@ import {
 } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Offers (ADR-018 §1, §2): the customer's request as the first offer, and each verb — offer, counter,
@@ -80,6 +80,7 @@ async function setup(doc?: Record<string, unknown>) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const prod = ulid();
   await db.orm.insert(products).values({
     id: prod,

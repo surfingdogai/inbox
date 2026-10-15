@@ -9,7 +9,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services, threadEntries } from "../src/schema/tables";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { rowToItem } from "../src/write/views";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The owner's limits, attacked (ADR-018 §4, Q1–Q3): a haggling assistant, a confused one, the owner's
@@ -78,6 +78,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const chain = ulid();
   await db.orm
     .insert(products)

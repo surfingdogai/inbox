@@ -4,7 +4,7 @@ import { networksLink, schema, ulid } from "@surfingdog/core";
 import { logMailOut, type MailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb, futureDay } from "./harness";
+import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * A customer's privacy through the whole app (the founder, 23 September 2026): the page the code email
@@ -29,6 +29,7 @@ async function setup(opts: { languages?: string[]; mailOut?: MailOut } = {}) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

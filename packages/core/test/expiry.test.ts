@@ -11,7 +11,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, outboundMail, products, services, slotClaims } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Deadlines (ADR-018 §1, §11): a request nobody answered lapses at its clock, what we proposed at its
@@ -67,6 +67,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const prod = ulid();
   await db.orm.insert(products).values({
     id: prod,

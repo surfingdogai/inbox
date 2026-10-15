@@ -9,6 +9,7 @@ import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   isDoorElsewhereUrl,
   MAX_SETUP_SOURCES,
+  MAX_SUGGESTED_SERVICES,
   readSettings,
   type SetupSource,
   setupFieldSchema,
@@ -45,7 +46,7 @@ import {
  * rules are left alone.
  *
  * What a plan never holds: products, feeds, or who the business is in law (`commerce`). Those are the
- * owner's to add, in the app. A price goes in only when the owner typed or confirmed it
+ * owner's to add, in the app; only the country the site gave fills an empty legal country. A price goes in only when the owner typed or confirmed it
  * (`price_confirmed`); one read from a page is never applied. And a plan never lists the business in
  * a network's directory: it can only keep it out, and joining is the owner's to choose.
  */
@@ -166,6 +167,13 @@ export const setupPlanSchema = z
       .describe(
         "Bookings or orders taken somewhere else, and where: replaces the list, so [] brings both back to the inbox.",
       ),
+    suggested_services: z
+      .array(z.object({ name: z.string().trim().min(1).max(120) }))
+      .max(MAX_SUGGESTED_SERVICES)
+      .optional()
+      .describe(
+        "Services read on the site that the plan does not apply (only a language model read them): kept for the owner to add, one press each, never on offer until they do. Replaces the list.",
+      ),
     sources: z
       .record(setupFieldSchema, setupSourceSchema)
       .refine((s) => Object.keys(s).length <= MAX_SETUP_SOURCES, { message: `at most ${MAX_SETUP_SOURCES} fields` })
@@ -193,8 +201,15 @@ export interface SetupPlanResult {
     readonly on: readonly ItemType[];
     /** The doors the plan expects, when it names them. */
     readonly expected: readonly ItemType[] | null;
-    /** Expected doors that stay shut, each with what opens it. */
-    readonly missing: readonly { readonly door: ItemType; readonly why: string }[];
+    /**
+     * Expected doors that stay shut, each with what opens it; for a booking that waits on the inbox,
+     * what it still needs (`needs`), for a host to point the owner at.
+     */
+    readonly missing: readonly {
+      readonly door: ItemType;
+      readonly why: string;
+      readonly needs?: "service" | "hours" | "service_and_hours";
+    }[];
   };
 }
 
@@ -407,6 +422,7 @@ export async function applySetupPlan(
   // ---- the public profile, unpublished, and where each detail came from ----
   const settingsPatch: Record<string, unknown> = {};
   const said: string[] = [];
+  let countrySource: SetupSource | undefined;
   const dir = plan.directory;
   if (dir) {
     const current = state.settings.directory;
@@ -461,6 +477,30 @@ export async function applySetupPlan(
       );
     }
     if (Object.keys(patch).length) settingsPatch.directory = patch;
+    // The country the site gave is the one it sells under, until the owner says otherwise: it fills
+    // an empty legal country (its consumer law, its words, its holidays), and never replaces one.
+    const country = dir.address?.addressCountry;
+    if (country && !state.settings.commerce.legal.country) {
+      settingsPatch.commerce = { legal: { country } };
+      said.push(check(`Sets the country you sell under to ${country}.`, "directory.address"));
+      const read = plan.sources?.["directory.address"];
+      if (read) countrySource = read;
+    }
+  }
+  // ---- services read but not applied: suggested to the owner ----
+  if (plan.suggested_services) {
+    const known = new Set([
+      ...state.services.map((svc) => nameKey(svc.name)),
+      ...(plan.services ?? []).map((svc) => nameKey(svc.name)),
+    ]);
+    const wanted = plan.suggested_services.filter((svc) => !known.has(nameKey(svc.name)));
+    if (!same(wanted, state.settings.setup.suggestions.services)) {
+      settingsPatch.setup = { suggestions: { services: wanted } };
+      if (wanted.length)
+        said.push(
+          `Suggests services to add: ${wanted.map((svc) => svc.name).join(", ")}. None is on offer until you add it.`,
+        );
+    }
   }
   // ---- bookings or orders taken somewhere else ----
   const elsewhereNow = state.settings.doorsElsewhere.map((d) => ({ itemType: d.itemType, url: d.url }));
@@ -507,10 +547,16 @@ export async function applySetupPlan(
       Object.assign(doorsAfter, patch);
     }
   }
-  if (plan.sources && !same(sorted(plan.sources), sorted(state.settings.setup.sources))) {
+  const sources = plan.sources
+    ? { ...plan.sources, ...(countrySource ? { "commerce.legal.country": countrySource } : {}) }
+    : undefined;
+  if (sources && !same(sorted(sources), sorted(state.settings.setup.sources))) {
     // A merge keeps keys it is not sent, so a field the plan no longer names is sent as null.
-    const gone = Object.keys(state.settings.setup.sources).filter((k) => !(k in (plan.sources ?? {})));
-    settingsPatch.setup = { sources: { ...plan.sources, ...Object.fromEntries(gone.map((k) => [k, null])) } };
+    const gone = Object.keys(state.settings.setup.sources).filter((k) => !(k in sources));
+    settingsPatch.setup = {
+      ...(settingsPatch.setup as Record<string, unknown> | undefined),
+      sources: { ...sources, ...Object.fromEntries(gone.map((k) => [k, null])) },
+    };
     said.push("Keeps a note of where each detail was read.");
   }
   if (Object.keys(settingsPatch).length) {
@@ -534,16 +580,17 @@ export async function applySetupPlan(
   const rules = dryRun ? rulesAfter : (await readState(caps, db, caller)).rules;
   const expected = plan.doors ? ITEM_ORDER.filter((t) => plan.doors?.includes(t)) : null;
   const shut = expected ? expected.filter((d) => !on.includes(d)) : [];
-  const missing = shut.map((door) => ({
-    door,
-    why: whyShut(door, {
-      services: servicesAfter,
-      own: state.ownHours,
-      hours: hoursAfter,
-      elsewhere: away,
-      doors: doorsAfter,
-    }),
-  }));
+  const after: DoorState = {
+    services: servicesAfter,
+    own: state.ownHours,
+    hours: hoursAfter,
+    elsewhere: away,
+    doors: doorsAfter,
+  };
+  const missing = shut.map((door) => {
+    const needs = door === "booking" ? bookingNeeds(after) : null;
+    return { door, why: whyShut(door, after), ...(needs ? { needs } : {}) };
+  });
 
   const sentences = [
     ...readFrom(plan.sources ?? {}),
@@ -641,14 +688,25 @@ interface DoorState {
   readonly doors: DoorSwitches;
 }
 
-/** A service that can be booked: on offer, with weekly hours that have a window (its own, else the business's). */
+/** Whether a service is asked about for a price (`quote`) rather than booked at a time. */
+function quoted(price: unknown): boolean {
+  return (price as { model?: unknown } | null)?.model === "quote";
+}
+
+/**
+ * A service that can be booked: on offer, booked at a time (not asked about for a price), with weekly
+ * hours that have a window (its own, else the business's).
+ */
 function bookable(s: DoorState): boolean {
-  return s.doors.booking !== false && s.services.some((svc) => svc.active && hasWindows(s.own.get(svc.id) ?? s.hours));
+  return (
+    s.doors.booking !== false &&
+    s.services.some((svc) => svc.active && !quoted(svc.price) && hasWindows(s.own.get(svc.id) ?? s.hours))
+  );
 }
 
 /**
  * The doors on once a plan is applied, read as `offeredItemTypes` reads the inbox: a message always,
- * a booking with a service that has hours, a quote with a service or a product, an order with a
+ * a booking with a service booked at a time that has hours, a quote with a service or a product, an order with a
  * product, a refund with something paid; a booking or an order taken somewhere else, never. The
  * tests hold the two to the same answer.
  */
@@ -670,13 +728,26 @@ function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[]
   return ITEM_ORDER.filter((t) => on.has(t));
 }
 
+/** What a booking that stays shut still needs from the inbox: a service booked at a time, opening hours, or both. */
+function bookingNeeds(s: DoorState): "service" | "hours" | "service_and_hours" | null {
+  if (s.elsewhere.has("booking") || s.doors.booking === false) return null;
+  const service = s.services.some((svc) => svc.active && !quoted(svc.price));
+  const hours = hasWindows(s.hours) || [...s.own.values()].some(hasWindows);
+  if (!service && !hours) return "service_and_hours";
+  if (!service) return "service";
+  if (!hours) return "hours";
+  return null;
+}
+
 /** What opens a door the plan expects and the inbox will not have on. */
 function whyShut(door: ItemType, s: DoorState): string {
   const away = s.elsewhere.get(door);
   if (away) return `${away.replace(/\.$/, "")}, so agents are sent there.`;
   if (door === "booking") {
-    const service = s.services.some((svc) => svc.active);
+    const listed = s.services.some((svc) => svc.active);
+    const service = s.services.some((svc) => svc.active && !quoted(svc.price));
     const hours = hasWindows(s.hours) || [...s.own.values()].some(hasWindows);
+    if (listed && !service) return "Booking turns on once a service is booked at a time, not asked for a price.";
     if (!service && !hours) return "Booking turns on when there are opening hours and at least one service.";
     if (!service) return "Booking turns on once there is a service to book.";
     if (!hours) return "Booking turns on once there are opening hours.";

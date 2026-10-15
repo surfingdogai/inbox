@@ -7,7 +7,7 @@ import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The owner's AI is held like a rule where money is concerned (the founder, 23 September 2026, "time yes,
@@ -74,6 +74,7 @@ async function setup() {
       service(svc.fixed, { model: "fixed", value: 10_000, currency: "EUR" }),
       service(svc.from, { model: "from", value: 2_000, currency: "EUR" }),
     ]);
+  await openWeekdays(db);
   const product = ulid();
   await db.orm
     .insert(products)

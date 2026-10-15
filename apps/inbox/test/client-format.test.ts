@@ -328,10 +328,10 @@ describe("email that does not go out, and customers who stopped the networks", (
     expect(mailBannerLines({ service: true, sender: true, links: true })).toEqual([]);
     const none = mailBannerLines({ service: false, sender: true, links: true });
     expect(none).toHaveLength(1);
-    expect(none[0]).toMatch(/^Emails are not being sent: this inbox has no mail service set up/);
+    expect(none).toEqual(["Email is off on this inbox: nothing is sent."]);
     expect(mailBannerLines({ service: true, sender: false, links: false })).toEqual([
-      "Emails are not being sent: there is no address to send them from. Fill in Send from below.",
-      "Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the public address of this inbox. Customers can still answer by replying.",
+      "Email is off: there is no address to send from. Set Send from, under Advanced.",
+      "Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the inbox address.",
     ]);
   });
 

@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 // The published verifier, by path: packages/sdk/src/webhooks/verify.ts is unchanged since sdk-v0.1.1.
 import { verifyWebhook } from "../../../packages/sdk/src/index";
 import { type App, createInbox } from "../src/app";
-import { freshDb, futureDay, makeClient } from "./harness";
+import { freshDb, futureDay, makeClient, openWeekdays } from "./harness";
 
 /**
  * Keys, scopes, idempotency and attribution, as the live instance meets them on upgrade: the rows,
@@ -151,6 +151,7 @@ async function seedBusiness(db: Db) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   return serviceId;
 }
 

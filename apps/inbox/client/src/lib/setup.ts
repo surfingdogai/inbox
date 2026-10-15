@@ -24,6 +24,8 @@ export function offerBodies(
   offers: readonly OfferDraft[],
   sells: "services" | "products",
   currency: string,
+  /** The services are asked about for a price, not booked (agents can ask for a price and not book). */
+  asked = false,
 ): OfferBodies {
   const wanted = offers.filter((o) => o.name.trim());
   const priced: { offer: OfferDraft; value: number | undefined }[] = [];
@@ -35,6 +37,16 @@ export function offerBodies(
     if (sells === "products" && value === undefined)
       return { problem: `${o.name.trim()} needs a price. ${PRICE_HINT}` };
     priced.push({ offer: o, value });
+  }
+  if (sells === "services" && asked) {
+    return {
+      kind: "services",
+      bodies: priced.map(({ offer }) => ({
+        name: offer.name.trim(),
+        active: true,
+        price: { model: "quote" as const },
+      })),
+    };
   }
   if (sells === "services") {
     return {
@@ -61,4 +73,33 @@ export function offerBodies(
 export function ownerEmailDoc(typed: string): { notifications: { ownerEmail: string | null } } {
   const email = typed.trim();
   return { notifications: { ownerEmail: email || null } };
+}
+
+/** What agents can do, as the wizard asks it: the same three switches as Settings. */
+export interface WizardDoors {
+  readonly booking: boolean;
+  readonly quoteRequest: boolean;
+  readonly message: boolean;
+}
+
+/**
+ * The settings write the wizard's switches make (`settings.doors`): booking and messages follow
+ * what the inbox holds when on (a booking still needs a service and hours), off is off; asking for
+ * a price on opens it before anything is listed.
+ */
+export function wizardDoorsDoc(d: WizardDoors): { doors: Record<string, boolean | null> } {
+  return {
+    doors: {
+      booking: d.booking ? null : false,
+      quoteRequest: d.quoteRequest,
+      message: d.message ? null : false,
+    },
+  };
+}
+
+/** The rules to start from: bookings' when agents can book, requests for a price's when they can only ask. */
+export function wizardPreset(d: WizardDoors): "appointments" | "trades" | null {
+  if (d.booking) return "appointments";
+  if (d.quoteRequest) return "trades";
+  return null;
 }

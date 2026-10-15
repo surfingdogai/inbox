@@ -18,7 +18,7 @@ import { NO_CUSTOMER, NO_PERSON } from "../src/rules/evaluate";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, products, services } from "../src/schema/tables";
 import { type Caller, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Rewarding good customers (ADR-018 §4, Q3): a better price the owner's own rules give a customer whose
@@ -85,6 +85,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const chain = ulid();
   const saddle = ulid();
   await db.orm.insert(products).values([

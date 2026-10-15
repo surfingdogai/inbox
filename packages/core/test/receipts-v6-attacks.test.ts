@@ -13,7 +13,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Rules version 6's receipts, attacked (ADR-017 Amendment 3, ADR-018 §8 and Amendment 6): what a
@@ -78,6 +78,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const chain = ulid();
   await db.orm
     .insert(products)

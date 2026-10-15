@@ -231,7 +231,7 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => {
       const caller = c.get("caller");
       return c.json(
-        await caps.checkAvailability(c.req.valid("query"), { now: caller.now ? caller.now() : Date.now() }),
+        await caps.checkAvailability(c.req.valid("query"), { now: caller.now ? caller.now() : Date.now(), caller }),
       );
     },
   );

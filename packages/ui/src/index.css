@@ -47,7 +47,9 @@
   --row-bg-hover: rgba(255, 255, 255, 0.4);
   --input-bg: rgba(255, 255, 255, 0.38);
   --input-bg-hover: rgba(255, 255, 255, 0.46);
-  --input-border: rgba(255, 255, 255, 0.65);
+  /* A field reads as a field on white glass: a hairline you can see. */
+  --input-border: rgba(20, 22, 60, 0.18);
+  --hairline-strong: rgba(20, 22, 60, 0.18);
   --btn-primary-bg: #14163c;
   --btn-primary-fg: #ffffff;
   --field-alpha: 0.5;
@@ -84,6 +86,7 @@
     --input-bg: rgba(255, 255, 255, 0.06);
     --input-bg-hover: rgba(255, 255, 255, 0.09);
     --input-border: rgba(255, 255, 255, 0.16);
+    --hairline-strong: rgba(255, 255, 255, 0.18);
     --btn-primary-bg: #f2f1ff;
     --btn-primary-fg: #0d0e26;
     --field-alpha: 0.28;
@@ -119,6 +122,7 @@
   --input-bg: rgba(255, 255, 255, 0.06);
   --input-bg-hover: rgba(255, 255, 255, 0.09);
   --input-border: rgba(255, 255, 255, 0.16);
+  --hairline-strong: rgba(255, 255, 255, 0.18);
   --btn-primary-bg: #f2f1ff;
   --btn-primary-fg: #0d0e26;
   --field-alpha: 0.28;
@@ -685,9 +689,12 @@ select.input {
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: var(--pill-bg-hover);
-  border: 1px solid var(--pill-border);
-  transition: background-color 0.2s;
+  /* Off: a track that reads on any glass, in either theme. */
+  background: color-mix(in oklab, var(--ink) 16%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ink) 26%, transparent);
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
 }
 .switch span::after {
   content: "";
@@ -697,12 +704,16 @@ select.input {
   width: 16px;
   height: 16px;
   border-radius: 9999px;
-  background: var(--ink);
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
   transition: transform 0.2s var(--ease-out-soft);
 }
 .switch input:checked + span {
-  background: color-mix(in srgb, var(--c-success) 45%, transparent);
-  border-color: color-mix(in srgb, var(--c-success) 60%, transparent);
+  background: var(--c-success);
+  border-color: var(--c-success);
+}
+.switch input:disabled + span {
+  opacity: 0.55;
 }
 .switch input:checked + span::after {
   transform: translateX(18px);

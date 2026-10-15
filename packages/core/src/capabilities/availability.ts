@@ -11,6 +11,10 @@ import { dateLocaliser, isClosed, readClosures } from "./closures";
  * and never a time that starts before `now` plus the minimum notice (`booking.minNoticeMin`): a
  * time that has passed, or that is too close to book online, is not offered.
  * Deterministic and cheap: at most 14 days, at most 200 slots returned.
+ *
+ * Hours nobody set are no hours: with no weekly hours saved, for the business or the service, no
+ * time is offered. A service asked about for a price (`price.model` "quote") is never booked, so it
+ * has no times at all: the customer asks for a price instead.
  */
 export interface Slot {
   readonly startTime: string;
@@ -23,13 +27,48 @@ export type Weekly = Partial<
 >;
 
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-export const DEFAULT_WEEKLY: Weekly = {
-  mon: [["09:00", "18:00"]],
-  tue: [["09:00", "18:00"]],
-  wed: [["09:00", "18:00"]],
-  thu: [["09:00", "18:00"]],
-  fri: [["09:00", "18:00"]],
-};
+
+/** No hours: what a business or a service that set none is open. */
+export const NO_HOURS: Weekly = {};
+
+/**
+ * The weekly hours a service is booked in: its own, else the business's, else none. Hours are never
+ * made up: a business that saved none is open to no booking, whatever it lists.
+ */
+export function weeklyFor(
+  rules: readonly { readonly serviceId: string | null; readonly weekly: unknown }[],
+  serviceId: string,
+): Weekly {
+  return (rules.find((r) => r.serviceId === serviceId)?.weekly ??
+    rules.find((r) => !r.serviceId)?.weekly ??
+    NO_HOURS) as Weekly;
+}
+
+/** Whether a service is asked about for a price rather than booked (`price.model` "quote"). */
+export function askedForAPrice(price: unknown): boolean {
+  const p = typeof price === "string" ? safeJson(price) : price;
+  return typeof p === "object" && p !== null && (p as { model?: unknown }).model === "quote";
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** The refusal for times or a booking of a service priced by quote: ask for a price instead. */
+export function quoteNotBookable(serviceId: string): WriteError {
+  return new WriteError(
+    "invalid_input",
+    "This service is asked about for a price, not booked: send a request for a price instead. Nothing was written.",
+    {
+      fields: [{ path: "service_id", problem: "invalid", message: "asked for a price, not booked" }],
+      details: { reason: "quote_only", service_id: serviceId },
+    },
+  );
+}
 
 export async function findSlots(
   db: Db,
@@ -52,6 +91,7 @@ export async function findSlots(
       fields: [{ path: "service_id", problem: "invalid", message: "unknown service" }],
     });
   }
+  if (askedForAPrice(service.price)) throw quoteNotBookable(service.id);
   const from = Date.parse(input.from);
   const to = Date.parse(input.to);
   if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
@@ -73,9 +113,7 @@ export async function findSlots(
         or(eq(availabilityRules.serviceId, service.id), isNull(availabilityRules.serviceId)),
       ),
     );
-  const weekly = (rules.find((r) => r.serviceId === service.id)?.weekly ??
-    rules[0]?.weekly ??
-    DEFAULT_WEEKLY) as Weekly;
+  const weekly = weeklyFor(rules, service.id);
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
   const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
@@ -114,7 +152,8 @@ export async function findSlots(
 
 /**
  * Whether one time is one the business would offer for a service (`findSlots`, for a single
- * candidate of any length): on the service's grid, inside opening hours, on a day it is open, and
+ * candidate of any length): a service that is booked (not asked about for a price), on its grid,
+ * inside opening hours someone set, on a day it is open, and
  * free for its whole length — counting every claim but the item's own (`exceptItemId`), so a
  * booking can move to a time that overlaps where it is now.
  */
@@ -129,7 +168,7 @@ export async function slotOffered(
   },
 ): Promise<boolean> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
-  if (!service?.active || !(input.end > input.start)) return false;
+  if (!service?.active || !(input.end > input.start) || askedForAPrice(service.price)) return false;
   if (input.start % (service.granularityMin * 60_000) !== 0) return false;
   const rules = await db.orm
     .select()
@@ -140,9 +179,7 @@ export async function slotOffered(
         or(eq(availabilityRules.serviceId, service.id), isNull(availabilityRules.serviceId)),
       ),
     );
-  const weekly = (rules.find((r) => r.serviceId === service.id)?.weekly ??
-    rules[0]?.weekly ??
-    DEFAULT_WEEKLY) as Weekly;
+  const weekly = weeklyFor(rules, service.id);
   if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return false;
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);

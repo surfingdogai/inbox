@@ -34,26 +34,45 @@ export function Field({
   );
 }
 
+/**
+ * An on/off switch with its line. `pending`: switched on, but waiting for something it needs (a
+ * service, opening hours); the track shows it, and `describedBy` names the reason for a screen reader.
+ */
 export function Switch({
   checked,
   onChange,
   children,
   disabled,
+  pending,
+  describedBy,
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   children: ReactNode;
   disabled?: boolean | undefined;
+  pending?: boolean | undefined;
+  describedBy?: string | undefined;
 }) {
   return (
-    <label className="check">
-      <span className="switch">
-        <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    <label className={pending ? "check is-pending" : "check"}>
+      <span className={pending ? "switch is-pending" : "switch"}>
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          onChange={(e) => onChange(e.target.checked)}
+        />
         <span />
       </span>
       {children}
     </label>
   );
+}
+
+/** A form's buttons, the main one last, on the right, as everywhere in Settings. */
+export function FormActions({ children }: { children: ReactNode }) {
+  return <div className="form-actions">{children}</div>;
 }
 
 /** A card's title row with its action on the right. */

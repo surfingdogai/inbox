@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay, nextDay, confirmed as sentConfirmed } from "./harness";
+import { freshDb, futureDay, nextDay, openWeekdays, confirmed as sentConfirmed } from "./harness";
 
 /**
  * Changes to what was agreed through the doors the app serves (ADR-018 §3.1, §6): the customer's
@@ -30,6 +30,7 @@ async function setup() {
     createdAt: now,
     updatedAt: now,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

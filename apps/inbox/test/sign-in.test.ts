@@ -251,6 +251,23 @@ describe("a host's handoff", () => {
     expect((await appA.request(late.url)).status).toBe(410);
     expect((await postForm(appA, A, { action: "/auth/handoff", fields: { token: late.token } })).status).toBe(410);
   });
+
+  it("opens the page the host pointed to, on this site only", async () => {
+    const db = await freshDb();
+    const A = "https://inbox-a.example";
+    const app = createApp({ db, mailOut: logMailOut(), baseUrl: A, ownerEmails: [OWNER] });
+    const to = await createHandoff(db, { email: OWNER, origin: A, now: Date.now() });
+    const form = formOf(await (await app.request(`${to.url}&redirect=%2Fsettings%2Fservices`)).text());
+    expect(form.fields).toMatchObject({ redirect: "/settings/services" });
+    const opened = await postForm(app, A, form);
+    expect(opened.status).toBe(303);
+    expect(opened.headers.get("location")).toBe("/settings/services");
+    // Another site is never where a handoff sends anyone.
+    const away = await createHandoff(db, { email: OWNER, origin: A, now: Date.now() });
+    const off = formOf(await (await app.request(`${away.url}&redirect=https%3A%2F%2Fevil.example%2F`)).text());
+    expect(off.fields.redirect).toBeUndefined();
+    expect((await postForm(app, A, off)).headers.get("location")).toBe("/");
+  });
 });
 
 describe("the session cookie", () => {

@@ -14,7 +14,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, outboundMail, products, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Offers under attack (ADR-018 §1, §2, §4, Q2, Q5): what a haggling assistant, a careless owner, a
@@ -71,6 +71,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   // Priced "from": the catalogue does not set the price, a person does.
   const from = ulid();
   await db.orm.insert(services).values({
@@ -83,6 +84,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const prod = ulid();
   await db.orm.insert(products).values({
     id: prod,

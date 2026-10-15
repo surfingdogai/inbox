@@ -14,7 +14,7 @@ import {
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * Receipts through the doors an agent actually uses (ADR-016): REST to book, the owner's API to
@@ -39,6 +39,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

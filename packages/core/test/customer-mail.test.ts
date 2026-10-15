@@ -22,7 +22,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { services } from "../src/schema/tables";
 import type { Caller } from "../src/write/caller";
 import { describeToCustomer } from "../src/write/views";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * What a customer reads (the founder, 23 September 2026): most customers do not know which software a
@@ -843,6 +843,7 @@ describe("the emails a customer gets", () => {
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     const caps = confirming(new Capabilities(db));
     await caps.updateSettings(owner(), {
       doc: {

@@ -105,6 +105,12 @@ export const policyPayloadSchema = z.looseObject({
   }),
   read_only: z.boolean(),
   suspended_reason: z.string().max(2_000).nullable(),
+  /** The business's own domain, and the control plane's page where the owner connects it: shown in Settings. */
+  domain: host.optional(),
+  connect_url: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .optional(),
 });
 export type PolicyPayload = z.infer<typeof policyPayloadSchema>;
 

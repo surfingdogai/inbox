@@ -1,5 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm";
-import { DEFAULT_WEEKLY, localiser, type Weekly, withinOpening } from "../capabilities/availability";
+import { localiser, weeklyFor, withinOpening } from "../capabilities/availability";
 import { dateLocaliser, isClosed, readClosures } from "../capabilities/closures";
 import type { Db } from "../db";
 import type { Item, ItemType } from "../domain/types";
@@ -398,9 +398,8 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
     slotIsFree = false;
   }
   const rows = await db.orm.select().from(availabilityRules).where(eq(availabilityRules.kind, "open"));
-  const weekly = (rows.find((r) => r.serviceId === service.id)?.weekly ??
-    rows.find((r) => !r.serviceId)?.weekly ??
-    DEFAULT_WEEKLY) as Weekly;
+  // Hours nobody set are no hours: a booking is never within them.
+  const weekly = weeklyFor(rows, service.id);
   const closures = await readClosures(db, service.id);
   const withinBusinessHours =
     withinOpening(localiser(timezone), weekly, Date.parse(item.payload.startTime), Date.parse(item.payload.endTime)) &&

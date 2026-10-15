@@ -43,8 +43,9 @@ export function doorSwitch(doors: DoorSwitches, type: ItemType): boolean | undef
  * The item types this inbox takes, in canonical order:
  *
  * - `message`, always;
- * - `booking`, with an active service that has weekly hours with at least one window (its own, or
- *   the business's when it has none of its own);
+ * - `booking`, with an active service booked at a time (not one asked about for a price, `quote`)
+ *   that has weekly hours with at least one window (its own, or the business's when it has none of
+ *   its own);
  * - `order`, with an active product;
  * - `quote_request`, with an active service or product to ask about, or switched on (`doors`);
  * - `refund`, with something paid to refund: an order, or a booking of a service with a price.
@@ -79,6 +80,8 @@ export async function offeredItemTypes(
     doors.booking !== false &&
     services.rows.some((r) => {
       const id = String(r[0]);
+      // A service asked about for a price is never booked: it opens a request for a price instead.
+      if ((json(r[1]) as { model?: unknown } | null)?.model === "quote") return false;
       return hasWindows(own.has(id) ? own.get(id) : base?.[1]);
     });
   const orderable = !elsewhere.includes("order") && products.rows.length > 0;

@@ -7,7 +7,7 @@ import { pinnedFetch, type ResolvedAddress } from "@surfingdog/platform/node";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createInbox, type Inbox } from "../src/app";
 import { outboundDenyFrom } from "../src/env";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * The inbox's outbound calls on the Node server, end to end: a webhook, a test event and a product
@@ -62,6 +62,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const ownerKey = (await createApiKey(db, { kind: "owner", name: "cli" })).key;
   const pending: Promise<unknown>[] = [];
   const { ranges: deny } = outboundDenyFrom(OWN_ADDRESS);

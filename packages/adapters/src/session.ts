@@ -638,11 +638,17 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
         link: { href: "/login", label: "Sign in" },
       });
     }
+    // Where the host sent the owner to, on this site only: Settings › Services, say.
+    const redirect = safeRedirect(c.req.query("redirect"));
     return authPage(c, 200, {
       title: "Open your inbox",
       heading: `Open ${await businessName()}`,
       lines: [`You are signing in as ${row.email}.`],
-      form: { action: "/auth/handoff", fields: { token }, button: "Open your inbox" },
+      form: {
+        action: "/auth/handoff",
+        fields: { token, ...(redirect === "/" ? {} : { redirect }) },
+        button: "Open your inbox",
+      },
     });
   });
 
@@ -660,7 +666,7 @@ export function authRoutes(deps: SessionDeps): Hono<CallerEnv> {
           })
         : expiredLink(c, false);
     }
-    return signIn(c, row.email, "/", form);
+    return signIn(c, row.email, safeRedirect(fields.redirect), form);
   });
 
   app.get("/me", async (c) => {

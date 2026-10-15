@@ -8,7 +8,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller, Principal } from "../src/write/index";
 import { once, pruneIdempotencyKeys, withIdempotencyKey } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Keys, scopes, idempotency and attribution at the core (ADR-004, log first). The doors are covered
@@ -67,6 +67,7 @@ async function setup(): Promise<{ db: Db; caps: Capabilities }> {
   const db = createDb(await makeClient());
   await runMigrations(db.client, MIGRATIONS);
   await resetTables(db.client);
+  await openWeekdays(db);
   return { db, caps: new Capabilities(db, createSecretBox([KEY])) };
 }
 

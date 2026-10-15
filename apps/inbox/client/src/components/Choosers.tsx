@@ -1,16 +1,25 @@
 import clsx from "clsx";
-import { X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
-import { countryOptions } from "../lib/countries";
+import { countryName, countryOptions } from "../lib/countries";
 import { currencyGroups, currencyLabel, currencySymbol, symbolAfter } from "../lib/currencies";
+import {
+  bestUnit,
+  type DurationPreset,
+  type DurationUnit,
+  durationWords,
+  fromMinutes,
+  inMinutes,
+  isPreset,
+} from "../lib/durations";
 import { languageName, matchLanguages, nativeName } from "../lib/languages";
-import { browserZone, placeOf, zoneGroups } from "../lib/zones";
+import { browserZone, matchZones, type ZoneChoice, zoneChoice, zoneChoices } from "../lib/zones";
 
 /**
  * The choosers every Settings form uses, so nobody types a code or guesses a format: a time zone by
- * place, a currency by name, languages by name, a country by name, an amount with its currency, a
- * length from the usual ones. Native controls wherever one fits, so they work with a keyboard and on
- * a phone as the platform's own do.
+ * country and city, a currency by name, languages by name, a country by name, an amount with its
+ * currency, a length of time from the usual ones, a small number with − and +. Native controls
+ * wherever one fits, so they work with a keyboard and on a phone as the platform's own do.
  */
 
 /** The clock, ticking once a minute while a chooser that shows times is on screen. */
@@ -23,40 +32,124 @@ function useMinute(): number {
   return Math.floor(now / 60_000) * 60_000;
 }
 
-/** A time zone, by place, grouped by region, each with the time it is there now; and the browser's, one click away. */
-export function TimeZoneSelect({
+/**
+ * A time zone, typed ahead by country or city (`Portugal — Lisbon · 14:05`). Opened, it suggests the
+ * zone this browser is in and the business's country's own first. Arrow keys move, Enter picks,
+ * Escape leaves the choice as it was.
+ */
+export function TimeZonePicker({
   id,
   value,
   onChange,
-  disabled,
+  country,
+  describedBy,
 }: {
   id: string;
   value: string;
   onChange: (zone: string) => void;
-  disabled?: boolean | undefined;
+  /** The business's country, whose zones are suggested first. */
+  country?: string | null | undefined;
+  describedBy?: string | undefined;
 }) {
   const now = useMinute();
-  const groups = useMemo(() => zoneGroups(now, [value]), [now, value]);
   const browser = browserZone();
+  const { suggested, all } = useMemo(
+    () => zoneChoices(now, { keep: value, browser, country: country ?? null }),
+    [now, value, browser, country],
+  );
+  const current = all.find((c) => c.zone === value) ?? zoneChoice(value, now);
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const listId = `${id}-list`;
+  const typed = text.trim() !== "";
+  const options: readonly ZoneChoice[] = open ? (typed ? matchZones(text, all) : suggested) : [];
+  const pick = (zone: string) => {
+    onChange(zone);
+    setText("");
+    setOpen(false);
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      setActive((a) => Math.min(a + 1, Math.max(options.length - 1, 0)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Enter") {
+      const choice = options[active];
+      if (open && choice) {
+        e.preventDefault();
+        pick(choice.zone);
+      }
+    } else if (e.key === "Escape") {
+      setText("");
+      setOpen(false);
+    }
+  };
   return (
-    <>
-      <select id={id} className="input" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        {groups.map((g) => (
-          <optgroup key={g.region} label={g.region}>
-            {g.zones.map((z) => (
-              <option key={z.zone} value={z.zone}>
-                {z.label}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      {browser && browser !== value && !disabled && (
-        <button type="button" className="linkish" onClick={() => onChange(browser)}>
-          Use {placeOf(browser)}, where you are
-        </button>
+    <div className="combo">
+      <input
+        ref={input}
+        id={id}
+        className="input combo-field"
+        role="combobox"
+        aria-expanded={open && options.length > 0}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-describedby={describedBy}
+        aria-activedescendant={open && options[active] ? `${listId}-${active}` : undefined}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={open ? "Type a city or a country" : undefined}
+        value={open ? text : `${current.name}${current.clock ? ` · ${current.clock}` : ""}`}
+        onChange={(e) => {
+          setText(e.target.value);
+          setOpen(true);
+          setActive(0);
+        }}
+        onFocus={(e) => {
+          setOpen(true);
+          setActive(0);
+          e.currentTarget.select();
+        }}
+        onBlur={() => {
+          setOpen(false);
+          setText("");
+        }}
+        onKeyDown={onKey}
+      />
+      {open && (
+        <div id={listId} className="combo-list glass-strong" role="listbox" aria-label="Time zones">
+          {!typed && options.length > 0 && <div className="combo-head">Suggested</div>}
+          {options.map((c, i) => (
+            <div
+              key={c.zone}
+              id={`${listId}-${i}`}
+              role="option"
+              tabIndex={-1}
+              aria-selected={i === active}
+              className={clsx("combo-option", i === active && "is-active", c.zone === value && "is-current")}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(c.zone);
+              }}
+              onMouseEnter={() => setActive(i)}
+            >
+              <span className="combo-name">
+                {c.name}
+                {c.zone === browser && <span className="combo-note">where you are</span>}
+              </span>
+              <span className="combo-clock">{c.clock}</span>
+            </div>
+          ))}
+          {typed && options.length === 0 && <div className="combo-empty">No place by that name.</div>}
+          {!typed && <div className="combo-empty">Type a city or a country for any other.</div>}
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -93,26 +186,35 @@ export function CurrencySelect({
   );
 }
 
-/** A country by name; empty is none. */
+/** A country by name; empty is none. `suggest` is offered one press away while none is chosen. */
 export function CountrySelect({
   id,
   value,
   onChange,
+  suggest,
 }: {
   id: string;
   value: string;
   onChange: (code: string) => void;
+  suggest?: string | null | undefined;
 }) {
   const options = useMemo(() => countryOptions(value), [value]);
   return (
-    <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Not set</option>
-      {options.map((c) => (
-        <option key={c.code} value={c.code}>
-          {c.name}
-        </option>
-      ))}
-    </select>
+    <>
+      <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not set</option>
+        {options.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {!value && suggest && (
+        <button type="button" className="linkish" onClick={() => onChange(suggest)}>
+          Use {countryName(suggest)}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -212,10 +314,11 @@ export function LengthPicker({
             <input
               className="input"
               type="number"
+              inputMode="numeric"
               min={5}
               max={1440}
               step={5}
-              aria-label="Minutes"
+              aria-label={`${legend}, minutes`}
               value={value}
               onChange={(e) => onChange(e.target.value)}
             />
@@ -232,10 +335,217 @@ export function LengthPicker({
   );
 }
 
+const UNIT_WORDS: Readonly<Record<DurationUnit, string>> = { min: "minutes", h: "hours", days: "days" };
+const COARSER: Readonly<Record<DurationUnit, readonly DurationUnit[]>> = {
+  min: ["min", "h", "days"],
+  h: ["h", "days"],
+  days: ["days"],
+};
+
+/**
+ * A length of time from the usual ones, one press each, said back in words ("24 hours"). Other opens
+ * a number with its unit (minutes, hours or days, as fine as the setting keeps). The value stays in
+ * the setting's own unit (`unit`); an optional one may be empty, which its first preset names.
+ */
+export function DurationPicker({
+  id,
+  legend,
+  value,
+  onChange,
+  unit,
+  presets,
+  min = 0,
+  max,
+  hint,
+  error,
+}: {
+  id: string;
+  legend: string;
+  /** In `unit`, as typed; "" for none set, when a preset says what that means. */
+  value: string;
+  onChange: (value: string) => void;
+  unit: DurationUnit;
+  presets: readonly DurationPreset[];
+  /** Bounds in `unit`. */
+  min?: number | undefined;
+  max?: number | undefined;
+  hint?: string | undefined;
+  error?: string | undefined;
+}) {
+  const name = useId();
+  const [other, setOther] = useState(() => !isPreset(value, presets));
+  const stored = value.trim() === "" ? null : Number(value);
+  const minutes = stored === null || !Number.isFinite(stored) ? null : inMinutes(stored, unit);
+  const units = COARSER[unit];
+  const [otherUnit, setOtherUnit] = useState<DurationUnit>(() => bestUnit(minutes ?? 0, units));
+  const shown = minutes === null ? "" : String(Math.round((minutes / inMinutes(1, otherUnit)) * 100) / 100);
+  const none = presets.find((p) => p.value === null)?.label;
+  const words =
+    minutes === null ? (none ?? "") : Number.isFinite(minutes) ? durationWords(minutes, none ?? "None") : "";
+  const hintId = `${id}-hint`;
+  return (
+    <fieldset className="chips-field" aria-describedby={hint || error ? hintId : undefined}>
+      <legend className="label label-line">
+        <span>{legend}</span>
+        {words && !error && <span className="dur-words">{words}</span>}
+      </legend>
+      <div className="chips" role="radiogroup">
+        {presets.map((p) => (
+          <label key={p.label} className="chip">
+            <input
+              type="radio"
+              name={name}
+              checked={!other && (p.value === null ? stored === null : stored === p.value)}
+              onChange={() => {
+                setOther(false);
+                onChange(p.value === null ? "" : String(p.value));
+              }}
+            />
+            <span>{p.label}</span>
+          </label>
+        ))}
+        <label className="chip">
+          <input
+            type="radio"
+            name={name}
+            checked={other}
+            onChange={() => {
+              setOther(true);
+              setOtherUnit(bestUnit(minutes ?? 0, units));
+            }}
+          />
+          <span>Other</span>
+        </label>
+        {other && (
+          <span className="chip-other">
+            <input
+              id={id}
+              className="input"
+              type="number"
+              inputMode="numeric"
+              min={Math.ceil(fromMinutes(inMinutes(min, unit), otherUnit))}
+              max={max === undefined ? undefined : Math.floor(inMinutes(max, unit) / inMinutes(1, otherUnit))}
+              step={1}
+              aria-label={`${legend}, in ${UNIT_WORDS[otherUnit]}`}
+              value={shown}
+              onChange={(e) => {
+                const typed = e.target.value.trim();
+                if (typed === "") return onChange("");
+                const n = Number(typed);
+                // Kept as typed when it is not a number, so the API names the field.
+                onChange(Number.isFinite(n) ? String(fromMinutes(inMinutes(n, otherUnit), unit)) : typed);
+              }}
+            />
+            {units.length > 1 ? (
+              <select
+                className="input unit-select"
+                aria-label={`${legend}, unit`}
+                value={otherUnit}
+                onChange={(e) => setOtherUnit(e.target.value as DurationUnit)}
+              >
+                {units.map((u) => (
+                  <option key={u} value={u}>
+                    {UNIT_WORDS[u]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="hint">{UNIT_WORDS[unit]}</span>
+            )}
+          </span>
+        )}
+      </div>
+      {error ? (
+        <div id={hintId} className="hint error" role="alert">
+          {error}
+        </div>
+      ) : (
+        hint && (
+          <div id={hintId} className="hint">
+            {hint}
+          </div>
+        )
+      )}
+    </fieldset>
+  );
+}
+
+/** A small whole number, with − and + either side; typing works too. */
+export function Stepper({
+  id,
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  suffix,
+  hint,
+  error,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  min: number;
+  max: number;
+  /** After the number: "%", "per customer". */
+  suffix?: string | undefined;
+  hint?: string | undefined;
+  error?: string | undefined;
+}) {
+  const n = Number(value);
+  const at = Number.isFinite(n) ? n : min;
+  const step = (d: number) => onChange(String(Math.min(max, Math.max(min, Math.round(at) + d))));
+  return (
+    <div>
+      <label className="label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="stepper">
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon stepper-btn"
+          aria-label={`One less: ${label}`}
+          disabled={at <= min}
+          onClick={() => step(-1)}
+        >
+          <Minus className="icon-sm" aria-hidden="true" />
+        </button>
+        <input
+          id={id}
+          className="input stepper-field"
+          inputMode="numeric"
+          aria-invalid={error ? true : undefined}
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+        />
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon stepper-btn"
+          aria-label={`One more: ${label}`}
+          disabled={at >= max}
+          onClick={() => step(1)}
+        >
+          <Plus className="icon-sm" aria-hidden="true" />
+        </button>
+        {suffix && <span className="hint stepper-suffix">{suffix}</span>}
+      </div>
+      {error ? (
+        <div className="hint error" role="alert">
+          {error}
+        </div>
+      ) : (
+        hint && <div className="hint">{hint}</div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Languages by name: chips for the chosen ones (× takes one off), and a field that offers the rest as
- * the owner types, the common ones first. Arrow keys move through what is offered, Enter adds,
- * Backspace in the empty field takes the last chip off, Escape closes the list.
+ * the owner types, the common ones first; each named in English with its own name beside it, greyed.
+ * Arrow keys move through what is offered, Enter adds, Backspace in the empty field takes the last
+ * chip off, Escape closes the list.
  */
 export function LanguagePicker({
   id,

@@ -26,3 +26,20 @@ export async function freshDb() {
   ]);
   return { db, caps: new Capabilities(db) };
 }
+
+/**
+ * Opening hours, Monday to Friday 09:00 to 18:00, for the whole business: hours nobody set are no
+ * hours (nothing is offered or booked in them), so a test that books opens the business first.
+ */
+export async function openWeekdays(db: { client: SqliteClient }): Promise<void> {
+  const day = [["09:00", "18:00"]];
+  await db.client.query({
+    sql: "INSERT INTO availability_rules (id, service_id, kind, weekly, created_at) VALUES (?, NULL, 'open', ?, ?)",
+    params: [
+      `hours${Math.random().toString(36).slice(2, 12)}`,
+      JSON.stringify({ mon: day, tue: day, wed: day, thu: day, fri: day }),
+      Date.now(),
+    ],
+    method: "run",
+  });
+}

@@ -14,7 +14,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, jobs, outboundMail, products, services, slotClaims } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, createItem, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Changes to a promise (ADR-018 §3.1, §3.2): either side asks to change a confirmed booking or an
@@ -78,6 +78,7 @@ async function setup(doc: Record<string, unknown> = {}) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const prod = ulid();
   await db.orm.insert(products).values({
     id: prod,

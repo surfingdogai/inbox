@@ -733,7 +733,8 @@ a {
   justify-content: space-between;
   gap: 10px;
 }
-.sec-head h3 {
+.sec-head h3,
+.card .sec-head h3.sec {
   margin: 0;
 }
 .lede.small {
@@ -809,7 +810,7 @@ a {
 }
 .hours-day {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-columns: 150px minmax(0, 1fr) auto;
   gap: 6px 16px;
   align-items: start;
   padding: 8px 0;
@@ -857,23 +858,25 @@ a {
   padding: 0 30px 0 12px;
   font-variant-numeric: tabular-nums;
 }
-.input.time-select.is-all-day {
-  width: 268px;
-}
 @media (max-width: 620px) {
-  /* The day and its switch on one line, "Closed" at its end; open, the windows below. */
+  /* The day and its switch on one line, "24 h" at its end; the windows below. */
   .hours-day {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
   }
-  .hours-day:has(.hours-window) .hours-windows {
+  .hours-day > .hours-end {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .hours-day > .hours-windows {
     grid-column: 1 / -1;
+  }
+  .hours-day.is-closed > .hours-windows {
+    grid-column: 2;
+    grid-row: 1;
   }
   .input.time-select {
     width: 112px;
-  }
-  .input.time-select.is-all-day {
-    width: 248px;
   }
 }
 .closure-row {
@@ -1164,12 +1167,20 @@ textarea.json-editor {
   display: none;
 }
 .details summary::before {
-  content: "\25B8";
-  font-size: 10px;
-  color: var(--ink-3);
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin: 0 3px 0 1px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(-45deg);
+  transition: transform 0.18s var(--ease-out-soft, ease);
 }
 .details[open] summary::before {
-  content: "\25BE";
+  transform: rotate(45deg);
+}
+.details summary.disclosure::before {
+  content: none;
 }
 .details .fields {
   margin: 10px 0 0;
@@ -1359,15 +1370,22 @@ textarea.json-editor {
 /* One row per thing offered: name, then the small numbers, then the bin. */
 .offer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px 110px auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  gap: 10px 12px;
   align-items: end;
   padding: 12px 14px;
   border-radius: var(--radius-md);
 }
+.offer > .wide {
+  grid-column: 1 / -1;
+}
 @media (max-width: 620px) {
   .offer {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .offer > div:nth-child(2):not(.wide) {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 .wizard-nav {
@@ -1459,11 +1477,27 @@ fieldset.chips,
   opacity: 0;
   cursor: pointer;
 }
+/* A choice made: the ink itself, clear on any glass. */
 .chip:has(input:checked),
 .chip[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--ink) 42%, transparent);
-  background: color-mix(in srgb, var(--ink) 7%, var(--glass-bg-strong));
-  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--ground, #fff);
+}
+.chip:has(input:checked):hover,
+.chip[aria-pressed="true"]:hover {
+  background: var(--ink);
+  color: var(--ground, #fff);
+}
+/* A one-off action that looks like a chip: pressing it does something, it never stays "on". */
+.chip.chip-action {
+  gap: 4px;
+  color: var(--ink-2);
+}
+.chip.chip-action:focus-visible,
+.chip.chip-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 2px;
 }
 .chip:has(input:focus-visible) {
   outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
@@ -1652,6 +1686,16 @@ fieldset.chips,
 .door-note a,
 .door-note .linkish {
   color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.door-note a + span + a {
+  margin-left: 0;
+}
+.door-wait {
+  font-weight: 400;
+  color: var(--ink-3);
 }
 
 /* The rest of a service, folded. */
@@ -1683,4 +1727,404 @@ fieldset.chips,
 .hours-head + p + .hours-grid {
   padding-top: 16px;
   border-top: 1px solid var(--hairline);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings, second pass: one save bar, folded advanced settings,    */
+/*  time zones by place, lengths of time in words, small numbers.     */
+/* ------------------------------------------------------------------ */
+
+/* A form's buttons: the main one last, on the right; a secondary action may stand at the start. */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.form-actions > .form-actions-start {
+  margin-right: auto;
+}
+
+/* The one save bar: only while the page holds a change, always in reach. */
+.savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 9999px;
+  box-shadow: var(--glass-shadow);
+  animation: savebar-in 0.22s var(--ease-out-soft, ease) both;
+}
+.savebar-text {
+  margin-right: auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+@keyframes savebar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .savebar {
+    animation: none;
+  }
+}
+
+/* Two even columns, full width: the business's own details. */
+.business-grid,
+.general .grid2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+  align-items: start;
+}
+@media (max-width: 620px) {
+  .business-grid,
+  .general .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* What the host set: read, not typed. */
+.readonly-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-height: 44px;
+  margin: 0;
+  padding: 11px 0 0;
+  font-size: 14.5px;
+}
+.readonly-sep {
+  color: var(--ink-3);
+}
+.readonly-wait {
+  color: var(--ink-3);
+}
+.readonly-ok {
+  color: var(--c-success-ink);
+}
+.readonly-action {
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.mono-soft {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* A hint and a count on one line, the count at the end. */
+.hint-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hint-row .count {
+  margin-left: auto;
+  white-space: nowrap;
+}
+textarea.input.autogrow {
+  min-height: 0;
+  max-height: 220px;
+  resize: none;
+  field-sizing: content;
+}
+
+/* Advanced: one quiet line until opened. */
+.advanced > summary {
+  list-style: none;
+}
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.disclosure:hover {
+  color: var(--ink);
+}
+.disclosure-icon {
+  color: var(--ink-2);
+  transition: transform 0.18s var(--ease-out-soft, ease);
+}
+details[open] > .disclosure .disclosure-icon {
+  transform: rotate(90deg);
+}
+.disclosure-open,
+details[open] > .disclosure .disclosure-closed {
+  display: none;
+}
+details[open] > .disclosure .disclosure-open {
+  display: inline;
+}
+.disclosure:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.advanced-body {
+  margin-top: 8px;
+  gap: 0;
+}
+.subsection {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0;
+  border-top: 1px solid var(--hairline);
+}
+.subsection:first-child {
+  border-top: 0;
+  padding-top: 8px;
+}
+.subsec {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.held-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 20px;
+  margin: 0;
+  font-size: 14px;
+}
+.held-list > div {
+  display: contents;
+}
+.held-list dt {
+  color: var(--ink-3);
+}
+.held-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+/* A length of time: the chips, and the choice said in words beside its label. */
+legend.label-line {
+  display: flex;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.dur-words {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.input.unit-select {
+  width: auto;
+  height: 30px;
+  padding: 0 30px 0 10px;
+  font-size: 13px;
+}
+
+/* A small number with − and +. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.input.stepper-field {
+  width: 64px;
+  height: 36px;
+  padding: 0 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.stepper-btn {
+  width: 36px;
+  height: 36px;
+  color: var(--ink-2);
+}
+.stepper-suffix {
+  margin: 0 0 0 4px;
+}
+
+/* A time zone, typed ahead. */
+.combo {
+  position: relative;
+}
+/* What is offered as you type: solid, so nothing on the page shows through it. */
+.combo-list.glass-strong,
+.lang-list.glass-strong {
+  background: color-mix(in srgb, var(--ground) 97%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+}
+.combo-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+}
+.combo-head {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.combo-option {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.combo-option.is-active {
+  background: var(--row-bg-hover);
+}
+.combo-name {
+  flex: 1;
+  min-width: 0;
+}
+.combo-option.is-current .combo-name {
+  font-weight: 600;
+}
+.combo-note {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.combo-clock {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.combo-empty {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* Opening hours, second pass: "24 h" on each open day, one "Copy to all days", a week of one kind as one line. */
+.hours-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+}
+.hours-copy {
+  font-size: 12.5px;
+}
+.hours-summary {
+  line-height: 36px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.hours-every {
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+}
+.hours-every .hours-label {
+  line-height: 36px;
+}
+.hours-icon {
+  color: var(--ink-3);
+}
+.hours-icon:hover {
+  color: var(--ink);
+}
+
+/* Services the site seemed to list: one press from the editor, filled in. */
+.suggest {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.state.state-left {
+  justify-items: start;
+  text-align: left;
+  padding: 8px 0 4px;
+}
+.order-btns {
+  display: inline-flex;
+  gap: 0;
+  color: var(--ink-3);
+}
+
+/* Pending: switched on, waiting for what it needs. */
+.switch.is-pending span {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--ink) 34%, transparent);
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.switch.is-pending input:checked + span {
+  background: color-mix(in oklab, var(--c-success) 30%, transparent);
+  border-color: color-mix(in oklab, var(--c-success) 70%, transparent);
+}
+
+/* The settings tabs fade at the edges where they scroll. */
+@media (max-width: 760px) {
+  .subnav {
+    mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+    padding-right: 24px;
+  }
+}
+
+/* On a phone: a thumb's worth to press. */
+@media (max-width: 600px) {
+  .btn-icon,
+  .btn-icon.btn-sm,
+  .hours-icon,
+  .stepper-btn,
+  .lang-x {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .chip {
+    min-height: 40px;
+    height: auto;
+    padding: 0 14px;
+  }
+  .chip-other .input,
+  .input.unit-select {
+    height: 40px;
+  }
+  .door-row {
+    min-height: 48px;
+  }
+  .savebar {
+    bottom: 8px;
+    border-radius: var(--radius-panel);
+  }
+  .seg.theme-wide {
+    display: none;
+  }
+}
+@media (min-width: 601px) {
+  .btn.theme-phone {
+    display: none;
+  }
 }

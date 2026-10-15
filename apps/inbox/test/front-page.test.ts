@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * The business's own page (the web form door, ADR-010), through the whole app: a visitor at `/`
@@ -41,6 +41,7 @@ async function setup(opts: { appShell?: (r: Request) => Promise<Response> } = {}
       updatedAt: T0,
     },
   ]);
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

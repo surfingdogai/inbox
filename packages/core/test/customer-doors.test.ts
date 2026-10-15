@@ -9,7 +9,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, itemEvents, items, jobs, services, slotClaims, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, setFlags, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * The customer's answers to what the business proposed (ADR-018 §5, §6), through the assistant's
@@ -59,6 +59,7 @@ async function setup(): Promise<{ db: Db; caps: Capabilities; svc: string }> {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   return {
     db,
     caps: confirming(new Capabilities(db, createSecretBox(["customer-doors-test-secret-0123456789"]))),

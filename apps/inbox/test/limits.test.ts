@@ -12,7 +12,7 @@ import {
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * Rate limits on the doors anyone can open (packages/adapters/src/limits.ts). Without them one
@@ -36,6 +36,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const clock = { t: T0 };
   const owner = await createApiKey(db, { kind: "owner", name: "test" });
   const app = createApp({ db, now: () => clock.t, ownerEmails: ["owner@example.com"] });

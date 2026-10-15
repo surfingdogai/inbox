@@ -11,7 +11,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, jobs, outboundMail, products, services, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Returns and withdrawals under attack (ADR-018 §3.4, §7, §8): the same goods sent back twice for two
@@ -85,6 +85,7 @@ async function setup(doc: Record<string, unknown> = {}) {
       updatedAt: T0,
     },
   ]);
+  await openWeekdays(db);
   const chain = ulid();
   await db.orm
     .insert(products)

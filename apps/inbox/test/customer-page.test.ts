@@ -3,7 +3,7 @@ import { type Db, networkSuccessStatement, schema, setFlags, ulid } from "@surfi
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { confirmed, freshDb, futureDay, nextDay } from "./harness";
+import { confirmed, freshDb, futureDay, nextDay, openWeekdays } from "./harness";
 
 /**
  * The page a link in the business's email opens (ADR-018 §5), through the whole app: the email
@@ -28,6 +28,7 @@ async function setup(languages = ["en"], now?: { at: number | null }) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

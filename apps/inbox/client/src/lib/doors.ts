@@ -91,3 +91,11 @@ export function needsWords(needs: DoorView["needs"]): string {
   if (needs === "hours") return "Needs opening hours.";
   return "";
 }
+
+/** What a switched-on door is waiting for, after its line: "once you add a service". */
+export function waitWords(needs: DoorView["needs"]): string {
+  if (needs === "service_and_hours") return "once you add a service and your hours";
+  if (needs === "service") return "once you add a service";
+  if (needs === "hours") return "once you set your hours";
+  return "";
+}

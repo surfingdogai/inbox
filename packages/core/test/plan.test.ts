@@ -252,7 +252,8 @@ describe("a setup plan", () => {
     expect(dry.doors).toEqual({
       on: ["message"],
       expected: ["message", "booking"],
-      missing: [{ door: "booking", why: "Booking turns on once there is a service to book." }],
+      // What it needs, for a host to point the owner at: here, a service.
+      missing: [{ door: "booking", why: "Booking turns on once there is a service to book.", needs: "service" }],
     });
     expect(dry.sentences.at(-1)).toBe("Booking turns on once there is a service to book.");
     expect((await caps.applySetupPlan(system, hoursOnly)).doors).toEqual(dry.doors);
@@ -261,7 +262,9 @@ describe("a setup plan", () => {
       { services: [{ name: "Corte" }], hours: {}, doors: ["booking"] },
       { dryRun: true },
     );
-    expect(both.doors.missing).toEqual([{ door: "booking", why: "Booking turns on once there are opening hours." }]);
+    expect(both.doors.missing).toEqual([
+      { door: "booking", why: "Booking turns on once there are opening hours.", needs: "hours" },
+    ]);
   });
 
   it("keeps bookings at a booking platform: booking stays shut, quotes and messages stay here", async () => {

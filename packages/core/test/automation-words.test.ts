@@ -8,7 +8,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, itemEvents, items, jobs, services, threadEntries } from "../src/schema/tables";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { rowToItem } from "../src/write/views";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * What automation writes to a customer names only money the business offered (ADR-018 §4; DL 7/2004
@@ -73,6 +73,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const caps = confirming(new Capabilities(db));
   let hour = 8;
   const booking = async () => {

@@ -81,7 +81,7 @@ import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { findSlots, type Slot } from "./availability";
+import { askedForAPrice, findSlots, quoteNotBookable, type Slot } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -493,6 +493,33 @@ export class Capabilities {
     if (doorSwitch((await readSettings(this.db)).doors, kind) === false) throw doorShut(kind);
   }
 
+  /**
+   * An agent's search for times or booking when agents are told no booking is taken here
+   * (`offeredItemTypes`): no service booked at a time with opening hours someone set, or the door
+   * switched off. The manifest says so; an agent that never read it is refused all the same, never
+   * offered or given a time nobody opened. A booking of a service asked about for a price is refused
+   * to every customer: they ask for a price instead.
+   */
+  private async refuseUnbookable(caller: Caller | undefined, serviceId: string | undefined): Promise<void> {
+    if (!caller || !isCustomer(caller)) return;
+    if (serviceId) {
+      const [svc] = await this.db.orm
+        .select({ id: services.id, price: services.price })
+        .from(services)
+        .where(eq(services.id, serviceId));
+      if (svc && askedForAPrice(svc.price)) throw quoteNotBookable(svc.id);
+    }
+    if (caller.actor.kind !== "customer_agent") return;
+    const s = await readSettings(this.db);
+    if (doorSwitch(s.doors, "booking") === false) throw doorShut("booking");
+    const offered = await offeredItemTypes(
+      this.db,
+      s.doorsElsewhere.map((d) => d.itemType),
+      s.doors,
+    );
+    if (!offered.includes("booking")) throw notBookableHere();
+  }
+
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
     const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
@@ -584,11 +611,12 @@ export class Capabilities {
    */
   async checkAvailability(
     input: T.CheckAvailabilityInput,
-    opts: { readonly now?: number } = {},
+    opts: { readonly now?: number; readonly caller?: Caller | undefined } = {},
   ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
     // Times the inbox would offer for bookings taken at a platform are not the platform's times.
     const elsewhere = await this.doorElsewhere("booking");
     if (elsewhere) throw takenElsewhere("booking", elsewhere);
+    await this.refuseUnbookable(opts.caller, input.service_id);
     const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
     return findSlots(this.db, {
       serviceId: input.service_id,
@@ -617,6 +645,7 @@ export class Capabilities {
   async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
+    await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId);
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
@@ -1796,7 +1825,18 @@ async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEnt
   }));
 }
 
-/** The refusal for a kind of request the business takes somewhere else: where to go instead. */
+/**
+ * An agent's booking, or search for times, where agents are told no booking is taken: no service
+ * booked at a time with opening hours the owner set. A request for a price or a message still reaches it.
+ */
+function notBookableHere(): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "This business takes no bookings from agents yet: it has no service to book with opening hours set. Nothing was written. Ask for a price or send a message instead; its manifest lists what it takes.",
+    { details: { reason: "booking_not_offered", item_type: "booking" } },
+  );
+}
+
 /** An agent's request through a door the owner switched off (`settings.doors`). */
 function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
   const what = kind === "booking" ? "bookings" : kind === "quote_request" ? "requests for a price" : "messages";
@@ -1807,6 +1847,7 @@ function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
   );
 }
 
+/** The refusal for a kind of request the business takes somewhere else: where to go instead. */
 function takenElsewhere(kind: "booking" | "order", url: string): WriteError {
   const what = kind === "booking" ? "bookings" : "orders";
   return new WriteError(

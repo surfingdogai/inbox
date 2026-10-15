@@ -23,7 +23,7 @@ import {
   rules as rulesTable,
   services,
 } from "../schema/tables";
-import { type HostPolicy, SET_BY_HOST } from "../settings/policy";
+import { type HostHome, type HostPolicy, SET_BY_HOST } from "../settings/policy";
 import { readSettings } from "../settings/schema";
 import { canonicalLanguages } from "../util/locale";
 import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
@@ -31,7 +31,7 @@ import { fromZod, WriteError } from "../write/errors";
 import { heldForPrice } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
-import { DEFAULT_WEEKLY, type Weekly } from "./availability";
+import { NO_HOURS, type Weekly } from "./availability";
 import { type Closure, readClosures } from "./closures";
 import { offeredItemTypes } from "./directory";
 import type * as S from "./setup-types";
@@ -49,6 +49,11 @@ export interface Profile {
   readonly languages: readonly string[];
   /** Whether the host holds the domain (`HostPolicy.profileDomain`): nobody changes it here, the owner included. */
   readonly domain_held: boolean;
+  /**
+   * Where the business joined from, when a host set the inbox up (`HostPolicy.home`): its own domain,
+   * whether the site links to the inbox yet, and where the owner connects the two. Absent otherwise.
+   */
+  readonly home?: { readonly domain: string; readonly linked: boolean; readonly connect_url: string | null };
   /**
    * What agents can do here now: the item types the manifest lists (`offeredItemTypes`), for the
    * owner to see while the public doors are still closed (an inbox not yet connected answers no agent).
@@ -71,8 +76,8 @@ export interface RuleView {
 export interface Availability {
   readonly timezone: string;
   /**
-   * The business's weekly hours. Until any are saved (`weekly_set` false) these are the hours a
-   * booking falls back to, not hours the business set: nothing is published, and booking stays shut.
+   * The business's weekly hours: none (`{}`, `weekly_set` false) until the owner saves some. Nothing
+   * is offered, published or booked in hours nobody set.
    */
   readonly weekly: Weekly;
   readonly weekly_set: boolean;
@@ -145,6 +150,7 @@ export class SetupCapabilities {
         ? (canonicalLanguages(input.languages) ?? [...input.languages])
         : [...current.languages],
       domain_held: current.domain_held,
+      ...(current.home ? { home: current.home } : {}),
       item_types: current.item_types,
     };
     await this.db.client.query({
@@ -183,6 +189,7 @@ export class SetupCapabilities {
       currency: row?.currency ?? s.business.currency,
       languages: row?.languages?.length ? row.languages : s.business.languages,
       domain_held: this.policy()?.profileDomain !== undefined,
+      ...home(this.policy()?.home),
       item_types: await offeredItemTypes(
         this.db,
         s.doorsElsewhere.map((d) => d.itemType),
@@ -448,7 +455,7 @@ export class SetupCapabilities {
     const base = open.find((r) => !r.serviceId);
     return {
       timezone: profile.timezone,
-      weekly: (base?.weekly as Weekly | null) ?? DEFAULT_WEEKLY,
+      weekly: (base?.weekly as Weekly | null) ?? NO_HOURS,
       weekly_set: base !== undefined,
       overrides: open
         .filter((r) => r.serviceId)
@@ -917,4 +924,9 @@ const ASK_A_PERSON = "flag it for a person";
 function priceSentence(ruleName: string | undefined, action: Action): string {
   const rule = ruleName?.trim() ? `Rule '${ruleName.trim()}'` : "This rule";
   return `${rule} wanted to ${describeAction(action)}, but the request holds a price that is not in your catalogue, so it asks a person to price it first`;
+}
+
+/** The profile's view of where a hosted business joined from, when its host said. */
+function home(h: HostHome | undefined): Pick<Profile, "home"> {
+  return h ? { home: { domain: h.domain, linked: h.linked, connect_url: h.connectUrl } } : {};
 }

@@ -26,7 +26,7 @@ import {
   forwardable,
   identityIssueHandler,
 } from "../src/identity";
-import { freshDb } from "./db";
+import { freshDb, openWeekdays } from "./db";
 import { fakeNetwork } from "./fake-network";
 
 /**
@@ -95,6 +95,7 @@ async function setup(
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const fake = fakeNetwork({
     host,
     keys: async () => (await caps.receipts.jwks()).keys as PublicJwk[],

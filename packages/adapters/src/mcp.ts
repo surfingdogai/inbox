@@ -335,7 +335,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       },
       (args) =>
         run(async () => {
-          const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now() });
+          const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now(), caller });
           return {
             text: r.slots.length
               ? `${r.slots.length} free slots for ${r.service.name}; first ${r.slots[0]?.startTime}.`

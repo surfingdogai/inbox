@@ -87,6 +87,9 @@ export const setupFieldSchema = z
 /** At most this many fields with a source. */
 export const MAX_SETUP_SOURCES = 30;
 
+/** At most this many services suggested to the owner by a setup plan. */
+export const MAX_SUGGESTED_SERVICES = 30;
+
 const disabledNetwork = (): NetworkEntry => networkEntrySchema.parse({});
 const defaultNetworks = (): Record<string, NetworkEntry> => ({ [DEFAULT_NETWORK]: disabledNetwork() });
 
@@ -708,7 +711,8 @@ const sections = {
   /**
    * Where the details a setup plan filled in came from (`capabilities/plan.ts`), per field: the page,
    * when it was read, and how. Kept so the owner app can ask the owner to check what was only read
-   * from a page's words. Never published.
+   * from a page's words. Never published. And what it read but did not apply (`suggestions`): the
+   * services only a language model read, for the owner to add with one press each.
    */
   setup: z
     .object({
@@ -719,6 +723,18 @@ const sections = {
         })
         .default({})
         .describe("Where each detail a setup plan filled in was read, keyed by field (hours, services, profile.name)."),
+      suggestions: z
+        .object({
+          services: z
+            .array(z.object({ name: z.string().trim().min(1).max(120) }))
+            .max(MAX_SUGGESTED_SERVICES)
+            .default([])
+            .describe(
+              "Services a setup plan read on the business's site but could not vouch for (a language model's reading of its words): offered to the owner to add, never on offer until they do.",
+            ),
+        })
+        .prefault({})
+        .describe("What a setup plan read and left for the owner to add. Never published, never booked."),
     })
     .prefault({}),
   testMode: z.boolean().default(false),

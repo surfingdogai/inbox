@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 /** The request goes through the door on the real clock: a day to come (nobody books a time that has started). */
@@ -23,6 +23,7 @@ describe("jobs after requests", () => {
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     const owner = await createApiKey(db, { kind: "owner", name: "t" });
     const mail = logMailOut();
     const pending: Promise<unknown>[] = [];

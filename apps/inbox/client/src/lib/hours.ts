@@ -83,9 +83,23 @@ export function checkDraft(draft: Draft): string | null {
   return null;
 }
 
-/** A day's windows as words: `09:00–13:00, 14:00–18:00`, or `open 24 hours`. */
-function dayWords(windows: readonly Window[]): string {
-  return isAllDay(windows) ? "open 24 hours" : windows.map(([a, b]) => `${a}–${b}`).join(", ");
+/** A day's windows as words: `09:00–13:00, 14:00–18:00`, or `open 24 hours` (`Open 24 hours` to start a line). */
+export function dayWords(windows: readonly Window[], capital = false): string {
+  if (isAllDay(windows)) return capital ? "Open 24 hours" : "open 24 hours";
+  return windows.map(([a, b]) => `${a}–${b}`).join(", ");
+}
+
+/** The windows every day has, when all seven are open and the same; null otherwise. */
+export function everyDaySame(draft: Draft): readonly Window[] | null {
+  const first = draft.mon;
+  if (first.length === 0) return null;
+  const key = JSON.stringify(first);
+  return WEEKDAYS.every(({ key: day }) => JSON.stringify(draft[day]) === key) ? first : null;
+}
+
+/** The closing times after `opens`: a window never closes before it opens. */
+export function laterThan(closes: readonly string[], opens: string): readonly string[] {
+  return closes.filter((t) => t > opens);
 }
 
 /**

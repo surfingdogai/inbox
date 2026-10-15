@@ -1,7 +1,7 @@
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
-import { confirmed, freshDb, futureDay } from "./harness";
+import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * What an anonymous caller's fingerprint opens (security review): nothing. A caller without a key is
@@ -27,6 +27,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

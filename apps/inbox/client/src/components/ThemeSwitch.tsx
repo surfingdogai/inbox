@@ -8,10 +8,10 @@ const MODES: readonly { key: ThemeMode; label: string; Icon: LucideIcon }[] = [
 ];
 
 /** Day, night or the system's choice. `compact` shows icons only. */
-export function ThemeSwitch({ compact }: { compact?: boolean | undefined }) {
+export function ThemeSwitch({ compact, className }: { compact?: boolean | undefined; className?: string | undefined }) {
   const [mode, setMode] = useTheme();
   return (
-    <fieldset className="seg">
+    <fieldset className={className ? `seg ${className}` : "seg"}>
       <legend className="sr-only">Theme</legend>
       {MODES.map(({ key, label, Icon }) => (
         <button
@@ -27,5 +27,26 @@ export function ThemeSwitch({ compact }: { compact?: boolean | undefined }) {
         </button>
       ))}
     </fieldset>
+  );
+}
+
+/** On a phone: one button that steps through system, day and night, its icon the mode now. */
+export function ThemeButton({ className }: { className?: string | undefined }) {
+  const [mode, setMode] = useTheme();
+  const at = MODES.findIndex((m) => m.key === mode);
+  const now = MODES[at] ?? MODES[0];
+  const next = MODES[(at + 1) % MODES.length] ?? MODES[0];
+  if (!now || !next) return null;
+  const Icon = now.Icon;
+  return (
+    <button
+      type="button"
+      className={["btn btn-ghost btn-icon", className].filter(Boolean).join(" ")}
+      aria-label={`Theme: ${now.label}. Switch to ${next.label}`}
+      title={`Theme: ${now.label}`}
+      onClick={() => setMode(next.key)}
+    >
+      <Icon className="icon" aria-hidden="true" />
+    </button>
   );
 }

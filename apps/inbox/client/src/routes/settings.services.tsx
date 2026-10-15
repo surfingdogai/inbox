@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
-import { Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useState } from "react";
 import { ProductEditor, ServiceEditor } from "../components/Catalogue";
 import { SourceTag } from "../components/Choosers";
@@ -31,6 +31,7 @@ type Editing = "new" | string | null;
 /** What the business offers: services booked or asked about (length, price), and products. Prices are in the business's currency. */
 function ServicesPage() {
   const profile = useProfile();
+  const settings = useSettings();
   if (profile.isError) {
     return (
       <div className="card glass">
@@ -51,13 +52,17 @@ function ServicesPage() {
     );
   }
   const currency = profile.data.currency;
+  // Buying is no part of an inbox a host runs for the business: no products there.
+  const hosted = (settings.data?.locked ?? []).includes("email") || profile.data.home !== undefined;
   return (
     <>
       <ServicesCard currency={currency} />
-      <ProductsCard currency={currency} />
+      {settings.data && !hosted && <ProductsCard currency={currency} />}
     </>
   );
 }
+
+const nameKey = (name: string) => name.trim().toLowerCase();
 
 function ServicesCard({ currency }: { currency: string }) {
   const services = useServices();
@@ -68,22 +73,40 @@ function ServicesCard({ currency }: { currency: string }) {
   const sources = settings.data?.doc.setup.sources;
   const read = sourceNote(sources, "services");
   const [editing, setEditing] = useState<Editing>(null);
+  const [prefill, setPrefill] = useState<{ name: string } | undefined>(undefined);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const rows = services.data?.items ?? [];
   const problem = write.error ? problemOf(write.error) : null;
+  const priceCounters = settings.data?.doc.negotiation.priceCounters ?? false;
+  // What the site seemed to list, for the owner to add with one press: never on offer until they do.
+  const taken = new Set(rows.map((r) => nameKey(r.name)));
+  const suggested = (settings.data?.doc.setup.suggestions.services ?? []).filter((s) => !taken.has(nameKey(s.name)));
+  const foundOn = sourceNote(sources, "suggested_services")?.host;
   const done = (text: string) => {
     setEditing(null);
+    setPrefill(undefined);
     setConfirm(null);
     setNotice(text);
     // Saved by the owner: they have checked what was read.
     const cleared = clearSources(sources, "services");
     if (cleared) saveSettings.mutate({ doc: cleared });
   };
-  const open = (next: Editing) => {
+  const open = (next: Editing, from?: { name: string }) => {
     write.reset();
     setNotice(null);
+    setPrefill(from);
     setEditing(next);
+  };
+  // Moving a service up or down rewrites the order of the list as it now reads.
+  const move = async (index: number, by: -1 | 1) => {
+    const order = [...rows];
+    const [it] = order.splice(index, 1);
+    if (!it) return;
+    order.splice(index + by, 0, it);
+    for (const [i, r] of order.entries()) {
+      if (r.sort !== i) await write.mutateAsync({ id: r.id, body: { sort: i } });
+    }
   };
 
   return (
@@ -91,10 +114,12 @@ function ServicesCard({ currency }: { currency: string }) {
       <SectionHead title="Services">
         <SourceTag source={read} />
         <span className="sp" />
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => open("new")}>
-          <Plus className="icon" aria-hidden="true" />
-          New service
-        </button>
+        {editing === null && rows.length > 0 && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => open("new")}>
+            <Plus className="icon" aria-hidden="true" />
+            New service
+          </button>
+        )}
       </SectionHead>
       <p className="lede small">What agents can book, or ask you a price for. Prices are optional.</p>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
@@ -107,31 +132,50 @@ function ServicesCard({ currency }: { currency: string }) {
         />
       )}
       {services.isSuccess && rows.length === 0 && editing !== "new" && (
-        <div className="state">
+        <div className="state state-left">
           <h3>No services yet</h3>
-          <p>Add one, like a 30-minute haircut or a quote for a kitchen.</p>
+          {suggested.length > 0 ? (
+            <Suggestions host={foundOn} names={suggested.map((s) => s.name)} onPick={(name) => open("new", { name })} />
+          ) : (
+            <p>Like a 30-minute haircut, or a quote for a kitchen.</p>
+          )}
+          <div>
+            <button type="button" className="btn btn-primary" onClick={() => open("new")}>
+              <Plus className="icon" aria-hidden="true" />
+              Add a service
+            </button>
+          </div>
         </div>
       )}
       {editing === "new" && (
         <ServiceEditor
+          key={prefill?.name ?? ""}
           initial={undefined}
+          prefill={prefill}
           currency={currency}
+          priceCounters={priceCounters}
           pending={write.isPending}
           error={problem}
           onSubmit={(body, floor) => write.mutate({ body, floor }, { onSuccess: () => done("Service added.") })}
-          onCancel={() => setEditing(null)}
+          onCancel={() => {
+            setEditing(null);
+            setPrefill(undefined);
+          }}
         />
       )}
       <div className="stack">
-        {rows.map((s) => (
+        {rows.map((s, i) => (
           <ServiceLine
             key={s.id}
             service={s}
             editing={editing === s.id}
             confirming={confirm === s.id}
             currency={currency}
+            priceCounters={priceCounters}
             pending={write.isPending}
             error={editing === s.id || confirm === s.id ? problem : null}
+            onUp={i > 0 ? () => void move(i, -1) : undefined}
+            onDown={i < rows.length - 1 ? () => void move(i, 1) : undefined}
             onEdit={() => open(s.id)}
             onCancel={() => setEditing(null)}
             floor={floors.data?.get(`service:${s.id}`) ?? null}
@@ -158,7 +202,35 @@ function ServicesCard({ currency }: { currency: string }) {
           />
         ))}
       </div>
+      {rows.length > 0 && suggested.length > 0 && editing === null && (
+        <Suggestions host={foundOn} names={suggested.map((x) => x.name)} onPick={(name) => open("new", { name })} />
+      )}
     </section>
+  );
+}
+
+/** "Found on salaorosa.pt: Corte · Cor": each one press from the editor, filled in. */
+function Suggestions({
+  host,
+  names,
+  onPick,
+}: {
+  host: string | undefined;
+  names: readonly string[];
+  onPick: (name: string) => void;
+}) {
+  return (
+    <div className="suggest">
+      <span className="hint">Found on {host ?? "your site"}:</span>
+      <div className="chips">
+        {names.map((name) => (
+          <button key={name} type="button" className="chip chip-action" onClick={() => onPick(name)}>
+            <Plus className="icon-xs" aria-hidden="true" />
+            {name}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -168,8 +240,11 @@ function ServiceLine({
   editing,
   confirming,
   currency,
+  priceCounters,
   pending,
   error,
+  onUp,
+  onDown,
   onEdit,
   onCancel,
   onSave,
@@ -182,8 +257,11 @@ function ServiceLine({
   editing: boolean;
   confirming: boolean;
   currency: string;
+  priceCounters: boolean;
   pending: boolean;
   error: ReturnType<typeof problemOf> | null;
+  onUp: (() => void) | undefined;
+  onDown: (() => void) | undefined;
   onEdit: () => void;
   onCancel: () => void;
   floor: number | null;
@@ -205,6 +283,28 @@ function ServiceLine({
         {s.description && <div className="s">{s.description}</div>}
       </div>
       <div className="rowx">
+        {!archived && (onUp || onDown) && (
+          <span className="order-btns">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label={`Move ${s.name} up`}
+              disabled={!onUp || pending}
+              onClick={onUp}
+            >
+              <ArrowUp className="icon-sm" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label={`Move ${s.name} down`}
+              disabled={!onDown || pending}
+              onClick={onDown}
+            >
+              <ArrowDown className="icon-sm" aria-hidden="true" />
+            </button>
+          </span>
+        )}
         {!archived && (
           <button type="button" className="btn btn-secondary btn-sm" onClick={onEdit} aria-expanded={editing}>
             Edit
@@ -226,6 +326,7 @@ function ServiceLine({
             initial={s}
             floor={floor}
             currency={currency}
+            priceCounters={priceCounters}
             pending={pending}
             error={error}
             onSubmit={onSave}

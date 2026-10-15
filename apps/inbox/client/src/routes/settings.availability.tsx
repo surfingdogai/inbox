@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { SourceTag, TimeZoneSelect } from "../components/Choosers";
+import { SourceTag, TimeZonePicker } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
+import { FormActions } from "../components/Form";
 import { ClosuresEditor, HoursEditor } from "../components/Hours";
 import { problemOf } from "../lib/api";
 import { describeWeekly } from "../lib/hours";
@@ -16,6 +17,7 @@ import {
   useSettings,
 } from "../lib/queries";
 import { clearSources, sourceNote } from "../lib/sources";
+import { cityOf } from "../lib/zones";
 
 export const Route = createFileRoute("/settings/availability")({
   component: AvailabilityPage,
@@ -27,7 +29,6 @@ function AvailabilityPage() {
   const services = useServices();
   const settings = useSettings();
   const saveWeekly = useSaveWeekly();
-  const saveProfile = useSaveProfile();
   const saveSettings = useSaveSettings();
   const clearOverride = useClearOverride();
   const saveClosures = useSaveClosures();
@@ -54,11 +55,12 @@ function AvailabilityPage() {
     );
   }
   const a = availability.data;
-  const active = (services.data?.items ?? []).filter((s) => s.active === 1);
+  const active = (services.data?.items ?? []).filter((s) => s.active === 1 && s.price?.model !== "quote");
   const override = a.overrides.find((o) => o.service_id === scope);
   const service = active.find((s) => s.id === scope);
-  const weekly = scope ? (override?.weekly ?? a.weekly) : a.weekly;
-  const unset = !scope && !a.weekly_set;
+  // A service follows the business's hours until it has its own; with none saved, there are none.
+  const weekly = scope ? (override?.weekly ?? (a.weekly_set ? a.weekly : {})) : a.weekly;
+  const unset = scope ? !override && !a.weekly_set : !a.weekly_set;
   const editorKey = `${scope}:${unset}:${JSON.stringify(weekly)}`;
   const sources = settings.data?.doc.setup.sources;
   const hoursNote = scope ? null : sourceNote(sources, "hours");
@@ -68,26 +70,12 @@ function AvailabilityPage() {
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
       <section className="card glass stack">
         <div className="settings-grid hours-head">
-          <div>
-            <label className="label" htmlFor="hours-tz">
-              Time zone
-            </label>
-            <TimeZoneSelect
-              id="hours-tz"
-              value={a.timezone}
-              disabled={saveProfile.isPending}
-              onChange={(timezone) =>
-                saveProfile.mutate({ timezone }, { onSuccess: () => setNotice("Time zone saved.") })
-              }
-            />
-            {saveProfile.error ? (
-              <div className="hint error" role="alert">
-                {problemOf(saveProfile.error).detail}
-              </div>
-            ) : (
-              <div className="hint">Every time below is in it.</div>
-            )}
-          </div>
+          <ZoneChoice
+            key={a.timezone}
+            saved={a.timezone}
+            hours={a.weekly_set ? describeWeekly(a.weekly) : null}
+            onSaved={(zone) => setNotice(`Time zone saved: ${cityOf(zone)}.`)}
+          />
           {active.length > 0 && (
             <div>
               <label className="label" htmlFor="hours-scope">
@@ -134,8 +122,12 @@ function AvailabilityPage() {
             service
               ? override
                 ? `${service.name} has its own hours. Days left closed are closed for it.`
-                : `Follows the business hours (${describeWeekly(a.weekly)}). Save to give it its own.`
-              : "Days left closed take no bookings."
+                : a.weekly_set
+                  ? `Follows the business hours (${describeWeekly(a.weekly)}). Save to give it its own.`
+                  : "The business has no hours yet. Save to give it its own."
+              : unset
+                ? "No hours yet. Agents can book once you save some."
+                : "Days left closed take no bookings."
           }
           pending={saveWeekly.isPending}
           error={saveWeekly.error ? problemOf(saveWeekly.error) : null}
@@ -164,5 +156,58 @@ function AvailabilityPage() {
         />
       </section>
     </>
+  );
+}
+
+/**
+ * The time zone, picked here and saved only when the owner says so: the hours stay as they are, read
+ * in the new zone, and the line says that before anything moves. Typing and arrowing through zones
+ * never saves anything.
+ */
+function ZoneChoice({
+  saved,
+  hours,
+  onSaved,
+}: {
+  saved: string;
+  hours: string | null;
+  onSaved: (zone: string) => void;
+}) {
+  const [zone, setZone] = useState(saved);
+  const save = useSaveProfile();
+  const changed = zone !== saved;
+  return (
+    <div>
+      <label className="label" htmlFor="hours-tz">
+        Time zone
+      </label>
+      <TimeZonePicker id="hours-tz" value={zone} onChange={setZone} describedBy="hours-tz-hint" />
+      {save.error ? (
+        <div className="hint error" role="alert">
+          {problemOf(save.error).detail}
+        </div>
+      ) : (
+        <div className="hint" id="hours-tz-hint">
+          {changed
+            ? `${hours ? `Hours stay ${hours}` : "Every time stays as it is"}, now in ${cityOf(zone)} time.`
+            : "Hours and bookings use this time zone."}
+        </div>
+      )}
+      {changed && (
+        <FormActions>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setZone(saved)}>
+            Keep {cityOf(saved)}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => save.mutate({ timezone: zone }, { onSuccess: () => onSaved(zone) })}
+          >
+            {save.isPending && <span className="spinner" aria-hidden="true" />}
+            Save time zone
+          </button>
+        </FormActions>
+      )}
+    </div>
   );
 }

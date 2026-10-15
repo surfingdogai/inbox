@@ -60,3 +60,26 @@ export function confirming<C extends Capabilities>(caps: C): C {
   caps.createOrder = again(caps.createOrder.bind(caps));
   return caps;
 }
+
+/**
+ * Opening hours, Monday to Friday 09:00 to 18:00, for the whole business: hours nobody set are no
+ * hours (nothing is offered or booked in them), so a test that books opens the business first.
+ * Idempotent: a business that has hours keeps them.
+ */
+export async function openWeekdays(db: { client: SqliteClient }): Promise<void> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM availability_rules WHERE kind = 'open' AND service_id IS NULL LIMIT 1",
+    method: "all",
+  });
+  if (rows.length) return;
+  const day = [["09:00", "18:00"]];
+  await db.client.query({
+    sql: "INSERT INTO availability_rules (id, service_id, kind, weekly, created_at) VALUES (?, NULL, 'open', ?, ?)",
+    params: [
+      `hours${Math.random().toString(36).slice(2, 12)}`,
+      JSON.stringify({ mon: day, tue: day, wed: day, thu: day, fri: day }),
+      Date.now(),
+    ],
+    method: "run",
+  });
+}

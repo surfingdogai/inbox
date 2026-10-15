@@ -23,7 +23,10 @@ import type { PolicyPayload } from "./types";
 export type HostedPolicy = HostPolicy & { readonly agents: "open" | "closed" };
 
 export function hostedPolicy(p: PolicyPayload): HostedPolicy {
-  return { ...hostPolicyFor({ address: p.address, site: p.site }), agents: p.agents };
+  return {
+    ...hostPolicyFor({ address: p.address, site: p.site, domain: p.domain, connectUrl: p.connect_url }),
+    agents: p.agents,
+  };
 }
 
 export interface BuildDeps {

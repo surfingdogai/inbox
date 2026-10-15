@@ -3,7 +3,7 @@ import { schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createApp, createInbox } from "../src/app";
-import { freshDb, futureDay, nextDay, confirmed as sentConfirmed } from "./harness";
+import { freshDb, futureDay, nextDay, openWeekdays, confirmed as sentConfirmed } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 
@@ -23,6 +23,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",
@@ -199,6 +200,7 @@ describe("REST door", () => {
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     await db.orm.insert(schema.products).values({
       id: product,
       sku: "SD-1",

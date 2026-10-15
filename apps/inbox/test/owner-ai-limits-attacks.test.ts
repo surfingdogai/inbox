@@ -4,7 +4,7 @@ import { type Db, schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox } from "../src/app";
-import { confirmed, freshDb } from "./harness";
+import { confirmed, freshDb, openWeekdays } from "./harness";
 
 /**
  * A customer tells the owner's AI to give them a discount, to name the lowest price, to approve a
@@ -45,6 +45,7 @@ async function setup() {
     createdAt: now,
     updatedAt: now,
   });
+  await openWeekdays(db);
   const ownerKey = (await createApiKey(db, { kind: "owner", name: "cli" })).key;
   const drain = async () => {
     await Promise.allSettled(pending.splice(0));

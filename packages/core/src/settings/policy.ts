@@ -30,6 +30,19 @@ export interface HostPolicy {
    * nobody changes it here. `null` names none. Absent, the profile's domain is the owner's.
    */
   readonly profileDomain?: string | null | undefined;
+  /**
+   * Where the business joined from, when a host set the inbox up for it: its own domain, whether
+   * that site links to the inbox yet, and the host's page where the owner connects the two. Shown to
+   * the owner in Settings; never published.
+   */
+  readonly home?: HostHome | undefined;
+}
+
+/** The business's own site as its host knows it (`HostPolicy.home`). */
+export interface HostHome {
+  readonly domain: string;
+  readonly linked: boolean;
+  readonly connectUrl: string | null;
 }
 
 /** A settings write's document: sections and keys to set, `null` to remove one. */
@@ -51,9 +64,16 @@ export const SET_BY_HOST = "set by your host";
  * - Once it does: the website is the site, and the profile's domain is its host; the networks and
  *   the directories stay as they were, and are the owner's to switch on.
  */
-export function hostPolicyFor(o: { readonly address: string; readonly site: string | null }): HostPolicy {
+export function hostPolicyFor(o: {
+  readonly address: string;
+  readonly site: string | null;
+  /** The business's own domain, and the host's page where the owner connects the inbox to it. */
+  readonly domain?: string | null | undefined;
+  readonly connectUrl?: string | null | undefined;
+}): HostPolicy {
   const linked = o.site !== null;
   return {
+    ...(o.domain ? { home: { domain: o.domain, linked, connectUrl: o.connectUrl ?? null } } : {}),
     forced: (current) => ({
       notifications: { appUrl: o.address },
       integrations: { webhooks: { allowPrivateTargets: false } },

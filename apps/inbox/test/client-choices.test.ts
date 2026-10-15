@@ -12,14 +12,19 @@ import {
   NOT_HUNDREDTHS,
   offeredCurrency,
 } from "../client/src/lib/currencies";
-import { doorSwitchDoc, doorViews, needsWords } from "../client/src/lib/doors";
+import { doorSwitchDoc, doorViews, needsWords, waitWords } from "../client/src/lib/doors";
+import { bestUnit, DURATION_PRESETS, durationWords, isPreset } from "../client/src/lib/durations";
+import { countryOfZone, currencyOfCountry, emailLangOfCountry, zonesOfCountry } from "../client/src/lib/geo";
 import {
   ALL_DAY,
   checkDraft,
   copyToAll,
+  dayWords,
   describeWeekly,
+  everyDaySame,
   HOURS_PRESETS,
   isAllDay,
+  laterThan,
   presetOf,
   timeLabel,
   timeSteps,
@@ -27,9 +32,10 @@ import {
   withValue,
 } from "../client/src/lib/hours";
 import { ISO_639_1, languagesToSave, matchLanguages } from "../client/src/lib/languages";
+import { offerBodies, wizardDoorsDoc, wizardPreset } from "../client/src/lib/setup";
 import { clearSources, sourceNote } from "../client/src/lib/sources";
 import type { ServiceRow, Settings } from "../client/src/lib/types";
-import { placeOf, regionOf, zoneGroups } from "../client/src/lib/zones";
+import { matchZones, placeOf, zoneChoices, zoneName } from "../client/src/lib/zones";
 
 // What the owner picks in Settings instead of typing it: hours from the clock (open all the time
 // included), a time zone by place, a currency by name, languages by name, a country by name, a
@@ -74,6 +80,15 @@ describe("opening hours", () => {
     expect(Object.values(copyToAll(draft, "sun")).every((w) => w.length === 0)).toBe(true);
   });
 
+  it("read as one line when every day is the same, and close only after they open", () => {
+    const always = HOURS_PRESETS.find((p) => p.key === "always")?.draft;
+    expect(always && everyDaySame(always)).toEqual([ALL_DAY]);
+    expect(always && dayWords(everyDaySame(always) ?? [], true)).toBe("Open 24 hours");
+    expect(everyDaySame(toDraft({ mon: [["09:00", "18:00"]] }))).toBeNull();
+    expect(laterThan(timeSteps(15).closes, "09:00")[0]).toBe("09:15");
+    expect(laterThan(timeSteps(15).closes, "23:45")).toEqual(["24:00"]);
+  });
+
   it("are picked from the clock every quarter of an hour, a time set before kept in its place", () => {
     const { opens, closes } = timeSteps(15);
     expect(opens).toHaveLength(96);
@@ -93,20 +108,75 @@ describe("opening hours", () => {
 });
 
 describe("time zones", () => {
-  it("are places, grouped by region, each with the time there, the stored one always among them", () => {
+  it("are places by country and city, with the time there, the stored one always among them", () => {
     expect(placeOf("Europe/Lisbon")).toBe("Lisbon");
     expect(placeOf("America/Argentina/Buenos_Aires")).toBe("Buenos Aires, Argentina");
-    expect(regionOf("America/New_York")).toBe("Americas");
-    expect(regionOf("UTC")).toBe("Other");
+    expect(zoneName("Europe/Lisbon")).toBe("Portugal — Lisbon");
+    expect(zoneName("America/New_York")).toBe("United States — New York");
+    expect(zoneName("UTC")).toBe("UTC");
     const now = Date.parse("2026-10-15T13:05:00Z");
-    const groups = zoneGroups(now, ["Asia/Calcutta"], "en-GB");
-    expect(groups.at(-1)?.region).toBe("Other");
-    const all = groups.flatMap((g) => g.zones);
-    expect(all.find((z) => z.zone === "Europe/Lisbon")?.label).toBe("Lisbon · 14:05");
+    const { all } = zoneChoices(now, { keep: "Asia/Calcutta", locale: "en-GB" });
+    expect(all.find((z) => z.zone === "Europe/Lisbon")).toMatchObject({ name: "Portugal — Lisbon", clock: "14:05" });
     expect(all.some((z) => z.zone === "Asia/Calcutta")).toBe(true);
     expect(all.some((z) => z.zone === "UTC")).toBe(true);
-    const europe = groups.find((g) => g.region === "Europe")?.zones.map((z) => placeOf(z.zone)) ?? [];
-    expect(europe).toEqual([...europe].sort((a, b) => a.localeCompare(b)));
+    // Nobody runs a business at a research station or on a fixed offset.
+    expect(all.some((z) => /^(Antarctica|Arctic|Etc)\//.test(z.zone))).toBe(false);
+    const names = all.map((z) => z.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, "en-GB")));
+  });
+
+  it("suggest where the browser is, then the business's country's own, and are found by city or country", () => {
+    const now = Date.parse("2026-10-15T13:05:00Z");
+    const { suggested, all } = zoneChoices(now, { keep: "Europe/Lisbon", browser: "America/New_York" });
+    expect(suggested.map((z) => z.zone)).toEqual([
+      "America/New_York",
+      "Europe/Lisbon",
+      "Atlantic/Azores",
+      "Atlantic/Madeira",
+    ]);
+    expect(matchZones("lisb", all)[0]?.zone).toBe("Europe/Lisbon");
+    expect(matchZones("portugal", all).map((z) => z.zone)).toEqual(
+      expect.arrayContaining(["Europe/Lisbon", "Atlantic/Madeira", "Atlantic/Azores"]),
+    );
+    expect(matchZones("new york", all)[0]?.zone).toBe("America/New_York");
+    expect(matchZones("sao paulo", all)[0]?.zone).toBe("America/Sao_Paulo");
+    expect(matchZones("", all)).toEqual([]);
+  });
+
+  it("know their country, its money and the language its emails start in", () => {
+    expect(countryOfZone("Europe/Lisbon")).toBe("PT");
+    expect(countryOfZone("Asia/Calcutta")).toBe("IN");
+    expect(countryOfZone("UTC")).toBeNull();
+    expect(zonesOfCountry("PT")).toEqual(["Atlantic/Azores", "Atlantic/Madeira", "Europe/Lisbon"]);
+    expect(currencyOfCountry("BG")).toBe("EUR");
+    expect(currencyOfCountry("PT")).toBe("EUR");
+    expect(emailLangOfCountry("BR")).toBe("pt");
+    expect(emailLangOfCountry("ES")).toBe("en");
+    expect(emailLangOfCountry(null)).toBeNull();
+  });
+});
+
+describe("lengths of time", () => {
+  it("are said in words, in the unit that reads best", () => {
+    expect(durationWords(0)).toBe("None");
+    expect(durationWords(30)).toBe("30 minutes");
+    expect(durationWords(90)).toBe("1 hour 30 minutes");
+    expect(durationWords(1440)).toBe("1 day");
+    expect(durationWords(2880)).toBe("2 days");
+    expect(durationWords(10080)).toBe("1 week");
+    expect(durationWords(1500)).toBe("1 day 1 hour");
+    expect(bestUnit(1440, ["min", "h", "days"])).toBe("days");
+    expect(bestUnit(90, ["min", "h", "days"])).toBe("min");
+    expect(bestUnit(120, ["h", "days"])).toBe("h");
+  });
+
+  it("are picked from presets in each setting's own unit, an empty optional one included", () => {
+    expect(DURATION_PRESETS.cancellation.map((p) => p.label)).toEqual(["None", "2 h", "12 h", "24 h", "48 h"]);
+    expect(isPreset("1440", DURATION_PRESETS.cancellation)).toBe(true);
+    expect(isPreset("1500", DURATION_PRESETS.cancellation)).toBe(false);
+    expect(isPreset("", DURATION_PRESETS.cutoff)).toBe(true);
+    expect(isPreset("", DURATION_PRESETS.cancellation)).toBe(false);
+    expect(isPreset("72", DURATION_PRESETS.holdHours)).toBe(true);
   });
 });
 
@@ -139,7 +209,14 @@ describe("currencies", () => {
     expect(currencyNote("GBP", "EUR", [])).toBeNull();
   });
 
-  it("are guessed from the browser's region", () => {
+  it("are guessed from the time zone's country first, then the browser's region", () => {
+    // The browser's English does not beat the zone the business is in.
+    expect(guessCurrency(["en-GB"], "Europe/Lisbon")).toBe("EUR");
+    expect(guessCurrency(["pt-PT"], "America/New_York")).toBe("USD");
+    expect(guessCurrency(["en-GB"], "Europe/Sofia")).toBe("EUR");
+    // A zone whose money is not counted in hundredths falls back to the browser's region.
+    expect(guessCurrency(["en-GB"], "Asia/Tokyo")).toBe("GBP");
+    expect(guessCurrency(["en-GB"], "UTC")).toBe("GBP");
     expect(guessCurrency(["pt-PT"])).toBe("EUR");
     expect(guessCurrency(["en-GB"])).toBe("GBP");
     expect(guessCurrency(["en-US"])).toBe("USD");
@@ -198,6 +275,10 @@ describe("what agents can do", () => {
     expect(quote).toMatchObject({ label: "Agents can ask for a price", on: false, open: false });
     expect(message).toMatchObject({ label: "Agents can send a message", on: true, open: true });
     expect(needsWords(booking?.needs ?? null)).toBe("Needs a service and opening hours.");
+    expect(waitWords(booking?.needs ?? null)).toBe("once you add a service and your hours");
+    expect(waitWords("service")).toBe("once you add a service");
+    expect(waitWords("hours")).toBe("once you set your hours");
+    expect(waitWords(null)).toBe("");
     expect(doorViews({ ...facts, hasService: true })[0]?.needs).toBe("hours");
     expect(doorViews({ ...facts, hasHours: true })[0]?.needs).toBe("service");
     expect(doorViews({ ...facts, itemTypes: ["message", "quote_request", "booking"] })[0]).toMatchObject({
@@ -314,5 +395,23 @@ describe("a service", () => {
     expect(serviceWrite({ ...serviceDraft(undefined, null), name: "x", price: "abc" }, opts)).toMatchObject({
       problem: expect.stringContaining("on request"),
     });
+  });
+});
+
+describe("the setup wizard's doors", () => {
+  it("are the three switches, more than one at once, and pick the rules to start from", () => {
+    const all = { booking: true, quoteRequest: true, message: true };
+    expect(wizardDoorsDoc(all)).toEqual({ doors: { booking: null, quoteRequest: true, message: null } });
+    expect(wizardDoorsDoc({ booking: false, quoteRequest: true, message: false })).toEqual({
+      doors: { booking: false, quoteRequest: true, message: false },
+    });
+    expect(wizardPreset(all)).toBe("appointments");
+    expect(wizardPreset({ booking: false, quoteRequest: true, message: true })).toBe("trades");
+    expect(wizardPreset({ booking: false, quoteRequest: false, message: true })).toBeNull();
+  });
+
+  it("make what is offered asked about for a price when agents cannot book", () => {
+    const out = offerBodies([{ name: "Kitchen", minutes: "60", price: "99" }], "services", "EUR", true);
+    expect(out).toEqual({ kind: "services", bodies: [{ name: "Kitchen", active: true, price: { model: "quote" } }] });
   });
 });

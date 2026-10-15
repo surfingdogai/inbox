@@ -3,7 +3,7 @@ import { createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
-import { confirmedTool, freshDb, futureDay } from "./harness";
+import { confirmedTool, freshDb, futureDay, openWeekdays } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 
@@ -35,6 +35,7 @@ describe("MCP doors", () => {
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     const app = createApp({ db });
     const client = await connect(app, "/mcp");
     const tools = await client.listTools();
@@ -104,6 +105,7 @@ describe("MCP doors", () => {
       createdAt: T0,
       updatedAt: T0,
     });
+    await openWeekdays(db);
     await db.orm.insert(schema.business).values({
       id: "self",
       name: "Oficina Maré",

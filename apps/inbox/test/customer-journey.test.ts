@@ -5,7 +5,7 @@ import { logMailOut, type MailOut, type OutboundMail } from "@surfingdog/platfor
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 import { createInbox } from "../src/app";
-import { confirmed, confirmedTool, freshDb, futureDay } from "./harness";
+import { confirmed, confirmedTool, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * One customer, end to end, through the whole app as it runs: an assistant books, the business
@@ -35,6 +35,7 @@ async function setup(languages: string[], opts: { network?: "down" | "issuing" }
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Oficina Maré",

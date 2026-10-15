@@ -2,15 +2,15 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CurrencySelect, MoneyInput, TimeZoneSelect } from "../components/Choosers";
+import { CurrencySelect, LengthPicker, MoneyInput, TimeZonePicker } from "../components/Choosers";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
-import { lengthWords } from "../lib/catalogue";
 import { guessCurrency } from "../lib/currencies";
-import { languagesToSave } from "../lib/languages";
+import { countryOfZone, emailLangOfCountry } from "../lib/geo";
+import { languageName, languagesToSave } from "../lib/languages";
 import {
   useApplyPreset,
   useProducts,
@@ -21,9 +21,10 @@ import {
   useSaveWeekly,
   useServices,
   useServiceWrite,
+  useSettings,
 } from "../lib/queries";
-import { offerBodies, ownerEmailDoc } from "../lib/setup";
-import type { PresetKey, Weekly } from "../lib/types";
+import { offerBodies, ownerEmailDoc, type WizardDoors, wizardDoorsDoc, wizardPreset } from "../lib/setup";
+import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
   beforeLoad: async ({ location }) => {
@@ -54,35 +55,18 @@ function rememberSkip(): void {
   }
 }
 
-type Trade = { key: PresetKey; title: string; blurb: string; sells: "services" | "products" };
-
 /**
- * Three ways of working, and the choice decides the rest of the wizard: what step three asks for,
- * and which rules answer for you. The words are the owner's, not the schema's — nobody thinks of
- * themselves as running a "quote_request vertical".
+ * What agents can do, the same three switches as Settings: more than one, as most businesses take
+ * bookings and requests for a price and messages. The choice decides the rest of the wizard: whether
+ * step three asks for a length, whether it asks for hours, and which rules answer for you.
  */
-const TRADES: readonly Trade[] = [
-  {
-    key: "appointments",
-    title: "People book time with me",
-    blurb: "A consultation, a class, a table, a treatment. You have a calendar and slots in it.",
-    sells: "services",
-  },
-  {
-    key: "trades",
-    title: "People ask me for a price",
-    blurb: "A job to quote, a visit to arrange. Every enquiry is different and you answer each one.",
-    sells: "services",
-  },
-  {
-    key: "shop",
-    title: "People buy things from me",
-    blurb: "Stock with prices. Orders come in and you fulfil them.",
-    sells: "products",
-  },
+const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string; readonly line: string }[] = [
+  { key: "booking", label: "Agents can book time", line: "A consultation, a class, a table, a treatment." },
+  { key: "quoteRequest", label: "Agents can ask for a price", line: "A job to quote, a visit to arrange." },
+  { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
 ];
 
-const STEPS = ["You", "What you do", "What you offer", "When you are open", "Answering"] as const;
+const STEPS = ["You", "What agents can do", "What you offer", "When you are open", "Answering"] as const;
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -101,16 +85,22 @@ function guessTimezone(): string {
   }
 }
 
-/** The lengths an offer is picked from. */
-const LENGTHS = [15, 30, 45, 60, 90, 120];
-/** The customers' email language the browser suggests: Portuguese for a Portuguese browser, else English. */
-function guessLang(): "en" | "pt" {
+/**
+ * The customers' email language to start from: the one of the country the time zone is in (Lisbon,
+ * São Paulo: Portuguese), else the browser's, else English.
+ */
+function guessLang(zone: string): "en" | "pt" {
+  const byPlace = emailLangOfCountry(countryOfZone(zone));
+  if (byPlace) return byPlace;
   try {
     return navigator.language.toLowerCase().startsWith("pt") ? "pt" : "en";
   } catch {
     return "en";
   }
 }
+
+const browserLanguages = (): string[] =>
+  typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language];
 
 interface Offer {
   readonly id: number;
@@ -125,6 +115,11 @@ function SetupWizard() {
   const services = useServices();
   const products = useProducts();
 
+  const settings = useSettings();
+  // Where requests are announced is the host's to hold on an inbox it runs: not asked here then.
+  const ownerEmailHeld = (settings.data?.locked ?? []).some(
+    (l) => l === "notifications" || l === "notifications.ownerEmail",
+  );
   const saveProfile = useSaveProfile();
   const saveSettings = useSaveSettings();
   const serviceWrite = useServiceWrite();
@@ -136,10 +131,15 @@ function SetupWizard() {
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
-  const [currency, setCurrency] = useState(() =>
-    guessCurrency(typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language]),
-  );
-  const [emailLang, setEmailLang] = useState<"en" | "pt">(guessLang);
+  const [currency, setCurrency] = useState(() => guessCurrency(browserLanguages(), tz));
+  const [emailLang, setEmailLang] = useState<"en" | "pt">(() => guessLang(tz));
+  // Until the owner picks them, the currency and the email language follow the time zone's country.
+  const [picked, setPicked] = useState({ currency: false, lang: false });
+  const pickZone = (zone: string) => {
+    setTimezone(zone);
+    if (!picked.currency) setCurrency(guessCurrency(browserLanguages(), zone));
+    if (!picked.lang) setEmailLang(guessLang(zone));
+  };
   // Where new requests are announced: the address they signed in with, unless they say otherwise.
   const [ownerEmail, setOwnerEmail] = useState("");
   const [local, setLocal] = useState<string | null>(null);
@@ -157,7 +157,7 @@ function SetupWizard() {
     const known = profile.data?.name?.trim();
     if (known) setName((typed) => typed || known);
   }, [profile.data?.name]);
-  const [trade, setTrade] = useState<Trade | null>(null);
+  const [doors, setDoors] = useState<WizardDoors>({ booking: true, quoteRequest: true, message: true });
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
   const [nextId, setNextId] = useState(2);
   const [hours, setHours] = useState<Weekly>(DEFAULT_HOURS);
@@ -178,7 +178,9 @@ function SetupWizard() {
     applyPreset.isPending;
 
   const existing = (services.data?.items.length ?? 0) + (products.data?.items.length ?? 0);
-  const sells = trade?.sells ?? "services";
+  // Booked at a time, or only asked about for a price.
+  const asked = !doors.booking;
+  const preset = wizardPreset(doors);
 
   const leave = () => {
     rememberSkip();
@@ -199,10 +201,13 @@ function SetupWizard() {
           languages: languagesToSave(known, emailLang, true),
         });
         // A merge: only this one key is sent, everything else in the settings stays as it is.
-        await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
+        if (!ownerEmailHeld) await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
+      }
+      if (step === 1) {
+        await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
       if (step === 2) {
-        const planned = offerBodies(offers, sells, currency);
+        const planned = offerBodies(offers, "services", currency, asked);
         if ("problem" in planned) {
           setLocal(planned.problem);
           return false;
@@ -213,11 +218,11 @@ function SetupWizard() {
           for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
       }
-      if (step === 3 && sells === "services") {
+      if (step === 3 && doors.booking) {
         await saveWeekly.mutateAsync({ weekly: hours });
       }
       if (step === 4) {
-        if (rules && trade) await applyPreset.mutateAsync({ key: trade.key, replace: false });
+        if (rules && preset) await applyPreset.mutateAsync({ key: preset, replace: false });
         setDone(true);
         return true;
       }
@@ -233,8 +238,8 @@ function SetupWizard() {
 
   const canAdvance =
     (step === 0 && name.trim().length > 0) ||
-    (step === 1 && trade !== null) ||
-    (step === 2 && (offers.some((o) => o.name.trim()) || existing > 0)) ||
+    (step === 1 && (doors.booking || doors.quoteRequest || doors.message)) ||
+    (step === 2 && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     step === 3 ||
     step === 4;
 
@@ -288,38 +293,50 @@ function SetupWizard() {
               />
             </Field>
             <div className="grid2">
-              <Field id="su-tz" label="Time zone" hint="Every time your inbox says is in this zone.">
-                <TimeZoneSelect id="su-tz" value={timezone} onChange={setTimezone} />
+              <Field id="su-tz" label="Time zone" hint="Hours and bookings use this time zone.">
+                <TimeZonePicker id="su-tz" value={timezone} onChange={pickZone} />
               </Field>
               <Field id="su-cur" label="Currency" error={problem?.field("currency")}>
-                <CurrencySelect id="su-cur" value={currency} onChange={setCurrency} />
+                <CurrencySelect
+                  id="su-cur"
+                  value={currency}
+                  onChange={(c) => {
+                    setCurrency(c);
+                    setPicked((p) => ({ ...p, currency: true }));
+                  }}
+                />
               </Field>
             </div>
-            <Field
-              id="su-owner"
-              label="Where should we tell you about new requests?"
-              hint="An email address. Empty, we write to the address you sign in with."
-              error={problem?.field("notifications.ownerEmail")}
-            >
-              <input
+            {!ownerEmailHeld && (
+              <Field
                 id="su-owner"
-                className="input"
-                type="email"
-                autoComplete="email"
-                value={ownerEmail}
-                onChange={(e) => setOwnerEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </Field>
-            <Field id="su-lang" label="The language your customers get emails in">
+                label="Where should we tell you about new requests?"
+                hint="An email address. Empty, we write to the address you sign in with."
+                error={problem?.field("notifications.ownerEmail")}
+              >
+                <input
+                  id="su-owner"
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </Field>
+            )}
+            <Field id="su-lang" label="Customers' emails are in">
               <select
                 id="su-lang"
                 className="input"
                 value={emailLang}
-                onChange={(e) => setEmailLang(e.target.value === "pt" ? "pt" : "en")}
+                onChange={(e) => {
+                  setEmailLang(e.target.value === "pt" ? "pt" : "en");
+                  setPicked((p) => ({ ...p, lang: true }));
+                }}
               >
-                <option value="en">English</option>
-                <option value="pt">Português</option>
+                <option value="en">{languageName("en")}</option>
+                <option value="pt">{languageName("pt")}</option>
               </select>
             </Field>
           </>
@@ -327,35 +344,31 @@ function SetupWizard() {
 
         {step === 1 && (
           <>
-            <h2 className="sec">How do people buy from you?</h2>
-            <p className="lede small">
-              This decides what your inbox asks for and how it answers. You can change all of it later, and you can have
-              more than one; pick the one that happens most.
-            </p>
-            <div className="stack">
-              {TRADES.map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  className={clsx("pick row-glass", trade?.key === t.key && "is-picked")}
-                  aria-pressed={trade?.key === t.key}
-                  onClick={() => setTrade(t)}
-                >
-                  <b>{t.title}</b>
-                  <span className="s">{t.blurb}</span>
-                </button>
+            <h2 className="sec">What can agents do?</h2>
+            <p className="lede small">As many as you like. You can change them any time in Settings.</p>
+            <ul className="door-list">
+              {DOORS.map((d) => (
+                <li key={d.key} className="door-row">
+                  <Switch checked={doors[d.key]} onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}>
+                    {d.label}
+                  </Switch>
+                  <span className="door-note">{d.line}</span>
+                </li>
               ))}
-            </div>
+            </ul>
+            {!doors.booking && !doors.quoteRequest && !doors.message && (
+              <p className="hint">Agents can't reach you at all.</p>
+            )}
           </>
         )}
 
         {step === 2 && (
           <>
-            <h2 className="sec">{sells === "services" ? "What can people book?" : "What do you sell?"}</h2>
+            <h2 className="sec">{doors.booking ? "What can people book?" : "What can people ask you about?"}</h2>
             <p className="lede small">
-              {sells === "services"
+              {doors.booking
                 ? "One is enough to start. An agent asking what you offer is answered from this."
-                : "One is enough to start. If your shop publishes a product feed, connect it later in Settings and this fills itself."}
+                : "Optional: agents can ask for a price in their own words. Name what you do and they ask about it."}
             </p>
             {existing > 0 && (
               <p className="hint">
@@ -364,47 +377,39 @@ function SetupWizard() {
               </p>
             )}
             <div className="stack">
-              {offers.map((o, i) => (
+              {offers.map((o) => (
                 <div className="offer row-glass" key={o.id}>
-                  <Field id={`su-o-${o.id}`} label={i === 0 ? "Name" : ""}>
+                  <Field id={`su-o-${o.id}`} label="Name">
                     <input
                       id={`su-o-${o.id}`}
                       className="input"
                       value={o.name}
-                      placeholder={sells === "services" ? "Initial consultation" : "Whole bean, 1kg"}
+                      placeholder={doors.booking ? "Initial consultation" : "Kitchen fitting"}
                       onChange={(e) =>
                         setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, name: e.target.value } : x)))
                       }
                     />
                   </Field>
-                  {sells === "services" && (
-                    <Field id={`su-m-${o.id}`} label={i === 0 ? "Length" : ""}>
-                      <select
-                        id={`su-m-${o.id}`}
-                        className="input"
-                        aria-label={i === 0 ? undefined : "Length"}
-                        value={o.minutes}
-                        onChange={(e) =>
-                          setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, minutes: e.target.value } : x)))
-                        }
-                      >
-                        {LENGTHS.map((m) => (
-                          <option key={m} value={String(m)}>
-                            {lengthWords(m)}
-                          </option>
-                        ))}
-                      </select>
+                  {doors.booking && (
+                    <Field id={`su-p-${o.id}`} label="Price" optional>
+                      <MoneyInput
+                        id={`su-p-${o.id}`}
+                        currency={currency}
+                        value={o.price}
+                        placeholder="On request"
+                        onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: v } : x)))}
+                      />
                     </Field>
                   )}
-                  <Field id={`su-p-${o.id}`} label={i === 0 ? "Price" : ""} optional={i === 0 && sells === "services"}>
-                    <MoneyInput
-                      id={`su-p-${o.id}`}
-                      currency={currency}
-                      value={o.price}
-                      placeholder={sells === "services" ? "On request" : ""}
-                      onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: v } : x)))}
-                    />
-                  </Field>
+                  {doors.booking && (
+                    <div className="wide">
+                      <LengthPicker
+                        legend="Length"
+                        value={o.minutes}
+                        onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, minutes: v } : x)))}
+                      />
+                    </div>
+                  )}
                   {offers.length > 1 && (
                     <button
                       type="button"
@@ -435,26 +440,22 @@ function SetupWizard() {
         {step === 3 && (
           <>
             <h2 className="sec">When are you open?</h2>
-            {sells === "services" ? (
+            {doors.booking ? (
               <>
-                <p className="lede small">
-                  Free slots are worked out from these, so an agent is never offered a time you are closed. Weekdays
-                  nine to five are filled in; change what is wrong.
-                </p>
+                <p className="lede small">Agents are offered free times inside these, never when you are closed.</p>
                 <HoursEditor
                   initial={hours}
                   title="Opening hours"
-                  hint="Days you leave closed take no bookings. Up to six windows a day, for a lunch break or an evening."
+                  hint="Days left closed take no bookings."
                   pending={busy}
                   error={problem}
-                  onSave={(w) => setHours(w)}
+                  onChange={(w) => setHours(w)}
                 />
                 <p className="hint">Saved when you continue.</p>
               </>
             ) : (
               <p className="lede small">
-                You sell things rather than time, so opening hours change nothing about orders. Skip straight on. If you
-                start taking bookings later, Settings has the hours.
+                You take no bookings here, so hours change nothing yet. Settings has them when you do.
               </p>
             )}
           </>
@@ -467,17 +468,21 @@ function SetupWizard() {
               Rules are the part that saves you the work. They are yours to read and change, and nothing decides
               anything you did not write down.
             </p>
-            <Switch checked={rules} onChange={setRules} disabled={busy}>
-              Start from the <b>{trade?.title ?? "recommended"}</b> rules
-            </Switch>
-            <p className="hint">
-              {trade?.key === "shop"
-                ? "Small orders are accepted straight away and larger ones wait for you."
-                : trade?.key === "trades"
-                  ? "Quote requests are flagged for you, and anything urgent goes to the top."
-                  : "Bookings in a free slot are confirmed, and everything else waits for you."}{" "}
-              You can read each rule in plain English in Settings, and switch any of them off.
-            </p>
+            {preset ? (
+              <>
+                <Switch checked={rules} onChange={setRules} disabled={busy}>
+                  Start from the rules for {preset === "appointments" ? "bookings" : "requests for a price"}
+                </Switch>
+                <p className="hint">
+                  {preset === "trades"
+                    ? "Requests for a price are flagged for you, and anything urgent goes to the top."
+                    : "Bookings in a free slot are confirmed, and everything else waits for you."}{" "}
+                  Each rule reads in plain words in Settings, and switches off.
+                </p>
+              </>
+            ) : (
+              <p className="hint">Messages come to you; nothing answers on its own.</p>
+            )}
           </>
         )}
 
@@ -514,8 +519,7 @@ function Finished({ onOpen }: { onOpen: () => void }) {
       </div>
       <section className="card glass stack">
         <p className="lede">
-          It takes bookings, orders, quotes and messages now, from people and from AI agents, and answers what your
-          rules say it may.
+          It takes requests now, from people and from AI agents, and answers what your rules say it may.
         </p>
         <h3 className="sec">Where it lives</h3>
         <dl className="fields">
@@ -539,9 +543,6 @@ function Finished({ onOpen }: { onOpen: () => void }) {
           </li>
           <li>
             <b>Where events go.</b> Point your other systems at it in Settings, Integrations.
-          </li>
-          <li>
-            <b>A product feed,</b> if your shop publishes one. It fills your catalogue by itself.
           </li>
         </ul>
         <div className="rowx">

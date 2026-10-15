@@ -56,12 +56,17 @@ describe("the item types the manifest lists", () => {
     expect((await s.manifest()).item_types).toEqual(["message", "quote_request", "booking", "refund"]);
   });
 
-  it("take no refund for a service priced only on request, and follow a service's own hours", async () => {
+  it("take no booking of a service asked for a price, even with hours", async () => {
     const s = await setup();
-    const svc = await s.caps.setup.createService(
-      owner,
-      serviceInput.parse({ name: "Survey", price: { model: "quote" } }),
-    );
+    await s.caps.setup.createService(owner, serviceInput.parse({ name: "Survey", price: { model: "quote" } }));
+    await s.caps.setup.setWeekly(owner, { weekly: weekdays });
+    // Asked about, never booked: agents ask for a price, and no booking door opens.
+    expect((await s.manifest()).item_types).toEqual(["message", "quote_request"]);
+  });
+
+  it("take no refund for a service priced on request, and follow a service's own hours", async () => {
+    const s = await setup();
+    const svc = await s.caps.setup.createService(owner, serviceInput.parse({ name: "Visit" }));
     await s.caps.setup.setWeekly(owner, { weekly: weekdays });
     expect((await s.manifest()).item_types).toEqual(["message", "quote_request", "booking"]);
     // Its own hours, with no window, close it whatever the business's say.

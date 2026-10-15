@@ -563,16 +563,12 @@ export function mailBannerLines(m: { service: boolean; sender: boolean; links: b
   if (!m) return [];
   const out: string[] = [];
   if (!m.service) {
-    out.push(
-      "Emails are not being sent: this inbox has no mail service set up, so every email to you and to your customers only goes to the log, and each item shows it as not sent.",
-    );
+    out.push("Email is off on this inbox: nothing is sent.");
   } else if (!m.sender) {
-    out.push("Emails are not being sent: there is no address to send them from. Fill in Send from below.");
+    out.push("Email is off: there is no address to send from. Set Send from, under Advanced.");
   }
   if (!m.links) {
-    out.push(
-      "Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the public address of this inbox. Customers can still answer by replying.",
-    );
+    out.push("Emails carry no Accept or Decline links: set INBOX_SECRET_KEY and the inbox address.");
   }
   return out;
 }

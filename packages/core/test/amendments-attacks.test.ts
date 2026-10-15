@@ -13,7 +13,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, products, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, createItem, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, resetTables } from "./harness";
+import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
  * Attacks on changes to a promise (ADR-018 §3.1, §3.2, Amendment 3), each found by a failing test
@@ -77,6 +77,7 @@ async function setup(doc: Record<string, unknown> = {}) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(products).values({
     id: ulid(),
     sku: "CH-9",

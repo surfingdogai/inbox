@@ -3,7 +3,7 @@ import { createApiKey, hashKey, ROUTE_SCOPES } from "@surfingdog/adapters";
 import { type Db, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox, type Inbox } from "../src/app";
-import { freshDb, futureDay } from "./harness";
+import { freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * Connecting other software through the doors (keys and scopes, idempotency, attribution, webhook
@@ -28,6 +28,7 @@ async function setup(opts: { fetchImpl?: typeof fetch } = {}) {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const ownerKey = (await createApiKey(db, { kind: "owner", name: "cli" })).key;
   const pending: Promise<unknown>[] = [];
   const inbox = createInbox({

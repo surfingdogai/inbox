@@ -65,7 +65,7 @@ Some starting points, to adjust with the owner:
 | Already on a booking system | inbox | inbox, if it quotes | the booking system's door, or the inbox with a person confirming | nobody | at the booking, or a link |
 | Trades | inbox | inbox | inbox, after a quote | nobody | a link with the invoice |
 
-**Today** the inbox advertises what it has the means to do: `message` always, `booking` once a service has opening hours, `order` once a product is active, `quote_request` with either ([Manifest](/docs/manifest/)). So a shop whose orders go to its own checkout leaves products out of the inbox, and the inbox's manifest does not offer orders. If an agent sends an order anyway, the public API still takes it as a request that waits for a person: nothing is promised until someone accepts it.
+**Today** the inbox advertises what it has the means to do: `message` always, `booking` once a service booked at a time has opening hours the owner saved, `order` once a product is active, `quote_request` with either ([Manifest](/docs/manifest/)). So a shop whose orders go to its own checkout leaves products out of the inbox, and the inbox's manifest does not offer orders. If an agent sends an order anyway, the public API still takes it as a request that waits for a person: nothing is promised until someone accepts it.
 
 Where bookings or orders are taken somewhere else, say so with `doorsElsewhere` ([Your page](/docs/your-page/)): the manifest names that address as `doors_elsewhere`, leaves the kind out of `item_types`, and the business's page links there.
 

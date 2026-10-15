@@ -9,7 +9,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, business, products, rules, services, slotClaims } from "../src/schema/tables";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { bucketRange, bucketsFor } from "../src/write/slots";
-import { makeClient, resetTables } from "./harness";
+import { makeClient, openWeekdays, resetTables } from "./harness";
 
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const owner: Caller = {
@@ -50,6 +50,7 @@ async function setup(): Promise<{ db: Db; caps: Capabilities; svc: string }> {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   await db.orm.insert(products).values([
     {
       id: ulid(),

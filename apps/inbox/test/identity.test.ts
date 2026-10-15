@@ -16,7 +16,7 @@ import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 import { type App, createInbox } from "../src/app";
-import { freshDb } from "./harness";
+import { freshDb, openWeekdays } from "./harness";
 
 /**
  * People through the doors an agent uses (ADR-017 §2, §8.4): REST and MCP answer a first booking
@@ -41,6 +41,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
+  await openWeekdays(db);
   const mail = logMailOut();
   let inboxRef: ReturnType<typeof createInbox> | null = null;
   const net = fakeNetwork({
