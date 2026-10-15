@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   DOOR_HISTORY_CURRENT_DAYS,
   DOOR_HISTORY_MIN_DAYS,
-  DOOR_HISTORY_PUBLIC_TYPES,
   DOOR_HISTORY_RECENT_DAYS,
   type DoorHistoryInput,
   doorHistoryEntrySchema,
@@ -13,18 +12,18 @@ import {
   listingDetailSchema,
 } from "../src/index";
 import vectors from "../vectors/door-history.json";
+import doors from "../vocab/doors.json";
 
 /**
- * A door's history (protocol §4.8, ADR-020) against `vectors/door-history.json`, which an implementation of its own
- * wrote and the network's code is held to as well.
+ * A door's history (protocol §4.8, ADR-020) against `vectors/door-history.json`, which
+ * `scripts/gen-door-history-vectors.py` wrote, independently of this code; the network's code is held to it as well.
  */
 
 describe("vectors/door-history.json", () => {
-  it("says the protocol's numbers and public names", () => {
+  it("says the protocol's numbers", () => {
     expect(vectors.min_days).toBe(DOOR_HISTORY_MIN_DAYS);
     expect(vectors.recent_days).toBe(DOOR_HISTORY_RECENT_DAYS);
     expect(vectors.current_days).toBe(DOOR_HISTORY_CURRENT_DAYS);
-    expect(vectors.public_types).toEqual(DOOR_HISTORY_PUBLIC_TYPES);
     expect(vectors.cases.length).toBeGreaterThanOrEqual(15);
   });
 
@@ -35,6 +34,23 @@ describe("vectors/door-history.json", () => {
       if (got !== null) expect(doorHistoryEntrySchema.safeParse(got).success).toBe(true);
     });
   }
+
+  it("shows every door type of the vocabulary and a platform's, never an experimental one or llms.txt", () => {
+    const entry = {
+      host: "salon.example",
+      first_seen: "2026-10-03",
+      last_seen: "2026-10-03",
+      days_seen: 1,
+      current: true,
+      days: [],
+    };
+    for (const type of [...doors.types, "platform:fresha"]) {
+      expect(doorHistoryOf({ ...entry, type }, "2026-10-16")?.type, type).toBe(type);
+    }
+    for (const type of [...doors.experimental, "llms.txt", "llms_txt", "agent_inbox", "page", ""]) {
+      expect(doorHistoryOf({ ...entry, type }, "2026-10-16"), type).toBeNull();
+    }
+  });
 });
 
 describe("door_history on a listing, get_business and a check result", () => {
@@ -46,15 +62,18 @@ describe("door_history on a listing, get_business and a check result", () => {
     expect(
       doorHistorySchema.safeParse({
         as_of: "2026-11-13",
-        doors: [{ ...entry, checks: { ...entry?.checks, days: 13 } }],
+        doors: [{ ...entry, checks: { ...entry?.checks, days: 0 } }],
       }).success,
     ).toBe(false);
     expect(
       doorHistorySchema.safeParse({
         as_of: "2026-11-13",
-        doors: [{ ...entry, checks: { ...entry?.checks, recent: "a" } }],
+        doors: [{ ...entry, checks: { ...entry?.checks, recent: "ab" } }],
       }).success,
     ).toBe(false);
+    expect(doorHistorySchema.safeParse({ as_of: "2026-11-13", doors: [{ ...entry, days_seen: 0 }] }).success).toBe(
+      false,
+    );
     expect(doorHistorySchema.safeParse({ as_of: "2026-11-13", doors: [{ ...entry, type: "llms_txt" }] }).success).toBe(
       false,
     );

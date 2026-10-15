@@ -198,6 +198,7 @@ describe("shell.css", () => {
       "sd-record-meter",
       // a site's door history
       "sd-history",
+      "sd-spark-row",
       "sd-spark",
     ]) {
       expect(css, cls).toMatch(new RegExp(`\\.${cls}[\\s,.:{\\[>]`));

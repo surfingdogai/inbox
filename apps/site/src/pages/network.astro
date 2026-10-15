@@ -194,13 +194,17 @@ const shared = [
         <h3 class="h-card">Door history</h3>
         <p class="card-text">
           The network reads the doors businesses publish for AI agents: members' and claimed listings' every day,
-          the rest when it crawls. It keeps what each read found for good, one line per door per day. Nothing an
-          agent reports goes into it.
+          the rest when it crawls. Of its own reads only, it keeps a line per door per day, for good; nothing an agent
+          reports goes into it. A site that opts out at surfingdog.ai/bot has it deleted at once.
         </p>
         <p class="card-text">
-          A listing shows when each door was first and last seen answering. For a door read every day it also shows,
-          once 14 days are checked, the share of days every check answered. A day with one failed check is a day
-          missed, and the share is rounded down: 199 of 200 is 99%.
+          A listing and a check's result show the days each door was seen answering. For a door read every day they
+          also show, from 14 days checked, the share of days every check answered, rounded down: 199 of 200 is 99%.
+        </p>
+        <p class="more">
+          <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/020-door-history.md" rel="noopener"
+            >How it is counted</a
+          >
         </p>
       </div>
     </div>
@@ -233,8 +237,8 @@ const shared = [
       </dl>
 
       <p class="fine">
-        The network keeps the hourly counts for 90 days, and every receipt and its daily line of what it found at each
-        door for good, so a record is never lost. Switch it off and nothing more is sent.
+        The network keeps the hourly counts for 90 days, and every receipt for good, so a record is never lost.
+        Switch it off and nothing more is sent.
       </p>
       <p class="more">
         <a class="link" href="/privacy/">Every detail, on the privacy page</a>

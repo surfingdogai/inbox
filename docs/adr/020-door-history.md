@@ -15,46 +15,65 @@ later by anyone: a network that throws it away loses it, and a newcomer cannot b
 
 ## Decision
 
-1. **One line per door per day, kept for good.** For every door it reads, a network keeps one row a day with counts
+1. **One line per door per day, kept for good.** For every door type the history may show (any type of
+   [`vocab/doors.json`](../../packages/spec/vocab/doors.json) and a platform's door; never `llms.txt`, an experimental
+   type or a page, which the public never sees, so nothing is kept of them), a network keeps one row a day with counts
    only: how many of its reads concluded something, how many answered, failed (by class, in the vocabulary of
    [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json)) or were blocked; of its
-   reads of the daily set, how many answered and failed; the median time its own reads took to get an answer; and the
-   protocol version a crawl saw. Plus, per door, the first and last day a read found it answering. No page content,
-   no address, no agent, no person. The raw reads keep their own shorter retention (90 days on our network).
-2. **Only the network's own reads.** A read counts as the door state machine counts it (§4.8): a probe's answer,
-   failure or blocked read; a crawl's answer, and its failure where the crawl decides; a public check's answer, never
-   its failure. A read thrown away because its control read failed, or never answered, is no read. Nothing an agent
-   reports enters the history: door reports stay private to the business and only make the network look again
-   ([ADR-019](019-door-reports.md) §2).
+   daily checks, how many answered and how many were missed; the median time its own reads took to get an answer; and
+   the protocol version a crawl saw, when it looks like a version (words a site wrote are never kept). Plus, per door,
+   the first and last day a read found it answering. No page content, no address, no agent, no person. The raw reads
+   keep their own shorter retention (90 days on our network).
+2. **Only the network's own reads, and only its own timing for checks.** A read counts as the door state machine
+   counts it (§4.8): a probe's answer, failure or blocked read; a crawl's answer, and its failure where the crawl
+   decides; a public check's answer, never its failure. A read thrown away because its control read failed, or never
+   answered, is no read. Nothing an agent reports enters the history: door reports stay private to the business and
+   only make the network look again ([ADR-019](019-door-reports.md) §2). A read a report asks for is a read of the
+   door like any other, but it is **never a daily check**: a daily check is the network's scheduled daily read and
+   only that (a read that was also the daily read then due counts, whatever else asked for it). A confirm read the
+   crawl, an agent's report or the business asked for, and a recovery read after a failed one, are not checks. So
+   someone who knows when a door is down for maintenance cannot time reports, or the reads that follow them, to make
+   its days missed: a report only ever makes the network look again.
 3. **What the public sees.** For each door type at each host of a business: the first and last day a read found it
-   answering, and whether a door of that type is there now. For a door the network reads every day (a member's, a
-   claimed listing's: they asked to be listed), its daily checks: a day is checked when a read of the daily set
-   concluded, and answered only when every one of them that day answered, so a failure and an answer fifteen minutes
-   later is a day missed. From 14\* checked days the share of days answered shows, floored to the whole percent (99%
-   for 199 of 200, never 100% with a day missed), with the days themselves and the last 90 days as a line: "Answered
-   97% of daily checks since 3 Oct 2026 (41 of 42 days)." Below 14 days nothing is said, and no sentence says why.
-   A door last checked more than 7\* days ago says "from … to …" instead of "since". Blocked reads, latency, read
-   counts and failure classes stay private.
+   answering, on how many days, and whether a door of that type is there now. A door the crawl reads about once a
+   month says so by its count ("Seen answering on 3 days from 16 Aug 2026 to 24 Sep 2026"), never as if it had
+   answered every day between. For a door the network reads every day (a member's, a claimed listing's: they asked to
+   be listed), its daily checks: a check is missed when it failed, or when it was blocked while the door is down by
+   the network's reads (at least three reads blocked in a row over at least 48 hours, the rule our published rules
+   already use to count a member's inbox down); a day is checked
+   when a check concluded, and answered only when none of that day's was missed, so a failure and an answer fifteen
+   minutes later is a day missed. From 14\* checked days the share of days answered shows, floored to the whole
+   percent (99% for 199 of 200, never 100% with a day missed), with the days themselves and the last 90 days as a
+   line: "Answered every check on 97% of days checked since 3 Oct 2026 (41 of 42)." Below 14 days nothing is said,
+   and no sentence says why. A door last checked more than 7\* days ago says "from … to …" instead of "since". Other
+   blocked reads, latency, read counts and failure classes stay private. An off-site door the crawl could not tie to
+   the site is never shown.
 4. **Where.** A listing's detail (`GET /v1/businesses/{domain}`) and `get_business` carry `door_history` for the doors
    the listing shows; a site's current result (`/b/<domain>` and its JSON, `check_business`, once it is scored) for
    every door type at every host a read found answering. Omitted when there is nothing to say, and never on a result
-   its owner hid.
+   its owner hid. The result page leaves the section out while it would say nothing its doors do not (every door seen
+   on one day, still there, with no checks).
 5. **Not a rate of agents' reports.** What agents report never shows as a share, a rate or a count of uses: a business
    can report its own successes, so only failures from independent sources may ever go public (§4.15). This share
-   comes from the network's own reads alone, which neither the business nor any agent can make.
+   comes from the network's own scheduled reads alone, whose time neither the business nor any agent can choose.
 6. **Retention.** For good, as receipts are ([ADR-017](017-reputation-and-ranking.md) §9). A site that opts out of the
-   crawl has its whole history deleted at once, and again by a nightly pass should a restored copy bring it back. A
-   found entry that leaves the directory after 180 days unchecked (§4.11) keeps its history, which shows again with
-   the site's next result.
+   crawl has its whole history deleted at once, nothing is written for it after (not even by a read in flight when it
+   opted out), and a nightly pass deletes it again should a restored copy bring it back. A found entry that leaves the
+   directory after 180 days unchecked (§4.11) keeps its history, which shows again with the site's next result.
 7. **What came before.** The history starts with the build that writes it. Once, a network rebuilds what it still
-   holds from before: its own reads of the last 90 days, the day each stored door was first found and last found
-   answering, and the crawl's dated record of each site. A day nothing survives for stays empty; nothing is filled in.
+   holds from before: its own reads of the last 90 days (a daily check only by its kind, since which reads were also
+   the daily read was not stored before), and the day each stored door was first found and last found answering. A
+   crawl's dated record of a site is not used: it says a document was fetched, not that the door answered. A day
+   nothing survives for stays empty; nothing is filled in.
 
 ## Size
 
 Measured on PostgreSQL 18 with rows shaped like ours: a day row is about 96 bytes with its index, a door row about
-280. At today's 55,000 doors read about monthly, plus the daily set, that is about 2,000 day rows a day, some 70 MB a
-year; ten times the doors, about 0.7 GB a year. Reading one door read daily for ten years takes about 2 ms.
+280. Of the 57,500 doors our network stores, about 31,000 are of the types kept; llms.txt files, booking platforms'
+pages and WebMCP are the rest. Read about monthly, plus the daily set, that is about 1,000 day rows a day, some 35 MB
+a year; ten times the doors, about 0.4 GB a year. The rebuild of what came before writes about 31,000 doors and
+31,000 day rows (some 12 MB). Reading one door read daily for ten years takes about 2 ms. A door's row is moved, not
+made again, by each read, so its numbering never runs out however often doors are read.
 
 ## Open: a sole trader's data
 
@@ -68,7 +87,9 @@ year; ten times the doors, about 0.7 GB a year. Reading one door read daily for 
 ## Consequences
 
 - The protocol's §4.8 gains "History", §4.10 the `door_history` member, and §4.11 the exception to its 180 days.
-- `packages/spec` holds the schema (`doorHistorySchema`), a reference function (`doorHistoryOf`) and
-  [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json), written by an implementation of its
-  own; a network that shows a door's history is held to them.
+- `packages/spec` 0.4.1 holds the schema (`doorHistorySchema`), a reference function (`doorHistoryOf`) and
+  [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json), written by
+  [`scripts/gen-door-history-vectors.py`](../../packages/spec/scripts/gen-door-history-vectors.py), an implementation
+  of its own; a network that shows a door's history is held to their numbers and `checks`, and words its `summary`
+  its own way.
 - The crawler's notice and the privacy page say what is kept and for how long.
