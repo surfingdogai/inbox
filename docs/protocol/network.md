@@ -5,7 +5,8 @@ Spec 0.3 adds, all of it optional for a network and none of it read by an inbox,
 agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3). Spec 0.4
 adds, optional for a network, door reports (§4.15): agents say how each use of a door went, and the
 business sees it in its signed ping's answer; and it writes down how a network's own reads move a
-door (§4.8).
+door (§4.8). Spec 0.4.1 lets a network keep, and show, a door's history from its own reads (§4.8,
+[ADR-020](../adr/020-door-history.md)).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -35,6 +36,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Order, shuffle, cursors | [`vectors/ordering.json`](../../packages/spec/vectors/ordering.json) |
 | What a network keeps from a profile | [`vectors/profile.json`](../../packages/spec/vectors/profile.json) |
 | What an assistant reads from the tools | [`vectors/mcp.json`](../../packages/spec/vectors/mcp.json) |
+| A door's history, as the public sees it | [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json) (§4.8) |
 | A directory-level network's rules | [`schemas/ranking-directory.json`](../../packages/spec/schemas/ranking-directory.json) (§10) |
 | The categories list | [`vocab/categories.json`](../../packages/spec/vocab/categories.json) |
 | Door types, and what is never a door | [`vocab/doors.json`](../../packages/spec/vocab/doors.json) (§4.8) |
@@ -720,7 +722,7 @@ customers that are https, on a host name, with no user, written as RFC 3986 writ
 anything else percent-encoded) and holding no space, control character or hidden character: the
 schemas say `format: uri`, and a client that checks it refuses a whole answer for one door that is
 not), `standing? {tier, ranked, in_words}`, a member's `track_record?` as its listing gives it
-(§4.3), and `listing_url`. `in_words` says a tier, or a record, in plain sentences and is never a
+(§4.3), `door_history?` as its listing gives it (§4.8), and `listing_url`. `in_words` says a tier, or a record, in plain sentences and is never a
 mark against a business: no standing yet is said to be where every business starts, which it is.
 From rules version 8 `standing` also has `kept`, `broken` and `open`, and then either
 `verified_share` and `verified_kept_share` or, for a record on the business's own word,
@@ -840,6 +842,42 @@ follows its type, not its URL: the network keeps it by domain and door type, and
 change of URL for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json)
 (`reads`, `states`) pins this down.
 
+**History** ([ADR-020](../adr/020-door-history.md); optional for a network). A network may keep, for
+good, one line per door per UTC day of what its own reads concluded, for the door types it may show
+(never `llms.txt`, an experimental type or a page): how many answered, failed (by class) or were
+blocked; of its daily checks, how many answered and how many were missed; the median time its own
+reads took to get an answer; and the protocol version a crawl saw, when it looks like one; and per
+door the first and last day a read found it answering. A read counts as the state machine counts it
+(a check's failure, a read thrown away and a crawl's doubt about a door of the daily set are none),
+and nothing an agent reports enters it. Opting out deletes it. A listing's detail and `get_business`
+carry it as `door_history` for the doors the listing shows, and a site's current result for every
+door type at every host a read found answering (never an off-site door the crawl could not tie to the
+site), each `{type, host, first_seen, last_seen, days_seen, current, checks?, summary?}`:
+
+- `first_seen` and `last_seen` are the first and last UTC day a read found a door of that type at that
+  host answering, and `days_seen` on how many days one did: a door the crawl reads about once a month
+  is seen on few days, and nothing is said of the days between. `current` says whether one is there
+  now;
+- `checks` is only for a door read every day, and only from **14** checked days. A **daily check** is
+  the network's daily read of the door, and only that: a read that was also the daily read then due
+  counts, whatever else asked for it, but a read the crawl, an agent's report or the business asked
+  for, and a recovery read after a failed one, are never checks, so no one can choose when a door is
+  checked. A check is missed when it failed, or was blocked while the door is down by the network's
+  reads (at least three reads blocked in a row over at least 48 hours, as a network's published rules
+  count a member's inbox down); any other blocked read is no check. A day is checked when a check
+  concluded, and answered only when none of its checks was missed: a failure and an answer fifteen
+  minutes later is a day missed. `{first_checked, last_checked, days, answered, recent}`: `recent` is
+  the last 90 days ending on `as_of`, `a` every check answered, `x` one was missed, `.` no check;
+- `summary` says it in words, the share floored to the whole percent: "Answered every check on 97% of
+  days checked since 3 Oct 2026 (41 of 42)." A door last checked more than 7 days before `as_of` says
+  "from … to …" instead of "since". `summary` is informative and in English: the vectors pin `checks`
+  exactly and `summary` as this network words it; another network may word it differently, or in
+  another language.
+
+Below 14 days there is no share and no sentence saying why. Latency, read counts, blocked reads and
+failure classes are never shown. [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json)
+pins this down.
+
 The network spends little on any one door: at most one read per door and one per host in 10 minutes,
 at most 12 reads of a door a day, and at most 2 a day made by reports nobody can tell apart (§4.15).
 The daily set is read first, its recovery reads before all; reads of other doors take at most half of
@@ -886,6 +924,7 @@ counts in a filter**, except page language. A filter reads `declared` and `seen`
 | `why` | why it is in this place of the list, in plain words |
 | `found` | §4.11 |
 | `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}` |
+| `door_history` (detail only) | the history of the doors it shows, from the network's own reads (§4.8) |
 
 **Categories.** A listing's `categories` stay the slugs of the categories list (its 35 groups). A
 place category is an id of the Overture Maps Foundation's **Overture Place Categories** taxonomy
@@ -930,7 +969,8 @@ A network may list businesses it found on their own websites. Such an entry:
 - leaves the directory within 24 hours of an opt-out at that page or through `update_business`
   (§4.12), and is not stored again while the opt-out stands;
 - loses a fact the network has not seen for 180 days, and leaves the directory, and the network's
-  store, once the network has not checked it for 180 days;
+  store, once the network has not checked it for 180 days, all but its doors' history (§4.8), which a
+  network may keep for good unless the site opts out;
 - is served with `X-Robots-Tag: noindex` on its detail.
 
 `vectors/listing.json` holds what was crawled and the card a network derives from it.
@@ -1149,8 +1189,8 @@ lists or changes a listing. Its result is `GET /b/{domain}` (a page) and `GET /b
 the six lead answers each with its door and date, every capability, the fixes, a plain message the
 owner can hand to whoever runs the site, and the rank. For a domain the directory lists as a member,
 a result that is `done`, `not_checked`, `blocked` or `failed` also carries the member's `track_record`
-exactly as its listing gives it (§4.3);
-the page draws a shown record that is not self-reported as a thin meter of kept against broken, with
+exactly as its listing gives it (§4.3), and a result that is `done` also carries `door_history`
+(§4.8); the page draws a shown record that is not self-reported as a thin meter of kept against broken, with
 the counts in words; a self-reported one as its counts in words, labelled "Self-reported", with no
 meter; and never puts either in the rank, which is the agentic score's.
 

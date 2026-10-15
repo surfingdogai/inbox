@@ -25,6 +25,9 @@ or network:
   ping's answer gives the business, the `report` hint on a network's answers, and how a network's
   own reads move a door between live, failing and gone (`readDoorReports`, `doorReportEffect`,
   `classifyDoorRead`, `doorStatusAfter`; `vectors/door-reports.json`).
+- 0.4.1 (optional for a network): a door's history from the network's own reads (`door_history` on
+  a listing's detail, `get_business` and a check result; `doorHistorySchema`, `doorHistoryOf`;
+  `vectors/door-history.json`). An answer without it reads as before.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -43,6 +46,7 @@ implementations:
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
+| `door-history.json` | a door's history (§4.8): the days seen answering, days checked and answered, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
 its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door
@@ -59,5 +63,7 @@ result, with the JSON-RPC, MCP, A2A and HTTP codes each one stands for.
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by
 `npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`,
-`ordering.json`, `profile.json`, `mcp.json` and `score.json` come from the network unchanged. `packages/core/test/*-vectors.test.ts` checks
+`ordering.json`, `profile.json`, `mcp.json` and `score.json` come from the network unchanged.
+`door-history.json` is written by `python3 scripts/gen-door-history-vectors.py` (Python's standard
+library only: an implementation of its own, in another language than either side it checks). `packages/core/test/*-vectors.test.ts` checks
 every file against the code on Node and in workerd; the network checks the same files in Go.
