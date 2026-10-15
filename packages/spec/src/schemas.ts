@@ -25,6 +25,7 @@ import {
   doorIncidentAnsweredSchema,
   doorIncidentAnswerSchema,
   doorReportClassesVocabSchema,
+  doorReporterSchema,
   doorReportSchema,
   doorReportsRequestSchema,
   doorReportsResponseSchema,
@@ -207,6 +208,10 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "door-report": { schema: doorReportSchema, title: "One door report: how one use of a door went (§4.15)" },
   "door-reports-request": { schema: doorReportsRequestSchema, title: "POST /v1/door-reports (strict JSON)" },
   "door-reports-response": { schema: doorReportsResponseSchema, title: "POST /v1/door-reports: 202" },
+  "door-reporter": {
+    schema: doorReporterSchema,
+    title: "GET /v1/door-reports/me: the signer's own reporting credit and reading allowance (§4.15)",
+  },
   "door-incident-answer": { schema: doorIncidentAnswerSchema, title: "POST /v1/door-incidents/{id}" },
   "door-incident-answered": {
     schema: doorIncidentAnsweredSchema,

@@ -24,7 +24,11 @@ or network:
   about a person), the classes they use (`vocab/door-report-classes.json`), the `doors` block a signed
   ping's answer gives the business, the `report` hint on a network's answers, and how a network's
   own reads move a door between live, failing and gone (`readDoorReports`, `doorReportEffect`,
-  `classifyDoorRead`, `doorStatusAfter`; `vectors/door-reports.json`).
+  `classifyDoorRead`, `doorStatusAfter`; `vectors/door-reports.json`). On 15 October 2026, 0.4 also
+  gained, optional for a network, the reporters' reading allowance: the rule (`REPORTER_CREDIT_RULE`,
+  `READ_ALLOWANCE`, `reporterCreditOf`, `doorReportEarns`), the answer of `GET /v1/door-reports/me`
+  (`schemas/door-reporter.json`) and the vectors that pin it (`vectors/door-reports.json`'s
+  `contributors`).
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
@@ -42,7 +46,7 @@ implementations:
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
-| `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
+| `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, how the network's own reads move a door (§4.8), and what earns a reporter points and who is a contributor (`contributors`, §4.15) |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
 its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door

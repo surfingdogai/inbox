@@ -13,13 +13,25 @@ export class NetworkCallError extends Error {
   readonly status: number;
   /** The problem document's `code`, like `not_signed_in` or `bad_code`, when there is one. */
   readonly code: string | null;
+  /** How long the network asked you to wait (its `Retry-After`), in milliseconds, when it said. */
+  readonly retryAfterMs: number | null;
 
-  constructor(status: number, code: string | null, message: string) {
+  constructor(status: number, code: string | null, message: string, retryAfterMs: number | null = null) {
     super(message);
     this.name = "NetworkCallError";
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+/** `Retry-After` in milliseconds: seconds, or an HTTP date; null when absent or unreadable. */
+export function retryAfterMs(value: string | null, nowMs: number = Date.now()): number | null {
+  if (value === null || value.trim() === "") return null;
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  const at = Date.parse(v);
+  return Number.isNaN(at) ? null : Math.max(0, at - nowMs);
 }
 
 interface CallOptions {

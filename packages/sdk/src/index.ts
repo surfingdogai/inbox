@@ -5,7 +5,10 @@
  * - for a business's own systems: the webhook verifier and the event types (ADR-015);
  * - for a customer's agent (ADR-017 §8.4): hold a person's pass or key, sign requests
  *   (`sdi-agent/1`), delegate the agent's key at setup, verify receipts and counter-sign them, and
- *   report how each use of a business's door went (`reportDoor`, network protocol §4.15);
+ *   report how each use of a business's door went (`reportDoor`, or `trackDoor` around the call,
+ *   network protocol §4.15), sign a client's requests to the network through one `fetch`
+ *   (`signingFetch`), and see the reporting credit that earns a larger reading allowance
+ *   (`reporterCredit`);
  * - for anyone building an inbox or a network (the network protocol): sign a call to a network
  *   (`sdi-instance/1`) and check one, and issue receipts.
  *
@@ -22,17 +25,37 @@ export {
   passRefOf,
   sdiPassHeader,
 } from "./agent/credentials.js";
-export type { DoorReporterOptions, DoorReportInput, DoorReportsAnswer, DoorResult } from "./agent/doors.js";
+export type {
+  DoorClass,
+  DoorOutcome,
+  DoorReporterAnswer,
+  DoorReporterOptions,
+  DoorReportInput,
+  DoorReportsAnswer,
+  DoorResult,
+  FailClass,
+  InfoClass,
+  InvalidClass,
+  ReadAllowance,
+  RefusedClass,
+} from "./agent/doors.js";
 export {
   DEFAULT_REPORT_NETWORK,
   DoorReporter,
   doorReportBody,
+  FAIL_CLASSES,
   flushDoorReports,
+  INFO_CLASSES,
+  INVALID_CLASSES,
   MAX_PENDING_DOOR_REPORTS,
   newIntent,
+  REFUSED_CLASSES,
   reportDoor,
+  reporterCredit,
   reportNetwork,
 } from "./agent/doors.js";
+export type { SigningFetchOptions } from "./agent/fetch.js";
+export { signingFetch } from "./agent/fetch.js";
 export type { AgentKey, AgentKeyInput, AgentPrivateJwk, AgentPublicJwk } from "./agent/keys.js";
 export { generateAgentKey, thumbprint } from "./agent/keys.js";
 export { delegate, NetworkCallError, networkUrl, passFromKey, requestSignInCode, signIn } from "./agent/network.js";
@@ -54,6 +77,8 @@ export {
 } from "./agent/receipts.js";
 export type { SignedRequest, SigningErrorCode, SignRequestInput } from "./agent/sign.js";
 export { contentDigest, MAX_WINDOW_SECONDS, SIGNATURE_LABEL, SigningError, signRequest } from "./agent/sign.js";
+export type { TrackDoorInput, TrackDoorOptions } from "./agent/track.js";
+export { classifyDoorAnswer, classifyDoorError, doorTokenOf, trackDoor } from "./agent/track.js";
 export type {
   InstancePublicJwk,
   InstanceSignatureCode,

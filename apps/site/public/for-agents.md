@@ -126,14 +126,24 @@ one call, and it needs no signature, pass or account: the MCP tool `report_door`
   message, item id or reason. A report carrying any of it is refused whole.
 
 **Why it is worth it to you.** Your reports may make the network read doors again (at most twice a day
-per door, for the doors it reads itself), so your searches send you to doors that work. A success counts the same as a failure. Nothing you report goes public by
-itself, and the business never learns which agent reported.
+per door, for the doors it reads itself), so your searches send you to doors that work. A success
+counts the same as a failure. Nothing you report goes public by itself, and the business never learns
+which agent reported.
+
+**Sign them, and you read more.** Reports signed with your own key (sdi-agent/1) or as your platform
+(Web Bot Auth) earn points: 1 for each business you report at, once a day, at most 10 a day. With 30
+points in the last 30 days, on at least 7 different days, you are a contributor, and your signed reads
+of the network (`/mcp`, `/a2a`, `/v1/businesses` and `/v1/businesses/{domain}`) count against an
+allowance of your own: 1,800 a minute for a key, 6,000 for a platform, on top of the 600 a minute every
+address has. Nothing else changes: the same answers, the same order. Sign for the host you send to.
+`GET https://<network>/v1/door-reports/me`, signed, shows your credit.
 
 **Tell your person,** once, that you report how businesses' doors answer: only whether the door
 worked, never anything about them.
 
-The MIT library `@surfingdog/sdk` does it for you: `reportDoor()` collects reports and sends them in
-batches on its own.
+The MIT library `@surfingdog/sdk` does it for you: `trackDoor()` wraps each use of a door and
+reports how it went, `reportDoor()` collects reports and sends them in batches on its own, retrying when
+the network asks, and `signingFetch()` signs your requests to the network, your MCP client's included.
 
 **Acknowledge receipts, and report a broken promise only when it happened.** When a business issues
 a receipt on your item (a booking confirmed, an order accepted, a change you both agreed, a refund
