@@ -7,7 +7,9 @@ import {
   type DoorReadObservation,
   type DoorReportSource,
   doorReportClassesVocabSchema,
+  doorReportEarns,
   doorReportEffect,
+  doorReporterSchema,
   doorReportsRequestSchema,
   doorReportsResponseSchema,
   doorStatusAfter,
@@ -15,7 +17,10 @@ import {
   NETWORK_ONLY_DOOR_CLASSES,
   parseStrictJson,
   pingDoorsSchema,
+  READ_ALLOWANCE,
+  REPORTER_CREDIT_RULE,
   readDoorReports,
+  reporterCreditOf,
   signedPingResponseSchema,
 } from "../src/index";
 import vectors from "../vectors/door-reports.json";
@@ -242,5 +247,53 @@ describe("the ping's doors block", () => {
       }).success,
     ).toBe(true);
     expect(pingDoorsSchema.safeParse({ as_of: "2026-10-12T00:00:00Z" }).success).toBe(false);
+  });
+});
+
+describe("the reporters' reading allowance, as vectors/door-reports.json's contributors pin it", () => {
+  const v = vectors.contributors;
+
+  it("publishes the rule this code applies", () => {
+    expect(v.rule).toEqual(REPORTER_CREDIT_RULE);
+    expect(v.cases.length).toBeGreaterThanOrEqual(8);
+    expect(v.earning.length).toBeGreaterThanOrEqual(5);
+  });
+
+  for (const c of v.cases) {
+    it(c.name, () => {
+      expect(reporterCreditOf(c.days)).toEqual(c.expect);
+    });
+  }
+
+  for (const c of v.earning) {
+    it(c.name, () => {
+      expect(doorReportEarns(c.report as Parameters<typeof doorReportEarns>[0])).toBe(c.expect.earns);
+    });
+  }
+
+  it("answers GET /v1/door-reports/me as its schema says, for a key and a platform", () => {
+    const base = {
+      credit: { points: 31, days: 7 },
+      contributor: true,
+      threshold: REPORTER_CREDIT_RULE,
+      reads: { ...READ_ALLOWANCE.key, per: "key" },
+      contributor_reads: { ...READ_ALLOWANCE.key, per: "key" },
+      rule: "https://network.example/report.md#a-larger-reading-allowance",
+      as_of: "2026-10-15T12:00:00Z",
+    };
+    const key = { ...base, reporter: { type: "key", keyid: "U1FnFeccbN76Yku-3J2NFbaHkQUK6EUvTBDDdGI27xI" } };
+    expect(doorReporterSchema.safeParse(key).success).toBe(true);
+    const platform = {
+      ...base,
+      reporter: { type: "platform", origin: "https://agents.example.com", platform: "example.com" },
+      reads: { ...READ_ALLOWANCE.address, per: "address" },
+    };
+    expect(doorReporterSchema.safeParse(platform).success).toBe(true);
+    expect(doorReporterSchema.safeParse({ ...key, reporter: { type: "key", keyid: "short" } }).success).toBe(false);
+    expect(
+      doorReporterSchema.safeParse({ ...key, reads: { per_minute: 600, burst: 200, per: "person" } }).success,
+    ).toBe(false);
+    expect(doorReporterSchema.safeParse({ ...key, as_of: "yesterday" }).success).toBe(false);
+    expect(jsonSchemaOf("door-reporter")).toMatchObject({ title: expect.stringContaining("/v1/door-reports/me") });
   });
 });

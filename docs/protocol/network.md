@@ -5,7 +5,9 @@ Spec 0.3 adds, all of it optional for a network and none of it read by an inbox,
 agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3). Spec 0.4
 adds, optional for a network, door reports (§4.15): agents say how each use of a door went, and the
 business sees it in its signed ping's answer; and it writes down how a network's own reads move a
-door (§4.8).
+door (§4.8). On 15 October 2026, 0.4 also gained, optional for a network, the reporters' reading
+allowance and `GET /v1/door-reports/me` (§4.15), and a published limit of 600 requests a minute on
+`GET /v1/businesses` and `GET /v1/businesses/{domain}` (§4.7).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -46,6 +48,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 | Door report classes | [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json) (§4.15) |
 | Door reports, and the network's own reads of a door | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (§4.8, §4.15) |
+| The reporters' reading allowance: what earns credit, who is a contributor | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) `contributors` (§4.15) |
 
 ## 1. Conventions
 
@@ -230,6 +233,7 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
 | `POST /v1/door-reports` (0.4, MAY) | optional sdi-agent/1 or Web Bot Auth | `{v: 1, reports}` → `202 {accepted, ignored, next}` (§4.15) | `door-reports-*`, `door-report` |
 | `POST /v1/door-incidents/{id}` (0.4, MAY) | sdi-instance/1 | `{state: "fixed"}` → `{id, state, check_queued}` (§4.15) | `door-incident-*` |
+| `GET /v1/door-reports/me` (0.4, MAY) | sdi-agent/1 or Web Bot Auth | → the signer's own credit and reading allowance (§4.15) | `door-reporter` |
 | `GET /report.md` (0.4, with door reports) | none | → how an agent reports, in plain words (§4.15) | |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
 | `POST /v1/persons` | sdi-instance/1 | `{request_id, email, agent?}` → `201` | `persons-*` |
@@ -744,9 +748,12 @@ in the order.
 A network publishes its own limits on these doors. The reference: 600 requests a minute from one
 address (an IPv6 /64 counts as one), in bursts of 200, for reading (an assistant platform sends many
 people's searches from a few addresses), and 60 a minute, in bursts of 30, for the calls of tools that
-write or reach other sites. Whatever the addresses, a network runs at most a few searches at once; one
-that cannot start within a moment is told the directory is busy (503 with `Retry-After` over REST, a
-tool failure that says so over MCP), so searches never take its database from everything else.
+write or reach other sites; `GET /v1/businesses` and `GET /v1/businesses/{domain}` have the same 600 a
+minute of their own (`429 rate_limited` with `Retry-After`). An agent whose signed door reports earned
+it reads on a larger allowance of its own (§4.15). Whatever the addresses, a network runs at most a few
+searches at once; one that cannot start within a moment is told the directory is busy (503 with
+`Retry-After` over REST, a tool failure that says so over MCP), so searches never take its database
+from everything else.
 
 ### 4.8 Doors
 
@@ -1331,6 +1338,52 @@ source hash, over 7 days or more. A self-held key's
 hash, with times and domains, may still be personal data of the person behind the agent, so an agent
 tells its person that it reports how doors answer (for-agents.md §5).
 
+**The reporters' reading allowance (MAY).** Limits only (ADR-019 Amendment 1): a network MAY give
+the agents that sign their door reports a larger reading allowance.
+
+- **Points.** A report earns its signer 1 point when the network took it (`accepted`), a verified
+  signature carried its call (sdi-agent/1 with a self-held key, or Web Bot Auth, where a platform is
+  every origin of its registrable domain), and, for a platform, its business is not on the platform's
+  own registrable domain. A point is one business (a report's `domain`) on one UTC day the network
+  received reports at it, however many: the day received, never the report's `at`. What a report said
+  never matters: a door that worked earns what a door that failed does. An unsigned report earns
+  nothing.
+- **Contributor.** In the window (today and the 29 days before), at least 30 points on at least 7
+  days, each day counting at most 10.
+- **The allowance.** A contributor's signed reads of `/mcp`, `/a2a`, `GET /v1/businesses` and
+  `GET /v1/businesses/{domain}` count against its own allowance: the reference values are 1,800
+  a minute in bursts of 600 for a key and 6,000 in bursts of 2,000 for a platform, and at most as many
+  of a kind's reads from one address. When it is spent, the address's allowance still applies, so a
+  contributor never reads on less than anyone. A contributor's report that a door could not be
+  reached is read a little sooner, within the same two reads a day per door.
+- **Nothing else.** The same answers, byte for byte, and the same order; no weight in a ranking, a
+  score or a track record; nothing a business is told.
+- **A signed read.** sdi-agent/1 as §3 says, or Web Bot Auth covering at least `"@authority"` and the
+  `Signature-Agent` member naming the platform, which is what Web Bot Auth asks of a bot; a network
+  MAY take Web Bot Auth on a read only from platforms it knows from their reports. `"@authority"` is
+  the host the request is sent to: a network that serves these doors on more than one host takes a
+  signature for each. A network checks a read's signature whoever it names and looks up the signer's
+  points only once it verified, so that no answer, header or delay says whether some signer is a
+  contributor. A read is never refused for its signature, and its answer does not say what became of
+  it. A read's signature counts once. Over MCP and A2A, a report signed over the request whole
+  (method, authority, path, the body's digest) is the signer's, as on `POST /v1/door-reports`, and
+  `Sdi-Signature` says why when a report's signature is not used.
+- **Your own credit.** `GET /v1/door-reports/me`, signed the same way, answers the signer's `credit`
+  (`points`, `days`), whether it is a `contributor`, the rule (`threshold`: `window_days`,
+  `min_days`, `min_points`, `per_day_at_most`, as `REPORTER_CREDIT_RULE`), what its signed reads count
+  against now (`reads`) and what a contributor of its kind reads with (`contributor_reads`)
+  ([`schemas/door-reporter.json`](../../packages/spec/schemas/door-reporter.json)). Unsigned it is
+  `401 signature_required`; a signature not used is `401` with its code, also in `Sdi-Signature`. The
+  network checks the signature before it looks anything up: there is no way to ask about another
+  reporter.
+- **What is kept.** Per reporter and UTC day: the reporter as a keyed hash under a period that changes
+  every 30 days, never a key or an origin, and how many businesses it reported at; which businesses
+  only as bits of a keyed hash of each domain, and only until the day is over (the reference network
+  clears them within minutes of midnight UTC). Rows go after 31 days.
+
+`vectors/door-reports.json`'s `contributors` pins what earns points (`earning`) and who is a
+contributor (`cases`); `reporterCreditOf` and `doorReportEarns` in `packages/spec` apply them.
+
 **What the business sees.** A signed ping's `200` (§4.1) carries `doors`
 ([`schemas/ping-response.json`](../../packages/spec/schemas/ping-response.json)), of its own doors
 only: its inbox, the doors of its own domain, and on a site its domain shares with others (a shared
@@ -1355,8 +1408,10 @@ guide, reward}`: `search_businesses`, `get_business`, `check_business`, `GET /v1
 /v1/businesses/{domain}` and `GET /b/{domain}.json`. `guide` is `<network>/report.md`, an agent's guide
 like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server card and the A2A card.
 `reward` says what is true: reports may make the network read doors again (at most twice a day per
-door, for the doors it reads itself), so an agent's searches send it to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
-that reports.
+door, for the doors it reads itself), so an agent's searches send it to doors that work. The
+allowance above is published in `/report.md` and the `report_door` tool's description, not in every
+answer. Credit is the same for a success and a failure, and no answer differs for an agent that
+reports.
 
 ## 5. Persons and passes
 
@@ -1680,7 +1735,7 @@ the inbox asks each network only about its own. No network ever sees another's s
 | Status | Codes |
 |---|---|
 | 400 | `malformed`, `bad_payload`, `category_unresolved`, `page_too_deep` (0.2) |
-| 401 | `unknown_instance`, `bad_signature`, `expired`, `not_signed_in`, `replayed_signature` |
+| 401 | `unknown_instance`, `bad_signature`, `expired`, `not_signed_in`, `replayed_signature`, `signature_required` (0.4, door reports) |
 | 403 | `pass_requires_signature`, `not_your_receipt`, `report_requires_signature`, `unlinked` |
 | 404 | `unknown_pass`, `unknown_issuer`, `not_found` |
 | 409 | `person_exists`, `nonce_reused`, `already_reported`, `you_acknowledged_it` |

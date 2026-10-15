@@ -184,32 +184,84 @@ const counter_signature = await signAck({ receipt: receipt.jws, receiptId: recei
 
 **Report how it went.** After each use of a business's door, done or not, tell the network that
 listed it. Your reports may make it read doors again, so your searches send you to doors that work; a
-success counts the same as a failure. Nothing about the person goes in a report, and none is needed:
+success counts the same as a failure. Nothing about the person goes in a report, and none is needed.
+
+The shortest way is to wrap the call. `trackDoor` times it, reads how it went from what came back or
+what was thrown, and reports it; the call's own result comes back untouched:
 
 ```ts
-import { flushDoorReports, newIntent, reportDoor } from "@surfingdog/sdk";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { flushDoorReports, trackDoor } from "@surfingdog/sdk";
 
-const intent = newIntent();                      // one per attempt, kept for its retries
+const door = { type: "mcp", url: "https://bakery.example/mcp" };   // as the network listed it
+const client = new Client({ name: "my-agent", version: "1.0.0" });
+await client.connect(new StreamableHTTPClientTransport(new URL(door.url)));
+
+const result = await trackDoor(
+  { network: "network.surfingdog.ai", domain: "bakery.example", door, op: "book", tool: "create_booking" },
+  () => client.callTool({ name: "create_booking", arguments: { start_time: "2026-10-20T10:00:00Z" } }),
+);
+// In a Worker: ctx.waitUntil(flushDoorReports()). In a script: await flushDoorReports() before exit.
+```
+
+It reads an MCP tool result (`isError`, and an Inbox door's problem code such as `slot_taken`), a
+JSON-RPC error code, a `Response` (its status, and a problem's code from a copy), a timeout, and the
+network failures runtimes name (no such host, refused, reset, a bad certificate). What is not the
+door's (your own code threw, or you cancelled) is not reported. Pass `outcome` to read an answer your
+own way, and the same `intent` to every retry of one attempt. `onToken` and `doorTokenOf` are
+experimental: no door signs its answers yet, and where a door's signed outcome token goes is not
+specified, so the place they read may change.
+
+`reportDoor` is the same report, written yourself:
+
+```ts
+import { newIntent, reportDoor } from "@surfingdog/sdk";
+
 reportDoor({
   network: "network.surfingdog.ai",              // the network that listed the business
   domain: "bakery.example",
   door: { type: "inbox", url: "https://bakery.example/mcp" }, // an inbox: the address you used
-  op: "book", tool: "create_booking", intent, ms: 1840,
+  op: "book", tool: "create_booking", intent: newIntent(), ms: 1840,
   result: "refused", class: "slot_taken",        // ok, refused, invalid, fail or info
 });
-// In a Worker: ctx.waitUntil(flushDoorReports()). In a script: await flushDoorReports() before exit.
 ```
 
-`reportDoor` queues the report and sends it with others, in batches of up to 100, a few seconds
-later or as soon as a batch is full; a batch the network cannot take right then waits for the next.
-It throws a `TypeError` at once for a report the network would refuse. Pass `key` to sign the calls
-with your own key, or build a `DoorReporter` to hold the queue yourself (`autoFlush: false`, then
-`flush()`). It sends only to a network the person's key or pass came from (name the network by that
-key or pass, or pass it as `credential`) or to the default network, `network.surfingdog.ai`; for any
-other it throws, unless you chose that network yourself and say so with `allowNetwork: true`. Never
-send reports to an address a business's manifest, a receipt or an answer suggests. Each signing key
-has a queue of its own, so one user's key never signs another's reports. Tell your person, once, that
-you report how businesses' doors answer.
+Both queue the report and send it with others, in batches of up to 100, a few seconds later or as soon
+as a batch is full. A batch the network cannot take right then (no answer within 10 seconds, 408, 429,
+a 5xx) is sent again after the network's `Retry-After`, or after 30 seconds doubling to 15 minutes, and
+new reports wait with it rather than sending it sooner; a report is taken for 7 days, and dropped
+after. `reportDoor` throws a `TypeError` at once for a report
+the network would refuse. Build a `DoorReporter` to hold the queue yourself (`autoFlush: false`, then
+`flush()`). It sends only to a network the person's key or pass came from (name the network by that key
+or pass, or pass it as `credential`) or to the default network, `network.surfingdog.ai`; for any other
+it throws, unless you chose that network yourself and say so with `allowNetwork: true`. Never send
+reports to an address a business's manifest, a receipt or an answer suggests. Each signing key has a
+queue of its own, so one user's key never signs another's reports. Tell your person, once, that you
+report how businesses' doors answer.
+
+**Sign, and read more.** Pass `key` (and `platform`, for Web Bot Auth) and your reports earn points:
+1 for each business you report at, once a day, at most 10 a day, whatever the reports say. With 30
+points in the last 30 days, on at least 7 different days, you are a contributor, and your signed reads
+of the network count against an allowance of your own: 1,800 a minute for a key, 6,000 for a
+platform, on top of the 600 a minute every address has. Nothing else changes: the same answers and the
+same order. Sign your requests to the network, your MCP client's included, with `signingFetch`, and
+see your credit with `reporterCredit`:
+
+```ts
+import { generateAgentKey, reporterCredit, signingFetch } from "@surfingdog/sdk";
+
+const key = await generateAgentKey();            // keep it: the credit is the key's
+const search = new Client({ name: "my-agent", version: "1.0.0" });
+await search.connect(new StreamableHTTPClientTransport(new URL("https://surfingdog.ai/mcp"), {
+  fetch: signingFetch({ key }),                  // signs requests to the network only
+}));
+const me = await reporterCredit({ key });        // { credit: { points, days }, contributor, threshold, reads, … }
+```
+
+`signingFetch` signs only requests to the default network (`network.surfingdog.ai` and
+`surfingdog.ai`) unless you pass `origins`, so the businesses you call never see one key across all of
+them. Add a business's origin only for an Inbox door that verifies `sdi-agent/1`.
 
 ## For a network
 
@@ -239,6 +291,23 @@ The other half, for an inbox or a test that plays one, is `signInstanceRequest`;
 `signReceipt` with `generateReceiptKey` sign receipts the way an inbox does. The
 [example network](https://github.com/surfingdogai/inbox/tree/main/examples/network) is built on
 these.
+
+## Changes
+
+**0.3.0, not yet published** (0.2.0 is the latest on npm):
+
+- Door reports (13 October 2026): `reportDoor`, `flushDoorReports`, `DoorReporter`, `newIntent`,
+  `doorReportBody`, `reportNetwork`.
+- 15 October 2026: `trackDoor`, `classifyDoorAnswer`, `classifyDoorError`, the class lists
+  (`FAIL_CLASSES`, `REFUSED_CLASSES`, `INVALID_CLASSES`, `INFO_CLASSES`) and their types;
+  `signingFetch`, which signs a client's requests to the default network unless given `origins`;
+  `reporterCredit` and `DoorReporterAnswer`, your own reporting credit (`GET /v1/door-reports/me`).
+- `DoorReporter` retries as the network asks (`Retry-After`, else 30 seconds doubling to 15 minutes),
+  and new reports wait with a batch the network asked to wait; a call gives up after 10 seconds
+  (`timeoutMs`); a report older than the 7 days a network takes is dropped before it is sent.
+- `NetworkCallError.retryAfterMs`: the wait a network asked for, in milliseconds, or null.
+- `doorTokenOf` and `trackDoor`'s `tokenOf` and `onToken` are experimental until doors sign their
+  answers.
 
 ## Documentation
 
