@@ -10,7 +10,7 @@
  * and that page in the docs sidebar (astro.config.mjs). test/hosted.node.test.ts fails when the
  * three disagree.
  */
-export const HOSTED_PILOT_OPEN = false;
+export const HOSTED_PILOT_OPEN = true;
 
 /** Where a business starts: the card that is prefilled from its check result. */
 export const START_URL = "https://app.surfingdog.ai/start";

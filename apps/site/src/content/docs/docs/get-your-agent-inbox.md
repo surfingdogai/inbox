@@ -1,7 +1,7 @@
 ---
 title: Get your agent inbox
 description: Set up a hosted inbox from your check result, then connect it to your own domain with one DNS record. The record, and the steps for each DNS provider.
-draft: true
+draft: false
 ---
 
 <!--

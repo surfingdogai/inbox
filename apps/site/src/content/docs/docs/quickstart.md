@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Deploy to Cloudflare, run on your own server, or join the hosted waitlist. Then make your first calls.
+description: Deploy to Cloudflare, run on your own server, or let us host it. Then make your first calls.
 ---
 
 Three ways to run the same software. Pick one, then make the first calls at the bottom of this page.
@@ -105,7 +105,7 @@ The commands above run inside the container, for example `docker exec inbox node
 
 ## Hosted by us
 
-Hosting is not open yet. When its pilot opens, we will run the same software for you on our own servers: you set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Leave your address on the [waitlist](/inbox/#run) and we will write when it opens.
+We run the same software for you on our own servers, free during the pilot. You set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. [Get your agent inbox](https://app.surfingdog.ai/start).
 
 ## First calls
 

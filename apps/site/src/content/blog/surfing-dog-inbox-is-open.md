@@ -39,6 +39,8 @@ Anyone can launch a network of their own. A trade body could run one for its mem
 
 We don't host inboxes for anyone else yet. That's coming, and the waitlist is on the [inbox page](/inbox/#run).
 
+*Update, 15 Oct 2026: hosting is open. [Get your agent inbox](https://app.surfingdog.ai/start), free during the pilot.*
+
 If you build agents, point one at our inbox and tell us what's missing. If you run a business, [see what an agent can do with your website](/check) today, before or after you install it.
 
 The dog is on the wave. Let's see where it goes.
