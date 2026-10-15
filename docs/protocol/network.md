@@ -8,7 +8,8 @@ business sees it in its signed ping's answer; and it writes down how a network's
 door (§4.8). Spec 0.5 names `orderable` as a level of its own, the rung `bookable` is on, for doors
 that take orders and none that books; `level=bookable` and `level=orderable` filter by what the doors
 take; and a UCP or ACP profile raises a business only on a site that shows it sells (§4.9). A network
-that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value.
+that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value. A network may also keep, and show, a door's history from its own reads
+(§4.8, [ADR-020](../adr/020-door-history.md)).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -38,6 +39,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Order, shuffle, cursors | [`vectors/ordering.json`](../../packages/spec/vectors/ordering.json) |
 | What a network keeps from a profile | [`vectors/profile.json`](../../packages/spec/vectors/profile.json) |
 | What an assistant reads from the tools | [`vectors/mcp.json`](../../packages/spec/vectors/mcp.json) |
+| A door's history, as the public sees it | [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json) (§4.8) |
 | A directory-level network's rules | [`schemas/ranking-directory.json`](../../packages/spec/schemas/ranking-directory.json) (§10) |
 | The categories list | [`vocab/categories.json`](../../packages/spec/vocab/categories.json) |
 | Door types, and what is never a door | [`vocab/doors.json`](../../packages/spec/vocab/doors.json) (§4.8) |
@@ -843,6 +845,32 @@ follows its type, not its URL: the network keeps it by domain and door type, and
 change of URL for 90 days. [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json)
 (`reads`, `states`) pins this down.
 
+**History** ([ADR-020](../adr/020-door-history.md); optional for a network). A network may keep, for
+good, one line per door per UTC day of what its own reads concluded: how many answered, failed (by
+class) or were blocked; of the reads of the daily set, how many answered and failed; the median time
+its own reads took to get an answer; and the protocol version a crawl saw; and per door the first and
+last day a read found it answering. A read counts as the state machine counts it (a check's failure,
+a read thrown away and a crawl's doubt about a door of the daily set are none), and nothing an agent
+reports enters it. Opting out deletes it. A listing's detail and `get_business` carry it as
+`door_history` for the doors the listing shows, and a site's current result for every door type at
+every host a read found answering, each `{type, host, first_seen, last_seen, current, checks?,
+summary?}`:
+
+- `first_seen` and `last_seen` are the first and last UTC day a read found a door of that type at that
+  host answering; `current` says whether one is there now;
+- `checks` is only for a door read every day, and only from **14** checked days. A day is checked when
+  a read of the daily set concluded, answered or failed (a blocked read is no check), and answered
+  only when every one of them that day answered: a failure and an answer fifteen minutes later is a
+  day missed. `{since, last, days, answered, recent}`: `recent` is the last 90 days ending on
+  `as_of`, `a` every check answered, `x` one failed, `.` no check;
+- `summary` says it in words, the share floored to the whole percent: "Answered 97% of daily checks
+  since 3 Oct 2026 (41 of 42 days)." A door last checked more than 7 days before `as_of` says "from …
+  to …" instead of "since".
+
+Below 14 days there is no share and no sentence saying why. Latency, read counts, blocked reads and
+failure classes are never shown. [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json)
+pins this down.
+
 The network spends little on any one door: at most one read per door and one per host in 10 minutes,
 at most 12 reads of a door a day, and at most 2 a day made by reports nobody can tell apart (§4.15).
 The daily set is read first, its recovery reads before all; reads of other doors take at most half of
@@ -893,6 +921,7 @@ counts in a filter**, except page language. A filter reads `declared` and `seen`
 | `why` | why it is in this place of the list, in plain words |
 | `found` | §4.11 |
 | `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}` |
+| `door_history` (detail only) | the history of the doors it shows, from the network's own reads (§4.8) |
 
 **Categories.** A listing's `categories` stay the slugs of the categories list (its 35 groups). A
 place category is an id of the Overture Maps Foundation's **Overture Place Categories** taxonomy
@@ -937,7 +966,8 @@ A network may list businesses it found on their own websites. Such an entry:
 - leaves the directory within 24 hours of an opt-out at that page or through `update_business`
   (§4.12), and is not stored again while the opt-out stands;
 - loses a fact the network has not seen for 180 days, and leaves the directory, and the network's
-  store, once the network has not checked it for 180 days;
+  store, once the network has not checked it for 180 days, all but its doors' history (§4.8), which a
+  network may keep for good unless the site opts out;
 - is served with `X-Robots-Tag: noindex` on its detail.
 
 `vectors/listing.json` holds what was crawled and the card a network derives from it.

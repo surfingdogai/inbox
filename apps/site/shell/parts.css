@@ -1290,6 +1290,38 @@ textarea.sd-code {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- A site's door history (result page) ------------------------- */
+/* Each door type at a host: when our reads first found it answering, and for a door read every day,
+   the share of days every check answered over a sparkline of the last 90 days. The page draws the
+   sparkline as one SVG of three paths, one mark a day: .is-answered a bar in the success tone,
+   .is-missed a bar in ink, .is-none a dot on the line in faint ink. Never red. Its label says the
+   counts for a screen reader; without this sheet it is still ink at three strengths. */
+.sd-history {
+  display: grid;
+  gap: var(--sp-1);
+}
+.sd-history p {
+  margin: 0;
+}
+.sd-spark {
+  display: block;
+  max-width: 100%;
+  height: 12px;
+  color: var(--ink-3);
+}
+.sd-spark .is-answered {
+  fill: var(--c-success);
+  fill-opacity: 0.7;
+}
+.sd-spark .is-missed {
+  fill: var(--ink);
+  fill-opacity: 1;
+}
+.sd-spark .is-none {
+  fill: var(--ink-3);
+  fill-opacity: 0.5;
+}
+
 /* --- A check while it reads, and the result as a guide ----------- */
 /* The classes the network's live check page, result pages and leaderboards use from the site: the
    rows a check streams as it reads, the chips for the files it found, "Check again", a suggested

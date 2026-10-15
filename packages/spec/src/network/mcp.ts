@@ -5,6 +5,7 @@ import { reportHintSchema, tierSchema, timestampSchema } from "./common";
 import {
   attributesResponseSchema,
   categoriesResponseSchema,
+  doorHistorySchema,
   doorTypeSchema,
   levelNameSchema,
   listingAdditionsShape,
@@ -272,6 +273,7 @@ export const getBusinessOutputSchema = businessCardSchema.extend({
     .optional()
     .describe("Every displayed value of an entry that is not a member, with its source and date."),
   rules: z.object({ version: z.int().min(1), url: z.url() }).optional(),
+  door_history: doorHistorySchema.optional().describe("The history of the doors this listing shows (§4.8)."),
   report: reportHintSchema.optional(),
 });
 export type GetBusinessOutput = z.infer<typeof getBusinessOutputSchema>;

@@ -69,3 +69,5 @@ beside both, and needs its own place, so that it is not read as either.
   the protocol.
 - An agent's SDK may report automatically (`reportDoor`, on by default), because a report carries
   nothing about the person it acts for.
+- A door's history, kept for good, is built from the network's own reads alone; no report enters it
+  ([ADR-020](020-door-history.md)).
