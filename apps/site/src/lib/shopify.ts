@@ -5,7 +5,8 @@ import type { Faq, Source } from "./faq";
  * on the store's own domain, what our check counts for it under the published rules, and what an
  * owner can add. What Shopify and the assistants do moves monthly, so every line about them says
  * where we read it, and the page says when; what the check counts follows /v1/score-rules (version
- * 2, as amended on 12 October 2026) and the network's next steps for Shopify (vocab/guide.json).
+ * 3, as amended on 15 October 2026: a UCP profile counts where the store's server answers or its pages
+ * show its prices) and the network's next steps for Shopify (vocab/guide.json).
  */
 export const SHOPIFY_CHECKED = "12 October 2026";
 export const SHOPIFY_AS_OF = "as of October 2026";
