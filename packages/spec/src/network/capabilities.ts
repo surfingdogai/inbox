@@ -55,18 +55,92 @@ export type Evidence = z.infer<typeof evidenceSchema>;
 
 export const journeySchema = z.enum(["before", "doing", "after", "ongoing", "policies"]);
 
-/** `vocab/capabilities.json`. */
+/**
+ * The kinds of agent door the vocabulary says how to read (version 2): an agent inbox's item types, an MCP server's
+ * tools, an A2A agent's skills, OpenAPI operations, a documented REST endpoint, the capabilities of a UCP or ACP profile,
+ * and a page's WebMCP tools (experimental: counted toward a score, never toward a level).
+ */
+export const VOCAB_DOOR_IDS = ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "webmcp"] as const;
+export const vocabDoorIdSchema = z.enum(VOCAB_DOOR_IDS);
+export type VocabDoorId = z.infer<typeof vocabDoorIdSchema>;
+
+/** The directory's request kinds (`vocab/doors.json` `kinds`) a capability is filtered by: ask is message, quote is negotiate. */
+export const requestKindSchema = z.enum(["ask", "quote", "book", "order", "pay"]);
+
+const evidenceTextSchema = z
+  .object({ declared: z.string(), tested: z.string(), proven: z.string() })
+  .describe("What has to be seen before a capability may be said to be declared, tested or proven.");
+
+/**
+ * One capability. Its `id`, `journey`, `label` and `question` are version 1's and never change; version 2 adds the rest,
+ * all optional, so a version 1 document still reads.
+ */
+export const vocabCapabilitySchema = z.object({
+  id: capabilityIdSchema,
+  journey: journeySchema,
+  label: z.string(),
+  question: z.string(),
+  definition: z.string().optional().describe("Version 2: what doing it means, in one or two sentences."),
+  aliases: z.array(z.string()).optional().describe("Version 2: other words people and agents use for it."),
+  kind: requestKindSchema
+    .optional()
+    .describe("Version 2: the request kind a directory filters by for it (`accepts=`), where there is one."),
+  partial: z.string().optional().describe("Version 2: what the state partial means for it."),
+  evidence: evidenceTextSchema.optional().describe("Version 2: what has to be seen at each step of the ladder."),
+  not_enough: z.array(z.string()).optional().describe("Version 2: things that look like it and never meet it."),
+  doors: z
+    .partialRecord(vocabDoorIdSchema, z.array(z.string()).min(1))
+    .optional()
+    .describe(
+      "Version 2: how each kind of door meets it, by example names (an item type, a tool, a skill, an operation, a " +
+        "protocol's capability). A kind of door left out does not carry it.",
+    ),
+});
+export type VocabCapability = z.infer<typeof vocabCapabilitySchema>;
+
+/** `vocab/capabilities.json`, served at `https://surfingdog.ai/spec/capabilities.json`. */
 export const capabilitiesVocabSchema = z.object({
   version: z.int().min(1),
   name: z.string(),
+  title: z.string().optional().describe("Version 2: the vocabulary's title for people."),
+  published: z.iso.date().optional().describe("Version 2: the day this version was published."),
+  licence: z.string().optional().describe('Version 2: "MIT".'),
+  url: z.url().optional().describe("Version 2: where the latest version is served."),
+  summary: z.string().optional(),
   states: z.array(capabilityStateSchema),
+  state_meanings: z.partialRecord(capabilityStateSchema, z.string()).optional(),
   evidence: z.array(evidenceSchema),
+  evidence_meanings: z.partialRecord(evidenceSchema, z.string()).optional(),
   produced: z.array(evidenceSchema),
   lead: z.array(capabilityIdSchema),
   journeys: z.array(journeySchema),
-  capabilities: z.array(
-    z.object({ id: capabilityIdSchema, journey: journeySchema, label: z.string(), question: z.string() }),
-  ),
+  doors: z
+    .array(
+      z.object({
+        id: vocabDoorIdSchema,
+        label: z.string(),
+        via: z.string().describe("What of the door is read: an item type, a tool, a skill, an operation…"),
+        spec: z.url().optional().describe("The door's own specification."),
+        experimental: z.boolean().optional(),
+        how: z.string(),
+      }),
+    )
+    .optional()
+    .describe("Version 2: the kinds of door, and how each is read."),
+  never_doors: z.string().optional().describe("Version 2: what never meets a capability."),
+  names: z.string().optional().describe("Version 2: how a tool, skill or operation name is read."),
+  capabilities: z.array(vocabCapabilitySchema),
+  changelog: z
+    .array(
+      z.object({
+        version: z.int().min(1),
+        published: z.iso.date().optional(),
+        amended: z.iso.date().optional(),
+        summary: z.string(),
+      }),
+    )
+    .optional()
+    .describe("Version 2: every version and amendment, oldest first."),
 });
 export type CapabilitiesVocab = z.infer<typeof capabilitiesVocabSchema>;
 

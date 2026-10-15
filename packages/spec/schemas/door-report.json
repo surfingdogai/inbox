@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/door-report.json",
   "title": "One door report: how one use of a door went (§4.15)",
   "type": "object",
   "properties": {

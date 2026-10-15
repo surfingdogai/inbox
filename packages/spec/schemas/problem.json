@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/problem.json",
   "title": "RFC 9457 problem with a code",
   "type": "object",
   "properties": {

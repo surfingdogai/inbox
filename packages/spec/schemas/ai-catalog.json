@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/ai-catalog.json",
   "title": "/.well-known/ai-catalog.json (ARD), as a network serves it",
   "type": "object",
   "properties": {

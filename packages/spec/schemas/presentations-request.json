@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/presentations-request.json",
   "title": "POST /v1/presentations",
   "type": "object",
   "properties": {

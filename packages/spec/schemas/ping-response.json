@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/ping-response.json",
   "title": "POST /v1/instances/{domain}/ping: a signed ping's 200",
   "type": "object",
   "properties": {

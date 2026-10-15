@@ -10,9 +10,9 @@
       "description": "The business's website, as a URL or a bare domain like salon.example."
     },
     "fresh": {
-      "type": "boolean",
       "default": false,
-      "description": "Read the site again rather than answer the stored result: for a business that just changed its site. Allowed a few minutes after the last read; before that, the stored result is answered with when to ask again."
+      "description": "Read the site again rather than answer the stored result: for a business that just changed its site. Allowed a few minutes after the last read; before that, the stored result is answered with when to ask again.",
+      "type": "boolean"
     }
   },
   "required": ["url"]

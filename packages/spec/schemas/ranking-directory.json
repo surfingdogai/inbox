@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/ranking-directory.json",
   "title": "GET /v1/ranking, from a network that publishes its own rules (protocol §10)",
   "type": "object",
   "properties": {

@@ -1,0 +1,286 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+
+/**
+ * /spec/check/: the conformance check, in the browser. What is pasted is checked by @surfingdog/spec's
+ * checkDocument (packages/spec/src/conformance.ts), loaded when the first check runs; nothing is sent anywhere.
+ */
+---
+
+<StarlightPage
+  frontmatter={{
+    title: "Check a manifest or a receipt",
+    description:
+      "Paste an agent inbox manifest, a receipt or an acknowledgement, and see whether it holds to the published specs, and if not, why. It runs in your browser.",
+  }}
+>
+  <p>
+    Paste an agent inbox <a href="/spec/manifest/">manifest</a>, a <a href="/spec/receipts/">receipt</a> or an
+    acknowledgement. It is checked here, in your browser, against the published specs. Nothing you paste leaves this
+    page.
+  </p>
+
+  <form class="check" data-check>
+    <label for="check-doc">Manifest, receipt or acknowledgement</label>
+    <textarea
+      id="check-doc"
+      name="doc"
+      rows="10"
+      spellcheck="false"
+      autocomplete="off"
+      placeholder='{"spec": "surfingdog-inbox/0", …}  or  eyJhbGciOiJFZERTQSIs…'></textarea>
+    <details>
+      <summary>Check a receipt's signature, or an acknowledgement against its receipt</summary>
+      <label for="check-extra">The inbox's keys (its manifest, or its <code>/.well-known/jwks.json</code>), or the receipt an acknowledgement is for</label>
+      <textarea id="check-extra" name="extra" rows="5" spellcheck="false" autocomplete="off"></textarea>
+    </details>
+    <div class="actions">
+      <button type="submit" class="go">Check</button>
+      <button type="button" class="quiet" data-example="manifest">Try a manifest</button>
+      <button type="button" class="quiet" data-example="receipt">Try a receipt</button>
+    </div>
+  </form>
+
+  <div class="result" data-result aria-live="polite" hidden>
+    <p class="verdict" data-verdict></p>
+    <p class="read" data-read></p>
+    <div data-errors hidden><h3>What does not hold</h3><ul></ul></div>
+    <div data-warnings hidden><h3>Worth fixing</h3><ul></ul></div>
+    <div data-passed hidden><h3>What holds</h3><ul></ul></div>
+  </div>
+
+  <p class="fine">
+    The same check is code you can run: <code>checkManifest</code>, <code>checkReceipt</code> and
+    <code>checkAcknowledgement</code> in <a href="https://github.com/surfingdogai/inbox/tree/main/packages/spec"
+      >packages/spec</a
+    >, tested against the <a href="/spec/">published vectors</a>. To read a manifest from its address, fetch it with
+    <code>curl https://inbox.example.com/.well-known/agent-inbox.json</code> and paste what comes back.
+  </p>
+</StarlightPage>
+
+<style>
+  .check {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+  }
+  .check label {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+  .check textarea {
+    width: 100%;
+    font: 0.8125rem/1.5 var(--sl-font-mono);
+    color: var(--sl-color-white);
+    background: var(--sl-color-gray-7, var(--sl-color-black));
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 3px;
+    padding: 0.6rem 0.7rem;
+    resize: vertical;
+  }
+  .check textarea:focus {
+    border-color: var(--sl-color-accent);
+    outline: none;
+  }
+  .check details {
+    margin: 0;
+  }
+  .check summary {
+    cursor: pointer;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+  .check details[open] summary {
+    margin-bottom: 0.5rem;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .actions button {
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    border-radius: 3px;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .go {
+    background: var(--sl-color-white);
+    color: var(--sl-color-black);
+    border: 1px solid var(--sl-color-white);
+  }
+  .go:hover {
+    background: var(--sl-color-accent);
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+  }
+  .quiet {
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    border: 1px solid var(--sl-color-gray-5);
+  }
+  .quiet:hover {
+    color: var(--sl-color-white);
+    border-color: var(--sl-color-gray-3);
+  }
+  .result {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sl-color-gray-5);
+    animation: arrive 0.25s ease both;
+  }
+  .verdict {
+    font-size: var(--sl-text-lg);
+    margin: 0;
+  }
+  .verdict[data-ok="true"]::before {
+    content: "✓ ";
+    color: var(--sl-color-green);
+  }
+  .verdict[data-ok="false"]::before {
+    content: "× ";
+    color: var(--sl-color-orange);
+  }
+  .read {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    margin-top: 0.25rem;
+  }
+  .result h3 {
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+    margin-top: 1rem;
+  }
+  .result ul {
+    padding-left: 1.1rem;
+  }
+  .result li {
+    font-size: var(--sl-text-sm);
+  }
+  .result li code {
+    font-size: 0.75rem;
+  }
+  .fine {
+    margin-top: 2rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .result {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import type { ConformanceFinding, ConformanceReport } from "../../../../../packages/spec/src/conformance";
+
+  const form = document.querySelector<HTMLFormElement>("[data-check]");
+  const doc = document.querySelector<HTMLTextAreaElement>("#check-doc");
+  const extra = document.querySelector<HTMLTextAreaElement>("#check-extra");
+  const result = document.querySelector<HTMLElement>("[data-result]");
+
+  const KINDS: Record<string, string> = {
+    manifest: "a manifest",
+    receipt: "a receipt",
+    acknowledgement: "an acknowledgement",
+  };
+
+  function list<T>(name: string, items: readonly T[], format: (item: T) => HTMLLIElement) {
+    const box = result?.querySelector<HTMLElement>(`[data-${name}]`);
+    const ul = box?.querySelector("ul");
+    if (!box || !ul) return;
+    ul.replaceChildren(...items.map(format));
+    box.hidden = items.length === 0;
+  }
+
+  function finding(f: ConformanceFinding): HTMLLIElement {
+    const li = document.createElement("li");
+    const where = document.createElement("code");
+    where.textContent = f.path;
+    li.append(where, ` ${f.message} `);
+    const code = document.createElement("code");
+    code.textContent = f.code;
+    li.append(code);
+    return li;
+  }
+
+  function text(s: string): HTMLLIElement {
+    const li = document.createElement("li");
+    li.textContent = s;
+    return li;
+  }
+
+  function show(r: ConformanceReport) {
+    if (!result) return;
+    const verdict = result.querySelector<HTMLElement>("[data-verdict]");
+    const read = result.querySelector<HTMLElement>("[data-read]");
+    if (verdict) {
+      verdict.dataset.ok = String(r.ok);
+      const n = r.errors.length;
+      verdict.textContent = r.ok ? "It holds to the spec." : `It does not hold to the spec: ${n} ${n === 1 ? "problem" : "problems"}.`;
+    }
+    if (read) {
+      read.textContent = r.kind ? `Read as ${KINDS[r.kind]}${r.version ? `, ${r.version}` : ""}.` : "";
+    }
+    list("errors", r.errors, finding);
+    list("warnings", r.warnings, finding);
+    list("passed", r.passed, text);
+    result.hidden = false;
+  }
+
+  async function run() {
+    const { checkDocument } = await import("../../../../../packages/spec/src/conformance");
+    const pasted = doc?.value ?? "";
+    const second = (extra?.value ?? "").trim();
+    const isJws = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/.test(second);
+    show(await checkDocument(pasted, isJws ? { receipt: second } : { keys: second }));
+  }
+
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    void run();
+  });
+
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-example]")) {
+    b.addEventListener("click", async () => {
+      const vectors = (await import("../../../../../packages/spec/vectors/receipts.json")).default;
+      if (!doc || !extra) return;
+      const key = vectors.issuer.public_jwk;
+      if (b.dataset.example === "receipt") {
+        doc.value = vectors.receipts[0]?.jws ?? "";
+        extra.value = JSON.stringify({ keys: [key] }, null, 2);
+        extra.closest("details")?.setAttribute("open", "");
+      } else {
+        doc.value = JSON.stringify(
+          {
+            spec: "surfingdog-inbox/0",
+            instance: "https://inbox.example.com",
+            item_types: ["message", "booking"],
+            protocols: { mcp: "https://inbox.example.com/mcp", openapi: "https://inbox.example.com/openapi.json" },
+            agent_policy: { tiers: ["anonymous", "signed_agent"] },
+            receipt_keys: { keys: [{ ...key, kid: "made-up" }] },
+            review_services: [],
+          },
+          null,
+          2,
+        );
+        extra.value = "";
+      }
+      void run();
+    });
+  }
+</script>

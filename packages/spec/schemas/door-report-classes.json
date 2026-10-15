@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/door-report-classes.json",
   "title": "The door report classes (vocab/door-report-classes.json)",
   "type": "object",
   "properties": {

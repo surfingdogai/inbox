@@ -34,6 +34,21 @@ or network:
   a listing's detail, `get_business` and a check result; `doorHistorySchema`, `doorHistoryOf`;
   `vectors/door-history.json`). An answer without it reads as before.
 
+- 0.5 ([ADR-020](../../docs/adr/020-the-reference.md)): the capability vocabulary, version 2
+  (`vocab/capabilities.json`; version 1 kept as `vocab/capabilities-v1.json`): for each capability a
+  definition, other words for it, what partial means, what has to be seen at each step of the
+  evidence ladder, what is not enough, and how each kind of door carries it, by example names that
+  the network's own door registry reads as that capability. The conformance check (`checkManifest`,
+  `checkReceipt`, `checkAcknowledgement`, `checkDocument`), which says whether a document holds to
+  these specs and why not, with the codes a network answers. The census's data (`census-edition`,
+  `census-editions`; protocol §4.16, optional for a network). Every JSON Schema but the MCP tools'
+  now carries a `$id`, its address at `https://surfingdog.ai/spec/schemas/<name>.json`.
+
+Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
+`/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
+`/spec/capabilities/v<N>.json`, and `/spec/index.json`, which lists them), with a page for people
+for each spec and a page that checks a pasted manifest, receipt or acknowledgement in the browser.
+
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two
 implementations:

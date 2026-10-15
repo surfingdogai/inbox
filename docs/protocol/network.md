@@ -10,7 +10,10 @@ that take orders and none that books; `level=bookable` and `level=orderable` fil
 take; and a UCP or ACP profile raises a business only on a site that shows it sells (§4.9). A network
 that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value. Spec 0.5.1 lets a
 network keep, and show, a door's history from its own reads (§4.8, [ADR-020](../adr/020-door-history.md)),
-optional for a network.
+optional for a network. Spec 0.6 adds, optional for a network, the census (§4.16): once a month, how
+many of the businesses it checked an agent can do each thing with, as counts; and version 2 of the
+capability vocabulary, which says what each capability means, the evidence for it and how each kind
+of door carries it ([ADR-020](../adr/020-the-reference.md)).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -47,11 +50,12 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Attributes a listing may carry | [`vocab/attributes.json`](../../packages/spec/vocab/attributes.json) (§4.10) |
 | Rules version 7's order: tiers, newcomers, pages | [`vectors/ordering-v7.json`](../../packages/spec/vectors/ordering-v7.json) (§4.4), from the network |
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
-| The capability vocabulary | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13) |
+| The capability vocabulary, version 2: definitions, evidence, how each kind of door carries each capability | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13); version 1 at [`vocab/capabilities-v1.json`](../../packages/spec/vocab/capabilities-v1.json) |
 | The agentic score's rules, version 2 as amended on 8 and 12 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
 | The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 | Door report classes | [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json) (§4.15) |
 | Door reports, and the network's own reads of a door | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (§4.8, §4.15) |
+| The census: an edition, and the list of them | [`schemas/census-edition.json`](../../packages/spec/schemas/census-edition.json), [`schemas/census-editions.json`](../../packages/spec/schemas/census-editions.json) (§4.16) |
 
 ## 1. Conventions
 
@@ -1412,6 +1416,32 @@ like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server c
 `reward` says what is true: reports may make the network read doors again (at most twice a day per
 door, for the doors it reads itself), so an agent's searches send it to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
 that reports.
+
+### 4.16 The census (spec 0.5, MAY)
+
+A network may publish, once a month, how many of the businesses it checked an agent can do each
+thing with. The method Surfing Dog's network follows, with every definition, is at
+https://surfingdog.ai/spec/census/ (method version 1); another network may count by its own and say
+so in `method`.
+
+| Call | Auth | Answer | Schema |
+|---|---|---|---|
+| `GET /v1/census` | none | the published and withdrawn editions, newest first | `census-editions` |
+| `GET /v1/census/{edition}` | none | one edition: `edition` is its month, `YYYY-MM` | `census-edition` |
+
+- An edition's `rows` are counts, one per `scope`, `key` and `metric`: the whole (`all`, key empty),
+  and each `country`, kind of business (`group`), website `platform` and `city` with at least
+  `method.min_sample` sites checked; `left_out` says how many keys of each scope were under it.
+  Every published key has a row for every metric, zero included.
+- Metrics: `checked`; `agent_ready`; `can:<capability>` for every capability of the vocabulary
+  version it names, counted among the agent-ready; `door:<type>`, counted among the agent-ready;
+  `level:<name>`, counted among the checked; and for a city, `places`, its list's size.
+- No row names a business, and none may: a network that publishes a count small enough to point at
+  one business is not following this section.
+- A published edition's counts never change. A mistake withdraws it (`status: "withdrawn"`, `note`
+  says why); it stays readable. A draft is never served to anyone but the network's operators.
+- The data is open: `licence` names it (Surfing Dog's is the ODbL 1.0), and a CSV of the same rows,
+  `edition,scope,key,metric,value`, is a network's to offer.
 
 ## 5. Persons and passes
 

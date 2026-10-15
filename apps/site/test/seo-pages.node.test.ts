@@ -312,6 +312,12 @@ describe("the owners' pages", () => {
       const post = p.match(/^\/blog\/([a-z0-9-]+)\/$/)?.[1];
       if (post) return existsSync(site(`src/content/blog/${post}.md`));
       if (p.startsWith("/docs/")) return existsSync(site(`src/content/docs${p.replace(/\/$/, "")}.md`));
+      // The specs: Starlight pages under src/content/docs/spec, and the check.
+      if (p === "/spec/") return existsSync(site("src/content/docs/spec/index.md"));
+      if (p.startsWith("/spec/")) {
+        const rest = p.slice("/spec/".length).replace(/\/$/, "");
+        return existsSync(site(`src/content/docs/spec/${rest}.md`)) || existsSync(site(`src/pages/spec/${rest}.astro`));
+      }
       const bare = p.replace(/\/+$/, "");
       return (
         existsSync(site(`src/pages${bare}.astro`)) ||

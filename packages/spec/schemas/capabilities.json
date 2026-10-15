@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/capabilities.json",
   "title": "The capability vocabulary (vocab/capabilities.json)",
   "type": "object",
   "properties": {
@@ -11,6 +12,28 @@
     "name": {
       "type": "string"
     },
+    "title": {
+      "description": "Version 2: the vocabulary's title for people.",
+      "type": "string"
+    },
+    "published": {
+      "description": "Version 2: the day this version was published.",
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+    },
+    "licence": {
+      "description": "Version 2: \"MIT\".",
+      "type": "string"
+    },
+    "url": {
+      "description": "Version 2: where the latest version is served.",
+      "type": "string",
+      "format": "uri"
+    },
+    "summary": {
+      "type": "string"
+    },
     "states": {
       "type": "array",
       "items": {
@@ -18,11 +41,31 @@
         "enum": ["yes", "partial", "no", "na"]
       }
     },
+    "state_meanings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": ["yes", "partial", "no", "na"]
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "evidence": {
       "type": "array",
       "items": {
         "type": "string",
         "enum": ["declared", "tested", "proven"]
+      }
+    },
+    "evidence_meanings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": ["declared", "tested", "proven"]
+      },
+      "additionalProperties": {
+        "type": "string"
       }
     },
     "produced": {
@@ -67,6 +110,46 @@
         "enum": ["before", "doing", "after", "ongoing", "policies"]
       }
     },
+    "doors": {
+      "description": "Version 2: the kinds of door, and how each is read.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "webmcp"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "via": {
+            "type": "string",
+            "description": "What of the door is read: an item type, a tool, a skill, an operation…"
+          },
+          "spec": {
+            "description": "The door's own specification.",
+            "type": "string",
+            "format": "uri"
+          },
+          "experimental": {
+            "type": "boolean"
+          },
+          "how": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "label", "via", "how"]
+      }
+    },
+    "never_doors": {
+      "description": "Version 2: what never meets a capability.",
+      "type": "string"
+    },
+    "names": {
+      "description": "Version 2: how a tool, skill or operation name is read.",
+      "type": "string"
+    },
     "capabilities": {
       "type": "array",
       "items": {
@@ -106,9 +189,95 @@
           },
           "question": {
             "type": "string"
+          },
+          "definition": {
+            "description": "Version 2: what doing it means, in one or two sentences.",
+            "type": "string"
+          },
+          "aliases": {
+            "description": "Version 2: other words people and agents use for it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "description": "Version 2: the request kind a directory filters by for it (`accepts=`), where there is one.",
+            "type": "string",
+            "enum": ["ask", "quote", "book", "order", "pay"]
+          },
+          "partial": {
+            "description": "Version 2: what the state partial means for it.",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Version 2: what has to be seen at each step of the ladder.",
+            "type": "object",
+            "properties": {
+              "declared": {
+                "type": "string"
+              },
+              "tested": {
+                "type": "string"
+              },
+              "proven": {
+                "type": "string"
+              }
+            },
+            "required": ["declared", "tested", "proven"]
+          },
+          "not_enough": {
+            "description": "Version 2: things that look like it and never meet it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "doors": {
+            "description": "Version 2: how each kind of door meets it, by example names (an item type, a tool, a skill, an operation, a protocol's capability). A kind of door left out does not carry it.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "webmcp"]
+            },
+            "additionalProperties": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "required": ["id", "journey", "label", "question"]
+      }
+    },
+    "changelog": {
+      "description": "Version 2: every version and amendment, oldest first.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "published": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "amended": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": ["version", "summary"]
       }
     }
   },
