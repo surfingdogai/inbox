@@ -217,8 +217,8 @@ export type CardDoor = z.infer<typeof cardDoorSchema>;
 /**
  * A door's history (§4.8, ADR-020): what the network's own reads found of one door type at one host of the
  * business, from a line a day it keeps for good. Never anything an agent reported. `checks` only for a door the
- * network reads every day, and only from 14 checked days; below that it is absent, and nothing says why.
- * `vectors/door-history.json` pins it down.
+ * network reads every day, and only from 14 checked days (the default; a network may wait longer); below that it is
+ * absent, and nothing says why. `vectors/door-history.json` pins it down.
  */
 export const doorHistoryEntrySchema = z.object({
   type: doorTypeSchema,
@@ -227,24 +227,34 @@ export const doorHistoryEntrySchema = z.object({
     .date()
     .describe("The first UTC day a read of the network's found a door of this type at this host answering."),
   last_seen: z.iso.date().describe("The last such day."),
+  days_seen: z
+    .int()
+    .min(1)
+    .describe(
+      "On how many days a read of the network's found it answering: a door read about once a month is seen on few days, and nothing is said of the days between.",
+    ),
   current: z.boolean().describe("Whether a door of this type is at this host now (not gone)."),
   checks: z
     .object({
-      since: z.iso.date().describe("The first day checked."),
-      last: z.iso.date().describe("The last day checked."),
+      first_checked: z.iso.date().describe("The first day checked."),
+      last_checked: z.iso.date().describe("The last day checked."),
       days: z
         .int()
-        .min(14)
-        .describe("Days checked: days on which a daily read of the door concluded (blocked reads are none)."),
+        .min(1)
+        .describe(
+          "Days checked: days on which the network's daily read of the door concluded. A read an agent's report or the business asked for is no check.",
+        ),
       answered: z
         .int()
         .min(0)
-        .describe("Of them, days on which every check answered: one failed check makes the day missed."),
+        .describe(
+          "Of them, days on which every check answered: one missed check (failed, or blocked while the door is down by the network's reads) makes the day missed.",
+        ),
       recent: z
         .string()
-        .regex(/^[ax.]{90}$/)
+        .regex(/^[ax.]+$/)
         .describe(
-          "The last 90 days ending on as_of, oldest first: a every check answered, x one failed, . no check that day.",
+          "The last 90 days (the default) ending on as_of, oldest first: a every check answered, x one was missed, . no check that day.",
         ),
     })
     .optional()
@@ -253,7 +263,7 @@ export const doorHistoryEntrySchema = z.object({
     .string()
     .optional()
     .describe(
-      'With checks: "Answered 97% of daily checks since 3 Oct 2026 (41 of 42 days).", the share floored, "from … to …" when the last check is more than 7 days old.',
+      'With checks, in English: "Answered every check on 97% of days checked since 3 Oct 2026 (41 of 42).", the share floored, "from … to …" when the last check is more than 7 days old. Informative: another network may word it its own way.',
     ),
 });
 export type DoorHistoryEntry = z.infer<typeof doorHistoryEntrySchema>;
@@ -264,7 +274,7 @@ export const doorHistorySchema = z
     doors: z.array(doorHistoryEntrySchema),
   })
   .describe(
-    "What the network's own reads found of the business's doors, kept for good: each door type at each host, when it was first and last seen answering, and for a door read every day, how many days every check answered. Absent when there is nothing to say.",
+    "What the network's own reads found of the business's doors, kept for good: each door type at each host, when it was first and last seen answering and on how many days, and for a door read every day, on how many days every check answered. Absent when there is nothing to say.",
   );
 export type DoorHistory = z.infer<typeof doorHistorySchema>;
 

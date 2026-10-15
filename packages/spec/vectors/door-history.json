@@ -1,21 +1,8 @@
 {
-  "description": "A door's history (protocol §4.8, ADR-020): what the public sees of one door type at one host, from the days the network's own daily-set reads concluded. entry.days are [day, answered, failed]: that day's reads of the daily set that answered and that failed. A day is checked when one concluded, and answered only when none failed; the share shows from min_days checked days, floored; recent is the last recent_days days ending on as_of ('a' every check answered, 'x' one failed, '.' no check); a door whose last check is more than current_days before as_of says from…to instead of since. expect null: never shown.",
+  "description": "A door's history (protocol §4.8, ADR-020): what the public sees of one door type at one host, from the days a network's own daily checks of the door concluded. entry.type is a door type as vocab/doors.json names it (an experimental type, or anything else, is never shown). entry.days_seen is the days a read found the door answering, shown as at least the days first_seen and last_seen name. entry.days are [day, answered, missed]: that day's daily checks that answered and that were missed. A day is checked when one concluded, and answered only when none was missed; the share shows from min_days checked days, floored; recent is the last recent_days days ending on as_of ('a' every check answered, 'x' one was missed, '.' no check); a door whose last check is more than current_days before as_of says from…to instead of since. summary is this network's English words for checks, which another network may word its own way. expect null: never shown. Written by scripts/gen-door-history-vectors.py.",
   "min_days": 14,
   "recent_days": 90,
   "current_days": 7,
-  "public_types": {
-    "agent_inbox": "inbox",
-    "mcp": "mcp",
-    "shopify_mcp": "platform:shopify",
-    "a2a": "a2a",
-    "openapi": "openapi",
-    "api": "api",
-    "ucp": "ucp",
-    "acp": "acp",
-    "nlweb": "nlweb",
-    "webhook": "webhook",
-    "other": "other"
-  },
   "cases": [
     {
       "name": "fewer than 14 checked days: the dates and nothing else",
@@ -25,6 +12,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 13,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -47,6 +35,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 13,
         "current": true
       }
     },
@@ -58,6 +47,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -81,25 +71,27 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-16",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-16",
           "days": 14,
           "answered": 14,
           "recent": "............................................................................aaaaaaaaaaaaaa"
         },
-        "summary": "Answered 100% of daily checks since 3 Oct 2026 (14 of 14 days)."
+        "summary": "Answered every check on 100% of days checked since 3 Oct 2026 (14 of 14)."
       }
     },
     {
-      "name": "a day with a failed check and an answer later is a day missed: 41 of 42 is 97%",
+      "name": "a day with a missed check and an answer later is a day missed: 41 of 42 is 97%",
       "as_of": "2026-11-13",
       "entry": {
         "type": "mcp",
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -151,15 +143,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-11-13",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-11-13",
           "days": 42,
           "answered": 41,
           "recent": "................................................aaaaaaaaaaaaaaaaaaaaxaaaaaaaaaaaaaaaaaaaaa"
         },
-        "summary": "Answered 97% of daily checks since 3 Oct 2026 (41 of 42 days)."
+        "summary": "Answered every check on 97% of days checked since 3 Oct 2026 (41 of 42)."
       }
     },
     {
@@ -170,6 +163,7 @@
         "host": "salon.example",
         "first_seen": "2026-04-01",
         "last_seen": "2026-10-17",
+        "days_seen": 199,
         "current": true,
         "days": [
           ["2026-04-01", 1, 0],
@@ -379,25 +373,27 @@
         "host": "salon.example",
         "first_seen": "2026-04-01",
         "last_seen": "2026-10-17",
+        "days_seen": 199,
         "current": true,
         "checks": {
-          "since": "2026-04-01",
-          "last": "2026-10-17",
+          "first_checked": "2026-04-01",
+          "last_checked": "2026-10-17",
           "days": 200,
           "answered": 199,
           "recent": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaxaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "summary": "Answered 99% of daily checks since 1 Apr 2026 (199 of 200 days)."
+        "summary": "Answered every check on 99% of days checked since 1 Apr 2026 (199 of 200)."
       }
     },
     {
-      "name": "a check that only failed is a day missed, and the last day of the window",
+      "name": "a check that was only missed is a day missed, and the last day of the window",
       "as_of": "2026-10-22",
       "entry": {
         "type": "mcp",
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-21",
+        "days_seen": 19,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -427,15 +423,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-21",
+        "days_seen": 19,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-22",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-22",
           "days": 20,
           "answered": 19,
           "recent": "......................................................................aaaaaaaaaaaaaaaaaaax"
         },
-        "summary": "Answered 95% of daily checks since 3 Oct 2026 (19 of 20 days)."
+        "summary": "Answered every check on 95% of days checked since 3 Oct 2026 (19 of 20)."
       }
     },
     {
@@ -446,6 +443,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -497,15 +495,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-11-13",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-11-13",
           "days": 42,
           "answered": 42,
           "recent": "...........aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa....................................."
         },
-        "summary": "Answered 100% of daily checks from 3 Oct 2026 to 13 Nov 2026 (42 of 42 days)."
+        "summary": "Answered every check on 100% of days checked from 3 Oct 2026 to 13 Nov 2026 (42 of 42)."
       }
     },
     {
@@ -516,6 +515,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -567,15 +567,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-11-13",
+        "days_seen": 42,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-11-13",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-11-13",
           "days": 42,
           "answered": 42,
           "recent": ".........................................aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa......."
         },
-        "summary": "Answered 100% of daily checks since 3 Oct 2026 (42 of 42 days)."
+        "summary": "Answered every check on 100% of days checked since 3 Oct 2026 (42 of 42)."
       }
     },
     {
@@ -586,6 +587,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-20",
+        "days_seen": 18,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -613,25 +615,27 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-20",
+        "days_seen": 18,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-16",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-16",
           "days": 14,
           "answered": 14,
           "recent": "............................................................................aaaaaaaaaaaaaa"
         },
-        "summary": "Answered 100% of daily checks since 3 Oct 2026 (14 of 14 days)."
+        "summary": "Answered every check on 100% of days checked since 3 Oct 2026 (14 of 14)."
       }
     },
     {
-      "name": "the same day twice (two URLs of the type at the host) is one day, missed if one failed",
+      "name": "the same day twice (two URLs of the type at the host) is one day, missed if one was",
       "as_of": "2026-10-16",
       "entry": {
         "type": "mcp",
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -656,15 +660,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-16",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-16",
           "days": 14,
           "answered": 13,
           "recent": "............................................................................aaaaaaaxaaaaaa"
         },
-        "summary": "Answered 92% of daily checks since 3 Oct 2026 (13 of 14 days)."
+        "summary": "Answered every check on 92% of days checked since 3 Oct 2026 (13 of 14)."
       }
     },
     {
@@ -675,6 +680,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -699,15 +705,16 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-16",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-16",
           "days": 14,
           "answered": 14,
           "recent": "........................................................................aaaaaaaaaaaaaa...."
         },
-        "summary": "Answered 100% of daily checks since 3 Oct 2026 (14 of 14 days)."
+        "summary": "Answered every check on 100% of days checked since 3 Oct 2026 (14 of 14)."
       }
     },
     {
@@ -716,8 +723,9 @@
       "entry": {
         "type": "mcp",
         "host": "salon.example",
-        "first_seen": "2026-10-03",
+        "first_seen": "2026-10-01",
         "last_seen": "2026-11-30",
+        "days_seen": 30,
         "current": true,
         "days": [
           ["2026-10-01", 1, 0],
@@ -755,17 +763,18 @@
       "expect": {
         "type": "mcp",
         "host": "salon.example",
-        "first_seen": "2026-10-03",
+        "first_seen": "2026-10-01",
         "last_seen": "2026-11-30",
+        "days_seen": 30,
         "current": true,
         "checks": {
-          "since": "2026-10-01",
-          "last": "2026-11-28",
+          "first_checked": "2026-10-01",
+          "last_checked": "2026-11-28",
           "days": 30,
           "answered": 30,
           "recent": ".............................a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.."
         },
-        "summary": "Answered 100% of daily checks since 1 Oct 2026 (30 of 30 days)."
+        "summary": "Answered every check on 100% of days checked since 1 Oct 2026 (30 of 30)."
       }
     },
     {
@@ -776,6 +785,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-01",
         "last_seen": "2027-01-31",
+        "days_seen": 123,
         "current": true,
         "days": [
           ["2026-10-01", 1, 0],
@@ -908,25 +918,69 @@
         "host": "salon.example",
         "first_seen": "2026-10-01",
         "last_seen": "2027-01-31",
+        "days_seen": 123,
         "current": true,
         "checks": {
-          "since": "2026-10-01",
-          "last": "2027-01-31",
+          "first_checked": "2026-10-01",
+          "last_checked": "2027-01-31",
           "days": 123,
           "answered": 123,
           "recent": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
-        "summary": "Answered 100% of daily checks since 1 Oct 2026 (123 of 123 days)."
+        "summary": "Answered every check on 100% of days checked since 1 Oct 2026 (123 of 123)."
       }
     },
     {
-      "name": "a member's inbox is an inbox",
+      "name": "seen answering on a few days a month apart, never read daily: the dates and the count, no checks",
       "as_of": "2026-10-16",
       "entry": {
-        "type": "agent_inbox",
+        "type": "ucp",
+        "host": "salon.example",
+        "first_seen": "2026-08-16",
+        "last_seen": "2026-09-24",
+        "days_seen": 3,
+        "current": true,
+        "days": []
+      },
+      "expect": {
+        "type": "ucp",
+        "host": "salon.example",
+        "first_seen": "2026-08-16",
+        "last_seen": "2026-09-24",
+        "days_seen": 3,
+        "current": true
+      }
+    },
+    {
+      "name": "days_seen is never fewer than the days its first and last name",
+      "as_of": "2026-10-16",
+      "entry": {
+        "type": "mcp",
+        "host": "salon.example",
+        "first_seen": "2026-10-07",
+        "last_seen": "2026-10-09",
+        "days_seen": 0,
+        "current": true,
+        "days": []
+      },
+      "expect": {
+        "type": "mcp",
+        "host": "salon.example",
+        "first_seen": "2026-10-07",
+        "last_seen": "2026-10-09",
+        "days_seen": 2,
+        "current": true
+      }
+    },
+    {
+      "name": "a member's inbox",
+      "as_of": "2026-10-16",
+      "entry": {
+        "type": "inbox",
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -950,25 +1004,27 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "checks": {
-          "since": "2026-10-03",
-          "last": "2026-10-16",
+          "first_checked": "2026-10-03",
+          "last_checked": "2026-10-16",
           "days": 14,
           "answered": 14,
           "recent": "............................................................................aaaaaaaaaaaaaa"
         },
-        "summary": "Answered 100% of daily checks since 3 Oct 2026 (14 of 14 days)."
+        "summary": "Answered every check on 100% of days checked since 3 Oct 2026 (14 of 14)."
       }
     },
     {
       "name": "a Shopify store's MCP server is platform:shopify",
       "as_of": "2026-10-16",
       "entry": {
-        "type": "shopify_mcp",
+        "type": "platform:shopify",
         "host": "shop.example",
         "first_seen": "2026-10-07",
         "last_seen": "2026-10-07",
+        "days_seen": 1,
         "current": true,
         "days": []
       },
@@ -977,6 +1033,7 @@
         "host": "shop.example",
         "first_seen": "2026-10-07",
         "last_seen": "2026-10-07",
+        "days_seen": 1,
         "current": true
       }
     },
@@ -988,6 +1045,7 @@
         "host": "agents.salon.example",
         "first_seen": "2026-10-07",
         "last_seen": "2027-01-15",
+        "days_seen": 9,
         "current": false,
         "days": []
       },
@@ -996,6 +1054,7 @@
         "host": "agents.salon.example",
         "first_seen": "2026-10-07",
         "last_seen": "2027-01-15",
+        "days_seen": 9,
         "current": false
       }
     },
@@ -1003,10 +1062,11 @@
       "name": "llms.txt is not a door: never shown",
       "as_of": "2026-10-16",
       "entry": {
-        "type": "llms_txt",
+        "type": "llms.txt",
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": [
           ["2026-10-03", 1, 0],
@@ -1035,6 +1095,7 @@
         "host": "salon.example",
         "first_seen": "2026-10-03",
         "last_seen": "2026-10-16",
+        "days_seen": 14,
         "current": true,
         "days": []
       },
@@ -1048,6 +1109,7 @@
         "host": "salon.example",
         "first_seen": null,
         "last_seen": null,
+        "days_seen": 0,
         "current": true,
         "days": [
           ["2026-10-03", 0, 1],
