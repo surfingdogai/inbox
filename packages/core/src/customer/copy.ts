@@ -303,6 +303,8 @@ export interface EmailCopy {
   readonly replyToReach: string;
   /** Under every email a rule or the business's assistant sent (the founder, 23 September 2026). */
   readonly automated: string;
+  /** `automated` where a reply reaches nobody (the transport's `replies` is false): no reply asked for. */
+  readonly automatedNoReply: string;
   readonly total: Say;
   readonly priceToConfirm: string;
   /** An order line whose price is ours to set. */
@@ -773,6 +775,7 @@ const EN: Copy = {
     reference: (v) => `Reference: ${v.ref}`,
     replyToReach: "Reply to this email to reach us.",
     automated: "This reply was sent automatically. Reply to reach a person.",
+    automatedNoReply: "This reply was sent automatically.",
     total: (v) => `Total: ${v.total}`,
     priceToConfirm: "We will confirm the price with you.",
     lineToConfirm: "price to be confirmed",
@@ -1370,6 +1373,7 @@ const PT: Copy = {
     reference: (v) => `Referência: ${v.ref}`,
     replyToReach: "Responda a este email para falar connosco.",
     automated: "Esta resposta foi enviada automaticamente. Responda para falar com uma pessoa.",
+    automatedNoReply: "Esta resposta foi enviada automaticamente.",
     total: (v) => `Total: ${v.total}`,
     priceToConfirm: "Vamos confirmar o preço consigo.",
     lineToConfirm: "preço a confirmar",

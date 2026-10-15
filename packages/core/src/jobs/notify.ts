@@ -282,6 +282,9 @@ async function customerMail(
     business: facts.name,
     name: o.contact?.name ?? null,
     links,
+    // A reply reaches the business unless the transport says it reaches nobody (a hosted inbox's
+    // pinned sender with no Reply-To): then the email asks for none.
+    replies: o.mailOut.replies !== false,
     linked: linkedRow ? rowToItem(linkedRow) : null,
     unpriced: (p.event === "create" || item.state === "proposed") && (await createdUnpriced(db, item.id)),
     cancellationWindowMin: o.settings.booking.cancellationWindowMin,

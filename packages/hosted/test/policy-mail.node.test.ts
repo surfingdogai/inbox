@@ -1,9 +1,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { logMailOut } from "@surfingdog/platform";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type BuildDeps, tenantMailOut } from "../src/build";
 import { Ledger, RECIPIENT_DAILY_CAP } from "../src/ledger";
 import { redact } from "../src/redact";
+import type { PolicyPayload } from "../src/types";
 import { OWNER, PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -100,6 +103,42 @@ describe("mail", () => {
     const ack = rt.mail.find((m) => m.mail.to.includes("rita@example.org"));
     expect(ack?.from).toEqual({ address: `${slug}@mail.${PARENT}`, name: "Salão Rosa" });
     expect(ack?.mail.subject).not.toContain("curly");
+    // The pinned sender takes no mail: a customer's reply goes to the business's own address.
+    expect(ack?.mail.replyTo).toBe(OWNER);
+    expect(ack?.mail.text).toContain("Responda a este email para falar connosco."); // the business's language
+  });
+
+  it("asks a customer for no reply when the policy names no Reply-To: a reply would reach nobody", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-"));
+    const ledger = new Ledger(join(dir, "ledger.db"), { hashKey: "k" });
+    try {
+      const policy = (replyTo: string | null): PolicyPayload => ({
+        tenant_id: "tn_a",
+        policy_version: 1,
+        state: "live",
+        level: 2,
+        agents: "open",
+        address: "https://inbox.bikeworkshop.example",
+        site: "https://bikeworkshop.example",
+        owner_email: OWNER,
+        mail: {
+          from: "bike-workshop@mail.example.net",
+          from_name: "Bike Workshop",
+          reply_to: replyTo,
+          customer_mail: true,
+          customer_daily_cap: 200,
+        },
+        read_only: false,
+        suspended_reason: null,
+      });
+      const deps = (p: PolicyPayload) =>
+        ({ tenantId: "tn_a", policy: p, ledger, transport: () => logMailOut() }) as unknown as BuildDeps;
+      expect(tenantMailOut(deps(policy(null))).replies).toBe(false);
+      expect(tenantMailOut(deps(policy(OWNER))).replies).toBe(true);
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("caps one recipient across inboxes at five a day", async () => {
