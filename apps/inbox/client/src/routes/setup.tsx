@@ -2,11 +2,15 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CurrencySelect, MoneyInput, TimeZoneSelect } from "../components/Choosers";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
+import { lengthWords } from "../lib/catalogue";
+import { guessCurrency } from "../lib/currencies";
+import { languagesToSave } from "../lib/languages";
 import {
   useApplyPreset,
   useProducts,
@@ -96,6 +100,9 @@ function guessTimezone(): string {
     return "UTC";
   }
 }
+
+/** The lengths an offer is picked from. */
+const LENGTHS = [15, 30, 45, 60, 90, 120];
 /** The customers' email language the browser suggests: Portuguese for a Portuguese browser, else English. */
 function guessLang(): "en" | "pt" {
   try {
@@ -103,13 +110,6 @@ function guessLang(): "en" | "pt" {
   } catch {
     return "en";
   }
-}
-
-function guessCurrency(tz: string): string {
-  if (tz.startsWith("Europe/London")) return "GBP";
-  if (tz.startsWith("America/")) return "USD";
-  if (tz.startsWith("Europe/")) return "EUR";
-  return "EUR";
 }
 
 interface Offer {
@@ -136,7 +136,9 @@ function SetupWizard() {
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
-  const [currency, setCurrency] = useState(() => guessCurrency(tz));
+  const [currency, setCurrency] = useState(() =>
+    guessCurrency(typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language]),
+  );
   const [emailLang, setEmailLang] = useState<"en" | "pt">(guessLang);
   // Where new requests are announced: the address they signed in with, unless they say otherwise.
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -150,6 +152,11 @@ function SetupWizard() {
       live = false;
     };
   }, []);
+  // A business the inbox already knows by name (a plan, an earlier visit) starts with it.
+  useEffect(() => {
+    const known = profile.data?.name?.trim();
+    if (known) setName((typed) => typed || known);
+  }, [profile.data?.name]);
   const [trade, setTrade] = useState<Trade | null>(null);
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
   const [nextId, setNextId] = useState(2);
@@ -183,7 +190,14 @@ function SetupWizard() {
     setLocal(null);
     try {
       if (step === 0) {
-        await saveProfile.mutateAsync({ name: name.trim(), timezone, currency, languages: [emailLang] });
+        // A business already named keeps the languages it has, the email language first; a new one starts with it.
+        const known = profile.data?.name?.trim() ? (profile.data.languages ?? []) : [];
+        await saveProfile.mutateAsync({
+          name: name.trim(),
+          timezone,
+          currency,
+          languages: languagesToSave(known, emailLang, true),
+        });
         // A merge: only this one key is sent, everything else in the settings stays as it is.
         await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
       }
@@ -274,17 +288,11 @@ function SetupWizard() {
               />
             </Field>
             <div className="grid2">
-              <Field id="su-tz" label="Timezone" hint="Every time your inbox says is in this zone.">
-                <input id="su-tz" className="input" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+              <Field id="su-tz" label="Time zone" hint="Every time your inbox says is in this zone.">
+                <TimeZoneSelect id="su-tz" value={timezone} onChange={setTimezone} />
               </Field>
-              <Field id="su-cur" label="Currency">
-                <input
-                  id="su-cur"
-                  className="input"
-                  value={currency}
-                  maxLength={3}
-                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                />
+              <Field id="su-cur" label="Currency" error={problem?.field("currency")}>
+                <CurrencySelect id="su-cur" value={currency} onChange={setCurrency} />
               </Field>
             </div>
             <Field
@@ -370,32 +378,31 @@ function SetupWizard() {
                     />
                   </Field>
                   {sells === "services" && (
-                    <Field id={`su-m-${o.id}`} label={i === 0 ? "Minutes" : ""}>
-                      <input
+                    <Field id={`su-m-${o.id}`} label={i === 0 ? "Length" : ""}>
+                      <select
                         id={`su-m-${o.id}`}
                         className="input"
-                        inputMode="numeric"
+                        aria-label={i === 0 ? undefined : "Length"}
                         value={o.minutes}
                         onChange={(e) =>
                           setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, minutes: e.target.value } : x)))
                         }
-                      />
+                      >
+                        {LENGTHS.map((m) => (
+                          <option key={m} value={String(m)}>
+                            {lengthWords(m)}
+                          </option>
+                        ))}
+                      </select>
                     </Field>
                   )}
-                  <Field
-                    id={`su-p-${o.id}`}
-                    label={i === 0 ? `Price (${currency})` : ""}
-                    optional={i === 0 && sells === "services"}
-                  >
-                    <input
+                  <Field id={`su-p-${o.id}`} label={i === 0 ? "Price" : ""} optional={i === 0 && sells === "services"}>
+                    <MoneyInput
                       id={`su-p-${o.id}`}
-                      className="input"
-                      inputMode="decimal"
+                      currency={currency}
                       value={o.price}
-                      placeholder="45,50"
-                      onChange={(e) =>
-                        setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: e.target.value } : x)))
-                      }
+                      placeholder={sells === "services" ? "On request" : ""}
+                      onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: v } : x)))}
                     />
                   </Field>
                   {offers.length > 1 && (

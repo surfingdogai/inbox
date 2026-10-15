@@ -22,14 +22,34 @@ import { dateLocaliser, readClosures } from "./closures";
 const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund"];
 
 /**
+ * The owner's switches for what agents can do (`settings.doors`). Left out, a door follows what the
+ * inbox holds; `false` shuts it; `quoteRequest: true` opens the request for a price with nothing listed.
+ */
+export interface DoorSwitches {
+  readonly booking?: boolean | undefined;
+  readonly quoteRequest?: boolean | undefined;
+  readonly message?: boolean | undefined;
+}
+
+/** The switch for a door, by item type; undefined for a door no switch governs (order, refund). */
+export function doorSwitch(doors: DoorSwitches, type: ItemType): boolean | undefined {
+  if (type === "booking") return doors.booking;
+  if (type === "quote_request") return doors.quoteRequest;
+  if (type === "message") return doors.message;
+  return undefined;
+}
+
+/**
  * The item types this inbox takes, in canonical order:
  *
  * - `message`, always;
  * - `booking`, with an active service that has weekly hours with at least one window (its own, or
  *   the business's when it has none of its own);
  * - `order`, with an active product;
- * - `quote_request`, with an active service or product to ask about;
+ * - `quote_request`, with an active service or product to ask about, or switched on (`doors`);
  * - `refund`, with something paid to refund: an order, or a booking of a service with a price.
+ *
+ * A door the owner switched off (`settings.doors`, false) is never listed, whatever the inbox holds.
  *
  * A kind the business takes somewhere else (`elsewhere`, from `settings.doorsElsewhere`) is not
  * listed, and nor is a refund of it: the manifest names where to go for it instead.
@@ -37,7 +57,11 @@ const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", 
  * Only what is advertised reads this. A kind taken somewhere else is refused to customers by the
  * doors themselves (`createBooking`, `createOrder`, `checkAvailability`), which name where to go.
  */
-export async function offeredItemTypes(db: Db, elsewhere: readonly string[] = []): Promise<ItemType[]> {
+export async function offeredItemTypes(
+  db: Db,
+  elsewhere: readonly string[] = [],
+  doors: DoorSwitches = {},
+): Promise<ItemType[]> {
   const [services, open, products] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
@@ -52,6 +76,7 @@ export async function offeredItemTypes(db: Db, elsewhere: readonly string[] = []
   // A service's own hours replace the business's, so a service whose own hours are empty is closed.
   const bookable =
     !elsewhere.includes("booking") &&
+    doors.booking !== false &&
     services.rows.some((r) => {
       const id = String(r[0]);
       return hasWindows(own.has(id) ? own.get(id) : base?.[1]);
@@ -61,11 +86,13 @@ export async function offeredItemTypes(db: Db, elsewhere: readonly string[] = []
     const model = (json(r[1]) as { model?: unknown } | null)?.model;
     return model === "fixed" || model === "from";
   });
-  const offered = new Set<ItemType>(["message"]);
+  const offered = new Set<ItemType>();
+  if (doors.message !== false) offered.add("message");
   if (bookable) offered.add("booking");
   if (orderable) offered.add("order");
   // Something can still be asked about here when it is bought or booked somewhere else.
-  if (services.rows.length > 0 || products.rows.length > 0) offered.add("quote_request");
+  const askable = doors.quoteRequest === true || services.rows.length > 0 || products.rows.length > 0;
+  if (askable && doors.quoteRequest !== false) offered.add("quote_request");
   if (orderable || (bookable && priced)) offered.add("refund");
   return ITEM_TYPES.filter((t) => offered.has(t));
 }

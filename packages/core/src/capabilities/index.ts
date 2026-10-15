@@ -16,7 +16,7 @@ export {
   eraseStatements,
   MAX_CUSTOMER_ITEMS,
 } from "./customers";
-export { directoryProfile, offeredItemTypes } from "./directory";
+export { type DoorSwitches, directoryProfile, doorSwitch, offeredItemTypes } from "./directory";
 export {
   buildDownload,
   DOWNLOAD_TABLES,

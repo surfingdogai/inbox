@@ -4,6 +4,7 @@ import { isOwnerOrSystem } from "../access/outbound";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
+import type { ItemType } from "../domain/types";
 import { ulid } from "../ids";
 import { amountsIn, discountIn, speltAmountIn } from "../negotiation/amounts";
 import { allFloors, type FloorView, floorStatement } from "../negotiation/catalogue";
@@ -24,6 +25,7 @@ import {
 } from "../schema/tables";
 import { type HostPolicy, SET_BY_HOST } from "../settings/policy";
 import { readSettings } from "../settings/schema";
+import { canonicalLanguages } from "../util/locale";
 import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { heldForPrice } from "../write/pricing";
@@ -31,6 +33,7 @@ import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
 import { DEFAULT_WEEKLY, type Weekly } from "./availability";
 import { type Closure, readClosures } from "./closures";
+import { offeredItemTypes } from "./directory";
 import type * as S from "./setup-types";
 
 /**
@@ -44,6 +47,13 @@ export interface Profile {
   readonly timezone: string;
   readonly currency: string;
   readonly languages: readonly string[];
+  /** Whether the host holds the domain (`HostPolicy.profileDomain`): nobody changes it here, the owner included. */
+  readonly domain_held: boolean;
+  /**
+   * What agents can do here now: the item types the manifest lists (`offeredItemTypes`), for the
+   * owner to see while the public doors are still closed (an inbox not yet connected answers no agent).
+   */
+  readonly item_types: readonly ItemType[];
 }
 
 export interface RuleView {
@@ -60,7 +70,12 @@ export interface RuleView {
 
 export interface Availability {
   readonly timezone: string;
+  /**
+   * The business's weekly hours. Until any are saved (`weekly_set` false) these are the hours a
+   * booking falls back to, not hours the business set: nothing is published, and booking stays shut.
+   */
   readonly weekly: Weekly;
+  readonly weekly_set: boolean;
   readonly overrides: readonly { service_id: string; weekly: Weekly }[];
   readonly closures: readonly Closure[];
 }
@@ -125,7 +140,12 @@ export class SetupCapabilities {
       domain: input.domain === undefined ? current.domain : input.domain,
       timezone: input.timezone ?? current.timezone,
       currency: (input.currency ?? current.currency).toUpperCase(),
-      languages: input.languages ?? [...current.languages],
+      // Canonical and once each (`pt-br` is pt-BR): the schema has checked each is a language tag.
+      languages: input.languages
+        ? (canonicalLanguages(input.languages) ?? [...input.languages])
+        : [...current.languages],
+      domain_held: current.domain_held,
+      item_types: current.item_types,
     };
     await this.db.client.query({
       sql: `INSERT INTO business (id, name, domain, timezone, currency, languages, created_at, updated_at) VALUES ('self', ?, ?, ?, ?, ?, ?, ?)
@@ -162,6 +182,12 @@ export class SetupCapabilities {
       timezone: row?.timezone ?? s.business.timezone,
       currency: row?.currency ?? s.business.currency,
       languages: row?.languages?.length ? row.languages : s.business.languages,
+      domain_held: this.policy()?.profileDomain !== undefined,
+      item_types: await offeredItemTypes(
+        this.db,
+        s.doorsElsewhere.map((d) => d.itemType),
+        s.doors,
+      ),
     };
   }
 
@@ -253,7 +279,8 @@ export class SetupCapabilities {
         buffer_after_min: patch.buffer_after_min,
         capacity: patch.capacity,
         granularity_min: patch.granularity_min,
-        price: patch.price === undefined ? undefined : JSON.stringify(patch.price),
+        // null takes the price off (priced on request); left out, it stays as it is.
+        price: patch.price === undefined ? undefined : patch.price === null ? null : JSON.stringify(patch.price),
         active: patch.active === undefined ? undefined : patch.active ? 1 : 0,
         sort: patch.sort,
         withdrawal: patch.withdrawal,
@@ -422,6 +449,7 @@ export class SetupCapabilities {
     return {
       timezone: profile.timezone,
       weekly: (base?.weekly as Weekly | null) ?? DEFAULT_WEEKLY,
+      weekly_set: base !== undefined,
       overrides: open
         .filter((r) => r.serviceId)
         .map((r) => ({ service_id: r.serviceId as string, weekly: r.weekly as Weekly })),

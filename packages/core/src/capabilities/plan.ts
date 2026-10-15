@@ -18,6 +18,7 @@ import { servicePriceText } from "../util/money";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { type Closure, readClosures } from "./closures";
+import type { DoorSwitches } from "./directory";
 import type { Capabilities } from "./service";
 import { hasAmount, PRESET_NAMES, servicePriceKey, validTimezone } from "./setup";
 import {
@@ -153,7 +154,7 @@ export const setupPlanSchema = z
       .max(5)
       .optional()
       .describe(
-        "The doors the plan expects to be on once applied. The inbox opens a door from what it holds (booking with hours and a service), and says which expected ones stay shut and why.",
+        "The doors the plan expects to be on once applied. Each is switched on (`settings.doors`): asking for a price opens with nothing listed, a door the owner had switched off opens again. A booking still needs a service and hours to book it in; the result says which expected ones stay shut and why. A door left out of the list is left as it is.",
       ),
     doors_elsewhere: z
       .array(planElsewhereSchema)
@@ -480,6 +481,32 @@ export async function applySetupPlan(
       }
     }
   }
+  // ---- what agents can do: the doors the plan expects, switched on where they would stay shut ----
+  const doorsAfter: DoorSwitches = { ...state.settings.doors };
+  if (plan.doors) {
+    const patch: Record<string, boolean> = {};
+    const listed = servicesAfter.some((svc) => svc.active) || state.products;
+    if (plan.doors.includes("quote_request") && state.settings.doors.quoteRequest === false) {
+      patch.quoteRequest = true;
+      said.push("Lets agents ask you for a price again.");
+    } else if (plan.doors.includes("quote_request") && !listed && state.settings.doors.quoteRequest !== true) {
+      // Nothing listed yet: the request for a price opens anyway, the job in the request's own words.
+      patch.quoteRequest = true;
+      said.push("Lets agents ask you for a price, in their own words, before you list a service.");
+    }
+    if (plan.doors.includes("booking") && state.settings.doors.booking === false) {
+      patch.booking = true;
+      said.push("Lets agents book again.");
+    }
+    if (plan.doors.includes("message") && state.settings.doors.message === false) {
+      patch.message = true;
+      said.push("Lets agents send you messages again.");
+    }
+    if (Object.keys(patch).length) {
+      settingsPatch.doors = patch;
+      Object.assign(doorsAfter, patch);
+    }
+  }
   if (plan.sources && !same(sorted(plan.sources), sorted(state.settings.setup.sources))) {
     // A merge keeps keys it is not sent, so a field the plan no longer names is sent as null.
     const gone = Object.keys(state.settings.setup.sources).filter((k) => !(k in (plan.sources ?? {})));
@@ -501,6 +528,7 @@ export async function applySetupPlan(
         hours: hoursAfter,
         products: state.products,
         elsewhere: away,
+        doors: doorsAfter,
       })
     : await caps.getBusinessProfile().then((p) => ITEM_ORDER.filter((t) => p.item_types.includes(t)));
   const rules = dryRun ? rulesAfter : (await readState(caps, db, caller)).rules;
@@ -508,7 +536,13 @@ export async function applySetupPlan(
   const shut = expected ? expected.filter((d) => !on.includes(d)) : [];
   const missing = shut.map((door) => ({
     door,
-    why: whyShut(door, { services: servicesAfter, own: state.ownHours, hours: hoursAfter, elsewhere: away }),
+    why: whyShut(door, {
+      services: servicesAfter,
+      own: state.ownHours,
+      hours: hoursAfter,
+      elsewhere: away,
+      doors: doorsAfter,
+    }),
   }));
 
   const sentences = [
@@ -603,11 +637,13 @@ interface DoorState {
   readonly hours: WeeklyHours | null;
   /** The doors taken somewhere else, each with the sentence that says where. */
   readonly elsewhere: ReadonlyMap<ItemType, string>;
+  /** The owner's switches (`settings.doors`), as the plan leaves them. */
+  readonly doors: DoorSwitches;
 }
 
 /** A service that can be booked: on offer, with weekly hours that have a window (its own, else the business's). */
 function bookable(s: DoorState): boolean {
-  return s.services.some((svc) => svc.active && hasWindows(s.own.get(svc.id) ?? s.hours));
+  return s.doors.booking !== false && s.services.some((svc) => svc.active && hasWindows(s.own.get(svc.id) ?? s.hours));
 }
 
 /**
@@ -624,10 +660,12 @@ function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[]
   });
   const booking = !s.elsewhere.has("booking") && bookable(s);
   const order = !s.elsewhere.has("order") && s.products;
-  const on = new Set<ItemType>(["message"]);
+  const on = new Set<ItemType>();
+  if (s.doors.message !== false) on.add("message");
   if (booking) on.add("booking");
   if (order) on.add("order");
-  if (active.length > 0 || s.products) on.add("quote_request");
+  if ((s.doors.quoteRequest === true || active.length > 0 || s.products) && s.doors.quoteRequest !== false)
+    on.add("quote_request");
   if (order || (booking && priced)) on.add("refund");
   return ITEM_ORDER.filter((t) => on.has(t));
 }
@@ -724,13 +762,19 @@ function hasWindows(weekly: WeeklyHours | null | undefined): boolean {
   return Boolean(weekly && DAYS.some((d) => (weekly[d]?.length ?? 0) > 0));
 }
 
-/** `Mon–Fri 09:00–18:00, Sat 09:00–14:00`: days in a row with the same windows go together. */
+/**
+ * `Mon–Fri 09:00–18:00, Sat 09:00–14:00`: days in a row with the same windows go together. A day
+ * open from 00:00 to 24:00 is `open 24 hours`; every day so is `open all the time`.
+ */
 function hoursWords(weekly: WeeklyHours): string {
+  const allDay = (w: readonly (readonly [string, string])[] | undefined) =>
+    w?.length === 1 && w[0]?.[0] === "00:00" && w[0]?.[1] === "24:00";
+  if (DAYS.every((d) => allDay(weekly[d]))) return "open all the time";
   const runs: { from: keyof WeeklyHours; to: keyof WeeklyHours; windows: string }[] = [];
   for (const day of DAYS) {
     const windows = weekly[day];
     if (!windows?.length) continue;
-    const words = windows.map(([a, b]) => `${a}–${b}`).join(" and ");
+    const words = allDay(windows) ? "open 24 hours" : windows.map(([a, b]) => `${a}–${b}`).join(" and ");
     const last = runs.at(-1);
     if (last && last.windows === words && DAYS.indexOf(last.to) === DAYS.indexOf(day) - 1) last.to = day;
     else runs.push({ from: day, to: day, windows: words });

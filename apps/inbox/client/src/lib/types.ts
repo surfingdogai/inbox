@@ -98,6 +98,8 @@ export interface SettingsDoc {
   readonly version: number;
   /** Settings paths that hold a secret the read left out, e.g. `email.inboundSecret`. */
   readonly redacted?: readonly string[] | undefined;
+  /** Settings the host set or holds, dotted (`email`, `notifications.appUrl`): shown, never changed here. */
+  readonly locked?: readonly string[] | undefined;
 }
 
 /** RFC 9457 problem document, as every refusal comes back. */
@@ -193,7 +195,8 @@ export type ServiceBody = Partial<{
   readonly buffer_after_min: number;
   readonly capacity: number;
   readonly granularity_min: number;
-  readonly price: ServicePrice;
+  /** null takes the price off: priced on request. */
+  readonly price: ServicePrice | null;
   readonly active: boolean;
   readonly sort: number;
   readonly negotiable: boolean;

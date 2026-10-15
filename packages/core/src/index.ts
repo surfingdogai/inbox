@@ -73,6 +73,7 @@ export { mergeSettings } from "./settings/merge";
 export { type HostPolicy, hostPolicyFor, SET_BY_HOST, type SettingsPatch } from "./settings/policy";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
+export { canonicalLanguages, currencyProblem, isHundredthsCurrency } from "./util/locale";
 export { servicePriceText } from "./util/money";
 export { crc32, type ZipFile, zip } from "./util/zip";
 export { USER_AGENT, VERSION } from "./version";

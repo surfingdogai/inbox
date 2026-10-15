@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
 import { ruleDefinitionSchema } from "../rules/schema";
+import { canonicalLanguages, currencyProblem } from "../util/locale";
 
 /** Inputs of the owner's setup operations: profile, services, products, opening hours, rules. */
 
@@ -24,14 +25,40 @@ export function patchOf<T extends z.ZodRawShape>(schema: z.ZodObject<T>): z.ZodO
   return z.object(shape) as unknown as z.ZodObject<Patch<T>>;
 }
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
-const range = z.tuple([hhmm, hhmm]).refine(([a, b]) => a < b, { message: "closing time must be after opening time" });
+/** A closing time: HH:MM, or 24:00 for a window that runs to midnight (`["00:00","24:00"]` is the whole day). */
+const closing = z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|24:00)$/, "use HH:MM, or 24:00 for midnight");
+const range = z
+  .tuple([hhmm, closing])
+  .refine(([a, b]) => a < b, { message: "closing time must be after opening time" });
 const day = z.array(range).max(6);
 export const weeklySchema = z
   .object({ mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day })
   .partial()
   .describe(
-    'Opening windows per weekday, e.g. {"mon": [["09:00","13:00"],["14:00","18:00"]]}. Missing days are closed.',
+    'Opening windows per weekday, e.g. {"mon": [["09:00","13:00"],["14:00","18:00"]]}; ["00:00","24:00"] is open all day. Missing days are closed.',
   );
+
+/** A currency a price here can be in (`util/locale.ts`): an ISO 4217 code counted in hundredths. */
+export const currencySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .superRefine((code, ctx) => {
+    const problem = currencyProblem(code);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  });
+
+/**
+ * The languages a business speaks, as BCP 47 tags. Each must be one (`canonicalLanguages`); the
+ * profile stores them canonical and once each, in the business's order.
+ */
+export const languagesSchema = z
+  .array(z.string().min(2).max(35))
+  .min(1)
+  .max(10)
+  .superRefine((tags, ctx) => {
+    if (!canonicalLanguages(tags)) ctx.addIssue({ code: "custom", message: "language tags like en, pt or pt-BR" });
+  });
 
 export const closureSchema = z
   .object({
@@ -50,8 +77,8 @@ export const profileInput = z.object({
     .nullable()
     .optional(),
   timezone: z.string().min(1).max(64).optional().describe("IANA name, e.g. Europe/Lisbon"),
-  currency: z.string().length(3).toUpperCase().optional(),
-  languages: z.array(z.string().min(2).max(12)).min(1).max(10).optional(),
+  currency: currencySchema.optional().describe("ISO 4217, counted in hundredths: EUR, USD, GBP, …"),
+  languages: languagesSchema.optional().describe("BCP 47 tags, e.g. en, pt-BR."),
 });
 
 export const priceSchema = z.object({
@@ -59,7 +86,7 @@ export const priceSchema = z.object({
     .enum(["fixed", "from", "quote"])
     .describe("fixed = this price; from = starting at; quote = priced per request"),
   value: z.number().int().min(0).optional().describe("Minor units (cents)."),
-  currency: z.string().length(3).optional(),
+  currency: currencySchema.optional(),
   per: z
     .enum(["booking", "person"])
     .optional()
@@ -91,14 +118,17 @@ export const serviceInput = z.object({
       "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
     ),
 });
-export const updateServiceInput = patchOf(serviceInput).extend({ service_id: z.string().min(1) });
+export const updateServiceInput = patchOf(serviceInput).extend({
+  service_id: z.string().min(1),
+  price: priceSchema.nullable().optional().describe("null takes the price off: the service is priced on request."),
+});
 export const serviceIdInput = z.object({ service_id: z.string().min(1) });
 
 export const productInput = z.object({
   sku: z.string().max(64).optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
-  price: z.object({ value: z.number().int().min(0), currency: z.string().length(3) }),
+  price: z.object({ value: z.number().int().min(0), currency: currencySchema }),
   stock: z.number().int().min(0).nullable().optional().describe("null = not tracked"),
   active: z.boolean().default(true),
   withdrawal: withdrawalFlagSchema

@@ -1,49 +1,10 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { parseMajor } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
-import { formatMoney } from "../lib/format";
-import type { PriceModel, ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
+import { type ServiceDraft, serviceDraft, serviceWrite } from "../lib/catalogue";
+import type { ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
+import { LengthPicker, MoneyInput } from "./Choosers";
 import { Field, Switch } from "./Form";
-
-/** How a service reads in a list: "90 min · 15 min after · 1 at a time · every 30 min · €45.00". */
-export function describeService(s: ServiceRow): string {
-  const parts = [`${s.durationMin} min`];
-  if (s.bufferBeforeMin) parts.push(`${s.bufferBeforeMin} min before`);
-  if (s.bufferAfterMin) parts.push(`${s.bufferAfterMin} min after`);
-  parts.push(s.capacity === 1 ? "one at a time" : `${s.capacity} at a time`);
-  parts.push(`every ${s.granularityMin} min`);
-  parts.push(describePrice(s));
-  return parts.join(" · ");
-}
-
-export function describePrice(s: ServiceRow): string {
-  const p = s.price;
-  if (!p) return "no price";
-  if (p.model === "quote") return "priced by quote";
-  const money = p.value !== undefined ? formatMoney({ value: p.value, currency: p.currency ?? "EUR" }) : "";
-  const each = p.per === "person" ? `${money} per person` : money;
-  return p.model === "from" ? `from ${each}` : each;
-}
-
-interface ServiceDraft {
-  readonly name: string;
-  readonly description: string;
-  readonly duration: string;
-  readonly before: string;
-  readonly after: string;
-  readonly capacity: string;
-  readonly granularity: string;
-  readonly model: PriceModel;
-  readonly price: string;
-  /** Whom a fixed price is for: the booking, or each person in it. */
-  readonly per: "booking" | "person";
-  readonly sort: string;
-  readonly active: boolean;
-  /** Whether a customer may suggest a price of their own for it, while price counters are on. */
-  readonly negotiable: boolean;
-  /** The lowest price the owner's AI, rules and other systems may go to, in major units; empty for none. */
-  readonly floor: string;
-}
 
 /** A lowest price as typed: minor units, null for none, undefined when it is not a price. */
 function floorOf(typed: string): number | null | undefined {
@@ -53,27 +14,48 @@ function floorOf(typed: string): number | null | undefined {
 const majorOf = (minor: number | null | undefined) =>
   minor === null || minor === undefined ? "" : (minor / 100).toFixed(2);
 
-function serviceDraft(s: ServiceRow | undefined, floor: number | null | undefined): ServiceDraft {
-  return {
-    name: s?.name ?? "",
-    description: s?.description ?? "",
-    duration: String(s?.durationMin ?? 60),
-    before: String(s?.bufferBeforeMin ?? 0),
-    after: String(s?.bufferAfterMin ?? 0),
-    capacity: String(s?.capacity ?? 1),
-    granularity: String(s?.granularityMin ?? 15),
-    model: s?.price?.model ?? "fixed",
-    price: s?.price?.value !== undefined ? (s.price.value / 100).toFixed(2) : "",
-    per: s?.price?.per === "person" ? "person" : "booking",
-    sort: String(s?.sort ?? 0),
-    active: s ? s.active === 1 : true,
-    negotiable: s ? s.negotiable !== 0 : true,
-    floor: majorOf(floor),
-  };
+/** Minutes to pick from, with the stored value in its place when it is another. */
+const withMinutes = (steps: readonly number[], keep: string) => {
+  const n = Number(keep);
+  return Number.isInteger(n) && !steps.includes(n) ? [...steps, n].sort((a, b) => a - b) : steps;
+};
+const SLOT_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120];
+const BUFFERS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120];
+
+/** Two or three choices in a row, one press each (a radio group underneath, so arrows move between them). */
+function Choice<T extends string>({
+  legend,
+  value,
+  options,
+  onChange,
+}: {
+  legend: string;
+  value: T;
+  options: readonly { readonly value: T; readonly label: string }[];
+  onChange: (v: T) => void;
+}) {
+  const name = useId();
+  return (
+    <fieldset className="chips-field">
+      <legend className="label">{legend}</legend>
+      <div className="chips" role="radiogroup">
+        {options.map((o) => (
+          <label key={o.value} className="chip">
+            <input type="radio" name={name} checked={value === o.value} onChange={() => onChange(o.value)} />
+            <span>{o.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
-const int = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
-
+/**
+ * A service: its name, whether it is booked or asked about, its length from the usual ones, and a
+ * price in the business's currency, or none ("on request"). The rest — exact or starting at, per
+ * person, the lowest price, buffers, how often slots start, how many at once, its place in lists —
+ * is under More.
+ */
 export function ServiceEditor({
   initial,
   floor,
@@ -96,199 +78,203 @@ export function ServiceEditor({
   const [f, setF] = useState<ServiceDraft>(() => serviceDraft(initial, floor));
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]) => setF((d) => ({ ...d, [key]: value }));
+  const id = useId();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (pending) return;
-    if (!f.name.trim()) return setLocal("Give the service a name.");
-    const value = parseMajor(f.price);
-    if (f.model !== "quote" && value === undefined) {
-      return setLocal("Give a price, like 45,50 or 45.50, or choose priced by quote.");
-    }
-    const lowest = floorOf(f.floor);
-    if (lowest === undefined) return setLocal("Give the lowest price like 40,00 or 40.00, or leave it empty.");
+    const out = serviceWrite(f, { currency, isNew: !initial, floor });
+    if ("problem" in out) return setLocal(out.problem);
     setLocal(null);
-    const floorChanged = lowest !== (floor ?? null);
-    onSubmit(
-      {
-        name: f.name.trim(),
-        description: f.description.trim(),
-        duration_min: int(f.duration),
-        buffer_before_min: int(f.before),
-        buffer_after_min: int(f.after),
-        capacity: int(f.capacity),
-        granularity_min: int(f.granularity),
-        price:
-          f.model === "quote"
-            ? { model: "quote" }
-            : {
-                model: f.model,
-                value: value ?? 0,
-                currency,
-                ...(f.per === "person" ? { per: "person" as const } : {}),
-              },
-        sort: int(f.sort),
-        active: f.active,
-        negotiable: f.negotiable,
-      },
-      floorChanged ? lowest : undefined,
-    );
+    onSubmit(out.body, out.floor);
   };
   const err = (path: string) => error?.field(path);
+  const book = f.taken === "book";
+  const priced = book && f.price.trim() !== "";
   return (
-    <form className="confirm row-glass" onSubmit={submit}>
+    <form className="confirm row-glass stack" onSubmit={submit}>
       <h3>{initial ? `Edit ${initial.name}` : "New service"}</h3>
       <div className="settings-grid">
-        <Field id="sv-name" label="Name" error={err("name")}>
-          <input id="sv-name" className="input" value={f.name} onChange={(e) => set("name", e.target.value)} />
-        </Field>
-        <Field id="sv-desc" label="Description" optional error={err("description")}>
+        <Field id={`${id}-name`} label="Name" error={err("name")}>
           <input
-            id="sv-desc"
+            id={`${id}-name`}
+            className="input"
+            value={f.name}
+            placeholder="Haircut"
+            onChange={(e) => set("name", e.target.value)}
+          />
+        </Field>
+        <Choice
+          legend="Agents can"
+          value={f.taken}
+          options={[
+            { value: "book", label: "Book a time" },
+            { value: "ask", label: "Ask for a price" },
+          ]}
+          onChange={(v) => set("taken", v)}
+        />
+        {book && (
+          <div className="wide">
+            <LengthPicker
+              legend="Length"
+              value={f.duration}
+              onChange={(v) => set("duration", v)}
+              error={err("duration_min")}
+            />
+          </div>
+        )}
+        {book && (
+          <Field
+            id={`${id}-price`}
+            label="Price"
+            optional
+            error={err("price.value") ?? err("price")}
+            hint={priced ? undefined : "Empty: on request."}
+          >
+            <MoneyInput
+              id={`${id}-price`}
+              currency={currency}
+              placeholder="On request"
+              value={f.price}
+              onChange={(v) => set("price", v)}
+            />
+          </Field>
+        )}
+        <Field id={`${id}-desc`} label="Description" optional error={err("description")}>
+          <input
+            id={`${id}-desc`}
             className="input"
             value={f.description}
             onChange={(e) => set("description", e.target.value)}
           />
         </Field>
-        <Field id="sv-duration" label="Duration (minutes)" error={err("duration_min")}>
-          <input
-            id="sv-duration"
-            className="input"
-            type="number"
-            min={5}
-            max={1440}
-            value={f.duration}
-            onChange={(e) => set("duration", e.target.value)}
-          />
-        </Field>
-        <Field id="sv-gran" label="Slots start every (minutes)" error={err("granularity_min")}>
-          <input
-            id="sv-gran"
-            className="input"
-            type="number"
-            min={5}
-            max={240}
-            value={f.granularity}
-            onChange={(e) => set("granularity", e.target.value)}
-          />
-        </Field>
-        <Field id="sv-before" label="Buffer before (minutes)" error={err("buffer_before_min")}>
-          <input
-            id="sv-before"
-            className="input"
-            type="number"
-            min={0}
-            max={240}
-            value={f.before}
-            onChange={(e) => set("before", e.target.value)}
-          />
-        </Field>
-        <Field id="sv-after" label="Buffer after (minutes)" error={err("buffer_after_min")}>
-          <input
-            id="sv-after"
-            className="input"
-            type="number"
-            min={0}
-            max={240}
-            value={f.after}
-            onChange={(e) => set("after", e.target.value)}
-          />
-        </Field>
-        <Field
-          id="sv-capacity"
-          label="At the same time"
-          error={err("capacity")}
-          hint="How many bookings can share one slot."
-        >
-          <input
-            id="sv-capacity"
-            className="input"
-            type="number"
-            min={1}
-            max={100}
-            value={f.capacity}
-            onChange={(e) => set("capacity", e.target.value)}
-          />
-        </Field>
-        <Field id="sv-sort" label="Order in lists" error={err("sort")}>
-          <input
-            id="sv-sort"
-            className="input"
-            type="number"
-            min={0}
-            value={f.sort}
-            onChange={(e) => set("sort", e.target.value)}
-          />
-        </Field>
-        <Field id="sv-model" label="Price" error={err("price")}>
-          <select
-            id="sv-model"
-            className="input"
-            value={f.model}
-            onChange={(e) => set("model", e.target.value as PriceModel)}
-          >
-            <option value="fixed">A fixed price</option>
-            <option value="from">Starting at</option>
-            <option value="quote">Priced by quote</option>
-          </select>
-        </Field>
-        {f.model !== "quote" && (
-          <Field id="sv-price" label={`Amount (${currency})`} error={err("price.value")}>
-            <input
-              id="sv-price"
-              className="input"
-              inputMode="decimal"
-              value={f.price}
-              onChange={(e) => set("price", e.target.value)}
-            />
-          </Field>
-        )}
-        {f.model !== "quote" && (
-          <Field
-            id="sv-per"
-            label="Price is"
-            error={err("price.per")}
-            hint="Per person: a booking for four costs four times the amount."
-          >
-            <select
-              id="sv-per"
-              className="input"
-              value={f.per}
-              onChange={(e) => set("per", e.target.value === "person" ? "person" : "booking")}
-            >
-              <option value="booking">For the booking</option>
-              <option value="person">Per person</option>
-            </select>
-          </Field>
-        )}
-        {f.model === "fixed" && (
-          <Field
-            id="sv-floor"
-            label={`Lowest price (${currency})`}
-            optional
-            error={err("floors.0.floor_minor")}
-            hint="Your AI and rules never go under it, and never learn it. On the same basis as the price."
-          >
-            <input
-              id="sv-floor"
-              className="input"
-              inputMode="decimal"
-              value={f.floor}
-              onChange={(e) => set("floor", e.target.value)}
-            />
-          </Field>
-        )}
         <div className="wide">
           <Switch checked={f.active} onChange={(v) => set("active", v)}>
-            Bookable
+            On offer
           </Switch>
-        </div>
-        <div className="wide">
-          <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
-            Customers may suggest a price for it
-          </Switch>
-          <div className="hint">Only while you take customers' own prices (Settings). Off, one goes to you.</div>
         </div>
       </div>
+      <details className="details more">
+        <summary>More</summary>
+        <div className="settings-grid">
+          {priced && (
+            <Choice
+              legend="The price is"
+              value={f.model}
+              options={[
+                { value: "fixed", label: "Exact" },
+                { value: "from", label: "Starting at" },
+              ]}
+              onChange={(v) => set("model", v)}
+            />
+          )}
+          {priced && (
+            <Choice
+              legend="For"
+              value={f.per}
+              options={[
+                { value: "booking", label: "The booking" },
+                { value: "person", label: "Each person" },
+              ]}
+              onChange={(v) => set("per", v)}
+            />
+          )}
+          {priced && f.model === "fixed" && (
+            <Field
+              id={`${id}-floor`}
+              label="Lowest price"
+              optional
+              error={err("floors.0.floor_minor")}
+              hint="Your AI and rules never go under it, and never learn it."
+            >
+              <MoneyInput id={`${id}-floor`} currency={currency} value={f.floor} onChange={(v) => set("floor", v)} />
+            </Field>
+          )}
+          {book && (
+            <Field id={`${id}-gran`} label="Slots start every" error={err("granularity_min")}>
+              <select
+                id={`${id}-gran`}
+                className="input"
+                value={f.granularity}
+                onChange={(e) => set("granularity", e.target.value)}
+              >
+                {withMinutes(SLOT_STEPS, f.granularity).map((m) => (
+                  <option key={m} value={String(m)}>
+                    {m} min
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {book && (
+            <Field id={`${id}-before`} label="Free before" error={err("buffer_before_min")}>
+              <select
+                id={`${id}-before`}
+                className="input"
+                value={f.before}
+                onChange={(e) => set("before", e.target.value)}
+              >
+                {withMinutes(BUFFERS, f.before).map((m) => (
+                  <option key={m} value={String(m)}>
+                    {m ? `${m} min` : "None"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {book && (
+            <Field id={`${id}-after`} label="Free after" error={err("buffer_after_min")}>
+              <select
+                id={`${id}-after`}
+                className="input"
+                value={f.after}
+                onChange={(e) => set("after", e.target.value)}
+              >
+                {withMinutes(BUFFERS, f.after).map((m) => (
+                  <option key={m} value={String(m)}>
+                    {m ? `${m} min` : "None"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {book && (
+            <Field
+              id={`${id}-capacity`}
+              label="At the same time"
+              error={err("capacity")}
+              hint="Bookings that can share one slot."
+            >
+              <input
+                id={`${id}-capacity`}
+                className="input"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={100}
+                value={f.capacity}
+                onChange={(e) => set("capacity", e.target.value)}
+              />
+            </Field>
+          )}
+          <Field id={`${id}-sort`} label="Place in lists" error={err("sort")} hint="Lower comes first.">
+            <input
+              id={`${id}-sort`}
+              className="input"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={f.sort}
+              onChange={(e) => set("sort", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Switch checked={f.negotiable} onChange={(v) => set("negotiable", v)}>
+              Customers may suggest a price for it
+            </Switch>
+            <div className="hint">Only while you take customers' own prices (General). Off, one goes to you.</div>
+          </div>
+        </div>
+      </details>
       {(local || (error && !error.fields?.length)) && (
         <p className="hint error" role="alert">
           {local ?? error?.detail}
@@ -354,12 +340,12 @@ export function ProductEditor({
     if (pending) return;
     if (!f.name.trim()) return setLocal("Give the product a name.");
     const value = parseMajor(f.price);
-    if (value === undefined) return setLocal("Give a price, like 39,20 or 39.20.");
+    if (value === undefined) return setLocal("Write the price like 39.20.");
     const stock = f.stock.trim() === "" ? null : Number(f.stock);
     if (stock !== null && (!Number.isInteger(stock) || stock < 0))
       return setLocal("Stock is a whole number, or empty when not tracked.");
     const lowest = floorOf(f.floor);
-    if (lowest === undefined) return setLocal("Give the lowest price like 30,00 or 30.00, or leave it empty.");
+    if (lowest === undefined) return setLocal("Write the lowest price like 30, or leave it empty.");
     setLocal(null);
     onSubmit(
       {
@@ -391,13 +377,12 @@ export function ProductEditor({
             onChange={(e) => set("sku", e.target.value)}
           />
         </Field>
-        <Field id="pr-price" label={`Price (${initial?.price.currency ?? currency})`} error={err("price.value")}>
-          <input
+        <Field id="pr-price" label="Price" error={err("price.value") ?? err("price.currency")}>
+          <MoneyInput
             id="pr-price"
-            className="input"
-            inputMode="decimal"
+            currency={initial?.price.currency ?? currency}
             value={f.price}
-            onChange={(e) => set("price", e.target.value)}
+            onChange={(v) => set("price", v)}
           />
         </Field>
         <Field id="pr-stock" label="Stock" optional error={err("stock")} hint="Empty when you do not track it.">
@@ -420,17 +405,16 @@ export function ProductEditor({
         </Field>
         <Field
           id="pr-floor"
-          label={`Lowest price (${initial?.price.currency ?? currency})`}
+          label="Lowest price"
           optional
           error={err("floors.0.floor_minor")}
           hint="Per unit. Your AI and rules never go under it, and never learn it."
         >
-          <input
+          <MoneyInput
             id="pr-floor"
-            className="input"
-            inputMode="decimal"
+            currency={initial?.price.currency ?? currency}
             value={f.floor}
-            onChange={(e) => set("floor", e.target.value)}
+            onChange={(v) => set("floor", v)}
           />
         </Field>
         <div className="wide">

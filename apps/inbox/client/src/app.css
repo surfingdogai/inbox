@@ -809,31 +809,72 @@ a {
 }
 .hours-day {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 8px 16px;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 6px 16px;
   align-items: start;
-  padding: 10px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--hairline);
 }
+.hours-day > .check {
+  min-height: 36px;
+}
 .hours-label {
-  font-weight: 600;
+  font-weight: 500;
 }
 .hours-windows {
   display: grid;
   gap: 6px;
   justify-items: start;
+  min-width: 0;
+}
+.hours-closed {
+  margin: 0;
+  line-height: 36px;
 }
 .hours-window {
-  display: grid;
-  grid-template-columns: auto auto auto auto;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
-}
-.hours-window .input {
-  width: 128px;
 }
 .hours-dash {
   color: var(--ink-3);
+}
+.hours-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+.hours-actions .btn-icon {
+  color: var(--ink-3);
+}
+.hours-actions .btn-icon:hover {
+  color: var(--ink);
+}
+/* A time picked from the clock: compact, the numbers lined up. */
+.input.time-select {
+  width: 116px;
+  height: 36px;
+  padding: 0 30px 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+.input.time-select.is-all-day {
+  width: 268px;
+}
+@media (max-width: 620px) {
+  /* The day and its switch on one line, "Closed" at its end; open, the windows below. */
+  .hours-day {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+  .hours-day:has(.hours-window) .hours-windows {
+    grid-column: 1 / -1;
+  }
+  .input.time-select {
+    width: 112px;
+  }
+  .input.time-select.is-all-day {
+    width: 248px;
+  }
 }
 .closure-row {
   display: grid;
@@ -935,9 +976,6 @@ textarea.json-editor {
   font-size: 12.5px;
 }
 @media (max-width: 899px) {
-  .hours-day {
-    grid-template-columns: 1fr;
-  }
   .closure-row {
     grid-template-columns: 1fr auto 1fr;
   }
@@ -1335,4 +1373,314 @@ textarea.json-editor {
 .wizard-nav {
   justify-content: flex-end;
   margin-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings: the choosers. Nobody types a code: chips for a choice,  */
+/*  native selects for long lists, a field that knows its currency.   */
+/* ------------------------------------------------------------------ */
+.label-line,
+.sec-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.label-line .label {
+  margin: 0;
+}
+.label-line .opt {
+  margin-left: -4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.sec-line .sec {
+  margin: 0;
+}
+.card .sec-line {
+  margin-bottom: 4px;
+}
+.input[readonly] {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-2);
+}
+.hint.count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chips: one press each. As a radio group, the radio is hidden and its label is the chip. */
+fieldset.chips,
+.chips-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.chips-field > legend {
+  padding: 0;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 9999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.18s,
+    border-color 0.18s,
+    color 0.18s;
+}
+.chip:hover {
+  background: var(--row-bg-hover);
+  color: var(--ink);
+}
+.chip input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.chip:has(input:checked),
+.chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--ink) 42%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, var(--glass-bg-strong));
+  color: var(--ink);
+}
+.chip:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 2px;
+}
+.chip-other {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chip-other .input {
+  width: 88px;
+  height: 30px;
+  padding: 0 10px;
+}
+
+/* An amount with its currency inside the field, where the browser writes it. */
+.money-input {
+  position: relative;
+}
+.money-sym {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.money-input .input {
+  padding-left: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.money-input.is-after .money-sym {
+  left: auto;
+  right: 14px;
+}
+.money-input.is-after .input {
+  padding-left: 14px;
+  padding-right: 34px;
+}
+
+/* Languages: chips inside one field, and what to add as you type. */
+.lang-picker {
+  position: relative;
+}
+.lang-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 8px;
+  cursor: text;
+}
+.lang-box:focus-within {
+  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+}
+.lang-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 9999px;
+  background: var(--glass-bg-strong);
+  font-size: 13px;
+  font-weight: 500;
+}
+.lang-x {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.lang-x:hover {
+  background: var(--row-bg-hover);
+  color: var(--ink);
+}
+.lang-x svg {
+  width: 13px;
+  height: 13px;
+}
+.lang-field {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+@media (min-width: 768px) {
+  .lang-field {
+    font-size: 14.5px;
+  }
+}
+.lang-field::placeholder {
+  color: var(--ink-3);
+}
+.lang-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--glass-fallback);
+  box-shadow: var(--glass-shadow-hover);
+}
+.lang-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lang-option.is-active {
+  background: var(--row-bg-hover);
+}
+.lang-native {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* Where a detail was read: a quiet tag, sun when it asks to be checked. */
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.source-tag.is-check {
+  border-color: color-mix(in srgb, var(--c-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--c-warning) 12%, transparent);
+  color: var(--c-warning-ink);
+}
+
+/* What agents can do: three switches, one line each. */
+.door-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.door-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  min-height: 40px;
+  padding: 4px 0;
+}
+.door-row + .door-row {
+  border-top: 1px solid var(--hairline);
+}
+.door-note {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.door-note a,
+.door-note .linkish {
+  color: var(--ink-2);
+}
+
+/* The rest of a service, folded. */
+.details.more {
+  margin-top: 0;
+}
+.details.more > .settings-grid {
+  margin-top: 12px;
+}
+.fields.held {
+  margin: 4px 0 8px;
+}
+
+/* A quiet action under a field: "Use Lisbon, where you are". */
+.input + .linkish,
+.input + .hint + .linkish {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* Availability: the time zone above, the week below a hairline. */
+.hours-head {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.hours-head + .hours-grid,
+.hours-head + p + .hours-grid {
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
 }

@@ -84,7 +84,7 @@ import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from 
 import { findSlots, type Slot } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
-import { offeredItemTypes } from "./directory";
+import { doorSwitch, offeredItemTypes } from "./directory";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { applySetupPlan, type SetupPlanInput, type SetupPlanResult } from "./plan";
@@ -483,12 +483,23 @@ export class Capabilities {
     if (elsewhere) throw takenElsewhere(kind, elsewhere);
   }
 
+  /**
+   * An agent's new booking, request for a price or message through a door the owner switched off
+   * (`settings.doors`) is refused: the manifest no longer lists it, and an agent that never read it
+   * must not get in anyway. People writing by email or on the business's own page are not agents.
+   */
+  private async refuseShut(caller: Caller, kind: "booking" | "quote_request" | "message"): Promise<void> {
+    if (caller.actor.kind !== "customer_agent") return;
+    if (doorSwitch((await readSettings(this.db)).doors, kind) === false) throw doorShut(kind);
+  }
+
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
     const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
     const itemTypes = await offeredItemTypes(
       this.db,
       elsewhere.map((d) => d.item_type),
+      s.doors,
     );
     return {
       name: row?.name || s.business.name,
@@ -589,7 +600,8 @@ export class Capabilities {
     });
   }
 
-  requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
+  async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
+    await this.refuseShut(caller, "quote_request");
     return this.people.create(
       withIdempotencyKey(caller, input.idempotency_key),
       { type: "quote_request", payload: input.payload, contact: input.contact, message: input.message },
@@ -604,6 +616,7 @@ export class Capabilities {
    */
   async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "booking");
+    await this.refuseShut(caller, "booking");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
@@ -754,6 +767,7 @@ export class Capabilities {
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
+      await this.refuseShut(caller, "message");
       return this.people.create(
         c,
         {
@@ -1783,6 +1797,16 @@ async function customerThread(db: Db, itemId: string): Promise<CustomerThreadEnt
 }
 
 /** The refusal for a kind of request the business takes somewhere else: where to go instead. */
+/** An agent's request through a door the owner switched off (`settings.doors`). */
+function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
+  const what = kind === "booking" ? "bookings" : kind === "quote_request" ? "requests for a price" : "messages";
+  return new WriteError(
+    "not_allowed",
+    `This business takes no ${what} from agents here: its owner switched them off. Nothing was written. Its manifest lists what it does take.`,
+    { details: { reason: "door_shut", item_type: kind } },
+  );
+}
+
 function takenElsewhere(kind: "booking" | "order", url: string): WriteError {
   const what = kind === "booking" ? "bookings" : "orders";
   return new WriteError(

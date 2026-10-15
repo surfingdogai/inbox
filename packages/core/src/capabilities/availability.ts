@@ -187,12 +187,26 @@ export function localiser(timezone: string): Localiser {
   };
 }
 
+/**
+ * Whether [start, end) is inside the opening hours. Within one day, inside one window. Across
+ * midnight, only where the business stays open through it: a window to 24:00 on the first day and
+ * one from 00:00 on the next, as a business open all the time has every night.
+ */
 export function withinOpening(local: Localiser, weekly: Weekly, start: number, end: number): boolean {
   const s = local(start);
   const e = local(end - 1);
-  if (s.day !== e.day) return false;
-  const windows = weekly[s.day] ?? [];
-  return windows.some(([open, close]) => s.minutes >= toMinutes(open) && e.minutes + 1 <= toMinutes(close));
+  if (s.day === e.day) {
+    const windows = weekly[s.day] ?? [];
+    return windows.some(([open, close]) => s.minutes >= toMinutes(open) && e.minutes + 1 <= toMinutes(close));
+  }
+  if (DAYS[(DAYS.indexOf(s.day) + 1) % DAYS.length] !== e.day) return false;
+  const untilMidnight = (weekly[s.day] ?? []).some(
+    ([open, close]) => s.minutes >= toMinutes(open) && toMinutes(close) === 24 * 60,
+  );
+  const fromMidnight = (weekly[e.day] ?? []).some(
+    ([open, close]) => toMinutes(open) === 0 && e.minutes + 1 <= toMinutes(close),
+  );
+  return untilMidnight && fromMidnight;
 }
 
 function toMinutes(hhmm: string): number {

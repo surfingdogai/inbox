@@ -33,11 +33,16 @@ function TodayPane() {
   const services = useServices();
   const products = useProducts();
   // A brand-new instance is walked through setup rather than shown an empty inbox it cannot
-  // explain. The redirect waits for the three reads, so it never fires on a slow network and
+  // explain. The redirect waits for the four reads, so it never fires on a slow network and
   // sends a configured business to the wizard.
-  const ready = business.isSuccess && services.isSuccess && products.isSuccess;
+  const ready = business.isSuccess && services.isSuccess && products.isSuccess && settings.isSuccess;
+  // An inbox set up from a plan (its details read from the business's site) is not new, even with
+  // nothing listed yet: what is missing is added in Settings, where the plan's details are marked.
+  const fromPlan = Object.keys(settings.data?.doc.setup.sources ?? {}).length > 0;
   const unconfigured =
-    ready && looksUnconfigured(business.data?.name, services.data?.items.length ?? 0, products.data?.items.length ?? 0);
+    ready &&
+    !fromPlan &&
+    looksUnconfigured(business.data?.name, services.data?.items.length ?? 0, products.data?.items.length ?? 0);
   const navigate = Route.useNavigate();
   useEffect(() => {
     if (unconfigured && !setupSkipped()) void navigate({ to: "/setup" });

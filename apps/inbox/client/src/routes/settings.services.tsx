@@ -2,12 +2,24 @@ import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { describeService, ProductEditor, ServiceEditor } from "../components/Catalogue";
+import { ProductEditor, ServiceEditor } from "../components/Catalogue";
+import { SourceTag } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { problemOf } from "../lib/api";
+import { describeService } from "../lib/catalogue";
 import { formatMoney } from "../lib/format";
-import { useFloors, useProducts, useProductWrite, useProfile, useServices, useServiceWrite } from "../lib/queries";
+import {
+  useFloors,
+  useProducts,
+  useProductWrite,
+  useProfile,
+  useSaveSettings,
+  useServices,
+  useServiceWrite,
+  useSettings,
+} from "../lib/queries";
+import { clearSources, sourceNote } from "../lib/sources";
 import type { ProductRow, ServiceRow } from "../lib/types";
 
 export const Route = createFileRoute("/settings/services")({
@@ -16,10 +28,29 @@ export const Route = createFileRoute("/settings/services")({
 
 type Editing = "new" | string | null;
 
-/** What the business offers: bookable services (duration, buffers, capacity, price) and products. */
+/** What the business offers: services booked or asked about (length, price), and products. Prices are in the business's currency. */
 function ServicesPage() {
   const profile = useProfile();
-  const currency = profile.data?.currency ?? "EUR";
+  if (profile.isError) {
+    return (
+      <div className="card glass">
+        <ErrorState
+          title="Could not load the business profile"
+          text={problemOf(profile.error).detail}
+          onRetry={() => void profile.refetch()}
+        />
+      </div>
+    );
+  }
+  if (!profile.data) {
+    return (
+      <div className="card glass" aria-busy="true">
+        <div className="skeleton sk-title" />
+        <div className="skeleton sk-line" />
+      </div>
+    );
+  }
+  const currency = profile.data.currency;
   return (
     <>
       <ServicesCard currency={currency} />
@@ -32,6 +63,10 @@ function ServicesCard({ currency }: { currency: string }) {
   const services = useServices();
   const floors = useFloors();
   const write = useServiceWrite();
+  const settings = useSettings();
+  const saveSettings = useSaveSettings();
+  const sources = settings.data?.doc.setup.sources;
+  const read = sourceNote(sources, "services");
   const [editing, setEditing] = useState<Editing>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,6 +76,9 @@ function ServicesCard({ currency }: { currency: string }) {
     setEditing(null);
     setConfirm(null);
     setNotice(text);
+    // Saved by the owner: they have checked what was read.
+    const cleared = clearSources(sources, "services");
+    if (cleared) saveSettings.mutate({ doc: cleared });
   };
   const open = (next: Editing) => {
     write.reset();
@@ -51,15 +89,14 @@ function ServicesCard({ currency }: { currency: string }) {
   return (
     <section className="card glass stack">
       <SectionHead title="Services">
+        <SourceTag source={read} />
+        <span className="sp" />
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => open("new")}>
           <Plus className="icon" aria-hidden="true" />
           New service
         </button>
       </SectionHead>
-      <p className="lede small">
-        What people and agents can book. Duration and buffers shape the free slots; capacity is how many bookings share
-        one.
-      </p>
+      <p className="lede small">What agents can book, or ask you a price for. Prices are optional.</p>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
       {services.isPending && <div className="skeleton sk-line" />}
       {services.isError && (
@@ -72,7 +109,7 @@ function ServicesCard({ currency }: { currency: string }) {
       {services.isSuccess && rows.length === 0 && editing !== "new" && (
         <div className="state">
           <h3>No services yet</h3>
-          <p>Add the first thing people can book, like a 60-minute consultation.</p>
+          <p>Add one, like a 30-minute haircut or a quote for a kitchen.</p>
         </div>
       )}
       {editing === "new" && (
@@ -108,13 +145,13 @@ function ServicesCard({ currency }: { currency: string }) {
             onArchive={() =>
               write.mutate(
                 { id: s.id, archive: true },
-                { onSuccess: () => done(`${s.name} archived; it no longer takes bookings.`) },
+                { onSuccess: () => done(`${s.name} archived; agents no longer see it.`) },
               )
             }
             onRestore={() =>
               write.mutate(
                 { id: s.id, body: { active: true } },
-                { onSuccess: () => done(`${s.name} is bookable again.`) },
+                { onSuccess: () => done(`${s.name} is on offer again.`) },
               )
             }
             onKeep={() => setConfirm(null)}
@@ -164,7 +201,7 @@ function ServiceLine({
           <b>{s.name}</b>
           {archived && <span className="pill pill-xs">Archived</span>}
         </div>
-        <div className="s">{describeService(s)}</div>
+        <div className="s">{describeService(s, currency)}</div>
         {s.description && <div className="s">{s.description}</div>}
       </div>
       <div className="rowx">
@@ -175,7 +212,7 @@ function ServiceLine({
         )}
         {archived ? (
           <button type="button" className="btn btn-secondary btn-sm" onClick={onRestore} disabled={pending}>
-            Make bookable
+            Put back on offer
           </button>
         ) : (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onAskArchive} aria-expanded={confirming}>
@@ -199,7 +236,7 @@ function ServiceLine({
       {confirming && (
         <div className="confirm row-glass wide">
           <h3>Archive {s.name}</h3>
-          <p className="hint">It stops taking bookings and leaves the public list; existing bookings keep it.</p>
+          <p className="hint">Agents stop seeing it; what was booked or asked keeps it.</p>
           {error && (
             <p className="hint error" role="alert">
               {error.detail}
@@ -244,7 +281,7 @@ function ProductsCard({ currency }: { currency: string }) {
           New product
         </button>
       </SectionHead>
-      <p className="lede small">What agents can order. Prices are in {currency}; stock is optional.</p>
+      <p className="lede small">What agents can ask to order. Stock is optional.</p>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
       {products.isPending && <div className="skeleton sk-line" />}
       {products.isError && (

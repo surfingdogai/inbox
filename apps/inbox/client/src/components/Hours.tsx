@@ -1,16 +1,26 @@
-import { Plus, X } from "lucide-react";
-import { type FormEvent, useRef, useState } from "react";
+import clsx from "clsx";
+import { Copy, Plus, X } from "lucide-react";
+import { type FormEvent, type ReactNode, useMemo, useRef, useState } from "react";
 import type { ApiProblem } from "../lib/api";
 import {
+  ALL_DAY,
   checkClosures,
   checkDraft,
+  copyToAll,
   DEFAULT_WINDOW,
   type Draft,
+  HOURS_PRESETS,
+  isAllDay,
   MAX_WINDOWS,
   nextWindow,
+  presetOf,
+  timeLabel,
+  timeSteps,
   toDraft,
   toWeekly,
+  twelveHour,
   WEEKDAYS,
+  withValue,
 } from "../lib/hours";
 import type { Closure, Weekday, Weekly } from "../lib/types";
 import { Switch } from "./Form";
@@ -28,11 +38,54 @@ const asDraft = (rows: Rows): Draft => {
   return draft;
 };
 
-/** The weekly grid: each day open or closed, with up to six windows of HH:MM. */
+/** The value the first opening time takes for a day open all day. */
+const ALL_DAY_VALUE = "all-day";
+
+/** A time to open or close at, every quarter of an hour, as this browser writes times; 24:00 closes at midnight. */
+function TimeSelect({
+  value,
+  kind,
+  label,
+  allDay,
+  onChange,
+}: {
+  value: string;
+  kind: "opens" | "closes";
+  label: string;
+  /** Offer "Open 24 hours" first (the day's first opening time only). */
+  allDay?: boolean | undefined;
+  onChange: (value: string) => void;
+}) {
+  const steps = useMemo(() => timeSteps(15), []);
+  const hour12 = useMemo(() => twelveHour(), []);
+  const times = withValue(kind === "opens" ? steps.opens : steps.closes, value === ALL_DAY_VALUE ? "" : value);
+  return (
+    <select
+      className={clsx("input time-select", value === ALL_DAY_VALUE && "is-all-day")}
+      value={value}
+      aria-label={label}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {allDay && <option value={ALL_DAY_VALUE}>Open 24 hours</option>}
+      {times.map((t) => (
+        <option key={t} value={t}>
+          {timeLabel(t, hour12)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * The weekly grid: each day open or closed; open, either all day or up to six windows picked from
+ * the clock. Three quick starts above it, and any day copied to the rest in one press.
+ */
 export function HoursEditor({
   initial,
   title,
   hint,
+  unset,
+  note,
   pending,
   error,
   onSave,
@@ -40,20 +93,25 @@ export function HoursEditor({
   initial: Weekly;
   title: string;
   hint?: string | undefined;
+  /** Nothing saved yet: the grid starts empty, and says so. */
+  unset?: boolean | undefined;
+  /** Beside the title: where these hours were read, for the owner to check. */
+  note?: ReactNode;
   pending: boolean;
   error: ApiProblem | null;
   onSave: (weekly: Weekly) => void;
 }) {
   const nextId = useRef(1);
-  const [rows, setRows] = useState<Rows>(() => {
-    const draft = toDraft(initial);
+  const fromDraft = (draft: Draft): Rows => {
     const out = {} as Rows;
     for (const { key } of WEEKDAYS) out[key] = draft[key].map(([from, to]) => ({ id: nextId.current++, from, to }));
     return out;
-  });
+  };
+  const [rows, setRows] = useState<Rows>(() => fromDraft(toDraft(unset ? {} : initial)));
   const [local, setLocal] = useState<string | null>(null);
   const setDay = (day: Weekday, windows: readonly WindowRow[]) => setRows((r) => ({ ...r, [day]: windows }));
   const row = ([from, to]: readonly [string, string]): WindowRow => ({ id: nextId.current++, from, to });
+  const current = presetOf(asDraft(rows));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (pending) return;
@@ -65,81 +123,140 @@ export function HoursEditor({
   return (
     <form className="stack hours-grid" onSubmit={submit}>
       <div>
-        <h3 className="sec">{title}</h3>
+        <div className="sec-line">
+          <h3 className="sec">{title}</h3>
+          {note}
+        </div>
+        {unset && <p className="hint">No opening hours yet. Agents can book once you save some.</p>}
         {hint && <p className="lede small">{hint}</p>}
       </div>
-      {WEEKDAYS.map(({ key, label }) => {
-        const windows = rows[key];
-        const open = windows.length > 0;
-        return (
-          <div className="hours-day" key={key}>
-            <Switch checked={open} onChange={(v) => setDay(key, v ? [row(DEFAULT_WINDOW)] : [])}>
-              <span className="hours-label">{label}</span>
-            </Switch>
-            <div className="hours-windows">
-              {!open && <span className="hint">Closed</span>}
-              {windows.map((w) => (
-                <div className="hours-window" key={w.id}>
-                  <input
-                    className="input"
-                    type="time"
-                    step={900}
-                    value={w.from}
-                    aria-label={`${label}, opens`}
-                    onChange={(e) =>
-                      setDay(
-                        key,
-                        windows.map((x) => (x.id === w.id ? { ...x, from: e.target.value } : x)),
-                      )
-                    }
-                  />
-                  <span className="hours-dash">–</span>
-                  <input
-                    className="input"
-                    type="time"
-                    step={900}
-                    value={w.to}
-                    aria-label={`${label}, closes`}
-                    onChange={(e) =>
-                      setDay(
-                        key,
-                        windows.map((x) => (x.id === w.id ? { ...x, to: e.target.value } : x)),
-                      )
-                    }
-                  />
-                  {windows.length > 1 && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm btn-icon"
-                      aria-label={`Remove ${label} ${w.from}–${w.to}`}
-                      onClick={() =>
-                        setDay(
-                          key,
-                          windows.filter((x) => x.id !== w.id),
-                        )
+      <fieldset className="chips presets">
+        <legend className="sr-only">Quick starts</legend>
+        {HOURS_PRESETS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            className="chip"
+            aria-pressed={current === p.key}
+            onClick={() => setRows(fromDraft(p.draft))}
+          >
+            {p.label}
+          </button>
+        ))}
+      </fieldset>
+      <div>
+        {WEEKDAYS.map(({ key, label }) => {
+          const windows = rows[key];
+          const open = windows.length > 0;
+          const allDay = isAllDay(windows.map((w) => [w.from, w.to] as const));
+          const copy = (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label={`Copy ${label} to every day`}
+              title="Copy to every day"
+              onClick={() => setRows(fromDraft(copyToAll(asDraft(rows), key)))}
+            >
+              <Copy className="icon-sm" aria-hidden="true" />
+            </button>
+          );
+          return (
+            <div className="hours-day" key={key}>
+              <Switch checked={open} onChange={(v) => setDay(key, v ? [row(DEFAULT_WINDOW)] : [])}>
+                <span className="hours-label">{label}</span>
+              </Switch>
+              <div className="hours-windows">
+                {!open && <span className="hint hours-closed">Closed</span>}
+                {allDay ? (
+                  <div className="hours-window">
+                    <TimeSelect
+                      kind="opens"
+                      label={`${label}, opens`}
+                      allDay
+                      value={ALL_DAY_VALUE}
+                      onChange={(v) =>
+                        v !== ALL_DAY_VALUE &&
+                        setDay(key, [row([v, DEFAULT_WINDOW[1] > v ? DEFAULT_WINDOW[1] : "24:00"])])
                       }
-                    >
-                      <X className="icon" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {open && windows.length < MAX_WINDOWS && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() =>
-                    setDay(key, [...windows, row(nextWindow(windows.map((x) => [x.from, x.to] as const)))])
-                  }
-                >
-                  <Plus className="icon" aria-hidden="true" />
-                  Add a window
-                </button>
-              )}
+                    />
+                    <span className="hours-actions">{copy}</span>
+                  </div>
+                ) : (
+                  windows.map((w, i) => (
+                    <div className="hours-window" key={w.id}>
+                      <TimeSelect
+                        kind="opens"
+                        label={`${label}, opens`}
+                        allDay={i === 0 && windows.length === 1}
+                        value={w.from}
+                        onChange={(v) =>
+                          v === ALL_DAY_VALUE
+                            ? setDay(key, [row(ALL_DAY)])
+                            : setDay(
+                                key,
+                                windows.map((x) => (x.id === w.id ? { ...x, from: v } : x)),
+                              )
+                        }
+                      />
+                      <span className="hours-dash" aria-hidden="true">
+                        –
+                      </span>
+                      <TimeSelect
+                        kind="closes"
+                        label={`${label}, closes`}
+                        value={w.to}
+                        onChange={(v) =>
+                          setDay(
+                            key,
+                            windows.map((x) => (x.id === w.id ? { ...x, to: v } : x)),
+                          )
+                        }
+                      />
+                      <span className="hours-actions">
+                        {i === 0 ? (
+                          <>
+                            {windows.length < MAX_WINDOWS && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm btn-icon"
+                                aria-label={`Add hours on ${label}`}
+                                title="Add hours, for a break"
+                                onClick={() =>
+                                  setDay(key, [
+                                    ...windows,
+                                    row(nextWindow(windows.map((x) => [x.from, x.to] as const))),
+                                  ])
+                                }
+                              >
+                                <Plus className="icon-sm" aria-hidden="true" />
+                              </button>
+                            )}
+                            {copy}
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm btn-icon"
+                            aria-label={`Remove ${label} ${w.from}–${w.to}`}
+                            onClick={() =>
+                              setDay(
+                                key,
+                                windows.filter((x) => x.id !== w.id),
+                              )
+                            }
+                          >
+                            <X className="icon-sm" aria-hidden="true" />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
       {(local || error) && (
         <p className="hint error" role="alert">
           {local ?? error?.detail}

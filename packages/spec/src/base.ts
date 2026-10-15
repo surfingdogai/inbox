@@ -13,10 +13,16 @@ export type ItemType = z.infer<typeof itemTypeSchema>;
 export const trustTierSchema = z.enum(["anonymous", "signed_agent", "verified_principal", "reputed_principal"]);
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+/** A closing time: HH:MM, or 24:00 for a window that runs to midnight. */
+const closes = z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|24:00)$/, "use HH:MM, or 24:00 for midnight");
 
-/** One opening window, `[opens, closes)` in the business's zone. Closing is after opening: no overnight windows. */
+/**
+ * One opening window, `[opens, closes)` in the business's zone. Closing is after opening: no overnight
+ * windows. A window may close at 24:00, so `["00:00", "24:00"]` is the whole day; open through the
+ * night is a window to 24:00 and the next day's from 00:00.
+ */
 export const openingWindowSchema = z
-  .tuple([hhmm, hhmm])
+  .tuple([hhmm, closes])
   .refine(([opens, closes]) => opens < closes, { message: "closing time must be after opening time" });
 const openingDay = z.array(openingWindowSchema).max(6);
 

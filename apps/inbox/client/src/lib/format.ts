@@ -614,18 +614,3 @@ export function emailLangOf(languages: readonly string[]): "en" | "pt" {
   }
   return "en";
 }
-
-/**
- * The business's other languages, beside the one its customers' emails are in: every one that is not
- * that language, Spanish and French as much as English or Portuguese.
- */
-export function otherLanguages(languages: readonly string[], emailLang: "en" | "pt"): string[] {
-  const out: string[] = [];
-  for (const l of languages) {
-    const tag = l.trim();
-    const primary = tag.toLowerCase().split(/[-_]/)[0];
-    if (!tag || primary === emailLang || out.some((o) => o.toLowerCase() === tag.toLowerCase())) continue;
-    out.push(tag);
-  }
-  return out;
-}

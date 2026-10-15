@@ -139,6 +139,9 @@ export function useSaveSettings() {
     mutationFn: (body: SettingsBody) => api.putSettings(body),
     onSuccess: (data) => {
       qc.setQueryData(qk.settings, data);
+      // What agents can do (`doors`, `doorsElsewhere`) is read back with the profile and the business.
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.profile });
       void qc.invalidateQueries({ queryKey: ["items"] });
       void qc.invalidateQueries({ queryKey: ["counts"] });
       // A network switched on is pinged within seconds; look again once it has had the chance.
@@ -212,6 +215,8 @@ export function useServiceWrite() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.services });
       void qc.invalidateQueries({ queryKey: qk.availability });
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.profile });
       void qc.invalidateQueries({ queryKey: ["floors"] });
     },
   });
@@ -237,6 +242,8 @@ export function useProductWrite() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.products });
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.profile });
       void qc.invalidateQueries({ queryKey: ["floors"] });
     },
   });
@@ -251,7 +258,11 @@ export function useSaveWeekly() {
   return useMutation({
     mutationFn: (input: { weekly: Weekly; serviceId?: string | undefined }) =>
       api.putWeekly(input.weekly, input.serviceId),
-    onSuccess: (data) => qc.setQueryData(qk.availability, data),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.availability, data);
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.profile });
+    },
   });
 }
 
@@ -259,7 +270,11 @@ export function useClearOverride() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (serviceId: string) => api.clearOverride(serviceId),
-    onSuccess: (data) => qc.setQueryData(qk.availability, data),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.availability, data);
+      void qc.invalidateQueries({ queryKey: qk.business });
+      void qc.invalidateQueries({ queryKey: qk.profile });
+    },
   });
 }
 

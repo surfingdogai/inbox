@@ -141,7 +141,7 @@ describe("client opening hours", () => {
     expect(checkClosures([{ from: "2026-10-05", to: "2026-10-04" }])).toContain("ends");
     expect(checkClosures([{ from: "2026-10-05", to: "2026-10-05", reason: "Holiday" }])).toBeNull();
     expect(plusMinutes("18:00", 60)).toBe("19:00");
-    expect(plusMinutes("23:30", 60)).toBe("23:59");
+    expect(plusMinutes("23:30", 60)).toBe("24:00");
     expect(nextWindow([["09:00", "18:00"]])).toEqual(["18:00", "19:00"]);
     expect(nextWindow([])).toEqual(["09:00", "18:00"]);
   });

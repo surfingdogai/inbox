@@ -12,7 +12,6 @@ import {
   mailBannerLines,
   mailWord,
   networksOffWords,
-  otherLanguages,
   partyName,
   personStandings,
   receiptWord,
@@ -24,6 +23,7 @@ import {
   titleFor,
   truncate,
 } from "../client/src/lib/format";
+import { languagesToSave } from "../client/src/lib/languages";
 import type { Item } from "../client/src/lib/types";
 
 // The owner app's words and numbers: pure functions, so they run here on both runtimes.
@@ -383,12 +383,11 @@ describe("email that does not go out, and customers who stopped the networks", (
 });
 
 describe("the business's languages", () => {
-  it("keeps every other language beside the one customers' emails are in, whichever that is", () => {
+  it("say which of them customers' emails are in, and keep every other one (client-choices.test.ts saves them)", () => {
     expect(emailLangOf(["es", "pt-PT", "en"])).toBe("pt");
     expect(emailLangOf(["fr"])).toBe("en");
-    // Spanish and French are languages too, not English because emails can only be in English.
-    expect(otherLanguages(["en", "es", "fr"], "en")).toEqual(["es", "fr"]);
-    expect(otherLanguages(["pt", "pt-BR", "en", "es"], "pt")).toEqual(["en", "es"]);
-    expect(otherLanguages(["", " es ", "ES", "en-GB"], "en")).toEqual(["es"]);
+    // Spanish and French are languages too, never dropped because emails can only be in English.
+    expect(languagesToSave(["en", "es", "fr"], "en", false)).toEqual(["en", "es", "fr"]);
+    expect(languagesToSave(["es", "fr"], "en", true)).toEqual(["en", "es", "fr"]);
   });
 });

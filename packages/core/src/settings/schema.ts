@@ -689,6 +689,23 @@ const sections = {
       "Kinds of request you take somewhere else, and where: bookings at a booking platform, orders in your own checkout.",
     ),
   /**
+   * What agents can do here, door by door (`capabilities/directory.ts`): left out, a door follows
+   * what the inbox holds — a message always, a booking with a service and opening hours, a request
+   * for a price with something to ask about. `false` shuts a door whatever it holds: agents are not
+   * told of it, and one that asks anyway is refused. `quoteRequest: true` opens the request for a
+   * price before anything is listed, the job described in the request's own words. `true` opens no
+   * booking without a service and hours to book it in. People who write by email, or on the
+   * business's own page, are not agents: these leave them as they are.
+   */
+  doors: z
+    .object({
+      booking: z.boolean().optional().describe("Agents can see your free times and ask to book."),
+      quoteRequest: z.boolean().optional().describe("Agents can ask you for a price."),
+      message: z.boolean().optional().describe("Agents can send you a message."),
+    })
+    .prefault({})
+    .describe("What agents can do here. Left out, a door follows what the inbox holds; false shuts it."),
+  /**
    * Where the details a setup plan filled in came from (`capabilities/plan.ts`), per field: the page,
    * when it was read, and how. Kept so the owner app can ask the owner to check what was only read
    * from a page's words. Never published.

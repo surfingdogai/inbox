@@ -56,6 +56,9 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   { path: ["integrations", "webhooks", "allowPrivateTargets"] },
   { path: ["identity", "extraAuthorities"] },
   { path: ["customers", "otp"] },
+  // What agents can do here: a customer's message must never get the owner's AI to shut a door, or
+  // to open one the owner shut.
+  { path: ["doors"] },
 ];
 
 function at(doc: unknown, path: readonly string[]): unknown {

@@ -611,7 +611,9 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
   "19:00"]], "sat": [["09:00", "13:00"]]}, "closures": [{"from": "2026-12-24", "to":
   "2026-12-26"}]}`: the inbox's own weekly hours and closures, as it keeps them, with the IANA zone
   every time and date in them is in. A window is `[opens, closes)`, `HH:MM`, opening before it
-  closes (no overnight windows), at most six a day; a day left out is closed. A closure is whole
+  closes (no overnight windows), at most six a day; a day left out is closed. A window may close at
+  `24:00`: `["00:00", "24:00"]` is the whole day, and open through the night is a window to `24:00`
+  and the next day's from `00:00`. A closure is whole
   days, both included.
 - `services`: `[{"name": "Haircut", "type": "booking"}]`, at most 30: each service's name (80
   characters) and how it is taken (`booking`, `order` or `quote_request`). Prices and durations stay
@@ -639,7 +641,7 @@ slugs and 10 tags (a tag is at most 40 characters, or dropped); keeps a language
 47's shape; keeps `url` only as an absolute `http` or `https` address with no space, control or
 hidden character in it; keeps `hours` only with a zone it knows and at least one good window, and
 within them drops a day that is not `mon`…`sun`, a day with more than six windows, a window that is
-not two `HH:MM` opening before closing, and a closure that is not two real dates in order (the
+not two `HH:MM` opening before closing (the closing one may be `24:00`), and a closure that is not two real dates in order (the
 calendar has no year 0), merges windows that overlap, and forgets closures that have ended. Hours it
 cannot keep whole it drops whole: without its closures, a business would show open on a day it said
 it is closed. `vectors/profile.json` holds the cases. Nothing in a profile is scored, and nothing in
