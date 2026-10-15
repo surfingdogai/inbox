@@ -9,10 +9,10 @@ Two ways in: an API key, or OAuth 2.1 with a login.
 
 ## Today: an owner API key
 
-An owner key is a bearer token that starts with `sdi_own_`. On your server:
+An owner key is a bearer token that starts with `sdi_own_`. On your server, with the instance's settings so the key goes into its database:
 
 ```bash
-node apps/inbox/dist/server.mjs create-owner-key laptop
+node --env-file=.env apps/inbox/dist/server.mjs create-owner-key laptop
 ```
 
 The key is printed once and stored hashed. It is the same key the owner app takes at `/login`. Send it as `Authorization: Bearer sdi_own_…` to `/mcp/owner` or to any `/v1/owner/*` route; for Claude Code, for example:

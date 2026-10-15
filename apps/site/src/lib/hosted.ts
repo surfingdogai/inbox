@@ -44,6 +44,13 @@ export interface PilotLink {
 /** The hosted pilot's own button, wherever it leads. */
 const GET: PilotLink = { label: "Get your agent inbox", href: START_URL };
 
+/**
+ * The primary button of the pages a business lands on before it has an inbox (/hosted/, /try/,
+ * /assistants/), while the pilot is open: the hosted inbox's start. Closed, those pages have none.
+ */
+export const hostedCta = (open: boolean): PilotLink | null => (open ? GET : null);
+export const HOSTED_CTA = hostedCta(HOSTED_PILOT_OPEN);
+
 /** One sentence for the places that list ways to run the inbox. */
 export const HOSTED_LINE = HOSTED_PILOT_OPEN
   ? "Or let us run it for you: free during the pilot, at an address on your own domain."

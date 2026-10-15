@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   DEPLOY_URL,
+  HOSTED_CTA,
   HOSTED_FAQ,
   HOSTED_HERO,
   HOSTED_HOME,
@@ -19,6 +20,7 @@ import {
   HOSTED_PILOT_OPEN,
   HOSTED_RUN,
   HOSTED_STATUS,
+  hostedCta,
   hostedFaq,
   hostedHero,
   hostedHome,
@@ -332,6 +334,34 @@ describe("hosted first, once the pilot is open", () => {
     expect(HOSTED_OWNERSHIP).toEqual(hostedOwnership(HOSTED_PILOT_OPEN));
     expect(HOSTED_INBOX_LD).toBe(hostedInboxLd(HOSTED_PILOT_OPEN));
     expect(HOSTED_HOW_DATA).toEqual(hostedHowData(HOSTED_PILOT_OPEN));
+  });
+
+  it("/hosted/, /try/ and /assistants/: the hosted inbox's start is their primary button while open", () => {
+    expect(HOSTED_CTA).toEqual(hostedCta(HOSTED_PILOT_OPEN));
+    expect(hostedCta(true)).toEqual({ label: "Get your agent inbox", href: START_URL });
+    expect(hostedCta(false)).toBeNull();
+    for (const page of [
+      "src/pages/hosted/[...slug].astro",
+      "src/pages/try.astro",
+      "src/pages/assistants/index.astro",
+    ]) {
+      const src = read(page);
+      expect(src, page).toContain("import { HOSTED_CTA");
+      expect(src, page).toMatch(/<a class="btn btn-primary" href=\{HOSTED_CTA\.href\}>/);
+    }
+    // While open, /try/ and /assistants/ step their own buttons back.
+    expect(read("src/pages/try.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+    expect(read("src/pages/assistants/index.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+  });
+
+  it("install.md starts with the hosted inbox, and an AI hands the email and the code to the person", () => {
+    const md = read("public/install.md");
+    const hosted = md.indexOf("## The short way: we host it");
+    expect(hosted).toBeGreaterThan(0);
+    expect(hosted).toBeLessThan(md.indexOf("## Or they run it themselves"));
+    expect(hosted).toBeLessThan(md.indexOf("## Path A"));
+    expect(md).toContain(`${START_URL}?domain=<their domain>`);
+    expect(md).toContain("Never type either for\n   them, and never ask them to paste the code to you.");
   });
 
   it("the /inbox hero: the hosted inbox first while open, Deploy to Cloudflare while closed", () => {

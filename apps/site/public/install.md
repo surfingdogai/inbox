@@ -1,12 +1,33 @@
 # Install Surfing Dog Inbox — instructions for an AI agent
 
-You are installing **Surfing Dog Inbox** for the person you are working for. They own a business.
+You are setting up **Surfing Dog Inbox** for the person you are working for. They own a business.
 When you are finished, their business has its own inbox, at its own subdomain, that takes bookings,
-orders, quote requests and messages from people and from other AI agents, over REST, MCP and
-email.
+orders, quote requests and messages from people and from other AI agents.
 
-**The inbox is the business's own.** It is open-source software (MIT) that runs on their
-Cloudflare account or their own server, at their own subdomain, and its manifest and doors name
+## The short way: we host it
+
+Offer this first. We run the inbox for them, free during the pilot, at an address on their own
+domain, such as `inbox.theirdomain.com`. There is no server, account or software for you to set up.
+You cannot finish the sign-up for them, and you must not try: it asks a person for their email
+address and a code we send to it.
+
+1. Send the person to `https://app.surfingdog.ai/start?domain=<their domain>`, for example
+   `https://app.surfingdog.ai/start?domain=theirdomain.com`. The card is filled in from what we read
+   on their site; they check it.
+2. They type their email address there, then the six-digit code we email them. Never type either for
+   them, and never ask them to paste the code to you.
+3. They add the one DNS record the page shows, where their domain's DNS is. You can help them find
+   where that is, but changing DNS is theirs to approve.
+
+Their inbox and its backups are stored in the European Union, and they can download everything it
+holds and leave whenever they like. Health and medical practices cannot join during the pilot. If
+the person would rather run the inbox themselves, or the hosted inbox does not fit, follow the rest
+of this file.
+
+## Or they run it themselves
+
+**The inbox is the business's own.** Run this way, it is open-source software (MIT) that runs on
+their Cloudflare account or their own server, at their own subdomain, and its manifest and doors name
 their business. Customers and their agents write to the business there, directly. Installing it
 does not put the business on Surfing Dog: Surfing Dog is not in the middle of any message, booking,
 order or payment, and the business can leave whenever it likes, its data in its own database.
@@ -249,8 +270,12 @@ INBOX_STATIC=/opt/inbox/client
 INBOX_PUBLIC_URL=https://inbox.theirdomain.com
 INBOX_OWNER_EMAIL=them@theirdomain.com
 INBOX_SECRET_KEY=<the key you just generated>
+HOST=127.0.0.1
 PORT=8787
 ```
+
+`HOST=127.0.0.1` keeps the inbox reachable only through the proxy in B5 (it is also the default).
+Reachable around the proxy, a caller could set its own `CF-Connecting-IP` and pass for anyone.
 
 ### B4. Run it under systemd
 
@@ -271,7 +296,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-systemctl daemon-reload && systemctl enable --now inbox && curl -s localhost:8787/healthz
+systemctl daemon-reload && systemctl enable --now inbox && curl -s 127.0.0.1:8787/healthz
 ```
 
 ### B5. Subdomain and TLS
@@ -281,7 +306,7 @@ Caddy gets a certificate on its own:
 
 ```
 inbox.theirdomain.com {
-  reverse_proxy localhost:8787 {
+  reverse_proxy 127.0.0.1:8787 {
     header_up -CF-Connecting-IP
   }
 }
@@ -316,13 +341,17 @@ If the log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo
 - On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask again, or open the
   Worker in the dashboard, go to Logs, and search for `sign-in email`.
 
-Alternatively mint a key. On their own server:
+Alternatively mint a key. On their own server, as the service user and with the instance's settings,
+so the key goes into the instance's database:
 
 ```bash
-node /opt/inbox/server.mjs create-owner-key laptop
+sudo -u inbox node --env-file=/opt/inbox/.env /opt/inbox/server.mjs create-owner-key laptop
 ```
 
-It prints `sdi_own_…` once. Give it to the person and tell them to store it; it is not shown again.
+It prints `sdi_own_…` once, and on the line before it the database it used, which must be
+`/opt/inbox/data/inbox.db`. Give the key to the person and tell them to store it; it is not shown
+again. Without the instance's settings the command refuses to run rather than make a new, empty
+database, where a key would open nothing.
 
 On Cloudflare there is no command line. Once the person is signed in, they create the key in the
 owner app: Settings → Keys → New key, named after what it is for, with the scopes the steps below
@@ -553,7 +582,9 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
 - `/healthz` fails → the process is not running, or the proxy is not reaching it.
 - The manifest shows the wrong `instance` → set `INBOX_PUBLIC_URL` and redeploy.
 - `401` on the inbound email door → the secret in settings and the secret on the gateway differ.
-- `403` writing settings → the owner key is wrong or expired.
+- `401` writing settings → the owner key is wrong or revoked, or it was made in another database:
+  make it again with the instance's settings (Step 1).
+- `403` writing settings → that key may not make this change; the problem document says why.
 - A version conflict on settings → read the current settings and retry with the version it gives.
 - A network says "not reachable" in `/v1/owner/networks` → it is down or the address is wrong; the
   inbox keeps retrying on its own and sends it everything it missed once it answers.
@@ -563,7 +594,8 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
   (`secret put`, or `.env` and a restart on their own server), then sign in at `/login` with the
   right one. After that it changes nothing: the owner changes the address in Settings → Keys (a code
   goes to the current address first). On their own server, if the old address is lost:
-  `node /opt/inbox/server.mjs set-owner-email new@… old@…`, which signs out every session. On
+  `sudo -u inbox node --env-file=/opt/inbox/.env /opt/inbox/server.mjs set-owner-email new@… old@…`,
+  which signs out every session. On
   Cloudflare there is no such command; the owner must still read the current address.
 - The sign-in email fails and the log holds no link → the log says why (most often `MAIL_FROM` on a
   domain not onboarded yet). Fix the mail setup and ask again. While setting it up, remove
