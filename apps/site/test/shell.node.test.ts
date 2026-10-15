@@ -196,6 +196,9 @@ describe("shell.css", () => {
       // a member's track record
       "sd-record",
       "sd-record-meter",
+      // a site's door history
+      "sd-history",
+      "sd-spark",
     ]) {
       expect(css, cls).toMatch(new RegExp(`\\.${cls}[\\s,.:{\\[>]`));
     }
@@ -240,6 +243,19 @@ describe("shell.css", () => {
     expect(section).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|sun|warning)(?:-ink)?\b/);
     expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i);
     expect(section).toMatch(/\.sd-record\s*\{[^}]*font-variant-numeric:\s*tabular-nums/);
+  });
+
+  it("draws a door's history in the success tone against ink, never an alarm colour or a colour of its own", () => {
+    const parts = read("shell/parts.css");
+    const at = parts.indexOf("/* --- A site's door history");
+    expect(at).toBeGreaterThan(0);
+    const end = parts.indexOf("/* --- ", at + 8);
+    const section = parts.slice(at, end < 0 ? undefined : end).replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(section).toMatch(/\.sd-spark \.is-answered\s*\{[^}]*var\(--c-success\)/);
+    expect(section).toMatch(/\.sd-spark \.is-missed\s*\{[^}]*var\(--ink\)/);
+    expect(section).toMatch(/\.sd-spark \.is-none\s*\{[^}]*var\(--ink-3\)/);
+    expect(section).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|sun|warning)(?:-ink)?\b/);
+    expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i);
   });
 
   it("names no red anywhere in parts.css: every colour written out is ink, white, black or a cool hue", () => {

@@ -6,6 +6,7 @@ export * from "./capabilities";
 export * from "./common";
 export * from "./directory";
 export * from "./doors";
+export * from "./history";
 export * from "./instances";
 export * from "./mcp";
 export * from "./persons";

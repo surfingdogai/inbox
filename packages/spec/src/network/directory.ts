@@ -214,6 +214,60 @@ export const cardDoorSchema = z.object({
 });
 export type CardDoor = z.infer<typeof cardDoorSchema>;
 
+/**
+ * A door's history (§4.8, ADR-020): what the network's own reads found of one door type at one host of the
+ * business, from a line a day it keeps for good. Never anything an agent reported. `checks` only for a door the
+ * network reads every day, and only from 14 checked days; below that it is absent, and nothing says why.
+ * `vectors/door-history.json` pins it down.
+ */
+export const doorHistoryEntrySchema = z.object({
+  type: doorTypeSchema,
+  host: z.string().describe("The door's host, lower case."),
+  first_seen: z.iso
+    .date()
+    .describe("The first UTC day a read of the network's found a door of this type at this host answering."),
+  last_seen: z.iso.date().describe("The last such day."),
+  current: z.boolean().describe("Whether a door of this type is at this host now (not gone)."),
+  checks: z
+    .object({
+      since: z.iso.date().describe("The first day checked."),
+      last: z.iso.date().describe("The last day checked."),
+      days: z
+        .int()
+        .min(14)
+        .describe("Days checked: days on which a daily read of the door concluded (blocked reads are none)."),
+      answered: z
+        .int()
+        .min(0)
+        .describe("Of them, days on which every check answered: one failed check makes the day missed."),
+      recent: z
+        .string()
+        .regex(/^[ax.]{90}$/)
+        .describe(
+          "The last 90 days ending on as_of, oldest first: a every check answered, x one failed, . no check that day.",
+        ),
+    })
+    .optional()
+    .describe("A door the network reads every day (a member's, a claimed listing's), from 14 checked days."),
+  summary: z
+    .string()
+    .optional()
+    .describe(
+      'With checks: "Answered 97% of daily checks since 3 Oct 2026 (41 of 42 days).", the share floored, "from … to …" when the last check is more than 7 days old.',
+    ),
+});
+export type DoorHistoryEntry = z.infer<typeof doorHistoryEntrySchema>;
+
+export const doorHistorySchema = z
+  .object({
+    as_of: z.iso.date().describe("The UTC day it was read on."),
+    doors: z.array(doorHistoryEntrySchema),
+  })
+  .describe(
+    "What the network's own reads found of the business's doors, kept for good: each door type at each host, when it was first and last seen answering, and for a door read every day, how many days every check answered. Absent when there is nothing to say.",
+  );
+export type DoorHistory = z.infer<typeof doorHistorySchema>;
+
 /** A place category: an Overture Place Categories id (CC BY 4.0) with its label, or a group slug. */
 export const placeCategorySchema = z.object({ id: z.string(), label: z.string(), src: factSourceSchema });
 
@@ -363,6 +417,7 @@ export const listingDetailSchema = listingSchema.extend({
     .array(listingFactSchema)
     .optional()
     .describe("Every displayed value of an entry that is not a member, with its source and date (§4.11)."),
+  door_history: doorHistorySchema.optional().describe("The history of the doors this listing shows (§4.8)."),
   report: reportHintSchema.optional(),
 });
 export type ListingDetail = z.infer<typeof listingDetailSchema>;
