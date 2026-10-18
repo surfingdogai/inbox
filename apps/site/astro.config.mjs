@@ -4,6 +4,7 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
+import { BEACON_HEAD } from "./src/lib/analytics.ts";
 import { HOSTED_LLMS, HOSTED_OWNERSHIP } from "./src/lib/hosted.ts";
 import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
 
@@ -53,6 +54,9 @@ export default defineConfig({
           content:
             '(()=>{try{const h=location.hostname;const rest="; Path=/; SameSite=Lax"+(h==="surfingdog.ai"||h.endsWith(".surfingdog.ai")?"; Domain=surfingdog.ai":"")+(location.protocol==="https:"?"; Secure":"");const write=(v)=>{document.cookie="sd_theme="+v+"; Max-Age=31536000"+rest};const t=localStorage.getItem("starlight-theme");const want=t==="light"||t==="dark"?t:"";const c=(document.cookie.match(/(?:^|; )sd_theme=([^;]*)/)||[])[1]||"";if(c==="light"||c==="dark"||c==="auto"){const chosen=c==="auto"?"":c;if(chosen!==want){localStorage.setItem("starlight-theme",chosen);document.documentElement.dataset.theme=chosen||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark")}}else if(want){write(want)}document.addEventListener("change",(e)=>{const s=e.target;if(s instanceof HTMLSelectElement&&s.closest("starlight-theme-select")){const v=s.value;write(v==="light"||v==="dark"?v:"auto")}})}catch{}})();',
         },
+        // Cloudflare Web Analytics, only in the surfingdog.ai build, as on the site's pages
+        // (src/lib/analytics.ts).
+        ...BEACON_HEAD,
       ],
       social: [{ icon: "github", label: "GitHub", href: GITHUB }],
       editLink: { baseUrl: `${GITHUB}/edit/main/apps/site/` },

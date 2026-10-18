@@ -2,6 +2,7 @@
 import "../styles/site.css";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
+import { BEACON } from "../lib/analytics";
 import { fontFaceCss } from "../lib/shell";
 
 interface Props {
@@ -71,6 +72,8 @@ const fonts = fontFaceCss();
     <meta name="twitter:image" content={ogImage} />
     <meta name="twitter:image:alt" content={imageAlt} />
     {ld && <script type="application/ld+json" set:html={JSON.stringify(ld)} />}
+    {/* Cloudflare Web Analytics, only in the surfingdog.ai build (src/lib/analytics.ts). */}
+    {BEACON && <script is:inline {...BEACON}></script>}
     <style is:inline set:html={fonts}></style>
     <script is:inline>
       // Apply a saved theme before first paint. Same key as the docs (Starlight).
