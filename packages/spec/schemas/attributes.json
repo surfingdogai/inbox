@@ -70,7 +70,23 @@
           "items": {
             "type": "string"
           },
-          "description": "Ways an agent itself pays: AP2, ACP delegated payment, x402, UCP handlers."
+          "description": "Ways an agent itself pays: AP2, ACP delegated payment, x402, UCP handlers, Visa Intelligent Commerce, Mastercard Agent Pay."
+        },
+        "version": {
+          "description": "The version of vocab/payments.json.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "labels": {
+          "description": "Each token's English name.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       },
       "required": ["methods", "wallets", "agent"]

@@ -89,6 +89,7 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
         </div>
         <div class="r-tags" data-tags></div>
         <p class="r-takes" data-takes></p>
+        <p class="r-pay" data-pay></p>
         <p class="r-found" data-found></p>
         <p class="r-record" data-record hidden>
           <span class="r-meter" data-record-meter aria-hidden="true" hidden><i></i></span>
@@ -239,7 +240,20 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
     height: 100%;
     background: var(--c-success);
   }
+  :global(.r-pay) {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  :global(.r-pay-seen) {
+    font-size: var(--fs-micro);
+    letter-spacing: 0.02em;
+    color: var(--ink-3);
+    opacity: 0.85;
+  }
   :global(.r-takes:empty),
+  :global(.r-pay:empty),
   :global(.r-found:empty),
   :global(.r-tags:empty) {
     display: none;
@@ -385,6 +399,16 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
           set("[data-found]", v.found);
           const tags = node.querySelector<HTMLElement>("[data-tags]");
           if (tags) for (const t of v.tags) tags.append(el("span", t.on ? "r-tag is-on" : "r-tag", t.text));
+          const pay = node.querySelector<HTMLElement>("[data-pay]");
+          if (pay && v.pays) {
+            // What the business declared first; what was only seen after one quiet marker; then how many more.
+            pay.append(`Pay with ${v.pays.declared.join(" · ")}`);
+            if (v.pays.seen.length) {
+              if (v.pays.declared.length) pay.append(" · ");
+              pay.append(el("span", "r-pay-seen", "seen:"), ` ${v.pays.seen.join(" · ")}`);
+            }
+            if (v.pays.more) pay.append(` +${v.pays.more}`);
+          }
           const rec = recordView(raw);
           const recEl = node.querySelector<HTMLElement>("[data-record]");
           if (rec && recEl) {

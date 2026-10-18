@@ -54,6 +54,15 @@ export interface FrontCopy {
   /** For the business's own people: the way to their inbox. */
   readonly signIn: string;
   readonly tooMany: string;
+  /** How a visitor can pay, one quiet line: `We take card, MB WAY and Apple Pay.` (names as payName gives them). */
+  readonly payWith: (names: readonly string[]) => string;
+  /** The words for ways to pay that are not a brand's name, lower case, as a sentence says them. */
+  readonly payNames: Readonly<Record<string, string>>;
+}
+
+/** "a, b and c", in a language's word for and. */
+function listOf(names: readonly string[], and: string): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
 }
 
 const EN: FrontCopy = {
@@ -104,6 +113,8 @@ const EN: FrontCopy = {
   back: "Back",
   signIn: "Staff sign in",
   tooMany: "Too many requests from here just now. Please try again in a little while.",
+  payWith: (names) => `We take ${listOf(names, "and")}.`,
+  payNames: { card: "card", cash: "cash", bank_transfer: "bank transfer", crypto: "crypto" },
 };
 
 const PT: FrontCopy = {
@@ -154,6 +165,8 @@ const PT: FrontCopy = {
   back: "Voltar",
   signIn: "Entrada da equipa",
   tooMany: "Demasiados pedidos a partir daqui neste momento. Tente de novo daqui a pouco.",
+  payWith: (names) => `Aceitamos ${listOf(names, "e")}.`,
+  payNames: { card: "cartão", cash: "dinheiro", bank_transfer: "transferência bancária", crypto: "criptomoedas" },
 };
 
 export const FRONT_COPY: Readonly<Record<CustomerLang, FrontCopy>> = { en: EN, pt: PT };

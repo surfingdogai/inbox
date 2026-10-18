@@ -1715,6 +1715,51 @@ fieldset.chips,
 .details.more {
   margin-top: 0;
 }
+/* Settings → Payments: the groups of ways to pay, the less common folded. */
+.pay-groups {
+  gap: 16px;
+}
+.pay-more > .pay-groups {
+  margin-top: 14px;
+}
+/* Where the ticks came from, when the setup read them on the business's website. */
+.hint.pay-from {
+  margin: -4px 0 0;
+}
+/* Which cards: under Card once it is ticked, quiet. */
+.pay-brands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.pay-brands > legend.hint {
+  float: left;
+  margin: 0 4px 0 0;
+  padding: 0;
+}
+/* "Saved", beside the heading in a spot of its own: it fades, and nothing moves. */
+.pay-status {
+  min-width: 4em;
+  min-height: 1.4em;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.pay-status.is-on {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pay-status {
+    transition: none;
+  }
+}
 .details.more > .settings-grid {
   margin-top: 12px;
 }

@@ -1,5 +1,5 @@
 {
-  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. From the network.",
+  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. Protocol 0.2: place_category keeps an Overture place category id this network knows and does not exclude, with at most two alternates none of which is an ancestor or descendant of another; attributes keeps keys of vocab/attributes.json with a value of their type that apply to its categories (applies_to: group slugs, place category ids on its path, or *), never one that needs a proof or is derived; price_band a whole number from 1 to 4; currencies up to five ISO 4217 codes; each absent when nothing is kept. payments keeps up to 64 tokens of vocab/payments.json (a synonym read as its token, any capitals and accents), with card for a card brand, each once, in the vocabulary's order; absent when none is kept. From the network.",
   "vocabulary_version": 4,
   "cases": [
     {
@@ -574,6 +574,168 @@
         "description": "Cuts and colour",
         "categories": ["hair-beauty"],
         "tags": ["vegan"],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": []
+      }
+    },
+    {
+      "name": "0.2: a place category with its alternates, attributes of the vocabulary, a price band and currencies",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Kaya Yoga",
+        "categories": ["fitness"],
+        "place_category": {
+          "primary": "yoga_studio",
+          "alternates": ["pilates_studio", "active_life", "meditation_center"]
+        },
+        "attributes": {
+          "walk_ins": true,
+          "wifi": false,
+          "halal": true,
+          "pets_welcome": true,
+          "open_24h": true,
+          "nope": true,
+          "parking": "yes"
+        },
+        "price_band": 2,
+        "currencies": ["kes", "USD", "KES", "eur", "dollars"]
+      },
+      "kept": {
+        "name": "Kaya Yoga",
+        "description": "",
+        "categories": ["fitness"],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "place_category": {
+          "primary": "yoga_studio",
+          "alternates": ["pilates_studio", "meditation_center"]
+        },
+        "attributes": {
+          "walk_ins": true,
+          "wifi": false
+        },
+        "price_band": 2,
+        "currencies": ["KES", "USD", "EUR"]
+      }
+    },
+    {
+      "name": "0.2: an unknown or excluded place category is dropped, never the profile; a price band outside 1 to 4 too",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Atelier",
+        "place_category": {
+          "primary": "casino",
+          "alternates": ["hair_salon"]
+        },
+        "price_band": 5,
+        "currencies": "EUR",
+        "attributes": ["wifi"]
+      },
+      "kept": {
+        "name": "Atelier",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": []
+      }
+    },
+    {
+      "name": "0.2: an attribute applies to the categories it names, its place categories' paths included",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Café Lune",
+        "place_category": {
+          "primary": "coffee_shop"
+        },
+        "attributes": {
+          "outdoor_seating": true,
+          "free_estimates": true,
+          "cert": "b_corp"
+        },
+        "price_band": 1.5
+      },
+      "kept": {
+        "name": "Café Lune",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "place_category": {
+          "primary": "coffee_shop",
+          "alternates": []
+        },
+        "attributes": {
+          "outdoor_seating": true
+        }
+      }
+    },
+    {
+      "name": "payments: tokens of vocab/payments.json and the names it reads, each once, in its order; anything else dropped alone",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Harbour Coffee",
+        "payments": ["Apple Pay", "card", "CARD", "mb_way", "cheques", 7, "x402", "Bank transfer"]
+      },
+      "kept": {
+        "name": "Harbour Coffee",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "payments": ["card", "bank_transfer", "mb_way", "apple_pay", "x402"]
+      }
+    },
+    {
+      "name": "payments: a card brand says a card",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Harbour Coffee",
+        "payments": ["Visa", "mastercard", "pix"]
+      },
+      "kept": {
+        "name": "Harbour Coffee",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "payments": ["card", "visa", "mastercard", "pix"]
+      }
+    },
+    {
+      "name": "payments: none known is no payments, and a list of the wrong type is dropped",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Atelier Two",
+        "payments": "card"
+      },
+      "kept": {
+        "name": "Atelier Two",
+        "description": "",
+        "categories": [],
+        "tags": [],
         "languages": [],
         "address": {},
         "geo": null,

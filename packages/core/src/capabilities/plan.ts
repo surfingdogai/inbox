@@ -1,3 +1,10 @@
+import {
+  isPaymentToken,
+  MAX_PROFILE_PAYMENTS,
+  PAYMENTS_VOCABULARY,
+  paymentLabel,
+  sortPaymentTokens,
+} from "@surfingdog/spec";
 import { z } from "zod";
 import { isOwnerOrSystem } from "../access/outbound";
 import { customerLang } from "../customer/lang";
@@ -44,6 +51,10 @@ import {
  * part way (a lost connection, a restart) is finished by applying it again. A service is matched by
  * its name; a preset's rules are matched by theirs and replaced as a set, and the owner's other
  * rules are left alone.
+ *
+ * How the business is paid (`payments`) goes in as the ways a person pays that its site showed, for the
+ * owner to untick any it does not take: never an agent's own way to pay, which only an integration that
+ * runs it may offer.
  *
  * What a plan never holds: products, feeds, or who the business is in law (`commerce`). Those are the
  * owner's to add, in the app; only the country the site gave fills an empty legal country. A price goes in only when the owner typed or confirmed it
@@ -124,6 +135,27 @@ const planElsewhereSchema = z.object({
   name: z.string().max(120).optional().describe("What the place is called, for the sentences; not kept."),
 });
 
+/** The ways a person pays (the vocabulary's methods and wallets): what a plan may tick for the owner. */
+const PERSON_PAYMENTS = new Set([...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOCABULARY.wallets]);
+
+const planPaymentsSchema = z
+  .object({
+    accepted: z
+      .array(
+        z
+          .string()
+          .refine(
+            (t) => isPaymentToken(t) && PERSON_PAYMENTS.has(t),
+            "a way a person pays, of vocab/payments.json's methods and wallets, like card or apple_pay",
+          ),
+      )
+      .max(MAX_PROFILE_PAYMENTS)
+      .refine((all) => new Set(all).size === all.length, "each payment once"),
+  })
+  .describe(
+    "How customers pay, as read from the business's own site: replaces the ways ticked in Settings → Payments, for the owner to untick any it does not take.",
+  );
+
 /** A field a plan may never carry, with the reason in the refusal. */
 const never = (what: string) =>
   z
@@ -167,6 +199,7 @@ export const setupPlanSchema = z
       .describe(
         "Bookings or orders taken somewhere else, and where: replaces the list, so [] brings both back to the inbox.",
       ),
+    payments: planPaymentsSchema.optional(),
     suggested_services: z
       .array(z.object({ name: z.string().trim().min(1).max(120) }))
       .max(MAX_SUGGESTED_SERVICES)
@@ -500,6 +533,21 @@ export async function applySetupPlan(
         said.push(
           `Suggests services to add: ${wanted.map((svc) => svc.name).join(", ")}. None is on offer until you add it.`,
         );
+    }
+  }
+  // ---- how the business is paid ----
+  if (plan.payments) {
+    const wanted = sortPaymentTokens(plan.payments.accepted);
+    if (!same(wanted, sortPaymentTokens(state.settings.payments.accepted))) {
+      settingsPatch.payments = { accepted: wanted };
+      said.push(
+        check(
+          wanted.length
+            ? `Shows the ways to pay read on your site: ${wanted.map(paymentLabel).join(", ")}.`
+            : "Shows no ways to pay.",
+          "payments",
+        ),
+      );
     }
   }
   // ---- bookings or orders taken somewhere else ----

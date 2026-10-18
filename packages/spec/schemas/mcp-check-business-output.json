@@ -461,6 +461,38 @@
       },
       "required": ["claim", "hide", "opt_out"]
     },
+    "pay_with": {
+      "description": "How the business is paid, each way with its evidence: declared by the business, or seen on its own pages and files.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "A payment token of GET /v1/attributes."
+          },
+          "label": {
+            "type": "string",
+            "description": "Its English name: Apple Pay for apple_pay."
+          },
+          "src": {
+            "type": "string",
+            "enum": ["declared", "seen"]
+          },
+          "via": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "Where the evidence is: registration, manifest, schema_org, ucp, acp, door, file or page today. A later network may add one: read a via you do not know as evidence of its src."
+          },
+          "url": {
+            "description": "The page, file, profile, manifest or door the evidence is at.",
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["token", "label", "src", "via"]
+      }
+    },
     "track_record": {
       "type": "object",
       "properties": {

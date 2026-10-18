@@ -1,4 +1,4 @@
-import { readDoorsElsewhere } from "@surfingdog/spec";
+import { isPaymentToken, MAX_PROFILE_PAYMENTS, readDoorsElsewhere } from "@surfingdog/spec";
 import { z } from "zod";
 import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
@@ -677,6 +677,25 @@ const sections = {
         .or(z.literal(""))
         .default("")
         .describe("The business's own website, if it has one."),
+    })
+    .prefault({}),
+  /**
+   * How customers and their agents can pay the business (Settings → Payments): tokens of the payments vocabulary
+   * (`@surfingdog/spec`'s `vocab/payments.json`: card, apple_pay, paypal, pix…), ticked by the owner, or filled in
+   * from what its own website showed by a setup plan (its source is then `setup.sources.payments`, until the owner
+   * saves the tab). The manifest publishes them in its profile (`profile.payments`, with card for a card brand), so an
+   * agent knows before it pays, and a network shows them as declared by the business. A token is never removed from the
+   * vocabulary, so a stored one always reads. It is what the business says of itself to every agent, so only the owner
+   * in person changes it (`guard.ts`).
+   */
+  payments: z
+    .object({
+      accepted: z
+        .array(z.string().refine(isPaymentToken, "a payment of vocab/payments.json, like card or apple_pay"))
+        .max(MAX_PROFILE_PAYMENTS)
+        .refine((all) => new Set(all).size === all.length, "each payment once")
+        .default([])
+        .describe("How customers and their agents can pay you: card, apple_pay, paypal, pix… (vocab/payments.json)."),
     })
     .prefault({}),
   /**

@@ -642,6 +642,11 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
     keeps a key that applies to the business's categories and drops one that needs a proof it
     cannot check yet.
   - `price_band`: 1 to 4. `currencies`: up to 5 ISO 4217 codes.
+  - `payments` (18 October 2026): how customers and their agents can pay, at most 64 tokens of
+    [`vocab/payments.json`](../../packages/spec/vocab/payments.json) (`card`, `apple_pay`, `paypal`,
+    `pix`…). A network keeps the tokens it knows, reads a name its synonyms list as its token, drops
+    anything else alone, adds `card` for a card brand (`visa`, `mastercard`, `amex`), and shows them as
+    declared by the business (§4.10).
 
 The manifest may also carry `claims`, `{"<network host>": "<token>"}`: how an inbox proves to a
 network that the manifest is its own when it registers or claims a listing there (§4.12).
@@ -942,7 +947,7 @@ counts in a filter**, except page language. A filter reads `declared` and `seen`
 | `has_inbox` | it has an inbox door, ours or any compatible one |
 | `doors` | §4.8 |
 | `requestable` | §4.8 |
-| `accepts` | `{kinds, pay?}`: the kinds its live doors take, and the payments it accepts (tokens of `GET /v1/attributes`' `payments`: methods, wallets and the ways an agent itself pays) |
+| `accepts` | `{kinds, pay?, pay_with?}`: the kinds its live doors take, the payments it accepts (tokens of `GET /v1/attributes`' `payments`: methods, wallets and the ways an agent itself pays), and each of them with its evidence (below) |
 | `category` | `{primary, alternates, path, group?}`: place categories, each `{id, label, src}`; `path` is the primary's ancestors, root first; `group` its slug of the categories list |
 | `attributes` | `{key: {v, src}}`, keys of `GET /v1/attributes` |
 | `place` | for entries that are not members: `{locality?, region?, country?, kind, service_area?, ships_to?}`; `kind` is any of `storefront`, `service_area`, `online`; a service area is a radius (at most 300 km) or up to 50 countries |
@@ -970,6 +975,34 @@ attributes filter.
 has `place`; H3 cells are not part of 0.2. Hours and their zone are as §4.3 says; a business without a
 zone is left out of `open_now`. `languages` are BCP 47 tags; the language of its pages counts, as
 `probably`. `currencies` are ISO 4217; `price_band` is 1 to 4.
+
+**Payments.** [`vocab/payments.json`](../../packages/spec/vocab/payments.json) (version 2) lists every
+token with its English label: `methods` and `wallets` are how a person pays, `agent` the ways an agent
+itself pays at a door. A token is never removed or renamed. `accepts.pay_with` gives each of a listing's
+`pay` tokens as `{token, label, src, via, url?}`, with the strongest evidence the network has for it:
+
+- `declared`, when the business said so itself: its registration (`via: registration`), its inbox's
+  manifest (`manifest`, `profile.payments`), its own structured data (`schema_org`, `paymentAccepted`),
+  its own UCP profile's payment handlers (`ucp`, each handler's name read against the vocabulary's
+  `handlers`, anywhere in the name, then `handlers_last`, only as the whole of its last part), ACP
+  delegated payment (`acp`), or an agent payment protocol its door's document declares in its structure
+  (`door`: x402 or AP2 as a member of its own, or named in a payment, scheme, protocol or extension
+  member);
+- `seen`, when it did not: the network saw a payment provider's own code, button, hosted checkout link or
+  a Shopify storefront's payment icons on the site's pages (`page`), or its Apple Pay domain file
+  (`/.well-known/apple-developer-merchantid-domain-association`, `file`); a door's document names an
+  agent payment protocol only in passing, its prose included (`door`); or its shop platform's standard
+  UCP profile lists it (`ucp`: the handlers a platform gives nearly every store, such as Shopify's
+  `dev.shopify.card`, `dev.shopify.shop_pay` and `com.google.pay`, in a profile that names the
+  platform's own handlers).
+
+A token declared and seen is declared. A card brand (`visa`, `mastercard`, `amex`) says a card: `card` comes
+with the brand's evidence. `url` is where the evidence is, absent for a registration. A page's words are
+never evidence, nothing is a model's reading, and a UCP or ACP profile the network does not count (a
+platform's blanket profile, §4.13) gives none. A reader does not refuse a `via` it does not know: a later
+network may add one. `accepts=` reads `declared` and `seen` alike; a reader that needs the business's own
+word reads `src`. `ucp_handlers` says a UCP profile names payment handlers: it is the protocol, not a way a
+person pays, and a page for people leaves it out (the handlers it names are listed themselves).
 
 **Filters** are §4.3's, and every one only leaves businesses out.
 
@@ -1439,13 +1472,17 @@ so in `method`.
 - An edition's `rows` are counts, one per `scope`, `key` and `metric`: the whole (`all`, key empty),
   and each `country`, kind of business (`group`), website `platform`, `source` (where the network
   found the site) and `city` with at least `method.min_sample` sites checked; `left_out` says how
-  many keys of each scope were under it. Every published key has a row for every metric, zero
-  included. A reader skips a scope or a metric it does not know: both are added to, never renamed.
+  many keys of each scope were under it. Every published key has a row for every metric of its scope,
+  zero included. A reader skips a scope or a metric it does not know: both are added to, never renamed.
 - Metrics: `checked`; `agent_ready`; `can:<capability>` for every capability of the vocabulary
   version it names, counted among the agent-ready; `door:<type>`, counted among the agent-ready;
   `level:<name>`, a level below askable among the checked and askable and above among the
   agent-ready; `no_ai`, the sites whose doors reach askable and that ask AI systems to stay away;
-  and for a city, `places`, its list's size. The levels and `no_ai` add up to `checked`.
+  and for a city, `places`, its list's size. The levels and `no_ai` add up to `checked`. For the whole,
+  each country and each city, an edition that names `payments` (the tokens it counts) also has
+  `pay_read`, the sites whose ways to pay were read, and for each token `pay:<token>`, those that show it
+  (§4.10), and `pay_declared:<token>`, those of them that declared it themselves; the difference is those
+  where it was only seen. A metric is any lower-case name with at most one key after a colon.
 - No row holds a website's name or domain, and a breakdown key is published only with at least
   `method.min_sample` sites checked. Small counts within a published key are published as they
   are: each counts public features of websites.

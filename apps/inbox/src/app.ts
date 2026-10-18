@@ -465,6 +465,7 @@ export function createInbox(deps: AppDeps): Inbox {
         languages: profile.languages,
         timezone: profile.timezone,
         directory: settings.directory,
+        payments: settings.payments.accepted,
         now: deps.now ? deps.now() : Date.now(),
       }),
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],

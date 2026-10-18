@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_PROFILE_PAYMENTS } from "./payments";
 
 /**
  * The discovery manifest an instance publishes at MANIFEST_PATH. Tiny on purpose: it says what
@@ -108,6 +109,13 @@ export const profileSchema = z.object({
     .max(5)
     .optional()
     .describe("ISO 4217."),
+  payments: z
+    .array(z.string().regex(/^[a-z0-9_]{2,40}$/))
+    .max(MAX_PROFILE_PAYMENTS)
+    .optional()
+    .describe(
+      "How a customer or their agent can pay: tokens of vocab/payments.json (card, apple_pay, paypal, pix…). A network keeps the tokens it knows and drops the rest alone; a card brand (visa) says card too.",
+    ),
 });
 export type Profile = z.infer<typeof profileSchema>;
 

@@ -1,5 +1,5 @@
 import type { MailOut } from "@surfingdog/platform";
-import type { DoorElsewhere } from "@surfingdog/spec";
+import { type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
@@ -129,6 +129,11 @@ export interface BusinessProfile {
    * the manifest names them; absent when there are none. None of them is in `item_types`.
    */
   readonly doors_elsewhere?: readonly DoorElsewhere[] | undefined;
+  /**
+   * How customers and their agents can pay (`settings.payments`, Settings → Payments), as the manifest's profile
+   * publishes it: tokens of the payments vocabulary, with card for a card brand; absent when none is ticked.
+   */
+  readonly payments?: readonly string[] | undefined;
 }
 
 /** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
@@ -597,6 +602,7 @@ export class Capabilities {
       },
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
+      ...(s.payments.accepted.length ? { payments: publishedPayments(s.payments.accepted) } : {}),
     };
   }
 

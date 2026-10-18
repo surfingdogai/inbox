@@ -5,6 +5,7 @@ import {
   profileHoursSchema,
   profileSchema,
   profileServiceSchema,
+  publishedPayments,
 } from "@surfingdog/spec";
 import type { z } from "zod";
 import type { Db } from "../db";
@@ -104,7 +105,8 @@ export async function offeredItemTypes(
  * The public profile the manifest carries for a directory (ADR-017 A2.5), or nothing while the
  * business has no name. It holds only what the business publishes about itself: the name and
  * languages, what the owner filled in under `directory` (each part only when it is not empty), its
- * weekly hours and the closures that have not ended, and up to thirty active services by name.
+ * weekly hours and the closures that have not ended, up to thirty active services by name, and how it is paid
+ * (`settings.payments`).
  * Never a contact email, a phone or the legal address. Each field is checked alone against the
  * spec's profile, as a network checks it, and one it would reject is left out on its own.
  */
@@ -115,6 +117,8 @@ export async function directoryProfile(
     readonly languages: readonly string[];
     readonly timezone: string;
     readonly directory: Settings["directory"];
+    /** How it is paid (`settings.payments.accepted`): published as `payments`. */
+    readonly payments?: readonly string[] | undefined;
     readonly now: number;
   },
 ): Promise<Profile | undefined> {
@@ -138,6 +142,8 @@ export async function directoryProfile(
   if (hours) fields.hours = hours;
   const services = await publicServices(db);
   if (services.length) fields.services = services;
+  const payments = publishedPayments(input.payments ?? []);
+  if (payments.length) fields.payments = payments;
 
   const shape = profileSchema.shape as unknown as Record<string, z.ZodType>;
   const kept: Record<string, unknown> = {};
