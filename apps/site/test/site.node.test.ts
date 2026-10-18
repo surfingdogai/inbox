@@ -1195,8 +1195,10 @@ describe("what the directory and the connector claim", () => {
     const text = visible(page);
     expect(text).not.toContain("Each business here proved it owns its domain");
     expect(page).toContain('page("source=member&limit=100")');
-    expect(page).toContain('page("source=registered,found&limit=50")');
-    expect(page.indexOf('page("source=member')).toBeLessThan(page.indexOf('page("source=registered,found'));
+    // "Found by our crawler" lists what the crawler found, never a business that registered itself.
+    expect(page).toContain('page("source=found&limit=50")');
+    expect(page).not.toContain("source=registered,found");
+    expect(page.indexOf('page("source=member')).toBeLessThan(page.indexOf('page("source=found'));
     expect(page).toContain("found.note");
     expect(text).toContain("Found by our crawler");
     expect(text).toContain("These are not members and run no inbox with us.");

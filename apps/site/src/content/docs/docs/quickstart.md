@@ -72,7 +72,7 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `RESEND_API_KEY` | unset | Real email through Resend instead, from `MAIL_FROM`. With neither, mail is printed to the console, sign-in emails included. |
 | `INBOX_OUTBOUND_DENY` | unset | Comma-separated addresses and ranges no outbound call reaches, like `203.0.114.7, 2a01:4f8::/32`: the server's own public addresses, or a neighbour's. Loopback, private, link-local and the other non-public ranges are always refused (see [Security and privacy](/docs/security-and-privacy/)). An entry that is not an address or a range stops the server at boot. |
 
-A few commands run against the same database and exit. Run them with the instance's settings (`node --env-file=.env …`, or `INBOX_DB` set), so they use its database: each says on stderr which database it used, and without `INBOX_DB` it refuses to run rather than create a new `./data/inbox.db`.
+A few commands run against the same database and exit. Run them from the directory the server runs in, or with `INBOX_DB` set (`node --env-file-if-exists=.env …` reads a `.env` when there is one), so they use its database: each says on stderr which database it used. Without `INBOX_DB` a command uses `./data/inbox.db` when that file is there, and refuses to run rather than create a new one.
 
 ```bash
 node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once

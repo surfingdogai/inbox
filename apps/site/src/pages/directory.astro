@@ -285,8 +285,8 @@ import Layout from "../layouts/Layout.astro";
         recEl.hidden = false;
       }
     } else {
-      // Found (or registered) on its own website: no pill and no record; what we found, and when, in
-      // the card's own words.
+      // Found on its own website: no pill and no record; what we found, and when, in the card's own
+      // words.
       node.querySelector("[data-online]")?.remove();
       const doors = foundDoors(Array.isArray(b.doors) ? (b.doors as Door[]) : []);
       set("[data-takes]", doors ? `Found: ${doors}` : "");
@@ -331,7 +331,9 @@ import Layout from "../layouts/Layout.astro";
     }
     if (!foundHost) return;
     try {
-      const found = await page("source=registered,found&limit=50");
+      // Found by our crawler alone: a business that registered itself proved its domain, and is not
+      // what this section says it is.
+      const found = await page("source=found&limit=50");
       foundHost.replaceChildren();
       for (const b of found) {
         const node = entry(b, []);
