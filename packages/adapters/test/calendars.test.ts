@@ -1,5 +1,5 @@
 import type { Interval, OutboundBooking, RunContext } from "@surfingdog/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildICalEvent,
   busyFromICal,
@@ -11,11 +11,13 @@ import {
   GOOGLE_SCOPES,
   googleCalendarConnector,
   googleEventId,
+  icsConnector,
+  idTokenClaims,
+  mayCarryCredentials,
   multistatus,
   parseRRule,
   parseXml,
   resolveZone,
-  siteOf,
   zonedToUtc,
 } from "../src/index";
 import {
@@ -29,8 +31,10 @@ import {
   EVENT_DENTIST,
   EVENT_OUTLOOK,
   EVENT_WEEKLY_LISBON,
+  GOOGLE_ID_CLAIMS,
   GOOGLE_PROBE,
   GOOGLE_TOKEN,
+  googleIdToken,
   ICLOUD_CALENDARS,
   ICLOUD_HOME_SET,
   ICLOUD_PRINCIPAL,
@@ -41,7 +45,7 @@ import {
 } from "./fixtures/calendars";
 
 /**
- * Contract tests for the calendar connectors (ADR-020) against answers shaped after each platform's
+ * Contract tests for the calendar connectors (ADR-022) against answers shaped after each platform's
  * documentation (fixtures/calendars.ts): what is asked of the platform, with which headers and body,
  * and what the inbox makes of the answer. The HTTP client is the real one; only `fetch` is faked.
  */
@@ -77,6 +81,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
 const INBOX = {
+  id: "5f1c0de2a9b84e7d3c61",
   origin: "https://inbox.salon.example",
   host: "inbox.salon.example",
   name: "Ana's Salon",
@@ -98,9 +103,16 @@ function runContext(http: RunContext["http"], over: Partial<RunContext> = {}): R
     destinations: [],
     destination: null,
     own: { ids: new Set(), spans: [] },
+    marker: "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
     saveSecret: async () => {},
     ...over,
   };
+}
+
+/** Busy times as a connector answered them, whether it read the whole window or said how far it got. */
+function intervalsOf(read: Interval[] | { intervals: readonly Interval[] } | undefined): Interval[] {
+  if (!read) return [];
+  return Array.isArray(read) ? read : [...read.intervals];
 }
 
 const booking: OutboundBooking = {
@@ -136,7 +148,7 @@ describe("the connectors' HTTP client", () => {
     expect(seen).toHaveLength(0);
   });
 
-  it("checks every redirect again and keeps a sign-in within its site only", async () => {
+  it("checks every redirect again and keeps a sign-in on its own host, or within iCloud's", async () => {
     const { http, seen } = fakePlatform((req) => {
       if (req.url === "https://caldav.icloud.com/start")
         return new Response(null, { status: 301, headers: { location: "https://p42-caldav.icloud.com/next" } });
@@ -162,8 +174,26 @@ describe("the connectors' HTTP client", () => {
     await expect(
       http.request({ method: "GET", url: "https://caldav.icloud.com/evil", followRedirects: true }),
     ).rejects.toMatchObject({ code: "config" });
-    expect(siteOf("p42-caldav.icloud.com")).toBe("icloud.com");
-    expect(siteOf("cloud.salon.co.uk")).toBe("salon.co.uk");
+    expect(mayCarryCredentials("caldav.icloud.com", "p42-caldav.icloud.com")).toBe(true);
+    // One suffix holds many customers: never "the same site" by its last labels.
+    expect(mayCarryCredentials("ana.nextcloud-host.example.net", "bob.nextcloud-host.example.net")).toBe(false);
+    expect(mayCarryCredentials("salon.github.io", "evil.github.io")).toBe(false);
+    expect(mayCarryCredentials("cloud.salon.co.uk", "cloud.salon.co.uk")).toBe(true);
+  });
+
+  it("drops a sign-in on a redirect between two customers of one hoster", async () => {
+    const { http, seen } = fakePlatform((req) => {
+      if (req.url === "https://ana.nextcloud-host.example.net/dav")
+        return new Response(null, { status: 301, headers: { location: "https://bob.nextcloud-host.example.net/dav" } });
+      return new Response("", { status: 207 });
+    });
+    await http.request({
+      method: "PROPFIND",
+      url: "https://ana.nextcloud-host.example.net/dav",
+      headers: { authorization: "Basic c2VjcmV0" },
+      followRedirects: true,
+    });
+    expect(seen.map((s) => s.headers.get("authorization"))).toEqual(["Basic c2VjcmV0", null]);
   });
 
   it("stops reading past the size it was given", async () => {
@@ -297,6 +327,9 @@ describe("busy times from iCalendar", () => {
 
 /* --- CalDAV ---------------------------------------------------------------------- */
 
+/** A calendar server's answer to a request without the right sign-in: 401, asking for a password. */
+const challenge = () => new Response("", { status: 401, headers: { "www-authenticate": 'Basic realm="Calendar"' } });
+
 function icloudServer(state: { events: Map<string, string>; password?: string } = { events: new Map() }) {
   const password = state.password ?? "abcd-efgh-ijkl-mnop";
   const auth = `Basic ${btoa(`ana@icloud.com:${password}`)}`;
@@ -305,7 +338,7 @@ function icloudServer(state: { events: Map<string, string>; password?: string } 
     if (u.host === "caldav.icloud.com" && u.pathname === "/.well-known/caldav") {
       return new Response(null, { status: 301, headers: { location: "https://caldav.icloud.com/" } });
     }
-    if (req.headers.get("authorization") !== auth) return new Response("", { status: 401 });
+    if (req.headers.get("authorization") !== auth) return challenge();
     if (u.host === "caldav.icloud.com" && u.pathname === "/" && req.method === "PROPFIND") return xml(ICLOUD_PRINCIPAL);
     if (u.host === "caldav.icloud.com" && u.pathname === "/123456789/principal/") return xml(ICLOUD_HOME_SET);
     if (u.host !== "p42-caldav.icloud.com") return undefined;
@@ -335,6 +368,13 @@ function icloudServer(state: { events: Map<string, string>; password?: string } 
   });
 }
 
+/** What connecting iCloud keeps: the principal, the calendar home, and the host that asked for the password. */
+const ICLOUD_EXTRA = {
+  principal: "https://caldav.icloud.com/123456789/principal/",
+  home: "https://p42-caldav.icloud.com/123456789/calendars/",
+  authHost: "caldav.icloud.com",
+};
+
 describe("CalDAV: iCloud", () => {
   const icloud = caldavConnector();
 
@@ -357,6 +397,7 @@ describe("CalDAV: iCloud", () => {
       destination: "https://p42-caldav.icloud.com/123456789/calendars/home/",
     });
     expect(c?.secret).toEqual({ username: "ana@icloud.com", password: "abcd-efgh-ijkl-mnop" });
+    expect(c?.extra).toEqual(ICLOUD_EXTRA);
     expect(seen.every((s) => s.url.startsWith("https://"))).toBe(true);
     expect(seen.filter((s) => s.method === "PROPFIND").map((s) => s.headers.get("depth"))).toEqual([
       "0",
@@ -383,6 +424,7 @@ describe("CalDAV: iCloud", () => {
     const work = "https://p42-caldav.icloud.com/123456789/calendars/work/";
     const ctx = runContext(http, {
       secret: { username: "ana@icloud.com", password: "abcd-efgh-ijkl-mnop" },
+      extra: ICLOUD_EXTRA,
       calendars: [
         { id: home, name: "Home", writable: true },
         { id: work, name: "Work", writable: true },
@@ -396,10 +438,11 @@ describe("CalDAV: iCloud", () => {
     const put = seen.find((s) => s.method === "PUT");
     expect(put?.headers.get("if-none-match")).toBe("*");
     expect(put?.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
-    expect(put?.body).toContain(`UID:sdi-${booking.itemId}@inbox.salon.example`);
+    // Its own by the inbox's id, never its host, which moves.
+    expect(put?.body).toContain(`UID:sdi-${booking.itemId}@${INBOX.id}.inbox`);
 
-    const busy = await icloud.busy?.(ctx, WINDOW);
-    const starts = (busy ?? []).map((i) => iso(i.start));
+    const busy = intervalsOf(await icloud.busy?.(ctx, WINDOW));
+    const starts = busy.map((i) => iso(i.start));
     expect(starts).toContain("2026-11-03T10:00:00.000Z");
     expect(starts).toContain("2026-11-03T18:00:00.000Z");
     // The booking it wrote is not a busy time of its own.
@@ -417,6 +460,7 @@ describe("CalDAV: iCloud", () => {
     const work = "https://p42-caldav.icloud.com/123456789/calendars/work/";
     const ctx = runContext(http, {
       secret: { username: "ana@icloud.com", password: "abcd-efgh-ijkl-mnop" },
+      extra: ICLOUD_EXTRA,
       destinations: [
         { id: home, name: "Home", writable: true },
         { id: work, name: "Work", writable: true },
@@ -446,6 +490,7 @@ describe("CalDAV: finding the server", () => {
       if (u.host !== "cloud.example.org") return undefined;
       if (u.pathname === "/.well-known/caldav")
         return new Response(null, { status: 301, headers: { location: "/remote.php/dav/" } });
+      if (!req.headers.get("authorization")) return challenge();
       if (u.pathname === "/remote.php/dav/") return xml(NEXTCLOUD_PRINCIPAL);
       if (u.pathname === "/remote.php/dav/principals/users/ana/") return xml(NEXTCLOUD_HOME_SET);
       if (u.pathname === "/remote.php/dav/calendars/ana/") return xml(NEXTCLOUD_CALENDARS);
@@ -459,6 +504,11 @@ describe("CalDAV: finding the server", () => {
       { id: "https://cloud.example.org/remote.php/dav/calendars/ana/personal/", name: "Personal", writable: true },
     ]);
     expect(seen[0]?.url).toBe("https://cloud.example.org/.well-known/caldav");
+    // Asked first without the password; it went only to the host that asked for it.
+    expect(seen[0]?.headers.get("authorization")).toBeNull();
+    expect(
+      seen.filter((s) => s.headers.get("authorization")).every((s) => s.url.startsWith("https://cloud.example.org/")),
+    ).toBe(true);
   });
 
   it("finds the server from the email's domain through DNS when nobody gave one", async () => {
@@ -473,6 +523,7 @@ describe("CalDAV: finding the server", () => {
         if (type === "TXT") return json({ Status: 0, Answer: [{ type: 16, data: '"path=/dav/"' }] });
       }
       if (u.host === "dav.mailhost.example.net") {
+        if (!req.headers.get("authorization")) return challenge();
         if (u.pathname === "/dav/") return xml(NEXTCLOUD_PRINCIPAL.replaceAll("/remote.php/dav/", "/dav/"));
         if (u.pathname === "/dav/principals/users/ana/")
           return xml(NEXTCLOUD_HOME_SET.replaceAll("/remote.php/dav/", "/dav/"));
@@ -486,6 +537,7 @@ describe("CalDAV: finding the server", () => {
     // DNS was asked for the name only.
     const dns = seen.filter((s) => s.url.startsWith("https://cloudflare-dns.com/"));
     expect(dns.map((s) => new URL(s.url).searchParams.get("name"))).toEqual([
+      "example.org",
       "_caldavs._tcp.example.org",
       "_caldavs._tcp.example.org",
     ]);
@@ -496,7 +548,168 @@ describe("CalDAV: finding the server", () => {
     const { http } = fakePlatform(() => undefined);
     await expect(
       dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: "ana@example.org", password: "pw" }),
+    ).rejects.toMatchObject({
+      code: "config",
+      field: "server",
+      message: "No calendar was found for that email. Add the server address under More options.",
+    });
+  });
+
+  it("never sends the app password to the website at the email's domain", async () => {
+    // The usual small business: its domain is its website, at a website host, and `caldav.` a parking page.
+    const { http, seen } = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.host === "cloudflare-dns.com") return json({ Status: 0, Answer: [] });
+      if (u.host === "salon-ana.example.com")
+        return new Response(null, {
+          status: 301,
+          headers: { location: `https://www.salon-ana.example.com${u.pathname}` },
+        });
+      if (u.host === "www.salon-ana.example.com") return new Response("<html>Book a cut</html>", { status: 404 });
+      if (u.host === "caldav.salon-ana.example.com") return new Response("<html>This domain is parked</html>");
+      return undefined;
+    });
+    await expect(
+      dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: "ana@salon-ana.example.com", password: "app-pw" }),
     ).rejects.toMatchObject({ code: "config", field: "server" });
+    const website = seen.filter((s) => !s.url.startsWith("https://cloudflare-dns.com/"));
+    expect(website.length).toBeGreaterThan(0);
+    expect(website.every((s) => s.headers.get("authorization") === null)).toBe(true);
+  });
+
+  it("refuses a calendar a server names on another host, without taking the password there", async () => {
+    const { http, seen } = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.host === "dav.example.org") {
+        if (!req.headers.get("authorization")) return challenge();
+        return xml(
+          NEXTCLOUD_PRINCIPAL.replaceAll("/remote.php/dav/principals/", "https://collector.example.net/principals/"),
+        );
+      }
+      return xml(NEXTCLOUD_HOME_SET);
+    });
+    await expect(
+      dav.connect?.(
+        { http, now: NOW, inbox: INBOX },
+        { username: "ana", password: "pw", server: "https://dav.example.org/" },
+      ),
+    ).rejects.toMatchObject({ code: "config" });
+    expect(seen.some((s) => s.url.startsWith("https://collector.example.net/"))).toBe(false);
+  });
+
+  it("tells a Gmail or Outlook owner at once where their calendar connects instead", async () => {
+    const { http } = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.host === "cloudflare-dns.com" && u.searchParams.get("type") === "MX") {
+        if (u.searchParams.get("name") === "salon-ana.pt")
+          return json({ Status: 0, Answer: [{ type: 15, data: "1 smtp.google.com." }] });
+        if (u.searchParams.get("name") === "barbearia.example")
+          return json({ Status: 0, Answer: [{ type: 15, data: "0 barbearia-example.mail.protection.outlook.com." }] });
+      }
+      return undefined;
+    });
+    for (const email of ["ana@gmail.com", "ana@salon-ana.pt"]) {
+      await expect(
+        dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: email, password: "pw" }),
+      ).rejects.toMatchObject({
+        code: "config",
+        field: "username",
+        message: "Google calendars connect with Google, coming soon here. Until then, use Calendar link.",
+      });
+    }
+    await expect(
+      caldavConnector({ googleReady: true }).connect?.(
+        { http, now: NOW, inbox: INBOX },
+        { username: "ana@gmail.com", password: "pw" },
+      ),
+    ).rejects.toMatchObject({ message: "Google calendars connect with Google: choose Google above." });
+    for (const email of ["ana@hotmail.com", "rui@barbearia.example"]) {
+      await expect(
+        dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: email, password: "pw" }),
+      ).rejects.toMatchObject({
+        field: "username",
+        message: "Outlook calendars cannot connect here yet. Until then, use Calendar link.",
+      });
+    }
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("stops looking when finding the server takes too long, and says what to do", async () => {
+    let clock = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => clock);
+    const { http, seen } = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.host === "cloudflare-dns.com") return json({ Status: 0, Answer: [] });
+      // A slow website: the first look uses up the time there is.
+      clock += 30_000;
+      return new Response("slow", { status: 404 });
+    });
+    await expect(
+      dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: "ana@slow-site.example.org", password: "pw" }),
+    ).rejects.toMatchObject({
+      message: "No calendar was found for that email. Add the server address under More options.",
+    });
+    expect(seen.filter((s) => !s.url.startsWith("https://cloudflare-dns.com/"))).toHaveLength(1);
+  });
+});
+
+/* --- a calendar's private link ------------------------------------------------------ */
+
+describe("Calendar link", () => {
+  const ics = icsConnector();
+  const FEED = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+    "X-WR-CALNAME:Ana — salão",
+    "BEGIN:VEVENT",
+    "UID:dentist-1@google.com",
+    "DTSTART:20261103T100000Z",
+    "DTEND:20261103T110000Z",
+    "SUMMARY:Dentist",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    `UID:sdi-${booking.itemId}@${INBOX.id}.inbox`,
+    "DTSTART:20261103T150000Z",
+    "DTEND:20261103T160000Z",
+    "SUMMARY:Haircut · Rita Amaral",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  const LINK = "https://calendar.google.com/calendar/ical/ana%40gmail.com/private-0a1b2c3d4e5f/basic.ics";
+
+  it("connects with the private link, a webcal:// one too, and reads busy times only", async () => {
+    const { http, seen } = fakePlatform((req) =>
+      req.url === LINK ? new Response(FEED, { headers: { "content-type": "text/calendar" } }) : undefined,
+    );
+    const c = await ics.connect?.({ http, now: NOW, inbox: INBOX }, { url: LINK.replace("https://", "webcal://") });
+    expect(c).toMatchObject({ account: "Ana — salão", secret: { url: LINK }, calendars: [], destinations: [] });
+    expect(c?.externalId).toMatch(/^[0-9a-f]{32}$/);
+    expect(c?.externalId).not.toContain("private");
+    expect(ics.capabilities).toEqual(["busy_times"]);
+    expect(ics.bookings).toBeUndefined();
+    const busy = intervalsOf(await ics.busy?.(runContext(http, { secret: { url: LINK } }), WINDOW));
+    // The inbox's own booking (written there by a connected calendar) is not busy against itself.
+    expect(busy.map((i) => iso(i.start))).toEqual(["2026-11-03T10:00:00.000Z"]);
+    expect(seen.every((s) => s.method === "GET" && s.headers.get("authorization") === null)).toBe(true);
+  });
+
+  it("says plainly when the link does not open, or is not a calendar", async () => {
+    const { http } = fakePlatform((req) =>
+      req.url.endsWith("/gone.ics") ? new Response("", { status: 404 }) : new Response("<html>Sign in</html>"),
+    );
+    await expect(
+      ics.connect?.({ http, now: NOW, inbox: INBOX }, { url: "https://calendar.example.com/gone.ics" }),
+    ).rejects.toMatchObject({ code: "auth", field: "url" });
+    await expect(
+      ics.connect?.({ http, now: NOW, inbox: INBOX }, { url: "https://calendar.example.com/page" }),
+    ).rejects.toMatchObject({ code: "config", field: "url" });
+    await expect(
+      ics.connect?.({ http, now: NOW, inbox: INBOX }, { url: "http://calendar.example.com/a.ics" }),
+    ).rejects.toMatchObject({ code: "config", field: "url" });
   });
 });
 
@@ -633,9 +846,11 @@ describe("Cal.com", () => {
       start: "2026-11-03T15:00:00.000Z",
       eventTypeId: 101,
       attendee: { name: "Rita Amaral", timeZone: "Europe/Lisbon", language: "pt" },
-      metadata: { sdi_item: booking.itemId, sdi_inbox: "inbox.salon.example" },
+      // A mark only this inbox can make, never its host: anyone booking on the public page can set metadata.
+      metadata: { sdi_item: booking.itemId, sdi_mark: expect.stringMatching(/^[0-9a-f]{32}$/) },
     });
     expect(JSON.stringify(made[0]?.body)).not.toContain("@");
+    expect(JSON.stringify(made[0]?.body)).not.toContain("inbox.salon.example");
     // A length an event type takes as an option is asked for.
     await cal.bookings?.put(ctxFor(http), { ...booking, durationMin: 120, end: booking.start + 7_200_000 }, null);
     expect(made[1]?.body).toMatchObject({ eventTypeId: 103, lengthInMinutes: 120 });
@@ -686,17 +901,31 @@ describe("Cal.com", () => {
     const saturday = Date.parse("2026-11-07T10:00:00Z");
     await expect(
       cal.bookings?.put(ctxFor(http), { ...booking, start: saturday, end: saturday + 3_600_000 }, null),
-    ).rejects.toMatchObject({ code: "refused", message: expect.stringContaining("Cal.com would not take 7 Nov") });
+    ).rejects.toMatchObject({
+      code: "refused",
+      message: expect.stringMatching(/^Cal\.com would not take 7 Nov.*not available\. Check the hours in Cal\.com\.$/),
+    });
+    // Refused for another reason: Cal.com's own words, without sending the owner to the hours.
+    const { http: limited } = fakePlatform((req) =>
+      req.url.endsWith("/v2/bookings") && req.method === "POST"
+        ? json({ status: "error", error: { message: "Booking limit reached for this period" } }, 400)
+        : undefined,
+    );
+    await expect(cal.bookings?.put(ctxFor(limited), booking, null)).rejects.toMatchObject({
+      message: expect.not.stringContaining("Check the hours"),
+    });
   });
 
   it("reads busy times from bookings and checked calendars, leaving out this inbox's own", async () => {
     const { http, made } = calcomServer();
     await cal.bookings?.put(ctxFor(http), booking, null);
-    const busy = await cal.busy?.(
-      ctxFor(http, { own: { ids: new Set(["new-1"]), spans: [{ start: booking.start, end: booking.end }] } }),
-      WINDOW,
+    const busy = intervalsOf(
+      await cal.busy?.(
+        ctxFor(http, { own: { ids: new Set(["new-1"]), spans: [{ start: booking.start, end: booking.end }] } }),
+        WINDOW,
+      ),
     );
-    expect((busy ?? []).map((i) => [iso(i.start), iso(i.end)])).toEqual([
+    expect(busy.map((i) => [iso(i.start), iso(i.end)])).toEqual([
       ["2026-11-03T11:00:00.000Z", "2026-11-03T12:00:00.000Z"],
       ["2026-11-04T09:00:00.000Z", "2026-11-04T09:45:00.000Z"],
       ["2026-11-05T10:00:00.000Z", "2026-11-05T10:30:00.000Z"],
@@ -704,14 +933,73 @@ describe("Cal.com", () => {
     expect(made).toHaveLength(1);
   });
 
-  it("finds a booking it made when a run stopped before noting it", async () => {
+  it("finds a booking it made when a run stopped before noting it, by its mark, times and event type", async () => {
     const { http } = calcomServer();
     await cal.bookings?.put(ctxFor(http), booking, null);
     expect(await cal.bookings?.find?.(ctxFor(http), booking)).toEqual({
       externalId: "new-1",
       etag: null,
-      calendar: null,
+      calendar: "101",
+      start: booking.start,
+      end: booking.end,
     });
+    // Another inbox (another marker) does not take it for its own.
+    expect(
+      await cal.bookings?.find?.(ctxFor(http, { marker: "ffffffffffffffffffffffffffffffff" }), booking),
+    ).toBeNull();
+  });
+
+  it("never takes a booking someone made on the public page for its own, whatever its metadata says", async () => {
+    const forged = {
+      uid: "public-1",
+      start: "2026-11-03T15:00:00.000Z",
+      end: "2026-11-03T16:00:00.000Z",
+      status: "accepted",
+      // What the embed's prefill lets anyone set.
+      metadata: { sdi_item: booking.itemId, sdi_inbox: "inbox.salon.example", sdi_mark: "0".repeat(32) },
+    };
+    const { http } = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.pathname === "/v2/bookings" && req.method === "GET") return json(calcomBookings([forged]));
+      if (u.pathname === "/v2/calendars") return json({ status: "success", data: { connectedCalendars: [] } });
+      return undefined;
+    });
+    const busy = intervalsOf(await cal.busy?.(ctxFor(http), WINDOW));
+    expect(busy.map((i) => iso(i.start))).toEqual(["2026-11-03T15:00:00.000Z"]);
+    expect(await cal.bookings?.find?.(ctxFor(http), booking)).toBeNull();
+  });
+
+  it("never reads a calendar it could not reach as free, and says how far it read when there was more", async () => {
+    const failing = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.pathname === "/v2/bookings") return json(calcomBookings([]));
+      if (u.pathname === "/v2/calendars") return json({ status: "error" }, 500);
+      return undefined;
+    });
+    await expect(cal.busy?.(ctxFor(failing.http), WINDOW)).rejects.toMatchObject({ code: "unreachable" });
+    const forbidden = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.pathname === "/v2/bookings") return json(calcomBookings([]));
+      if (u.pathname === "/v2/calendars") return json(CALCOM_CALENDARS);
+      if (u.pathname === "/v2/calendars/busy-times") return json({ status: "error" }, 400);
+      return undefined;
+    });
+    await expect(cal.busy?.(ctxFor(forbidden.http), WINDOW)).rejects.toMatchObject({ code: "bad_response" });
+    // Page after page: the answer says it read only so far.
+    let page = 0;
+    const endless = fakePlatform((req) => {
+      const u = new URL(req.url);
+      if (u.pathname === "/v2/bookings") {
+        page++;
+        const start = new Date(Date.parse("2026-11-03T09:00:00Z") + page * 3_600_000).toISOString();
+        return json(calcomBookings([{ uid: `b${page}`, start, end: start, status: "accepted" }], `p${page + 1}`));
+      }
+      if (u.pathname === "/v2/calendars") return json({ status: "success", data: { connectedCalendars: [] } });
+      return undefined;
+    });
+    const read = await cal.busy?.(ctxFor(endless.http), WINDOW);
+    expect(Array.isArray(read)).toBe(false);
+    expect(read && !Array.isArray(read) ? iso(read.until) : "").toBe("2026-11-04T05:00:00.000Z");
   });
 });
 
@@ -780,6 +1068,13 @@ describe("Google Calendar", () => {
 
   it("is soon until the instance has a client, and asks for the two narrow scopes with PKCE and offline access", () => {
     expect(googleCalendarConnector(null).ready?.()).toBe("Google sign-in is not set up on this inbox yet.");
+    // Soon where ours is on its way (hosted); something to set up on one's own server.
+    expect(googleCalendarConnector(null, { hosted: true }).whenNotReady).toEqual({ status: "soon" });
+    expect(googleCalendarConnector(null).whenNotReady).toMatchObject({
+      status: "setup",
+      hint: "Needs a Google client on the server.",
+      href: "https://surfingdog.ai/docs/calendars/#google-calendar",
+    });
     const google = googleCalendarConnector(client);
     expect(google.ready?.()).toBe(true);
     const url = new URL(
@@ -803,12 +1098,14 @@ describe("Google Calendar", () => {
       code_challenge_method: "S256",
     });
     expect(GOOGLE_SCOPES).toEqual([
+      "openid",
+      "email",
       "https://www.googleapis.com/auth/calendar.events.owned",
       "https://www.googleapis.com/auth/calendar.freebusy",
     ]);
   });
 
-  it("exchanges the code with its verifier and names the account by its calendar", async () => {
+  it("exchanges the code with its verifier and knows the account by Google's own id for it", async () => {
     const { http, tokenBodies } = googleServer();
     const c = await googleCalendarConnector(client).oauth?.exchange(
       { http, now: NOW, inbox: INBOX },
@@ -824,10 +1121,44 @@ describe("Google Calendar", () => {
     });
     expect(c).toMatchObject({
       account: "ana.salon@gmail.com",
-      externalId: "ana.salon@gmail.com",
+      // Never a calendar's name, which can be renamed and is the same for many accounts ("Salon").
+      externalId: "110248495921238986420",
       secret: { refresh_token: "1//0g-test-refresh", access_token: "ya29.a0-test-access" },
       defaults: { busy: ["primary"], destination: "primary" },
     });
+  });
+
+  it("takes the account from an ID token only when it was made for this client, by Google, and still holds", () => {
+    const token = googleIdToken(GOOGLE_ID_CLAIMS);
+    expect(idTokenClaims(token, client.clientId, NOW)).toEqual({
+      sub: "110248495921238986420",
+      email: "ana.salon@gmail.com",
+    });
+    expect(idTokenClaims(token, "another-client.apps.googleusercontent.com", NOW)).toBeNull();
+    expect(
+      idTokenClaims(googleIdToken({ ...GOOGLE_ID_CLAIMS, iss: "https://evil.example" }), client.clientId, NOW),
+    ).toBeNull();
+    expect(idTokenClaims(token, client.clientId, NOW + 2 * 3_600_000)).toBeNull();
+    expect(idTokenClaims("not-a-token", client.clientId, NOW)).toBeNull();
+    // Two accounts whose main calendars share a name are two accounts.
+    const other = googleIdToken({ ...GOOGLE_ID_CLAIMS, sub: "998877", email: "salon@example.com" });
+    expect(idTokenClaims(other, client.clientId, NOW)?.sub).not.toBe(idTokenClaims(token, client.clientId, NOW)?.sub);
+  });
+
+  it("refuses a sign-in that does not say which account it is", async () => {
+    const { http } = fakePlatform((req) =>
+      req.url.startsWith("https://oauth2.googleapis.com/token")
+        ? json({ ...GOOGLE_TOKEN, id_token: undefined })
+        : req.url.includes("/calendar/v3/")
+          ? json(GOOGLE_PROBE)
+          : undefined,
+    );
+    await expect(
+      googleCalendarConnector(client).oauth?.exchange(
+        { http, now: NOW, inbox: INBOX },
+        { code: "c", verifier: "v".repeat(64), redirectUri: "https://x.example/cb" },
+      ),
+    ).rejects.toMatchObject({ code: "bad_response" });
   });
 
   it("refuses an access that left the calendar out", async () => {
@@ -852,15 +1183,17 @@ describe("Google Calendar", () => {
 
   it("reads busy times in pieces Google answers, leaving out the inbox's own by their times", async () => {
     const { http, seen } = googleServer();
-    const busy = await googleCalendarConnector(client).busy?.(
-      runContext(http, {
-        secret,
-        busyCalendars: ["primary"],
-        own: { ids: new Set(), spans: [{ start: booking.start, end: booking.end }] },
-      }),
-      WINDOW,
+    const busy = intervalsOf(
+      await googleCalendarConnector(client).busy?.(
+        runContext(http, {
+          secret,
+          busyCalendars: ["primary"],
+          own: { ids: new Set(), spans: [{ start: booking.start, end: booking.end }] },
+        }),
+        WINDOW,
+      ),
     );
-    expect((busy ?? []).map((i) => iso(i.start))).toEqual(["2026-11-03T10:00:00.000Z", "2026-12-20T10:00:00.000Z"]);
+    expect(busy.map((i) => iso(i.start))).toEqual(["2026-11-03T10:00:00.000Z", "2026-12-20T10:00:00.000Z"]);
     expect(seen.filter((s) => s.url.endsWith("/freeBusy")).length).toBe(2);
   });
 
@@ -878,7 +1211,7 @@ describe("Google Calendar", () => {
       id,
       summary: "Haircut · Rita Amaral",
       transparency: "opaque",
-      extendedProperties: { private: { sdiItem: booking.itemId, sdiInbox: "inbox.salon.example" } },
+      extendedProperties: { private: { sdiItem: booking.itemId, sdiInbox: INBOX.id } },
     });
     // Written again without the link (a run that stopped): the 409 becomes an update.
     await google.bookings?.put(ctx, { ...booking, title: "Haircut" }, null);
@@ -913,7 +1246,7 @@ describe("Google Calendar", () => {
   });
 
   it("refreshes an access token that ran out, keeps the new one, and says when access was withdrawn", async () => {
-    const { http } = googleServer();
+    const { http, tokenBodies } = googleServer();
     const google = googleCalendarConnector(client);
     const saved: Record<string, string>[] = [];
     const ctx = runContext(http, {
@@ -925,6 +1258,10 @@ describe("Google Calendar", () => {
     });
     await google.busy?.(ctx, WINDOW);
     expect(saved[0]).toMatchObject({ access_token: "ya29.a0-refreshed", refresh_token: "1//0g-test-refresh" });
+    // Within the run (the stale token still in hand), the refreshed one is used: Google is not asked again.
+    await google.bookings?.put({ ...ctx, destination: "primary" }, booking, null);
+    expect(tokenBodies.filter((b) => b.get("grant_type") === "refresh_token")).toHaveLength(1);
+    expect(saved).toHaveLength(1);
     await expect(
       google.busy?.(
         runContext(http, {

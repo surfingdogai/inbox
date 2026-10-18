@@ -14,7 +14,7 @@ import { createInbox, type Inbox } from "../src/app";
 import { freshDb, futureDay, nextDay, openWeekdays } from "./harness";
 
 /**
- * A calendar connected end to end (ADR-020), through the doors an owner and an agent use: Settings
+ * A calendar connected end to end (ADR-022), through the doors an owner and an agent use: Settings
  * connects iCloud with an app-specific password, the five-minute sync reads a dentist's appointment
  * that takes 10:00 off the free times, a booking the owner confirms lands in iCloud within the same
  * run of the outbox, and goes when it is cancelled. Google is connected by its sign-in, through the
@@ -56,7 +56,9 @@ function platforms(): Platforms {
       if (url.pathname === "/.well-known/caldav") {
         return new Response(null, { status: 301, headers: { location: "https://caldav.icloud.com/" } });
       }
-      if (headers.get("authorization") !== auth) return new Response("", { status: 401 });
+      if (headers.get("authorization") !== auth) {
+        return new Response("", { status: 401, headers: { "www-authenticate": 'Basic realm="iCloud"' } });
+      }
       if (url.host === "caldav.icloud.com" && url.pathname === "/") return xml(ICLOUD_PRINCIPAL);
       if (url.pathname === "/123456789/principal/") return xml(ICLOUD_HOME_SET);
       if (url.pathname === "/123456789/calendars/" && method === "PROPFIND") return xml(ICLOUD_CALENDARS);
@@ -87,7 +89,7 @@ function platforms(): Platforms {
   return { fetch: fetchImpl, icloud, calls };
 }
 
-async function setup(opts: { google?: boolean; secretKey?: string | null } = {}) {
+async function setup(opts: { google?: boolean; secretKey?: string | null; hosted?: boolean } = {}) {
   const db = await freshDb();
   const serviceId = ulid();
   const now = Date.now();
@@ -112,6 +114,7 @@ async function setup(opts: { google?: boolean; secretKey?: string | null } = {})
     background: (work) => void pending.push(work),
     fetchImpl: p.fetch,
     ...(opts.google === false ? {} : { oauth: { google: GOOGLE } }),
+    ...(opts.hosted ? { oauthRedirect: () => "https://oauth.example.com/oauth/google/callback" } : {}),
   });
   return { db, inbox, app: inbox.app, serviceId, owner: { authorization: `Bearer ${ownerKey}` }, p, pending };
 }
@@ -171,8 +174,8 @@ describe("Settings → Integrations", () => {
     };
     expect(body.can_connect).toBe(true);
     expect(body.cards.map((c) => [c.id, c.status])).toEqual([
-      ["calcom", "ready"],
       ["calendar", "ready"],
+      ["calcom", "ready"],
       ["stripe", "soon"],
       ["mollie", "soon"],
       ["shopify", "soon"],
@@ -185,13 +188,16 @@ describe("Settings → Integrations", () => {
       ["fastmail", "ready"],
       ["nextcloud", "ready"],
       ["other", "ready"],
+      ["ics", "ready"],
+      ["outlook", "soon"],
     ]);
+    expect((calendar as { line?: string } | undefined)?.line).toBe("Google, iCloud, Fastmail and more");
     const icloud = calendar?.ways.find((w) => w.preset === "icloud");
     expect(icloud?.form.map((f) => [f.key, f.secret])).toEqual([
       ["username", false],
       ["password", true],
     ]);
-    expect(icloud?.form[1]?.link?.href).toBe("https://account.apple.com/account/manage");
+    expect(icloud?.form[1]?.link?.href).toBe("https://account.apple.com/account/manage/section/security");
     const calcom = body.cards.find((c) => c.id === "calcom")?.ways[0];
     expect(calcom?.form[0]?.link?.href).toBe("https://app.cal.com/settings/developer/api-keys");
 
@@ -200,7 +206,19 @@ describe("Settings → Integrations", () => {
       await without.app.request(req("GET", "/v1/owner/integrations", undefined, without.owner))
     ).json()) as typeof body;
     const google = plain.cards.find((c) => c.id === "calendar")?.ways.find((w) => w.kind === "google_calendar");
-    expect(google).toMatchObject({ status: "soon", form: [] });
+    // One's own server with no Google client: something to set up, and how; never "soon" for ever.
+    expect(google).toMatchObject({ status: "setup", form: [], hint: "Needs a Google client on the server." });
+    const calendarLine = plain.cards.find((c) => c.id === "calendar") as { line?: string; ways: { kind: string }[] };
+    expect(calendarLine.line).toBe("iCloud, Fastmail, Nextcloud and more");
+    expect(calendarLine.ways.map((w) => w.kind).slice(-2)).toEqual(["google_calendar", "outlook"]);
+
+    const hosted = await setup({ google: false, hosted: true });
+    const onHosted = (await (
+      await hosted.app.request(req("GET", "/v1/owner/integrations", undefined, hosted.owner))
+    ).json()) as typeof body;
+    expect(
+      onHosted.cards.find((c) => c.id === "calendar")?.ways.find((w) => w.kind === "google_calendar"),
+    ).toMatchObject({ status: "soon" });
   });
 
   it("says nothing can be connected without INBOX_SECRET_KEY, and refuses to try", async () => {
@@ -274,7 +292,11 @@ describe("an iCloud calendar, end to end", () => {
     await drain(s.inbox, s.db, s.pending);
     const href = `https://p42-caldav.icloud.com/123456789/calendars/home/sdi-${itemId}.ics`;
     expect(s.p.icloud.get(href)).toContain("SUMMARY:Haircut · Rita Amaral");
-    expect(s.p.icloud.get(href)).toContain(`UID:sdi-${itemId}@inbox.example.com`);
+    const { rows: instance } = await s.db.client.query({
+      sql: "SELECT value FROM instance_meta WHERE key = 'instance_id'",
+      method: "all",
+    });
+    expect(s.p.icloud.get(href)).toContain(`UID:sdi-${itemId}@${String(instance[0]?.[0])}.inbox`);
 
     // Read back on the next sync, it is the inbox's own: it does not block itself.
     await s.inbox.app.request(req("POST", `/v1/owner/integrations/${view.id}/sync`, {}, s.owner));
@@ -328,8 +350,9 @@ describe("an iCloud calendar, end to end", () => {
       structuredContent: { connections: { id: string }[] };
     };
     // The PATCH synced at once: the work calendar holds nothing here.
-    expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times, 0 bookings written`);
-    expect(listed.content[0]?.text).toContain("Soon: Stripe, Mollie, Shopify, WooCommerce.");
+    expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
+    expect(listed.content[0]?.text).toContain("), 0 bookings written");
+    expect(listed.content[0]?.text).toContain("Soon: Outlook Calendar, Stripe, Mollie, Shopify, WooCommerce.");
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;
@@ -340,6 +363,52 @@ describe("an iCloud calendar, end to end", () => {
     const removed = await s.app.request(req("DELETE", `/v1/owner/integrations/${view.id}`, undefined, s.owner));
     expect(removed.status).toBe(200);
     expect(await removed.json()).toEqual({ removed: true, left_in_calendar: 0 });
+  });
+});
+
+describe("who may connect", () => {
+  it("lets a key handed to another system list and sync, and refuses it the rest", async () => {
+    const s = await setup();
+    const view = (await (await connectIcloud(s)).json()) as { id: string };
+    const integration = (
+      await createApiKey(s.db, { kind: "integration", name: "Zapier", scopes: ["integrations:write"] })
+    ).key;
+    const key = { authorization: `Bearer ${integration}` };
+    expect((await s.app.request(req("GET", "/v1/owner/integrations", undefined, key))).status).toBe(200);
+    expect((await s.app.request(req("POST", `/v1/owner/integrations/${view.id}/sync`, {}, key))).status).toBe(200);
+    expect(
+      (await s.app.request(req("PATCH", `/v1/owner/integrations/${view.id}`, { busy_on: false }, key))).status,
+    ).toBe(403);
+    expect((await s.app.request(req("DELETE", `/v1/owner/integrations/${view.id}`, undefined, key))).status).toBe(403);
+    expect(
+      (
+        await s.app.request(
+          req(
+            "POST",
+            "/v1/owner/integrations",
+            { kind: "caldav", preset: "icloud", values: { username: APPLE_ID, password: APP_PASSWORD } },
+            key,
+          ),
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it("connects a failing calendar again in place, with only the new password", async () => {
+    const s = await setup();
+    const view = (await (await connectIcloud(s)).json()) as { id: string; calendars: { id: string; name: string }[] };
+    const work = view.calendars.find((c) => c.name === "Salon & Work")?.id;
+    await s.app.request(req("PATCH", `/v1/owner/integrations/${view.id}`, { busy_calendars: [work] }, s.owner));
+    const again = await s.app.request(
+      req(
+        "POST",
+        "/v1/owner/integrations",
+        { kind: "caldav", connection_id: view.id, values: { password: APP_PASSWORD } },
+        s.owner,
+      ),
+    );
+    expect(again.status, await again.clone().text()).toBe(201);
+    expect(await again.json()).toMatchObject({ id: view.id, preset: "icloud", busy_calendars: [work] });
   });
 });
 
@@ -383,6 +452,26 @@ describe("Google, by its sign-in", () => {
     expect(new URL(forged.headers.get("location") ?? "", "https://x.example").searchParams.get("connect_error")).toBe(
       "That sign-in was not started here. Try again from Settings.",
     );
+  });
+
+  it("never sends the owner back to another site, whatever path the sign-in was started with", async () => {
+    const s = await setup();
+    for (const path of ["/.//evil.example/x", "/a/..//evil.example/x", "//evil.example"]) {
+      const started = await s.app.request(
+        req("POST", "/v1/owner/integrations/authorize", { kind: "google_calendar", return_to: path }, s.owner),
+      );
+      const state = new URL(((await started.json()) as { authorize_url: string }).authorize_url).searchParams.get(
+        "state",
+      );
+      const back = await s.app.request(
+        req(
+          "GET",
+          `/oauth/connect/google_calendar/callback?state=${encodeURIComponent(state ?? "")}&error=access_denied`,
+        ),
+      );
+      const location = back.headers.get("location") ?? "";
+      expect(location.startsWith("/settings/integrations?"), location).toBe(true);
+    }
   });
 
   it("is refused when the inbox has no Google client", async () => {

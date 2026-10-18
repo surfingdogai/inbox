@@ -1,11 +1,18 @@
+import type { MailOut } from "@surfingdog/platform";
+import { businessFacts } from "../customer/audience";
+import { oneLine } from "../customer/format";
+import { autoHeaders, mailByJob, mailDomain, senderOf, sendLogged, storeMail } from "../jobs/mail-log";
+import { ownerAddressOf } from "../jobs/notify";
 import type { JobHandler } from "../jobs/runner";
-import type { ConnectorCapabilities } from "./capability";
+import { readSettings } from "../settings/schema";
+import { CONNECTOR_SYNC_INTERVAL_MS, type ConnectorCapabilities } from "./capability";
 
 /**
- * The two jobs a connection runs. A sync (every five minutes, and when the owner asks) writes
- * bookings out and reads busy times; a push (after every booking event) only writes bookings out.
- * A sync queues its successor before it calls the platform, so a platform that is down today is
- * read again in five minutes rather than never. A connection that is gone or paused ends its chain;
+ * The jobs a connection runs. A sync (every five minutes, and when the owner asks) writes bookings
+ * out and reads busy times; a push (after every booking event) only writes bookings out. A sync
+ * queues its successor before it calls the platform, so a platform that is down today is read again
+ * later rather than never: later the more it fails, and not at all after a day of refused sign-ins,
+ * until the owner connects again or syncs now. A connection that is gone or paused ends its chain;
  * connecting or unpausing starts it again.
  */
 export function connectorSyncHandler(connectors: ConnectorCapabilities): JobHandler {
@@ -13,9 +20,14 @@ export function connectorSyncHandler(connectors: ConnectorCapabilities): JobHand
     const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
     if (typeof id !== "string") return { note: "no connection id" };
     if (!(await connectors.active(id))) return { note: `connection ${id} is gone or paused` };
-    await connectors.scheduleNext(id, now);
+    const delay = await connectors.nextSyncDelay(id, now);
+    if (delay !== null) await connectors.scheduleNext(id, now, delay);
     const report = await connectors.run(id, now, "sync");
-    return { note: report ? `connection ${id}: ${report.note}` : `connection ${id} is gone` };
+    // The chain had stopped (a day of refused sign-ins) and this sync, which the owner asked for,
+    // worked: it starts again.
+    if (delay === null && report?.ok) await connectors.scheduleNext(id, now, CONNECTOR_SYNC_INTERVAL_MS);
+    const stopped = delay === null && !report?.ok ? "; not tried again until it is connected again or synced now" : "";
+    return { note: report ? `connection ${id}: ${report.note}${stopped}` : `connection ${id} is gone` };
   };
 }
 
@@ -25,5 +37,79 @@ export function connectorPushHandler(connectors: ConnectorCapabilities): JobHand
     if (typeof id !== "string") return { note: "no connection id" };
     const report = await connectors.run(id, now, "push");
     return { note: report ? `connection ${id}: ${report.note}` : `connection ${id} is gone` };
+  };
+}
+
+/**
+ * The one email that says a connection stopped syncing, to the owner, in the inbox's own words: what
+ * went wrong in the platform's terms, and where to connect it again. It goes through the mail log
+ * like every other email, so a retry sends it once, and not at all if the connection works again (or
+ * is gone) by then.
+ */
+export function connectorNoticeHandler(
+  connectors: ConnectorCapabilities,
+  mailOut: MailOut,
+  opts: { readonly baseUrl?: string | undefined } = {},
+): JobHandler {
+  return async (job, { db, now }) => {
+    const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
+    if (typeof id !== "string") return { note: "no connection id" };
+    const settings = await readSettings(db);
+    const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
+    const facts = await businessFacts(db, settings);
+    const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
+    let logged = await mailByJob(db, job.id);
+    if (!logged) {
+      const notice = await connectors.failingNotice(id);
+      if (!notice) return { note: `connection ${id} works again, or is gone: nothing to tell` };
+      const appUrl = (settings.notifications.appUrl ?? publicUrl).replace(/\/+$/, "");
+      const text = [
+        `Your ${notice.title} stopped syncing${notice.error ? `: ${notice.error}` : "."}`,
+        "",
+        `Connect it again in Settings → Integrations${appUrl ? `: ${appUrl}/settings/integrations` : "."}`,
+        "",
+        "Until then, what you add in that calendar does not take times off what your inbox offers.",
+      ].join("\n");
+      logged = await storeMail(
+        db,
+        {
+          itemId: null,
+          jobKey: job.id,
+          recipient: "owner",
+          template: "owner.connector_failing",
+          lang: "en",
+          subject: oneLine(`Your ${notice.title} stopped syncing`),
+          text,
+          ...(sender ? {} : { skip: "no_sender" as const }),
+        },
+        mailDomain(sender?.from.address, publicUrl),
+        now,
+      );
+    }
+    if (logged.status === "skipped") return { note: `not sent: ${logged.skipReason ?? "skipped"}` };
+    if (logged.status === "sent" || logged.status === "failed") return { note: `already ${logged.status}` };
+    const address = await ownerAddressOf(db, settings);
+    if (!address || !sender) {
+      await db.client.query({
+        sql: "UPDATE outbound_mail SET status = 'skipped', skip_reason = ?, updated_at = ? WHERE id = ?",
+        params: [address ? "no_sender" : "no_address", now, logged.id],
+        method: "run",
+      });
+      return { note: `not sent: ${address ? "no sender" : "no address"}` };
+    }
+    const sent = await sendLogged(
+      db,
+      mailOut,
+      logged,
+      {
+        ...sender,
+        to: [address],
+        subject: logged.subject,
+        text: logged.bodyText,
+        headers: autoHeaders({ automatic: true, template: logged.template }),
+      },
+      { final: job.attempts >= job.maxAttempts, now },
+    );
+    return { note: sent === null ? "not sent: held back" : "told the owner the connection stopped syncing" };
   };
 }

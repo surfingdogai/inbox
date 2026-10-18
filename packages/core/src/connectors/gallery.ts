@@ -1,20 +1,23 @@
 import { type ConnectorDefinition, type ConnectorGroup, describeForm, type FormField } from "./sdk";
 
 /**
- * Settings → Integrations, as cards. A card is what the owner recognises (Cal.com, their calendar,
+ * Settings → Integrations, as cards. A card is what the owner recognises (their calendar, Cal.com,
  * Stripe); a way is how it connects (iCloud, Google, an API key). A card whose ways are not built yet,
  * or not set up on this instance, says "Soon" and has nothing to press: never a button that goes
- * nowhere.
+ * nowhere. A way that needs something only the server's operator can give says "set up", and how.
  */
 export interface GalleryWay {
   readonly kind: string;
   readonly preset: string | null;
   readonly label: string;
-  readonly status: "ready" | "soon";
+  /** `ready`; `soon` (on its way); `setup` (needs something on the server: `hint`, `href`). */
+  readonly status: "ready" | "soon" | "setup";
   readonly auth: "form" | "oauth";
   /** The fields the owner fills in (empty for a sign-in on the platform). */
   readonly form: readonly FormField[];
   readonly note?: string | undefined;
+  readonly hint?: string | undefined;
+  readonly href?: string | undefined;
 }
 
 export interface GalleryCard {
@@ -24,6 +27,7 @@ export interface GalleryCard {
   readonly line: string;
   readonly group: ConnectorGroup;
   readonly status: "ready" | "soon";
+  /** Ready ways first, then the ones to come. */
   readonly ways: readonly GalleryWay[];
 }
 
@@ -36,20 +40,15 @@ interface CardSpec {
 }
 
 /**
- * Every card, in the order they are shown. Payments and shops are on their way and say so; the
- * kinds they name do not exist yet, so they resolve to "Soon" until a connector registers them.
+ * Every card, in the order they are shown: the calendar most businesses have first. Payments and
+ * shops are on their way and say so; the kinds they name do not exist yet, so they resolve to "Soon"
+ * until a connector registers them. Outlook is named so an Outlook owner sees it is not forgotten.
  */
 export const GALLERY: readonly CardSpec[] = [
   {
-    id: "calcom",
-    title: "Cal.com",
-    line: "Busy times in, bookings out",
-    group: "calendars",
-    ways: [{ kind: "calcom", preset: null, label: "Cal.com" }],
-  },
-  {
     id: "calendar",
     title: "Calendar",
+    // Drawn from the ready ways (`calendarLine`); this is what is said when none is.
     line: "Busy times in, bookings out",
     group: "calendars",
     ways: [
@@ -58,7 +57,16 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "caldav", preset: "fastmail", label: "Fastmail" },
       { kind: "caldav", preset: "nextcloud", label: "Nextcloud" },
       { kind: "caldav", preset: "other", label: "Other" },
+      { kind: "ics", preset: null, label: "Calendar link" },
+      { kind: "outlook", preset: null, label: "Outlook" },
     ],
+  },
+  {
+    id: "calcom",
+    title: "Cal.com",
+    line: "Busy times in, bookings out",
+    group: "calendars",
+    ways: [{ kind: "calcom", preset: null, label: "Cal.com" }],
   },
   {
     id: "stripe",
@@ -90,6 +98,11 @@ export const GALLERY: readonly CardSpec[] = [
   },
 ];
 
+/** The card a connection belongs to, for its tile's state. */
+export function cardOf(kind: string): string | undefined {
+  return GALLERY.find((c) => c.ways.some((w) => w.kind === kind))?.id;
+}
+
 /** The cards as this instance can offer them, from the connectors it registered. */
 export function gallery(definitions: ReadonlyMap<string, ConnectorDefinition>): GalleryCard[] {
   return GALLERY.map((card) => {
@@ -97,23 +110,40 @@ export function gallery(definitions: ReadonlyMap<string, ConnectorDefinition>): 
       const def = definitions.get(w.kind);
       const ready = def ? (def.ready ? def.ready() : true) : "not built yet";
       const preset = w.preset ? def?.presets?.find((p) => p.id === w.preset) : undefined;
+      const unready = def && ready !== true ? def.whenNotReady : undefined;
       return {
         kind: w.kind,
         preset: w.preset,
         label: w.label,
-        status: def && ready === true ? "ready" : "soon",
+        status: def && ready === true ? "ready" : (unready?.status ?? "soon"),
         auth: def?.auth ?? "form",
         form: def?.form && ready === true ? describeForm(def.form, preset) : [],
-        ...(preset?.note ? { note: preset.note } : {}),
+        ...((preset?.note ?? def?.note) ? { note: preset?.note ?? def?.note } : {}),
+        ...(unready?.hint ? { hint: unready.hint } : {}),
+        ...(unready?.href ? { href: unready.href } : {}),
       };
     });
+    // Ready first, the rest after in the order given: what can be pressed comes first.
+    const sorted = [...ways.filter((w) => w.status === "ready"), ...ways.filter((w) => w.status !== "ready")];
     return {
       id: card.id,
       title: card.title,
-      line: card.line,
+      line: card.id === "calendar" ? calendarLine(sorted) : card.line,
       group: card.group,
       status: ways.some((w) => w.status === "ready") ? "ready" : "soon",
-      ways,
+      ways: sorted,
     };
   });
+}
+
+/**
+ * The calendar card says which calendars it takes, as people know them: "iCloud, Fastmail, Nextcloud
+ * and more" while Google is not set up, "Google, iCloud, Fastmail and more" once it is.
+ */
+function calendarLine(ways: readonly GalleryWay[]): string {
+  const named = ways
+    .filter((w) => w.status === "ready" && w.kind !== "ics" && w.preset !== "other")
+    .map((w) => w.label);
+  if (named.length === 0) return "Busy times in, bookings out";
+  return `${named.slice(0, 3).join(", ")} and more`;
 }

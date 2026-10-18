@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CheckCheck, CircleAlert, Inbox, LogOut, type LucideIcon, MailX, Settings } from "lucide-react";
+import { CalendarX, CheckCheck, CircleAlert, Inbox, LogOut, type LucideIcon, MailX, Settings } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { signOut } from "../lib/auth";
 import { type Counts, countFor, FILTERS, type Filter } from "../lib/filters";
@@ -22,12 +22,15 @@ export function Rail({
   q,
   counts,
   testMode,
+  failing,
 }: {
   name: string;
   filter: Filter;
   q: string | undefined;
   counts: Counts | undefined;
   testMode: boolean;
+  /** A connected calendar that stopped syncing: what it says, so the owner connects it again. */
+  failing?: { readonly title: string; readonly error: string | null } | undefined;
 }) {
   const navigate = useNavigate();
   const leave = async () => {
@@ -64,6 +67,21 @@ export function Rail({
         );
       })}
       <div className="foot">
+        {failing && (
+          <Link
+            to="/settings/integrations"
+            className="rail-link rail-warn"
+            aria-label={`${failing.title} stopped syncing`}
+            title={
+              failing.error ? `${failing.title} stopped syncing: ${failing.error}` : `${failing.title} stopped syncing`
+            }
+          >
+            <span>
+              <CalendarX className="icon" aria-hidden="true" />
+              <span className="label">Calendar failing</span>
+            </span>
+          </Link>
+        )}
         <span className="pill" title={testMode ? "New items are sandbox items" : undefined}>
           <i className={clsx("dot", testMode && "dot-warning")} />
           {testMode ? "Test mode on" : "Test mode off"}

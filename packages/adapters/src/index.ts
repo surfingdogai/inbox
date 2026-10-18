@@ -1,5 +1,5 @@
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
-import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
+import { type Caller, type Capabilities, copyFor, type Db, safeReturnPath, WriteError } from "@surfingdog/core";
 import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -373,7 +373,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // from them), a code to the address they have now; then the change itself, and its undo.
   app.route("/auth/step-up", stepUpRoutes(ownerMail));
   app.route("/auth/email", ownerEmailRoutes({ ...ownerMail, onOwnerEmailChange: deps.onOwnerEmailChange }));
-  // A platform sends the owner back here after they signed in to connect it (ADR-020). The state is
+  // A platform sends the owner back here after they signed in to connect it (ADR-022). The state is
   // the proof: minted for this inbox, used once, gone in ten minutes. The code in the address never
   // leaves: the answer is a redirect into the owner app with no Referer.
   app.get("/oauth/connect/:kind/callback", async (c) => {
@@ -388,7 +388,11 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
           now: clock(),
         })
       : { returnTo: "/settings/integrations", ok: false, message: "That sign-in came back without its state." };
-    const target = new URL(r.returnTo, "https://inbox.invalid");
+    // The path is checked again as the browser will read it: never `//another.site`.
+    let target = new URL(safeReturnPath(r.returnTo), "https://inbox.invalid");
+    if (target.origin !== "https://inbox.invalid" || target.pathname.startsWith("//")) {
+      target = new URL("/settings/integrations", "https://inbox.invalid");
+    }
     if (r.ok) target.searchParams.set("connected", "id" in r && r.id ? r.id : kind);
     else target.searchParams.set("connect_error", r.message);
     return new Response(null, {

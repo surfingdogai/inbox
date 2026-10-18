@@ -75,7 +75,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /feeds/:id/import": ["integrations:write"],
   "DELETE /feeds/:id": ["integrations:write"],
   "GET /integrations": [READ_SETUP, "integrations:write"],
-  // Connecting and disconnecting are the owner's, checked by the capability whatever the scopes.
+  // Connecting, changing and disconnecting are the owner's in person, checked by the capability
+  // whatever the scopes: an integration key and the owner's AI only list and sync.
   "POST /integrations": ["integrations:write"],
   "POST /integrations/authorize": ["integrations:write"],
   "GET /integrations/:id": [READ_SETUP, "integrations:write"],

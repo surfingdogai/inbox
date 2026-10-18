@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The connector SDK (ADR-014, ADR-015, ADR-020).
+ * The connector SDK (ADR-014, ADR-015, ADR-022).
  *
  * A connector is a small object that says what it does for the inbox (its capabilities), what the
  * owner gives it (a Zod schema whose secret fields are marked), and how it syncs. Everything around
@@ -52,7 +52,11 @@ export function field<T extends z.ZodType>(schema: T, hints: FieldHints): T {
   return schema;
 }
 
-/** A field that is sealed by the secret box and never read back: an API key, a password. */
+/**
+ * A field that is sealed by the secret box and never read back: an API key, a password. It is never
+ * filled in by a browser or a password manager: an app password made for this inbox is not the
+ * account's password, and a manager that offers a new one breaks the connection before it starts.
+ */
 export function secretField<T extends z.ZodType>(schema: T, hints: Omit<FieldHints, "secret">): T {
   return field(schema, { input: "password", autocomplete: "off", ...hints, secret: true });
 }
@@ -225,9 +229,15 @@ export interface Connected {
   readonly defaults: { readonly busy: readonly string[]; readonly destination: string | null };
 }
 
-/** The inbox a connector works for: its origin (for links) and its business's name, zone and language. */
+/**
+ * The inbox a connector works for: its own id (which the entries it writes carry, so it knows them
+ * wherever its address moves), its origin (for links) and its business's name, zone and language.
+ */
 export interface InboxIdentity {
+  /** Made once at random, never shown: marks what this inbox wrote. Never its host, which changes. */
+  readonly id: string;
   readonly origin: string;
+  /** For links only: never to tell this inbox's entries from another's. */
   readonly host: string;
   readonly name: string;
   readonly timezone: string;
@@ -258,6 +268,12 @@ export interface RunContext extends ConnectContext {
   readonly destinations: readonly CalendarChoice[];
   readonly destination: string | null;
   readonly own: OwnEvents;
+  /**
+   * A secret only this inbox can make, the same for every connection of this account (connected
+   * again or not): put on what the connector writes where the platform keeps no id of the inbox's
+   * own choosing, so it finds its own and nobody else can pass for it.
+   */
+  readonly marker: string;
   /** Keeps a changed secret (a refreshed access token) sealed, for the next run. */
   saveSecret(next: Readonly<Record<string, string>>): Promise<void>;
 }
@@ -266,6 +282,16 @@ export interface RunContext extends ConnectContext {
 export interface Interval {
   readonly start: number;
   readonly end: number;
+}
+
+/**
+ * Busy times as a connector read them, when it could not read the whole window (a platform that
+ * answers only so many pages): `until` is how far ahead the answer is complete. Past it the inbox
+ * offers nothing, rather than a time nobody knows is free.
+ */
+export interface BusyRead {
+  readonly intervals: readonly Interval[];
+  readonly until: number;
 }
 
 /** A confirmed booking as a connector writes it: times, and words the owner wants to see in a calendar. */
@@ -334,18 +360,36 @@ export interface ConnectorDefinition {
   readonly auth: "form" | "oauth";
   readonly form?: z.ZodObject | undefined;
   readonly presets?: readonly ConnectorPreset[] | undefined;
+  /** A few words shown above its form, when it does less than others (busy times only). */
+  readonly note?: string | undefined;
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
+  /**
+   * How the gallery shows it while it is not ready: `soon` (on its way here), or `setup` (it needs
+   * something on the server only its operator can give, said in `hint`, explained at `href`).
+   */
+  readonly whenNotReady?:
+    | { readonly status: "soon" | "setup"; readonly hint?: string | undefined; readonly href?: string | undefined }
+    | undefined;
   /** Checks what the owner gave against the platform, and reads what they can choose. Called on save. */
   connect?(ctx: ConnectContext, input: Readonly<Record<string, string>>): Promise<Connected>;
   readonly oauth?: OAuthFlow | undefined;
   /** Reads the account's calendars and destinations again (they change). */
   refresh?(ctx: RunContext): Promise<Pick<Connected, "account" | "calendars" | "destinations">>;
-  /** Busy times inside the window, leaving out what this inbox wrote itself (`ctx.own`). */
-  busy?(ctx: RunContext, window: Interval): Promise<Interval[]>;
+  /**
+   * Busy times inside the window, leaving out what this inbox wrote itself (`ctx.own`). A connector
+   * that could not read all of the window says how far it got (`BusyRead`).
+   */
+  busy?(ctx: RunContext, window: Interval): Promise<Interval[] | BusyRead>;
   readonly bookings?: BookingWriter | undefined;
   /** Gives the access back on the platform, as the connection goes (best effort). */
   disconnect?(ctx: RunContext): Promise<void>;
+}
+
+/** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */
+export function calendarName(name: string): string {
+  const n = name.trim();
+  return /calendar$/i.test(n) ? n : `${n} calendar`;
 }
 
 /* --- intervals ------------------------------------------------------------ */

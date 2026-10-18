@@ -2,17 +2,17 @@ import clsx from "clsx";
 import { CalendarDays, ChevronRight, CreditCard, ExternalLink, RefreshCw, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
-import { relativeTime } from "../lib/format";
+import { session } from "../lib/auth";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
 import type { ConnectionView, FormField, GalleryCard, GalleryWay } from "../lib/types";
 import { ErrorState, Toast } from "./Feedback";
 import { Field, SectionHead, Switch } from "./Form";
 
 /**
- * Settings → Integrations, the gallery (ADR-020): one card per thing an owner recognises, its ways
- * in, and what is connected. The form for each way is drawn from the connector's own schema, so a
- * connector added later needs no screen of its own. A card that is not built yet says "Soon" and
- * has nothing to press.
+ * Settings → Integrations, the gallery (ADR-022): what is connected first, then one card per thing
+ * an owner recognises, its ways in. The form for each way is drawn from the connector's own schema,
+ * so a connector added later needs no screen of its own. A card that is not built yet says "Soon"
+ * and has nothing to press; on a phone those are one quiet line.
  */
 
 interface Notice {
@@ -22,9 +22,35 @@ interface Notice {
 
 const ICONS = { calendars: CalendarDays, payments: CreditCard, shops: ShoppingBag } as const;
 
+/** The card a connection belongs to. */
+const CARD_OF: Readonly<Record<string, string>> = {
+  caldav: "calendar",
+  google_calendar: "calendar",
+  ics: "calendar",
+  outlook: "calendar",
+  calcom: "calcom",
+};
+const cardOf = (kind: string) => CARD_OF[kind] ?? kind;
+
+/** The address the owner signs in with: a way in is picked from it, and its email field filled. */
+function useOwnerEmail(): string | null {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void session().then((u) => {
+      if (live) setEmail(u?.email ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return email;
+}
+
 export function IntegrationsCard() {
   const integrations = useIntegrations();
   const write = useIntegrationWrite();
+  const email = useOwnerEmail();
   const [open, setOpen] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const data = integrations.data;
@@ -43,17 +69,21 @@ export function IntegrationsCard() {
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }, []);
 
-  const connectedCards = new Set(
-    (data?.connections ?? []).map((c) =>
-      c.kind === "calcom" ? "calcom" : c.kind === "caldav" || c.kind === "google_calendar" ? "calendar" : c.kind,
-    ),
-  );
+  const connections = data?.connections ?? [];
+  const byCard = new Map<string, ConnectionView[]>();
+  for (const c of connections) byCard.set(cardOf(c.kind), [...(byCard.get(cardOf(c.kind)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
+  const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
+  // Cal.com adds the bookings it is given to the calendar it checks, so with both adding them each
+  // booking would show twice there.
+  const calcom = connections.find((c) => c.kind === "calcom" && c.bookings_on && c.status !== "disabled");
+  const twice = connections.find(
+    (c) => (c.kind === "caldav" || c.kind === "google_calendar") && c.bookings_on && c.status !== "disabled",
+  );
 
   return (
     <section className="card glass stack">
       <SectionHead title="Connect" />
-      <p className="lede small">Busy times come in. Confirmed bookings go out.</p>
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {integrations.isPending && <div className="skeleton sk-line" />}
       {integrations.isError && (
@@ -65,7 +95,32 @@ export function IntegrationsCard() {
       )}
       {data && !data.can_connect && (
         <p className="hint" role="note">
-          Connecting needs INBOX_SECRET_KEY on the server, so passwords can be stored locked.
+          Connecting needs INBOX_SECRET_KEY on the server, so passwords are stored encrypted.
+        </p>
+      )}
+      {connections.length > 0 && (
+        <div className="stack int-connections">
+          {connections.map((c) => (
+            <ConnectionLine key={c.id} connection={c} cards={data?.cards ?? []} onNotice={setNotice} />
+          ))}
+        </div>
+      )}
+      {calcom && twice && (
+        <p className="hint int-twice" role="note">
+          Cal.com adds its bookings to your calendar too, so each would show twice.{" "}
+          <button
+            type="button"
+            className="int-inline"
+            disabled={write.isPending}
+            onClick={() =>
+              write.mutate(
+                { id: twice.id, patch: { bookings_on: false } },
+                { onSuccess: () => setNotice({ tone: "success", text: `${twice.title} no longer adds bookings.` }) },
+              )
+            }
+          >
+            Stop adding them from {twice.title}
+          </button>
         </p>
       )}
       {data && (
@@ -74,7 +129,7 @@ export function IntegrationsCard() {
             <Tile
               key={c.id}
               card={c}
-              connected={connectedCards.has(c.id)}
+              connections={byCard.get(c.id) ?? []}
               open={open === c.id}
               disabled={!data.can_connect}
               onOpen={() => {
@@ -90,6 +145,7 @@ export function IntegrationsCard() {
         <ConnectPanel
           key={card.id}
           card={card}
+          email={email}
           pending={write.isPending}
           error={write.error ? problemOf(write.error) : null}
           onCancel={() => setOpen(null)}
@@ -107,32 +163,35 @@ export function IntegrationsCard() {
           onError={(text) => setNotice({ tone: "danger", text })}
         />
       )}
-      {(data?.connections.length ?? 0) > 0 && (
-        <div className="stack int-connections">
-          {data?.connections.map((c) => (
-            <ConnectionLine key={c.id} connection={c} onNotice={setNotice} />
-          ))}
-        </div>
-      )}
+      {soon.length > 0 && <p className="int-soon-line">Soon: {soon.map((c) => c.title).join(" · ")}</p>}
     </section>
   );
 }
 
+/** What a card's tag says: the worst of its connections. */
+function tagOf(connections: readonly ConnectionView[]): { text: string; tone: "on" | "warn" | "quiet" } | null {
+  if (connections.length === 0) return null;
+  if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
+  if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
+  return { text: "Connected", tone: "on" };
+}
+
 function Tile({
   card,
-  connected,
+  connections,
   open,
   disabled,
   onOpen,
 }: {
   card: GalleryCard;
-  connected: boolean;
+  connections: readonly ConnectionView[];
   open: boolean;
   disabled: boolean;
   onOpen: () => void;
 }) {
   const Icon = ICONS[card.group];
   const soon = card.status === "soon";
+  const tag = tagOf(connections);
   const body = (
     <>
       <Icon className="icon int-icon" aria-hidden="true" />
@@ -142,8 +201,10 @@ function Tile({
       </span>
       {soon ? (
         <span className="int-tag">Soon</span>
-      ) : connected ? (
-        <span className="int-tag is-on">Connected</span>
+      ) : tag ? (
+        <span className={clsx("int-tag", tag.tone === "on" && "is-on", tag.tone === "warn" && "is-warn")}>
+          {tag.text}
+        </span>
       ) : null}
     </>
   );
@@ -163,8 +224,47 @@ function Tile({
   );
 }
 
+const APPLE = new Set(["icloud.com", "me.com", "mac.com"]);
+const FASTMAIL = new Set(["fastmail.com", "fastmail.fm"]);
+const GOOGLE = new Set(["gmail.com", "googlemail.com"]);
+const MICROSOFT = /^(outlook|hotmail|live|msn)\.[a-z.]+$/;
+
+/**
+ * The way in to open first, from the owner's own address: iCloud for an iCloud address, Google for
+ * Gmail, and so on. A Google or Outlook owner whose way is not ready here yet is offered the
+ * calendar's private link, and told why.
+ */
+function preferredWay(card: GalleryCard, email: string | null): { way: GalleryWay | undefined; hint?: string } {
+  const ready = card.ways.filter((w) => w.status === "ready");
+  const find = (kind: string, preset: string | null = null) =>
+    card.ways.find((w) => w.kind === kind && w.preset === preset);
+  const link = find("ics");
+  const domain = email?.slice(email.lastIndexOf("@") + 1).toLowerCase() ?? "";
+  if (APPLE.has(domain) && find("caldav", "icloud")?.status === "ready") return { way: find("caldav", "icloud") };
+  if (FASTMAIL.has(domain) && find("caldav", "fastmail")?.status === "ready")
+    return { way: find("caldav", "fastmail") };
+  if (GOOGLE.has(domain)) {
+    const google = find("google_calendar");
+    if (google?.status === "ready") return { way: google };
+    if (link?.status === "ready") {
+      return {
+        way: link,
+        hint:
+          google?.status === "setup"
+            ? "Google needs setting up on this server first. Until then, your Google calendar's private link blocks your busy times."
+            : "Google connects here soon. Until then, your Google calendar's private link blocks your busy times.",
+      };
+    }
+  }
+  if (MICROSOFT.test(domain) && link?.status === "ready") {
+    return { way: link, hint: "Outlook cannot connect here yet. Its published calendar link blocks your busy times." };
+  }
+  return { way: ready[0] };
+}
+
 function ConnectPanel({
   card,
+  email,
   pending,
   error,
   onConnect,
@@ -172,16 +272,18 @@ function ConnectPanel({
   onError,
 }: {
   card: GalleryCard;
+  email: string | null;
   pending: boolean;
   error: ApiProblem | null;
   onConnect: (body: { kind: string; preset?: string; values: Record<string, string> }) => void;
   onCancel: () => void;
   onError: (text: string) => void;
 }) {
-  const ready = card.ways.filter((w) => w.status === "ready");
-  const [wayKey, setWayKey] = useState(() => keyOf(ready[0] ?? card.ways[0]));
-  const way = card.ways.find((w) => keyOf(w) === wayKey) ?? ready[0];
+  const [picked, setPicked] = useState<string | null>(null);
+  const preferred = preferredWay(card, email);
+  const way = card.ways.find((w) => keyOf(w) === (picked ?? keyOf(preferred.way))) ?? preferred.way;
   if (!way) return null;
+  const setup = card.ways.filter((w) => w.status === "setup");
   return (
     <div className="confirm row-glass stack int-panel">
       {card.ways.length > 1 && (
@@ -191,23 +293,37 @@ function ConnectPanel({
             <button
               key={keyOf(w)}
               type="button"
-              aria-pressed={keyOf(w) === wayKey}
+              aria-pressed={keyOf(w) === keyOf(way)}
               disabled={w.status !== "ready"}
-              title={w.status === "ready" ? undefined : "Soon"}
-              onClick={() => setWayKey(keyOf(w))}
+              title={w.status === "ready" ? undefined : (w.hint ?? "Soon")}
+              onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
-              {w.status !== "ready" && <span className="opt"> · soon</span>}
+              {w.status === "soon" && <span className="opt"> · soon</span>}
+              {w.status === "setup" && <span className="opt"> · set up</span>}
             </button>
           ))}
         </fieldset>
       )}
+      {picked === null && preferred.hint && <p className="hint">{preferred.hint}</p>}
+      {setup.map((w) => (
+        <p key={keyOf(w)} className="hint">
+          {w.label}: {w.hint ?? "needs setting up on the server."}{" "}
+          {w.href && (
+            <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
+              How
+              <ExternalLink className="icon-xs" aria-hidden="true" />
+            </a>
+          )}
+        </p>
+      ))}
       {way.auth === "oauth" ? (
         <SignIn way={way} onCancel={onCancel} onError={onError} />
       ) : (
         <WayForm
           key={keyOf(way)}
           way={way}
+          email={email}
           pending={pending}
           error={error}
           onCancel={onCancel}
@@ -222,12 +338,23 @@ function keyOf(w: GalleryWay | undefined): string {
   return w ? `${w.kind}:${w.preset ?? ""}` : "";
 }
 
-function SignIn({ way, onCancel, onError }: { way: GalleryWay; onCancel: () => void; onError: (t: string) => void }) {
+function SignIn({
+  way,
+  again,
+  onCancel,
+  onError,
+}: {
+  way: GalleryWay;
+  again?: boolean;
+  onCancel: () => void;
+  onError: (t: string) => void;
+}) {
   const [going, setGoing] = useState(false);
   return (
     <div className="stack">
       <p className="hint">
-        You will be asked to let this inbox see when you are busy and add the bookings it confirms.
+        Google will ask to let this inbox see when you are busy and edit your calendar. It only touches the bookings it
+        adds.
       </p>
       <div className="rowx">
         <button
@@ -245,7 +372,7 @@ function SignIn({ way, onCancel, onError }: { way: GalleryWay; onCancel: () => v
             }
           }}
         >
-          {going ? "Opening…" : `Continue with ${way.label}`}
+          {going ? "Opening…" : `${again ? "Connect again with" : "Continue with"} ${way.label}`}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
@@ -255,25 +382,50 @@ function SignIn({ way, onCancel, onError }: { way: GalleryWay; onCancel: () => v
   );
 }
 
+/**
+ * A secret field is never filled in by a browser or a password manager: beside an email field,
+ * Safari and iCloud Keychain take the form for a sign-up and offer a password of their own, which
+ * is not the app password made for this inbox.
+ */
+const NO_FILL = {
+  autoComplete: "off",
+  "data-1p-ignore": "",
+  "data-lpignore": "true",
+  "data-bwignore": "",
+  "data-form-type": "other",
+} as const;
+
 function WayForm({
   way,
+  email,
+  account,
   pending,
   error,
   onSubmit,
   onCancel,
 }: {
   way: GalleryWay;
+  email?: string | null;
+  /** Connecting again: the account, as it is connected; only the secret fields are asked for. */
+  account?: string;
   pending: boolean;
   error: ApiProblem | null;
   onSubmit: (values: Record<string, string>) => void;
   onCancel: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const main = way.form.filter((f) => !f.advanced);
-  const advanced = way.form.filter((f) => f.advanced);
+  const fields = account !== undefined ? way.form.filter((f) => f.secret) : way.form;
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const first: Record<string, string> = {};
+    // The owner's own address, editable: the calendar's account is most often it.
+    if (email && account === undefined)
+      for (const f of fields) if (f.input === "email" && !f.secret) first[f.key] = email;
+    return first;
+  });
+  const main = fields.filter((f) => !f.advanced);
+  const advanced = fields.filter((f) => f.advanced);
   const missing = main.some((f) => f.required && !(values[f.key] ?? "").trim());
   const fieldError = (f: FormField) => error?.field(`values.${f.key}`);
-  const shown = new Set(way.form.map((f) => `values.${f.key}`));
+  const shown = new Set(fields.map((f) => `values.${f.key}`));
   const general = error && !(error.fields ?? []).some((f) => shown.has(f.path));
   const input = (f: FormField) => (
     <div key={f.key} className="int-field">
@@ -283,7 +435,7 @@ function WayForm({
           className="input"
           type={f.input === "url" ? "text" : f.input}
           inputMode={f.input === "url" ? "url" : f.input === "email" ? "email" : undefined}
-          autoComplete={f.secret ? "new-password" : (f.autocomplete ?? "off")}
+          {...(f.secret ? NO_FILL : { autoComplete: f.autocomplete ?? "off" })}
           spellCheck={false}
           placeholder={f.placeholder}
           value={values[f.key] ?? ""}
@@ -302,12 +454,17 @@ function WayForm({
   return (
     <form
       className="stack"
+      autoComplete="off"
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()])));
       }}
     >
-      {way.note && <p className="hint">{way.note}</p>}
+      {account !== undefined ? (
+        <p className="int-account-line">{account}</p>
+      ) : (
+        way.note && <p className="hint">{way.note}</p>
+      )}
       {main.map(input)}
       {advanced.length > 0 && (
         <details className="advanced">
@@ -326,7 +483,7 @@ function WayForm({
       )}
       <div className="rowx">
         <button type="submit" className="btn btn-primary" disabled={pending || missing}>
-          {pending ? "Checking…" : "Connect"}
+          {pending ? "Checking…" : account !== undefined ? "Connect again" : "Connect"}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
           Cancel
@@ -343,39 +500,73 @@ const STATUS: Record<string, string> = {
   disabled: "Paused",
 };
 
-function ConnectionLine({ connection: c, onNotice }: { connection: ConnectionView; onNotice: (n: Notice) => void }) {
+/** "synced just now", "synced 24 min ago": a few words that read as a sentence. */
+function syncedAgo(at: number, now: number): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 60) return "synced just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `synced ${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `synced ${h} ${h === 1 ? "hour" : "hours"} ago`;
+  const d = Math.round(h / 24);
+  return `synced ${d} days ago`;
+}
+
+function dayOf(ms: number): string {
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(new Date(ms));
+}
+
+function ConnectionLine({
+  connection: c,
+  cards,
+  onNotice,
+}: {
+  connection: ConnectionView;
+  cards: readonly GalleryCard[];
+  onNotice: (n: Notice) => void;
+}) {
   const write = useIntegrationWrite();
-  const [choosing, setChoosing] = useState(false);
+  const [panel, setPanel] = useState<"change" | "again" | null>(null);
   const [confirming, setConfirming] = useState(false);
   const destination = c.destinations.find((d) => d.id === c.destination);
+  const writes = c.capabilities.includes("write_bookings");
+  const way = cards
+    .find((card) => card.id === cardOf(c.kind))
+    ?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
   const meta = [
     c.busy_on
       ? c.status === "configured"
         ? "reading busy times"
         : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
       : "busy times off",
-    c.bookings_on
-      ? destination && c.kind !== "calcom"
-        ? `bookings go to ${destination.name}`
-        : "bookings go out"
-      : "bookings off",
-    c.last_sync_at ? `synced ${relativeTime(new Date(c.last_sync_at).toISOString())}` : null,
+    writes
+      ? c.bookings_on
+        ? destination && c.kind !== "calcom"
+          ? `bookings go to ${destination.name}`
+          : "bookings go out"
+        : "bookings off"
+      : null,
+    c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
   ].filter(Boolean);
   const problem = write.error ? problemOf(write.error) : null;
+  const failing = c.status === "error";
   return (
     <div className={clsx("int-conn row-glass", c.status === "disabled" && "is-paused")}>
       <div className="int-conn-main">
         <div className="int-conn-head">
           <span className="int-title">{c.title}</span>
           <span className="int-account">{c.account}</span>
-          <span className={clsx("pill pill-xs", c.status === "error" && "is-warn")}>
-            {STATUS[c.status] ?? c.status}
-          </span>
+          <span className={clsx("pill pill-xs", failing && "is-warn")}>{STATUS[c.status] ?? c.status}</span>
         </div>
         <div className="int-meta">{meta.join(" · ")}</div>
-        {c.status === "error" && c.last_error && (
+        {failing && c.last_error && (
           <div className="hint error" role="alert">
             {c.last_error}
+          </div>
+        )}
+        {c.busy_on && c.busy_partial && c.busy_until && (
+          <div className="hint">
+            Read to {dayOf(c.busy_until)}: this calendar has more ahead than is read, so later times stay closed.
           </div>
         )}
         {c.bookings_failing > 0 && c.booking_error && (
@@ -391,33 +582,83 @@ function ConnectionLine({ connection: c, onNotice }: { connection: ConnectionVie
         )}
       </div>
       <div className="rowx int-actions">
+        {failing && way?.status === "ready" ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            aria-expanded={panel === "again"}
+            onClick={() => setPanel(panel === "again" ? null : "again")}
+          >
+            Connect again
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            aria-label={`Sync ${c.title} now`}
+            title="Sync now"
+            disabled={write.isPending || c.status === "disabled"}
+            onClick={() =>
+              write.mutate(
+                { id: c.id, sync: true },
+                { onSuccess: () => onNotice({ tone: "success", text: "Syncing now." }) },
+              )
+            }
+          >
+            <RefreshCw className="icon-sm" aria-hidden="true" />
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-ghost btn-sm"
-          aria-label={`Sync ${c.title} now`}
-          disabled={write.isPending || c.status === "disabled"}
-          onClick={() =>
-            write.mutate(
-              { id: c.id, sync: true },
-              { onSuccess: () => onNotice({ tone: "success", text: "Syncing now." }) },
-            )
-          }
+          aria-expanded={panel === "change"}
+          onClick={() => setPanel(panel === "change" ? null : "change")}
         >
-          <RefreshCw className="icon-sm" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          aria-expanded={choosing}
-          onClick={() => setChoosing(!choosing)}
-        >
-          Choose
+          Change
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
           Disconnect
         </button>
       </div>
-      {choosing && <Choices connection={c} onDone={() => setChoosing(false)} onNotice={onNotice} />}
+      {panel === "again" && way && (
+        <div className="confirm row-glass wide stack int-panel">
+          {way.auth === "oauth" ? (
+            <SignIn
+              way={way}
+              again
+              onCancel={() => setPanel(null)}
+              onError={(text) => onNotice({ tone: "danger", text })}
+            />
+          ) : (
+            <WayForm
+              way={way}
+              account={c.account}
+              pending={write.isPending}
+              error={problem}
+              onCancel={() => setPanel(null)}
+              onSubmit={(values) =>
+                write.mutate(
+                  {
+                    connect: {
+                      kind: c.kind,
+                      ...(c.preset ? { preset: c.preset } : {}),
+                      connection_id: c.id,
+                      values,
+                    },
+                  },
+                  {
+                    onSuccess: () => {
+                      setPanel(null);
+                      onNotice({ tone: "success", text: "Connected again. Reading your calendar now." });
+                    },
+                  },
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+      {panel === "change" && <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />}
       {confirming && (
         <div className="confirm row-glass wide">
           <h3>Disconnect {c.title}</h3>
@@ -468,11 +709,11 @@ function Choices({
   return (
     <div className="confirm row-glass wide stack">
       <Switch checked={busyOn} onChange={setBusyOn}>
-        Block times this calendar is busy
+        Block times you are busy
       </Switch>
       {busyOn && c.calendars.length > 1 && (
         <fieldset className="chips-field">
-          <legend className="label">From</legend>
+          <legend className="label">Busy in</legend>
           <div className="chips">
             {c.calendars.map((cal) => (
               <button
@@ -490,7 +731,7 @@ function Choices({
       )}
       {busyOn && active.length > 1 && (
         <fieldset className="chips-field">
-          <legend className="label">For</legend>
+          <legend className="label">Blocks</legend>
           <div className="chips">
             <button
               type="button"
@@ -523,7 +764,7 @@ function Choices({
         </Switch>
       )}
       {bookingsOn && writable.length > 1 && (
-        <Field id={`dest-${c.id}`} label={c.kind === "calcom" ? "As" : "To"}>
+        <Field id={`dest-${c.id}`} label={c.kind === "calcom" ? "Event type" : "To"}>
           <select
             id={`dest-${c.id}`}
             className="input"
@@ -565,21 +806,6 @@ function Choices({
           }
         >
           Save
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={write.isPending}
-          onClick={() =>
-            write.mutate(
-              { id: c.id, patch: { paused: c.status !== "disabled" } },
-              {
-                onSuccess: () => onNotice({ tone: "success", text: c.status === "disabled" ? "Resumed." : "Paused." }),
-              },
-            )
-          }
-        >
-          {c.status === "disabled" ? "Resume" : "Pause"}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
           Close

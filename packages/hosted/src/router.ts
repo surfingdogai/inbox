@@ -64,7 +64,7 @@ export interface RouterOptions {
   readonly visitorSchemeHeader?: string | undefined;
   /**
    * The name Google sends every owner back to after signing in to connect a calendar
-   * (`HOSTED_OAUTH_RELAY_HOST`, ADR-020): the router passes them on to their own inbox. Absent, no
+   * (`HOSTED_OAUTH_RELAY_HOST`, ADR-022): the router passes them on to their own inbox. Absent, no
    * name is treated so.
    */
   readonly oauthRelayHost?: string | undefined;

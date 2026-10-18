@@ -36,7 +36,7 @@ export const OWNER_PAGES = [
 export const OWNER_PAGE_PREFIXES = ["/items/", "/settings/"] as const;
 export const OWNER_AUTH_PREFIX = "/auth/";
 export const OWNER_API_PREFIX = "/v1/owner/";
-/** Where a platform sends the owner back after they signed in to connect it (ADR-020). */
+/** Where a platform sends the owner back after they signed in to connect it (ADR-022). */
 export const OWNER_CONNECT_RETURN = /^\/oauth\/connect\/[a-z][a-z0-9_]{0,39}\/callback$/;
 
 /** The session cookie's names (the `__Host-` one over https, the plain one over http). */

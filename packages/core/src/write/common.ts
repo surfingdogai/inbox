@@ -167,7 +167,7 @@ export const deliverJobPrefix = (deliveryId: string): string => `whsend:${delive
 
 /**
  * Whether anything listens to events: an active webhook endpoint, or a connected calendar that keeps
- * bookings in step (ADR-020), which the fanout tells of every booking event. An instance with neither
+ * bookings in step (ADR-022), which the fanout tells of every booking event. An instance with neither
  * writes no fanout job at all.
  */
 export async function hasEventListeners(db: Db): Promise<boolean> {

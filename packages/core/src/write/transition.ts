@@ -1,7 +1,8 @@
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { findSlots, slotOffered } from "../capabilities/availability";
-import { busyOverlapping } from "../connectors/store";
+import { calendarName } from "../connectors/sdk";
+import { BUSY_HORIZON_MS, busyDetails } from "../connectors/store";
 import { audienceFor, businessFacts } from "../customer/audience";
 import { copyFor, vars } from "../customer/copy";
 import type { Audience } from "../customer/describe";
@@ -2765,10 +2766,18 @@ function replay(hit: { requestHash: string; response: unknown }, requestHash: st
 export type { Transition };
 
 /**
- * What the owner is told when a time cannot be booked: fully booked, or busy in a calendar they
- * connected (ADR-020), which no booking in the inbox explains.
+ * What the owner is told when a time cannot be booked: fully booked, busy in a calendar they
+ * connected (ADR-022), which no booking in the inbox explains, or further ahead than that calendar
+ * was read. The calendar is named, so the owner knows where to free the time.
  */
 async function ownerSlotWords(db: Db, spec: SlotSpec, bucket: number): Promise<string> {
-  const busy = await busyOverlapping(db, bucket, bucket + spec.granularityMin * 60_000, spec.resourceKey);
-  return busy.length > 0 ? "that time is busy in a calendar you connected" : "that time is fully booked";
+  const busy = await busyDetails(db, bucket, bucket + spec.granularityMin * 60_000, spec.resourceKey);
+  const known = busy.find((b) => !b.beyond);
+  if (known) return `that time is busy in your ${calendarName(known.name || "connected")}`;
+  const beyond = busy[0];
+  if (beyond) {
+    const days = Math.round(BUSY_HORIZON_MS / 86_400_000);
+    return `your ${calendarName(beyond.name || "connected")} is read only ${days} days ahead, and that time is further`;
+  }
+  return "that time is fully booked";
 }

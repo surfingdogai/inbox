@@ -2,27 +2,33 @@ import {
   type CalendarChoice,
   type ConnectorDefinition,
   ConnectorError,
+  type ConnectorHttp,
   field,
   type Interval,
   mergeIntervals,
   type RunContext,
   secretField,
+  subtractIntervals,
 } from "@surfingdog/core";
 import { z } from "zod";
+import { lookupMx } from "../dns";
 import { CalDavClient } from "./client";
 import { buildEvent } from "./ical";
 
 /**
- * Any calendar that speaks CalDAV (ADR-020): iCloud, Fastmail, Nextcloud, and the rest. The owner
+ * Any calendar that speaks CalDAV (ADR-022): iCloud, Fastmail, Nextcloud, and the rest. The owner
  * gives an email and an app password; the server is found from a preset, from the email's domain,
- * or, only when neither works, from an address under More options.
+ * or, only when neither works, from an address under More options. A Google or Microsoft mailbox is
+ * told at once where it connects instead: no app password opens their calendars over CalDAV.
  */
 
 export const caldavForm = z.object({
   username: field(z.string().trim().min(1).max(320), {
     label: "Email",
     input: "email",
-    autocomplete: "username",
+    // An address, never a "username": a browser that sees a username beside a password takes the
+    // form for a sign-up and fills in a password of its own.
+    autocomplete: "email",
     placeholder: "you@example.com",
   }),
   password: secretField(z.string().min(1).max(512), {
@@ -47,8 +53,11 @@ export const CALDAV_PRESETS = [
       username: { label: "Apple Account email", placeholder: "you@icloud.com" },
       password: {
         label: "App-specific password",
-        help: "Not your Apple Account password: make one for this inbox, under Sign-In and Security.",
-        link: { href: "https://account.apple.com/account/manage", text: "Make one at account.apple.com" },
+        help: "Not your Apple Account password. Apple shows it once: copy it.",
+        link: {
+          href: "https://account.apple.com/account/manage/section/security",
+          text: "Make one: Sign-In and Security → App-Specific Passwords",
+        },
       },
     },
   },
@@ -57,7 +66,7 @@ export const CALDAV_PRESETS = [
     label: "Fastmail",
     values: { server: "https://caldav.fastmail.com" },
     fields: {
-      username: { label: "Fastmail email" },
+      username: { label: "Fastmail email", placeholder: "you@fastmail.com" },
       password: {
         label: "App password",
         help: "Make one with access to calendars, in Settings → Privacy & Security.",
@@ -77,7 +86,7 @@ export const CALDAV_PRESETS = [
         advanced: false,
         required: true,
       },
-      username: { label: "Username", input: "text" as const, placeholder: undefined },
+      username: { label: "Username", input: "text" as const, placeholder: undefined, autocomplete: "off" },
       password: { label: "App password", help: "Make one in Settings → Security → Devices & sessions." },
     },
   },
@@ -89,21 +98,38 @@ export const CALDAV_PRESETS = [
   },
 ] as const;
 
-/** The UID of the event this inbox writes for a booking: its own, and recognisable as such. */
-export function ownUid(itemId: string, host: string): string {
-  return `sdi-${itemId}@${host}`;
+/**
+ * The UID of the event this inbox writes for a booking: its own, and recognisable as such by the
+ * inbox's own id, never its host (which moves to the business's own domain, and is the same
+ * placeholder for every inbox that has none).
+ */
+export function ownUid(itemId: string, instanceId: string): string {
+  return `sdi-${itemId}@${instanceId}.inbox`;
 }
 
-export function isOwnUid(uid: string, host: string): boolean {
-  return uid.startsWith("sdi-") && uid.endsWith(`@${host}`);
+export function isOwnUid(uid: string, instanceId: string): boolean {
+  return uid.startsWith("sdi-") && uid.endsWith(`@${instanceId}.inbox`);
 }
 
-function client(ctx: { readonly http: RunContext["http"] }, secret: Readonly<Record<string, string>>): CalDavClient {
+function client(
+  ctx: { readonly http: RunContext["http"]; readonly extra: RunContext["extra"] },
+  secret: Readonly<Record<string, string>>,
+): CalDavClient {
   const username = secret.username ?? "";
   const password = secret.password ?? "";
   if (!username || !password)
     throw new ConnectorError("auth", "The saved email or app password is missing. Connect it again.");
-  return new CalDavClient(ctx.http, { username, password });
+  return new CalDavClient(ctx.http, { username, password }, { authHost: signedInAt(ctx.extra) });
+}
+
+/** The host that asked for the password when it was connected: the only one it goes to. */
+function signedInAt(extra: RunContext["extra"]): string | null {
+  if (typeof extra.authHost === "string" && extra.authHost) return extra.authHost;
+  try {
+    return new URL(String(extra.principal ?? "")).hostname || null;
+  } catch {
+    return null;
+  }
 }
 
 function defaultDestination(calendars: readonly CalendarChoice[]): string | null {
@@ -115,7 +141,35 @@ function strip(calendars: readonly (CalendarChoice & { components?: readonly str
   return calendars.map(({ id, name, writable }) => ({ id, name, writable }));
 }
 
-export function caldavConnector(): ConnectorDefinition {
+const GOOGLE_MAIL = new Set(["gmail.com", "googlemail.com"]);
+const MICROSOFT_MAIL = /^(outlook|hotmail|live|msn)\.[a-z.]+$/;
+
+/**
+ * A mailbox at Google or Microsoft, from the email's domain or, for a domain of the business's own,
+ * the mail servers it names: their calendars do not open with an app password over CalDAV.
+ */
+async function mailboxAt(http: ConnectorHttp, email: string): Promise<"google" | "microsoft" | null> {
+  const domain = email
+    .slice(email.lastIndexOf("@") + 1)
+    .trim()
+    .toLowerCase();
+  if (!domain || !email.includes("@")) return null;
+  if (GOOGLE_MAIL.has(domain)) return "google";
+  if (MICROSOFT_MAIL.test(domain)) return "microsoft";
+  const mx = await lookupMx(http, domain);
+  if (mx.some((h) => h === "google.com" || h.endsWith(".google.com") || h.endsWith(".googlemail.com"))) {
+    return "google";
+  }
+  if (mx.some((h) => h.endsWith(".protection.outlook.com") || h.endsWith(".outlook.com"))) return "microsoft";
+  return null;
+}
+
+export interface CalDavOptions {
+  /** Whether this inbox connects Google Calendar now, so a Gmail owner is sent the right way. */
+  readonly googleReady?: boolean | undefined;
+}
+
+export function caldavConnector(opts: CalDavOptions = {}): ConnectorDefinition {
   return {
     kind: "caldav",
     title: "Calendar",
@@ -129,13 +183,35 @@ export function caldavConnector(): ConnectorDefinition {
       const username = (input.username ?? "").trim();
       const password = input.password ?? "";
       const server = input.server?.trim() || undefined;
-      const found = await new CalDavClient(ctx.http, { username, password }).discover(server);
+      if (!server) {
+        const at = await mailboxAt(ctx.http, username);
+        if (at === "google") {
+          throw new ConnectorError(
+            "config",
+            opts.googleReady
+              ? "Google calendars connect with Google: choose Google above."
+              : "Google calendars connect with Google, coming soon here. Until then, use Calendar link.",
+            { field: "username" },
+          );
+        }
+        if (at === "microsoft") {
+          throw new ConnectorError(
+            "config",
+            "Outlook calendars cannot connect here yet. Until then, use Calendar link.",
+            {
+              field: "username",
+            },
+          );
+        }
+      }
+      const dav = new CalDavClient(ctx.http, { username, password });
+      const found = await dav.discover(server);
       const calendars = strip(found.calendars);
       return {
         account: username,
         externalId: found.principal,
         secret: { username, password },
-        extra: { principal: found.principal, home: found.home },
+        extra: { principal: found.principal, home: found.home, authHost: dav.signedInAt },
         calendars,
         destinations: calendars.filter((c) => c.writable),
         defaults: { busy: calendars.map((c) => c.id), destination: defaultDestination(calendars) },
@@ -158,12 +234,14 @@ export function caldavConnector(): ConnectorDefinition {
         out.push(
           ...(await dav.busy(id, window, {
             timezone: ctx.inbox.timezone,
-            skipUid: (uid) => isOwnUid(uid, ctx.inbox.host),
+            skipUid: (uid) => isOwnUid(uid, ctx.inbox.id),
             skipHref: (href) => ctx.own.ids.has(href),
           })),
         );
       }
-      return mergeIntervals(out, window);
+      // The inbox's own bookings that another connection wrote here (Cal.com writing into this
+      // calendar) carry no UID of ours: they are taken out by their times.
+      return mergeIntervals(subtractIntervals(out, ctx.own.spans), window);
     },
 
     bookings: {
@@ -181,7 +259,7 @@ export function caldavConnector(): ConnectorDefinition {
           etag = null;
         }
         const ics = buildEvent({
-          uid: ownUid(booking.itemId, ctx.inbox.host),
+          uid: ownUid(booking.itemId, ctx.inbox.id),
           start: booking.start,
           end: booking.end,
           title: booking.title,

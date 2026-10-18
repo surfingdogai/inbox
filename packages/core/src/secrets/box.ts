@@ -51,7 +51,13 @@ export type MacPurpose =
    * The owner's six-digit sign-in and step-up codes, as `login_tokens.code_hash` keeps them: without
    * the key, whoever reads that table cannot try the million codes against it.
    */
-  | "login-code";
+  | "login-code"
+  /**
+   * The mark a connector puts on what it writes where the platform chooses the ids (a Cal.com
+   * booking's metadata, ADR-022): one per platform account, so the inbox finds its own again after
+   * connecting the account again, and nobody who books on the platform can pass for it.
+   */
+  | "connector-marker";
 
 export interface SecretBox {
   /**

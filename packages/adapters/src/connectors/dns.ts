@@ -1,8 +1,9 @@
 import type { ConnectorHttp } from "@surfingdog/core";
 
 /**
- * DNS for finding a calendar server from an email address (RFC 6764): SRV and TXT records, asked of
- * a public DNS-over-HTTPS resolver. A Worker has no resolver of its own and the shared packages use
+ * DNS for finding a calendar server from an email address (RFC 6764): SRV and TXT records, and MX
+ * records to tell a Google or Microsoft mailbox (which no app password opens), asked of a public
+ * DNS-over-HTTPS resolver. A Worker has no resolver of its own and the shared packages use
  * web APIs only, so both runtimes ask the same way. What is sent is the name looked up
  * (`_caldavs._tcp.example.com`), nothing about the owner.
  */
@@ -21,7 +22,7 @@ interface DnsJson {
   readonly Answer?: readonly { readonly type?: number; readonly data?: string }[];
 }
 
-async function ask(http: ConnectorHttp, name: string, type: "SRV" | "TXT"): Promise<string[]> {
+async function ask(http: ConnectorHttp, name: string, type: "SRV" | "TXT" | "MX"): Promise<string[]> {
   try {
     const res = await http.request({
       method: "GET",
@@ -33,7 +34,7 @@ async function ask(http: ConnectorHttp, name: string, type: "SRV" | "TXT"): Prom
     if (res.status !== 200) return [];
     const json = JSON.parse(res.text) as DnsJson;
     if (json.Status !== 0) return [];
-    const code = type === "SRV" ? 33 : 16;
+    const code = type === "SRV" ? 33 : type === "MX" ? 15 : 16;
     return (json.Answer ?? []).filter((a) => a.type === code && typeof a.data === "string").map((a) => String(a.data));
   } catch {
     // No answer is an answer here: discovery tries the next way.
@@ -62,4 +63,14 @@ export async function lookupPath(http: ConnectorHttp, name: string): Promise<str
     if (m?.[1]?.startsWith("/")) return m[1];
   }
   return null;
+}
+
+/** The mail servers a domain names (MX), lower case, without the trailing dot. */
+export async function lookupMx(http: ConnectorHttp, domain: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const data of await ask(http, domain, "MX")) {
+    const host = (data.trim().split(/\s+/)[1] ?? "").replace(/\.$/, "").toLowerCase();
+    if (host) out.push(host);
+  }
+  return out;
 }

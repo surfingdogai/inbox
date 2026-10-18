@@ -37,6 +37,11 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
 - Owner MCP and REST for services, products, opening hours, closed days, rules, settings, items and
   their transitions, and replies.
 - Product feeds: a CSV or Google Merchant XML file at a public URL, imported every six hours.
+- Calendars: iCloud, Fastmail, Nextcloud, any CalDAV calendar, a calendar's private `.ics` link, and
+  Cal.com (Google Calendar where the inbox has a Google client). Busy times there take those times off
+  what is offered, about three months ahead; confirmed bookings are written into the calendar. The
+  owner connects one in Settings → Integrations, in person: an AI or an integration key can only
+  `list_integrations` and `sync_integration`. See https://surfingdog.ai/docs/calendars/.
 - The email door: mail sent or forwarded to the inbox's address becomes a message.
 - An idempotency key on every owner write.
 
@@ -48,9 +53,9 @@ work around it in a way that pretends it exists.
 - Create-or-update a product by SKU in one call.
 - Webhooks from other platforms straight into the inbox. Today they go to a bridge (Zapier, Make,
   n8n), and the bridge calls the inbox.
-- Busy-time blocks and calendar feeds. Today the inbox only knows whole closed days.
+- Two-way calendar sync: a booking cancelled in Cal.com or a calendar is not cancelled in the inbox.
 - A hosted booking form, and a widget for the business's website.
-- Native connectors for Shopify, WooCommerce, Google Calendar, Stripe and Mollie. They are on the
+- Native connectors for Shopify, WooCommerce, Stripe, Mollie and Outlook calendars. They are on the
   requests board, https://surfingdog.ai/requests, where the person can vote for them.
 
 ---

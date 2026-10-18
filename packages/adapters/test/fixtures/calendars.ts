@@ -1,5 +1,5 @@
 /**
- * Platform answers for the calendar connectors' contract tests (ADR-020). They are written after the
+ * Platform answers for the calendar connectors' contract tests (ADR-022). They are written after the
  * platforms' published documentation and the RFCs' own examples (RFC 4791 for CalDAV, RFC 6764 for
  * discovery, Cal.com's API v2 reference, Google Calendar API v3), in the shapes those servers answer
  * with, including the quirks that matter here: iCloud's partition host, Nextcloud's well-known
@@ -385,12 +385,33 @@ export const CALCOM_CALENDARS = {
 
 /* --- Google ------------------------------------------------------------------ */
 
+/** An ID token as Google's token endpoint answers one (OpenID Connect): header, claims, signature. */
+export function googleIdToken(claims: Record<string, unknown>): string {
+  const b64 = (v: unknown) => btoa(JSON.stringify(v)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return `${b64({ alg: "RS256", kid: "c8ab71530972bba20b49f78a09c9852c43ff9118", typ: "JWT" })}.${b64(claims)}.c2lnbmF0dXJl`;
+}
+
+export const GOOGLE_ID_CLAIMS = {
+  iss: "https://accounts.google.com",
+  azp: "1234-abc.apps.googleusercontent.com",
+  aud: "1234-abc.apps.googleusercontent.com",
+  sub: "110248495921238986420",
+  email: "ana.salon@gmail.com",
+  email_verified: true,
+  at_hash: "HK6E_P6Dh8Y93mRNtsDB1Q",
+  iat: Date.parse("2026-11-02T08:00:00Z") / 1000,
+  exp: Date.parse("2026-11-02T09:00:00Z") / 1000,
+};
+
 export const GOOGLE_TOKEN = {
   access_token: "ya29.a0-test-access",
   expires_in: 3599,
   refresh_token: "1//0g-test-refresh",
-  scope: "https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.events.owned",
+  // Google answers `email` as the userinfo scope's full name.
+  scope:
+    "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.events.owned",
   token_type: "Bearer",
+  id_token: googleIdToken(GOOGLE_ID_CLAIMS),
 };
 
 export const GOOGLE_PROBE = { summary: "ana.salon@gmail.com", timeZone: "Europe/Lisbon" };

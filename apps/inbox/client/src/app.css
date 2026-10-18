@@ -2129,7 +2129,7 @@ legend.label-line {
   }
 }
 
-/* Settings → Integrations: the gallery (ADR-020). Small tiles, hairlines, one quiet tag. */
+/* Settings → Integrations: the gallery (ADR-022). Small tiles, hairlines, one quiet tag. */
 .int-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2159,7 +2159,7 @@ legend.label-line {
     background 0.18s var(--ease-out-soft, ease),
     border-color 0.18s var(--ease-out-soft, ease);
 }
-.int-tile:hover:not(:disabled) {
+.int-tile:hover:not(:disabled):not(.is-soon) {
   background: var(--row-bg-hover);
 }
 .int-tile.is-open {
@@ -2220,6 +2220,47 @@ legend.label-line {
   height: 6px;
   border-radius: 9999px;
   background: var(--c-success, currentColor);
+}
+.int-tag.is-warn {
+  color: color-mix(in srgb, var(--c-warning) 70%, var(--ink));
+}
+/* On a phone the cards still to come are one quiet line, not four tiles to scroll past. */
+.int-soon-line {
+  display: none;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+@media (max-width: 600px) {
+  .int-tile.is-soon {
+    display: none;
+  }
+  .int-soon-line {
+    display: block;
+  }
+}
+.rail-warn .icon {
+  color: color-mix(in srgb, var(--c-warning) 75%, var(--ink));
+}
+.int-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.int-inline:hover:not(:disabled) {
+  color: var(--ink);
+}
+.int-account-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 .int-panel {
   animation: int-in 0.22s var(--ease-out-soft, ease) both;

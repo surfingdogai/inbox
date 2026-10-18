@@ -6,7 +6,7 @@ import {
   type Interval,
 } from "@surfingdog/core";
 import { lookupPath, lookupSrv } from "../dns";
-import { basicAuth, retryAfterMs } from "../http";
+import { basicAuth, mayCarryCredentials, retryAfterMs } from "../http";
 import { busyFromICal } from "./ical";
 import { CALDAV, child, children, DAV, descendants, multistatus, prop, textOf } from "./xml";
 
@@ -15,6 +15,12 @@ import { CALDAV, child, children, DAV, descendants, multistatus, prop, textOf } 
  * speaks it. Finding the server follows RFC 6764: an address the owner gave, else the DNS SRV record
  * of their email's domain, else `/.well-known/caldav` there; then the principal, its calendar home,
  * and the calendars in it.
+ *
+ * The app password goes only to the calendar server that asks for it. Every address found on the
+ * way (an email's domain is most often the business's website, at a website host) is first asked
+ * without it, and taken only when it answers as a calendar server does: a WebDAV answer, or a
+ * request to sign in. From then on the password goes to that host alone (or within a provider whose
+ * hosts are all its own, `mayCarryCredentials`), and any other host a server names is refused.
  */
 
 export interface DavAccount {
@@ -46,14 +52,45 @@ const PROPFIND_CALENDARS = `<?xml version="1.0" encoding="utf-8"?>
   </d:prop>
 </d:propfind>`;
 
+/** How long finding a calendar may take in all, so the owner hears in time what to do instead. */
+export const DISCOVERY_BUDGET_MS = 25_000;
+/** One call to a calendar server, at most. */
+const CALL_TIMEOUT_MS = 20_000;
+
+/**
+ * The calendar servers of providers that are their own and need no asking: the password goes to
+ * them straight away.
+ */
+const KNOWN_SERVERS: ReadonlySet<string> = new Set(["caldav.icloud.com", "caldav.fastmail.com"]);
+
+const NOT_FOUND = "No calendar was found for that email. Add the server address under More options.";
+
 export class CalDavClient {
+  /** The host that asked for the password, which alone receives it. */
+  private authHost: string | null;
+  /** When discovery must stop, so the owner hears what to do in time. */
+  private deadline: number | null = null;
+
   constructor(
     private readonly http: ConnectorHttp,
     private readonly account: DavAccount,
-  ) {}
+    opts: { readonly authHost?: string | null | undefined } = {},
+  ) {
+    this.authHost = opts.authHost ?? null;
+  }
 
-  private headers(extra: Record<string, string> = {}): Record<string, string> {
-    return { authorization: basicAuth(this.account.username, this.account.password), ...extra };
+  /** The host the password goes to, once one asked for it: kept with the connection. */
+  get signedInAt(): string | null {
+    return this.authHost;
+  }
+
+  private timeout(): number {
+    if (this.deadline === null) return CALL_TIMEOUT_MS;
+    return Math.max(1_000, Math.min(CALL_TIMEOUT_MS, this.deadline - Date.now()));
+  }
+
+  private expired(): boolean {
+    return this.deadline !== null && Date.now() >= this.deadline;
   }
 
   async send(
@@ -61,58 +98,118 @@ export class CalDavClient {
     url: string,
     opts: { body?: string; depth?: "0" | "1"; headers?: Record<string, string>; contentType?: string } = {},
   ): Promise<ConnectorHttpResponse> {
+    const host = hostOf(url);
+    if (!this.authHost || !mayCarryCredentials(this.authHost, host)) {
+      // A server naming a calendar on another host does not take the password there with it.
+      throw new ConnectorError("config", `${host} is not the calendar server this account signed in to.`);
+    }
     const res = await this.http.request({
       method,
       url,
-      headers: this.headers({
+      headers: {
+        authorization: basicAuth(this.account.username, this.account.password),
         ...(opts.depth ? { depth: opts.depth } : {}),
         ...(opts.body ? { "content-type": opts.contentType ?? "application/xml; charset=utf-8" } : {}),
         ...(opts.headers ?? {}),
-      }),
+      },
       ...(opts.body ? { body: opts.body } : {}),
       followRedirects: method === "PROPFIND" || method === "GET" || method === "REPORT",
       maxBytes: 8 * 1024 * 1024,
-      timeoutMs: 20_000,
+      timeoutMs: this.timeout(),
     });
     if (res.status === 401) {
       throw new ConnectorError(
         "auth",
-        "The calendar did not take that email and password. Use an app password, not your usual one.",
+        "The calendar did not take that email and app password. Make a new app password and press Connect again.",
         { field: "password" },
       );
     }
-    if (res.status === 429 || res.status === 503) {
-      throw new ConnectorError("rate_limited", `${hostOf(url)} asked us to wait.`, {
+    if (res.status === 429) {
+      throw new ConnectorError("rate_limited", `${host} asked this inbox to wait.`, {
         retryAfterMs: retryAfterMs(res.headers),
       });
     }
+    if (res.status >= 500) {
+      throw new ConnectorError(
+        "unreachable",
+        `${host} is not answering properly; this inbox tries again in a few minutes.`,
+        {
+          retryAfterMs: retryAfterMs(res.headers),
+        },
+      );
+    }
     return res;
+  }
+
+  /**
+   * Asks an address, without the password, whether a calendar server is there: a WebDAV answer, or
+   * a request to sign in with a password. The address it ends at, after its redirects, or null.
+   */
+  private async probe(url: string): Promise<{ readonly url: string } | { readonly problem: string }> {
+    let res: ConnectorHttpResponse;
+    try {
+      res = await this.http.request({
+        method: "PROPFIND",
+        url,
+        headers: { depth: "0", "content-type": "application/xml; charset=utf-8" },
+        body: PROPFIND_PRINCIPAL,
+        followRedirects: true,
+        maxBytes: 256 * 1024,
+        timeoutMs: this.timeout(),
+      });
+    } catch (error) {
+      return { problem: error instanceof Error ? error.message : String(error) };
+    }
+    if (res.status === 207) return { url: res.url };
+    if (res.status === 401) {
+      const challenge = res.headers.get("www-authenticate") ?? "";
+      if (/(^|[\s,])basic(\s|$|,)/i.test(challenge)) return { url: res.url };
+      return { problem: `${hostOf(res.url)} asks for a kind of sign-in this inbox cannot give` };
+    }
+    return { problem: `${hostOf(res.url)} is not a calendar server` };
   }
 
   /* --- finding the account ---------------------------------------------- */
 
   /** The account's principal, calendar home and calendars, from a server address or the email alone. */
   async discover(server: string | undefined): Promise<Discovered> {
-    const starts = server ? fromServer(server) : await this.fromEmail();
-    if (starts.length === 0) {
-      throw new ConnectorError(
-        "config",
-        "We could not find a calendar server for that address. Add the server address under More options.",
-        { field: "server" },
-      );
+    this.deadline = Date.now() + DISCOVERY_BUDGET_MS;
+    try {
+      return await this.discoverWithin(server);
+    } finally {
+      this.deadline = null;
     }
+  }
+
+  private async discoverWithin(server: string | undefined): Promise<Discovered> {
+    const starts = server ? fromServer(server) : await this.fromEmail();
+    if (starts.length === 0) throw new ConnectorError("config", NOT_FOUND, { field: "server" });
     let lastProblem: string | null = null;
     for (const start of starts) {
+      if (this.expired()) break;
+      // Asked first without the password, unless it is a provider's own server.
+      let target = start;
+      if (!KNOWN_SERVERS.has(hostOf(start))) {
+        const probed = await this.probe(start);
+        if ("problem" in probed) {
+          lastProblem = probed.problem;
+          continue;
+        }
+        target = probed.url;
+      }
+      this.authHost = hostOf(target);
       let res: ConnectorHttpResponse;
       try {
-        res = await this.send("PROPFIND", start, { body: PROPFIND_PRINCIPAL, depth: "0" });
+        res = await this.send("PROPFIND", target, { body: PROPFIND_PRINCIPAL, depth: "0" });
       } catch (error) {
         if (error instanceof ConnectorError && (error.code === "auth" || error.code === "rate_limited")) throw error;
         lastProblem = error instanceof Error ? error.message : String(error);
+        this.authHost = null;
         continue;
       }
       if (res.status !== 207) {
-        lastProblem = `${hostOf(start)} answered ${res.status}`;
+        lastProblem = `${hostOf(target)} is not a calendar server`;
+        this.authHost = null;
         continue;
       }
       const responses = safeMultistatus(res.text);
@@ -130,20 +227,26 @@ export class CalDavClient {
           const home = absolute(homeHref, res.url);
           return { principal: res.url, home, calendars: await this.calendars(home) };
         }
-        lastProblem = `${hostOf(start)} is not a calendar server`;
+        lastProblem = `${hostOf(target)} is not a calendar server`;
+        this.authHost = null;
         continue;
       }
       const principal = absolute(principalHref, res.url);
       const home = await this.homeOf(principal);
       return { principal, home, calendars: await this.calendars(home) };
     }
+    if (!server) throw new ConnectorError("config", NOT_FOUND, { field: "server" });
     throw new ConnectorError(
       "config",
-      `We could not find your calendars${lastProblem ? ` (${lastProblem})` : ""}. Check the server address under More options.`,
+      `No calendar was found there${lastProblem ? ` (${lastProblem})` : ""}. Check the server address under More options.`,
       { field: "server" },
     );
   }
 
+  /**
+   * Where to look from the email alone (RFC 6764): the SRV record's server, then the email's domain
+   * and its `caldav.` name, each asked without the password first.
+   */
   private async fromEmail(): Promise<string[]> {
     const at = this.account.username.lastIndexOf("@");
     if (at < 0) return [];
@@ -206,13 +309,20 @@ export class CalDavClient {
   <d:prop><d:getetag/><c:calendar-data>${expand ? `<c:expand start="${start}" end="${end}"/>` : ""}</c:calendar-data></d:prop>
   <c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="${start}" end="${end}"/></c:comp-filter></c:comp-filter></c:filter>
 </c:calendar-query>`;
-    let res = await this.send("REPORT", calendar, { body: query(true), depth: "1" });
-    if (res.status !== 207 && res.status !== 404 && res.status !== 410) {
+    let res: ConnectorHttpResponse | null = null;
+    try {
+      res = await this.send("REPORT", calendar, { body: query(true), depth: "1" });
+    } catch (error) {
+      // Some servers fail outright on `expand` rather than saying no: asked again without it.
+      if (!(error instanceof ConnectorError && error.code === "unreachable")) throw error;
+    }
+    if (!res || (res.status !== 207 && res.status !== 404 && res.status !== 410)) {
       res = await this.send("REPORT", calendar, { body: query(false), depth: "1" });
     }
     if (res.status === 404 || res.status === 410) return [];
-    if (res.status !== 207)
-      throw new ConnectorError("bad_response", `${hostOf(calendar)} answered ${res.status} for its events.`);
+    if (res.status !== 207) {
+      throw new ConnectorError("bad_response", `${hostOf(calendar)} would not list the events in that calendar.`);
+    }
     const out: Interval[] = [];
     for (const r of safeMultistatus(res.text)) {
       if (r.href && opts.skipHref(absolute(r.href, res.url))) continue;
@@ -237,7 +347,7 @@ export class CalDavClient {
       throw new ConnectorError("refused", `${hostOf(href)} does not let this account add events to that calendar.`);
     }
     if (res.status < 200 || res.status >= 300) {
-      throw new ConnectorError("bad_response", `${hostOf(href)} answered ${res.status} when the booking was written.`);
+      throw new ConnectorError("bad_response", `${hostOf(href)} would not take the booking.`);
     }
     return res.headers.get("etag");
   }
@@ -247,7 +357,7 @@ export class CalDavClient {
     const res = await this.send("DELETE", href);
     if (res.status === 404 || res.status === 410) return;
     if (res.status < 200 || res.status >= 300) {
-      throw new ConnectorError("bad_response", `${hostOf(href)} answered ${res.status} when the booking was removed.`);
+      throw new ConnectorError("bad_response", `${hostOf(href)} would not remove the booking.`);
     }
   }
 }
@@ -256,7 +366,7 @@ function safeMultistatus(text: string) {
   try {
     return multistatus(text);
   } catch {
-    throw new ConnectorError("bad_response", "The calendar server sent an answer we could not read.");
+    throw new ConnectorError("bad_response", "The calendar server sent an answer this inbox could not read.");
   }
 }
 
@@ -287,7 +397,7 @@ export function fromServer(server: string): string[] {
   try {
     url = new URL(withScheme);
   } catch {
-    throw new ConnectorError("config", "That server address is not one we can read.", { field: "server" });
+    throw new ConnectorError("config", "That is not a server address.", { field: "server" });
   }
   if (url.protocol === "http:") url.protocol = "https:";
   url.hash = "";
@@ -323,7 +433,7 @@ function lastSegment(url: string): string {
 
 function hostOf(url: string): string {
   try {
-    return new URL(url).host;
+    return new URL(url).hostname;
   } catch {
     return "the calendar server";
   }

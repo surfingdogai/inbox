@@ -89,6 +89,9 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     leftOut: "Sign-ins with a calendar that were on their way.",
     strip: empty("connector_auth"),
   },
+  instance_meta: {
+    note: "This inbox's own id, which the entries it adds to a calendar carry, so a copy knows them as its own.",
+  },
   // People who sign in, keys and AI apps.
   users: { note: "The people who sign in. Sign in where you open the copy with the same email address." },
   sessions: { leftOut: "Who is signed in.", strip: empty("sessions") },

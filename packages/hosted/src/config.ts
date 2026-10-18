@@ -32,7 +32,7 @@ import { parseMasterKeys } from "./keys";
  *   service manager's memory limit is the hard one).
  * - `INBOX_STATIC`: the owner app's build; `INBOX_OUTBOUND_DENY`: more addresses no call reaches.
  * - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (the shards'): the Google client every inbox
- *   signs owners in to Google Calendar with; without both, Google shows as "Soon" (ADR-020).
+ *   signs owners in to Google Calendar with; without both, Google shows as "Soon" (ADR-022).
  * - `HOSTED_OAUTH_RELAY_HOST` (router and shards): the one name Google sends every owner back to,
  *   `https://<it>/oauth/google/callback`, registered once on the Google client; the router passes
  *   the owner on to their own inbox from there. Unset, each inbox uses its own callback.

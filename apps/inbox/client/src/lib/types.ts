@@ -316,6 +316,8 @@ export interface ConnectBody {
   readonly kind: string;
   readonly preset?: string | undefined;
   readonly values: Readonly<Record<string, string>>;
+  /** Connect this connection again in place: only its secret fields, every choice kept. */
+  readonly connection_id?: string | undefined;
 }
 
 /** `PATCH /v1/owner/integrations/{id}`: what the owner chooses. */

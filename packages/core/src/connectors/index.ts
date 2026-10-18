@@ -1,6 +1,7 @@
 export {
   type AuthorizeInput,
   authorizeInput,
+  CONNECTOR_NOTICE_KIND,
   CONNECTOR_PUSH_KIND,
   CONNECTOR_SYNC_INTERVAL_MS,
   CONNECTOR_SYNC_KIND,
@@ -18,13 +19,16 @@ export {
   type UpdateConnectionInput,
   updateConnectionInput,
 } from "./capability";
-export { GALLERY, type GalleryCard, type GalleryWay, gallery } from "./gallery";
-export { connectorPushHandler, connectorSyncHandler } from "./jobs";
+export { cardOf, GALLERY, type GalleryCard, type GalleryWay, gallery } from "./gallery";
+export { connectorNoticeHandler, connectorPushHandler, connectorSyncHandler } from "./jobs";
 export * from "./sdk";
 export {
   BUSY_HORIZON_MS,
+  type BusyDetail,
+  busyDetails,
   busyOverlapping,
   claimLink,
+  instanceId,
   type LinkRow as ConnectorLinkRow,
   liveLinks,
   MAX_BUSY_ROWS,

@@ -14,9 +14,10 @@ import {
  * a size. The host's `fetchImpl` (`pinnedFetch` on Node) then resolves the name, refuses it when any
  * address is not public, and connects to the address it checked.
  *
- * Credentials travel only within one site. A calendar server that redirects to another of its own
- * hosts (iCloud sends each account to a partition host) keeps the sign-in; a redirect anywhere else
- * goes without it.
+ * Credentials travel only to the host they were given for. A redirect to another host goes without
+ * them, but within a provider named here whose hosts are all its own (iCloud sends each account to a
+ * partition host, `p42-caldav.icloud.com`): never by a guess at what a "site" is, since one suffix
+ * often holds many customers (`github.io`, a hoster's customer subdomains).
  */
 
 const MAX_REDIRECTS = 3;
@@ -28,7 +29,7 @@ export function connectorHttp(opts: { readonly fetchImpl?: typeof fetch | undefi
   return {
     async request(request: ConnectorHttpRequest): Promise<ConnectorHttpResponse> {
       let url = checked(request.url);
-      const site = siteOf(url.hostname);
+      const origin = url.hostname;
       let method = request.method.toUpperCase();
       let body = request.body;
       const headers: Record<string, string> = { "user-agent": USER_AGENT, ...(request.headers ?? {}) };
@@ -54,7 +55,7 @@ export function connectorHttp(opts: { readonly fetchImpl?: typeof fetch | undefi
           await response.body?.cancel().catch(() => {});
           if (!location) throw new ConnectorError("bad_response", `${url.host} redirected nowhere.`);
           const next = checked(new URL(location, url).toString());
-          if (siteOf(next.hostname) !== site) {
+          if (!mayCarryCredentials(origin, next.hostname)) {
             delete headers.authorization;
             delete headers.Authorization;
           }
@@ -93,19 +94,18 @@ function checked(raw: string): URL {
 }
 
 /**
- * The site a host belongs to, for whether a sign-in may follow a redirect: its last two labels, or
- * three under a two-letter country's common second level (example.co.uk, example.com.br).
+ * Providers whose every host under the name is their own, and that send an account from one host to
+ * another: a sign-in given to one of them may go to the others. Nothing else is ever widened.
  */
-export function siteOf(hostname: string): string {
-  const labels = hostname.toLowerCase().replace(/\.$/, "").split(".");
-  if (labels.length <= 2) return labels.join(".");
-  const tld = labels[labels.length - 1] ?? "";
-  const second = labels[labels.length - 2] ?? "";
-  const n = tld.length === 2 && SECOND_LEVEL.has(second) ? 3 : 2;
-  return labels.slice(-n).join(".");
-}
+export const CREDENTIAL_FAMILIES: readonly string[] = ["icloud.com"];
 
-const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gov", "ac", "edu", "or", "ne", "gob", "nom"]);
+/** Whether a sign-in given for `from` may go to `to`: the same host, or both within one family. */
+export function mayCarryCredentials(from: string, to: string): boolean {
+  const a = from.toLowerCase().replace(/\.$/, "");
+  const b = to.toLowerCase().replace(/\.$/, "");
+  if (a === b) return true;
+  return CREDENTIAL_FAMILIES.some((f) => (a === f || a.endsWith(`.${f}`)) && (b === f || b.endsWith(`.${f}`)));
+}
 
 async function readBounded(response: Response, max: number, host: string): Promise<string> {
   const reader = response.body?.getReader();

@@ -273,7 +273,7 @@ export class Capabilities {
   readonly feeds: FeedCapabilities;
 
   /**
-   * Connected platforms (ADR-014, ADR-020): calendars that block busy times and keep bookings in step.
+   * Connected platforms (ADR-014, ADR-022): calendars that block busy times and keep bookings in step.
    * The host attaches the connectors it offers and how they reach the world (`connectors.attach`).
    */
   readonly connectors: ConnectorCapabilities;

@@ -184,7 +184,7 @@ const { app, runner, prepare } = createInbox({
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
-  // Google Calendar's OAuth client (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET): "Soon" without it.
+  // Google Calendar's OAuth client (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET): "set up" without it.
   ...oauthFrom({
     GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,

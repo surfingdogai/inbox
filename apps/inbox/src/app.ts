@@ -32,9 +32,11 @@ import {
 import {
   buildManifest,
   Capabilities,
+  CONNECTOR_NOTICE_KIND,
   CONNECTOR_PUSH_KIND,
   CONNECTOR_SYNC_KIND,
   connectorLane,
+  connectorNoticeHandler,
   connectorPushHandler,
   connectorSyncHandler,
   createRunner,
@@ -133,7 +135,7 @@ export interface AppDeps {
   readonly snapshot?: SqliteSnapshot | undefined;
   /**
    * The OAuth clients this inbox signs owners in to platforms with (GOOGLE_OAUTH_CLIENT_ID and
-   * GOOGLE_OAUTH_CLIENT_SECRET). A platform without one shows as "Soon" in Settings → Integrations.
+   * GOOGLE_OAUTH_CLIENT_SECRET). Without one, Google shows as "Soon" on a hosted inbox and "set up" on one's own server.
    */
   readonly oauth?: OAuthClients | undefined;
   /**
@@ -193,10 +195,14 @@ export function createInbox(deps: AppDeps): Inbox {
   const port = createIdentityPort(identity);
   caps.people.attachPort(port);
   caps.attachMail(mailOut);
-  // Connected platforms (ADR-020): every call leaves through the host's outbound fetch, and a demo
-  // calls none, whoever connected what.
+  // Connected platforms (ADR-022): every call leaves through the host's outbound fetch, and a demo
+  // calls none, whoever connected what. An inbox that signs owners in through the host's one relay
+  // is a hosted one: Google without a client is "Soon" there, and "set up" on one's own server.
   caps.connectors.attach({
-    definitions: builtInConnectors({ oauth: deps.oauth }),
+    definitions: builtInConnectors({
+      oauth: deps.oauth,
+      hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
+    }),
     http: connectorHttp({ fetchImpl: demo ? noNetworkFetch : deps.fetchImpl }),
     redirectUri: deps.oauthRedirect,
   });
@@ -227,10 +233,12 @@ export function createInbox(deps: AppDeps): Inbox {
     )
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
     .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }))
-    // Connected calendars (ADR-020): a sync every five minutes, a push after every booking event,
-    // one connection's jobs one after another. An instance with nothing connected enqueues neither.
+    // Connected calendars (ADR-022): a sync every five minutes, a push after every booking event,
+    // one connection's jobs one after another, and one email to the owner when one stops syncing.
+    // An instance with nothing connected enqueues none of them.
     .register(CONNECTOR_SYNC_KIND, connectorSyncHandler(caps.connectors), { lane: connectorLane })
-    .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane });
+    .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane })
+    .register(CONNECTOR_NOTICE_KIND, connectorNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }));
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -242,7 +250,13 @@ export function createInbox(deps: AppDeps): Inbox {
       runner.register(kind, noNetworkHandler);
     }
     // Nor does anything a tester typed leave by a webhook, or reach a calendar, whoever set one up.
-    for (const kind of [WEBHOOK_FANOUT_KIND, WEBHOOK_DELIVERY_KIND, CONNECTOR_SYNC_KIND, CONNECTOR_PUSH_KIND])
+    for (const kind of [
+      WEBHOOK_FANOUT_KIND,
+      WEBHOOK_DELIVERY_KIND,
+      CONNECTOR_SYNC_KIND,
+      CONNECTOR_PUSH_KIND,
+      CONNECTOR_NOTICE_KIND,
+    ])
       runner.register(kind, noWebhookHandler);
     runner.register(
       DEMO_NIGHTLY_KIND,

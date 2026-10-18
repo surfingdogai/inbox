@@ -1324,12 +1324,12 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       return once(c, "feeds.remove", { feed_id: id }, (caller) => caps.feeds.remove(caller, id));
     },
   );
-  // ---- integrations: calendars and the platforms to come (ADR-014, ADR-020) ----
+  // ---- integrations: calendars and the platforms to come (ADR-014, ADR-022) ----
   app.get(
     "/integrations",
     owner({
       tags: ["integrations"],
-      summary: "What can be connected (Cal.com, calendars; payments and shops marked soon) and what is connected",
+      summary: "What can be connected (calendars, Cal.com; payments and shops marked soon) and what is connected",
       description:
         "Each card lists its ways in, with the form to fill in (secret fields marked) or a sign-in on the platform. Connections never carry a secret.",
       responses: json("Integrations", R.integrationsSchema),
@@ -1340,9 +1340,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations",
     owner({
       tags: ["integrations"],
-      summary: "Connect with a form: Cal.com's API key, or a calendar's email and app password",
+      summary: "Connect with a form: a calendar's email and app password, its private link, or Cal.com's API key",
       description:
-        "Checked against the platform before anything is kept: wrong credentials answer 422 with the field to fix. Secrets are sealed with INBOX_SECRET_KEY and never returned. The first sync starts at once. Connecting is the owner's: the owner's AI is refused (403).",
+        "Checked against the platform before anything is kept: wrong credentials answer 422 with the field to fix. Secrets are sealed with INBOX_SECRET_KEY and never returned. The first sync starts at once. With `connection_id`, connects that connection again in place (a new app password or key for the same account): only the secret fields are needed, and every choice is kept. Connecting is the owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Connection", R.connectionSchema, 201),
       write: true,
     }),
@@ -1365,7 +1365,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["integrations"],
       summary: "Start a sign-in on the platform (Google): the address to open in the owner's browser",
       description:
-        "OAuth 2.0 with PKCE and offline access, valid for ten minutes. The platform sends the owner back to /oauth/connect/{kind}/callback, which connects and returns to the owner app.",
+        "OAuth 2.0 with PKCE and offline access, valid for ten minutes. The platform sends the owner back to /oauth/connect/{kind}/callback, which connects (or connects again, for the same account, keeping its choices) and returns to the owner app. The owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Where to sign in", R.authorizeSchema),
       write: true,
     }),
@@ -1385,6 +1385,8 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     owner({
       tags: ["integrations"],
       summary: "Choose calendars, where bookings go and which services busy times apply to; pause or resume",
+      description:
+        "What is chosen changes which times customers are offered, so it is the owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Connection", R.connectionSchema),
       write: true,
     }),
@@ -1413,7 +1415,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     owner({
       tags: ["integrations"],
       summary: "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar.",
-      description: "The owner's: the owner's AI is refused (403).",
+      description: "The owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Removed", R.looseSchema),
       write: true,
     }),

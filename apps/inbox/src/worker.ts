@@ -27,7 +27,7 @@ type Bindings = Env & {
    */
   MAIL_FROM?: string;
   MAIL_FROM_NAME?: string;
-  /** Google Calendar's OAuth client (ADR-020); without both, Google shows as "Soon". */
+  /** Google Calendar's OAuth client (ADR-022); without both, Google shows as "set up". */
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_REDIRECT_URI?: string;

@@ -1,7 +1,7 @@
 import { normalizeHost } from "./host";
 
 /**
- * One address for every hosted inbox's sign-in with Google (ADR-020). Google sends an owner back only
+ * One address for every hosted inbox's sign-in with Google (ADR-022). Google sends an owner back only
  * to an address registered on the client, one by one, and every inbox has a name of its own; so each
  * inbox asks Google to come back to `https://<relay host>/oauth/google/callback`, puts its own origin
  * at the front of the state (`base64url(origin).<secret>`), and the router sends the owner's browser

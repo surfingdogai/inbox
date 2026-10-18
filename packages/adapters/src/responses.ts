@@ -697,7 +697,7 @@ export const mailServiceSchema = z.object({
   links: z.boolean().describe("Emails can carry answer links."),
 });
 
-/* --- integrations (ADR-020) ------------------------------------------------ */
+/* --- integrations (ADR-022) ------------------------------------------------ */
 
 const calendarChoiceSchema = z.looseObject({
   id: z.string(),
@@ -721,7 +721,7 @@ const formFieldSchema = z.looseObject({
 
 export const connectionSchema = z.looseObject({
   id: z.string(),
-  kind: z.string().describe("calcom, caldav or google_calendar"),
+  kind: z.string().describe("caldav, google_calendar, ics (a calendar's private link: busy times only) or calcom"),
   preset: z.string().nullable().describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar"),
   title: z.string(),
   name: z.string(),
@@ -735,14 +735,25 @@ export const connectionSchema = z.looseObject({
   destinations: z.array(calendarChoiceSchema),
   destination: z.string().nullable(),
   services: z.array(z.string()).nullable().describe("The services busy times apply to; null for all"),
-  busy_times: z.number().int(),
+  busy_times: z.number().int().describe("The busy times still ahead, as last read"),
   busy_read_at: z.number().int().nullable().describe("Unix milliseconds"),
+  busy_until: z
+    .number()
+    .int()
+    .nullable()
+    .describe("How far ahead the busy times were read (Unix milliseconds): past it no time is offered"),
+  busy_partial: z.boolean().describe("Read less far ahead than usual: the calendar had more ahead than one sync reads"),
   bookings_written: z.number().int(),
   bookings_failing: z.number().int(),
   booking_error: z.string().nullable(),
   last_sync_at: z.number().int().nullable(),
   last_error: z.string().nullable(),
   last_error_at: z.number().int().nullable(),
+  error_code: z
+    .string()
+    .nullable()
+    .describe("While it fails: auth (connect it again), config, unreachable, rate_limited, refused, bad_response"),
+  failing_since: z.number().int().nullable(),
   created_at: z.number().int(),
 });
 
@@ -759,10 +770,14 @@ export const integrationsSchema = z.object({
           kind: z.string(),
           preset: z.string().nullable(),
           label: z.string(),
-          status: z.enum(["ready", "soon"]),
+          status: z
+            .enum(["ready", "soon", "setup"])
+            .describe("setup: it needs something on the server first, said in hint and explained at href"),
           auth: z.enum(["form", "oauth"]),
           form: z.array(formFieldSchema),
           note: z.string().optional(),
+          hint: z.string().optional(),
+          href: z.string().optional(),
         }),
       ),
     }),

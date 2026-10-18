@@ -71,7 +71,7 @@ export function webhookFanoutHandler(): JobHandler {
     // the job row — durable evidence rather than a log line that scrolls away.
     const wanted = matched.slice(0, MAX_ENDPOINTS_PER_EVENT);
     const skipped = matched.length - wanted.length;
-    // A booking event reaches every calendar that keeps bookings in step (ADR-020): one push job per
+    // A booking event reaches every calendar that keeps bookings in step (ADR-022): one push job per
     // connection, once per event, beside the deliveries.
     const pushes = eventType.startsWith("booking.") ? await connectorPushStatements(db, p.eventId, now) : [];
     if (wanted.length === 0) {

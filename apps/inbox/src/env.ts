@@ -102,7 +102,7 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
  * The OAuth clients this inbox signs owners in to platforms with, from GOOGLE_OAUTH_CLIENT_ID and
  * GOOGLE_OAUTH_CLIENT_SECRET (both, or neither: one alone is said and left out), and
  * GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect address for all its inboxes. Without a
- * client, Google Calendar shows as "Soon" in Settings → Integrations.
+ * client, Google Calendar shows as "set up" in Settings → Integrations ("Soon" on a hosted inbox).
  */
 export function oauthFrom(
   env: {

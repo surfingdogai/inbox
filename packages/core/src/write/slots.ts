@@ -63,7 +63,7 @@ export function bucketsFor(spec: SlotSpec, startTime: string, endTime: string): 
 
 /**
  * Existing claims per bucket, ignoring the item's own (so a re-confirm is not its own competitor),
- * and every bucket a connected calendar says is busy taken whole (ADR-020): busy times only ever
+ * and every bucket a connected calendar says is busy taken whole (ADR-022): busy times only ever
  * remove places. Every door that offers, proposes, books or moves a time reads through here, so a
  * busy time is honoured by all of them or by none.
  */

@@ -5,7 +5,7 @@ import { RELAY_PATH, relayRedirect, relayTarget } from "../src/oauth-relay";
 import { type Runtime, startRuntime } from "./harness";
 
 /**
- * One address for every hosted inbox's Google sign-in (ADR-020): the router passes the owner on to the
+ * One address for every hosted inbox's Google sign-in (ADR-022): the router passes the owner on to the
  * inbox the state names, and only to a name it knows as an inbox.
  */
 const RELAY = "connect.example.org";

@@ -14,21 +14,28 @@ import {
 import { retryAfterMs } from "./http";
 
 /**
- * Google Calendar (ADR-020) over its API, with an OAuth sign-in: the authorization code flow with
+ * Google Calendar (ADR-022) over its API, with an OAuth sign-in: the authorization code flow with
  * PKCE (S256) and offline access, so the inbox keeps working after the owner closes the tab. Two
- * scopes and no more: `calendar.freebusy` to read when the owner is busy (times only, never what the
- * events are), and `calendar.events.owned` to add, move and remove the bookings it confirms on the
- * owner's own calendars. Busy times come from the free/busy query; the bookings this inbox wrote are
- * taken out by their times, since that answer carries no ids.
+ * calendar scopes and no more: `calendar.freebusy` to read when the owner is busy (times only, never
+ * what the events are), and `calendar.events.owned` to add, move and remove the bookings it confirms
+ * on the owner's own calendars; and `openid email`, which are not sensitive, so the account is known
+ * by Google's own id for it, never by a calendar's name. Busy times come from the free/busy query;
+ * the bookings this inbox wrote are taken out by their times, since that answer carries no ids.
  *
- * Shown as "Soon" until the instance has a Google client (GOOGLE_OAUTH_CLIENT_ID and
- * GOOGLE_OAUTH_CLIENT_SECRET): ours on hosted, the self-hoster's own otherwise.
+ * Until the instance has a Google client (GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET) it
+ * shows as "Soon" on a hosted inbox, where ours is on its way, and as "set up" on one's own server.
  */
 
-export const GOOGLE_SCOPES = [
+/** The calendar scopes: what the owner is asked to allow, and what must come back allowed. */
+export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events.owned",
   "https://www.googleapis.com/auth/calendar.freebusy",
 ] as const;
+
+/** Everything asked for: the calendar scopes, and who the account is (`openid email`). */
+export const GOOGLE_SCOPES = ["openid", "email", ...GOOGLE_CALENDAR_SCOPES] as const;
+
+const ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 
 const AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN = "https://oauth2.googleapis.com/token";
@@ -58,9 +65,49 @@ export function googleEventId(itemId: string): string {
   return `sdi${hex}`;
 }
 
-export function googleCalendarConnector(client: OAuthClient | null): ConnectorDefinition {
+/**
+ * Who the account is, from the ID token Google's token endpoint answered with: its `sub` (Google's
+ * own id, which never changes) and its address. Taken straight from Google over TLS with the client's
+ * secret, so its issuer, audience and expiry are what is checked (OpenID Connect Core §3.1.3.7).
+ */
+export function idTokenClaims(
+  token: string,
+  clientId: string,
+  now: number,
+): { readonly sub: string; readonly email: string | null } | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  let claims: { iss?: unknown; aud?: unknown; exp?: unknown; sub?: unknown; email?: unknown; email_verified?: unknown };
+  try {
+    const b64 = part.replaceAll("-", "+").replaceAll("_", "/");
+    const bytes = Uint8Array.from(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=")), (c) =>
+      c.charCodeAt(0),
+    );
+    claims = JSON.parse(new TextDecoder().decode(bytes)) as typeof claims;
+  } catch {
+    return null;
+  }
+  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!ISSUERS.has(String(claims.iss)) || !audiences.includes(clientId)) return null;
+  if (typeof claims.exp !== "number" || claims.exp * 1000 < now - 300_000) return null;
+  if (typeof claims.sub !== "string" || !claims.sub) return null;
+  const email = typeof claims.email === "string" && claims.email_verified !== false ? claims.email : null;
+  return { sub: claims.sub, email };
+}
+
+export interface GoogleOptions {
+  /** A hosted inbox, whose Google client is ours and on its way: "Soon" rather than "set up". */
+  readonly hosted?: boolean | undefined;
+}
+
+export function googleCalendarConnector(client: OAuthClient | null, opts: GoogleOptions = {}): ConnectorDefinition {
   const ready = () =>
     client?.clientId && client.clientSecret ? (true as const) : "Google sign-in is not set up on this inbox yet.";
+  /**
+   * Access tokens refreshed in this process, by refresh token: a run that refreshed once uses the new
+   * token for every call after, rather than asking Google again and sealing it again each time.
+   */
+  const fresh = new Map<string, { readonly token: string; readonly expiresAt: number }>();
 
   async function tokenRequest(ctx: ConnectContext, body: Record<string, string>): Promise<Record<string, unknown>> {
     if (!client) throw new ConnectorError("config", "Google sign-in is not set up on this inbox.");
@@ -77,7 +124,13 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
     if (res.status === 401 || j.error === "invalid_client") {
       throw new ConnectorError("config", "Google did not recognise this inbox's sign-in client.");
     }
-    if (res.status !== 200) throw new ConnectorError("bad_response", `Google answered ${res.status} for the sign-in.`);
+    if (res.status >= 500) {
+      throw new ConnectorError(
+        "unreachable",
+        "Google is not answering properly; this inbox tries again in a few minutes.",
+      );
+    }
+    if (res.status !== 200) throw new ConnectorError("bad_response", "Google would not finish the sign-in.");
     return j;
   }
 
@@ -87,15 +140,15 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
     if (ctx.secret.access_token && expires > ctx.now + 60_000) return ctx.secret.access_token;
     const refresh = ctx.secret.refresh_token;
     if (!refresh) throw new ConnectorError("auth", "Google's lasting access is missing. Connect it again.");
+    const cached = fresh.get(refresh);
+    if (cached && cached.expiresAt > ctx.now + 60_000) return cached.token;
     const j = await tokenRequest(ctx, { grant_type: "refresh_token", refresh_token: refresh });
     const token = typeof j.access_token === "string" ? j.access_token : "";
     if (!token) throw new ConnectorError("bad_response", "Google did not send an access token.");
-    const next = {
-      ...ctx.secret,
-      access_token: token,
-      access_expires_at: String(ctx.now + Number(j.expires_in ?? 3600) * 1000),
-    };
-    await ctx.saveSecret(next);
+    const expiresAt = ctx.now + Number(j.expires_in ?? 3600) * 1000;
+    if (fresh.size >= 500) fresh.clear();
+    fresh.set(refresh, { token, expiresAt });
+    await ctx.saveSecret({ ...ctx.secret, access_token: token, access_expires_at: String(expiresAt) });
     return token;
   }
 
@@ -116,9 +169,13 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    if (res.status === 401) throw new ConnectorError("auth", "Google stopped this connection. Connect it again.");
+    if (res.status === 401) {
+      // The token was refused: not kept for the next call.
+      if (ctx.secret.refresh_token) fresh.delete(ctx.secret.refresh_token);
+      throw new ConnectorError("auth", "Google stopped this connection. Connect it again.");
+    }
     if (res.status === 429 || (res.status === 403 && /rateLimit/i.test(res.text))) {
-      throw new ConnectorError("rate_limited", "Google asked us to slow down.", {
+      throw new ConnectorError("rate_limited", "Google asked this inbox to slow down.", {
         retryAfterMs: retryAfterMs(res.headers),
       });
     }
@@ -128,7 +185,12 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
     if (res.status === 403) {
       throw new ConnectorError("auth", "Google did not allow this. Connect again and allow the calendar.");
     }
-    if (res.status >= 500) throw new ConnectorError("unreachable", `Google answered ${res.status}. It is tried again.`);
+    if (res.status >= 500) {
+      throw new ConnectorError(
+        "unreachable",
+        "Google is not answering properly; this inbox tries again in a few minutes.",
+      );
+    }
     return { res, json: json(res) };
   }
 
@@ -140,7 +202,7 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
       end: { dateTime: new Date(booking.end).toISOString() },
       transparency: "opaque",
       status: "confirmed",
-      extendedProperties: { private: { sdiItem: booking.itemId, sdiInbox: ctx.inbox.host } },
+      extendedProperties: { private: { sdiItem: booking.itemId, sdiInbox: ctx.inbox.id } },
       ...(booking.url ? { source: { title: "Inbox", url: booking.url } } : {}),
     };
   }
@@ -154,6 +216,13 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
     capabilities: ["busy_times", "write_bookings"],
     auth: "oauth",
     ready,
+    whenNotReady: opts.hosted
+      ? { status: "soon" }
+      : {
+          status: "setup",
+          hint: "Needs a Google client on the server.",
+          href: "https://surfingdog.ai/docs/calendars/#google-calendar",
+        },
 
     oauth: {
       authorizeUrl({ redirectUri, state, challenge }) {
@@ -183,17 +252,20 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
         const refresh = typeof j.refresh_token === "string" ? j.refresh_token : "";
         const access = typeof j.access_token === "string" ? j.access_token : "";
         const granted = String(j.scope ?? "").split(/\s+/);
-        if (!GOOGLE_SCOPES.every((s) => granted.includes(s))) {
+        if (!GOOGLE_CALENDAR_SCOPES.every((s) => granted.includes(s))) {
           throw new ConnectorError("refused", "Google gave access without the calendar. Connect again and allow both.");
         }
         if (!refresh || !access)
           throw new ConnectorError("bad_response", "Google did not give lasting access. Try again.");
+        const who =
+          typeof j.id_token === "string" && client ? idTokenClaims(j.id_token, client.clientId, ctx.now) : null;
+        if (!who) throw new ConnectorError("bad_response", "Google did not say which account this is. Try again.");
         const secret = {
           refresh_token: refresh,
           access_token: access,
           access_expires_at: String(ctx.now + Number(j.expires_in ?? 3600) * 1000),
         };
-        // The primary calendar's name is its owner's address: what the owner recognises it by.
+        // The calendar is asked for once, so a client without the Calendar API says so now.
         const run: RunContext = {
           ...ctx,
           secret,
@@ -203,17 +275,18 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
           destinations: [],
           destination: null,
           own: { ids: new Set(), spans: [] },
+          marker: "",
           saveSecret: async () => {},
         };
         const probe = await api(run, "GET", `${calendarPath("primary")}?maxResults=1&fields=summary,timeZone`);
-        if (probe.res.status !== 200 || typeof probe.json.summary !== "string") {
-          throw new ConnectorError("bad_response", "Google did not show the calendar.");
-        }
-        const account = probe.json.summary;
-        const calendars = [{ id: "primary", name: account, writable: true, primary: true }];
+        if (probe.res.status !== 200) throw new ConnectorError("bad_response", "Google did not show the calendar.");
+        const summary = typeof probe.json.summary === "string" ? probe.json.summary : "";
+        const account = who.email || summary || "Google Calendar";
+        const calendars = [{ id: "primary", name: summary || account, writable: true, primary: true }];
         return {
           account,
-          externalId: account.toLowerCase(),
+          // Google's own id for the account: the same however its calendars are named.
+          externalId: who.sub,
           secret,
           extra: {},
           calendars,
@@ -235,8 +308,7 @@ export function googleCalendarConnector(client: OAuthClient | null): ConnectorDe
           timeZone: "UTC",
           items: ids.map((id) => ({ id })),
         });
-        if (res.status !== 200)
-          throw new ConnectorError("bad_response", `Google answered ${res.status} for busy times.`);
+        if (res.status !== 200) throw new ConnectorError("bad_response", "Google would not give the busy times.");
         const calendars = (j.calendars ?? {}) as Record<string, { busy?: { start?: string; end?: string }[] }>;
         for (const id of ids) {
           for (const b of calendars[id]?.busy ?? []) {
@@ -308,6 +380,6 @@ function linkOf(j: Record<string, unknown>, id: string, calendar: string): LinkS
   };
 }
 
-function refused(status: number): ConnectorError {
-  return new ConnectorError("refused", `Google answered ${status} when the booking was written.`);
+function refused(_status: number): ConnectorError {
+  return new ConnectorError("refused", "Google would not take the booking.");
 }

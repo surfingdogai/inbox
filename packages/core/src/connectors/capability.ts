@@ -6,7 +6,7 @@ import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { requireSecretBox, type SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
-import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
+import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
 import { type GalleryCard, gallery } from "./gallery";
@@ -15,7 +15,9 @@ import {
   type Connected,
   type ConnectorDefinition,
   ConnectorError,
+  type ConnectorErrorCode,
   type ConnectorHttp,
+  calendarName,
   describeForm,
   type InboxIdentity,
   type LinkState,
@@ -28,6 +30,8 @@ import {
   claimLink,
   clearBusyStatements,
   dueRetries,
+  instanceId,
+  type LinkClaim,
   type LinkRow,
   liveLinks,
   readLink,
@@ -37,28 +41,46 @@ import {
 } from "./store";
 
 /**
- * Connected platforms (ADR-014, ADR-015, ADR-020): the owner connects, chooses, syncs and
+ * Connected platforms (ADR-014, ADR-015, ADR-022): the owner connects, chooses, syncs and
  * disconnects here; the jobs call `run` every few minutes and after every booking event.
  *
  * The rules that shape it:
  * - **A connector is a row, never a setting** (ADR-015 §1). Credentials are sealed by the secret
  *   box, bound to the row, and no answer of any door ever carries them. Without `INBOX_SECRET_KEY`
  *   nothing is connected (fail closed).
- * - **Connecting is the owner's**: it hands over a password or a sign-in. The owner's AI may list and
- *   sync what is connected, never connect or disconnect it.
+ * - **Connecting is the owner's, in person**: it hands over a password or a sign-in, and what is
+ *   chosen decides which times customers are offered. The owner's AI and a key handed to another
+ *   system may list and sync what is connected, never connect, change or disconnect it.
  * - **Busy times only remove times.** They never move, cancel or refuse a booking already made.
+ *   Past how far ahead a calendar was read, nothing is offered: not known to be free is not free.
  * - **One job at a time per booking calls the platform** (`claimLink`), so two syncs that meet never
  *   write a booking twice, and a run that stopped half way is finished by the next.
  */
 
 export const CONNECTOR_SYNC_KIND = "connector_sync";
 export const CONNECTOR_PUSH_KIND = "connector_push";
+/** The one email to the owner that a connection stopped syncing. */
+export const CONNECTOR_NOTICE_KIND = "connector_notice";
 /** Busy times are read this often; a booking event writes out at once. */
 export const CONNECTOR_SYNC_INTERVAL_MS = 5 * 60_000;
+/** A connection that keeps failing is read less often: at most this far apart for a refused sign-in… */
+const AUTH_BACKOFF_MAX_MS = 6 * 3_600_000;
+/** …and this for a platform that does not answer. */
+const OTHER_BACKOFF_MAX_MS = 30 * 60_000;
+/** A sign-in refused for this long stops being tried until the owner connects again or syncs now. */
+const AUTH_GIVE_UP_MS = 24 * 3_600_000;
+/** A platform that does not answer for this long is told to the owner, like a refused sign-in at once. */
+const NOTICE_AFTER_MS = 2 * 3_600_000;
+const DAY_MS = 86_400_000;
 /** Calendars and event types are read again this often: they change rarely. */
 const REFRESH_EVERY_MS = 6 * 3_600_000;
-/** Bookings changed this long before the cursor are looked at again: writes that landed out of order. */
+/**
+ * Bookings changed this recently are looked at again by the next run: a write stamped a moment
+ * before it landed would otherwise slip behind the cursor. The cursor never passes them until then.
+ */
 const CURSOR_LOOKBACK_MS = 2 * 60_000;
+/** Bookings read per page, first all the confirmed ones still to come, then the ones that changed. */
+const PUSH_PAGE = 200;
 /** Calls to a platform in one run; the rest wait for the next, which is queued at once. */
 const WRITES_PER_RUN = 25;
 /** A sign-in on the platform's page must come back within this. */
@@ -80,6 +102,11 @@ export interface PublicConfig {
   readonly busyOn: boolean;
   readonly bookingsOn: boolean;
   readonly refreshedAt: number;
+  /**
+   * What the owner typed that is not secret (an email, a server address), so connecting again asks
+   * only for the new password or key.
+   */
+  readonly inputs: Readonly<Record<string, string>>;
 }
 
 /** A connection as every door shows it: never a secret. */
@@ -100,14 +127,22 @@ export interface ConnectionView {
   readonly destinations: readonly CalendarChoice[];
   readonly destination: string | null;
   readonly services: readonly string[] | null;
+  /** The busy times still ahead, as read. */
   readonly busy_times: number;
   readonly busy_read_at: number | null;
+  /** How far ahead they were read: past it nothing is offered. */
+  readonly busy_until: number | null;
+  /** Read less far ahead than usual: the calendar had more ahead than one sync reads. */
+  readonly busy_partial: boolean;
   readonly bookings_written: number;
   readonly bookings_failing: number;
   readonly booking_error: string | null;
   readonly last_sync_at: number | null;
   readonly last_error: string | null;
   readonly last_error_at: number | null;
+  /** What kind of failure it is (`auth`: connect again; `unreachable`: it is tried again). */
+  readonly error_code: string | null;
+  readonly failing_since: number | null;
   readonly created_at: number;
 }
 
@@ -123,6 +158,11 @@ export const connectInput = z.object({
   preset: z.string().min(1).max(40).optional(),
   values: z.record(z.string(), z.string().max(4096)).default({}),
   name: z.string().trim().max(80).optional(),
+  /**
+   * Connect this connection again, in place: a new password or key for the same account, with what
+   * was typed before and every choice kept. Only the secret fields need to be given.
+   */
+  connection_id: z.string().min(1).max(64).optional(),
 });
 export type ConnectInput = z.input<typeof connectInput>;
 
@@ -158,9 +198,17 @@ interface ConnectorRow {
   readonly lastSyncAt: number | null;
   readonly busyAt: number | null;
   readonly createdAt: number;
+  readonly busyGen: number | null;
+  readonly busyUntil: number | null;
+  readonly errorCode: string | null;
+  readonly failingSince: number | null;
+  readonly failures: number;
+  readonly notifiedAt: number | null;
 }
 
 export interface RunReport {
+  /** The run read what it set out to (a failing platform, or a run that did not happen, is not). */
+  readonly ok: boolean;
   readonly written: number;
   readonly removed: number;
   readonly failed: number;
@@ -227,20 +275,20 @@ export class ConnectorCapabilities {
     requireOwnerSide(caller);
     const rows = await this.rows();
     const out: ConnectionView[] = [];
-    for (const row of rows) out.push(await this.view(row));
+    for (const row of rows) out.push(await this.view(row, nowOf(caller)));
     return out;
   }
 
   async get(caller: Caller, id: string): Promise<ConnectionView> {
     requireOwnerSide(caller);
-    return this.view(await this.row(id));
+    return this.view(await this.row(id), nowOf(caller));
   }
 
   /* --- connecting with a form ---------------------------------------------- */
 
   async connect(caller: Caller, raw: ConnectInput): Promise<ConnectionView> {
     requireOwnerSide(caller);
-    requireNotAssistant(caller, "connect");
+    requirePerson(caller, "connect");
     const box = requireSecretBox(this.secrets);
     const input = parse(connectInput, raw);
     const def = this.usable(input.kind);
@@ -253,13 +301,23 @@ export class ConnectorCapabilities {
         },
       );
     }
-    const preset = input.preset ? def.presets?.find((p) => p.id === input.preset) : undefined;
-    if (input.preset && !preset) {
-      throw new WriteError("invalid_input", `${def.title} has no way called ${input.preset}`, {
+    // Connecting again in place: the same account, with what was typed the first time.
+    const again = input.connection_id ? await this.row(input.connection_id) : null;
+    if (again && again.kind !== def.kind) {
+      throw new WriteError("invalid_input", `That connection is not a ${def.title} one.`, {
+        fields: [{ path: "connection_id", problem: "invalid", message: "another kind of connection" }],
+      });
+    }
+    const presetId = input.preset ?? again?.config.preset ?? undefined;
+    const preset = presetId ? def.presets?.find((p) => p.id === presetId) : undefined;
+    if (presetId && !preset) {
+      throw new WriteError("invalid_input", `${def.title} has no way called ${presetId}`, {
         fields: [{ path: "preset", problem: "invalid", message: "unknown preset" }],
       });
     }
+    const secret = new Set(secretKeys(def.form));
     const values: Record<string, string> = {};
+    for (const [k, v] of Object.entries(again?.config.inputs ?? {})) if (!secret.has(k)) values[k] = v;
     for (const [k, v] of Object.entries(input.values)) values[k] = v.trim();
     for (const [k, v] of Object.entries(preset?.values ?? {})) values[k] = v;
     // Empty is absent: an optional field the owner left blank is not a value of nothing.
@@ -284,14 +342,29 @@ export class ConnectorCapabilities {
     } catch (error) {
       throw asWriteError(error, def.title);
     }
-    return this.store(def, input.preset ?? null, connected, input.name, now, box);
+    if (again && again.externalId !== connected.externalId) {
+      const first = [...secret][0];
+      throw new WriteError(
+        "invalid_input",
+        `That is another account than ${again.config.account || again.name}. Connect it from its tile instead.`,
+        {
+          ...(first
+            ? { fields: [{ path: `values.${first}`, problem: "invalid" as const, message: "another account" }] }
+            : {}),
+        },
+      );
+    }
+    // Kept for connecting again: what the owner typed that is not a secret, nor fixed by the preset.
+    const inputs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) if (!secret.has(k) && !(k in (preset?.values ?? {}))) inputs[k] = v;
+    return this.store(def, presetId ?? null, connected, input.name, now, box, again !== null, inputs);
   }
 
   /* --- connecting by signing in on the platform (OAuth with PKCE) ---------- */
 
   async authorize(caller: Caller, raw: AuthorizeInput, origin: string): Promise<{ authorize_url: string }> {
     requireOwnerSide(caller);
-    requireNotAssistant(caller, "connect");
+    requirePerson(caller, "connect");
     const box = requireSecretBox(this.secrets);
     const input = parse(authorizeInput, raw);
     const def = this.usable(input.kind);
@@ -397,7 +470,7 @@ export class ConnectorCapabilities {
 
   async update(caller: Caller, id: string, raw: UpdateConnectionInput): Promise<ConnectionView> {
     requireOwnerSide(caller);
-    requireNotAssistant(caller, "change");
+    requirePerson(caller, "change");
     const input = parse(updateConnectionInput, raw);
     const row = await this.row(id);
     const now = nowOf(caller);
@@ -468,7 +541,7 @@ export class ConnectorCapabilities {
       );
     }
     if (statements.length > 0) await this.db.batch(statements);
-    return this.view(await this.row(id));
+    return this.view(await this.row(id), now);
   }
 
   async syncNow(caller: Caller, id: string): Promise<{ queued: true; connection_id: string }> {
@@ -487,7 +560,7 @@ export class ConnectorCapabilities {
    */
   async remove(caller: Caller, id: string): Promise<{ removed: true; left_in_calendar: number }> {
     requireOwnerSide(caller);
-    requireNotAssistant(caller, "disconnect");
+    requirePerson(caller, "disconnect");
     const row = await this.row(id);
     const now = nowOf(caller);
     const left = (await liveLinks(this.db, row.id)).length;
@@ -517,19 +590,28 @@ export class ConnectorCapabilities {
   async run(connectorId: string, now: number, mode: "sync" | "push"): Promise<RunReport | null> {
     const row = await this.rowOrNull(connectorId);
     if (!row) return null;
-    if (row.status === "disabled") {
-      return { written: 0, removed: 0, failed: 0, busy: null, more: false, note: "paused" };
-    }
+    const idle = (note: string, ok = false): RunReport => ({
+      ok,
+      written: 0,
+      removed: 0,
+      failed: 0,
+      busy: null,
+      more: false,
+      note,
+    });
+    if (row.status === "disabled") return idle("paused");
     const def = this.definitions.get(row.kind);
-    if (!def || !this.http || !this.secrets) {
-      return { written: 0, removed: 0, failed: 0, busy: null, more: false, note: "not available on this instance" };
-    }
+    if (!def || !this.http || !this.secrets) return idle("not available on this instance");
     let ctx: RunContext;
     try {
       ctx = await this.runContext(row, now);
     } catch {
-      await this.markError(row.id, "The saved credentials cannot be opened here. Connect it again.", now);
-      return { written: 0, removed: 0, failed: 0, busy: null, more: false, note: "credentials do not open" };
+      await this.markError(
+        row,
+        { code: "config", message: "The saved credentials cannot be opened here. Connect it again." },
+        now,
+      );
+      return idle("credentials do not open");
     }
 
     let push = { written: 0, removed: 0, failed: 0, more: false };
@@ -537,10 +619,16 @@ export class ConnectorCapabilities {
       push = await this.pushBookings(row, def, ctx, now);
     }
     if (mode === "push") {
-      return { ...push, busy: null, note: `${push.written} written, ${push.removed} removed, ${push.failed} failed` };
+      return {
+        ok: true,
+        ...push,
+        busy: null,
+        note: `${push.written} written, ${push.removed} removed, ${push.failed} failed`,
+      };
     }
 
     let busy: number | null = null;
+    let truncated = false;
     try {
       if (def.refresh && now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS) {
         const fresh = await def.refresh(ctx);
@@ -559,26 +647,36 @@ export class ConnectorCapabilities {
         });
       }
       if (row.config.busyOn && def.busy && def.capabilities.includes("busy_times")) {
-        // The owner's own bookings written since this run began are left out too.
-        const own = await this.ownEvents(row.id);
-        const intervals = await def.busy({ ...ctx, own }, { start: now - 3_600_000, end: now + BUSY_HORIZON_MS });
-        busy = (await writeBusy(this.db, row.id, intervals, now)).rows;
+        // Every booking any connection wrote is left out, the ones written since this run began too.
+        const own = await this.ownEvents();
+        const window = { start: now - 3_600_000, end: now + BUSY_HORIZON_MS };
+        const read = await def.busy({ ...ctx, own }, window);
+        const intervals = Array.isArray(read) ? read : read.intervals;
+        const until = Array.isArray(read) ? window.end : Math.max(window.start, Math.min(window.end, read.until));
+        const written = await writeBusy(this.db, row.id, intervals, now, until);
+        busy = written.rows;
+        truncated = written.truncated || written.until < window.end;
+      } else if (!row.config.busyOn && row.busyGen !== null) {
+        // Switched off while a sync was reading: whatever it left is taken away again.
+        await this.db.batch(clearBusyStatements(row.id));
       }
       await this.db.client.query({
         sql: `UPDATE connectors SET status = CASE WHEN status = 'disabled' THEN status ELSE 'active' END,
-                     last_sync_at = ?, last_error = NULL, last_error_at = NULL, updated_at = ? WHERE id = ?`,
+                     last_sync_at = ?, last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL,
+                     failures = 0, notified_at = NULL, updated_at = ? WHERE id = ?`,
         params: [now, now, row.id],
         method: "run",
       });
     } catch (error) {
       if (!(error instanceof ConnectorError)) throw error;
-      await this.markError(row.id, error.message, now);
-      return { ...push, busy: null, note: error.message };
+      await this.markError(row, error, now);
+      return { ok: false, ...push, busy: null, note: error.message };
     }
     return {
+      ok: true,
       ...push,
       busy,
-      note: `${busy ?? 0} busy, ${push.written} written, ${push.removed} removed, ${push.failed} failed`,
+      note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed`,
     };
   }
 
@@ -588,9 +686,26 @@ export class ConnectorCapabilities {
     return row !== null && row.status !== "disabled";
   }
 
+  /**
+   * How long until the next sync: five minutes, longer for a connection that keeps failing (twice as
+   * long each time, at most six hours for a refused sign-in and half an hour otherwise), and null for
+   * a sign-in refused for a day, which is tried again only when the owner connects again or syncs now.
+   * Nextcloud and Apple count failed sign-ins, and every hosted inbox calls from the same address.
+   */
+  async nextSyncDelay(connectorId: string, now: number): Promise<number | null> {
+    const row = await this.rowOrNull(connectorId);
+    if (row?.status !== "error") return CONNECTOR_SYNC_INTERVAL_MS;
+    const doubled = CONNECTOR_SYNC_INTERVAL_MS * 2 ** Math.min(Math.max(row.failures - 1, 0), 10);
+    if (row.errorCode === "auth" || row.errorCode === "config") {
+      if (row.failingSince !== null && now - row.failingSince > AUTH_GIVE_UP_MS) return null;
+      return Math.min(doubled, AUTH_BACKOFF_MAX_MS);
+    }
+    return Math.min(doubled, OTHER_BACKOFF_MAX_MS);
+  }
+
   /** The successor of a sync, queued before the run itself so a failing platform never ends the chain. */
-  async scheduleNext(connectorId: string, now: number): Promise<void> {
-    const next = now + CONNECTOR_SYNC_INTERVAL_MS;
+  async scheduleNext(connectorId: string, now: number, delayMs: number = CONNECTOR_SYNC_INTERVAL_MS): Promise<void> {
+    const next = now + delayMs;
     await ensureJob(
       this.db,
       CONNECTOR_SYNC_KIND,
@@ -603,6 +718,14 @@ export class ConnectorCapabilities {
     );
   }
 
+  /**
+   * The bookings to write out, in two passes that share one budget of calls: first every confirmed
+   * booking still to come (once, when the connection is new), page by page in (start, id) order; then
+   * the bookings that changed, themselves or their customer, in (time, id) order. The cursor keeps
+   * both places and moves forward only past what was done: never past a booking another job holds,
+   * nor past one changed in the last two minutes (a write stamped a moment before it landed). The
+   * answer says whether there is more to do now.
+   */
   private async pushBookings(
     row: ConnectorRow,
     def: ConnectorDefinition,
@@ -611,144 +734,202 @@ export class ConnectorCapabilities {
   ): Promise<{ written: number; removed: number; failed: number; more: boolean }> {
     const writer = def.bookings;
     if (!writer) return { written: 0, removed: 0, failed: 0, more: false };
-    const cursor = row.cursor === null ? Number.NaN : Number(row.cursor);
-    const ids: string[] = [];
-    let newest = Number.isFinite(cursor) ? cursor : 0;
+    const before = row.cursor;
+    const cursor = parseCursor(before, now);
+    const counts = { calls: 0, written: 0, removed: 0, failed: 0 };
     let more = false;
-    if (!Number.isFinite(cursor)) {
-      // The first run: every confirmed booking still to come goes into the calendar.
-      const { rows } = await this.db.client.query({
-        sql: `SELECT id, updated_at FROM items WHERE type = 'booking' AND state = 'confirmed' AND end_at > ?
-               ORDER BY start_at LIMIT 500`,
-        params: [Math.floor(now / 1000)],
-        method: "all",
-      });
-      for (const r of rows) ids.push(String(r[0]));
-      newest = now;
-      more = rows.length === 500;
-    } else {
-      const since = cursor - CURSOR_LOOKBACK_MS;
-      const { rows } = await this.db.client.query({
-        sql: `SELECT i.id, MAX(i.updated_at, COALESCE(p.updated_at, 0)) AS changed FROM items i
-                LEFT JOIN parties p ON p.id = i.party_id
-               WHERE i.type = 'booking' AND (i.updated_at >= ? OR p.updated_at >= ?)
-               ORDER BY changed LIMIT 200`,
-        params: [since, since],
-        method: "all",
-      });
-      for (const r of rows) {
-        ids.push(String(r[0]));
-        newest = Math.max(newest, Number(r[1]));
-      }
-      more = rows.length === 200;
-    }
-    for (const id of await dueRetries(this.db, row.id, now, 50)) if (!ids.includes(id)) ids.push(id);
+    let progressed = false;
+    const one = async (itemId: string): Promise<"held" | "done"> => {
+      const outcome = await this.reconcileOne(row, writer, ctx, itemId, now);
+      if (outcome === "held") return "held";
+      if (outcome === "none" || outcome === "lost") return "done";
+      counts.calls++;
+      if (outcome === "written") counts.written++;
+      else if (outcome === "removed") counts.removed++;
+      else counts.failed++;
+      return "done";
+    };
 
-    let calls = 0;
-    let written = 0;
-    let removed = 0;
-    let failed = 0;
-    for (const itemId of ids) {
-      if (calls >= WRITES_PER_RUN) {
+    // 1. A new connection: every confirmed booking still to come goes into the calendar.
+    if (cursor.fill) {
+      const { rows } = await this.db.client.query({
+        sql: `SELECT id, start_at FROM items
+               WHERE type = 'booking' AND state = 'confirmed' AND end_at > ?
+                 AND (COALESCE(start_at, '') > ? OR (COALESCE(start_at, '') = ? AND id > ?))
+               ORDER BY COALESCE(start_at, ''), id LIMIT ?`,
+        params: [Math.floor(now / 1000), cursor.fill.s, cursor.fill.s, cursor.fill.i, PUSH_PAGE],
+        method: "all",
+      });
+      let blocked = false;
+      let all = true;
+      for (const r of rows) {
+        if (counts.calls >= WRITES_PER_RUN) {
+          all = false;
+          break;
+        }
+        const id = String(r[0]);
+        if ((await one(id)) === "held") blocked = true;
+        if (!blocked) {
+          cursor.fill = { s: String(r[1] ?? ""), i: id };
+          progressed = true;
+        }
+      }
+      if (!all || rows.length === PUSH_PAGE || blocked) more = true;
+      else cursor.fill = null;
+    }
+
+    // 2. What changed since the last look, while the budget lasts.
+    if (counts.calls < WRITES_PER_RUN) {
+      const since = cursor.c;
+      const { rows } = await this.db.client.query({
+        sql: `SELECT id, MAX(changed) AS changed FROM (
+                SELECT id, updated_at AS changed FROM items WHERE type = 'booking' AND updated_at >= ?
+                UNION ALL
+                SELECT i.id, p.updated_at AS changed FROM parties p JOIN items i ON i.party_id = p.id AND i.type = 'booking'
+                 WHERE p.updated_at >= ?
+              ) GROUP BY id
+              HAVING MAX(changed) > ? OR (MAX(changed) = ? AND id > ?)
+              ORDER BY MAX(changed), id LIMIT ?`,
+        params: [since, since, since, since, cursor.i, PUSH_PAGE],
+        method: "all",
+      });
+      const settled = now - CURSOR_LOOKBACK_MS;
+      let blocked = false;
+      let all = true;
+      for (const r of rows) {
+        if (counts.calls >= WRITES_PER_RUN) {
+          all = false;
+          break;
+        }
+        const id = String(r[0]);
+        const changed = Number(r[1]);
+        if ((await one(id)) === "held") blocked = true;
+        if (!blocked && changed <= settled) {
+          cursor.c = changed;
+          cursor.i = id;
+          progressed = true;
+        }
+      }
+      if (!all || rows.length === PUSH_PAGE) more = true;
+    } else {
+      more = true;
+    }
+
+    for (const id of await dueRetries(this.db, row.id, now, 50)) {
+      if (counts.calls >= WRITES_PER_RUN) {
         more = true;
         break;
       }
-      const outcome = await this.reconcileOne(row, writer, ctx, itemId, now);
-      if (outcome === "none") continue;
-      calls++;
-      if (outcome === "written") written++;
-      else if (outcome === "removed") removed++;
-      else failed++;
+      await one(id);
     }
-    // Forward only: two runs that meet never move the cursor back.
-    if (calls < WRITES_PER_RUN && newest > 0) {
+
+    const after = JSON.stringify(cursor);
+    if (after !== before) {
+      // Compare and set: two runs that meet never move the cursor back; the one that loses does its
+      // part again next time, which writes nothing twice.
       await this.db.client.query({
-        sql: "UPDATE connectors SET cursor = ? WHERE id = ? AND (cursor IS NULL OR CAST(cursor AS INTEGER) < ?)",
-        params: [String(newest), row.id, newest],
+        sql: "UPDATE connectors SET cursor = ? WHERE id = ? AND cursor IS ?",
+        params: [after, row.id, before],
         method: "run",
       });
     }
     if (more) {
-      await ensureJob(this.db, CONNECTOR_PUSH_KIND, `cpush:${row.id}:more:${Math.floor(now / 10_000)}`, {
+      // Straight on when this run got somewhere; when all it met was held or too new, after a pause.
+      const wait = progressed || counts.calls > 0 ? 1_000 : CURSOR_LOOKBACK_MS;
+      await ensureJob(this.db, CONNECTOR_PUSH_KIND, `cpush:${row.id}:more:${Math.floor((now + wait) / 10_000)}`, {
         now,
-        runAt: now + 1_000,
+        runAt: now + wait,
         payload: { connectorId: row.id },
       });
     }
-    return { written, removed, failed, more };
+    return { written: counts.written, removed: counts.removed, failed: counts.failed, more };
   }
 
+  /**
+   * One booking made to match on the platform. `held`: another job holds it now and writes it;
+   * `lost`: this job's claim ran out while it called, and the job that took it over records it.
+   */
   private async reconcileOne(
     row: ConnectorRow,
     writer: NonNullable<ConnectorDefinition["bookings"]>,
     ctx: RunContext,
     itemId: string,
     now: number,
-  ): Promise<"none" | "written" | "removed" | "failed"> {
+  ): Promise<"none" | "held" | "lost" | "written" | "removed" | "failed"> {
     const wanted = await this.outbound(itemId, ctx.inbox.origin);
     const link = await readLink(this.db, row.id, itemId);
-    if (wanted === "keep") return "none";
     if (wanted) {
-      // A booking that ended before it was ever written is history, not something to add now.
-      if (!link && wanted.end < now - 86_400_000) return "none";
-      const hash = await bookingHash(wanted, ctx.destination);
+      const { booking, past } = wanted;
+      // A booking that ended before it was ever written is history, not something to add now, nor a
+      // failure to keep saying.
+      if (booking.end < now - DAY_MS && !link?.externalId) {
+        if (!link || link.state === "removed") return "none";
+        const claim = await claimLink(this.db, row.id, itemId, now);
+        if (!claim) return "held";
+        await settleLink(this.db, claim, { kind: "removed" }, now);
+        return "none";
+      }
+      // One that has happened (completed, a no-show) is never added, and stays where it was written:
+      // it is only written again when its words changed (the customer's name taken off on erasure).
+      if (past && (!link?.externalId || link.state === "removed")) return "none";
+      const at = past ? { ...ctx, destination: link?.calendar ?? ctx.destination } : ctx;
+      const hash = await bookingHash(booking, at.destination);
       if (link && link.state === "synced" && link.syncedHash === hash && !link.lastError) return "none";
       if (link?.lastError && link.retryAt !== null && link.retryAt > now) return "none";
       const claim = await claimLink(this.db, row.id, itemId, now);
-      if (!claim) return "none";
-      const claimed = claim.link;
+      if (!claim) return "held";
       try {
-        let current = stateOf(claimed);
-        // A link that was there before, with no id: an earlier run may have written it and stopped
-        // before it could say so. A connector that cannot choose its ids looks for it first.
-        if (!current && !claim.fresh && writer.find) current = await writer.find(ctx, wanted);
-        const out = await writer.put(ctx, wanted, current);
-        await settleLink(
+        let current = stateOf(claim.link);
+        // No id kept for it: an earlier run may have written it and stopped before it could say so, or
+        // a connection to this account that was disconnected since wrote it. A connector whose
+        // platform chooses the ids looks for it first.
+        if (!current && writer.find) current = await writer.find(at, booking);
+        const out = await writer.put(at, booking, current);
+        const kept = await settleLink(
           this.db,
-          claimed,
+          claim,
           {
             kind: "synced",
             externalId: out.externalId,
             etag: out.etag,
             calendar: out.calendar,
             hash,
-            start: wanted.start,
-            end: wanted.end,
+            start: booking.start,
+            end: booking.end,
           },
           now,
         );
-        return "written";
+        return kept ? "written" : "lost";
       } catch (error) {
-        await this.failLink(claimed, error, now);
+        await this.failLink(claim, error, now);
         return "failed";
       }
     }
     if (!link || link.state === "removed") return "none";
     if (link.lastError && link.retryAt !== null && link.retryAt > now && link.externalId) return "none";
     const claim = await claimLink(this.db, row.id, itemId, now);
-    if (!claim) return "none";
-    const claimed = claim.link;
+    if (!claim) return "held";
     try {
-      let current = stateOf(claimed);
-      if (!current && !claim.fresh && writer.find) {
+      let current = stateOf(claim.link);
+      if (!current && writer.find) {
         const gone = await this.outboundForFind(itemId, ctx.inbox.origin);
         if (gone) current = await writer.find(ctx, gone);
       }
       if (current) await writer.remove(ctx, current);
-      await settleLink(this.db, claimed, { kind: "removed" }, now);
-      return "removed";
+      const kept = await settleLink(this.db, claim, { kind: "removed" }, now);
+      return kept ? "removed" : "lost";
     } catch (error) {
-      await this.failLink(claimed, error, now);
+      await this.failLink(claim, error, now);
       return "failed";
     }
   }
 
-  private async failLink(link: LinkRow, error: unknown, now: number): Promise<void> {
+  private async failLink(claim: LinkClaim, error: unknown, now: number): Promise<void> {
     if (!(error instanceof ConnectorError)) {
       // Our own bug: the claim is let go so the next run tries, and the error is said where it can be read.
       await settleLink(
         this.db,
-        link,
+        claim,
         { kind: "failed", error: `unexpected: ${String((error as Error)?.message ?? error)}`, retryAt: now + 600_000 },
         now,
       );
@@ -756,18 +937,26 @@ export class ConnectorCapabilities {
     }
     await settleLink(
       this.db,
-      link,
-      { kind: "failed", error: error.message, retryAt: now + (error.retryAfterMs ?? retryDelayMs(link.attempts)) },
+      claim,
+      {
+        kind: "failed",
+        error: error.message,
+        retryAt: now + (error.retryAfterMs ?? retryDelayMs(claim.link.attempts)),
+      },
       now,
     );
   }
 
   /**
-   * What a booking should look like on the platform: written while confirmed, left alone once it has
-   * happened (completed, a no-show), and absent otherwise (cancelled, declined, expired, still asked
-   * for). Never a test booking. The title names the customer unless they were erased.
+   * What a booking should look like on the platform: written while confirmed; once it has happened
+   * (completed, a no-show), `past`: left where it is, only its words kept up to date; and absent
+   * otherwise (cancelled, declined, expired, still asked for). Never a test booking. The title names
+   * the customer unless they were erased.
    */
-  private async outbound(itemId: string, origin: string): Promise<OutboundBooking | null | "keep"> {
+  private async outbound(
+    itemId: string,
+    origin: string,
+  ): Promise<{ readonly booking: OutboundBooking; readonly past: boolean } | null> {
     const { rows } = await this.db.client.query({
       sql: `SELECT i.state, i.payload, i.sandbox, p.display_name, p.erased_at, s.name, s.duration_min
               FROM items i LEFT JOIN parties p ON p.id = i.party_id
@@ -780,9 +969,10 @@ export class ConnectorCapabilities {
     if (!r) return null;
     const state = String(r[0]);
     if (Number(r[2] ?? 0) === 1) return null;
-    if (state === "completed" || state === "no_show") return "keep";
-    if (state !== "confirmed") return null;
-    return bookingOf(itemId, r, origin);
+    const past = state === "completed" || state === "no_show";
+    if (state !== "confirmed" && !past) return null;
+    const booking = bookingOf(itemId, r, origin);
+    return booking ? { booking, past } : null;
   }
 
   /** The booking's last words, to find it on a platform after it was cancelled here. */
@@ -825,6 +1015,7 @@ export class ConnectorCapabilities {
     now: number,
     box: SecretBox,
     reconnect = false,
+    inputs?: Readonly<Record<string, string>>,
   ): Promise<ConnectionView> {
     const config: PublicConfig = {
       preset,
@@ -838,6 +1029,7 @@ export class ConnectorCapabilities {
       busyOn: def.capabilities.includes("busy_times"),
       bookingsOn: def.capabilities.includes("write_bookings"),
       refreshedAt: now,
+      inputs: inputs ?? {},
     };
     const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
     const title = name?.trim() || presetLabel || def.title;
@@ -855,12 +1047,15 @@ export class ConnectorCapabilities {
     const id = existingId ?? ulid(now);
     const sealed = await box.seal("connector-config", id, JSON.stringify(connected.secret));
     if (existingId) {
-      // Signing in again with the same account: new credentials, the owner's choices kept.
+      // Connecting again with the same account: new credentials, the owner's choices kept, and the
+      // failing it did forgotten (the sync starts again at its usual pace).
       await this.db.batch([
         {
-          sql: `UPDATE connectors SET config_enc = ?, status = 'configured', last_error = NULL, last_error_at = NULL,
+          sql: `UPDATE connectors SET config_enc = ?, status = CASE WHEN status = 'disabled' THEN status ELSE 'configured' END,
+                       last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL, failures = 0,
+                       notified_at = NULL,
                        config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?), '$.destinations', json(?),
-                       '$.extra', json(?), '$.refreshedAt', ?), updated_at = ? WHERE id = ?`,
+                       '$.extra', json(?), '$.refreshedAt', ?${inputs ? ", '$.inputs', json(?)" : ""}), updated_at = ? WHERE id = ?`,
           params: [
             sealed,
             config.account,
@@ -868,6 +1063,7 @@ export class ConnectorCapabilities {
             JSON.stringify(config.destinations),
             JSON.stringify(config.extra),
             now,
+            ...(inputs ? [JSON.stringify(inputs)] : []),
             now,
             id,
           ],
@@ -875,7 +1071,7 @@ export class ConnectorCapabilities {
         },
         jobStatement(CONNECTOR_SYNC_KIND, { connectorId: id }, now, { dedupeKey: `csync:${id}:r${now}` }),
       ]);
-      return this.view(await this.row(id));
+      return this.view(await this.row(id), now);
     }
     try {
       await this.db.batch([
@@ -894,7 +1090,7 @@ export class ConnectorCapabilities {
       }
       throw error;
     }
-    return this.view(await this.row(id));
+    return this.view(await this.row(id), now);
   }
 
   private async connectContext(now: number): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity }> {
@@ -920,6 +1116,7 @@ export class ConnectorCapabilities {
       host = "";
     }
     return {
+      id: await instanceId(this.db, Date.now()),
       origin,
       host: host || "inbox.invalid",
       name: facts.name || "Inbox",
@@ -944,7 +1141,8 @@ export class ConnectorCapabilities {
       busyCalendars: row.config.busyCalendars ?? [],
       destinations: row.config.destinations ?? [],
       destination: row.config.destination ?? null,
-      own: await this.ownEvents(row.id),
+      own: await this.ownEvents(),
+      marker: await markerOf(box, row.kind, row.externalId ?? row.id),
       async saveSecret(next) {
         await db.client.query({
           sql: "UPDATE connectors SET config_enc = ? WHERE id = ?",
@@ -955,8 +1153,13 @@ export class ConnectorCapabilities {
     };
   }
 
-  private async ownEvents(connectorId: string): Promise<RunContext["own"]> {
-    const links = await liveLinks(this.db, connectorId);
+  /**
+   * What this inbox wrote on any platform: every connection's bookings, not only this one's. Cal.com
+   * writes the bookings it is given into a calendar the owner may have connected here as well, and
+   * two calendars can show each other's events; a booking is never busy against itself.
+   */
+  private async ownEvents(): Promise<RunContext["own"]> {
+    const links = await liveLinks(this.db);
     return {
       ids: new Set(links.map((l) => l.externalId).filter((v): v is string => v !== null)),
       spans: links
@@ -965,13 +1168,49 @@ export class ConnectorCapabilities {
     };
   }
 
-  private async markError(id: string, message: string, now: number): Promise<void> {
+  /**
+   * A sync that failed: said on the row, counted (the sync backs off on it), and told to the owner
+   * once — at once when the platform refused the sign-in or what was given cannot work, after two
+   * hours when it does not answer — until it works again.
+   */
+  private async markError(
+    row: ConnectorRow,
+    error: { readonly code: ConnectorErrorCode; readonly message: string },
+    now: number,
+  ): Promise<void> {
     await this.db.client.query({
       sql: `UPDATE connectors SET status = CASE WHEN status = 'disabled' THEN status ELSE 'error' END,
-                   last_error = ?, last_error_at = ?, updated_at = ? WHERE id = ?`,
-      params: [message.slice(0, 500), now, now, id],
+                   last_error = ?, last_error_at = ?, error_code = ?, failing_since = COALESCE(failing_since, ?),
+                   failures = failures + 1, updated_at = ? WHERE id = ?`,
+      params: [error.message.slice(0, 500), now, error.code, now, now, row.id],
       method: "run",
     });
+    const after = await this.rowOrNull(row.id);
+    if (after?.status !== "error" || after.notifiedAt !== null) return;
+    const since = after.failingSince ?? now;
+    const tell = error.code === "auth" || error.code === "config" || now - since >= NOTICE_AFTER_MS;
+    if (!tell) return;
+    const claimed = await this.db.client.query({
+      sql: "UPDATE connectors SET notified_at = ? WHERE id = ? AND notified_at IS NULL",
+      params: [now, row.id],
+      method: "run",
+    });
+    if (claimed.changes !== 1) return;
+    await this.db.batch([
+      jobStatement(CONNECTOR_NOTICE_KIND, { connectorId: row.id }, now, { dedupeKey: `cnotice:${row.id}:${since}` }),
+    ]);
+  }
+
+  /**
+   * The words of the one email that says a connection stopped syncing, or null when it works again
+   * (or is gone) by the time the email would go.
+   */
+  async failingNotice(connectorId: string): Promise<{ readonly title: string; readonly error: string } | null> {
+    const row = await this.rowOrNull(connectorId);
+    if (row?.status !== "error") return null;
+    const def = this.definitions.get(row.kind);
+    const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    return { title: calendarName(row.name || presetLabel || def?.title || row.kind), error: row.lastError ?? "" };
   }
 
   private async rows(): Promise<ConnectorRow[]> {
@@ -999,13 +1238,13 @@ export class ConnectorCapabilities {
     return row;
   }
 
-  private async view(row: ConnectorRow): Promise<ConnectionView> {
+  private async view(row: ConnectorRow, now: number): Promise<ConnectionView> {
     const def = this.definitions.get(row.kind);
     const [busy, links] = await Promise.all([
       this.db.client.query({
         sql: `SELECT COUNT(*) FROM connector_busy b JOIN connectors c ON c.id = b.connector_id AND b.gen = c.busy_gen
-               WHERE b.connector_id = ?`,
-        params: [row.id],
+               WHERE b.connector_id = ? AND b.end_ms > ?`,
+        params: [row.id, now],
         method: "all",
       }),
       this.db.client.query({
@@ -1038,12 +1277,17 @@ export class ConnectorCapabilities {
       services: row.config.services ?? null,
       busy_times: Number(busy.rows[0]?.[0] ?? 0),
       busy_read_at: row.busyAt,
+      busy_until: row.busyUntil,
+      busy_partial:
+        row.busyUntil !== null && row.busyAt !== null && row.busyUntil < row.busyAt + BUSY_HORIZON_MS - 60_000,
       bookings_written: Number(l[0] ?? 0),
       bookings_failing: Number(l[1] ?? 0),
       booking_error: l[2] === null || l[2] === undefined ? null : String(l[2]),
       last_sync_at: row.lastSyncAt,
       last_error: row.lastError,
       last_error_at: row.lastErrorAt,
+      error_code: row.errorCode,
+      failing_since: row.failingSince,
       created_at: row.createdAt,
     };
   }
@@ -1072,7 +1316,7 @@ export function connectorLane(payload: unknown): string | undefined {
 }
 
 const ROW_COLUMNS =
-  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at";
+  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at";
 
 function rowOf(r: readonly unknown[]): ConnectorRow {
   let config: unknown = r[5];
@@ -1098,6 +1342,12 @@ function rowOf(r: readonly unknown[]): ConnectorRow {
     lastSyncAt: n(r[10]),
     busyAt: n(r[11]),
     createdAt: Number(r[12]),
+    busyGen: n(r[13]),
+    busyUntil: n(r[14]),
+    errorCode: r[15] === null || r[15] === undefined ? null : String(r[15]),
+    failingSince: n(r[16]),
+    failures: Number(r[17] ?? 0),
+    notifiedAt: n(r[18]),
   };
 }
 
@@ -1115,6 +1365,10 @@ function normaliseConfig(raw: unknown): PublicConfig {
     busyOn: c.busyOn !== false,
     bookingsOn: c.bookingsOn !== false,
     refreshedAt: typeof c.refreshedAt === "number" ? c.refreshedAt : 0,
+    inputs:
+      c.inputs && typeof c.inputs === "object"
+        ? Object.fromEntries(Object.entries(c.inputs).filter(([, v]) => typeof v === "string"))
+        : {},
   };
 }
 
@@ -1176,14 +1430,27 @@ export function callbackPath(kind: string): string {
   return `/oauth/connect/${encodeURIComponent(kind)}/callback`;
 }
 
-/** A path in the owner app, or Settings → Integrations: never an address on another site. */
+/**
+ * A path in the owner app, or Settings → Integrations: never an address on another site. The path is
+ * resolved the way a browser would (`/.//evil.example` becomes `//evil.example`, another site) and
+ * kept only when it stays here.
+ */
 export function safeReturnPath(raw: string | undefined): string {
+  const fallback = "/settings/integrations";
   const path = (raw ?? "").trim();
   const control = [...path].some((ch) => (ch.codePointAt(0) ?? 0) < 0x20);
-  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || control) {
-    return "/settings/integrations";
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || control) return fallback;
+  let url: URL;
+  try {
+    url = new URL(path, "https://inbox.invalid");
+  } catch {
+    return fallback;
   }
-  return path.slice(0, 200);
+  if (url.origin !== "https://inbox.invalid" || url.pathname.startsWith("//") || url.pathname.includes("\\")) {
+    return fallback;
+  }
+  const kept = `${url.pathname}${url.search}`;
+  return kept.length > 200 ? fallback : kept;
 }
 
 function asWriteError(error: unknown, title: string): WriteError {
@@ -1209,16 +1476,66 @@ function requireOwnerSide(caller: Caller): void {
 }
 
 /**
- * Connecting hands over a password or a sign-in, and disconnecting changes what customers can book:
- * the owner does both in Settings. Their AI may read what is connected and sync it, nothing more.
+ * Connecting hands over a password or a sign-in, and what is chosen (or switched off, or
+ * disconnected) changes what customers can book: the owner does it, in person, in Settings. Their AI
+ * and a key handed to another system may read what is connected and sync it, nothing more.
  */
-function requireNotAssistant(caller: Caller, verb: string): void {
-  if (!isOwnerAssistant(caller)) return;
+function requirePerson(caller: Caller, verb: string): void {
+  if (isPerson(caller)) return;
+  if (isOwnerAssistant(caller)) {
+    throw new WriteError(
+      "not_allowed",
+      `A connection holds the owner's password or sign-in, so you cannot ${verb} one. Tell the owner in a note; they do it in Settings → Integrations.`,
+      { details: { reason: "owner_credentials", draft_for_owner: true } },
+    );
+  }
   throw new WriteError(
     "not_allowed",
-    `A connection holds the owner's password or sign-in, so you cannot ${verb} one. Tell the owner in a note; they do it in Settings → Integrations.`,
-    { details: { reason: "owner_credentials", draft_for_owner: true } },
+    `A connection holds the owner's password or sign-in, so a key cannot ${verb} one. The owner does it in Settings → Integrations.`,
+    { details: { reason: "owner_credentials" } },
   );
+}
+
+/**
+ * The mark a connector puts on what it writes where the platform chooses the ids: an HMAC under the
+ * instance key of the platform and the account, so it is the same after connecting that account
+ * again, and nobody without the key can make it.
+ */
+async function markerOf(box: SecretBox, kind: string, account: string): Promise<string> {
+  const key = await box.mac("connector-marker");
+  const mac = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${kind}:${account}`) as BufferSource),
+  );
+  return [...mac.slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+interface PushCursor {
+  /**
+   * Where the first pass is, through the confirmed bookings still to come (`items.start_at`, the
+   * start as the booking gives it, and the id after it); null once it is done.
+   */
+  fill: { s: string; i: string } | null;
+  /** Where the second pass is, through the bookings that changed: a time and the id after it. */
+  c: number;
+  i: string;
+}
+
+/** The cursor as a run reads it: a new connection starts with the first pass, changes from now. */
+function parseCursor(raw: string | null, now: number): PushCursor {
+  const fresh = { fill: { s: "", i: "" }, c: now - CURSOR_LOOKBACK_MS, i: "" };
+  if (raw === null) return fresh;
+  if (/^\d+$/.test(raw)) return { fill: null, c: Number(raw), i: "" };
+  try {
+    const j = JSON.parse(raw) as { fill?: unknown; c?: unknown; i?: unknown };
+    const fill = j.fill as { s?: unknown; i?: unknown } | null | undefined;
+    const okFill = fill === null || (typeof fill?.s === "string" && typeof fill?.i === "string");
+    if (typeof j.c === "number" && typeof j.i === "string" && okFill) {
+      return { fill: fill ? { s: String(fill.s), i: String(fill.i) } : null, c: j.c, i: j.i };
+    }
+  } catch {
+    // Unreadable: start again from the beginning, which writes nothing that is already written.
+  }
+  return fresh;
 }
 
 function toBase64Url(bytes: Uint8Array): string {
