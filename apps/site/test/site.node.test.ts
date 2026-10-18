@@ -1188,3 +1188,35 @@ describe("the track record", () => {
     }
   });
 });
+
+describe("what the directory and the connector claim", () => {
+  it("/directory shows members first, labels found entries with what was found and when, and links a manifest only when there is one", () => {
+    const page = read("src/pages/directory.astro");
+    const text = visible(page);
+    expect(text).not.toContain("Each business here proved it owns its domain");
+    expect(page).toContain('page("source=member&limit=100")');
+    // "Found by our crawler" lists what the crawler found, never a business that registered itself.
+    expect(page).toContain('page("source=found&limit=50")');
+    expect(page).not.toContain("source=registered,found");
+    expect(page.indexOf('page("source=member')).toBeLessThan(page.indexOf('page("source=found'));
+    expect(page).toContain("found.note");
+    expect(text).toContain("Found by our crawler");
+    expect(text).toContain("These are not members and run no inbox with us.");
+    // No manifest URL made up for a business that has none.
+    expect(page).not.toContain("/.well-known/agent-inbox.json`");
+    expect(page).toContain('if (typeof b.manifest_url === "string" && b.manifest_url) manifest.href = b.manifest_url;');
+    expect(page).toContain("else manifest.remove();");
+  });
+
+  it("says the connector finds and links, and never that it books, orders or lists verified businesses", () => {
+    for (const path of [
+      "src/pages/assistants/index.astro",
+      "src/pages/assistants/[slug].astro",
+      "src/pages/index.astro",
+    ]) {
+      const text = visible(read(path));
+      expect(text, path).toMatch(/finds and links/);
+      expect(text, path).not.toMatch(/verified businesses/);
+    }
+  });
+});

@@ -4,7 +4,7 @@
 // an offer before the service works; `astro dev` still shows them, for review.
 import { type CollectionEntry, getCollection, render } from "astro:content";
 import Layout from "../../layouts/Layout.astro";
-import { HOSTED_PILOT_OPEN } from "../../lib/hosted";
+import { HOSTED_CTA, HOSTED_PILOT_OPEN } from "../../lib/hosted";
 
 export async function getStaticPaths() {
   if (!HOSTED_PILOT_OPEN && !import.meta.env.DEV) return [];
@@ -26,6 +26,18 @@ const isTerms = page.id !== "index";
     <p class="eyebrow">{page.data.eyebrow}</p>
     <h1 class="h-page" id="hosted-h">{page.data.title}</h1>
     <p class="lede">{page.data.description}</p>
+    {
+      !isTerms && HOSTED_CTA && (
+        <div class="hero-actions hosted-cta">
+          <a class="btn btn-primary" href={HOSTED_CTA.href}>
+            {HOSTED_CTA.label}
+          </a>
+          <a class="btn btn-secondary" href="/check">
+            Check your website first
+          </a>
+        </div>
+      )
+    }
     {
       isTerms && (
         <p class="fine">Last updated {page.data.updated}. Surfing Dog Lda, Portugal. Questions: hello@surfingdog.ai</p>
@@ -70,6 +82,9 @@ const isTerms = page.id !== "index";
 </Layout>
 
 <style>
+  .hosted-cta {
+    margin-top: var(--sp-5);
+  }
   .hosted-nav {
     margin-top: var(--sp-6);
     padding-top: var(--sp-4);

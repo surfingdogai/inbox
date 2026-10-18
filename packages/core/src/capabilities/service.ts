@@ -1351,10 +1351,12 @@ export class Capabilities {
     // A write sent against another version than the one stored is refused here, before anything is
     // merged: the merge and every check below read this row, so only this row may be replaced. Taking
     // the version the caller named instead would let a write that raced in between (the host's own,
-    // switching something off) be overwritten by a document merged without it.
-    if (row && input.expected_version !== undefined && input.expected_version !== row.version) {
+    // switching something off) be overwritten by a document merged without it. Nothing stored is
+    // version 0, as a read says, so a first write may name 0 and a second write naming 0 is stale.
+    const current = row?.version ?? 0;
+    if (input.expected_version !== undefined && input.expected_version !== current) {
       throw new WriteError("version_conflict", "settings changed since you read them", {
-        details: { currentVersion: row.version },
+        details: { currentVersion: current },
       });
     }
     const stored = row && isPlainObject(row.doc) ? row.doc : {};

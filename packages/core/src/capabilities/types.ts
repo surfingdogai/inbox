@@ -465,9 +465,11 @@ export const updateSettingsInput = z.object({
   expected_version: z
     .number()
     .int()
-    .min(1)
+    .min(0)
     .optional()
-    .describe("The version you read; a write over a newer version is refused instead of overwriting it."),
+    .describe(
+      "The version you read: 0 while nothing has been written yet, as get_settings says. A write over another version is refused instead of overwriting it.",
+    ),
 });
 
 export type ListServicesInput = z.infer<typeof listServicesInput>;

@@ -279,20 +279,25 @@ const ADDRESS_HEADERS = /^(from|sender|reply-to|return-path|to|cc|bcc|resent-[a-
  * - Headers that name a sender or a recipient are left out, and the rest are each kept to one line.
  *
  * `sender` is the pinned address, so a message that names none (the owner's sign-in link) goes from
- * it too, and `pinned` tells the inbox its email is from here. What the inner transport says of
- * itself (`delivers`) and its hooks (`allowCustomerMail`, `beforeSend`) are kept.
+ * it too, and `pinned` tells the inbox its email is from here. `replies` says whether a reply reaches
+ * anyone: with a Reply-To it does; without one it goes back to `from.address`, which reaches someone
+ * only when `fromTakesReplies` says that address takes mail. What the inner transport says of itself
+ * (`delivers`) and its hooks (`allowCustomerMail`, `beforeSend`) are kept.
  */
 export function pinnedMailOut(
   inner: MailOut,
   pin: {
     readonly from: { readonly address: string; readonly name?: string | undefined };
     readonly replyTo?: string | undefined;
+    /** The pinned address takes mail: a reply to it, with no Reply-To, reaches someone. */
+    readonly fromTakesReplies?: boolean | undefined;
   },
 ): MailOut {
   const sender = pin.from.name ? { address: pin.from.address, name: pin.from.name } : { address: pin.from.address };
   return {
     sender,
     pinned: true,
+    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true,
     ...(inner.delivers === false ? { delivers: false } : {}),
     ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
     ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),

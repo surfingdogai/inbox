@@ -342,6 +342,16 @@ describe("a pinned sender", () => {
     expect(out.sender).toEqual({ address: "oficina-mare@mail.example.net" });
   });
 
+  it("says whether a reply reaches anyone: with a Reply-To, or from an address that takes mail", () => {
+    const log = logMailOut();
+    const from = { address: "bike-workshop@mail.example.net" };
+    expect(pinnedMailOut(log, { from }).replies).toBe(false);
+    expect(pinnedMailOut(log, { from, replyTo: "hello@bikeworkshop.example" }).replies).toBe(true);
+    expect(pinnedMailOut(log, { from, fromTakesReplies: true }).replies).toBe(true);
+    // A transport that pins nothing says nothing: a reply is taken to reach the business.
+    expect(log.replies).toBeUndefined();
+  });
+
   // The name the message carries is the business's, which the owner, or a key with settings:write,
   // types: it must never read as another address, nor break into a header of its own.
   it("keeps a name it is given to a name on one line, and every header to one line", async () => {

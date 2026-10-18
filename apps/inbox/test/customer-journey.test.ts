@@ -270,7 +270,8 @@ describe("a customer, end to end", () => {
     expect(proposal?.mail.subject).toMatch(/Full service/);
     expect(text).toMatch(/^Hello Rita,/);
     expect(text).toMatch(/at 1[34]:00 \((Western European[^)]*|GMT\+1|WEST|WET)\)/);
-    expect(text).toMatch(/at 1[01]:00 \(/); // what they asked for, 09:00 UTC in Lisbon
+    // What they asked for, 09:00 UTC in the business's zone: 10:00 in summer time, 09:00 after it ends.
+    expect(text).toMatch(/at (09|10):00 \(/);
     expect(text).toContain("€45.00");
     expect(text).toMatch(/[Aa]nswer by|[Rr]eply by|until/);
     const links = linksIn(text);

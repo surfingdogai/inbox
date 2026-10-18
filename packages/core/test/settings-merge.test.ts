@@ -1,6 +1,7 @@
 import { runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
+import { updateSettingsInput } from "../src/capabilities/types";
 import { createDb, type Db } from "../src/db";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { DEFAULT_NETWORK, enabledNetworks, readSettings } from "../src/settings/schema";
@@ -158,6 +159,26 @@ describe("settings writes", () => {
       code: "invalid_input",
       fields: [{ path: "doc.netwroks", problem: "invalid", message: "not a setting" }],
     });
+  });
+
+  it("take expected_version 0 for a first write, as a read before any write says, and refuse it after", async () => {
+    const { caps } = await setup();
+    expect((await caps.getSettings(owner)).version).toBe(0);
+    const first = await caps.updateSettings(owner, { doc: { business: { name: "A" } }, expected_version: 0 });
+    expect(first.version).toBe(1);
+    await expect(
+      caps.updateSettings(owner, { doc: { business: { name: "B" } }, expected_version: 0 }),
+    ).rejects.toMatchObject({ code: "version_conflict", details: { currentVersion: 1 } });
+    // The wire takes 0 and nothing below it.
+    expect(updateSettingsInput.safeParse({ doc: {}, expected_version: 0 }).success).toBe(true);
+    expect(updateSettingsInput.safeParse({ doc: {}, expected_version: -1 }).success).toBe(false);
+  });
+
+  it("refuse a version named when nothing was written yet", async () => {
+    const { caps } = await setup();
+    await expect(
+      caps.updateSettings(owner, { doc: { business: { name: "A" } }, expected_version: 1 }),
+    ).rejects.toMatchObject({ code: "version_conflict", details: { currentVersion: 0 } });
   });
 
   it("still refuse a stale expected_version", async () => {

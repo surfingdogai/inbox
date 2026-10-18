@@ -5,7 +5,10 @@ Spec 0.3 adds, all of it optional for a network and none of it read by an inbox,
 agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3). Spec 0.4
 adds, optional for a network, door reports (§4.15): agents say how each use of a door went, and the
 business sees it in its signed ping's answer; and it writes down how a network's own reads move a
-door (§4.8).
+door (§4.8). Spec 0.5 names `orderable` as a level of its own, the rung `bookable` is on, for doors
+that take orders and none that books; `level=bookable` and `level=orderable` filter by what the doors
+take; and a UCP or ACP profile raises a business only on a site that shows it sells (§4.9). A network
+that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -473,7 +476,7 @@ of them only leaves businesses out:
 | `accepts` | comma-separated kinds (`ask`, `quote`, `book`, `order`, `pay`) and payment tokens, at most 8: its live doors take every kind and it accepts every payment |
 | `requestable` | `ask` or `quote`: a live door that declared that kind |
 | `door_type` | comma-separated door types (§4.8), `platform` for any platform, at most 5: a live door of any of them |
-| `level` | at that level or above (§4.9); `orderable` is `bookable`; below `askable` nothing is listed yet |
+| `level` | at that level or above (§4.9); `bookable` and `orderable` are one rung: `bookable` asks for a live door that takes bookings, `orderable` for one that takes orders; below `askable` nothing is listed yet |
 | `has_inbox` | `true`: with an inbox door; `false`: without one |
 | `source` | comma-separated `member`, `registered`, `found`: any of them |
 | `order` | `rank`, the published order (the default), or `nearest`, by distance, which needs `near` |
@@ -855,11 +858,15 @@ A business's level is the highest level among its live doors.
 | `listed` | known to exist; human contact only | no agent door |
 | `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
 | `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
-| `bookable` (or `orderable`) | a door can book, or create an order or a cart | inbox booking or order; UCP or ACP checkout; declared MCP or API write operations |
+| `bookable` | a door can book | inbox booking; declared MCP or API booking operations |
+| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, or another door of its own that takes orders); declared MCP or API order operations |
 | `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
 
 Levels come from the network's own probes; what a business declares is a hint until a probe confirms
-it. A door behind a customer account never raises a level. **Agent-ready** means `askable` or above.
+it. A door behind a customer account never raises a level. A UCP or ACP profile on a site that shows
+nothing for sale (no Product markup with a price, no other door that takes orders) raises it no
+higher than `readable`: a website platform may serve one on every site it hosts. A priced menu, a
+list of services or an offer with no price is no Product markup. **Agent-ready** means `askable` or above.
 A network lists businesses below `askable` only after its own checks for that (a working claim,
 correction and removal, and the fields each jurisdiction asks for); until then a filter below
 `askable` returns nothing. A network never shows a number for a level, only its name.

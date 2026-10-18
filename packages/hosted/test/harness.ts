@@ -85,7 +85,8 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     mail: {
       from: `${t.slugHost.split(".")[0]}@mail.${PARENT}`,
       from_name: level === 2 ? "Salão Rosa" : "Surfing Dog Inbox",
-      reply_to: null,
+      // As the control plane sets it: the business's own address at level 2, so a reply reaches it.
+      reply_to: level === 2 ? OWNER : null,
       customer_mail: live,
       customer_daily_cap: live ? 200 : 0,
     },

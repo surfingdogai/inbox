@@ -54,7 +54,7 @@ Node 22.16, 24 or 26 (`node:sqlite` with FTS5), one process, one SQLite file. A 
 git clone https://github.com/surfingdogai/inbox && cd inbox
 pnpm install
 pnpm --filter @surfingdog/inbox build            # apps/inbox/dist/client and apps/inbox/dist/server.mjs
-node apps/inbox/dist/server.mjs                  # http://0.0.0.0:8787, database in ./data/inbox.db
+node apps/inbox/dist/server.mjs                  # http://127.0.0.1:8787, database in ./data/inbox.db
 ```
 
 The server serves the owner app from `dist/client` next to the bundle; any path that is neither a door nor a file gets the app shell. Environment variables, all optional:
@@ -62,7 +62,7 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `8787` | Port to listen on. |
-| `HOST` | `0.0.0.0` | Interface to bind. |
+| `HOST` | `127.0.0.1` | Interface to bind. Loopback, for a server behind a proxy that terminates TLS; the Docker image sets `0.0.0.0` inside its container. |
 | `INBOX_DB` | `./data/inbox.db` | The SQLite file. Created, and migrated, at boot. |
 | `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
 | `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest, the links in emails and the `iss` of every [receipt](/docs/receipts/). Background jobs have no request to read it from, so without it they use the Inbox address in Settings, which your first sign-in over https fills in. The links in sign-in and address-change emails use the same address once there is one, never the host a request names. |
@@ -72,7 +72,7 @@ The server serves the owner app from `dist/client` next to the bundle; any path 
 | `RESEND_API_KEY` | unset | Real email through Resend instead, from `MAIL_FROM`. With neither, mail is printed to the console, sign-in emails included. |
 | `INBOX_OUTBOUND_DENY` | unset | Comma-separated addresses and ranges no outbound call reaches, like `203.0.114.7, 2a01:4f8::/32`: the server's own public addresses, or a neighbour's. Loopback, private, link-local and the other non-public ranges are always refused (see [Security and privacy](/docs/security-and-privacy/)). An entry that is not an address or a range stops the server at boot. |
 
-A few commands run against the same database and exit:
+A few commands run against the same database and exit. Run them from the directory the server runs in, or with `INBOX_DB` set (`node --env-file-if-exists=.env …` reads a `.env` when there is one), so they use its database: each says on stderr which database it used. Without `INBOX_DB` a command uses `./data/inbox.db` when that file is there, and refuses to run rather than create a new one.
 
 ```bash
 node apps/inbox/dist/server.mjs create-owner-key laptop   # prints a new owner API key (sdi_own_…) once

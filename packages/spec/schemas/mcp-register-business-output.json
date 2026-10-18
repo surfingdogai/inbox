@@ -20,7 +20,7 @@
     },
     "level": {
       "type": "string",
-      "enum": ["listed", "readable", "askable", "bookable", "payable"]
+      "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
     },
     "listed": {
       "description": "Whether search shows it now.",
@@ -32,7 +32,7 @@
       "properties": {
         "level": {
           "type": "string",
-          "enum": ["listed", "readable", "askable", "bookable", "payable"]
+          "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
         },
         "how": {
           "type": "string"
@@ -345,7 +345,7 @@
         "level": {
           "description": "The highest level of its live doors (§4.9).",
           "type": "string",
-          "enum": ["listed", "readable", "askable", "bookable", "payable"]
+          "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
         },
         "has_inbox": {
           "description": "It has an inbox door: ours or any compatible inbox.",
@@ -366,7 +366,7 @@
               },
               "level": {
                 "type": "string",
-                "enum": ["listed", "readable", "askable", "bookable", "payable"],
+                "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"],
                 "description": "What this door alone reaches, from the network's own probe."
               },
               "status": {

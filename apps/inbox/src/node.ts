@@ -25,13 +25,15 @@ import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
 import { listFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
-import { NODE_SERVER_OPTIONS } from "./node-server";
+import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
  * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
  * ../dist/client (or INBOX_STATIC), and a one-second job loop. Any path that is neither a door nor
  * a file gets the app shell, like the Worker's `not_found_handling: "single-page-application"`.
+ * It listens on HOST (default 127.0.0.1: behind the proxy that terminates TLS, never around it;
+ * the Docker image sets 0.0.0.0) and PORT (default 8787).
  * INBOX_DB points at the database file (default ./data/inbox.db). Mail goes out through Cloudflare
  * Email Service (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_EMAIL_TOKEN + MAIL_FROM), else Resend
  * (RESEND_API_KEY), else the console. INBOX_OWNER_EMAIL (comma-separated) lists who may create the
@@ -44,6 +46,12 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  * calls no network, and wipes itself every night.
  *
  *   node server.mjs                    serve
+ *
+ * A command runs against the instance's database and says which one, on stderr. Run it with the
+ * instance's settings (`node --env-file=/opt/inbox/.env server.mjs <command>`), so INBOX_DB names
+ * that database: without INBOX_DB it uses ./data/inbox.db only when that file already exists, and
+ * never creates a new one there, where a key it printed would open nothing.
+ *
  *   node server.mjs create-owner-key   print a new owner API key (first sign-in without email)
  *   node server.mjs set-owner-email <new> [<old>]
  *                                      the address the owner signs in with, for one who lost the old one
@@ -54,13 +62,21 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs apply-plan <file>  apply a setup plan (JSON); --dry-run says what it would do
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
+const command = process.argv[2];
+if (command) {
+  const refusal = commandDatabaseRefusal(file, process.env.INBOX_DB, command);
+  if (refusal) {
+    console.error(refusal);
+    process.exit(2);
+  }
+  console.error(`database: ${file}`);
+}
 mkdirSync(path.dirname(file), { recursive: true });
 const client = nodeSqliteClient(file);
 const db = createDb(client);
 const publicUrl = publicUrlFrom(process.env.INBOX_PUBLIC_URL);
 const from = senderFrom(process.env.MAIL_FROM, process.env.MAIL_FROM_NAME);
 
-const command = process.argv[2];
 if (command) {
   await ensureMigrated(db.client, MIGRATIONS);
   // Seeds confirm items, and a confirmed item earns a receipt when the host can sign one.
@@ -202,9 +218,10 @@ const loop = setInterval(() => {
 loop.unref();
 
 const port = Number(process.env.PORT ?? 8787);
-// Timeouts a client that trickles its request cannot outlast (node-server.ts).
+// Timeouts a client that trickles its request cannot outlast (node-server.ts). Loopback unless HOST
+// says otherwise: a server reachable around its proxy would take a client's own CF-Connecting-IP.
 serve(
-  { fetch: app.fetch, port, hostname: process.env.HOST ?? "0.0.0.0", serverOptions: NODE_SERVER_OPTIONS },
+  { fetch: app.fetch, port, hostname: process.env.HOST || DEFAULT_HOST, serverOptions: NODE_SERVER_OPTIONS },
   (info) => {
     console.log(`Surfing Dog Inbox listening on http://${info.address}:${info.port} (database ${file})`);
   },
