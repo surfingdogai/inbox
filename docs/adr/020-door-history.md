@@ -1,8 +1,9 @@
 # ADR-020 — A door's history is kept for good
 
 **Status:** accepted, 15 October 2026 (keeping it for good is the founder's decision of that day; the numbers
-marked \* are defaults the founder may change). Research, not legal advice: a legitimate-interest assessment and a
-question for counsel are open (below).
+marked \* are defaults the founder may change); amended 18 October 2026, when the founder decided to show the daily
+answer rate publicly (§5). Research, not legal advice: a legitimate-interest assessment and a question for counsel are
+open (below).
 
 ## Context
 
@@ -70,10 +71,11 @@ later by anyone: a network that throws it away loses it, and a newcomer cannot b
    can report its own successes, so only failures from independent sources may ever go public (§4.15). This share
    comes from the network's own scheduled reads alone, whose time neither the business nor any agent can choose. Our
    network decided earlier that, before any platform is recognised, the public sees failures only and never a success
-   rate; that was decided for agents' reports, and until the founder confirms it does not cover this share, our
-   network writes and works out the share but leaves `checks` and `summary` out of what it shows: listings and
-   results show the days each door was seen answering. Writing it cannot wait (a day not written is lost for good);
-   showing it can.
+   rate; that was decided for agents' reports. On 18 October 2026 the founder decided that it does not cover this
+   share and that the daily answer rate is public: listings, `get_business` and results carry `checks` and `summary`,
+   the count first ("answered 41 of 42 days (97%)"), and a day with a failed or a refused check counts as a missed
+   day, a refused one shown as refused. A network may still leave `checks` and `summary` out (§4.8); ours keeps that
+   as a switch, so it can take the share down in one release without losing a day of what it writes.
 6. **Retention.** For good, as receipts are ([ADR-017](017-reputation-and-ranking.md) §9). A site that opts out of the
    crawl has its whole history deleted at once, nothing is written for it after (not even by a read in flight when it
    opted out), and a nightly pass deletes it again should a restored copy bring it back. A found entry that leaves the
@@ -117,7 +119,7 @@ its numbering never runs out however often doors are read, and a site has at mos
 ## Consequences
 
 - The protocol's §4.8 gains "History", §4.10 the `door_history` member, and §4.11 the exception to its 180 days.
-- `packages/spec` 0.4.1 holds the schema (`doorHistorySchema`), a reference function (`doorHistoryOf`) and
+- `packages/spec` 0.5.1 holds the schema (`doorHistorySchema`), a reference function (`doorHistoryOf`) and
   [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json), written by
   [`scripts/gen-door-history-vectors.py`](../../packages/spec/scripts/gen-door-history-vectors.py), an implementation
   of its own; a network that shows a door's history is held to their numbers and `checks`, and words its `summary`

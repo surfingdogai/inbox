@@ -8,8 +8,9 @@ business sees it in its signed ping's answer; and it writes down how a network's
 door (§4.8). Spec 0.5 names `orderable` as a level of its own, the rung `bookable` is on, for doors
 that take orders and none that books; `level=bookable` and `level=orderable` filter by what the doors
 take; and a UCP or ACP profile raises a business only on a site that shows it sells (§4.9). A network
-that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value. Spec 0.5.1 lets a network keep, and show, a door's history
-from its own reads (§4.8, [ADR-020](../adr/020-door-history.md)), optional for a network.
+that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value. Spec 0.5.1 lets a
+network keep, and show, a door's history from its own reads (§4.8, [ADR-020](../adr/020-door-history.md)),
+optional for a network.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone

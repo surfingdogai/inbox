@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { doorHistoryPublic, doorHistoryShows } from "../src/lib/door-history";
+import { DOOR_SHARE_SHOWN, doorHistoryPublic, doorHistoryShows } from "../src/lib/door-history";
 
-/** A door's history (ADR-020) in the site's words: the share is named only while the network shows it. */
+/** A door's history (ADR-020) in the site's words: the share is named while the network shows it, as it does. */
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -15,6 +15,12 @@ describe("a door's history on the site", () => {
       expect(words(true)).toMatch(/the share of days every check answered/);
     }
     expect(doorHistoryShows(true)).toMatch(/199 of 200 is 99%/);
+    expect(doorHistoryShows(true)).toMatch(/"answered 41 of 42 days \(97%\)"/);
+    expect(doorHistoryShows(true)).toMatch(/a failed or a refused check counts as a missed day/);
+  });
+
+  it("is shown: the founder decided on 18 October 2026 to show the share publicly", () => {
+    expect(DOOR_SHARE_SHOWN).toBe(true);
   });
 
   it("is said through the switch on /network and /privacy, never written out", () => {
