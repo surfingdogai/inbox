@@ -2,7 +2,7 @@
   "version": 2,
   "name": "Surfing Dog capability vocabulary",
   "title": "What an AI agent can do at a business",
-  "published": "2026-10-15",
+  "published": "2026-10-18",
   "licence": "MIT",
   "url": "https://surfingdog.ai/spec/capabilities.json",
   "summary": "The things an AI agent can do for a person at a business, from finding it to getting a refund. Each one has a definition, what has to be seen before anyone may say a business offers it, and how it is met through each kind of agent door. The ids never change: a capability is added, never renamed.",
@@ -574,7 +574,7 @@
     },
     {
       "version": 2,
-      "date": "2026-10-15",
+      "date": "2026-10-18",
       "change": "published",
       "summary": "Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1."
     }

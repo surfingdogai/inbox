@@ -5,7 +5,7 @@ description: "The capability vocabulary, version 2: what an AI agent can do at a
 
 <!-- Written from packages/spec/vocab/capabilities.json by apps/site/src/lib/spec-capabilities.ts. Edit the JSON, then run UPDATE_SPEC_PAGES=1 pnpm vitest run apps/site/test/spec.node.test.ts. -->
 
-**Version 2**, published 15 October 2026. As JSON: [the latest](/spec/capabilities.json) · [version 2](/spec/capabilities/v2.json) · [version 1](/spec/capabilities/v1.json) · [its JSON Schema](/spec/schemas/capabilities.json) · [how names are read, as vectors](/spec/vectors/capability-names.json). MIT licence.
+**Version 2**, published 18 October 2026. As JSON: [the latest](/spec/capabilities.json) · [version 2](/spec/capabilities/v2.json) · [version 1](/spec/capabilities/v1.json) · [its JSON Schema](/spec/schemas/capabilities.json) · [how names are read, as vectors](/spec/vectors/capability-names.json). MIT licence.
 
 The things an AI agent can do for a person at a business, from finding it to getting a refund. Each one has a definition, what has to be seen before anyone may say a business offers it, and how it is met through each kind of agent door. The ids never change: a capability is added, never renamed.
 
@@ -626,7 +626,7 @@ Through each kind of door, for example:
 
 ## Changelog {#changelog}
 
-- **Version 2**, published 15 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1.
+- **Version 2**, published 18 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1.
 - **Version 1**, amended 13 October 2026. Tested is produced: a network's own read of a door that saw it answer and list a capability in the 7 days before.
 - **Version 1**, published 7 October 2026. Twenty capabilities in five parts of a customer's journey, each with a label and a question, the states yes, partial, no and na, and the evidence ladder declared, tested, proven.
 
