@@ -2489,3 +2489,86 @@ legend.label-line {
   flex-basis: 100%;
   margin: 0 0 0 26px;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Settings → Be found (settings.found.tsx): the lines, thin and mono */
+/* ------------------------------------------------------------------ */
+.found-line {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.found-line > textarea,
+.found-rows textarea {
+  width: 100%;
+}
+.found-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.found-rec {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.found-rec dt {
+  color: var(--ink-3);
+}
+.found-rec dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.found-wrap {
+  overflow-wrap: anywhere;
+}
+.found-steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.found-check {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.found-verdict {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+}
+.found-ready {
+  color: var(--c-success);
+}
+.found-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.found-rows li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 2px 8px;
+  color: var(--ink-2);
+}
+.found-item {
+  font-weight: 500;
+  color: var(--ink);
+}
+.found-rows li.is-ok > span:first-child {
+  color: var(--c-success);
+}
+.found-rows li > textarea {
+  grid-column: 2;
+}

@@ -1,0 +1,87 @@
+{
+  "about": "The lines a business adds so that AI agents find its inbox from its domain (owner control, 18 Oct 2026). Every builder of them (the owner app, the hosted Connect page, the network's discovery check) gives exactly these.",
+  "assistants": [
+    "ChatGPT-User",
+    "Claude-User",
+    "Google-CloudVertexBot",
+    "Perplexity-User",
+    "Meta-ExternalFetcher",
+    "DuckAssistBot",
+    "MistralAI-User"
+  ],
+  "assistant_search": ["OAI-SearchBot", "Claude-SearchBot", "PerplexityBot", "YouBot"],
+  "cases": [
+    {
+      "name": "a business with a name",
+      "domain": "example.com",
+      "host": "inbox.example.com",
+      "business": "Example Bakery",
+      "snippets": {
+        "manifest": "https://inbox.example.com/.well-known/agent-inbox.json",
+        "llms_line": "- [Agent inbox](https://inbox.example.com/.well-known/agent-inbox.json): send us messages and requests",
+        "llms_file": "# Example Bakery\n\n## Agents\n\n- [Agent inbox](https://inbox.example.com/.well-known/agent-inbox.json): send us messages and requests\n",
+        "link_tag": "<link rel=\"agent-inbox\" type=\"application/json\" href=\"https://inbox.example.com/.well-known/agent-inbox.json\">",
+        "link_header": "Link: <https://inbox.example.com/.well-known/agent-inbox.json>; rel=\"agent-inbox\"",
+        "json_ld": "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Example Bakery\",\"potentialAction\":{\"@type\":\"CommunicateAction\",\"name\":\"Message us\",\"target\":{\"@type\":\"EntryPoint\",\"contentType\":\"application/json\",\"urlTemplate\":\"https://inbox.example.com/.well-known/agent-inbox.json\"}},\"url\":\"https://example.com/\"}</script>",
+        "dns_name": "_agent-inbox",
+        "dns_value": "v=sdi1; manifest=https://inbox.example.com/.well-known/agent-inbox.json",
+        "well_known": "https://example.com/.well-known/agent-inbox.json",
+        "robots": "User-agent: ChatGPT-User\nUser-agent: Claude-User\nUser-agent: Google-CloudVertexBot\nUser-agent: Perplexity-User\nUser-agent: Meta-ExternalFetcher\nUser-agent: DuckAssistBot\nUser-agent: MistralAI-User\nAllow: /\n"
+      }
+    },
+    {
+      "name": "no name: the domain",
+      "domain": "example.com",
+      "host": "inbox.example.com",
+      "business": "",
+      "snippets": {
+        "manifest": "https://inbox.example.com/.well-known/agent-inbox.json",
+        "llms_line": "- [Agent inbox](https://inbox.example.com/.well-known/agent-inbox.json): send us messages and requests",
+        "llms_file": "# example.com\n\n## Agents\n\n- [Agent inbox](https://inbox.example.com/.well-known/agent-inbox.json): send us messages and requests\n",
+        "link_tag": "<link rel=\"agent-inbox\" type=\"application/json\" href=\"https://inbox.example.com/.well-known/agent-inbox.json\">",
+        "link_header": "Link: <https://inbox.example.com/.well-known/agent-inbox.json>; rel=\"agent-inbox\"",
+        "json_ld": "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"example.com\",\"potentialAction\":{\"@type\":\"CommunicateAction\",\"name\":\"Message us\",\"target\":{\"@type\":\"EntryPoint\",\"contentType\":\"application/json\",\"urlTemplate\":\"https://inbox.example.com/.well-known/agent-inbox.json\"}},\"url\":\"https://example.com/\"}</script>",
+        "dns_name": "_agent-inbox",
+        "dns_value": "v=sdi1; manifest=https://inbox.example.com/.well-known/agent-inbox.json",
+        "well_known": "https://example.com/.well-known/agent-inbox.json",
+        "robots": "User-agent: ChatGPT-User\nUser-agent: Claude-User\nUser-agent: Google-CloudVertexBot\nUser-agent: Perplexity-User\nUser-agent: Meta-ExternalFetcher\nUser-agent: DuckAssistBot\nUser-agent: MistralAI-User\nAllow: /\n"
+      }
+    },
+    {
+      "name": "a name to escape, another host",
+      "domain": "salon.example",
+      "host": "agents.salon.example",
+      "business": "  Bread & Co\n<Lisboa> \"Ltd\"  ",
+      "snippets": {
+        "manifest": "https://agents.salon.example/.well-known/agent-inbox.json",
+        "llms_line": "- [Agent inbox](https://agents.salon.example/.well-known/agent-inbox.json): send us messages and requests",
+        "llms_file": "# Bread & Co <Lisboa> \"Ltd\"\n\n## Agents\n\n- [Agent inbox](https://agents.salon.example/.well-known/agent-inbox.json): send us messages and requests\n",
+        "link_tag": "<link rel=\"agent-inbox\" type=\"application/json\" href=\"https://agents.salon.example/.well-known/agent-inbox.json\">",
+        "link_header": "Link: <https://agents.salon.example/.well-known/agent-inbox.json>; rel=\"agent-inbox\"",
+        "json_ld": "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Bread \\u0026 Co \\u003cLisboa\\u003e \\\"Ltd\\\"\",\"potentialAction\":{\"@type\":\"CommunicateAction\",\"name\":\"Message us\",\"target\":{\"@type\":\"EntryPoint\",\"contentType\":\"application/json\",\"urlTemplate\":\"https://agents.salon.example/.well-known/agent-inbox.json\"}},\"url\":\"https://salon.example/\"}</script>",
+        "dns_name": "_agent-inbox",
+        "dns_value": "v=sdi1; manifest=https://agents.salon.example/.well-known/agent-inbox.json",
+        "well_known": "https://salon.example/.well-known/agent-inbox.json",
+        "robots": "User-agent: ChatGPT-User\nUser-agent: Claude-User\nUser-agent: Google-CloudVertexBot\nUser-agent: Perplexity-User\nUser-agent: Meta-ExternalFetcher\nUser-agent: DuckAssistBot\nUser-agent: MistralAI-User\nAllow: /\n"
+      }
+    },
+    {
+      "name": "the inbox on the domain itself",
+      "domain": "kiosk.example",
+      "host": "kiosk.example",
+      "business": "Kiosk",
+      "snippets": {
+        "manifest": "https://kiosk.example/.well-known/agent-inbox.json",
+        "llms_line": "- [Agent inbox](https://kiosk.example/.well-known/agent-inbox.json): send us messages and requests",
+        "llms_file": "# Kiosk\n\n## Agents\n\n- [Agent inbox](https://kiosk.example/.well-known/agent-inbox.json): send us messages and requests\n",
+        "link_tag": "<link rel=\"agent-inbox\" type=\"application/json\" href=\"https://kiosk.example/.well-known/agent-inbox.json\">",
+        "link_header": "Link: <https://kiosk.example/.well-known/agent-inbox.json>; rel=\"agent-inbox\"",
+        "json_ld": "<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"Organization\",\"name\":\"Kiosk\",\"potentialAction\":{\"@type\":\"CommunicateAction\",\"name\":\"Message us\",\"target\":{\"@type\":\"EntryPoint\",\"contentType\":\"application/json\",\"urlTemplate\":\"https://kiosk.example/.well-known/agent-inbox.json\"}},\"url\":\"https://kiosk.example/\"}</script>",
+        "dns_name": "_agent-inbox",
+        "dns_value": "v=sdi1; manifest=https://kiosk.example/.well-known/agent-inbox.json",
+        "well_known": "https://kiosk.example/.well-known/agent-inbox.json",
+        "robots": "User-agent: ChatGPT-User\nUser-agent: Claude-User\nUser-agent: Google-CloudVertexBot\nUser-agent: Perplexity-User\nUser-agent: Meta-ExternalFetcher\nUser-agent: DuckAssistBot\nUser-agent: MistralAI-User\nAllow: /\n"
+      }
+    }
+  ]
+}

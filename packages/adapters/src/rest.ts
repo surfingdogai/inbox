@@ -917,6 +917,29 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.getNetworks(c.get("caller"))),
   );
 
+  app.get(
+    "/discovery",
+    owner({
+      tags: ["owner"],
+      summary: "The lines that lead AI agents from the business's own site to this inbox",
+      description:
+        "Where they go (the business's own domain: its website in Settings) and where they point (this inbox's own host), and the lines themselves: a <link rel=\"agent-inbox\">, schema.org structured data, a line for llms.txt, a _agent-inbox TXT record, and the manifest to serve at the site's own /.well-known/agent-inbox.json (ADR-022).",
+      responses: json("Discovery", R.looseSchema),
+    }),
+    async (c) => c.json(await caps.getDiscovery(c.get("caller"))),
+  );
+  app.post(
+    "/discovery/check",
+    owner({
+      tags: ["owner"],
+      summary: "Ask Surfing Dog's checker whether the lines are in place",
+      description:
+        "One call to the network's GET /v1/discovery/{domain}, when asked and never on its own: whether the inbox's DNS record and manifest answer, whether robots.txt keeps out an AI assistant, and which of the five ways lead an agent from the domain to the inbox, each missing one with its exact fix.",
+      responses: json("The check", R.looseSchema),
+    }),
+    async (c) => c.json(await caps.checkDiscovery(c.get("caller"))),
+  );
+
   app.put(
     "/settings",
     owner({

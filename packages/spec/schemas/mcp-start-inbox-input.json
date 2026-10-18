@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP start_inbox: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's own domain, like salon.example (a URL is read as its domain)."
+    }
+  },
+  "required": ["domain"]
+}

@@ -458,6 +458,11 @@
         },
         "opt_out": {
           "type": "string"
+        },
+        "manage": {
+          "description": "The owner's page (/b/<domain>/owner): claim, correct or hide, with no AI and no account.",
+          "type": "string",
+          "format": "uri"
         }
       },
       "required": ["claim", "hide", "opt_out"]

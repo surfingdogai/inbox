@@ -345,7 +345,12 @@ export const listingFactSchema = z.object({
   src: factSourceSchema,
   url: z.url().optional().describe("The page or door it was read from."),
   at: timestampSchema,
-  via: z.string().optional(),
+  via: z
+    .string()
+    .optional()
+    .describe(
+      "How it came: model, read by a language model; business, the business's own word (its registration, or a correction it made).",
+    ),
 });
 export type ListingFact = z.infer<typeof listingFactSchema>;
 

@@ -13,6 +13,8 @@ import type {
   CreateWebhookBody,
   CustomerSummary,
   DeliveryView,
+  DiscoveryResult,
+  DiscoveryView,
   EraseResult,
   FeedConnector,
   Floor,
@@ -241,6 +243,10 @@ export const api = {
       body: {},
       idempotent: true,
     }),
+  /** "Let agents find your inbox": the lines for the business's own site (ADR-022). */
+  discovery: () => call<DiscoveryView>("GET", "/v1/owner/discovery"),
+  /** Surfing Dog's checker reads the site, when the owner asks. */
+  checkDiscovery: () => call<DiscoveryResult>("POST", "/v1/owner/discovery/check"),
   /** Whether email goes out at all, has an address to go from, and can carry answer links. */
   mailStatus: () => call<MailStatus>("GET", "/v1/owner/mail"),
 

@@ -16,6 +16,7 @@ import { Route as SetupRouteImport } from "./routes/setup";
 import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
+import { Route as SettingsFoundRouteImport } from "./routes/settings.found";
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsKeysRouteImport } from "./routes/settings.keys";
 import { Route as SettingsNetworksRouteImport } from "./routes/settings.networks";
@@ -56,6 +57,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
 const SettingsAvailabilityRoute = SettingsAvailabilityRouteImport.update({
   id: "/availability",
   path: "/availability",
+  getParentRoute: () => SettingsRoute,
+} as any);
+const SettingsFoundRoute = SettingsFoundRouteImport.update({
+  id: "/found",
+  path: "/found",
   getParentRoute: () => SettingsRoute,
 } as any);
 const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/setup"
     | "/settings/availability"
+    | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/setup"
     | "/settings/availability"
+    | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/setup"
     | "/settings/availability"
+    | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
@@ -246,6 +258,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsAvailabilityRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/found": {
+      id: "/settings/found";
+      path: "/found";
+      fullPath: "/settings/found";
+      preLoaderRoute: typeof SettingsFoundRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/integrations": {
       id: "/settings/integrations";
       path: "/integrations";
@@ -312,6 +331,7 @@ const InboxRouteWithChildren = InboxRoute._addFileChildren(InboxRouteChildren);
 
 interface SettingsRouteChildren {
   SettingsAvailabilityRoute: typeof SettingsAvailabilityRoute;
+  SettingsFoundRoute: typeof SettingsFoundRoute;
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsKeysRoute: typeof SettingsKeysRoute;
   SettingsNetworksRoute: typeof SettingsNetworksRoute;
@@ -323,6 +343,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAvailabilityRoute: SettingsAvailabilityRoute,
+  SettingsFoundRoute: SettingsFoundRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeysRoute: SettingsKeysRoute,
   SettingsNetworksRoute: SettingsNetworksRoute,

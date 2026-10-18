@@ -722,7 +722,17 @@ export const checkResultSchema = z.object({
   excluded: z.string().optional(),
   not_certification: z.string().optional(),
   badge: z.object({ svg: z.url(), snippet: z.string() }).optional(),
-  owner: z.object({ claim: z.string(), hide: z.string(), opt_out: z.string() }).optional(),
+  owner: z
+    .object({
+      claim: z.string(),
+      hide: z.string(),
+      opt_out: z.string(),
+      manage: z
+        .url()
+        .optional()
+        .describe("The owner's page (/b/<domain>/owner): claim, correct or hide, with no AI and no account."),
+    })
+    .optional(),
   pay_with: z
     .array(payWithSchema)
     .optional()

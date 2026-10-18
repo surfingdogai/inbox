@@ -56,6 +56,9 @@ function SettingsLayout() {
         <Link to="/settings/networks" className="tab">
           Networks
         </Link>
+        <Link to="/settings/found" className="tab">
+          Be found
+        </Link>
       </nav>
       <Outlet />
     </main>

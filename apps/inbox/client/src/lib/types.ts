@@ -333,3 +333,48 @@ export interface ConnectionPatch {
   /** A payment platform: accepted orders get a link to pay (ADR-023). */
   readonly pay_on?: boolean;
 }
+
+/** The lines that lead an agent from the business's own site to this inbox (`GET /v1/owner/discovery`). */
+export interface DiscoverySnippets {
+  readonly manifest: string;
+  readonly llms_line: string;
+  readonly llms_file: string;
+  readonly link_tag: string;
+  readonly link_header: string;
+  readonly json_ld: string;
+  readonly dns_name: string;
+  readonly dns_value: string;
+  readonly well_known: string;
+  readonly robots: string;
+}
+
+export interface DiscoveryView {
+  readonly domain: string | null;
+  readonly domainFrom: "website" | "host" | "inbox" | null;
+  readonly host: string | null;
+  readonly name: string;
+  readonly manifest: string | null;
+  readonly snippets: DiscoverySnippets | null;
+  readonly checker: string;
+}
+
+/** One thing Surfing Dog's checker looked at (`POST /v1/owner/discovery/check`). */
+export interface DiscoveryItem {
+  readonly id: "cname" | "manifest" | "robots" | "well_known" | "llms_txt" | "link" | "schema_org" | "dns_txt";
+  readonly need: "required" | "recommended" | "optional";
+  readonly state: "ok" | "missing" | "wrong" | "blocked" | "unreadable";
+  readonly detail: string;
+  readonly fix?: string | undefined;
+}
+
+export interface DiscoveryResult {
+  readonly domain: string;
+  readonly host: string;
+  readonly manifest: string;
+  readonly checked_at: string;
+  readonly ready: boolean;
+  readonly ways: number;
+  readonly hosted?: "live" | "lost" | "closed" | undefined;
+  readonly next: string;
+  readonly items: readonly DiscoveryItem[];
+}
