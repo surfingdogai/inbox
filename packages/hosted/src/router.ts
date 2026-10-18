@@ -1,5 +1,6 @@
 import { request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
 import { classifyHost, isTenantId, normalizeHost, SLUG_LABEL, shardOf } from "./host";
+import { RELAY_PATH, relayTarget } from "./oauth-relay";
 import {
   type Answer,
   badHost,
@@ -61,6 +62,12 @@ export interface RouterOptions {
   readonly clientAddressHeader?: string | undefined;
   /** The header the server in front says the visitor's scheme in, as `{"scheme":"http"}` (default `cf-visitor`). */
   readonly visitorSchemeHeader?: string | undefined;
+  /**
+   * The name Google sends every owner back to after signing in to connect a calendar
+   * (`HOSTED_OAUTH_RELAY_HOST`, ADR-020): the router passes them on to their own inbox. Absent, no
+   * name is treated so.
+   */
+  readonly oauthRelayHost?: string | undefined;
   /** How long a shard may take to start answering (default 65 s, past the inbox's own minute). */
   readonly shardTimeoutMs?: number | undefined;
   readonly now?: (() => number) | undefined;
@@ -123,6 +130,40 @@ export function createRouter(o: RouterOptions): {
     const url = new URL(rawTarget, "http://router.invalid");
     const path = url.pathname;
     const target = `${path}${url.search}`;
+    // The one address Google sends every owner back to: on to the inbox the state names, if it is one.
+    if (o.oauthRelayHost && host === o.oauthRelayHost) {
+      const hsts = { "strict-transport-security": HSTS };
+      if (!(method === "GET" || method === "HEAD") || path !== RELAY_PATH) return send(res, notFound(html), hsts, head);
+      const relay = relayTarget(url.search);
+      let known = false;
+      if (relay) {
+        try {
+          const found = await o.resolver.lookup(relay.host);
+          known = found !== null && found.resolved.state !== "closed";
+        } catch (error) {
+          log(`router: relay resolve failed (${error instanceof Error ? error.message : error})`);
+          return send(res, unavailablePage(html, "unreachable"), hsts, head);
+        }
+      }
+      if (!relay || !known) {
+        return send(
+          res,
+          {
+            status: 400,
+            headers: { "content-type": "text/plain; charset=utf-8" },
+            body: "This sign-in is not for an inbox here.\n",
+          },
+          { ...hsts, "cache-control": "no-store" },
+          head,
+        );
+      }
+      return send(
+        res,
+        { status: 303, headers: { location: relay.location, "cache-control": "no-store" }, body: "" },
+        { ...hsts, "referrer-policy": "no-referrer" },
+        head,
+      );
+    }
     const cls = classifyHost(host, o.parent);
     // Headers every answer for this host carries: on a slug host, noindex and https from now on; on a
     // business's own name, https from now on. Each for that name alone, never its subdomains: the

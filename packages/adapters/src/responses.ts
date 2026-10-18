@@ -696,3 +696,79 @@ export const mailServiceSchema = z.object({
   sender: z.boolean().describe("There is an address to send from."),
   links: z.boolean().describe("Emails can carry answer links."),
 });
+
+/* --- integrations (ADR-020) ------------------------------------------------ */
+
+const calendarChoiceSchema = z.looseObject({
+  id: z.string(),
+  name: z.string(),
+  writable: z.boolean(),
+  primary: z.boolean().optional(),
+  lengths: z.array(z.number().int()).optional().describe("A Cal.com event type's lengths, in minutes"),
+});
+
+const formFieldSchema = z.looseObject({
+  key: z.string(),
+  label: z.string(),
+  input: z.enum(["text", "email", "url", "password"]),
+  required: z.boolean(),
+  secret: z.boolean().describe("Sealed before it is stored and never shown again"),
+  advanced: z.boolean(),
+  help: z.string().optional(),
+  link: z.object({ href: z.string(), text: z.string() }).optional(),
+  placeholder: z.string().optional(),
+});
+
+export const connectionSchema = z.looseObject({
+  id: z.string(),
+  kind: z.string().describe("calcom, caldav or google_calendar"),
+  preset: z.string().nullable().describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar"),
+  title: z.string(),
+  name: z.string(),
+  account: z.string(),
+  status: z.enum(["configured", "active", "error", "disabled"]),
+  capabilities: z.array(z.string()),
+  busy_on: z.boolean(),
+  bookings_on: z.boolean(),
+  calendars: z.array(calendarChoiceSchema),
+  busy_calendars: z.array(z.string()),
+  destinations: z.array(calendarChoiceSchema),
+  destination: z.string().nullable(),
+  services: z.array(z.string()).nullable().describe("The services busy times apply to; null for all"),
+  busy_times: z.number().int(),
+  busy_read_at: z.number().int().nullable().describe("Unix milliseconds"),
+  bookings_written: z.number().int(),
+  bookings_failing: z.number().int(),
+  booking_error: z.string().nullable(),
+  last_sync_at: z.number().int().nullable(),
+  last_error: z.string().nullable(),
+  last_error_at: z.number().int().nullable(),
+  created_at: z.number().int(),
+});
+
+export const integrationsSchema = z.object({
+  cards: z.array(
+    z.looseObject({
+      id: z.string(),
+      title: z.string(),
+      line: z.string(),
+      group: z.enum(["calendars", "payments", "shops"]),
+      status: z.enum(["ready", "soon"]),
+      ways: z.array(
+        z.looseObject({
+          kind: z.string(),
+          preset: z.string().nullable(),
+          label: z.string(),
+          status: z.enum(["ready", "soon"]),
+          auth: z.enum(["form", "oauth"]),
+          form: z.array(formFieldSchema),
+          note: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+  connections: z.array(connectionSchema),
+  can_connect: z.boolean().describe("False without INBOX_SECRET_KEY: nothing can be connected"),
+});
+
+export const authorizeSchema = z.object({ authorize_url: z.string().describe("Open it in the owner's browser") });

@@ -135,7 +135,7 @@ export async function findSlots(
     new Date(first).toISOString(),
     new Date(Math.min(to + duration, first + 14 * 86_400_000 + duration)).toISOString(),
   );
-  const taken = await readClaims(db, spec.resourceKey, allBuckets, input.exceptItemId ?? "");
+  const taken = await readClaims(db, spec, allBuckets, input.exceptItemId ?? "");
   for (let start = first; start + duration <= to && slots.length < limit; start += step) {
     const end = start + duration;
     if (!withinOpening(local, weekly, start, end)) continue;
@@ -195,7 +195,7 @@ export async function slotOffered(
   } catch {
     return false;
   }
-  return planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, input.exceptItemId)).ok;
+  return planClaims(spec, buckets, await readClaims(db, spec, buckets, input.exceptItemId)).ok;
 }
 
 export type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };

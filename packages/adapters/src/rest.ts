@@ -3,10 +3,12 @@ import {
   acknowledgeReceiptInput,
   addFeedInput,
   applyPresetInput,
+  authorizeInput,
   type Caller,
   type Capabilities,
   cancelItemInput,
   checkAvailabilityInput,
+  connectInput,
   createApiKeyInput,
   createBookingInput,
   createOrderInput,
@@ -45,6 +47,7 @@ import {
   suggestTimeInput,
   testRuleInput,
   transitionItemInput,
+  updateConnectionInput,
   updateProductInput,
   updateRuleInput,
   updateServiceInput,
@@ -58,6 +61,7 @@ import { type Context, Hono } from "hono";
 import { type DescribeRouteOptions, describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { ownerOperation, routeScopes } from "./access";
+import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
 
@@ -556,7 +560,7 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
   return app;
 }
 
-export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
+export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string | undefined } = {}): Hono<CallerEnv> {
   const app = new Hono<CallerEnv>();
   app.onError((error, c) => problemResponse(c, error));
   // Who may come in at all (an owner-side principal), then whether this principal's scopes cover
@@ -1318,6 +1322,104 @@ export function ownerRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => {
       const id = String(c.req.param("id"));
       return once(c, "feeds.remove", { feed_id: id }, (caller) => caps.feeds.remove(caller, id));
+    },
+  );
+  // ---- integrations: calendars and the platforms to come (ADR-014, ADR-020) ----
+  app.get(
+    "/integrations",
+    owner({
+      tags: ["integrations"],
+      summary: "What can be connected (Cal.com, calendars; payments and shops marked soon) and what is connected",
+      description:
+        "Each card lists its ways in, with the form to fill in (secret fields marked) or a sign-in on the platform. Connections never carry a secret.",
+      responses: json("Integrations", R.integrationsSchema),
+    }),
+    async (c) => c.json(await caps.connectors.integrations(c.get("caller"))),
+  );
+  app.post(
+    "/integrations",
+    owner({
+      tags: ["integrations"],
+      summary: "Connect with a form: Cal.com's API key, or a calendar's email and app password",
+      description:
+        "Checked against the platform before anything is kept: wrong credentials answer 422 with the field to fix. Secrets are sealed with INBOX_SECRET_KEY and never returned. The first sync starts at once. Connecting is the owner's: the owner's AI is refused (403).",
+      responses: json("Connection", R.connectionSchema, 201),
+      write: true,
+    }),
+    validator("json", connectInput, hook),
+    async (c) => {
+      const input = c.req.valid("json");
+      // The answer is kept for a retry, but no hash of a password or a key beside it.
+      return once(
+        c,
+        "integrations.connect",
+        caps.connectors.withoutSecrets(input),
+        (caller) => caps.connectors.connect(caller, input),
+        201,
+      );
+    },
+  );
+  app.post(
+    "/integrations/authorize",
+    owner({
+      tags: ["integrations"],
+      summary: "Start a sign-in on the platform (Google): the address to open in the owner's browser",
+      description:
+        "OAuth 2.0 with PKCE and offline access, valid for ten minutes. The platform sends the owner back to /oauth/connect/{kind}/callback, which connects and returns to the owner app.",
+      responses: json("Where to sign in", R.authorizeSchema),
+      write: true,
+    }),
+    validator("json", authorizeInput, hook),
+    async (c) =>
+      c.json(
+        await caps.connectors.authorize(c.get("caller"), c.req.valid("json"), publicOrigin(c.req.raw, opts.baseUrl)),
+      ),
+  );
+  app.get(
+    "/integrations/:id",
+    owner({ tags: ["integrations"], summary: "One connection", responses: json("Connection", R.connectionSchema) }),
+    async (c) => c.json(await caps.connectors.get(c.get("caller"), String(c.req.param("id")))),
+  );
+  app.patch(
+    "/integrations/:id",
+    owner({
+      tags: ["integrations"],
+      summary: "Choose calendars, where bookings go and which services busy times apply to; pause or resume",
+      responses: json("Connection", R.connectionSchema),
+      write: true,
+    }),
+    validator("json", updateConnectionInput, hook),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      const input = c.req.valid("json");
+      return once(c, "integrations.update", { id, ...input }, (caller) => caps.connectors.update(caller, id, input));
+    },
+  );
+  app.post(
+    "/integrations/:id/sync",
+    owner({
+      tags: ["integrations"],
+      summary: "Read busy times and write bookings now, rather than at the next five-minute sync",
+      responses: json("Queued", R.looseSchema),
+      write: true,
+    }),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      return once(c, "integrations.sync", { id }, (caller) => caps.connectors.syncNow(caller, id));
+    },
+  );
+  app.delete(
+    "/integrations/:id",
+    owner({
+      tags: ["integrations"],
+      summary: "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar.",
+      description: "The owner's: the owner's AI is refused (403).",
+      responses: json("Removed", R.looseSchema),
+      write: true,
+    }),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      return once(c, "integrations.remove", { id }, (caller) => caps.connectors.remove(caller, id));
     },
   );
   app.post(

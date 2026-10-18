@@ -1,5 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import { and, eq, gte, lte } from "drizzle-orm";
+import { busyOverlapping } from "../connectors/store";
 import type { Db } from "../db";
 import { slotClaims } from "../schema/tables";
 import { WriteError } from "./errors";
@@ -60,13 +61,19 @@ export function bucketsFor(spec: SlotSpec, startTime: string, endTime: string): 
   return buckets;
 }
 
-/** Existing claims per bucket, ignoring the item's own (so a re-confirm is not its own competitor). */
+/**
+ * Existing claims per bucket, ignoring the item's own (so a re-confirm is not its own competitor),
+ * and every bucket a connected calendar says is busy taken whole (ADR-020): busy times only ever
+ * remove places. Every door that offers, proposes, books or moves a time reads through here, so a
+ * busy time is honoured by all of them or by none.
+ */
 export async function readClaims(
   db: Db,
-  resourceKey: string,
+  spec: SlotSpec,
   buckets: readonly number[],
   exceptItemId: string,
 ): Promise<Map<number, Set<number>>> {
+  const resourceKey = spec.resourceKey;
   const taken = new Map<number, Set<number>>();
   if (buckets.length === 0) return taken;
   const rows = await db.orm
@@ -87,6 +94,18 @@ export async function readClaims(
       taken.set(r.bucketStart, set);
     }
     set.add(r.ordinal);
+  }
+  const g = spec.granularityMin * 60_000;
+  const first = buckets[0] ?? 0;
+  const last = (buckets[buckets.length - 1] ?? 0) + g;
+  const busy = await busyOverlapping(db, first, last, resourceKey);
+  if (busy.length > 0) {
+    for (const b of buckets) {
+      if (!busy.some((i) => i.start < b + g && i.end > b)) continue;
+      const full = new Set<number>();
+      for (let o = 0; o < Math.max(spec.capacity, 1); o++) full.add(o);
+      taken.set(b, full);
+    }
   }
   return taken;
 }

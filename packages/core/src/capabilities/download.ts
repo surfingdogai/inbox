@@ -83,6 +83,12 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     strip: () => ["UPDATE connectors SET config_enc = NULL, inbound_token = NULL, status = 'disabled'"],
   },
   connector_events: {},
+  connector_busy: { note: "The times connected calendars said were busy, as last read." },
+  connector_links: { note: "Which bookings were added to a connected calendar, and the calendar's id for each." },
+  connector_auth: {
+    leftOut: "Sign-ins with a calendar that were on their way.",
+    strip: empty("connector_auth"),
+  },
   // People who sign in, keys and AI apps.
   users: { note: "The people who sign in. Sign in where you open the copy with the same email address." },
   sessions: { leftOut: "Who is signed in.", strip: empty("sessions") },

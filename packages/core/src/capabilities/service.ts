@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
+import { ConnectorCapabilities } from "../connectors/capability";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
@@ -271,6 +272,12 @@ export class Capabilities {
   /** Product feeds: the one integration that needs no credentials at all (ADR-015 §7.3). */
   readonly feeds: FeedCapabilities;
 
+  /**
+   * Connected platforms (ADR-014, ADR-020): calendars that block busy times and keep bookings in step.
+   * The host attaches the connectors it offers and how they reach the world (`connectors.attach`).
+   */
+  readonly connectors: ConnectorCapabilities;
+
   /** Signed receipts and their acknowledgements (ADR-016). Issued by a job, read by every door. */
   readonly receipts: ReceiptCapabilities;
 
@@ -412,6 +419,7 @@ export class Capabilities {
   ) {
     this.setup = new SetupCapabilities(db, () => this.policy);
     this.feeds = new FeedCapabilities(db);
+    this.connectors = new ConnectorCapabilities(db, secrets, baseUrl);
     this.secrets = secrets;
     this.webhooks = new WebhookCapabilities(
       db,

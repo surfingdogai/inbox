@@ -2128,3 +2128,189 @@ legend.label-line {
     display: none;
   }
 }
+
+/* Settings → Integrations: the gallery (ADR-020). Small tiles, hairlines, one quiet tag. */
+.int-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .int-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+.int-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--row-bg);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background 0.18s var(--ease-out-soft, ease),
+    border-color 0.18s var(--ease-out-soft, ease);
+}
+.int-tile:hover:not(:disabled) {
+  background: var(--row-bg-hover);
+}
+.int-tile.is-open {
+  border-color: var(--glass-border-strong);
+  background: var(--glass-bg-strong);
+}
+.int-tile:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline-offset: 2px;
+}
+.int-tile:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.int-tile.is-soon {
+  cursor: default;
+  color: var(--ink-2);
+  background: transparent;
+}
+.int-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  stroke-width: 1.5;
+  color: var(--ink-2);
+}
+.int-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.int-name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.int-line {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+.int-tag {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+.int-tag.is-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+}
+.int-tag.is-on::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--c-success, currentColor);
+}
+.int-panel {
+  animation: int-in 0.22s var(--ease-out-soft, ease) both;
+}
+.int-panel .seg {
+  flex-wrap: wrap;
+  border-radius: 14px;
+}
+.int-field {
+  display: grid;
+  gap: 4px;
+}
+.int-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.int-link:hover {
+  color: var(--ink);
+}
+.int-conn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+.int-conn > .wide {
+  grid-column: 1 / -1;
+}
+.int-conn-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.int-conn.is-paused .int-conn-main {
+  opacity: 0.7;
+}
+.int-conn-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.int-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.int-account {
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.int-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+@media (max-width: 640px) {
+  .int-conn {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .int-actions {
+    justify-content: flex-start;
+  }
+}
+.pill.is-warn {
+  border-color: color-mix(in srgb, var(--c-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--c-warning) 12%, transparent);
+}
+@keyframes int-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .int-panel {
+    animation: none;
+  }
+  .int-tile {
+    transition: none;
+  }
+}

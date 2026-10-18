@@ -12,7 +12,7 @@ import type { Inbox } from "@surfingdog/inbox/app";
 import type { MailOut } from "@surfingdog/platform";
 import { type NodeSqliteClient, nodeSqliteClient } from "@surfingdog/platform/node";
 import { ownerVerdict, readOnlyAllows } from "./allowlist";
-import { buildInbox } from "./build";
+import { type BuildDeps, buildInbox } from "./build";
 import type { ControlPlane, EventType } from "./control-plane";
 import { isTenantId, normalizeHost, SLUG_LABEL, shardOf } from "./host";
 import { tenantSecretKey } from "./keys";
@@ -72,6 +72,9 @@ export interface ShardOptions {
   readonly transport: (from: { address: string; name: string }) => MailOut;
   readonly fetchImpl?: typeof fetch | undefined;
   readonly clientDir?: string | undefined;
+  /** The OAuth clients every inbox signs owners in to platforms with, and the one address they come back to. */
+  readonly oauth?: BuildDeps["oauth"];
+  readonly oauthRedirect?: BuildDeps["oauthRedirect"];
   /** Inboxes kept open at once (default 64). */
   readonly maxOpen?: number | undefined;
   /** An inbox's file, past which it takes no new writes (default 200 MB). */
@@ -225,6 +228,8 @@ export class Shard {
         transport: this.o.transport,
         fetchImpl: this.o.fetchImpl,
         clientDir: this.o.clientDir,
+        oauth: this.o.oauth,
+        oauthRedirect: this.o.oauthRedirect,
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
         now: this.o.now,

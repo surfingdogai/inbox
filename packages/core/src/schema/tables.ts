@@ -741,6 +741,10 @@ export const connectors = sqliteTable(
     lastSyncAt: integer("last_sync_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /** The generation of `connector_busy` rows that is current (0022, ADR-020); null before the first. */
+    busyGen: integer("busy_gen"),
+    /** When those busy times were read from the platform. */
+    busyAt: integer("busy_at"),
   },
   (t) => [
     unique("connectors_kind_external").on(t.kind, t.externalId),
@@ -748,6 +752,73 @@ export const connectors = sqliteTable(
     index("connectors_status").on(t.status),
   ],
 );
+
+/**
+ * What a connected calendar says is busy (0022, ADR-020): one generation per connector, the one named by
+ * `connectors.busy_gen`. Busy times only ever remove times the inbox would offer; they never move or
+ * cancel a booking.
+ */
+export const connectorBusy = sqliteTable(
+  "connector_busy",
+  {
+    connectorId: text("connector_id")
+      .notNull()
+      .references(() => connectors.id),
+    gen: integer("gen").notNull(),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.connectorId, t.gen, t.startMs, t.endMs] }),
+    index("connector_busy_span").on(t.endMs, t.startMs),
+  ],
+);
+
+/**
+ * A booking a connector keeps in step on the platform (0022, ADR-020): the platform's id for it, what was
+ * last written there (`synced_hash`, `synced_start`, `synced_end`), and the claim that lets one job at a
+ * time call the platform for it. `state`: `pending` | `synced` | `removed` | `failed`.
+ */
+export const connectorLinks = sqliteTable(
+  "connector_links",
+  {
+    connectorId: text("connector_id")
+      .notNull()
+      .references(() => connectors.id),
+    itemId: text("item_id").notNull(),
+    externalId: text("external_id"),
+    etag: text("etag"),
+    calendar: text("calendar"),
+    syncedHash: text("synced_hash"),
+    syncedStart: integer("synced_start"),
+    syncedEnd: integer("synced_end"),
+    state: text("state").notNull().default("pending"),
+    claimUntil: integer("claim_until"),
+    attempts: integer("attempts").notNull().default(0),
+    retryAt: integer("retry_at"),
+    lastError: text("last_error"),
+    lastErrorAt: integer("last_error_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.connectorId, t.itemId] }),
+    index("connector_links_item").on(t.itemId),
+    index("connector_links_retry").on(t.connectorId, t.state, t.retryAt),
+  ],
+);
+
+/** A sign-in with a platform on its way (0022): the state's hash, the PKCE verifier sealed, ten minutes. */
+export const connectorAuth = sqliteTable("connector_auth", {
+  stateHash: text("state_hash").primaryKey(),
+  kind: text("kind").notNull(),
+  verifierEnc: text("verifier_enc").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  returnTo: text("return_to").notNull(),
+  createdAt: createdAt(),
+  expiresAt: integer("expires_at").notNull(),
+  usedAt: integer("used_at"),
+});
 
 /** The inbound mirror of `webhook_deliveries`: what a platform sent us, and what we made of it. */
 export const connectorEvents = sqliteTable(

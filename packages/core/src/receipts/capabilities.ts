@@ -13,7 +13,7 @@ import { appliesV6, networkReceiptStatements, networkRulesOf, type ReceiptRef, t
 import { items, parties, receipts, signingKeys } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { enabledNetworks, readSettings, type Settings } from "../settings/schema";
-import { hasActiveWebhook, webhookFanoutStatement } from "../write/common";
+import { hasEventListeners, webhookFanoutStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import type { ItemRow } from "../write/views";
 import { createKeyStore, type KeyStore } from "./keys";
@@ -352,7 +352,7 @@ export class ReceiptCapabilities {
         method: "run",
       },
     ];
-    if (await hasActiveWebhook(this.db)) {
+    if (await hasEventListeners(this.db)) {
       statements.push(webhookFanoutStatement({ id, type: `${item.type}.receipt_issued`, itemId: item.id }, now));
     }
     // Every network the owner switched on gets every receipt, so each directory can count what
@@ -439,7 +439,7 @@ export class ReceiptCapabilities {
         method: "run",
       },
     ];
-    if (await hasActiveWebhook(this.db)) {
+    if (await hasEventListeners(this.db)) {
       // `events_v1` names the acknowledgement `<receipt id>:ack`, so that is the event id here.
       const [it] = await this.db.orm.select({ type: items.type }).from(items).where(eq(items.id, row.itemId));
       if (it) {

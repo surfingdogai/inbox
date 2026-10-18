@@ -10,7 +10,7 @@ import {
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
 import { flagOn } from "./demo";
-import { listFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { listFrom, oauthFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 
 type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
@@ -27,6 +27,10 @@ type Bindings = Env & {
    */
   MAIL_FROM?: string;
   MAIL_FROM_NAME?: string;
+  /** Google Calendar's OAuth client (ADR-020); without both, Google shows as "Soon". */
+  GOOGLE_OAUTH_CLIENT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  GOOGLE_OAUTH_REDIRECT_URI?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -50,6 +54,7 @@ function inboxFor(env: Bindings): Inbox {
       secretKey: secretKeyFrom(env.INBOX_SECRET_KEY),
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
+      ...oauthFrom(env),
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>
         env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers })),

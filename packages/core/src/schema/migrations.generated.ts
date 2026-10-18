@@ -327,4 +327,18 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `network_status` ADD `doors_at` integer;",
     ],
   },
+  {
+    version: 23,
+    name: "0022_calendars",
+    statements: [
+      "-- Calendars (ADR-020). What a connected calendar says is busy, the bookings this inbox keeps in step\n-- in it, and the sign-ins with a platform that are on their way. Three new tables and two columns on\n-- `connectors`; nothing that exists is changed, and an instance with no calendar writes no row here.\n--\n-- `connector_busy` holds one generation of busy times per connector: a sync writes its rows under a\n-- generation of its own, moves `connectors.busy_gen` to it only if it is newer than the one there,\n-- and deletes every other generation. Readers join on `busy_gen`, so a slow sync that finishes after\n-- a newer one never puts old times back, and a half-written generation is never read.\nALTER TABLE `connectors` ADD `busy_gen` integer;",
+      "ALTER TABLE `connectors` ADD `busy_at` integer;",
+      "CREATE TABLE IF NOT EXISTS `connector_busy` (\n\t`connector_id` text NOT NULL,\n\t`gen` integer NOT NULL,\n\t`start_ms` integer NOT NULL,\n\t`end_ms` integer NOT NULL,\n\tPRIMARY KEY(`connector_id`, `gen`, `start_ms`, `end_ms`),\n\tFOREIGN KEY (`connector_id`) REFERENCES `connectors`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "CREATE INDEX IF NOT EXISTS `connector_busy_span` ON `connector_busy` (`end_ms`, `start_ms`);",
+      "-- One row per booking a connector keeps in step. `claim_until` is the compare-and-set that lets one\n-- job, and only one, call the platform for a booking at a time: two syncs never create it twice.\nCREATE TABLE IF NOT EXISTS `connector_links` (\n\t`connector_id` text NOT NULL,\n\t`item_id` text NOT NULL,\n\t`external_id` text,\n\t`etag` text,\n\t`calendar` text,\n\t`synced_hash` text,\n\t`synced_start` integer,\n\t`synced_end` integer,\n\t`state` text DEFAULT 'pending' NOT NULL,\n\t`claim_until` integer,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`retry_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tPRIMARY KEY(`connector_id`, `item_id`),\n\tFOREIGN KEY (`connector_id`) REFERENCES `connectors`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "CREATE INDEX IF NOT EXISTS `connector_links_item` ON `connector_links` (`item_id`);",
+      "CREATE INDEX IF NOT EXISTS `connector_links_retry` ON `connector_links` (`connector_id`, `state`, `retry_at`);",
+      "-- A sign-in with a platform the owner started (OAuth with PKCE): the state's SHA-256, never the state,\n-- and the verifier sealed by the secret box. Used once, gone after ten minutes.\nCREATE TABLE IF NOT EXISTS `connector_auth` (\n\t`state_hash` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`verifier_enc` text NOT NULL,\n\t`redirect_uri` text NOT NULL,\n\t`return_to` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer\n);",
+    ],
+  },
 ];

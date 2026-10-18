@@ -2,14 +2,20 @@ import type {
   Action,
   Availability,
   BusinessProfile,
+  CalendarChoice,
   Closure,
   Condition,
   ConnectedAppView,
+  ConnectionView,
   CreatedKey,
   CustomerSummary,
   DeliveryView,
   EraseResult,
   FeedConnector,
+  FormField,
+  GalleryCard,
+  GalleryWay,
+  IntegrationsView,
   Item,
   ItemDetail,
   ItemType,
@@ -41,14 +47,20 @@ export type {
   Action,
   Availability,
   BusinessProfile,
+  CalendarChoice,
   Closure,
   Condition,
   ConnectedAppView,
+  ConnectionView,
   CreatedKey,
   CustomerSummary,
   DeliveryView,
   EraseResult,
   FeedConnector,
+  FormField,
+  GalleryCard,
+  GalleryWay,
+  IntegrationsView,
   Item,
   ItemDetail,
   ItemType,
@@ -297,4 +309,21 @@ export interface CreateKeyBody {
   readonly preset?: string | undefined;
   readonly scopes?: readonly string[] | undefined;
   readonly expires_at?: string | undefined;
+}
+
+/** `POST /v1/owner/integrations`: a connection made with a form. */
+export interface ConnectBody {
+  readonly kind: string;
+  readonly preset?: string | undefined;
+  readonly values: Readonly<Record<string, string>>;
+}
+
+/** `PATCH /v1/owner/integrations/{id}`: what the owner chooses. */
+export interface ConnectionPatch {
+  readonly busy_on?: boolean;
+  readonly bookings_on?: boolean;
+  readonly busy_calendars?: readonly string[];
+  readonly destination?: string | null;
+  readonly services?: readonly string[] | null;
+  readonly paused?: boolean;
 }

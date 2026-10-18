@@ -31,6 +31,11 @@ import { parseMasterKeys } from "./keys";
  * - `HOSTED_SHARD_HEAP_MB`: a cap on each shard's JavaScript heap when `all` starts them (the
  *   service manager's memory limit is the hard one).
  * - `INBOX_STATIC`: the owner app's build; `INBOX_OUTBOUND_DENY`: more addresses no call reaches.
+ * - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (the shards'): the Google client every inbox
+ *   signs owners in to Google Calendar with; without both, Google shows as "Soon" (ADR-020).
+ * - `HOSTED_OAUTH_RELAY_HOST` (router and shards): the one name Google sends every owner back to,
+ *   `https://<it>/oauth/google/callback`, registered once on the Google client; the router passes
+ *   the owner on to their own inbox from there. Unset, each inbox uses its own callback.
  * - Mail: the same settings as the inbox's own Node server (`MAIL_FROM` is not needed: every inbox
  *   sends from its own pinned address).
  */
@@ -55,6 +60,8 @@ export interface HostedConfig {
   readonly shardHeapMb: number | undefined;
   readonly clientDir: string | undefined;
   readonly deny: readonly AddressRange[];
+  readonly google: { readonly clientId: string; readonly clientSecret: string } | null;
+  readonly oauthRelayHost: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -125,6 +132,14 @@ export function readConfig(env: Record<string, string | undefined>, role: Role =
     if (!ok) problems.push("HOSTED_REPORT_FORM is an https address with no query, like https://example.com/report");
   }
   const deny = outboundDenyFrom(env.INBOX_OUTBOUND_DENY);
+  const googleId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "";
+  const googleSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "";
+  if (shard && Boolean(googleId) !== Boolean(googleSecret)) {
+    problems.push("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET go together");
+  }
+  const relayRaw = env.HOSTED_OAUTH_RELAY_HOST?.trim();
+  const oauthRelayHost = relayRaw ? (normalizeHost(relayRaw) ?? undefined) : undefined;
+  if (relayRaw && !oauthRelayHost) problems.push("HOSTED_OAUTH_RELAY_HOST is not a host name");
   if (deny.bad.length > 0) problems.push(`INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range`);
   const shardSocketDir = env.HOSTED_SHARD_SOCKET_DIR?.trim() || (routerSocket ? dirname(routerSocket) : "");
   if (!shardSocketDir && (router || shard)) problems.push("HOSTED_SHARD_SOCKET_DIR is not set");
@@ -149,6 +164,8 @@ export function readConfig(env: Record<string, string | undefined>, role: Role =
     shardHeapMb: heap ?? undefined,
     clientDir: env.INBOX_STATIC?.trim() || undefined,
     deny: deny.ranges,
+    google: googleId && googleSecret ? { clientId: googleId, clientSecret: googleSecret } : null,
+    oauthRelayHost,
   };
   if (problems.length > 0) throw new ConfigError(problems);
   return config;

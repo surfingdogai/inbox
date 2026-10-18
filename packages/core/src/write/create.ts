@@ -24,7 +24,7 @@ import {
   diagnoseFailure,
   eventStatement,
   findIdempotent,
-  hasActiveWebhook,
+  hasEventListeners,
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
@@ -350,7 +350,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       ...(rulesDelay ? { runAt: now + rulesDelay } : {}),
     }),
   );
-  if (await hasActiveWebhook(db)) {
+  if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now));
   }
 

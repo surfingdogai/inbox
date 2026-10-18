@@ -16,6 +16,7 @@ import { isTenantId } from "./host";
 import { runtimeKey } from "./keys";
 import { Ledger } from "./ledger";
 import { migrateCheck } from "./migrate-check";
+import { relayRedirect } from "./oauth-relay";
 import { installRedaction } from "./redact";
 import { CachedResolver } from "./resolver";
 import { serveRouter, serveShard } from "./server";
@@ -60,6 +61,7 @@ async function runRouter(c: HostedConfig): Promise<void> {
     reportForm: c.reportForm,
     adminKey: c.adminKey,
     shardKey: c.shardKey,
+    oauthRelayHost: c.oauthRelayHost,
     socket: c.routerSocket,
     adminSocket: c.adminSocket,
   });
@@ -88,6 +90,8 @@ async function runShard(c: HostedConfig, index: number): Promise<void> {
     transport: transportFrom(process.env),
     fetchImpl: pinnedFetch({ deny: [...c.deny] }),
     clientDir: c.clientDir,
+    oauth: { google: c.google },
+    oauthRedirect: relayRedirect(c.oauthRelayHost),
     maxOpen: c.openPerShard,
     maxTenantBytes: c.maxTenantBytes,
     watchdog,

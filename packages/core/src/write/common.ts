@@ -165,9 +165,18 @@ export const WEBHOOK_DELIVERY_KIND = "webhook_delivery";
  */
 export const deliverJobPrefix = (deliveryId: string): string => `whsend:${deliveryId}:`;
 
-export async function hasActiveWebhook(db: Db): Promise<boolean> {
+/**
+ * Whether anything listens to events: an active webhook endpoint, or a connected calendar that keeps
+ * bookings in step (ADR-020), which the fanout tells of every booking event. An instance with neither
+ * writes no fanout job at all.
+ */
+export async function hasEventListeners(db: Db): Promise<boolean> {
   const { rows } = await db.client.query({
-    sql: "SELECT 1 FROM webhooks WHERE active = 1 LIMIT 1",
+    sql: `SELECT 1 FROM webhooks WHERE active = 1
+          UNION ALL
+          SELECT 1 FROM connectors WHERE kind <> 'feed' AND status <> 'disabled'
+             AND json_extract(config_public, '$.bookingsOn') = 1
+          LIMIT 1`,
     params: [],
     method: "all",
   });

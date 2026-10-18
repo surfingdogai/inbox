@@ -1,6 +1,8 @@
 import {
+  builtInConnectors,
   type CallerEnv,
   type ClientMetadata,
+  connectorHttp,
   createIdentityPort,
   DEMO_LIMITS,
   DEMO_SHARED,
@@ -19,6 +21,7 @@ import {
   networkPingOneHandler,
   networkPublishHandler,
   networkReceiptHandler,
+  type OAuthClients,
   type OwnerEmailChange,
   publicOrigin,
   WEBHOOK_DELIVERY_KIND,
@@ -29,6 +32,11 @@ import {
 import {
   buildManifest,
   Capabilities,
+  CONNECTOR_PUSH_KIND,
+  CONNECTOR_SYNC_KIND,
+  connectorLane,
+  connectorPushHandler,
+  connectorSyncHandler,
   createRunner,
   createSecretBox,
   type Db,
@@ -123,6 +131,17 @@ export interface AppDeps {
    * `nodeSnapshot`. Absent (D1), a download answers 501 and says how to copy the database instead.
    */
   readonly snapshot?: SqliteSnapshot | undefined;
+  /**
+   * The OAuth clients this inbox signs owners in to platforms with (GOOGLE_OAUTH_CLIENT_ID and
+   * GOOGLE_OAUTH_CLIENT_SECRET). A platform without one shows as "Soon" in Settings → Integrations.
+   */
+  readonly oauth?: OAuthClients | undefined;
+  /**
+   * One redirect address for every sign-in with a platform, when the host keeps one for all its
+   * inboxes (GOOGLE_OAUTH_REDIRECT_URI on hosted). Absent, each inbox's own
+   * `/oauth/connect/<kind>/callback`.
+   */
+  readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
 }
 
 export interface Inbox {
@@ -174,6 +193,13 @@ export function createInbox(deps: AppDeps): Inbox {
   const port = createIdentityPort(identity);
   caps.people.attachPort(port);
   caps.attachMail(mailOut);
+  // Connected platforms (ADR-020): every call leaves through the host's outbound fetch, and a demo
+  // calls none, whoever connected what.
+  caps.connectors.attach({
+    definitions: builtInConnectors({ oauth: deps.oauth }),
+    http: connectorHttp({ fetchImpl: demo ? noNetworkFetch : deps.fetchImpl }),
+    redirectUri: deps.oauthRedirect,
+  });
   // Throws here, as the inbox is built, on a policy that names something that is not a setting.
   caps.attachPolicy(deps.policy ?? null);
   const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts, secrets: caps.secrets })
@@ -200,7 +226,11 @@ export function createInbox(deps: AppDeps): Inbox {
       }),
     )
     // Product feeds (ADR-015 §7.3). An instance with no feed connected never enqueues one.
-    .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }));
+    .register(FEED_IMPORT_KIND, feedImportHandler({ caps, fetchImpl: deps.fetchImpl }))
+    // Connected calendars (ADR-020): a sync every five minutes, a push after every booking event,
+    // one connection's jobs one after another. An instance with nothing connected enqueues neither.
+    .register(CONNECTOR_SYNC_KIND, connectorSyncHandler(caps.connectors), { lane: connectorLane })
+    .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane });
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -211,8 +241,9 @@ export function createInbox(deps: AppDeps): Inbox {
     ]) {
       runner.register(kind, noNetworkHandler);
     }
-    // Nor does anything a tester typed leave by a webhook, whoever set one up.
-    for (const kind of [WEBHOOK_FANOUT_KIND, WEBHOOK_DELIVERY_KIND]) runner.register(kind, noWebhookHandler);
+    // Nor does anything a tester typed leave by a webhook, or reach a calendar, whoever set one up.
+    for (const kind of [WEBHOOK_FANOUT_KIND, WEBHOOK_DELIVERY_KIND, CONNECTOR_SYNC_KIND, CONNECTOR_PUSH_KIND])
+      runner.register(kind, noWebhookHandler);
     runner.register(
       DEMO_NIGHTLY_KIND,
       demoNightlyHandler({ mailOut: transport, demo, baseUrl: deps.baseUrl, seed: { receipts: caps.receipts } }),
@@ -304,8 +335,13 @@ export function createInbox(deps: AppDeps): Inbox {
   });
   // The customer's pages set their own headers: the ones behind an email's links, and the business's
   // own page (`/p/*`, and `/` for anyone but the owner signed in, who gets their app there).
+  // So do the addresses a platform sends the owner back to after signing in (`/oauth/connect/…`),
+  // which carry a code: no Referer, nothing loaded.
   const customerPage = (path: string, request: Request) =>
-    path.startsWith("/c/") || path.startsWith("/p/") || (path === "/" && !hasOwnerSession(request));
+    path.startsWith("/c/") ||
+    path.startsWith("/p/") ||
+    path.startsWith("/oauth/connect/") ||
+    (path === "/" && !hasOwnerSession(request));
   app.use("*", (c, next) =>
     customerPage(c.req.path, c.req.raw)
       ? pageHeaders(c, next)

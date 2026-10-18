@@ -1544,6 +1544,52 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           };
         }),
     );
+    // ---- integrations: connected calendars (ADR-020) ----
+    server.registerTool(
+      "list_integrations",
+      {
+        title: "List integrations",
+        description:
+          "What this inbox can connect (Cal.com; a calendar: Google, iCloud, Fastmail, Nextcloud or any CalDAV; Stripe, Mollie, Shopify and WooCommerce say soon until they are built) and what is connected: each connection's status, when it last synced, how many busy times it holds, how many bookings it wrote and any that failed, and its last error. Busy times in a connected calendar take those times off what the inbox offers; confirmed bookings are written to it. Connecting or disconnecting takes the owner's password or sign-in, so only the owner does it, in Settings → Integrations; tell them in a note what you suggest.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        guarded("list_integrations", async () => {
+          const r = await caps.connectors.integrations(caller);
+          const connected = r.connections.map(
+            (c) =>
+              `${c.id} ${c.title} [${c.status}] ${c.busy_on ? `${c.busy_times} busy time${c.busy_times === 1 ? "" : "s"}` : "busy times off"}, ${c.bookings_on ? `${c.bookings_written} booking${c.bookings_written === 1 ? "" : "s"} written` : "bookings off"}${c.bookings_failing ? `, ${c.bookings_failing} failing` : ""}${c.last_sync_at ? `, synced ${new Date(c.last_sync_at).toISOString()}` : ", not synced yet"}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`,
+          );
+          const soon = r.cards.filter((card) => card.status === "soon").map((card) => card.title);
+          return {
+            text: [
+              connected.length ? connected.join("\n") : "Nothing is connected yet.",
+              soon.length ? `Soon: ${soon.join(", ")}.` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            structured: r,
+          };
+        }),
+    );
+    server.registerTool(
+      "sync_integration",
+      {
+        title: "Sync a connection now",
+        description:
+          "Reads a connected calendar's busy times and writes confirmed bookings to it now, rather than at the next five-minute sync.",
+        inputSchema: z.object({ connection_id: z.string().min(1), idempotency_key: idempotencyKey }),
+        annotations: writes,
+      },
+      ({ idempotency_key, connection_id }) =>
+        guarded("sync_integration", async () => {
+          const r = await once(idempotency_key, "integrations.sync", { id: connection_id }, (c) =>
+            caps.connectors.syncNow(c, connection_id),
+          );
+          return { text: `Sync of ${connection_id} queued.${again(r.replayed)}`, structured: r.result };
+        }),
+    );
     server.registerTool(
       "get_settings",
       {

@@ -1,5 +1,5 @@
 import { serveStatic } from "@hono/node-server/serve-static";
-import type { OwnerEmailChange } from "@surfingdog/adapters";
+import type { OAuthClients, OwnerEmailChange } from "@surfingdog/adapters";
 import { type Db, type HostPolicy, hostPolicyFor } from "@surfingdog/core";
 import { createInbox, type Inbox } from "@surfingdog/inbox/app";
 import { isDoor } from "@surfingdog/inbox/doors";
@@ -43,6 +43,10 @@ export interface BuildDeps {
   /** Where the owner app's files are (the client build); absent, the inbox serves its doors only. */
   readonly clientDir?: string | undefined;
   readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
+  /** The OAuth clients every inbox signs owners in to platforms with (Google Calendar). */
+  readonly oauth?: OAuthClients | undefined;
+  /** The one redirect address a platform sends every owner back to, through the router (ADR-020). */
+  readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
   readonly now?: (() => number) | undefined;
@@ -79,6 +83,8 @@ export function buildInbox(d: BuildDeps): Inbox {
     privateFetchImpl: d.fetchImpl,
     onOwnerEmailChange: d.onOwnerEmailChange,
     snapshot: nodeSnapshot(d.client, d.dir),
+    oauth: d.oauth,
+    oauthRedirect: d.oauthRedirect,
     now: d.now,
   });
   if (d.clientDir) {
