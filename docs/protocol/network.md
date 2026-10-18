@@ -5,7 +5,10 @@ Spec 0.3 adds, all of it optional for a network and none of it read by an inbox,
 agentic score (§4.13), the discovery documents (§4.14) and a member's track record (§4.3). Spec 0.4
 adds, optional for a network, door reports (§4.15): agents say how each use of a door went, and the
 business sees it in its signed ping's answer; and it writes down how a network's own reads move a
-door (§4.8).
+door (§4.8). Spec 0.5 names `orderable` as a level of its own, the rung `bookable` is on, for doors
+that take orders and none that books; `level=bookable` and `level=orderable` filter by what the doors
+take; and a UCP or ACP profile raises a business only on a site that shows it sells (§4.9). A network
+that emits `orderable` serves spec 0.5; a reader of 0.4 does not know the value.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -856,13 +859,14 @@ A business's level is the highest level among its live doors.
 | `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
 | `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
 | `bookable` | a door can book | inbox booking; declared MCP or API booking operations |
-| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product or Offer markup with a price, or another door of its own that takes orders); declared MCP or API order operations |
+| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, or another door of its own that takes orders); declared MCP or API order operations |
 | `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
 
 Levels come from the network's own probes; what a business declares is a hint until a probe confirms
 it. A door behind a customer account never raises a level. A UCP or ACP profile on a site that shows
-nothing for sale (no Product or Offer markup with a price, no other door that takes orders) raises it
-no higher than `readable`: a website platform may serve one on every site it hosts. **Agent-ready** means `askable` or above.
+nothing for sale (no Product markup with a price, no other door that takes orders) raises it no
+higher than `readable`: a website platform may serve one on every site it hosts. A priced menu, a
+list of services or an offer with no price is no Product markup. **Agent-ready** means `askable` or above.
 A network lists businesses below `askable` only after its own checks for that (a working claim,
 correction and removal, and the fields each jurisdiction asks for); until then a filter below
 `askable` returns nothing. A network never shows a number for a level, only its name.
