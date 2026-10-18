@@ -1324,7 +1324,7 @@ call the network every time.
 
 An inbox answers at its own host, often `inbox.<domain>`, with its manifest at
 `/.well-known/agent-inbox.json`. An agent that knows only the business's domain is led there by any of
-five ways, each a line the business adds where it already publishes things (ADR-002, ADR-022):
+five ways, each a line the business adds where it already publishes things (ADR-002, ADR-024):
 
 | Way | What the domain publishes |
 |---|---|

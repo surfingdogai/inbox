@@ -3,7 +3,7 @@ import { MANIFEST_PATH } from "../base";
 import { timestampSchema } from "./common";
 
 /**
- * How an AI agent that knows only a business's domain finds its inbox (ADR-002, ADR-022): the inbox
+ * How an AI agent that knows only a business's domain finds its inbox (ADR-002, ADR-024): the inbox
  * answers at its own host (inbox.<domain> by default), and the domain leads to it in one or more
  * ways, each a line the business adds where it already publishes things:
  *

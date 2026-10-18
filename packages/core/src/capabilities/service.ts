@@ -425,7 +425,7 @@ export class Capabilities {
   }
 
   /**
-   * "Let agents find your inbox" (ADR-022): where the lines go (the business's own domain) and where
+   * "Let agents find your inbox" (ADR-024): where the lines go (the business's own domain) and where
    * they point (this inbox's own host), and the lines themselves.
    */
   async getDiscovery(caller: Caller): Promise<DiscoveryView> {
@@ -480,7 +480,7 @@ export class Capabilities {
     outbound?: {
       readonly fetch?: typeof fetch | undefined;
       readonly privateFetch?: typeof fetch | undefined;
-      /** How the discovery check asks its network (ADR-022): absent, `fetch`. */
+      /** How the discovery check asks its network (ADR-024): absent, `fetch`. */
       readonly discovery?: typeof fetch | undefined;
     },
   ) {

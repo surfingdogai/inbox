@@ -19,7 +19,7 @@ import vectors from "../vectors/discovery.json";
 import words from "../vectors/discovery-words.json";
 
 /**
- * The lines that lead an agent from a business's domain to its inbox (ADR-022), against
+ * The lines that lead an agent from a business's domain to its inbox (ADR-024), against
  * `vectors/discovery.json`: the network's discovery check and a hosted inbox's Connect page are held
  * to the same file, so the three never say two things.
  */

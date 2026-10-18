@@ -30,7 +30,7 @@ define( 'SDI_KEEP', 7 * 24 * 3600 );
 
 /*
  * What it publishes, from one setting (the inbox's address, inbox.<your domain> unless you set
- * another), the same lines the inbox's own Settings → Be found gives (ADR-022 in the inbox's
+ * another), the same lines the inbox's own Settings → Be found gives (ADR-024 in the inbox's
  * repository; its vectors/discovery.json):
  *
  *   - <link rel="agent-inbox" href="…/agent-inbox.json"> in every page's <head>, and the same as an

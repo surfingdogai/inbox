@@ -243,7 +243,7 @@ export const api = {
       body: {},
       idempotent: true,
     }),
-  /** "Let agents find your inbox": the lines for the business's own site (ADR-022). */
+  /** "Let agents find your inbox": the lines for the business's own site (ADR-024). */
   discovery: () => call<DiscoveryView>("GET", "/v1/owner/discovery"),
   /** Surfing Dog's checker reads the site, when the owner asks. */
   checkDiscovery: () => call<DiscoveryResult>("POST", "/v1/owner/discovery/check"),

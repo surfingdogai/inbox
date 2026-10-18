@@ -5,7 +5,7 @@ import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * Settings → Be found (ADR-022) through the owner's API: the lines for the business's own site, and
+ * Settings → Be found (ADR-024) through the owner's API: the lines for the business's own site, and
  * Surfing Dog's checker asked only when the owner asks, with one GET that follows no redirect and an
  * answer held to the published schema. The network is a recorded answer: nothing leaves the test.
  */

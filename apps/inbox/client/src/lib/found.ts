@@ -1,7 +1,7 @@
 import type { DiscoveryItem, DiscoveryResult, DiscoverySnippets } from "./types";
 
 /**
- * "Let agents find your inbox" (ADR-022): the words, and the steps where most small businesses' sites are,
+ * "Let agents find your inbox" (ADR-024): the words, and the steps where most small businesses' sites are,
  * then any site: the spec's vectors/discovery-words.json, word for word (a hosted inbox's Connect page and
  * the WordPress plugin say the same). The steps were written from each platform's own help pages; they have
  * not been walked through in the platforms' panels yet.

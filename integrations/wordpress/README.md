@@ -2,7 +2,7 @@
 
 A WordPress plugin that points AI agents from a business's website to its agent inbox, from one
 setting (the inbox's address, `inbox.<domain>` unless set). Once the address is saved and the inbox
-answers there with its manifest, it publishes the lines of ADR-022 and
+answers there with its manifest, it publishes the lines of ADR-024 and
 `packages/spec/vectors/discovery.json`:
 
 - `<link rel="agent-inbox">` in every page's head, and the same as an HTTP `Link` header;

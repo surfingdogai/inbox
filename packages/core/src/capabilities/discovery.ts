@@ -11,7 +11,7 @@ import { isPublicHost } from "../util/hosts";
 import { WriteError } from "../write/errors";
 
 /**
- * "Let agents find your inbox" (ADR-022): the inbox answers at its own host, and the business's main
+ * "Let agents find your inbox" (ADR-024): the inbox answers at its own host, and the business's main
  * site leads an agent there in a few lines it publishes where it already publishes things (a link in
  * its pages, schema.org structured data, a line in llms.txt, its own /.well-known/agent-inbox.json,
  * a DNS record). This works out those lines for this inbox, and asks a network's discovery check

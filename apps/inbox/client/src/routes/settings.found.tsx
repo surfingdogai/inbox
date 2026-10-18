@@ -30,7 +30,7 @@ export const Route = createFileRoute("/settings/found")({
 });
 
 /**
- * Settings → Be found (ADR-022), in the order a small owner needs it: where the website is, that platform's
+ * Settings → Be found (ADR-024), in the order a small owner needs it: where the website is, that platform's
  * steps with only the lines it needs, one DNS record folded for whoever manages DNS, Check and an email for
  * whoever runs the site, then what the check found. Surfing Dog's checker reads the site's public pages only
  * when the owner presses Check; the platform it read is then picked, unless the owner picked one.

@@ -1,4 +1,4 @@
-# ADR-022 — Owners in control, and inboxes found from the domain
+# ADR-024 — Owners in control, and inboxes found from the domain
 
 **Status:** proposed, 18 October 2026. Built behind no switch; nothing is deployed, and nothing is
 submitted to any directory, registry or provider.

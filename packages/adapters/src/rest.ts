@@ -923,7 +923,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["owner"],
       summary: "The lines that lead AI agents from the business's own site to this inbox",
       description:
-        "Where they go (the business's own domain: its website in Settings) and where they point (this inbox's own host), and the lines themselves: a <link rel=\"agent-inbox\">, schema.org structured data, a line for llms.txt, a _agent-inbox TXT record, and the manifest to serve at the site's own /.well-known/agent-inbox.json (ADR-022).",
+        "Where they go (the business's own domain: its website in Settings) and where they point (this inbox's own host), and the lines themselves: a <link rel=\"agent-inbox\">, schema.org structured data, a line for llms.txt, a _agent-inbox TXT record, and the manifest to serve at the site's own /.well-known/agent-inbox.json (ADR-024).",
       responses: json("Discovery", R.looseSchema),
     }),
     async (c) => c.json(await caps.getDiscovery(c.get("caller"))),
