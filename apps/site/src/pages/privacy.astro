@@ -10,6 +10,7 @@
 // headers). Those logs have no time limit yet: the logs bullet names one only once it is set.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
+import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const UPDATED = "18 October 2026";
@@ -158,6 +159,14 @@ const UPDATED = "18 October 2026";
           new read of a site is deleted after 90 days. The result is public at <code>surfingdog.ai/b/&lt;domain&gt;</code>;
           a business can hide its own with <code>update_business</code>, with proof that the domain is its own, and can
           ask us to stop listing or reading its site at <a class="link" href="/bot">surfingdog.ai/bot</a>.
+        </li>
+        <li>
+          <b>Doors.</b> We read the doors businesses publish for AI agents (their MCP servers, agent cards, inboxes and
+          the like). Each read itself is kept 90 days. What they found we keep for good, one line per door per day: how
+          many reads we made, how many were answered, failed (and why) or blocked, how quickly, the protocol version the
+          door states, and the first and last day it answered. Beyond the site's own web addresses it holds nothing
+          about a person, no page content and nothing a customer wrote. {doorHistoryPublic(DOOR_SHARE_SHOWN)} A business
+          that opts out at <a class="link" href="/bot">surfingdog.ai/bot</a> has all of it deleted at once.
         </li>
         <li>
           <b>Registering and changing a listing.</b> <code>register_business</code> and <code>update_business</code>

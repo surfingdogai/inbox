@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { reportHintSchema, timestampSchema } from "./common";
-import { doorTypeSchema, levelNameSchema, trackRecordSchema } from "./directory";
+import { doorHistorySchema, doorTypeSchema, levelNameSchema, trackRecordSchema } from "./directory";
 
 /**
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
@@ -626,6 +626,9 @@ export const checkResultSchema = z.object({
   badge: z.object({ svg: z.url(), snippet: z.string() }).optional(),
   owner: z.object({ claim: z.string(), hide: z.string(), opt_out: z.string() }).optional(),
   track_record: trackRecordSchema.optional(),
+  door_history: doorHistorySchema
+    .optional()
+    .describe("Every door type at every host of the site a read of the network's found answering (§4.8)."),
   report: reportHintSchema.optional(),
 });
 export type CheckResult = z.infer<typeof checkResultSchema>;

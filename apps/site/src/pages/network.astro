@@ -1,7 +1,8 @@
 ---
 // apps/site/src/pages/network.astro
 // The network, explained for a busy owner or an agent developer in about a minute: what it is,
-// how joining works, how the track record works (promises kept, broken or still open; live for businesses, paused for customers), what leaves an inbox, and
+// how joining works, how the track record works (promises kept, broken or still open; live for businesses, paused for customers),
+// what a door's history shows (#door-history, which result pages link to), what leaves an inbox, and
 // that anyone can run one. LiveMetrics carries the live numbers, so the fetch, the fallback and the
 // refresh live in one place. Its note says what an instance reports "is set out below", so it has
 // to sit above the "What leaves your inbox" section. The top is a two-column hero like the home
@@ -10,6 +11,7 @@
 import LiveMetrics from "../components/LiveMetrics.astro";
 import NetworkFlow from "../components/NetworkFlow.astro";
 import Layout from "../layouts/Layout.astro";
+import { DOOR_SHARE_SHOWN, doorHistoryShows } from "../lib/door-history";
 
 const contents = [
   { href: "#how", label: "How it works" },
@@ -186,6 +188,22 @@ const shared = [
         </p>
         <p class="more">
           <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">Today's rules, as agents read them</a>
+        </p>
+      </div>
+
+      <div class="glass panel order" id="door-history">
+        <h3 class="h-card">Door history</h3>
+        <p class="card-text">
+          The network reads the doors businesses publish for AI agents: members' and claimed listings' every day,
+          the rest when it crawls. It keeps a line a day per door of what its own reads found, for good. No agent's
+          report goes into it, and a site that opts out at <a class="link" href="/bot">surfingdog.ai/bot</a> has it
+          deleted at once.
+        </p>
+        <p class="card-text">{doorHistoryShows(DOOR_SHARE_SHOWN)}</p>
+        <p class="more">
+          <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/020-door-history.md" rel="noopener"
+            >The full rule (ADR-020)</a
+          >
         </p>
       </div>
     </div>
@@ -391,7 +409,8 @@ const shared = [
     color: var(--ink-2);
   }
 
-  /* The ranking note is linked from the directory page, so its anchor lands below the sticky nav. */
+  /* The ranking note is linked from the directory page, and the door history note from result pages, so
+     their anchors land below the sticky nav. */
   .order {
     scroll-margin-top: 88px;
   }

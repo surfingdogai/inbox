@@ -893,6 +893,104 @@
         "required": ["field", "v", "src", "at"]
       }
     },
+    "door_history": {
+      "description": "The history of the doors this listing shows (§4.8).",
+      "type": "object",
+      "properties": {
+        "as_of": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+          "description": "The UTC day it was read on."
+        },
+        "doors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^(inbox|mcp|a2a|openapi|api|ucp|acp|nlweb|webhook|other|platform:[a-z0-9-]{1,40})$"
+              },
+              "host": {
+                "type": "string",
+                "description": "The door's host, lower case."
+              },
+              "first_seen": {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "description": "The first UTC day a read of the network's found a door of this type at this host answering."
+              },
+              "last_seen": {
+                "type": "string",
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "description": "The last such day."
+              },
+              "days_seen": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "description": "On how many days a read of the network's found it answering: a door read about once a month is seen on few days, and nothing is said of the days between."
+              },
+              "current": {
+                "type": "boolean",
+                "description": "Whether a door of this type is at this host now (not gone)."
+              },
+              "checks": {
+                "description": "A door the network reads every day (a member's, a claimed listing's), from 14 checked days.",
+                "type": "object",
+                "properties": {
+                  "first_checked": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "description": "The first day checked."
+                  },
+                  "last_checked": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                    "description": "The last day checked."
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Days checked: days on which the network's daily read of the door concluded. A read an agent's report or the business asked for is no check."
+                  },
+                  "answered": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Of them, days on which every check answered: one missed check (failed, or blocked while the door is down by the network's reads) makes the day missed, and one refused check (blocked otherwise) makes it refused."
+                  },
+                  "refused": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991,
+                    "description": "Of them, days on which a check was refused and none was missed: never answered days."
+                  },
+                  "recent": {
+                    "type": "string",
+                    "pattern": "^[axb.]{90}$",
+                    "description": "The last 90 days ending on as_of, oldest first: a every check answered, x one was missed, b one was refused and none missed, . no check that day."
+                  }
+                },
+                "required": ["first_checked", "last_checked", "days", "answered", "refused", "recent"]
+              },
+              "summary": {
+                "description": "With checks, in English: \"Answered every check on 41 of 42 days checked since 3 Oct 2026 (97%).\", the share floored, the days refused after it (\"(75%; refused our check on 5)\"), \"from … to …\" when the last check is more than 7 days old. Informative: another network may word it its own way.",
+                "type": "string"
+              }
+            },
+            "required": ["type", "host", "first_seen", "last_seen", "days_seen", "current"]
+          }
+        }
+      },
+      "required": ["as_of", "doors"]
+    },
     "report": {
       "type": "object",
       "properties": {

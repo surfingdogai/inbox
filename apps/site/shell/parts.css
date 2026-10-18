@@ -1290,6 +1290,56 @@ textarea.sd-code {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- A site's door history (result page) ------------------------- */
+/* Each door type at a host: on how many days our reads found it answering, and for a door read every
+   day, the share of days every check answered over a sparkline of the last 90 days, captioned beside
+   it. The page draws the sparkline as one SVG of up to four paths, one thin mark a day: .is-answered a
+   bar in a light success tone, .is-missed a bar in ink, .is-refused a bar half as tall in softer ink
+   (a day the site refused our check, told apart by its shape too), .is-none a dot on the line in
+   faint ink. Never red. Its title says the counts, for a screen reader and on hover; without this
+   sheet it is still ink at four strengths. */
+.sd-history {
+  display: grid;
+  gap: var(--sp-1);
+}
+.sd-history p {
+  margin: 0;
+}
+.sd-spark-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.sd-spark-row .fine {
+  margin: 0;
+  white-space: nowrap;
+}
+/* On a narrow screen the line narrows (its bars thinner) and its caption stays beside it. */
+.sd-spark {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  height: 8px;
+  color: var(--ink-3);
+}
+.sd-spark .is-answered {
+  fill: var(--c-success);
+  fill-opacity: 0.45;
+}
+.sd-spark .is-missed {
+  fill: var(--ink);
+  fill-opacity: 1;
+}
+.sd-spark .is-refused {
+  fill: var(--ink-2);
+  fill-opacity: 0.7;
+}
+.sd-spark .is-none {
+  fill: var(--ink-3);
+  fill-opacity: 0.5;
+}
+
 /* --- A check while it reads, and the result as a guide ----------- */
 /* The classes the network's live check page, result pages and leaderboards use from the site: the
    rows a check streams as it reads, the chips for the files it found, "Check again", a suggested

@@ -217,6 +217,74 @@ export const cardDoorSchema = z.object({
 });
 export type CardDoor = z.infer<typeof cardDoorSchema>;
 
+/**
+ * A door's history (§4.8, ADR-020): what the network's own reads found of one door type at one host of the
+ * business, from a line a day it keeps for good. Never anything an agent reported. `checks` only for a door the
+ * network reads every day, and only from 14 checked days; below that it is absent, and nothing says why. A network
+ * may leave `checks` and `summary` out altogether. `vectors/door-history.json` pins it down.
+ */
+export const doorHistoryEntrySchema = z.object({
+  type: doorTypeSchema,
+  host: z.string().describe("The door's host, lower case."),
+  first_seen: z.iso
+    .date()
+    .describe("The first UTC day a read of the network's found a door of this type at this host answering."),
+  last_seen: z.iso.date().describe("The last such day."),
+  days_seen: z
+    .int()
+    .min(1)
+    .describe(
+      "On how many days a read of the network's found it answering: a door read about once a month is seen on few days, and nothing is said of the days between.",
+    ),
+  current: z.boolean().describe("Whether a door of this type is at this host now (not gone)."),
+  checks: z
+    .object({
+      first_checked: z.iso.date().describe("The first day checked."),
+      last_checked: z.iso.date().describe("The last day checked."),
+      days: z
+        .int()
+        .min(1)
+        .describe(
+          "Days checked: days on which the network's daily read of the door concluded. A read an agent's report or the business asked for is no check.",
+        ),
+      answered: z
+        .int()
+        .min(0)
+        .describe(
+          "Of them, days on which every check answered: one missed check (failed, or blocked while the door is down by the network's reads) makes the day missed, and one refused check (blocked otherwise) makes it refused.",
+        ),
+      refused: z
+        .int()
+        .min(0)
+        .describe("Of them, days on which a check was refused and none was missed: never answered days."),
+      recent: z
+        .string()
+        .regex(/^[axb.]{90}$/)
+        .describe(
+          "The last 90 days ending on as_of, oldest first: a every check answered, x one was missed, b one was refused and none missed, . no check that day.",
+        ),
+    })
+    .optional()
+    .describe("A door the network reads every day (a member's, a claimed listing's), from 14 checked days."),
+  summary: z
+    .string()
+    .optional()
+    .describe(
+      'With checks, in English: "Answered every check on 41 of 42 days checked since 3 Oct 2026 (97%).", the share floored, the days refused after it ("(75%; refused our check on 5)"), "from … to …" when the last check is more than 7 days old. Informative: another network may word it its own way.',
+    ),
+});
+export type DoorHistoryEntry = z.infer<typeof doorHistoryEntrySchema>;
+
+export const doorHistorySchema = z
+  .object({
+    as_of: z.iso.date().describe("The UTC day it was read on."),
+    doors: z.array(doorHistoryEntrySchema),
+  })
+  .describe(
+    "What the network's own reads found of the business's doors, kept for good: each door type at each host, the doors there now first, when it was first and last seen answering and on how many days, and for a door read every day, on how many days every check answered. Absent when there is nothing to say.",
+  );
+export type DoorHistory = z.infer<typeof doorHistorySchema>;
+
 /** A place category: an Overture Place Categories id (CC BY 4.0) with its label, or a group slug. */
 export const placeCategorySchema = z.object({ id: z.string(), label: z.string(), src: factSourceSchema });
 
@@ -366,6 +434,7 @@ export const listingDetailSchema = listingSchema.extend({
     .array(listingFactSchema)
     .optional()
     .describe("Every displayed value of an entry that is not a member, with its source and date (§4.11)."),
+  door_history: doorHistorySchema.optional().describe("The history of the doors this listing shows (§4.8)."),
   report: reportHintSchema.optional(),
 });
 export type ListingDetail = z.infer<typeof listingDetailSchema>;
