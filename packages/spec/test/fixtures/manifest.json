@@ -1,0 +1,58 @@
+{
+  "spec": "surfingdog-inbox/0",
+  "instance": "https://inbox.example.com",
+  "profile": {
+    "name": "Harbour Bikes",
+    "description": "Bicycle repairs and hire",
+    "categories": ["bicycle-repair"],
+    "languages": ["en", "af"],
+    "address": {
+      "addressLocality": "Cape Town",
+      "addressCountry": "ZA"
+    },
+    "hours": {
+      "timezone": "Africa/Johannesburg",
+      "weekly": {
+        "mon": [["09:00", "13:00"], ["14:00", "18:00"]],
+        "sat": [["10:00", "14:00"]]
+      },
+      "closures": []
+    },
+    "services": [
+      {
+        "name": "Tune-up",
+        "type": "booking"
+      },
+      {
+        "name": "Wheel build",
+        "type": "quote_request"
+      }
+    ]
+  },
+  "item_types": ["message", "quote_request", "booking", "refund"],
+  "protocols": {
+    "openapi": "https://inbox.example.com/openapi.json",
+    "rest": "https://inbox.example.com/v1",
+    "mcp": "https://inbox.example.com/mcp"
+  },
+  "agent_policy": {
+    "tiers": ["anonymous", "signed_agent", "verified_principal", "reputed_principal"],
+    "signatures": ["sdi-agent/1", "web-bot-auth"],
+    "passes": true,
+    "networks": ["https://network.example.com"],
+    "guide": "https://surfingdog.ai/for-agents.md"
+  },
+  "receipt_keys": {
+    "keys": [
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+        "kid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
+        "alg": "EdDSA",
+        "use": "sig"
+      }
+    ]
+  },
+  "review_services": ["https://network.example.com"]
+}

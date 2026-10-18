@@ -13,6 +13,8 @@ import {
   capabilitiesVocabSchema,
   caseAnsweredSchema,
   categoriesResponseSchema,
+  censusEditionSchema,
+  censusEditionsSchema,
   checkBusinessInputSchema,
   checkBusinessOutputSchema,
   checkResultSchema,
@@ -30,6 +32,8 @@ import {
   doorReportsResponseSchema,
   getBusinessInputSchema,
   getBusinessOutputSchema,
+  getCensusInputSchema,
+  getCensusOutputSchema,
   instanceRegistrationRequestSchema,
   instanceRegistrationResponseSchema,
   instanceStatusSchema,
@@ -187,6 +191,8 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
     schema: listAttributesOutputSchema,
     title: "MCP list_attributes: structuredContent",
   },
+  "mcp-get-census-input": { schema: getCensusInputSchema, title: "MCP get_census: arguments" },
+  "mcp-get-census-output": { schema: getCensusOutputSchema, title: "MCP get_census: structuredContent" },
   "mcp-register-business-input": { schema: registerBusinessInputSchema, title: "MCP register_business: arguments" },
   "mcp-register-business-output": {
     schema: registerBusinessOutputSchema,
@@ -221,12 +227,24 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "check-result": { schema: checkResultSchema, title: "GET /b/{domain}.json: a check's result" },
   leaderboard: { schema: leaderboardSchema, title: "GET /leaderboard.json" },
   "ai-catalog": { schema: aiCatalogSchema, title: "/.well-known/ai-catalog.json (ARD), as a network serves it" },
+  "census-edition": {
+    schema: censusEditionSchema,
+    title: "GET /v1/census/{edition}: one month of the census, as counts (CC BY 4.0)",
+  },
+  "census-editions": { schema: censusEditionsSchema, title: "GET /v1/census: the published editions" },
 };
+
+/**
+ * Where the schemas are published, each at `<SCHEMA_BASE><name>.json`: its `$id`. The MCP tools' schemas, which a
+ * network serves inside its `tools/list`, carry none.
+ */
+export const SCHEMA_BASE = "https://surfingdog.ai/spec/schemas/";
 
 /** One JSON Schema document, as it is written to `schemas/<name>.json`. */
 export function jsonSchemaOf(name: string): Record<string, unknown> {
   const entry = JSON_SCHEMAS[name];
   if (!entry) throw new Error(`no schema named ${name}`);
   const { $schema, ...rest } = z.toJSONSchema(entry.schema, { io: "input" }) as Record<string, unknown>;
-  return { $schema, title: entry.title, ...rest };
+  if (name.startsWith("mcp-")) return { $schema, title: entry.title, ...rest };
+  return { $schema, $id: `${SCHEMA_BASE}${name}.json`, title: entry.title, ...rest };
 }

@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/recovery-finish-key.json",
   "title": "POST /v1/recovery/finish: recover",
   "type": "object",
   "properties": {

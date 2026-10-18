@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/score-rules.json",
   "title": "GET /v1/score-rules: the agentic score's rules",
   "type": "object",
   "properties": {

@@ -19,6 +19,7 @@ import { hostedOwnership } from "../src/lib/hosted";
 import { OWN_WORD_NOTE, recordNote, recordView, UNCONFIRMED_NOTE } from "../src/lib/record";
 import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
+import { specFiles } from "../src/lib/spec";
 import { capabilities, leastOf, stateOf } from "../src/lib/status";
 
 /**
@@ -569,6 +570,17 @@ describe("the home page and the three products", () => {
       if (p === "") return existsSync(site("src/pages/index.astro"));
       if (proxied.some((r) => r.test(p))) return true;
       if (p.startsWith("/docs")) return existsSync(site(`src/content/docs${p}.md`)) || p === "/docs";
+      // The specs: Starlight pages under src/content/docs/spec, the check, and packages/spec's files.
+      if (p === "/spec") return existsSync(site("src/content/docs/spec/index.md"));
+      if (p.startsWith("/spec/")) {
+        const rest = p.slice("/spec/".length);
+        return (
+          existsSync(site(`src/content/docs/spec/${rest}.md`)) ||
+          existsSync(site(`src/pages/spec/${rest}.astro`)) ||
+          specFiles().some((f) => f.path === rest) ||
+          rest === "index.json"
+        );
+      }
       if (p.startsWith("/blog")) return true;
       return (
         existsSync(site(`src/pages${p}.astro`)) ||

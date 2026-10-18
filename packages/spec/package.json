@@ -1,9 +1,9 @@
 {
   "name": "@surfingdog/spec",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "license": "MIT",
-  "description": "Surfing Dog Inbox open formats: discovery manifest, receipts, network calls, door reports \u2014 schemas, vocabularies and test vectors.",
+  "description": "Surfing Dog open formats: what an AI agent can do at a business (the capability vocabulary), the agent inbox manifest, receipts, network calls, door reports and the census \u2014 schemas, vocabularies, test vectors and a conformance check.",
   "exports": {
     ".": "./src/index.ts",
     "./vocab/*": "./vocab/*",

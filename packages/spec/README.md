@@ -33,6 +33,27 @@ or network:
 - 0.5.1 (optional for a network): a door's history from the network's own reads (`door_history` on
   a listing's detail, `get_business` and a check result; `doorHistorySchema`, `doorHistoryOf`;
   `vectors/door-history.json`). An answer without it reads as before.
+- 0.6 ([ADR-021](../../docs/adr/021-the-reference.md)): the capability vocabulary, version 2
+  (`vocab/capabilities.json`; version 1 kept as `vocab/capabilities-v1.json`): for each capability a
+  definition, other words for it, what partial means, what has to be seen at each step of the
+  evidence ladder, what is not enough, and how each kind of door carries it, by example names that
+  the network's own door registry reads as that capability. The conformance check (`checkManifest`,
+  `checkReceipt`, `checkAcknowledgement`, `checkDocument`), which says whether a document holds to
+  these specs and why not, with the codes a network answers. How a door's names are read as
+  capabilities, as vectors (`vectors/capability-names.json`, from the network). The census's data
+  (`census-edition`, `census-editions`, an example in `vectors/census-edition.json`, and the MCP tool
+  `get_census`; protocol §4.16, optional for a network), and the score rules version 3 it is counted
+  under (`vocab/score-rules-v3.json`, as revised on 15 and 18 October 2026). Every JSON Schema but
+  the MCP tools' now carries a `$id`, its address at `https://surfingdog.ai/spec/schemas/<name>.json`.
+  In the vocabulary's and the census's schemas a capability, a kind of door and a scope are any
+  lower-case name, so a later version that adds one still validates. `verifyReceipt` in
+  `@surfingdog/sdk` reads amendments and refunds, as the check does.
+
+Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
+`/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
+`/spec/capabilities/v<N>.json` and the latest at `/spec/capabilities.json`, and `/spec/index.json`,
+which lists them), readable from any origin, with a page for people for each spec and a page that
+checks a pasted manifest, receipt or acknowledgement in the browser.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two

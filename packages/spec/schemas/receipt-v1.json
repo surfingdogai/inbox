@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/receipt-v1.json",
   "title": "Receipt claims, v1 (ADR-016)",
   "type": "object",
   "properties": {

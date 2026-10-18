@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/leaderboard.json",
   "title": "GET /leaderboard.json",
   "type": "object",
   "properties": {
@@ -75,10 +76,10 @@
       "maximum": 9007199254740991
     },
     "named_total": {
-      "description": "How many of total the board names, over all its pages; unnamed is the rest.",
       "type": "integer",
       "minimum": 0,
-      "maximum": 9007199254740991
+      "maximum": 9007199254740991,
+      "description": "How many of total the board names, over all its pages; unnamed is the rest."
     },
     "unnamed": {
       "type": "integer",

@@ -5,6 +5,8 @@ description: The discovery document an instance publishes at /.well-known/agent-
 
 An instance publishes one small document at `/.well-known/agent-inbox.json`. It says what the instance accepts and where each protocol endpoint lives, so an agent can pick the door it prefers without fetching every card. The path is one constant, `MANIFEST_PATH`, in the MIT `@surfingdog/spec` package, and the name follows the `agent-card.json` pattern; a provisional IANA registration under RFC 8615 is planned once the spec page is stable ([ADR-002](https://github.com/surfingdogai/inbox/blob/main/docs/adr/002-well-known-name.md)).
 
+The format, field by field with what changed when, is the versioned spec: [Agent inbox manifest](/spec/manifest/). [Check yours](/spec/check/).
+
 ## Shape
 
 ```json

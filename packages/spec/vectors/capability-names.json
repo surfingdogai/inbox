@@ -1,0 +1,749 @@
+{
+  "description": "How a name is read as capabilities (the capability vocabulary's names rule and its kinds of door, https://surfingdog.ai/spec/capabilities/): for each kind of door, a tool's, skill's or operation's name (an inbox's item type, a UCP or ACP capability), whether its server marks it read-only, and the capabilities it meets, in the vocabulary's order. First every example name the vocabulary gives, then names that look like a capability and meet another or none, each with why. From the network's door registry; a checker that reads these names otherwise does not follow the vocabulary.",
+  "vocabulary": 2,
+  "door_registry": 1,
+  "cases": [
+    {
+      "door": "mcp",
+      "name": "get_business_profile",
+      "expect": ["find"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_store_hours",
+      "expect": ["find"]
+    },
+    {
+      "door": "a2a",
+      "name": "business-info",
+      "expect": ["find"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /business",
+      "expect": ["find"]
+    },
+    {
+      "door": "openapi",
+      "name": "getStoreInfo",
+      "expect": ["find"]
+    },
+    {
+      "door": "api",
+      "name": "GET /location",
+      "expect": ["find"]
+    },
+    {
+      "door": "mcp",
+      "name": "list_services",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "mcp",
+      "name": "list_products",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "mcp",
+      "name": "search_products",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_menu",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "a2a",
+      "name": "product-search",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /products",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "openapi",
+      "name": "listServices",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "api",
+      "name": "GET /menu",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "ucp",
+      "name": "catalog",
+      "expect": ["catalogue", "availability"]
+    },
+    {
+      "door": "webmcp",
+      "name": "search_products",
+      "expect": ["catalogue"]
+    },
+    {
+      "door": "inbox",
+      "name": "booking",
+      "expect": ["availability", "book", "change", "cancel", "track"]
+    },
+    {
+      "door": "mcp",
+      "name": "check_availability",
+      "expect": ["availability"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_available_slots",
+      "expect": ["availability"]
+    },
+    {
+      "door": "a2a",
+      "name": "check-availability",
+      "expect": ["availability"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /availability",
+      "expect": ["availability"]
+    },
+    {
+      "door": "openapi",
+      "name": "getSlots",
+      "expect": ["availability"]
+    },
+    {
+      "door": "api",
+      "name": "GET /slots",
+      "expect": ["availability"]
+    },
+    {
+      "door": "inbox",
+      "name": "message",
+      "expect": ["message", "support"]
+    },
+    {
+      "door": "mcp",
+      "name": "send_message",
+      "expect": ["message"]
+    },
+    {
+      "door": "mcp",
+      "name": "contact_business",
+      "expect": ["message"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_support_ticket",
+      "expect": ["message", "support"]
+    },
+    {
+      "door": "a2a",
+      "name": "SendMessage (any agent card)",
+      "expect": ["message"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /messages",
+      "expect": ["message"]
+    },
+    {
+      "door": "openapi",
+      "name": "createInquiry",
+      "expect": ["message"]
+    },
+    {
+      "door": "api",
+      "name": "POST /contact",
+      "expect": ["message"]
+    },
+    {
+      "door": "inbox",
+      "name": "quote_request",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "mcp",
+      "name": "request_quote",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "mcp",
+      "name": "accept_offer",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "mcp",
+      "name": "decline_offer",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "a2a",
+      "name": "request-quote",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /quotes",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "openapi",
+      "name": "createQuoteRequest",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "api",
+      "name": "POST /quote",
+      "expect": ["negotiate"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_booking",
+      "expect": ["book"]
+    },
+    {
+      "door": "mcp",
+      "name": "book_appointment",
+      "expect": ["book"]
+    },
+    {
+      "door": "mcp",
+      "name": "reserve_table",
+      "expect": ["book"]
+    },
+    {
+      "door": "a2a",
+      "name": "book-table",
+      "expect": ["book"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /bookings",
+      "expect": ["book"]
+    },
+    {
+      "door": "openapi",
+      "name": "createReservation",
+      "expect": ["book"]
+    },
+    {
+      "door": "api",
+      "name": "POST /appointments",
+      "expect": ["book"]
+    },
+    {
+      "door": "webmcp",
+      "name": "book_table",
+      "expect": ["book"]
+    },
+    {
+      "door": "inbox",
+      "name": "order",
+      "expect": ["order", "change", "cancel", "track", "receipt"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_order",
+      "expect": ["order"]
+    },
+    {
+      "door": "mcp",
+      "name": "place_order",
+      "expect": ["order"]
+    },
+    {
+      "door": "mcp",
+      "name": "checkout",
+      "expect": ["order", "pay"]
+    },
+    {
+      "door": "a2a",
+      "name": "place-order",
+      "expect": ["order"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /orders",
+      "expect": ["order"]
+    },
+    {
+      "door": "openapi",
+      "name": "createCheckout",
+      "expect": ["order", "pay"]
+    },
+    {
+      "door": "api",
+      "name": "POST /cart/checkout",
+      "expect": ["order", "pay"]
+    },
+    {
+      "door": "ucp",
+      "name": "checkout",
+      "expect": ["order"]
+    },
+    {
+      "door": "acp",
+      "name": "checkout",
+      "expect": ["order"]
+    },
+    {
+      "door": "webmcp",
+      "name": "add_to_cart",
+      "expect": ["order"]
+    },
+    {
+      "door": "mcp",
+      "name": "sign_up",
+      "expect": ["signup"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_account",
+      "expect": ["signup"]
+    },
+    {
+      "door": "mcp",
+      "name": "join_membership",
+      "expect": ["signup"]
+    },
+    {
+      "door": "a2a",
+      "name": "enrol-in-class",
+      "expect": ["signup"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /register",
+      "expect": ["signup"]
+    },
+    {
+      "door": "openapi",
+      "name": "registerCustomer",
+      "expect": ["signup"]
+    },
+    {
+      "door": "api",
+      "name": "POST /signup",
+      "expect": ["signup"]
+    },
+    {
+      "door": "mcp",
+      "name": "pay_order",
+      "expect": ["pay"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_payment",
+      "expect": ["pay"]
+    },
+    {
+      "door": "a2a",
+      "name": "pay-invoice",
+      "expect": ["pay", "receipt"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /payments",
+      "expect": ["pay"]
+    },
+    {
+      "door": "openapi",
+      "name": "completeCheckout",
+      "expect": ["order", "pay"]
+    },
+    {
+      "door": "api",
+      "name": "POST /pay",
+      "expect": ["pay"]
+    },
+    {
+      "door": "ucp",
+      "name": "payment_handlers",
+      "expect": ["pay"]
+    },
+    {
+      "door": "acp",
+      "name": "delegated_payment",
+      "expect": ["pay"]
+    },
+    {
+      "door": "mcp",
+      "name": "reschedule_booking",
+      "expect": ["change"]
+    },
+    {
+      "door": "mcp",
+      "name": "update_order",
+      "expect": ["change"]
+    },
+    {
+      "door": "a2a",
+      "name": "reschedule",
+      "expect": ["change"]
+    },
+    {
+      "door": "openapi",
+      "name": "PATCH /bookings/{id}",
+      "expect": ["change"]
+    },
+    {
+      "door": "openapi",
+      "name": "modifyOrder",
+      "expect": ["change"]
+    },
+    {
+      "door": "api",
+      "name": "PUT /orders/{id}",
+      "expect": ["change"]
+    },
+    {
+      "door": "mcp",
+      "name": "cancel_item",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "mcp",
+      "name": "cancel_booking",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "mcp",
+      "name": "cancel_order",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "a2a",
+      "name": "cancel-reservation",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "openapi",
+      "name": "DELETE /bookings/{id}",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "openapi",
+      "name": "cancelOrder",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "api",
+      "name": "POST /orders/{id}/cancel",
+      "expect": ["cancel"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_item_status",
+      "expect": ["track"]
+    },
+    {
+      "door": "mcp",
+      "name": "track_order",
+      "expect": ["track"]
+    },
+    {
+      "door": "a2a",
+      "name": "order-status",
+      "expect": ["track"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /orders/{id}/status",
+      "expect": ["track"]
+    },
+    {
+      "door": "openapi",
+      "name": "getShipmentStatus",
+      "expect": ["track"]
+    },
+    {
+      "door": "api",
+      "name": "GET /track/{id}",
+      "expect": ["track"]
+    },
+    {
+      "door": "ucp",
+      "name": "order",
+      "expect": ["track"]
+    },
+    {
+      "door": "inbox",
+      "name": "refund",
+      "expect": ["return"]
+    },
+    {
+      "door": "mcp",
+      "name": "request_return",
+      "expect": ["return"]
+    },
+    {
+      "door": "mcp",
+      "name": "create_refund",
+      "expect": ["return"]
+    },
+    {
+      "door": "a2a",
+      "name": "start-return",
+      "expect": ["return"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /returns",
+      "expect": ["return"]
+    },
+    {
+      "door": "openapi",
+      "name": "requestRefund",
+      "expect": ["return"]
+    },
+    {
+      "door": "api",
+      "name": "POST /orders/{id}/return",
+      "expect": ["return"]
+    },
+    {
+      "door": "ucp",
+      "name": "return",
+      "expect": ["return"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_receipt",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_invoice",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "a2a",
+      "name": "get-receipt",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /orders/{id}/invoice",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "openapi",
+      "name": "getReceipt",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "api",
+      "name": "GET /invoices/{id}",
+      "expect": ["receipt"]
+    },
+    {
+      "door": "mcp",
+      "name": "leave_review",
+      "expect": ["feedback"]
+    },
+    {
+      "door": "mcp",
+      "name": "submit_feedback",
+      "expect": ["feedback"]
+    },
+    {
+      "door": "a2a",
+      "name": "leave-feedback",
+      "expect": ["feedback"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /reviews",
+      "expect": ["feedback"]
+    },
+    {
+      "door": "api",
+      "name": "POST /feedback",
+      "expect": ["feedback"]
+    },
+    {
+      "door": "mcp",
+      "name": "pause_subscription",
+      "expect": ["subscription"]
+    },
+    {
+      "door": "mcp",
+      "name": "cancel_membership",
+      "expect": ["cancel", "subscription"]
+    },
+    {
+      "door": "a2a",
+      "name": "renew-membership",
+      "expect": ["subscription"]
+    },
+    {
+      "door": "openapi",
+      "name": "PATCH /subscriptions/{id}",
+      "expect": ["subscription"]
+    },
+    {
+      "door": "api",
+      "name": "POST /memberships/{id}/pause",
+      "expect": ["subscription"]
+    },
+    {
+      "door": "mcp",
+      "name": "redeem_voucher",
+      "expect": ["vouchers"]
+    },
+    {
+      "door": "mcp",
+      "name": "apply_gift_card",
+      "expect": ["vouchers"]
+    },
+    {
+      "door": "a2a",
+      "name": "redeem-voucher",
+      "expect": ["vouchers"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /vouchers/redeem",
+      "expect": ["vouchers"]
+    },
+    {
+      "door": "api",
+      "name": "POST /loyalty/redeem",
+      "expect": ["vouchers"]
+    },
+    {
+      "door": "mcp",
+      "name": "join_waitlist",
+      "expect": ["waitlist"]
+    },
+    {
+      "door": "a2a",
+      "name": "join-waitlist",
+      "expect": ["waitlist"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /waitlist",
+      "expect": ["waitlist"]
+    },
+    {
+      "door": "api",
+      "name": "POST /waitinglist",
+      "expect": ["waitlist"]
+    },
+    {
+      "door": "mcp",
+      "name": "file_complaint",
+      "expect": ["message", "support"]
+    },
+    {
+      "door": "a2a",
+      "name": "open-ticket",
+      "expect": ["support"]
+    },
+    {
+      "door": "openapi",
+      "name": "POST /tickets",
+      "expect": ["support"]
+    },
+    {
+      "door": "api",
+      "name": "POST /complaints",
+      "expect": ["message", "support"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_policies",
+      "expect": ["policies"]
+    },
+    {
+      "door": "mcp",
+      "name": "get_return_policy",
+      "expect": ["policies"]
+    },
+    {
+      "door": "a2a",
+      "name": "policies",
+      "expect": ["policies"]
+    },
+    {
+      "door": "openapi",
+      "name": "GET /policies",
+      "expect": ["policies"]
+    },
+    {
+      "door": "api",
+      "name": "GET /terms",
+      "expect": ["policies"]
+    },
+    {
+      "door": "mcp",
+      "name": "cancel_cart",
+      "expect": [],
+      "why": "A word that names something else rules it out: a cart is not an order."
+    },
+    {
+      "door": "mcp",
+      "name": "get_offers",
+      "expect": [],
+      "why": "A name that only reads meets only what reads: it negotiates nothing."
+    },
+    {
+      "door": "mcp",
+      "name": "get_contact_info",
+      "expect": ["find"],
+      "why": "Reading contact details is finding the business; it sends no message."
+    },
+    {
+      "door": "mcp",
+      "name": "create_booking",
+      "read_only": true,
+      "expect": [],
+      "why": "A tool its server marks read-only meets only what reads."
+    },
+    {
+      "door": "openapi",
+      "name": "GET /bookings",
+      "expect": [],
+      "why": "An operation by GET only reads; listing bookings books, changes and follows none."
+    },
+    {
+      "door": "openapi",
+      "name": "PATCH /bookings/{id}",
+      "expect": ["change"],
+      "why": "PATCH adds update: it changes a booking."
+    },
+    {
+      "door": "openapi",
+      "name": "DELETE /bookings/{id}",
+      "expect": ["cancel"],
+      "why": "DELETE adds delete: it cancels a booking."
+    },
+    {
+      "door": "mcp",
+      "name": "register_webhook",
+      "expect": [],
+      "why": "Registering a webhook, a key or a device is not signing up."
+    },
+    {
+      "door": "mcp",
+      "name": "sign_in",
+      "expect": [],
+      "why": "Signing in only logs a person in."
+    },
+    {
+      "door": "mcp",
+      "name": "search_documentation",
+      "expect": [],
+      "why": "A name that reads documentation meets no capability."
+    },
+    {
+      "door": "mcp",
+      "name": "BrowseWixRESTDocsMenu",
+      "expect": [],
+      "why": "A name that reads documentation meets no capability, though another word (menu) would."
+    }
+  ]
+}

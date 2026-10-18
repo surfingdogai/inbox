@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP get_census: arguments",
+  "type": "object",
+  "properties": {
+    "edition": {
+      "description": "The month, YYYY-MM. Without it, the latest published edition.",
+      "type": "string",
+      "pattern": "^20\\d\\d-(0[1-9]|1[0-2])$"
+    },
+    "scope": {
+      "description": "all (the default), country, group (kind of business), platform, source (where the sites came from) or city.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$"
+    },
+    "key": {
+      "description": "One key of the scope: a country code (GB), a group slug, a platform slug, a source, or a city slug (madrid). Without it, every key of the scope with its headline counts.",
+      "type": "string",
+      "maxLength": 64
+    }
+  }
+}

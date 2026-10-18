@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/census-editions.json",
+  "title": "GET /v1/census: the published editions",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "licence": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "CC-BY-4.0"
+        },
+        "url": {
+          "type": "string",
+          "const": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "How to credit it: \"Surfing Dog census, surfingdog.ai, CC BY 4.0\"."
+        },
+        "credits": {
+          "description": "Credit for others' data the counts rest on, given with the attribution: \"© Overture Maps Foundation\" when the cities are counted from Overture Maps places data.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["name", "url", "attribution"]
+    },
+    "editions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "edition": {
+            "type": "string",
+            "pattern": "^20\\d\\d-(0[1-9]|1[0-2])$",
+            "description": "The month the edition records, YYYY-MM."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["published", "withdrawn"]
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The edition's page."
+          },
+          "json": {
+            "type": "string",
+            "format": "uri"
+          },
+          "csv": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": ["edition", "title", "status", "as_of", "published_at", "url", "json", "csv"]
+      }
+    }
+  },
+  "required": ["title", "licence", "editions"]
+}

@@ -7,6 +7,8 @@ A **receipt** is the instance's signed statement about a transaction: this booki
 
 Receipts are issued by the instance and counter-signed by the customer's agent. They are how a network measures promise against delivery: what a business promised, and whether each promise was kept, broken or is still open.
 
+The format, claim by claim with what changed when, is the versioned spec: [Receipts](/spec/receipts/). [Check one](/spec/check/).
+
 ## When one is issued
 
 Promises:

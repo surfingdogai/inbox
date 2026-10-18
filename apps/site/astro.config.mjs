@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
 import { BEACON_HEAD } from "./src/lib/analytics.ts";
+import { headingIdsMarkdown } from "./src/lib/heading-ids.ts";
 import { HOSTED_LLMS, HOSTED_OWNERSHIP } from "./src/lib/hosted.ts";
 import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
 
@@ -30,6 +31,8 @@ export default defineConfig({
     // Docs written in two versions, one for each state of the hosted pilot, keep the one the switch
     // says (src/lib/hosted-markdown.ts).
     hostedPilotMarkdown(),
+    // A heading may name its own id: `### Membership {#subscription}` (src/lib/heading-ids.ts).
+    headingIdsMarkdown(),
     // Starlight adds this integration itself when it is missing; given here, it also lists the
     // network's sitemap in sitemap-index.xml.
     sitemap({ customSitemaps: [NETWORK_SITEMAP] }),
@@ -85,6 +88,17 @@ export default defineConfig({
           label: "Trust",
           items: ["docs/security-and-privacy", "docs/contributing"],
         },
+        {
+          label: "Specs",
+          items: [
+            { label: "Overview", link: "/spec/" },
+            "spec/capabilities",
+            "spec/manifest",
+            "spec/receipts",
+            "spec/census",
+            { label: "Check a manifest or a receipt", link: "/spec/check/" },
+          ],
+        },
         { label: "Technical", link: "/technical/" },
         { label: "Blog", link: "/blog/" },
       ],
@@ -104,6 +118,7 @@ export default defineConfig({
             "Guides, for any business anywhere and no vendor in particular: what makes a business ready for AI agents, and how to let a customer's AI assistant book, order, message or ask for a quote, and pay; publishing hours, prices and terms as data; making agent doors findable; what llms.txt does and doesn't; robots.txt and content signals. Each says what the check counts and ends with a way to check the change worked: https://surfingdog.ai/guides/.",
             "Leaderboards by category and place, the businesses where an agent can book, order or sign up above the rest, then by agentic score, separate from the directory's search order: https://surfingdog.ai/leaderboard.",
             "Discovery for agents: https://surfingdog.ai/.well-known/ai-catalog.json (ARD), the MCP server card at https://surfingdog.ai/.well-known/mcp/server-card.json and the A2A agent card at https://surfingdog.ai/.well-known/agent-card.json.",
+            "Specs, versioned, with JSON Schemas and test vectors (MIT): what an AI agent can do at a business, capability by capability, with the evidence for each and how MCP, A2A, OpenAPI, REST, UCP and ACP doors carry it (https://surfingdog.ai/spec/capabilities.json); the agent inbox manifest; receipts; and the census's method. Index for machines: https://surfingdog.ai/spec/index.json. Check a manifest or a receipt: https://surfingdog.ai/spec/check/.",
             `The protocol is open: anyone can run a network. Everything is MIT: the inbox server, the example network, network-check, and @surfingdog/sdk on npm. ${HOSTED_LLMS.open}`,
             "Every inbox publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. A business's inbox answers at its own address; our demo instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
           ].join("\n\n"),
@@ -118,6 +133,8 @@ export default defineConfig({
             { label: "Surfing Dog Search over MCP", url: "https://surfingdog.ai/mcp" },
             { label: "Directory API", url: "https://surfingdog.ai/v1/businesses" },
             { label: "Agentic score rules", url: "https://surfingdog.ai/v1/score-rules" },
+            { label: "Specs and their index", url: "https://surfingdog.ai/spec/index.json" },
+            { label: "What an AI agent can do: the vocabulary", url: "https://surfingdog.ai/spec/capabilities.json" },
             { label: "AI catalog (ARD)", url: "https://surfingdog.ai/.well-known/ai-catalog.json" },
             { label: "Live demo manifest", url: "https://inbox.surfingdog.ai/.well-known/agent-inbox.json" },
             { label: "Live OpenAPI document", url: "https://inbox.surfingdog.ai/openapi.json" },

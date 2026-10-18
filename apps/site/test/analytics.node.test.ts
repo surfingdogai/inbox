@@ -60,12 +60,15 @@ describe("the visit counter", () => {
     expect(layout.match(/BEACON &&/g)).toHaveLength(1);
     const config = read("astro.config.mjs");
     expect(config.match(/\.\.\.BEACON_HEAD,/g)).toHaveLength(1);
-    // No page writes a head of its own, so every page has the layout's.
+    // No page writes a head of its own, so every page has the layout's, or the docs' when it is
+    // built on Starlight's page (as /spec/check/ is).
     for (const path of files(site("src/pages"))) {
       if (!path.endsWith(".astro")) continue;
       const page = readFileSync(path, "utf8");
       expect(page, path).not.toMatch(/<head[\s>]/);
-      expect(page, path).toMatch(/import Layout from "(\.\.\/)+layouts\/Layout\.astro"/);
+      expect(page, path).toMatch(
+        /import (Layout from "(\.\.\/)+layouts\/Layout\.astro"|StarlightPage from "@astrojs\/starlight\/components\/StarlightPage\.astro")/,
+      );
     }
   });
 

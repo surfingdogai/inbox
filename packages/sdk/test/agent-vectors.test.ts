@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import passes from "../../spec/vectors/passes.json";
 import receiptsV1 from "../../spec/vectors/receipts.json";
 import receiptsV2 from "../../spec/vectors/receipts-v2.json";
+import receiptsV6 from "../../spec/vectors/receipts-v6.json";
 import signatures from "../../spec/vectors/signatures.json";
 import { signUnchecked } from "../src/agent/sign";
 import {
@@ -180,6 +181,24 @@ describe("receipts, against receipts.json and receipts-v2.json", () => {
     expect((await verifyReceipt(first.jws, { receipt_keys: keysV2 }, { now: receiptsV2.now * 1000 })).claims.itm).toBe(
       first.payload.itm,
     );
+  });
+
+  it("verifies the receipts of 27 September 2026 (amendments and refunds) and refuses what receipts-v6.json refuses, as the check does", async () => {
+    const keysV6 = { keys: [receiptsV6.issuer.public_jwk] };
+    for (const r of receiptsV6.receipts) {
+      const v = await verifyReceipt(r.jws, keysV6, { now: receiptsV6.now * 1000 });
+      expect(v.version, r.name).toBe(2);
+      expect(v.claims, r.name).toEqual(r.payload);
+    }
+    for (const r of receiptsV6.refused_receipts) {
+      let code = "ok";
+      try {
+        await verifyReceipt(r.jws, keysV6, { now: receiptsV6.now * 1000 });
+      } catch (e) {
+        code = (e as ReceiptVerificationError).code;
+      }
+      expect(code, r.name).toBe(r.code);
+    }
   });
 
   it("re-signs every acknowledgement to the same JWS", async () => {

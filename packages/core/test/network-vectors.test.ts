@@ -1202,7 +1202,7 @@ describe("protocol 0.2: cards, listings and the why line", () => {
     expect(whyOf({})).toBe("in the directory's published order");
   });
 
-  it("the tools: three, as before, and five more a network may offer", () => {
+  it("the tools: three, as before, and six more a network may offer", () => {
     expect([...MCP_TOOL_NAMES]).toEqual(["search_businesses", "get_business", "list_categories"]);
     expect([...MCP_OPTIONAL_TOOL_NAMES]).toEqual([
       "list_attributes",
@@ -1210,6 +1210,7 @@ describe("protocol 0.2: cards, listings and the why line", () => {
       "update_business",
       "check_business",
       "report_door",
+      "get_census",
     ]);
     const input = searchBusinessesInputSchema.parse({
       category: "hair_salon",
@@ -1503,9 +1504,13 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     const v = capabilitiesVocabSchema.parse(capabilityVocabulary);
     expect(v.capabilities.map((c) => c.id)).toEqual([...CAPABILITY_IDS]);
     expect(v.lead).toEqual([...LEAD_CAPABILITIES]);
-    expect(v.produced).toEqual(["declared"]);
-    // The rules carry the same vocabulary, each capability with its group.
-    expect(rules.capabilities.map(({ group: _, ...c }) => c)).toEqual(v.capabilities);
+    // Tested is produced since 13 October 2026 (score rules version 3).
+    expect(v.produced).toEqual(["declared", "tested"]);
+    // The rules carry the same vocabulary, each capability with its group: version 1's four fields, which version 2
+    // of the vocabulary keeps as they were.
+    expect(rules.capabilities.map(({ group: _, ...c }) => c)).toEqual(
+      v.capabilities.map(({ id, journey, label, question }) => ({ id, journey, label, question })),
+    );
   });
 
   it("the rules: weights sum to 100, every capability in one group, the formula word for word", () => {

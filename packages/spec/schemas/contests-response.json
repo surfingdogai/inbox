@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/contests-response.json",
   "title": "POST /v1/person/contests: 201 or 200",
   "type": "object",
   "properties": {

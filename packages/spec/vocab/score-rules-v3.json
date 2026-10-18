@@ -1,0 +1,596 @@
+{
+  "version": 3,
+  "name": "Agentic score",
+  "status": "in_force",
+  "published_at": "2026-10-13T00:00:00Z",
+  "effective_at": "2026-10-13T00:00:00Z",
+  "summary": "The agentic score says how far an AI agent can go with a business through doors the business published: message, book, order, sign up, cancel and negotiate, and the journey around them. It counts what applies to that kind of business, and what follows from what an agent can do there (where it can book, order or sign up, changing and cancelling that too, and the other steps after it), and nothing else, by the weights below, from what we read on the business's own site and doors, each with its source and date. It is not a certification, it never changes the directory's search order, and nobody can pay for it.",
+  "vocabulary": "https://surfingdog.ai/v1/score-rules#capabilities",
+  "capabilities": [
+    {
+      "id": "find",
+      "journey": "before",
+      "label": "Find",
+      "question": "Can an agent read who the business is, its opening hours and where it is?",
+      "group": "find"
+    },
+    {
+      "id": "catalogue",
+      "journey": "before",
+      "label": "Catalogue",
+      "question": "Can an agent read its services, products or menu, with prices?",
+      "group": "readable"
+    },
+    {
+      "id": "availability",
+      "journey": "before",
+      "label": "Availability",
+      "question": "Can an agent check free slots or stock?",
+      "group": "state"
+    },
+    {
+      "id": "message",
+      "journey": "before",
+      "label": "Message",
+      "question": "Can an agent send the business a message and get an answer?",
+      "group": "core"
+    },
+    {
+      "id": "negotiate",
+      "journey": "before",
+      "label": "Negotiate",
+      "question": "Can an agent ask for a quote, make an offer or get a counter-offer?",
+      "group": "negotiate"
+    },
+    {
+      "id": "book",
+      "journey": "doing",
+      "label": "Book",
+      "question": "Can an agent make a booking, with its details?",
+      "group": "core"
+    },
+    {
+      "id": "order",
+      "journey": "doing",
+      "label": "Order",
+      "question": "Can an agent place an order, with its options?",
+      "group": "core"
+    },
+    {
+      "id": "signup",
+      "journey": "doing",
+      "label": "Sign up",
+      "question": "Can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?",
+      "group": "core"
+    },
+    {
+      "id": "pay",
+      "journey": "doing",
+      "label": "Pay",
+      "question": "Can an agent pay, and is it clear how payment happens?",
+      "group": "core"
+    },
+    {
+      "id": "change",
+      "journey": "after",
+      "label": "Change",
+      "question": "Can an agent change a booking or an order?",
+      "group": "after"
+    },
+    {
+      "id": "cancel",
+      "journey": "after",
+      "label": "Cancel",
+      "question": "Can an agent cancel a booking or an order?",
+      "group": "after"
+    },
+    {
+      "id": "track",
+      "journey": "after",
+      "label": "Track",
+      "question": "Can an agent see the status of a booking, an order or a delivery?",
+      "group": "state"
+    },
+    {
+      "id": "return",
+      "journey": "after",
+      "label": "Return or refund",
+      "question": "Can an agent start a return, a refund or an exchange?",
+      "group": "after"
+    },
+    {
+      "id": "receipt",
+      "journey": "after",
+      "label": "Receipt",
+      "question": "Can an agent get a receipt or an invoice?",
+      "group": "after"
+    },
+    {
+      "id": "feedback",
+      "journey": "after",
+      "label": "Feedback",
+      "question": "Can an agent leave feedback or a review?",
+      "group": "unscored"
+    },
+    {
+      "id": "subscription",
+      "journey": "ongoing",
+      "label": "Membership",
+      "question": "Can an agent pause, resume or end a membership or subscription?",
+      "group": "after"
+    },
+    {
+      "id": "vouchers",
+      "journey": "ongoing",
+      "label": "Vouchers",
+      "question": "Can an agent use a gift card, a voucher or loyalty points?",
+      "group": "unscored"
+    },
+    {
+      "id": "waitlist",
+      "journey": "ongoing",
+      "label": "Waitlist",
+      "question": "Can an agent join a waitlist?",
+      "group": "unscored"
+    },
+    {
+      "id": "support",
+      "journey": "ongoing",
+      "label": "Support",
+      "question": "Can an agent raise a complaint or a problem with an order?",
+      "group": "unscored"
+    },
+    {
+      "id": "policies",
+      "journey": "policies",
+      "label": "Policies",
+      "question": "Can an agent read the cancellation, return, deposit or no-show policy?",
+      "group": "readable"
+    }
+  ],
+  "groups": [
+    {
+      "id": "core",
+      "weight": 40,
+      "members": ["message", "book", "order", "signup", "pay"]
+    },
+    {
+      "id": "after",
+      "weight": 30,
+      "members": ["change", "cancel", "return", "subscription", "receipt"]
+    },
+    {
+      "id": "state",
+      "weight": 10,
+      "members": ["availability", "track"]
+    },
+    {
+      "id": "negotiate",
+      "weight": 5,
+      "members": ["negotiate"]
+    },
+    {
+      "id": "readable",
+      "weight": 10,
+      "members": ["catalogue", "policies"]
+    },
+    {
+      "id": "find",
+      "weight": 5,
+      "members": ["find"]
+    },
+    {
+      "id": "unscored",
+      "weight": 0,
+      "members": ["feedback", "vouchers", "waitlist", "support"]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "appointments",
+      "label": "Appointments (salons, clinics, lawyers, advisers, tours)",
+      "noun": "a business taking appointments (a salon, a clinic, a dentist, a lawyer, an adviser or a tour)",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "pay",
+        "change",
+        "cancel",
+        "feedback",
+        "policies"
+      ],
+      "groups": [
+        "hair-beauty",
+        "wellness",
+        "photography",
+        "tours",
+        "auto",
+        "health",
+        "dental",
+        "therapy",
+        "legal",
+        "accounting",
+        "finance",
+        "property",
+        "recruitment"
+      ]
+    },
+    {
+      "id": "classes",
+      "label": "Classes, lessons, tutoring and childcare",
+      "noun": "a school, a class, a tutor or childcare (lessons, courses, tutoring and day care)",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "signup",
+        "pay",
+        "change",
+        "cancel",
+        "feedback",
+        "policies"
+      ],
+      "either": [["book", "signup"]],
+      "groups": ["education", "childcare"]
+    },
+    {
+      "id": "food",
+      "label": "Restaurants, bars and food",
+      "noun": "a restaurant, a bar or a food business",
+      "applicable": ["find", "catalogue", "availability", "message", "book", "order", "pay", "change", "cancel"],
+      "groups": ["restaurant", "cafe", "bakery", "bar"]
+    },
+    {
+      "id": "trades",
+      "label": "Trades and quote-led services",
+      "noun": "a trade or quote-led service",
+      "applicable": ["message", "negotiate", "book", "pay", "change", "cancel", "receipt"],
+      "groups": ["trades", "cleaning", "repair", "consulting", "it-services", "events"]
+    },
+    {
+      "id": "shop",
+      "label": "Shops",
+      "noun": "a shop",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "order",
+        "pay",
+        "change",
+        "cancel",
+        "track",
+        "return",
+        "receipt"
+      ],
+      "groups": ["grocery", "shop", "florist", "pets", "crafts"]
+    },
+    {
+      "id": "stay",
+      "label": "Places to stay and transport",
+      "noun": "a place to stay, or transport (an airline, a ferry, a coach or a taxi)",
+      "applicable": ["availability", "message", "book", "pay", "change", "cancel", "policies"],
+      "groups": ["stay", "transport"]
+    },
+    {
+      "id": "memberships",
+      "label": "Gyms and memberships",
+      "noun": "a gym or membership business",
+      "applicable": ["find", "catalogue", "message", "book", "order", "signup", "pay", "cancel", "subscription"],
+      "either": [["order", "signup"]],
+      "groups": ["fitness"]
+    },
+    {
+      "id": "venues",
+      "label": "Venues and events (live music, clubs, theatre, cinema, museums)",
+      "noun": "a venue (live music, a club, a theatre, a cinema, a museum or an event space)",
+      "applicable": [
+        "find",
+        "catalogue",
+        "availability",
+        "message",
+        "book",
+        "order",
+        "signup",
+        "pay",
+        "change",
+        "cancel",
+        "policies"
+      ],
+      "either": [["book", "order", "signup"]],
+      "groups": ["venues"]
+    },
+    {
+      "id": "general",
+      "label": "Business (type unknown)",
+      "noun": "a business of a kind not known",
+      "applicable": ["find", "catalogue", "message", "book", "order", "signup", "pay", "policies"],
+      "either": [["book", "order", "signup"]],
+      "groups": ["software-ai"]
+    }
+  ],
+  "follows": [
+    {
+      "if": "order",
+      "adds": ["change", "cancel", "track", "receipt"]
+    },
+    {
+      "if": "order",
+      "adds": ["return"],
+      "goods": true
+    },
+    {
+      "if": "book",
+      "adds": ["change", "cancel", "availability"]
+    },
+    {
+      "if": "signup",
+      "adds": ["change", "cancel", "subscription"]
+    }
+  ],
+  "goods": {
+    "summary": "A business sells goods when it is scored as a shop, or when it has a live UCP, ACP or Shopify checkout door (a UCP or ACP profile when the site shows it sells: commerce) or a catalogue of at least three products, unless it is a restaurant, a bar or a food business: a takeaway is not returned.",
+    "profiles": ["shop"],
+    "never": ["food"]
+  },
+  "commerce": {
+    "summary": "A UCP or ACP profile counts on a site that shows it sells, and nowhere else. A website platform may publish such a profile for every site it hosts, whether or not the business sells anything, so the profile alone says nothing about the business. It counts once our read finds Product markup with a price on the site's own pages, or another door of the site that takes orders. Without either, the profile is shown as a door the site published, and nothing comes from it: not ordering, paying, a catalogue, availability, tracking or returns, and it raises the business no higher than readable.",
+    "markup": "Product markup with a price: the site's own pages carry schema.org Product or ProductGroup markup whose offer has a price, or an Offer whose item is a product. A priced menu, a list of services, an event's tickets and an offer with a currency and no price are not; nor are prices a visitor sees on a page without the markup.",
+    "cart": "Another door that takes orders: a door of the site other than the profile, which our own read reached, lists a way to order (a cart, checkout or order tool, skill or operation, a Shopify storefront's door, the shop's own UCP server on its own domain, or an agent inbox that takes orders). A cart page a visitor uses is not one, and neither is a door whose kinds are what someone declared and nothing our read listed, a booking page, a text file or a hook.",
+    "awaiting": "A site whose last read came before our reads looked for this evidence, and that shows signs of a shop (payment handlers in its UCP or ACP profile, product links, a basket or add-to-basket buttons on its pages), keeps what its doors gave until we read it again, which we do at once. That read looks at one of its product pages and the profile's own server before anything else.",
+    "never": "What a language model read never counts as either. A door that names its own tools (an MCP server's create_order) is the business's own word about its own door, and counts as before.",
+    "documentation": "A tool, skill or operation whose name reads documentation gives no capability: one of the words doc, docs, documentation or readme with a verb that reads (read, browse, search, get, list, find, fetch, view, query, open), or those words with a website platform's name and nothing else (WixREADME). A path parameter such as {doc_id} is no word of the name. Reading a platform's developer documentation is not something an agent does for a customer; a business's own tools that create, change or delete its documents count as before.",
+    "documentation_words": ["doc", "docs", "documentation", "readme"],
+    "documentation_verbs": ["read", "browse", "search", "get", "list", "find", "fetch", "view", "query", "open"],
+    "documentation_platforms": ["wix", "shopify", "squarespace", "wordpress", "woocommerce", "webflow", "godaddy"]
+  },
+  "credit": {
+    "yes": 1,
+    "partial": 0.5,
+    "no": 0
+  },
+  "evidence": {
+    "declared": 1,
+    "tested": 1,
+    "proven": 1,
+    "produced": ["declared", "tested"],
+    "means": {
+      "declared": "The business's own site or door says so: its structured data, its pages, its manifest or its registration, or a door that meets it by what its protocol implies. We have not carried it out.",
+      "tested": "Our own read of the door, signed as our crawler, saw the door answer and list it (a tool, a skill or an operation it names, or a kind of item an inbox takes) within the 7 days before the capability was read (checked_at). A read lists what a door offers and does nothing else: we have not carried it out.",
+      "proven": "Not given yet: agents' signed outcomes of carrying it out, from platforms this network recognises."
+    }
+  },
+  "requests": "A request counts as doing it. Where an agent can file a request to change, cancel or return something (a change to a booking or an order, a cancellation, a return or a refund) and gets back a reference it can follow to the answer, it counts as yes, the same as a door that carries the request out at once. A person at the business may approve each change, cancellation or refund before it happens: that is a safe design, and it never scores lower.",
+  "formula": "For profile P: A_g = members(g) ∩ applicable(P), for each group g with weight > 0, where applicable(P) is P's applicable capabilities and what each of the rules' follows adds when its if is applicable to P and yes or partial (one marked goods when the business sells goods), and the capabilities of one of P's either sets count as one member of A_g, whose halves are the most any of them has. A group with A_g = ∅ is dropped.\npossible = Σ_{g: A_g≠∅} W_g\nN        = Σ_{g: A_g≠∅} W_g × s_g × (60 / |A_g|)      where s_g = Σ_{c∈A_g} halves(c)   (|A_g| ≤ 5; 60 = lcm(1..5))\nD        = 120 × possible\nscore    = (100 × N + D/2) div D                       (round half up; 0..100)\ngrade    = A ≥ 80, B ≥ 60, C ≥ 40, D ≥ 20, E < 20",
+  "grades": [
+    {
+      "grade": "A",
+      "min": 80
+    },
+    {
+      "grade": "B",
+      "min": 60
+    },
+    {
+      "grade": "C",
+      "min": 40
+    },
+    {
+      "grade": "D",
+      "min": 20
+    },
+    {
+      "grade": "E",
+      "min": 0
+    }
+  ],
+  "rank": "whether an agent can book, order or sign up there (yes, then partly, then no or not applicable), then score, then the most recent check, then domain; over businesses not hidden by their owner and of kinds the directory lists, software, API and AI companies among themselves. A leaderboard numbers the businesses it names 1, 2, 3 and so on; a result page's rank counts every business checked, named or not, in the same order.",
+  "named": "A business is named on leaderboards, and its result page may be indexed, when it is agent-ready (askable or above); others are counted, not named. If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
+  "directory": "The agentic score never changes a business's place in the directory's search order (https://surfingdog.ai/v1/ranking).",
+  "not_certification": "This is not a certification: it is what was read on the business's own site and doors on the date shown.",
+  "fixes": {
+    "find": {
+      "title": "Publish who you are, when you are open and where",
+      "how": "Add schema.org LocalBusiness markup (its most specific type) with name, address, geo and openingHoursSpecification."
+    },
+    "catalogue": {
+      "title": "Publish your services and prices for machines",
+      "how": "Add schema.org Service, Product or Menu items with Offer prices to your pages, or add a tool such as list_services<door>. A UCP or ACP catalogue counts once our read finds Product markup with prices on your pages, or another door of yours that takes orders.",
+      "protocol": "Publish your catalogue with its prices<door>."
+    },
+    "availability": {
+      "title": "Let agents check availability",
+      "how": "Add a tool or operation such as check_availability<door>, or publish stock with your catalogue.",
+      "protocol": "Publish stock with your catalogue<door>.",
+      "by_profile": {
+        "venues": {
+          "how": "Add a tool or operation such as check_availability<door> that says which dates, seats or tables are free."
+        }
+      }
+    },
+    "message": {
+      "title": "Let agents send you a message",
+      "how": "Publish a door that takes messages: an agent inbox, an A2A skill, or a tool such as send_message<door>.",
+      "by_profile": {
+        "shop": {
+          "how": "Publish a door where an agent can ask a question before buying or raise a problem after it: a tool such as send_message or create_support_ticket<door>, a support service with an MCP server declared in your UCP profile, or an agent inbox."
+        }
+      }
+    },
+    "negotiate": {
+      "title": "Let agents ask for a quote",
+      "how": "Add a tool such as request_quote or make_offer<door>, or take quote requests in an agent inbox."
+    },
+    "book": {
+      "title": "Let agents book",
+      "how": "Add a tool or operation that creates a booking, such as create_booking or POST /bookings<door>; if you use a booking platform, ask it whether it offers an agent door and declare it.",
+      "by_profile": {
+        "venues": {
+          "title": "Let agents book or buy tickets",
+          "how": "Add a tool or operation that books tickets, a table or an entry, such as create_booking or POST /bookings<door>, or sell tickets through UCP or ACP checkout; signing a person up as a member counts too. If you sell through a ticketing or booking platform, ask it whether it offers an agent door and declare it."
+        },
+        "general": {
+          "title": "Let agents book, order or sign up",
+          "how": "Add a tool or operation that creates a booking, an order or a sign-up, such as create_booking, create_order or sign_up<door>, or publish UCP or ACP checkout; any one of them counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
+        },
+        "classes": {
+          "title": "Let agents book or enrol",
+          "how": "Add a tool or operation that books a lesson or enrols a person in a class or a course, such as create_booking, enrol or POST /enrolments<door>; either one counts. If you use a booking platform, ask it whether it offers an agent door and declare it."
+        }
+      }
+    },
+    "order": {
+      "title": "Let agents order",
+      "how": "Publish UCP or ACP checkout and mark up your products with their prices (schema.org Product) on your pages, or add a tool or operation that creates an order, such as create_order<door>. A checkout profile counts once our read finds that markup, or another door of yours that takes orders, such as your shop's MCP server; a cart page alone doesn't count.",
+      "by_profile": {
+        "memberships": {
+          "title": "Let agents sign people up",
+          "how": "Add a tool or operation that signs a person up or sells a membership, such as sign_up, create_membership or POST /members<door>, or publish UCP or ACP checkout for memberships; either one counts."
+        }
+      },
+      "protocol": "Publish checkout<door>."
+    },
+    "signup": {
+      "title": "Let agents sign people up",
+      "how": "Add a tool or operation that signs a person up for an account, a membership, a class or a newsletter list, such as sign_up, create_account or POST /members<door>. Logging in is not signing up."
+    },
+    "pay": {
+      "title": "Let agents pay",
+      "how": "Accept payment through the agent (UCP payment handlers, ACP delegated payment, AP2 or x402, or a pay tool<door>), and state in your structured data how payment happens.",
+      "protocol": "Publish payment handlers (UCP) or delegated payment (ACP)<door>."
+    },
+    "change": {
+      "title": "Let agents change a booking or an order",
+      "how": "Add a tool or operation such as reschedule_booking or PATCH /orders/{id}<door>.",
+      "by_profile": {
+        "shop": {
+          "how": "Add a tool or operation such as update_order or PATCH /orders/{id}<door>."
+        },
+        "appointments": {
+          "how": "Add a tool or operation such as reschedule_booking or PATCH /bookings/{id}<door>."
+        },
+        "stay": {
+          "how": "Add a tool or operation such as change_reservation or PATCH /reservations/{id}<door>."
+        },
+        "venues": {
+          "how": "Add a tool or operation such as change_booking or PATCH /bookings/{id}<door>, for a date, a seat or the number of tickets."
+        },
+        "general": {
+          "title": "Let agents change a booking, an order or a membership",
+          "how": "Add a tool or operation that changes what an agent booked, ordered or signed up for, such as reschedule_booking, update_order or update_membership<door>."
+        }
+      },
+      "protocol": "Publish order management with changes to an order<door>, or add a tool or operation such as update_order."
+    },
+    "cancel": {
+      "title": "Let agents cancel",
+      "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your cancellation policy.",
+      "by_profile": {
+        "shop": {
+          "how": "Add a tool or operation such as cancel_order or DELETE /orders/{id}<door>, and publish your cancellation policy."
+        },
+        "venues": {
+          "how": "Add a tool or operation such as cancel_booking or DELETE /bookings/{id}<door>, and publish your refund and exchange policy for tickets."
+        },
+        "general": {
+          "how": "Add a tool or operation that cancels a booking or an order, or ends a membership or an account, such as cancel_booking, cancel_order or end_membership<door>, and publish your cancellation policy."
+        }
+      },
+      "protocol": "Publish order management with cancelling an order<door>, and publish your cancellation policy."
+    },
+    "track": {
+      "title": "Let agents see the status",
+      "how": "Add a tool or operation such as get_order_status or GET /orders/{id}<door>.",
+      "protocol": "Publish order management with an order's status<door>."
+    },
+    "return": {
+      "title": "Let agents start a return or refund",
+      "how": "Add a tool such as request_return<door>, and mark up your returns policy (schema.org MerchantReturnPolicy).",
+      "protocol": "Publish returns<door>, and mark up your returns policy (schema.org MerchantReturnPolicy)."
+    },
+    "receipt": {
+      "title": "Let agents get a receipt or invoice",
+      "how": "Add a tool or operation such as get_invoice<door>."
+    },
+    "subscription": {
+      "title": "Let agents manage a membership",
+      "how": "Add tools to pause, resume or end a membership<door>."
+    },
+    "policies": {
+      "title": "Publish your policies for machines",
+      "how": "Mark up your returns policy (schema.org MerchantReturnPolicy), link your cancellation, deposit and no-show policies from your pages, or add a tool that returns them<door>.",
+      "by_profile": {
+        "appointments": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "food": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "stay": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "memberships": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "venues": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        },
+        "general": {
+          "how": "Link your cancellation, deposit and no-show policies from your pages and state their terms in words (such as \"free cancellation up to 24 hours before\"), or add a tool that returns them<door>."
+        }
+      }
+    }
+  },
+  "changelog": [
+    {
+      "version": 1,
+      "summary": "The agentic score: capabilities by kind of business, published weights, declared evidence."
+    },
+    {
+      "version": 1,
+      "amended": "2026-10-07",
+      "summary": "The category group software-ai (software, API and AI companies), new on this day, is scored under the general profile. Before it, such a business had no group and took its profile from its signals (a shop's door or catalogue, a door that books), else general. No other rule changed."
+    },
+    {
+      "version": 2,
+      "published": "2026-10-07",
+      "summary": "Version 2. The general profile (a business whose kind is not known, and software, API and AI companies) is now scored on whether an agent can book, order or sign up there: book and order count together as one capability of the core group, and sign up with them (yes when any of them is yes, partly when any is partly), so its core group is message, book or order or sign up, and pay, still weighing 40. Under version 1 none applied to it, so a site where an agent could send a message and do nothing else scored as high as one where it could also book or buy; a clinic, a dentist, a therapist, a lawyer, a bar or a software company that takes no booking, order or sign-up through an agent now scores lower than before. Venues and events (live music, jazz clubs and nightclubs, theatres, cinemas, concert halls, comedy clubs, museums and galleries, event spaces) are now a kind of business of their own, the profile venues, where booking tickets, a table or an entry, ordering them, or signing up, counts the same way. Sign up is a capability of its own (can an agent sign the person up: an account, a membership, a class, a course or a newsletter list for the business's own service?), in the core group, met by a tool, skill or operation that signs a person up (sign_up, register, create_account, joining a club, a class or a membership, enrol, a schema.org RegisterAction or JoinAction), never by one that logs a person in and nothing more, nor by one that registers a tool, a model, a webhook or a passkey, joins tables, or adds staff or team members. It applies where it is natural: for a business of a kind not known and for venues it counts with book and order as one; for gyms and memberships it counts with order as one (joining is buying the membership); and classes, lessons and tutoring are now a kind of business of their own, the profile classes (before, scored as appointments, with the same weights), where booking a lesson or enrolling counts as one. No group's weight changed, and a business that signs nobody up scores as it did. A fix for book, order or sign up is one fix. Every stored score is worked out again under version 2; version 1 stays published at /v1/score-rules?version=1. With version 2 every leaderboard puts the businesses where an agent can book, order or sign up above the rest (yes, then partly, then no or not applicable), then orders them by score (rank); the score itself is not changed by that order. Clinics, dentists, therapists and lawyers are scored as appointment businesses (booking counts, ordering does not apply), and bars with food and drink (booking a table or ordering both count); under version 1 they fell under the general profile. The directory now lists every kind of business but adult services, gambling, weapons, tobacco, cannabis and vaping, payday loans and bail bonds, and each kind it now lists is scored where its own actions apply: banks, insurance, financial advice and loans (the group finance), estate agents (property) and recruitment agencies (recruitment) as appointment businesses, and accountants too (scored as trades under version 1); childcare as classes, where booking or enrolling counts as one; passenger transport (airlines, ferries, coaches, taxis and drivers, the group transport) with places to stay, where checking availability, booking, changing and cancelling apply; wineries and distilleries with bars; pharmacies, drugstores and hearing aids as shops; and licensed trades (electricians, plumbers, locksmiths and the like) as trades."
+    },
+    {
+      "version": 2,
+      "amended": "2026-10-08",
+      "summary": "Version 2, amended: what counts now follows what a business lets an agent do, on top of its kind (the rules' follows). Where an agent can order (yes or partly), changing, cancelling and tracking the order and getting a receipt count too, and a return or refund when the business sells goods (a shop, a UCP, ACP or Shopify checkout, or a catalogue of products; never a restaurant's takeaway). Where it can book, changing and cancelling the booking and checking availability count. Where it can sign a person up, changing and ending the membership or account, and managing the membership, count. Why: what a kind of business counted was fixed in advance, so a business of a kind not known where an agent could order and pay, and do nothing after it (no change, no cancel, no tracking, no receipt), scored 100, as high as one where an agent can see the whole thing through; a full score now needs the steps after it. What a kind of business already counted stays as it was, no group's weight and no grade changed, book, order and sign up still count as one where they did, and a business where an agent can do none of them scores as before. A fix that lets an agent book, order or sign up now counts the steps it brings with it, done as well, and says so. Every stored score is worked out again under the amended rules."
+    },
+    {
+      "version": 2,
+      "amended": "2026-10-12",
+      "summary": "Version 2, amended: a request counts as doing it (requests). Where an agent can file a request to change, cancel or return something and gets back a reference it can follow to the answer, that counts the same as a door that carries the request out at once, whether or not a person at the business approves it. Why: a business where a person approves each refund, or each change to an order already paid for, has chosen a safe design, and must not score lower than one that refunds the moment an agent asks. On the same day, how a door is read was corrected in the door registry the checker reads doors by: a tool, skill or operation that acts on an order that exists, to change it (update_order, modify_order, submit_order_change, PATCH /orders/{id}), cancel it, return or refund it, or get its receipt, is read as that step and not as placing an order, so a shop where an agent can fill a basket for a person to pay, and change an order afterwards, now reads as taking orders partly, not in full; and an order taken in an agent inbox (Surfing Dog Inbox) now counts changing the order and getting its receipt too, since the inbox takes an agent's request to change an accepted order and gives the agent the order's signed receipts. No group's weight, no kind of business and no grade changed. Every stored score is worked out again under the amended rules."
+    },
+    {
+      "version": 2,
+      "amended": "2026-10-12",
+      "summary": "Version 2, amended: message counts for every kind of business, shops included. Where an agent can send a business a message and get an answer, a question before buying or a problem after it, that now counts for a shop, and for a gym or membership business, as it already did for every other kind. It sits in the core group beside ordering and paying, as it does for the other kinds: for a shop, message, order and pay are now a third of the core group each, about 14 of 100 points, where order and pay were a half each, about 21; for a gym, message, book, order or sign up (one), and pay are a quarter of it each. A support or customer service channel an agent can use counts as message: a tool that sends a message or contacts the business, an agent inbox, and, as the door registry the checker reads doors by now says, a tool that opens a support ticket or files a complaint; and a support service a shop declares in its UCP profile, with an MCP server on its own domain, is now read as a door of the site, its tools with it. Why: a full interaction with a business includes being able to ask it something, and a shop an agent can buy from but never reach when something goes wrong does not offer one; before, such a shop could score 100. Sign up, book and negotiate still don't count for shops. Cancelling a cart, basket or checkout is not cancelling an order or a booking, so it no longer counts as cancel, nor as paying. No group's weight and no grade changed, and every other kind of business counts what it counted before. Every stored score is worked out again under the amended rules."
+    },
+    {
+      "version": 3,
+      "published": "2026-10-13",
+      "summary": "Version 3: how we know a capability can say tested. Until now every capability was declared: the business's own site or door says so. Now a capability met by a door is tested when our own read of that door, signed as our crawler, saw it answer and list the capability (a tool, a skill or an operation it names, or a kind of item an inbox takes) in the 7 days before the capability was read; anything else stays declared. A read lists what a door offers and does nothing else; we never carry it out, so tested says the door was there and named it, not that a booking or an order went through. Why: a door we read ourselves that week is stronger evidence than a page that says a door exists, and an agent choosing where to go should see the difference. The evidence label is what changed, and nothing else: every weight is still 1, so no score, no group's weight and no grade changed. Version 2 stays published at /v1/score-rules?version=2."
+    },
+    {
+      "version": 3,
+      "amended": "2026-10-15",
+      "summary": "Version 3, amended: a UCP or ACP profile counts on a site that shows it sells, and nowhere else (commerce). A website platform publishes the same shopping profile for every site it hosts, whether or not the business sells anything: we read restaurants, clinics and flooring firms, among others, as taking orders and having a catalogue because their platform serves one: about 11,600 sites on 15 October, three in four of those we counted as agent-ready. Now such a profile counts when the site shows Product or Offer markup with a price on its own pages, or a working cart: another door of the site, which our own read reached, that lists a way to order. Without either, it is shown as a door the site published and nothing comes from it: not ordering, paying, a catalogue, availability, tracking or returns, and the business is not counted as a shop for it. A tool, skill or operation whose name says it reads documentation (doc, docs, documentation, readme) gives no capability: a platform's developer-documentation tool had been read as a catalogue. The directory now calls the level of a business whose doors take orders and no bookings orderable, not bookable; the two share one rung, as they did. Why: the profile alone said nothing about the business, and the counts the site shows must hold up for any business a reader looks at. No group's weight, no kind of business and no grade changed, and a business whose site shows it sells, or that names its own tools, counts as before. In force at once, as decided on 15 October 2026: no business is a member yet but ours, and the rules lower no member. Every stored score and level is worked out again under the amended rules."
+    },
+    {
+      "version": 3,
+      "amended": "2026-10-18",
+      "summary": "Version 3, amended again before the amendment of 15 October was published, the two in force together: what shows a site sells is narrower, and said as our read checks it. Product markup with a price is schema.org Product or ProductGroup markup whose offer has a price, or an Offer whose item is a product: a priced menu, a list of services, an event's tickets, an offer with a currency and no price and an AggregateOffer on its own no longer count. Another door that takes orders is as before, and the shop's own UCP server on its own domain is one when our read reached it. Our reads now look at one of a site's product pages and its profile's own server before anything else; earlier reads had often spent their budget on other documents and reached neither. So a site whose last read came before that, and that shows signs of a shop (payment handlers in its UCP or ACP profile, product links, a basket or add-to-basket buttons on its pages), keeps what its doors gave until we read it again, which we do at once: 299 sites on 18 October, real shops among them, which the amendment of 15 October would have marked down. The documentation rule now reads names that read documentation: doc, docs, documentation or readme with a verb that reads, or with a website platform's name and nothing else; a path parameter such as {doc_id} is no word of the name, and a business's own tools that create, change or delete its documents count as before. Measured on 18 October 2026 over production's 25,370 sites with a UCP or ACP profile: 16,978 levels lowered and 299 kept for a read, 53 of the lowered on markup the amendment of 15 October would have counted; agent-ready businesses in the directory 25,566 before the two amendments and about 8,600 after, taking orders 25,092 before and about 8,300 after. Outside those sites the documentation rule takes the catalogue from 140, which a platform's documentation tool had given it, and lowers no level. Why: a business that sells must not be shown as one that doesn't because our read stopped short, and a count is right for every business in it. No group's weight, no kind of business and no grade changed. In force at once with the amendment of 15 October; every stored score and level is worked out again."
+    }
+  ]
+}

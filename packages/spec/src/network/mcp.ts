@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { profileServiceSchema } from "../base";
 import { checkResultSchema } from "./capabilities";
+import { censusEditionIdSchema, censusLicenceSchema, censusRowSchema, censusScopeSchema } from "./census";
 import { reportHintSchema, tierSchema, timestampSchema } from "./common";
 import {
   attributesResponseSchema,
@@ -31,7 +32,8 @@ export const MCP_TOOL_NAMES = ["search_businesses", "get_business", "list_catego
  * Tools a network may also offer (protocol 0.2): `list_attributes`, read-only; `register_business` and `update_business`,
  * which a business's own AI calls to register, claim, correct or remove its listing (§4.12); `check_business`, which
  * checks how far an agent can go with one business's website and gives its agentic score (§4.13); `report_door`, which
- * takes an agent's reports of how its uses of businesses' doors went, done or not (§4.15).
+ * takes an agent's reports of how its uses of businesses' doors went, done or not (§4.15); `get_census`, read-only, the
+ * monthly counts of what agents can do at the websites the network checked (§4.16).
  */
 export const MCP_OPTIONAL_TOOL_NAMES = [
   "list_attributes",
@@ -39,6 +41,7 @@ export const MCP_OPTIONAL_TOOL_NAMES = [
   "update_business",
   "check_business",
   "report_door",
+  "get_census",
 ] as const;
 
 /** `search_businesses`: `GET /v1/businesses` for an assistant, in the same order and with the same filters. */
@@ -285,6 +288,46 @@ export const listCategoriesOutputSchema = categoriesResponseSchema;
 /** `list_attributes`: `GET /v1/attributes` for an assistant (protocol 0.2). */
 export const listAttributesInputSchema = z.object({});
 export const listAttributesOutputSchema = attributesResponseSchema;
+
+/** `get_census` (§4.16, optional): an edition of the census for an assistant, `GET /v1/census/{edition}` cut to a scope. */
+export const getCensusInputSchema = z.object({
+  edition: censusEditionIdSchema.optional().describe("The month, YYYY-MM. Without it, the latest published edition."),
+  scope: censusScopeSchema
+    .optional()
+    .describe(
+      "all (the default), country, group (kind of business), platform, source (where the sites came from) or city.",
+    ),
+  key: z
+    .string()
+    .max(64)
+    .optional()
+    .describe(
+      "One key of the scope: a country code (GB), a group slug, a platform slug, a source, or a city slug (madrid). " +
+        "Without it, every key of the scope with its headline counts.",
+    ),
+});
+export const getCensusOutputSchema = z.object({
+  edition: censusEditionIdSchema,
+  title: z.string(),
+  status: z.enum(["published", "withdrawn"]),
+  as_of: timestampSchema,
+  published_at: timestampSchema,
+  note: z.string().nullable().describe("Why a withdrawn edition was withdrawn; null otherwise."),
+  scope: censusScopeSchema,
+  key: z.string().nullable().describe("The key asked for, or null for the whole scope."),
+  rows: z
+    .array(censusRowSchema)
+    .max(200)
+    .describe("The counts: every metric of one key, or the headline ones of each key."),
+  truncated: z.boolean().describe("Whether more keys are in the edition than rows holds."),
+  url: z.url().describe("The edition's page."),
+  json: z.url().describe("Every count of the edition."),
+  csv: z.url(),
+  method: z.url().describe("How it was counted, with every definition."),
+  vocabulary: z.url().describe("The capability vocabulary the can: metrics are defined in."),
+  licence: censusLicenceSchema,
+});
+export type GetCensusOutput = z.infer<typeof getCensusOutputSchema>;
 
 /* --- register_business and update_business (§4.12) ----------------------------------------------------------------- */
 

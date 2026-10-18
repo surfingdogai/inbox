@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/census-edition.json",
+  "title": "GET /v1/census/{edition}: one month of the census, as counts (CC BY 4.0)",
+  "type": "object",
+  "properties": {
+    "edition": {
+      "type": "string",
+      "pattern": "^20\\d\\d-(0[1-9]|1[0-2])$",
+      "description": "The month the edition records, YYYY-MM."
+    },
+    "title": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "published", "withdrawn"],
+      "description": "A draft is served to the network's operators only; a published or withdrawn one to everyone."
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+      "description": "When the counts were taken."
+    },
+    "published_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Why a withdrawn edition was withdrawn, or anything a reader must know; null when there is nothing."
+    },
+    "publish_note": {
+      "description": "For an edition published from a draft taken before its month ended: why it went out as it was.",
+      "type": "string",
+      "maxLength": 2000
+    },
+    "method": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The method in words, with the edition."
+        },
+        "min_sample": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "A country, kind of business, platform, source or city is published only with at least this many checked."
+        },
+        "city_read": {
+          "description": "A city is partial until this share of its list (places) is checked.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rules_hash": {
+          "description": "The score rules' content the capabilities were read under: 16 hex of the SHA-256 of the document.",
+          "type": "string"
+        },
+        "rules_share": {
+          "description": "The share of the checked scored under those rules when the counts were taken.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "door_registry": {
+          "description": "The version of the door registry the doors were read by.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "places_sources": {
+          "description": "The city lists the cities were counted from.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["version", "url", "min_sample"]
+    },
+    "vocabulary": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["version", "url"],
+      "description": "The capability vocabulary counted."
+    },
+    "score_rules": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "revised": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The day those rules were last published or amended: a version amended in place counts differently."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["version", "revised", "url"],
+      "description": "The score rules the capabilities' states were read under."
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
+      },
+      "description": "The capabilities counted, in vocabulary order."
+    },
+    "doors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
+      },
+      "description": "The door types counted."
+    },
+    "levels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
+      },
+      "description": "The readiness levels counted, lowest first."
+    },
+    "left_out": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "all, country, group, platform, source or city; a reader skips a scope it does not know."
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "description": "How many keys of each scope had fewer checked than min_sample, and are not in rows."
+    },
+    "licence": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "CC-BY-4.0"
+        },
+        "url": {
+          "type": "string",
+          "const": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "How to credit it: \"Surfing Dog census, surfingdog.ai, CC BY 4.0\"."
+        },
+        "credits": {
+          "description": "Credit for others' data the counts rest on, given with the attribution: \"© Overture Maps Foundation\" when the cities are counted from Overture Maps places data.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["name", "url", "attribution"]
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "all, country, group, platform, source or city; a reader skips a scope it does not know."
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The scope's key: empty for all."
+          },
+          "metric": {
+            "type": "string",
+            "pattern": "^(checked|agent_ready|places|no_ai|can:[a-z][a-z0-9_]*|door:[a-z0-9_]+|level:[a-z]+)$",
+            "description": "checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, or for a city places."
+          },
+          "value": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["scope", "key", "metric", "value"]
+      }
+    }
+  },
+  "required": [
+    "edition",
+    "title",
+    "status",
+    "as_of",
+    "published_at",
+    "note",
+    "method",
+    "vocabulary",
+    "score_rules",
+    "capabilities",
+    "doors",
+    "levels",
+    "left_out",
+    "licence",
+    "rows"
+  ]
+}
