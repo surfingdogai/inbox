@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type NetworkView, parseStoredSettings 
 import { describe, expect, it } from "vitest";
 import {
   agoWords,
+  carriedWords,
   doorPanel,
   emailWords,
   networkStatus,
@@ -217,6 +218,7 @@ describe("Settings → Networks", () => {
     standing: null,
     ping_signature: null,
     doors: null,
+    carried: null,
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
@@ -235,6 +237,25 @@ describe("Settings → Networks", () => {
     ]) {
       expect(parseNetworkOrigin(bad), bad).toHaveProperty("problem");
     }
+  });
+
+  it("says what assistants tried through a network, for the owner alone", () => {
+    expect(carriedWords(base)).toBeNull();
+    const carried = {
+      since: "2026-09-18T10:00:00Z",
+      delivered: 3,
+      confirm: 1,
+      not_delivered: { switched_off: 2, failed: 1 },
+      at: "2026-10-18T10:00:00Z",
+    };
+    expect(carriedWords({ ...base, carried })).toBe(
+      "Assistants tried to reach you through it in the last 30 days: 3 requests delivered, 1 booking shown to the person to confirm the price, 3 did not arrive (you had them switched off; your inbox could not be reached).",
+    );
+    expect(carriedWords({ ...base, carried: { ...carried, delivered: 1, confirm: 0, not_delivered: {} } })).toBe(
+      "Assistants tried to reach you through it in the last 30 days: 1 request delivered.",
+    );
+    expect(carriedWords({ ...base, enabled: false, carried })).toBeNull();
+    expect(carriedWords({ ...base, carried: { ...carried, delivered: 0, confirm: 0, not_delivered: {} } })).toBeNull();
   });
 
   it("says in one line how each network is doing", () => {

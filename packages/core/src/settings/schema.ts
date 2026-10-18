@@ -740,6 +740,24 @@ const sections = {
     .prefault({})
     .describe("What agents can do here. Left out, a door follows what the inbox holds; false shuts it."),
   /**
+   * Requests a network carries to this inbox for someone's AI assistant (ADR-020): a question, a
+   * request for a quote or for a booking, sent through the inbox's own public doors with the email
+   * address the person agreed to give, never a phone number. On for every inbox unless the owner
+   * switches it off; off, the manifest says `carried_requests: {"accepted": false}` and every
+   * network leaves the inbox be. The inbox's own doors and their limits are the same either way.
+   */
+  carried: z
+    .object({
+      accepted: z
+        .boolean()
+        .default(true)
+        .describe(
+          "Let networks bring you requests from people's AI assistants, with the email they agreed to give you.",
+        ),
+    })
+    .prefault({})
+    .describe("Requests a network carries to you for people's AI assistants."),
+  /**
    * Where the details a setup plan filled in came from (`capabilities/plan.ts`), per field: the page,
    * when it was read, and how. Kept so the owner app can ask the owner to check what was only read
    * from a page's words. Never published. And what it read but did not apply (`suggestions`): the

@@ -7,6 +7,7 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import {
+  carriedWords,
   type DoorPanel,
   doorPanel,
   emailWords,
@@ -77,6 +78,28 @@ function NetworksPage() {
       },
     );
   };
+  // One switch for every network at once: the manifest says it, so every network reads the same.
+  const carriedOn = settings.data ? settings.data.doc.carried.accepted : true;
+  const setCarried = (on: boolean) => {
+    if (!settings.data || save.isPending) return;
+    save.reset();
+    setNotice(null);
+    setActing("carried");
+    save.mutate(
+      { doc: { carried: { accepted: on } }, expected_version: settings.data.version },
+      {
+        onSuccess: () => {
+          setActing(null);
+          setNotice({
+            tone: "success",
+            text: on
+              ? "Networks can bring you requests from people's AI assistants."
+              : "Networks no longer bring you assistants' requests. Your own doors still take them.",
+          });
+        },
+      },
+    );
+  };
   const reload = () => {
     save.reset();
     void qc.invalidateQueries({ queryKey: qk.settings });
@@ -107,6 +130,20 @@ function NetworksPage() {
           on early is what counts.
         </p>
       </details>
+      <div className="net-carried">
+        <Switch checked={carriedOn} onChange={setCarried} disabled={save.isPending || !settings.data}>
+          Requests from AI assistants
+        </Switch>
+        <div className="hint">
+          A network can bring you someone's question, quote request or booking request from their AI assistant, with the
+          email they agreed to give you. It keeps only a record that it was delivered.
+        </div>
+        {acting === "carried" && problem && !conflict && (
+          <div className="hint error" role="alert">
+            {problem.detail}
+          </div>
+        )}
+      </div>
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {conflict && (
         <Toast
@@ -251,6 +288,7 @@ function NetworkLine({
   const rules = n.enabled ? rulesWords(n.rules) : null;
   const standing = standingWords(n);
   const doors = doorPanel(n);
+  const carried = carriedWords(n);
   const emails = n.enabled ? emailWords(n) : null;
   return (
     <div className={clsx("catalogue-row row-glass", !n.enabled && !n.held?.on_when_released && "is-archived")}>
@@ -270,6 +308,7 @@ function NetworkLine({
           </div>
         )}
         {doors && <AgentsGotOn panel={doors} />}
+        {carried && <div className="hint">{carried}</div>}
         {rules && <div className="hint">{rules}</div>}
         {n.enabled && n.level === "directory" && (
           <div className="hint">

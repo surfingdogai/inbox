@@ -782,6 +782,11 @@ a {
 .net-issue {
   margin-top: 10px;
 }
+/* The one switch for requests networks carry for people's assistants: above the networks, quiet. */
+.net-carried {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--hairline);
+}
 /* How agents got on: folded under the network, a few quiet lines per door. */
 .net-doors {
   margin-top: 8px;

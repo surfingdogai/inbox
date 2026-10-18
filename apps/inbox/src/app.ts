@@ -481,6 +481,8 @@ export function createInbox(deps: AppDeps): Inbox {
       ...(unlisted ? { directory: { listed: false } } : {}),
       // Where an agent goes for a kind the business takes somewhere else: a booking platform, its own checkout.
       doorsElsewhere: profile.doors_elsewhere,
+      // Whether a network may carry an assistant's request here: said only when the owner said no.
+      carried: settings.carried,
     });
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
   });

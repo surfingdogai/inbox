@@ -200,3 +200,14 @@ describe("the manifest's directory flag", () => {
     expect((await s.manifest()).directory).toBeUndefined();
   });
 });
+
+describe("the manifest's carried_requests (ADR-020)", () => {
+  it("is absent while networks may carry assistants' requests, the default, and says no once the owner does", async () => {
+    const s = await setup();
+    expect((await s.manifest()).carried_requests).toBeUndefined();
+    await s.caps.updateSettings(owner, { doc: { carried: { accepted: false } } });
+    expect((await s.manifest()).carried_requests).toEqual({ accepted: false });
+    await s.caps.updateSettings(owner, { doc: { carried: { accepted: true } } });
+    expect((await s.manifest()).carried_requests).toBeUndefined();
+  });
+});

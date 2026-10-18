@@ -22,6 +22,11 @@ export function buildManifest(input: {
    * kind named here is left out of `item_types`, so the document never says both.
    */
   doorsElsewhere?: readonly DoorElsewhere[] | undefined;
+  /**
+   * Whether a network may carry an assistant's request here (ADR-020, `settings.carried`): published
+   * only when it may not, `{accepted: false}`; absent means it may, the default for every inbox.
+   */
+  carried?: { readonly accepted: boolean } | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   const elsewhere = input.doorsElsewhere ?? [];
@@ -49,6 +54,7 @@ export function buildManifest(input: {
     receipt_keys: { keys: input.receiptKeys ?? [] },
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
+    ...(input.carried && !input.carried.accepted ? { carried_requests: { accepted: false } } : {}),
     ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
   });
 }
