@@ -22,6 +22,20 @@ const DAY = futureDay();
 const INBOUND = "journey-inbound-secret-0123456789";
 const NETWORK = "https://net.example.com";
 
+/**
+ * A time on DAY, given in UTC, as the business writes it in Lisbon: 13:00 UTC is 14:00 in summer
+ * time and 13:00 after it ends. DAY is a week from whenever the test runs, so the hour expected is
+ * worked out for that day rather than written down.
+ */
+function lisbon(utc: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Lisbon",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(`${DAY}T${utc}:00Z`));
+}
+
 async function setup(languages: string[], opts: { network?: "down" | "issuing" } = {}) {
   const db = await freshDb();
   const svc = ulid();
@@ -269,9 +283,8 @@ describe("a customer, end to end", () => {
     const text = proposal?.mail.text ?? "";
     expect(proposal?.mail.subject).toMatch(/Full service/);
     expect(text).toMatch(/^Hello Rita,/);
-    expect(text).toMatch(/at 1[34]:00 \((Western European[^)]*|GMT\+1|WEST|WET)\)/);
-    // What they asked for, 09:00 UTC in the business's zone: 10:00 in summer time, 09:00 after it ends.
-    expect(text).toMatch(/at (09|10):00 \(/);
+    expect(text).toMatch(new RegExp(`at ${lisbon("13:00")} \\((Western European[^)]*|GMT\\+1|WEST|WET)\\)`));
+    expect(text).toContain(`at ${lisbon("09:00")} (`); // what they asked for, 09:00 UTC in Lisbon
     expect(text).toContain("€45.00");
     expect(text).toMatch(/[Aa]nswer by|[Rr]eply by|until/);
     const links = linksIn(text);
@@ -291,7 +304,7 @@ describe("a customer, end to end", () => {
     expect(html).toContain("<title>Oficina Maré</title>");
     expect(html).toContain("Accept this time?");
     expect(html).toContain("€45.00");
-    expect(html).toMatch(/at 1[34]:00 \(/);
+    expect(html).toContain(`at ${lisbon("13:00")} (`);
     expect(html).not.toMatch(/surfing/i);
     await s.app.request(`${BASE}${links.Decline}`);
     expect(await counts(s)).toEqual(before);
@@ -306,7 +319,7 @@ describe("a customer, end to end", () => {
     // 6. The confirmation, on the same thread.
     const confirmation = mailTo(s, rita).at(-1);
     expect(confirmation?.mail.subject).toBe("Confirmed: Full service");
-    expect(confirmation?.mail.text).toMatch(/at 1[34]:00 \(/);
+    expect(confirmation?.mail.text).toContain(`at ${lisbon("13:00")} (`);
     expect(confirmation?.mail.text).toContain("€45.00");
     expect(confirmation?.mail.headers?.References?.split(" ")[0]).toBe(anchor);
 
@@ -404,7 +417,7 @@ describe("a customer, end to end", () => {
     await drain(s);
     const proposal = mailTo(s, ana).at(-1);
     const text = proposal?.mail.text ?? "";
-    expect(text).toMatch(/às 1[34]:00 \((hora da Europa Ocidental[^)]*|GMT\+1|WEST|WET)\)/);
+    expect(text).toMatch(new RegExp(`às ${lisbon("13:00")} \\((hora da Europa Ocidental[^)]*|GMT\\+1|WEST|WET)\\)`));
     expect(text).toMatch(/45,00\s€/);
     expect(text).toContain(`Referência: ${id.slice(-6).toUpperCase()}`);
     const links = linksIn(text);
@@ -505,7 +518,7 @@ describe("a customer, end to end", () => {
     const quote = mailTo(s, rita).at(-1)?.mail.text ?? "";
     expect(quote).toContain("28 × Spokes — €70.00");
     expect(quote).toContain("€310.00");
-    expect(quote).toMatch(/at 1[89]:00 \(/);
+    expect(quote).toContain(`at ${lisbon("18:00")} (`);
     const links = linksIn(quote);
     expect(Object.keys(links)).toEqual(["Accept", "Decline"]);
 
