@@ -203,7 +203,7 @@ export const businessCardSchema = z.object({
     })
     .optional()
     .describe(
-      "The business's own inbox, where it takes bookings, orders and questions; this server takes no bookings or orders. Present whenever has_inbox is true or absent.",
+      "The business's own inbox, where it takes bookings, orders and questions; this server takes no orders or payments and books nothing itself. Present whenever has_inbox is true or absent.",
     ),
   standing: z
     .object({

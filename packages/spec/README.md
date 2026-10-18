@@ -70,9 +70,10 @@ or network:
   the owner's page in a listing's `owner.manage`.
 - 0.6 (optional for a network): carried requests (ADR-020): `ask_business`, `request_quote` and
   `request_booking` carry a person's request to a business's own inbox (`schemas/mcp-ask-business-*`,
-  `mcp-request-quote-*`, `mcp-request-booking-*`); the manifest's optional `carried_requests`, which an
-  owner sets to `{"accepted": false}` to refuse them; and the `carried` counts a signed ping's answer gives
-  the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
+  `mcp-request-quote-*`, `mcp-request-booking-*`); the manifest's `carried_requests`, which an inbox with
+  the owner's switch publishes either way (a network carries nothing to a manifest without it); the
+  `Surfing-Dog-Carried` and `Surfing-Dog-Carried-For` headers a carried request comes with; and the
+  `carried` counts a signed ping's answer gives the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
   signed session id used only for its limits.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under

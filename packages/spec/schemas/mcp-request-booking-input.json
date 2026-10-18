@@ -45,7 +45,7 @@
       "pattern": "^[A-Za-z0-9_-]{43}$"
     },
     "contact": {
-      "description": "Needed with start: where the business answers.",
+      "description": "Needed with start: where the business can answer.",
       "type": "object",
       "properties": {
         "email": {

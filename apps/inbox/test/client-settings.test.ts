@@ -249,13 +249,16 @@ describe("Settings → Networks", () => {
       at: "2026-10-18T10:00:00Z",
     };
     expect(carriedWords({ ...base, carried })).toBe(
-      "Assistants tried to reach you through it in the last 30 days: 3 requests delivered, 1 booking shown to the person to confirm the price, 3 did not arrive (you had them switched off; your inbox could not be reached).",
+      "Assistants tried to reach you through this network, last 30 days: 3 delivered, 3 not delivered (you had them switched off; your inbox could not be reached).",
     );
-    expect(carriedWords({ ...base, carried: { ...carried, delivered: 1, confirm: 0, not_delivered: {} } })).toBe(
-      "Assistants tried to reach you through it in the last 30 days: 1 request delivered.",
+    expect(
+      carriedWords({ ...base, carried: { ...carried, delivered: 1, confirm: 0, not_delivered: { busy: 1 } } }),
+    ).toBe(
+      "Assistants tried to reach you through this network, last 30 days: 1 delivered, 1 not delivered (your inbox's limit was reached).",
     );
     expect(carriedWords({ ...base, enabled: false, carried })).toBeNull();
-    expect(carriedWords({ ...base, carried: { ...carried, delivered: 0, confirm: 0, not_delivered: {} } })).toBeNull();
+    // A booking only shown to the person to confirm reached nobody yet: not counted for the owner.
+    expect(carriedWords({ ...base, carried: { ...carried, delivered: 0, confirm: 2, not_delivered: {} } })).toBeNull();
   });
 
   it("says in one line how each network is doing", () => {

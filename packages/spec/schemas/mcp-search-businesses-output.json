@@ -96,7 +96,7 @@
             "description": "Its inbox answered this network within the last day."
           },
           "inbox": {
-            "description": "The business's own inbox, where it takes bookings, orders and questions; this server takes no bookings or orders. Present whenever has_inbox is true or absent.",
+            "description": "The business's own inbox, where it takes bookings, orders and questions; this server takes no orders or payments and books nothing itself. Present whenever has_inbox is true or absent.",
             "type": "object",
             "properties": {
               "url": {

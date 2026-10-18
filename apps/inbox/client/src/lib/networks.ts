@@ -473,8 +473,8 @@ function shortUrl(url: string): string {
 const CARRIED_WHY: Record<string, string> = {
   switched_off: "you had them switched off",
   failed: "your inbox could not be reached",
-  busy: "your inbox asked for a pause",
-  refused: "your inbox refused them",
+  busy: "your inbox's limit was reached",
+  refused: "your inbox turned it down",
   not_taken: "a kind of request you do not take",
   elsewhere: "a kind you take somewhere else",
   no_inbox: "your inbox could not be found",
@@ -482,22 +482,21 @@ const CARRIED_WHY: Record<string, string> = {
 
 /**
  * What a network says assistants tried, through it, over its last 30 days: the requests it carried
- * here, the bookings waiting for the person to confirm a price, and the ones that did not arrive and
- * why. Only this inbox is told; null when the network said nothing, or nothing happened.
+ * here, and the ones that did not arrive and why. A booking shown to the person to confirm its price
+ * is not counted: it reached nobody yet, and once the person says yes it is delivered. Only this
+ * inbox is told; null when the network said nothing, or nothing happened.
  */
 export function carriedWords(n: Pick<NetworkView, "enabled" | "carried">): string | null {
   const c = n.carried;
   if (!n.enabled || !c) return null;
-  const many = (k: number, one: string, more: string) => `${k} ${k === 1 ? one : more}`;
   const missed = Object.entries(c.not_delivered).filter(([, k]) => k > 0);
   const lost = missed.reduce((sum, [, k]) => sum + k, 0);
-  if (c.delivered + c.confirm + lost === 0) return null;
+  if (c.delivered + lost === 0) return null;
   const parts: string[] = [];
-  if (c.delivered) parts.push(`${many(c.delivered, "request", "requests")} delivered`);
-  if (c.confirm) parts.push(`${many(c.confirm, "booking", "bookings")} shown to the person to confirm the price`);
+  if (c.delivered) parts.push(`${c.delivered} delivered`);
   if (lost) {
     const why = missed.map(([k]) => CARRIED_WHY[k] ?? k.replaceAll("_", " ")).join("; ");
-    parts.push(`${lost} did not arrive (${why})`);
+    parts.push(`${lost} not delivered (${why})`);
   }
-  return `Assistants tried to reach you through it in the last 30 days: ${parts.join(", ")}.`;
+  return `Assistants tried to reach you through this network, last 30 days: ${parts.join(", ")}.`;
 }

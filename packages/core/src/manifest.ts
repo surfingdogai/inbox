@@ -24,7 +24,9 @@ export function buildManifest(input: {
   doorsElsewhere?: readonly DoorElsewhere[] | undefined;
   /**
    * Whether a network may carry an assistant's request here (ADR-020, `settings.carried`): published
-   * only when it may not, `{accepted: false}`; absent means it may, the default for every inbox.
+   * either way, `{accepted: true}` (the default for every inbox) or `{accepted: false}`, so a network
+   * can tell an inbox whose owner can switch them off from one from before the switch, which says
+   * nothing and is carried nothing.
    */
   carried?: { readonly accepted: boolean } | undefined;
 }): Manifest {
@@ -54,7 +56,7 @@ export function buildManifest(input: {
     receipt_keys: { keys: input.receiptKeys ?? [] },
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
-    ...(input.carried && !input.carried.accepted ? { carried_requests: { accepted: false } } : {}),
+    ...(input.carried ? { carried_requests: { accepted: input.carried.accepted } } : {}),
     ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
   });
 }

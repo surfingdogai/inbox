@@ -295,8 +295,10 @@ export const manifestSchema = z.object({
   /**
    * Whether a network may carry an assistant's request to this inbox (ADR-020; network.md §4.16): a
    * question, a request for a quote or for a booking, sent through this inbox's own public API with the
-   * person's email address, given with their consent. `{"accepted": false}` says no to every network;
-   * saying nothing, or `true`, says yes: carried requests are on unless the owner switches them off.
+   * person's email address, given with their consent. An inbox with the owner's switch publishes it
+   * either way: `{"accepted": true}`, the default, says yes; `{"accepted": false}` says no to every
+   * network. Saying nothing is an inbox from before the switch, whose owner could not say no: a network
+   * carries nothing to it.
    */
   carried_requests: z.object({ accepted: z.boolean() }).optional(),
   /**

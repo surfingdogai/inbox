@@ -481,10 +481,12 @@ export function createInbox(deps: AppDeps): Inbox {
       ...(unlisted ? { directory: { listed: false } } : {}),
       // Where an agent goes for a kind the business takes somewhere else: a booking platform, its own checkout.
       doorsElsewhere: profile.doors_elsewhere,
-      // Whether a network may carry an assistant's request here: said only when the owner said no.
+      // Whether a network may carry an assistant's request here: said either way, so the owner's
+      // switch reaches every network within minutes.
       carried: settings.carried,
     });
-    return c.json(manifest, 200, { "Cache-Control": "public, max-age=300" });
+    // A minute: a network reads it again within five, and an owner's switch must not wait on a cache.
+    return c.json(manifest, 200, { "Cache-Control": "public, max-age=60" });
   });
 
   // The receipt-signing keys as a plain JWKS (ADR-016), for anything that verifies a JWS the

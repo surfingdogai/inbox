@@ -7,17 +7,20 @@ import { DEFAULT_SETTINGS, settingsSchema } from "../src/settings/schema";
 
 /**
  * Requests a network carries for people's AI assistants (ADR-020): on for every inbox unless the
- * owner switches them off, and said in the manifest only when off. Node and workerd.
+ * owner switches them off, and said in the manifest either way, so a network can tell an inbox that
+ * has the switch from one from before it (which says nothing, and is carried nothing). Node and workerd.
  */
 describe("carried requests", () => {
-  it("are on by default, and the manifest says nothing of them then", () => {
+  it("are on by default, and the manifest says so", () => {
     expect(DEFAULT_SETTINGS.carried.accepted).toBe(true);
     const m = buildManifest({
       instanceUrl: "https://inbox.example.com",
       itemTypes: ["message"],
-      carried: { accepted: true },
+      carried: DEFAULT_SETTINGS.carried,
     });
-    expect(m).not.toHaveProperty("carried_requests");
+    expect(m.carried_requests).toEqual({ accepted: true });
+    expect(manifestSchema.parse(m).carried_requests).toEqual({ accepted: true });
+    // Without the setting (an inbox from before the switch, as a network reads it): nothing said.
     expect(buildManifest({ instanceUrl: "https://inbox.example.com", itemTypes: ["message"] })).not.toHaveProperty(
       "carried_requests",
     );

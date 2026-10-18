@@ -22,10 +22,13 @@ middle. A carried request has to keep the substance of that promise, and say pla
    writes. When a business allows it, we carry an assistant's request to the business's own inbox and
    keep only a record that it was delivered."* Every page that describes carried requests says it this
    way.
-2. **On by default, for every inbox.** Hosted and self-hosted alike, an inbox accepts carried requests
-   unless its owner switches them off (`settings.carried.accepted`). The manifest says so only when off
-   (`carried_requests: {"accepted": false}`), and every network leaves the inbox be. The inbox's own
-   doors, rules and limits apply to a carried request exactly as to any agent's.
+2. **On by default, for every inbox that can switch them off.** Hosted and self-hosted alike, an inbox
+   accepts carried requests unless its owner switches them off (`settings.carried.accepted`). The
+   manifest says it either way (`carried_requests: {"accepted": true}` or `{"accepted": false}`), and a
+   network carries only to a manifest that says `true`. A manifest that says nothing is an inbox from
+   before the switch, whose owner could not say no: it is carried nothing, and the answer says why. So
+   an inbox is updated before any network carries to it. The inbox's own doors, rules and limits apply
+   to a carried request exactly as to any agent's.
 3. **One MCP address.** The carrying tools are on the network's one `/mcp`, beside search; `/mcp/search`
    answers the same, for directories that list it by that name. The inbox's owner door (`/mcp/owner`)
    stays where it is, on the inbox.
@@ -34,9 +37,13 @@ middle. A carried request has to keep the substance of that promise, and say pla
    business; no description or answer asks the model to call anything on its own.
 5. **Anonymous, with limits.** No sign-in is needed. Limits count the person where the network can tell
    them apart (a directory key, then a session it signed, then the address), per person and business,
-   per wider network (an assistant platform's published outbound range counts as one, widely), per email
-   address, per business hourly and daily, and the same words to at most three businesses an hour.
-   OAuth only where a directory requires it.
+   per address (a session costs nothing to start), per wider network, per email address (by the mailbox
+   it reaches) and per email address and business, per place and business, per business hourly and
+   daily, the same words to at most five businesses an hour, and the network's own total last. An
+   assistant platform's published outbound range is many people, never a trusted caller: anyone who can
+   call from it can (its API customers too), so each address in it keeps a limit of its own and the range
+   as a whole gets at most a fifth of what the network carries. A request one limit refuses spends
+   nothing in the others. OAuth only where a directory requires it.
 6. **Only to an inbox.** A request goes only to a business in the directory whose inbox publishes a
    manifest on its own domain (or one short label under it), through that inbox's public API. Carrying
    to a business without an inbox comes later, if ever, and then only to a business that claimed its
@@ -58,6 +65,17 @@ middle. A carried request has to keep the substance of that promise, and say pla
     description says what it records, not that it must be called. The network serves
     `/.well-known/openai-apps-challenge` when it is given a token, and 404 otherwise.
 
+12. **The inbox can tell carried senders apart.** A carried request says so (`Surfing-Dog-Carried: 1`)
+    and carries an opaque code for its sender (`Surfing-Dog-Carried-For`), keyed by the network and the
+    same only for one sender, one inbox and one day: an inbox can hold one carried sender to its limits,
+    or turn them away, without turning the network away. Our inbox marks such an item (`flags.carried`)
+    and acknowledges it by email at most once a day per address, since the address was typed by an
+    assistant for someone the business has never heard from. The idempotency key is made of the request
+    itself (kind, business, mailbox, body), so a retry is the same request whoever sends it and whenever.
+13. **Only from an assistant, or our own pages.** The carrying tools refuse a call from a web page's
+    script (an `Origin` the network does not list), so no page can carry spam through its visitors'
+    browsers.
+
 ## Consequences
 
 - The network now handles an email address and a request's words for the second it takes to carry
@@ -66,8 +84,10 @@ middle. A carried request has to keep the substance of that promise, and say pla
 - A business that switched carried requests off still gets the same agents at its own doors; the
   switch is only about the network carrying.
 - An inbox sees a carried request as any anonymous agent's request, from the network's address. Its own
-  per-address limits then hold for every carried request together, which suits a small business; a
-  network that signs its requests (Web Bot Auth) could be told apart later.
-- The protocol gains §4.16, the tools' schemas (`schemas/mcp-ask-business-*.json`,
+  per-address limits then hold for every carried request together, which suits a small business; the
+  sender's code (decision 12) lets it hold one sender apart, and a network that signs its requests
+  (Web Bot Auth) could be told apart from a forger later.
+- The order of a release: inboxes first (so their manifests say `carried_requests`), then the network.
+- The protocol gains §4.16 (spec 0.6), the tools' schemas (`schemas/mcp-ask-business-*.json`,
   `mcp-request-quote-*`, `mcp-request-booking-*`), the manifest's `carried_requests` and the signed
   ping's `carried`.

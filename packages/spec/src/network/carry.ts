@@ -4,8 +4,8 @@ import { timestampSchema } from "./common";
 /**
  * Carried requests (ADR-020, `docs/protocol/network.md` §4.16): a network may carry an assistant's
  * question, request for a quote or request for a booking to a business's own inbox, through the
- * inbox's public API, when the inbox allows it (its manifest's `carried_requests`, on unless the
- * owner switched it off). The network keeps only a record that it was delivered: when, to which
+ * inbox's public API, when the inbox allows it (its manifest's `carried_requests.accepted`, true
+ * unless the owner switched it off; a manifest without it is carried nothing). The network keeps only a record that it was delivered: when, to which
  * business, and the outcome. Nothing anyone wrote, and nothing about the person.
  *
  * The person's contact is an email address they agreed to give the business, never a phone
@@ -23,7 +23,7 @@ const domainArg = z
 /** An email address, as a person types it: one @, a dot after it, no spaces. */
 export const CARRY_EMAIL_PATTERN = '^[^\\s@<>()\\[\\],;:"]{1,64}@[^\\s@<>()\\[\\],;:"]+\\.[^\\s@<>()\\[\\],;:"]{2,}$';
 
-/** Where the business answers: an email address the person agreed to give it. Never a phone number. */
+/** Where the business can answer: an email address the person agreed to give it. Never a phone number. */
 export const carryContactSchema = z
   .strictObject({
     email: z
@@ -33,7 +33,7 @@ export const carryContactSchema = z
       .describe("Your person's email address, which they agreed to give this business for its answer."),
     name: z.string().min(1).max(100).optional().describe("The name your person wants the business to use."),
   })
-  .describe("Where the business answers. Only an email address and a name: never a phone number.");
+  .describe("Where the business can answer. Only an email address and a name: never a phone number.");
 
 const consentArg = z
   .literal(true)
@@ -97,7 +97,7 @@ export const requestBookingInputSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{43}$/)
     .optional()
     .describe("The confirm.terms_sha of the last answer, sent only after your person said yes to its summary."),
-  contact: carryContactSchema.optional().describe("Needed with start: where the business answers."),
+  contact: carryContactSchema.optional().describe("Needed with start: where the business can answer."),
   consent: z
     .literal(true)
     .optional()
@@ -122,7 +122,7 @@ export const carryOutcomeSchema = z
     "elsewhere",
   ])
   .describe(
-    "delivered: in the business's inbox. confirm: nothing sent yet, the terms are for your person to confirm. times: the free times, nothing sent. not_free: that time is not free, nothing sent. refused: the inbox refused it (its words say why). busy: the inbox asked for a pause. failed: the inbox could not be reached. switched_off: the business does not take requests carried by a network. no_inbox: the business has no inbox to carry it to. not_taken: its inbox does not take this kind of request. elsewhere: it takes this kind somewhere else.",
+    "delivered: in the business's inbox. confirm: nothing sent yet, the terms are for your person to confirm. times: the free times, nothing sent. not_free: that time is not free, nothing sent. refused: the inbox refused it (its words say why). busy: the inbox asked for a pause. failed: the inbox could not be reached. switched_off: the business does not take requests carried by a network. no_inbox: the business has no inbox to carry it to, or its inbox has not said it takes requests carried by a network. not_taken: its inbox does not take this kind of request. elsewhere: it takes this kind somewhere else.",
   );
 export type CarryOutcome = z.infer<typeof carryOutcomeSchema>;
 
@@ -171,7 +171,11 @@ export const carryOutputSchema = z.object({
     .array(z.string())
     .optional()
     .describe("The services the business books, when service named none of them."),
-  times: z.array(carryTimeSchema).max(24).optional().describe("Free times, in UTC; timezone says the business's own."),
+  times: z
+    .array(carryTimeSchema)
+    .max(24)
+    .optional()
+    .describe("Free times, in UTC; timezone says the business's own, the clock to tell your person."),
   timezone: z.string().optional().describe("The business's time zone."),
   elsewhere: z.url().optional().describe("Where the business takes this kind of request instead."),
   kept: z.string().describe("What this network keeps of the request."),

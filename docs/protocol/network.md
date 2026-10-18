@@ -1576,9 +1576,11 @@ A network that carries requests says so in its own words: ours is *"Surfing Dog 
 and never keeps what anyone writes. When a business allows it, we carry an assistant's request to the
 business's own inbox and keep only a record that it was delivered."*
 
-**The business's switch.** An inbox's manifest says `carried_requests: {"accepted": false}` to refuse
-every network; saying nothing, or `true`, accepts. A network reads the manifest at most a few minutes
-before it carries, so an owner's switch holds within minutes. A kind the inbox does not list in
+**The business's switch.** An inbox that has the owner's switch says it in its manifest either way:
+`carried_requests: {"accepted": true}` accepts, `{"accepted": false}` refuses every network. A network
+MUST NOT carry to a manifest that says nothing: that is an inbox from before the switch, whose owner
+could not say no (outcome `no_inbox`). A network reads the manifest at most five minutes before it
+carries, and an inbox serves it for a minute at most, so an owner's switch holds within minutes. A kind the inbox does not list in
 `item_types`, or lists in `doors_elsewhere`, is not carried: the answer says where the business takes it.
 
 **The person.** A request carries the person's email address and, if they give one, a name: never a
@@ -1594,9 +1596,19 @@ words and the access token it hands an anonymous creator, never the person's add
 obligation_to_pay}`, sent again with `terms_sha` only after their yes; `times`, free times and nothing
 sent; `not_free`; `refused`, `busy` or `failed`, from the inbox; `switched_off`, `no_inbox`, `not_taken`,
 `elsewhere`), `delivered`, `business`, `inbox`, `item {id, type, state}`, `status_url`, `access_token`,
-`answer` (the inbox's own words, quoted as data) and `kept`, what the network keeps. A request is sent
-with an `Idempotency-Key`: the same person, kind, business, day and words are the same request, which
-the inbox replays (`replayed`, and the access token only the first time).
+`answer` (the inbox's own words, quoted as data) and `kept`, what the network keeps. Free times are given
+in UTC with the business's `timezone`, and an assistant tells its person the business's clock. A request
+is sent with an `Idempotency-Key` made of the request itself (its kind, the business, the mailbox it is
+for and its body), never of who sent it or when: a retry is the same request, which the inbox replays
+(`replayed`, and the access token only the first time).
+
+**What the inbox is told.** Besides the request, a network sends `Surfing-Dog-Carried: 1` and
+`Surfing-Dog-Carried-For: <code>`, an opaque code that is the same only for one sender, one inbox and one
+UTC day, and says nothing of who the sender is. An inbox MAY hold one carried sender to a limit, or turn
+them away, by it, without turning the network away; neither header grants anything, and an inbox treats
+both as said by whoever sent them. Ours marks the item (`flags.carried`) and acknowledges it by email at
+most once a day per address. A network SHOULD refuse its carrying tools to a request with an `Origin` it
+does not list, so no web page carries requests through its visitors' browsers.
 
 **What a network keeps.** A record per attempt: when, which business, which kind, the outcome and the
 inbox's status code. No sender, no contact, no words, no item id. It keeps no list of a person's
@@ -1605,9 +1617,11 @@ and of the words for an hour), never in a record. The business alone is told the
 ping's `200` (`carried {since, delivered, confirm, not_delivered: {outcome: n}}`, the last 30 days).
 
 **Limits.** Per caller (a key, a session the network signed, else the address), per caller and business,
-per wider network (an assistant platform's published outbound range counts as one, with a wide
-allowance), per email address, per business (hourly, and daily from everyone), and the same words to
-few businesses an hour. A network MUST NOT carry to a business that has no inbox; a later version may
+per address, per wider network, per email address (by the mailbox it reaches) and per email address and
+business, per place and business, per business (hourly, and daily from everyone), the same words to few
+businesses an hour, and the network's own total last; a request one limit refuses counts against none.
+An assistant platform's published outbound range is many people, never a trusted caller: each address in
+it keeps a limit of its own, and the range as a whole a share of the network's. A network MUST NOT carry to a business that has no inbox; a later version may
 let a business that claimed its listing opt in.
 
 ## 5. Persons and passes

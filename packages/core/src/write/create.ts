@@ -185,7 +185,11 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const who = identityColumns(match, identity);
   const machine = machines[input.type];
   const id = ulid();
-  const flags = itemFlagsSchema.parse({ ...input.flags, sandbox: caller.sandbox || input.flags?.sandbox === true });
+  const flags = itemFlagsSchema.parse({
+    ...input.flags,
+    sandbox: caller.sandbox || input.flags?.sandbox === true,
+    ...(caller.viaNetwork ? { carried: true } : {}),
+  });
   const anonymous = isCustomer(caller) && !caller.actor.partyId;
   const accessToken = anonymous ? randomToken(24) : undefined;
   const accessTokenHash = accessToken ? await hashText(accessToken) : null;

@@ -39,7 +39,7 @@
       },
       "required": ["email"],
       "additionalProperties": false,
-      "description": "Where the business answers. Only an email address and a name: never a phone number."
+      "description": "Where the business can answer. Only an email address and a name: never a phone number."
     },
     "consent": {
       "type": "boolean",

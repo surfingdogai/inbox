@@ -93,8 +93,8 @@ function NetworksPage() {
           setNotice({
             tone: "success",
             text: on
-              ? "Networks can bring you requests from people's AI assistants."
-              : "Networks no longer bring you assistants' requests. Your own doors still take them.",
+              ? "On. Within five minutes, assistants can reach you through networks."
+              : "Off. Within five minutes, networks stop bringing you assistants' requests; assistants can still write to your inbox directly.",
           });
         },
       },
@@ -109,6 +109,20 @@ function NetworksPage() {
   return (
     <section className="card glass stack">
       <SectionHead title="Networks" />
+      <div className="net-carried">
+        <Switch checked={carriedOn} onChange={setCarried} disabled={save.isPending || !settings.data}>
+          Requests from AI assistants
+        </Switch>
+        <div className="hint">
+          Questions, quotes and booking requests that people's AI assistants send through Surfing Dog or another
+          network, with the email they agreed to share. Off, assistants can still write to your inbox directly.
+        </div>
+        {acting === "carried" && problem && !conflict && (
+          <div className="hint error" role="alert">
+            {problem.detail}
+          </div>
+        )}
+      </div>
       <p className="lede small">{NETWORKS_WHY}</p>
       <details className="net-sent">
         <summary className="hint">What a network is sent</summary>
@@ -130,20 +144,6 @@ function NetworksPage() {
           on early is what counts.
         </p>
       </details>
-      <div className="net-carried">
-        <Switch checked={carriedOn} onChange={setCarried} disabled={save.isPending || !settings.data}>
-          Requests from AI assistants
-        </Switch>
-        <div className="hint">
-          A network can bring you someone's question, quote request or booking request from their AI assistant, with the
-          email they agreed to give you. It keeps only a record that it was delivered.
-        </div>
-        {acting === "carried" && problem && !conflict && (
-          <div className="hint error" role="alert">
-            {problem.detail}
-          </div>
-        )}
-      </div>
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {conflict && (
         <Toast
@@ -291,7 +291,7 @@ function NetworkLine({
   const carried = carriedWords(n);
   const emails = n.enabled ? emailWords(n) : null;
   return (
-    <div className={clsx("catalogue-row row-glass", !n.enabled && !n.held?.on_when_released && "is-archived")}>
+    <div className={clsx("catalogue-row row-glass net-row", !n.enabled && !n.held?.on_when_released && "is-archived")}>
       <div className="catalogue-main">
         <Switch checked={n.held ? n.held.on_when_released : n.enabled} onChange={onToggle} disabled={pending}>
           <b className="mono">{n.origin}</b>
