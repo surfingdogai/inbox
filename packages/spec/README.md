@@ -51,7 +51,7 @@ implementations:
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
-| `door-history.json` | a door's history (§4.8): the days seen answering, days checked and answered, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown |
+| `door-history.json` | a door's history (§4.8): the days seen answering, days checked, answered and refused, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown; `summary` is informative |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
 its English and Portuguese labels and synonyms. Protocol 0.2 adds `vocab/doors.json` (the door

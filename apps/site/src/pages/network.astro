@@ -11,6 +11,7 @@
 import LiveMetrics from "../components/LiveMetrics.astro";
 import NetworkFlow from "../components/NetworkFlow.astro";
 import Layout from "../layouts/Layout.astro";
+import { DOOR_SHARE_SHOWN, doorHistoryShows } from "../lib/door-history";
 
 const contents = [
   { href: "#how", label: "How it works" },
@@ -194,16 +195,14 @@ const shared = [
         <h3 class="h-card">Door history</h3>
         <p class="card-text">
           The network reads the doors businesses publish for AI agents: members' and claimed listings' every day,
-          the rest when it crawls. Of its own reads only, it keeps a line per door per day, for good; nothing an agent
-          reports goes into it. A site that opts out at surfingdog.ai/bot has it deleted at once.
+          the rest when it crawls. It keeps a line a day per door of what its own reads found, for good. No agent's
+          report goes into it, and a site that opts out at <a class="link" href="/bot">surfingdog.ai/bot</a> has it
+          deleted at once.
         </p>
-        <p class="card-text">
-          A listing and a check's result show the days each door was seen answering. For a door read every day they
-          also show, from 14 days checked, the share of days every check answered, rounded down: 199 of 200 is 99%.
-        </p>
+        <p class="card-text">{doorHistoryShows(DOOR_SHARE_SHOWN)}</p>
         <p class="more">
           <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/020-door-history.md" rel="noopener"
-            >How it is counted</a
+            >The full rule (ADR-020)</a
           >
         </p>
       </div>

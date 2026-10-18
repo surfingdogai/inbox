@@ -7,9 +7,11 @@ import { type DoorHistoryEntry, doorTypeSchema } from "./directory";
  *
  * A day is checked when the network's daily read of a door it reads every day (a member's or a claimed listing's)
  * concluded. A read an agent's report or the business asked for is a read of the door and never a check. A check is
- * missed when it failed, or was blocked while the door is down by the network's reads; a day is answered only when
- * none of its checks was missed, so a day with a failure and an answer fifteen minutes later is a day missed. The
- * share shows from 14 checked days, floored to the whole percent: never 100% with a day missed.
+ * missed when it failed, or was blocked while the door is down by the network's reads, and refused when it was
+ * blocked otherwise. A day is missed when one of its checks was missed, else refused when one was refused, else
+ * answered: a day with a failure and an answer fifteen minutes later is a day missed, and a site that refuses the
+ * network's read on its bad days hides nothing. The share of days answered shows from 14 checked days, floored to the
+ * whole percent: never 100% with a day missed or refused.
  */
 
 /** The fewest checked days the share shows from. */
@@ -21,7 +23,7 @@ export const DOOR_HISTORY_CURRENT_DAYS = 7;
 
 /**
  * One door type at one host as a network stores it. `type` is a door type as `vocab/doors.json` names it; `days_seen`
- * the days a read found it answering; `days` are `[day, answered, missed]`, that day's daily checks.
+ * the days a read found it answering; `days` are `[day, answered, missed, refused]`, that day's daily checks.
  */
 export interface DoorHistoryInput {
   readonly type: string;
@@ -30,7 +32,20 @@ export interface DoorHistoryInput {
   readonly last_seen: string | null;
   readonly days_seen: number;
   readonly current: boolean;
-  readonly days: readonly (readonly [string, number, number])[];
+  readonly days: readonly (readonly [string, number, number, number])[];
+}
+
+interface DayChecks {
+  answered: number;
+  missed: number;
+  refused: number;
+}
+
+/** A checked day's mark: `x` missed, else `b` refused, else `a` answered. */
+function mark(d: DayChecks): "a" | "x" | "b" {
+  if (d.missed > 0) return "x";
+  if (d.refused > 0) return "b";
+  return "a";
 }
 
 const DAY_MS = 86_400_000;
@@ -72,29 +87,32 @@ export function doorHistoryOf(entry: DoorHistoryInput, asOf: string): DoorHistor
     days_seen: Math.max(entry.days_seen, entry.first_seen === entry.last_seen ? 1 : 2),
     current: entry.current,
   };
-  const byDay = new Map<number, { answered: number; missed: number }>();
-  for (const [day, answered, missed] of entry.days) {
+  const byDay = new Map<number, DayChecks>();
+  for (const [day, answered, missed, refused] of entry.days) {
     const n = dayNumber(day);
-    if (n > today || answered < 0 || missed < 0 || answered + missed === 0) continue;
-    const cur = byDay.get(n) ?? { answered: 0, missed: 0 };
-    byDay.set(n, { answered: cur.answered + answered, missed: cur.missed + missed });
+    if (n > today || answered < 0 || missed < 0 || refused < 0 || answered + missed + refused === 0) continue;
+    const cur = byDay.get(n) ?? { answered: 0, missed: 0, refused: 0 };
+    byDay.set(n, { answered: cur.answered + answered, missed: cur.missed + missed, refused: cur.refused + refused });
   }
   if (byDay.size < DOOR_HISTORY_MIN_DAYS) return out;
   const keys = [...byDay.keys()];
   const first = Math.min(...keys);
   const last = Math.max(...keys);
-  const answered = [...byDay.values()].filter((d) => d.missed === 0).length;
+  const marks = [...byDay.values()].map(mark);
+  const answered = marks.filter((m) => m === "a").length;
+  const refused = marks.filter((m) => m === "b").length;
   let recent = "";
   for (let i = DOOR_HISTORY_RECENT_DAYS - 1; i >= 0; i--) {
     const d = byDay.get(today - i);
-    recent += d === undefined ? "." : d.missed === 0 ? "a" : "x";
+    recent += d === undefined ? "." : mark(d);
   }
   const days = byDay.size;
-  out.checks = { first_checked: dayString(first), last_checked: dayString(last), days, answered, recent };
+  out.checks = { first_checked: dayString(first), last_checked: dayString(last), days, answered, refused, recent };
   const when =
     today - last > DOOR_HISTORY_CURRENT_DAYS
       ? `from ${dayWords(first)} to ${dayWords(last)}`
       : `since ${dayWords(first)}`;
-  out.summary = `Answered every check on ${Math.floor((answered * 100) / days)}% of days checked ${when} (${answered} of ${days}).`;
+  const share = `${Math.floor((answered * 100) / days)}%${refused > 0 ? `; refused our check on ${refused}` : ""}`;
+  out.summary = `Answered every check on ${answered} of ${days} days checked ${when} (${share}).`;
   return out;
 }

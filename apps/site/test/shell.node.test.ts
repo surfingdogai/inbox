@@ -254,6 +254,7 @@ describe("shell.css", () => {
     const section = parts.slice(at, end < 0 ? undefined : end).replace(/\/\*[\s\S]*?\*\//g, "");
     expect(section).toMatch(/\.sd-spark \.is-answered\s*\{[^}]*var\(--c-success\)/);
     expect(section).toMatch(/\.sd-spark \.is-missed\s*\{[^}]*var\(--ink\)/);
+    expect(section).toMatch(/\.sd-spark \.is-refused\s*\{[^}]*var\(--ink-2\)/);
     expect(section).toMatch(/\.sd-spark \.is-none\s*\{[^}]*var\(--ink-3\)/);
     expect(section).not.toMatch(/--(?:c-)?(?:danger|flamingo|tangerine|sun|warning)(?:-ink)?\b/);
     expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch)\(/i);

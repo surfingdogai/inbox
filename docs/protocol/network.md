@@ -847,38 +847,45 @@ change of URL for 90 days. [`vectors/door-reports.json`](../../packages/spec/vec
 
 **History** ([ADR-020](../adr/020-door-history.md); optional for a network). A network may keep, for
 good, one line per door per UTC day of what its own reads concluded, for the door types it may show
-(never `llms.txt`, an experimental type or a page): how many answered, failed (by class) or were
-blocked; of its daily checks, how many answered and how many were missed; the median time its own
-reads took to get an answer; and the protocol version a crawl saw, when it looks like one; and per
-door the first and last day a read found it answering. A read counts as the state machine counts it
+(never `llms.txt`, an experimental type, a door a generic adapter found, or a page): how many
+answered, failed (by class) or were blocked; of its daily checks, how many answered, were missed and
+were refused; the median time its own reads took to get an answer; and the protocol version a crawl
+saw, when it has the shape of one; and per door the first and last day a read found it answering. A
+door is kept by its URL without the query or fragment. A read counts as the state machine counts it
 (a check's failure, a read thrown away and a crawl's doubt about a door of the daily set are none),
 and nothing an agent reports enters it. Opting out deletes it. A listing's detail and `get_business`
 carry it as `door_history` for the doors the listing shows, and a site's current result for every
 door type at every host a read found answering (never an off-site door the crawl could not tie to the
-site), each `{type, host, first_seen, last_seen, days_seen, current, checks?, summary?}`:
+site), each `{type, host, first_seen, last_seen, days_seen, current, checks?, summary?}`, the doors
+there now (`current`) first, then by `first_seen`:
 
 - `first_seen` and `last_seen` are the first and last UTC day a read found a door of that type at that
-  host answering, and `days_seen` on how many days one did: a door the crawl reads about once a month
-  is seen on few days, and nothing is said of the days between. `current` says whether one is there
-  now;
+  host answering, and `days_seen` on how many days one did, whoever asked for the read: a door the crawl
+  reads about once a month is seen on few days, and nothing is said of the days between. `current` says
+  whether one is there now;
 - `checks` is only for a door read every day, and only from **14** checked days. A **daily check** is
   the network's daily read of the door, and only that: a read that was also the daily read then due
   counts, whatever else asked for it, but a read the crawl, an agent's report or the business asked
   for, and a recovery read after a failed one, are never checks, so no one can choose when a door is
-  checked. A check is missed when it failed, or was blocked while the door is down by the network's
-  reads (at least three reads blocked in a row over at least 48 hours, as a network's published rules
-  count a member's inbox down); any other blocked read is no check. A day is checked when a check
-  concluded, and answered only when none of its checks was missed: a failure and an answer fifteen
-  minutes later is a day missed. `{first_checked, last_checked, days, answered, recent}`: `recent` is
-  the last 90 days ending on `as_of`, `a` every check answered, `x` one was missed, `.` no check;
-- `summary` says it in words, the share floored to the whole percent: "Answered every check on 97% of
-  days checked since 3 Oct 2026 (41 of 42)." A door last checked more than 7 days before `as_of` says
-  "from … to …" instead of "since". `summary` is informative and in English: the vectors pin `checks`
-  exactly and `summary` as this network words it; another network may word it differently, or in
+  checked. The daily read keeps its time of day (it is next due a day after it was due, not after it
+  was made), so a read a report asks for just before it never moves it. A check is **missed** when it
+  failed, or was blocked while the door is down by the network's reads (at least three reads blocked
+  in a row over at least 48 hours, as a network's published rules count a member's inbox down), and
+  **refused** when it was blocked otherwise. A day is checked when a check concluded; it is missed when
+  one of its checks was missed, else refused when one was refused, else answered: a failure and an
+  answer fifteen minutes later is a day missed, and a refused day is never an answered one.
+  `{first_checked, last_checked, days, answered, refused, recent}`: `refused` is the days refused, and
+  `recent` the last **90** days ending on `as_of`, `a` answered, `x` missed, `b` refused, `.` no check.
+  14 and 90 are the protocol's, not a network's to change; a network may leave `checks` out altogether;
+- `summary` says it in words, the count first and the share floored to the whole percent after it:
+  "Answered every check on 41 of 42 days checked since 3 Oct 2026 (97%)", with the days refused when
+  there were any ("(75%; refused our check on 5)"). A door last checked more than 7 days before `as_of`
+  says "from … to …" instead of "since". `summary` is informative and in English: the vectors pin
+  `checks` exactly and mark `summary` informative; another network may word it differently, or in
   another language.
 
-Below 14 days there is no share and no sentence saying why. Latency, read counts, blocked reads and
-failure classes are never shown. [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json)
+Below 14 days there is no share and no sentence saying why. Latency, read counts, blocked reads other
+than refused checks, and failure classes are never shown. [`vectors/door-history.json`](../../packages/spec/vectors/door-history.json)
 pins this down.
 
 The network spends little on any one door: at most one read per door and one per host in 10 minutes,

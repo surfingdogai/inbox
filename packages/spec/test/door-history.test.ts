@@ -24,16 +24,33 @@ describe("vectors/door-history.json", () => {
     expect(vectors.min_days).toBe(DOOR_HISTORY_MIN_DAYS);
     expect(vectors.recent_days).toBe(DOOR_HISTORY_RECENT_DAYS);
     expect(vectors.current_days).toBe(DOOR_HISTORY_CURRENT_DAYS);
+    expect(vectors.informative).toEqual(["summary"]);
     expect(vectors.cases.length).toBeGreaterThanOrEqual(15);
   });
 
+  // A conformance check compares every member of expect but the informative ones (summary: a network words it its
+  // own way); this code is also held to the vectors' words, which are this network's.
+  const normative = (h: unknown) =>
+    h === null || h === undefined ? h : { ...(h as Record<string, unknown>), summary: undefined };
   for (const c of vectors.cases) {
     it(c.name, () => {
       const got = doorHistoryOf(c.entry as unknown as DoorHistoryInput, c.as_of);
-      expect(got).toEqual(c.expect);
+      expect(normative(got)).toEqual(normative(c.expect));
+      expect(got?.summary, "this network's words").toBe(c.expect?.summary);
       if (got !== null) expect(doorHistoryEntrySchema.safeParse(got).success).toBe(true);
     });
   }
+
+  it("never counts a refused day as answered, and a missed check beats a refused one", () => {
+    const refused = vectors.cases.filter((c) => (c.expect?.checks?.refused ?? 0) > 0);
+    expect(refused.length).toBeGreaterThanOrEqual(3);
+    for (const c of refused) {
+      const k = c.expect?.checks;
+      if (!k) throw new Error(c.name);
+      expect(k.answered + k.refused, c.name).toBeLessThanOrEqual(k.days);
+      expect(k.recent.split("").filter((m) => m === "b").length, c.name).toBeLessThanOrEqual(k.refused);
+    }
+  });
 
   it("shows every door type of the vocabulary and a platform's, never an experimental one or llms.txt", () => {
     const entry = {
