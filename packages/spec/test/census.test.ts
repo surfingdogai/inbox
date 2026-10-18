@@ -104,6 +104,18 @@ describe("the score rules version 3", () => {
       .at(-1);
     expect((revised ?? "") >= "2026-10-15").toBe(true);
   });
+
+  it("counts a UCP profile's own catalogue only when it is the site's own and sells, and never books from a profile", () => {
+    const catalogue = (scoreRulesV3 as { commerce: { catalogue: string } }).commerce.catalogue;
+    for (const p of [
+      "the catalogue is the site's own",
+      "a price above zero that it says can be bought now",
+      "an ACP product feed, are not asked",
+      "A UCP or ACP profile never books",
+    ])
+      expect(catalogue).toContain(p);
+    expect(catalogue).not.toContain("above nothing");
+  });
 });
 
 describe("how a door's names are read as capabilities (vectors/capability-names.json)", () => {

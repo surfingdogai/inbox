@@ -56,7 +56,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Door report classes | [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json) (§4.15) |
 | Door reports, and the network's own reads of a door | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (§4.8, §4.15) |
 | How a tool's, skill's or operation's name is read as capabilities | [`vectors/capability-names.json`](../../packages/spec/vectors/capability-names.json) (§4.13), from the network |
-| The agentic score's rules, version 3 as revised on 15 October 2026: a commerce profile counts where the site sells | [`vocab/score-rules-v3.json`](../../packages/spec/vocab/score-rules-v3.json) (§4.13), from the network |
+| The agentic score's rules, version 3 as revised on 15 and 18 October 2026: a commerce profile counts where the site sells, its own catalogue included | [`vocab/score-rules-v3.json`](../../packages/spec/vocab/score-rules-v3.json) (§4.13), from the network |
 | The census: an edition, and the list of them | [`schemas/census-edition.json`](../../packages/spec/schemas/census-edition.json), [`schemas/census-editions.json`](../../packages/spec/schemas/census-editions.json), an example in [`vectors/census-edition.json`](../../packages/spec/vectors/census-edition.json) (§4.16) |
 | The census for an assistant: the MCP tool `get_census` | [`schemas/mcp-get-census-input.json`](../../packages/spec/schemas/mcp-get-census-input.json), [`schemas/mcp-get-census-output.json`](../../packages/spec/schemas/mcp-get-census-output.json) (§4.16) |
 
@@ -912,14 +912,17 @@ A business's level is the highest level among its live doors.
 | `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
 | `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
 | `bookable` | a door can book | inbox booking; declared MCP or API booking operations |
-| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, or another door of its own that takes orders); declared MCP or API order operations |
+| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, another door of its own that takes orders, or a product for sale in the catalogue its UCP profile names, when that catalogue is the site's own); declared MCP or API order operations |
 | `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
 
 Levels come from the network's own probes; what a business declares is a hint until a probe confirms
 it. A door behind a customer account never raises a level. A UCP or ACP profile on a site that shows
-nothing for sale (no Product markup with a price, no other door that takes orders) raises it no
-higher than `readable`: a website platform may serve one on every site it hosts. A priced menu, a
-list of services or an offer with no price is no Product markup. **Agent-ready** means `askable` or above.
+nothing for sale (no Product markup with a price, no other door that takes orders, no product for
+sale in the catalogue its UCP profile names) raises it no higher than `readable`: a website platform
+may serve one on every site it hosts. A priced menu, a list of services or an offer with no price is
+no Product markup, and a catalogue that refuses a network's read, lists nothing for sale, lists nothing but a
+template's sample products or services and events, or is another business's, shows nothing. A UCP or
+ACP profile never makes a business `bookable`. **Agent-ready** means `askable` or above.
 A network lists businesses below `askable` only after its own checks for that (a working claim,
 correction and removal, and the fields each jurisdiction asks for); until then a filter below
 `askable` returns nothing. A network never shows a number for a level, only its name.

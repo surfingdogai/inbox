@@ -62,14 +62,14 @@
       "label": "UCP",
       "via": "capability",
       "spec": "https://ucp.dev",
-      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works): a website platform that serves the same profile on every site it hosts gives none of these on its own."
+      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own."
     },
     {
       "id": "acp",
       "label": "ACP",
       "via": "capability",
       "spec": "https://www.agenticcommerce.dev",
-      "how": "Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works)."
+      "how": "Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue the site's UCP profile names)."
     },
     {
       "id": "webmcp",
@@ -113,7 +113,7 @@
       "aliases": ["menu", "products", "services", "price list"],
       "partial": "Items without prices, or prices only behind the customer's account.",
       "evidence": {
-        "declared": "schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that lists products, services or a menu.",
+        "declared": "schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that lists products, services or a menu.",
         "tested": "A network's read of the door saw it answer and list a tool, skill or operation that lists them.",
         "proven": "Signed reports from agent platforms a network recognises, saying that such a listing answered."
       },
@@ -140,7 +140,7 @@
       "aliases": ["free slots", "openings", "stock"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, or a cart that works).",
+        "declared": "A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names).",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "Signed reports from agent platforms a network recognises, saying that a check answered with times or stock."
       },
@@ -243,7 +243,7 @@
       "kind": "order",
       "partial": "The agent can fill a basket and hand a link to a person who completes the order.",
       "evidence": {
-        "declared": "An agent inbox that takes orders, a UCP or ACP checkout, or a tool, skill or operation that places an order, together with something the business really sells: products or offers with prices on its own site, or a cart that works.",
+        "declared": "An agent inbox that takes orders, a UCP or ACP checkout, or a tool, skill or operation that places an order, together with something the business really sells: products or offers with prices on its own site, a cart that works, or a product for sale in the catalogue its UCP profile names.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of an accepted or paid order that the customer's agent counter-signed, or signed reports from agent platforms a network recognises, saying that an order was placed."
       },
@@ -296,7 +296,7 @@
       "kind": "pay",
       "partial": "How to pay is described and a person has to pay.",
       "evidence": {
-        "declared": "UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that takes a payment.",
+        "declared": "UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that takes a payment.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of a paid order or booking that the customer's agent counter-signed."
       },
@@ -366,7 +366,7 @@
       "aliases": ["status", "where is my order"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that reads a status.",
+        "declared": "An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that reads a status.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "Signed reports from agent platforms a network recognises, saying that a status read answered."
       },
@@ -392,7 +392,7 @@
       "aliases": ["refund", "exchange", "withdraw"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that starts a return or a refund.",
+        "declared": "An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that starts a return or a refund.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of the refund's promise or its outcome, or signed reports from agent platforms a network recognises, saying that a return was started."
       },
@@ -577,6 +577,12 @@
       "date": "2026-10-18",
       "change": "published",
       "summary": "Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1."
+    },
+    {
+      "version": 2,
+      "date": "2026-10-18",
+      "change": "amended",
+      "summary": "A UCP profile also counts on a site when the catalogue it names, asked by a network's read, is the site's own and lists a product for sale with a price (score rules version 3, amended 18 October 2026): the parentheses that say what shows a site sells now say so. No capability was added, renamed or removed."
     }
   ]
 }

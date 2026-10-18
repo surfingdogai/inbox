@@ -28,8 +28,10 @@ or network:
 - 0.5: `orderable` is a level of its own, the same rung as `bookable`, for doors that take orders
   and none that books; `level=bookable` and `level=orderable` filter by what the doors take, so
   `level=bookable` no longer returns a shop whose doors take orders alone; and a UCP or ACP profile
-  raises a business only on a site that shows it sells (Product markup with a price, or another
-  door of its own that takes orders). A reader pinned to 0.4 rejects `orderable`.
+  raises a business only on a site that shows it sells (Product markup with a price, another door
+  of its own that takes orders, or, since 18 October 2026, a product for sale in the catalogue its
+  UCP profile names, when that catalogue is the site's own). A reader pinned to 0.4 rejects
+  `orderable`.
 - 0.5.1 (optional for a network): a door's history from the network's own reads (`door_history` on
   a listing's detail, `get_business` and a check result; `doorHistorySchema`, `doorHistoryOf`;
   `vectors/door-history.json`). An answer without it reads as before.

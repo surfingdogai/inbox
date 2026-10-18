@@ -48,9 +48,9 @@ A capability is met through a door an agent can use. Each kind of door is read b
 <dt>REST API · read by endpoint</dt>
 <dd>An endpoint the business documents for agents, read as an OpenAPI operation is.</dd>
 <dt><a href="https://ucp.dev">UCP</a> · read by capability</dt>
-<dd>The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works): a website platform that serves the same profile on every site it hosts gives none of these on its own.</dd>
+<dd>The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own.</dd>
 <dt><a href="https://www.agenticcommerce.dev">ACP</a> · read by capability</dt>
-<dd>Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works).</dd>
+<dd>Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue the site's UCP profile names).</dd>
 <dt><a href="https://github.com/webmachinelearning/webmcp">WebMCP</a> (experimental) · read by tool</dt>
 <dd>A tool a web page registers for the browser's agent, read as an MCP tool is. Experimental: it counts toward a score and never toward a readiness level.</dd>
 </dl>
@@ -100,7 +100,7 @@ Read what the business sells or offers, with prices: its products, its services 
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that lists products, services or a menu. |
+| `declared` | schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that lists products, services or a menu. |
 | `tested` | A network's read of the door saw it answer and list a tool, skill or operation that lists them. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that such a listing answered. |
 
@@ -131,7 +131,7 @@ Check what is free before asking for it: open times for a booking, rooms or seat
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, or a cart that works). |
+| `declared` | A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names). |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a check answered with times or stock. |
 
 Not enough:
@@ -246,7 +246,7 @@ Place an order for goods or food with its options and quantities, and get back t
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes orders, a UCP or ACP checkout, or a tool, skill or operation that places an order, together with something the business really sells: products or offers with prices on its own site, or a cart that works. |
+| `declared` | An agent inbox that takes orders, a UCP or ACP checkout, or a tool, skill or operation that places an order, together with something the business really sells: products or offers with prices on its own site, a cart that works, or a product for sale in the catalogue its UCP profile names. |
 | `proven` | A signed receipt of an accepted or paid order that the customer's agent counter-signed, or signed reports from agent platforms a network recognises, saying that an order was placed. |
 
 Not enough:
@@ -304,7 +304,7 @@ Pay for a booking or an order, or learn exactly how payment happens: on the spot
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that takes a payment. |
+| `declared` | UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that takes a payment. |
 | `proven` | A signed receipt of a paid order or booking that the customer's agent counter-signed. |
 
 Not enough:
@@ -390,7 +390,7 @@ Follow a booking, an order or a delivery: whether it is confirmed, where it is, 
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that reads a status. |
+| `declared` | An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that reads a status. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a status read answered. |
 
 Not enough:
@@ -419,7 +419,7 @@ Start a return, a refund or an exchange. A request that comes back with a refere
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that starts a return or a refund. |
+| `declared` | An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that starts a return or a refund. |
 | `proven` | A signed receipt of the refund's promise or its outcome, or signed reports from agent platforms a network recognises, saying that a return was started. |
 
 Not enough:
@@ -626,6 +626,7 @@ Through each kind of door, for example:
 
 ## Changelog {#changelog}
 
+- **Version 2**, amended 18 October 2026. A UCP profile also counts on a site when the catalogue it names, asked by a network's read, is the site's own and lists a product for sale with a price (score rules version 3, amended 18 October 2026): the parentheses that say what shows a site sells now say so. No capability was added, renamed or removed.
 - **Version 2**, published 18 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1.
 - **Version 1**, amended 13 October 2026. Tested is produced: a network's own read of a door that saw it answer and list a capability in the 7 days before.
 - **Version 1**, published 7 October 2026. Twenty capabilities in five parts of a customer's journey, each with a label and a question, the states yes, partial, no and na, and the evidence ladder declared, tested, proven.
