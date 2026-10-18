@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Plus, X } from "lucide-react";
+import { ChevronRight, Plus, X } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 import {
   actionNote,
@@ -35,6 +35,8 @@ export function ActionConfirm({
   onSubmit,
   onCancel,
   onSwitch,
+  payLink,
+  refundBy,
 }: {
   transition: Transition;
   tone: ButtonTone;
@@ -48,6 +50,10 @@ export function ActionConfirm({
   onSubmit: (input: Record<string, unknown> | undefined) => void;
   onCancel: () => void;
   onSwitch?: ((t: Transition) => void) | undefined;
+  /** The order waits at a link in the business's own Stripe or Mollie account (ADR-023): asking again sends it. */
+  payLink?: { readonly provider: string; readonly customer: string } | undefined;
+  /** The refund's order was paid through the platform: refunded there, it is recorded against that payment. */
+  refundBy?: { readonly provider: string; readonly paymentRef: string; readonly amount: Money } | undefined;
 }) {
   const kind = inputKindFor(
     transition.event,
@@ -213,6 +219,10 @@ export function ActionConfirm({
         };
       }
       case "payment": {
+        // Refunded in the platform's dashboard: recorded against its payment, for what is owed.
+        if (refundBy && transition.event === "refund") {
+          return { ok: true, input: { paymentRef: refundBy.paymentRef, amount: refundBy.amount } };
+        }
         if (!ref.trim()) return { ok: false, problem: "Add the payment reference, like the transaction id." };
         const paid = amount.trim() ? parseMoney(amount, currency) : undefined;
         if (amount.trim() && !paid) return { ok: false, problem: "The amount must be a number, like 89.30." };
@@ -694,7 +704,13 @@ export function ActionConfirm({
         </>
       )}
 
-      {kind === "payment" && (
+      {kind === "payment" && refundBy && transition.event === "refund" && (
+        <p className="hint">
+          Recorded against the {refundBy.provider} payment, for {formatMoney(refundBy.amount)}.
+        </p>
+      )}
+
+      {kind === "payment" && !(refundBy && transition.event === "refund") && (
         <div className="grid2">
           <div>
             <label className="label" htmlFor="act-ref">
@@ -723,7 +739,35 @@ export function ActionConfirm({
         </div>
       )}
 
-      {kind === "payment_request" && (
+      {kind === "payment_request" && payLink && (
+        <div className="stack-xs">
+          <p className="hint">
+            Sends {payLink.customer} the {payLink.provider} link again.
+          </p>
+          <details className="advanced">
+            <summary className="disclosure">
+              <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
+              <span>Use a link of your own instead</span>
+            </summary>
+            <div className="advanced-body">
+              <label className="label" htmlFor="act-url">
+                Your link
+              </label>
+              <input
+                id="act-url"
+                className="input"
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://"
+              />
+              <div className="hint">The {payLink.provider} link is then closed.</div>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {kind === "payment_request" && !payLink && (
         <div>
           <label className="label" htmlFor="act-url">
             Payment link <span className="opt">· optional</span>

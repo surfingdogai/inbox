@@ -43,8 +43,8 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
   owner connects one in Settings → Integrations, in person: an AI or an integration key can only
   `list_integrations` and `sync_integration`. See https://surfingdog.ai/docs/calendars/.
 - Payments: the business's own Stripe account (a restricted key) or Mollie account (its API key).
-  Every order the inbox accepts gets a link to pay into that account, and is marked paid once the
-  platform confirms it; refunds stay in the platform's dashboard. The owner connects it in Settings →
+  Orders the inbox accepts get a link to pay into that account (bookings not yet), and are marked
+  paid once the platform confirms it; refunds stay in the platform's dashboard. The owner connects it in Settings →
   Integrations, in person; an AI reads an order's links with `list_payments` and records no money.
   See https://surfingdog.ai/docs/payments/.
 - The email door: mail sent or forwarded to the inbox's address becomes a message.

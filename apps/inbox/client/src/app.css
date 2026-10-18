@@ -2388,8 +2388,51 @@ legend.label-line {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
+  /* Breaks after a "/" (each one is followed by a <wbr>), never mid-word. */
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: 0;
   user-select: all;
+}
+/* The rows to tick on a platform's key page, under the field that asks for the key. */
+.int-steps {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: grid;
+  gap: 1px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.int-steps li::marker {
+  color: var(--ink-3);
+}
+.int-question {
+  margin: 0;
+  color: var(--ink);
+}
+.int-add-mode {
+  justify-self: start;
+  font-size: 12.5px;
+}
+/* "Open Stripe": a button beside the others, or, on a phone, a quiet link in the line above them. */
+.int-meta .int-open-link {
+  display: none;
+  margin-left: 8px;
+}
+@media (max-width: 480px) {
+  .int-meta .int-open-link {
+    display: inline-flex;
+  }
+  .int-actions .int-open-btn {
+    display: none;
+  }
+  .int-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+}
+.refund-at {
+  margin: 4px 0 0;
 }
 .payments .receipt .int-link {
   margin-left: auto;

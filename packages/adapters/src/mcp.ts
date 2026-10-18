@@ -1560,7 +1560,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const r = await caps.connectors.integrations(caller);
           const connected = r.connections.map((c) =>
             c.payments
-              ? `${c.id} ${c.title} [${c.status}] ${c.mode === "test" ? "test mode, " : ""}${c.pay_on ? "pay links on" : "pay links off"}, ${c.payments.open} waiting to be paid, ${c.payments.paid} paid${c.payments.failing ? `, ${c.payments.failing} not made` : ""}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`
+              ? `${c.id} ${c.title} [${c.status}${c.payments.disconnecting ? ", disconnecting" : ""}] ${c.mode === "test" ? "test key (links for test orders only), " : ""}${c.pay_on ? "links to pay on" : "links to pay off"}, ${c.payments.open} waiting to be paid, ${c.payments.paid} paid${c.payments.failing ? `, ${c.payments.failing} order${c.payments.failing === 1 ? "" : "s"} without a link` : ""}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`
               : `${c.id} ${c.title} [${c.status}] ${c.busy_on ? `${c.busy_times} busy time${c.busy_times === 1 ? "" : "s"} ahead${c.busy_until ? ` (read to ${new Date(c.busy_until).toISOString().slice(0, 10)})` : ""}` : "busy times off"}, ${c.capabilities.includes("write_bookings") ? (c.bookings_on ? `${c.bookings_written} booking${c.bookings_written === 1 ? "" : "s"} written` : "bookings off") : "busy times only"}${c.bookings_failing ? `, ${c.bookings_failing} failing` : ""}${c.last_sync_at ? `, synced ${new Date(c.last_sync_at).toISOString()}` : ", not synced yet"}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`,
           );
           // What cannot be connected here yet, by name: whole cards, and the ways of a ready card
@@ -1621,9 +1621,12 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const r = await caps.connectors.itemPayments(caller, item_id);
           const lines = r.payments.map(
             (p) =>
-              `${p.provider} ${p.state}: ${decimalAmount(p.amount)} ${p.amount.currency}${p.state === "open" && p.url ? ` at ${p.url}` : ""}${p.paid_amount ? `, paid ${decimalAmount(p.paid_amount)} ${p.paid_amount.currency}${p.method ? ` by ${p.method}` : ""}` : ""}${p.error ? ` (${p.error})` : ""}${p.note ? ` (${p.note})` : ""}`,
+              `${p.provider} ${p.state}: ${decimalAmount(p.amount)} ${p.amount.currency}${p.url ? ` at ${p.url}` : ""}${p.paid_amount ? `, paid ${decimalAmount(p.paid_amount)} ${p.paid_amount.currency}${p.method ? ` by ${p.method}` : ""}` : ""}${p.error ? ` (${p.error})` : ""}${p.note ? ` (${p.note})` : ""}`,
           );
-          return { text: lines.length ? lines.join("\n") : "No pay links for this item.", structured: r };
+          return {
+            text: lines.length ? lines.join("\n") : (r.none ?? "No pay links for this item."),
+            structured: r,
+          };
         }),
     );
     server.registerTool(

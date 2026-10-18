@@ -46,6 +46,12 @@ export interface FieldHints {
   readonly advanced?: boolean | undefined;
   /** A preset that needs a field the schema leaves optional says so here (a Nextcloud address). */
   readonly required?: boolean | undefined;
+  /** Steps on the platform, one per line, shown under the help: the rows of a key page to tick. */
+  readonly steps?: readonly string[] | undefined;
+  /** Taken through the API but not drawn in the form: for the few who follow the docs to it. */
+  readonly hidden?: boolean | undefined;
+  /** A key's placeholder for each mode, for a second connection of the other one ("rk_test_…"). */
+  readonly byMode?: { readonly live: string; readonly test: string } | undefined;
 }
 
 /** Where field hints live: a registry of their own, so nothing else in the schema is touched. */
@@ -78,6 +84,8 @@ export interface FormField {
   readonly link?: { readonly href: string; readonly text: string } | undefined;
   readonly placeholder?: string | undefined;
   readonly autocomplete?: string | undefined;
+  readonly steps?: readonly string[] | undefined;
+  readonly byMode?: { readonly live: string; readonly test: string } | undefined;
 }
 
 /**
@@ -99,6 +107,7 @@ export function describeForm(schema: z.ZodObject, preset?: ConnectorPreset | und
     if (preset && key in preset.values) continue;
     const zod = raw as z.ZodType;
     const hints = { ...hintsOf(zod), ...(preset?.fields?.[key] ?? {}) } as FieldHints;
+    if (hints.hidden) continue;
     out.push({
       key,
       label: hints.label ?? key,
@@ -110,6 +119,8 @@ export function describeForm(schema: z.ZodObject, preset?: ConnectorPreset | und
       ...(hints.link ? { link: hints.link } : {}),
       ...(hints.placeholder ? { placeholder: hints.placeholder } : {}),
       ...(hints.autocomplete ? { autocomplete: hints.autocomplete } : {}),
+      ...(hints.steps?.length ? { steps: hints.steps } : {}),
+      ...(hints.byMode ? { byMode: hints.byMode } : {}),
     });
   }
   return out;
@@ -237,6 +248,13 @@ export interface Connected {
    * ones, so nobody is ever asked for real money for a test, nor marked paid with a test card.
    */
   readonly mode?: "live" | "test" | undefined;
+  /**
+   * Called once the connection is kept (`true`) or was refused after all (`false`, another of the
+   * same account connected already): what the connector made on the platform for the new key is
+   * kept or taken away again, and what the old one had goes only once the new one is in place (a
+   * payment platform's webhook endpoints). Best effort; never throws.
+   */
+  readonly settle?: ((kept: boolean) => Promise<void>) | undefined;
 }
 
 /**
@@ -270,6 +288,11 @@ export interface ConnectContext {
    * public address; null when the inbox does not know its address (no INBOX_PUBLIC_URL, nor an Inbox address in Settings).
    */
   readonly hookUrl?: string | null | undefined;
+  /**
+   * Whether the platform can reach `hookUrl` now. A hosted inbox before it goes live answers only
+   * its owner, so a webhook added then would fail until it does; false until then. Absent is true.
+   */
+  readonly hooksLive?: boolean | undefined;
 }
 
 /** What this inbox has written on the platform, so a connector leaves it out of busy times. */
@@ -360,7 +383,7 @@ export interface BookingWriter {
 
 /* --- getting paid (ADR-023) ------------------------------------------------ */
 
-/** Money in minor units (cents), with its ISO 4217 code in capitals. */
+/** Money in hundredths (4500 is 45.00), with its ISO 4217 code in capitals: a currency counted in hundredths. */
 export interface PayAmount {
   readonly value: number;
   readonly currency: string;
@@ -383,7 +406,7 @@ export interface PayLinkRequest {
   readonly language: string;
   /** Shown on the platform's page once the customer paid. */
   readonly thanks: string;
-  /** Shown when the link is no longer in use (the order changed, was cancelled, or paid). */
+  /** Shown on a link that is closed (paid, the order changed or ended, or the platform disconnected): true in every case. */
   readonly inactive: string;
   /** Where the platform says a payment changed, for platforms told per link (Mollie). */
   readonly hookUrl: string;
@@ -438,13 +461,29 @@ export interface InboundResult {
   readonly facts: readonly PaymentFact[];
 }
 
+/** What a platform says was refunded of one payment, read back with the business's key. */
+export interface RefundFact {
+  readonly amount: PayAmount;
+  /** The platform's ids for the refunds, newest first: `re_…` (Mollie). */
+  readonly refundIds: readonly string[];
+}
+
 export interface PaymentsHandler {
   /** Makes the link in the business's own account. Safe to call again with the same `ref`. */
   createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
   /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
   closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void>;
-  /** What happened on the link so far, asked of the platform (a webhook that never came). */
-  check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | null>;
+  /**
+   * What happened on the link so far, asked of the platform (a webhook that never came): every
+   * payment it took, paid or failed, so a second one on the same link is seen too. Empty for none.
+   */
+  check(ctx: RunContext, link: KnownLink): Promise<readonly PaymentFact[]>;
+  /**
+   * What was refunded of a payment, asked of the platform, for a platform whose key may read it
+   * (Mollie): the refund made in the dashboard marks the inbox's refund done. Absent when the key
+   * cannot (Stripe's restricted key asks for no refunds).
+   */
+  refunded?(ctx: RunContext, payment: { readonly paymentId: string }): Promise<RefundFact | null>;
   /**
    * A request the platform sent. Throws `ConnectorError("refused")` when its signature does not
    * check out. Answers null when it is not about a payment (another event, another inbox's link).
@@ -510,9 +549,10 @@ export interface ConnectorDefinition {
   >;
   /**
    * Whether to read again before the usual six hours: a payment platform whose webhook names another
-   * address than the inbox's own now (a business took its inbox to its own domain).
+   * address than the inbox's own now (a business took its inbox to its own domain), or that has a link
+   * waiting to be paid (`openLinks`), so a webhook removed or switched off is found within minutes.
    */
-  stale?(ctx: RunContext): boolean;
+  stale?(ctx: RunContext, opts?: { readonly openLinks: boolean }): boolean;
   /**
    * Busy times inside the window, leaving out what this inbox wrote itself (`ctx.own`). A connector
    * that could not read all of the window says how far it got (`BusyRead`).
@@ -521,6 +561,12 @@ export interface ConnectorDefinition {
   readonly bookings?: BookingWriter | undefined;
   /** Pay links in the business's own account, and the platform's word that they were paid (ADR-023). */
   readonly payments?: PaymentsHandler | undefined;
+  /**
+   * For a payment platform: the mode a key is for, read from the form before the platform is asked
+   * anything (`rk_live_…` is live), so connecting a second key of a mode already connected is
+   * refused before it can touch what the first one made. Null when the form does not say.
+   */
+  modeOf?(input: Readonly<Record<string, string>>): "live" | "test" | null;
   /**
    * For a connector the platform tells of payments by webhook: the events to send to
    * `POST /v1/hooks/<kind>`, so the form can say what to add by hand when the key cannot add it.
@@ -582,51 +628,25 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 
 /* --- money ---------------------------------------------------------------- */
 
-/** ISO 4217 currencies without a minor unit (500 JPY is 500) and with three (1 KWD is 1000). */
-const NO_MINOR = new Set([
-  "BIF",
-  "CLP",
-  "DJF",
-  "GNF",
-  "ISK",
-  "JPY",
-  "KMF",
-  "KRW",
-  "PYG",
-  "RWF",
-  "UGX",
-  "VND",
-  "VUV",
-  "XAF",
-  "XOF",
-  "XPF",
-]);
-const THREE_MINOR = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+/**
+ * Every amount in this inbox is kept in hundredths (`util/locale.ts`, `moneyIn`): 4500 EUR is 45.00.
+ * A currency counted otherwise (none, like JPY; thousandths, like KWD) is refused before a link is
+ * made (`isHundredthsCurrency`), so these never guess another exponent: a guess is a link for a
+ * hundred times the order.
+ */
 
-/** How many digits a currency has after the decimal point (ISO 4217): 2 unless it says otherwise. */
-export function currencyExponent(currency: string): number {
-  const c = currency.toUpperCase();
-  if (NO_MINOR.has(c)) return 0;
-  if (THREE_MINOR.has(c)) return 3;
-  return 2;
-}
-
-/** Minor units as a decimal string, the way some platforms want it: 4500 EUR → "45.00", 500 JPY → "500". */
+/** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */
 export function decimalAmount(amount: PayAmount): string {
-  const exp = currencyExponent(amount.currency);
-  if (exp === 0) return String(amount.value);
-  const s = String(Math.abs(amount.value)).padStart(exp + 1, "0");
-  return `${amount.value < 0 ? "-" : ""}${s.slice(0, -exp)}.${s.slice(-exp)}`;
+  const s = String(Math.abs(Math.trunc(amount.value))).padStart(3, "0");
+  return `${amount.value < 0 ? "-" : ""}${s.slice(0, -2)}.${s.slice(-2)}`;
 }
 
-/** A decimal string back to minor units ("45.00" EUR → 4500), or null when it is not one. */
-export function minorAmount(value: string, currency: string): number | null {
-  const exp = currencyExponent(currency);
+/** A decimal string back to hundredths ("45.00" → 4500, "45.5" → 4550), or null when it is not one. */
+export function minorAmount(value: string): number | null {
   const m = /^(\d{1,15})(?:\.(\d{1,6}))?$/.exec(value.trim());
   if (!m) return null;
-  const whole = Number(m[1]);
   const fraction = m[2] ?? "";
-  if (fraction.length > exp && /[1-9]/.test(fraction.slice(exp))) return null;
-  const minor = Number((fraction + "0".repeat(exp)).slice(0, exp) || "0");
-  return whole * 10 ** exp + minor;
+  // More than hundredths that are not zeros is not an amount this inbox can hold.
+  if (/[1-9]/.test(fraction.slice(2))) return null;
+  return Number(m[1]) * 100 + Number(`${fraction}00`.slice(0, 2));
 }

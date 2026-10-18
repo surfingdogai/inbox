@@ -300,13 +300,21 @@ async function customerMail(
     returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
     now: o.now,
   });
-  // A payment is asked for in one email (ADR-023): every email is written from the order as it stands
-  // when it goes, so one about an order accepted and then asked to pay a moment later says the same as
-  // the request's own. Whichever goes second, once the first asked the customer to pay, stays.
+  // A payment is asked for in one email (ADR-023). Every email is written from the order as it stands
+  // when it goes, so the email of the event that waits a moment for the link (the order accepted, a
+  // payment that did not go through, the owner asking without a link) carries it, with its own words.
+  // The payment connector's own request is then the one that stays: it goes only when no such email is
+  // still to go (the link came late, and that email went without it).
+  if (p.event === "request_payment" && cause.actorKind === "connector" && (await waitingMail(db, item.id, o.jobKey))) {
+    return { note: "no email: the order's email that is still to go carries the link" };
+  }
+  // An email written as a request to pay after one went since says nothing new; one with the business's
+  // own words always goes.
   if (
     rendered.template === "order.awaiting_payment" &&
+    !cause.words &&
     p.eventId &&
-    (await paymentAskedSince(db, item.id, p.eventId))
+    (await paymentAskedSince(db, item.id, p.eventId, item.type === "order" ? (item.payload.paymentUrl ?? null) : null))
   ) {
     return { note: "no email: the customer was asked to pay in an email since" };
   }
@@ -327,18 +335,37 @@ async function customerMail(
 }
 
 /**
- * Whether the customer was sent an email asking them to pay this order since the event: written from
- * the order as it stood then, so it carried that request's link, or a newer one. One that failed to
- * go does not count.
+ * Whether an email to the customer about this order is still to go (queued, not yet written), other
+ * than the job asking: the order's own email, held a moment for its link (`PAY_LINK_GRACE_MS`).
  */
-async function paymentAskedSince(db: Db, itemId: string, eventId: string): Promise<boolean> {
+async function waitingMail(db: Db, itemId: string, jobKey: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM jobs j
+           WHERE j.kind = 'notify' AND j.status = 'queued' AND j.id <> ?
+             AND json_extract(j.payload, '$.itemId') = ? AND json_extract(j.payload, '$.to') = 'customer'
+             AND json_extract(j.payload, '$.event') IN ('accept', 'accept_change', 'payment_failed', 'request_payment')
+             AND NOT EXISTS (SELECT 1 FROM outbound_mail m WHERE m.job_key = j.id)
+           LIMIT 1`,
+    params: [jobKey, itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+/**
+ * Whether the customer was sent an email asking them to pay this order since the event, with the link
+ * the order names now (when it names one): that email said all this one would. One written a moment
+ * before the link was made, without it, does not count; nor does one that failed to go.
+ */
+async function paymentAskedSince(db: Db, itemId: string, eventId: string, url: string | null): Promise<boolean> {
   const { rows } = await db.client.query({
     sql: `SELECT 1 FROM outbound_mail m
            WHERE m.item_id = ? AND m.recipient = 'customer' AND m.template = 'order.awaiting_payment'
              AND m.status IN ('queued', 'sent', 'retrying')
              AND m.created_at >= (SELECT e.created_at FROM item_events e WHERE e.id = ?)
+             AND (? IS NULL OR instr(m.body_text, ?) > 0)
            LIMIT 1`,
-    params: [itemId, eventId],
+    params: [itemId, eventId, url, url],
     method: "all",
   });
   return rows.length > 0;

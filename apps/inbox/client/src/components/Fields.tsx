@@ -7,17 +7,37 @@ import {
   formatDateTime,
   formatMoney,
   formatWhen,
+  methodName,
   RETURN_KIND,
 } from "../lib/format";
 import type { Item, ItemOf, Money } from "../lib/types";
 
+/**
+ * What the payment platform holds of an order (ADR-023): shown once, in its own block, so the fields
+ * leave out its payment reference and its link.
+ */
+export interface PlatformPayment {
+  /** The order's payment link is the platform's. */
+  readonly linkIsOurs: boolean;
+  /** The platform's id for the payment the order was marked paid with. */
+  readonly paidRef: string | null;
+}
+
 /** The typed card body: the facts of the payload, per type, then how and when it arrived. */
-export function Fields({ item, tz }: { item: Item; tz: string | undefined }) {
+export function Fields({
+  item,
+  tz,
+  platform,
+}: {
+  item: Item;
+  tz: string | undefined;
+  platform?: PlatformPayment | undefined;
+}) {
   return (
     <>
       {item.type === "order" && <Lines lines={item.payload.orderedItem} total={item.payload.totalPrice} />}
       <dl className="fields">
-        <Typed item={item} tz={tz} />
+        <Typed item={item} tz={tz} platform={platform} />
       </dl>
       {item.type === "quote_request" && item.payload.quote && <QuoteBlock quote={item.payload.quote} tz={tz} />}
     </>
@@ -59,12 +79,12 @@ function F({
   );
 }
 
-function Typed({ item, tz }: { item: Item; tz: string | undefined }) {
+function Typed({ item, tz, platform }: { item: Item; tz: string | undefined; platform?: PlatformPayment | undefined }) {
   switch (item.type) {
     case "booking":
       return <BookingFields item={item} tz={tz} />;
     case "order":
-      return <OrderFields item={item} tz={tz} />;
+      return <OrderFields item={item} tz={tz} platform={platform} />;
     case "quote_request":
       return <QuoteFields item={item} tz={tz} />;
     case "message":
@@ -102,11 +122,26 @@ function BookingFields({ item, tz }: { item: ItemOf<"booking">; tz: string | und
   );
 }
 
-function OrderFields({ item, tz }: { item: ItemOf<"order">; tz: string | undefined }) {
+function OrderFields({
+  item,
+  tz,
+  platform,
+}: {
+  item: ItemOf<"order">;
+  tz: string | undefined;
+  platform?: PlatformPayment | undefined;
+}) {
   const p = item.payload;
   const shipTo = formatAddress(p.shippingAddress);
   const billTo = formatAddress(p.billingAddress);
-  const payment = [p.paymentMethod, p.paymentRef ? `ref ${p.paymentRef}` : undefined].filter(Boolean).join(" · ");
+  // Paid through the platform, or asked to pay at its link: its own block says so, once.
+  const byPlatform = platform?.paidRef != null && platform.paidRef === p.paymentRef;
+  const payment = byPlatform
+    ? ""
+    : [p.paymentMethod ? methodName(p.paymentMethod) : undefined, p.paymentRef ? `ref ${p.paymentRef}` : undefined]
+        .filter(Boolean)
+        .join(" · ");
+  const link = platform?.linkIsOurs ? undefined : p.paymentUrl;
   return (
     <>
       {p.customerStatedPrice && (
@@ -119,10 +154,10 @@ function OrderFields({ item, tz }: { item: ItemOf<"order">; tz: string | undefin
         </F>
       )}
       {payment && <F label="Payment">{payment}</F>}
-      {p.paymentUrl && (
+      {link && (
         <F label="Payment link">
-          <a href={p.paymentUrl} target="_blank" rel="noreferrer">
-            {p.paymentUrl}
+          <a href={link} target="_blank" rel="noreferrer">
+            {link}
           </a>
         </F>
       )}

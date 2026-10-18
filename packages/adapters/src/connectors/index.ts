@@ -23,13 +23,14 @@ export {
 } from "./google";
 export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } from "./http";
 export { icsConnector, icsForm } from "./ics";
-export { MOLLIE_API, MOLLIE_EVENTS, mollieConnector, mollieForm } from "./mollie";
+export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
   STRIPE_API,
   STRIPE_EVENTS,
   STRIPE_PERMISSIONS,
   STRIPE_TOLERANCE_S,
+  STRIPE_VERSION,
   stripeConnector,
   stripeForm,
 } from "./stripe";

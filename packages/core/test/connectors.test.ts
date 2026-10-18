@@ -1117,6 +1117,7 @@ describe("a connection that fails", () => {
     expect(await caps.connectors.failingNotice(view.id)).toEqual({
       title: "Plain calendar",
       error: "The calendar did not take that app password.",
+      group: "calendars",
     });
     expect(await caps.connectors.nextSyncDelay(view.id, T0 + 25 * 3_600_000)).toBeNull();
 

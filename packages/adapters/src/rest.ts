@@ -681,7 +681,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["owner"],
       summary: "An order's pay links in your own Stripe or Mollie account, newest first, and what each came to",
       description:
-        "Where the customer pays (url, while it is open), its state (creating, open, paid, failed, closed, error), what was paid and how, and dashboard_url: the payment in your own Stripe or Mollie dashboard, where it is refunded. Nothing about the customer and never a key.",
+        "Where the customer pays (url, while it is open; never a closed link), its state (creating, open, paid, failed, closed, error), what was paid and how (payment_id, method), and dashboard_url: the payment in your own Stripe or Mollie dashboard, where it is refunded. `none` says why an order that could have a link has none. Nothing about the customer and never a key.",
       responses: json("Payments", R.itemPaymentsSchema),
     }),
     async (c) => c.json(await caps.connectors.itemPayments(c.get("caller"), String(c.req.param("id")))),
@@ -1445,7 +1445,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     owner({
       tags: ["integrations"],
       summary:
-        "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar; a payment platform's open links stop taking payments (links_closed).",
+        "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar. A payment platform makes no new link at once; its links waiting to be paid are switched off on the platform (links_closed now, links_closing still to go, by a job within two hours), and its key and webhook stay until then so a payment on one is still recorded.",
       description: "The owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Removed", R.looseSchema),
       write: true,

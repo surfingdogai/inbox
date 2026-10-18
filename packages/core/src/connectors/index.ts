@@ -24,12 +24,15 @@ export {
   connectorNoticeHandler,
   connectorPushHandler,
   connectorSyncHandler,
+  payCloseHandler,
   payLinkHandler,
   payNoticeHandler,
 } from "./jobs";
 export {
   hasLivePayLink,
   hasPayLinks,
+  linkComing,
+  PAY_CLOSE_KIND,
   PAY_LINK_GRACE_MS,
   PAY_LINK_KIND,
   PAY_NOTICE_KIND,
@@ -42,8 +45,10 @@ export {
   type PayHost,
   PaymentLinks,
   type PaymentView,
+  type PayNotice,
   type PayNoticeReason,
   type PayState,
+  providerOf,
 } from "./payments";
 export * from "./sdk";
 export {

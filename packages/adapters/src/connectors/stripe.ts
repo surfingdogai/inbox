@@ -30,10 +30,14 @@ import { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
  * are made in Stripe, where the money is.
  *
  * The endpoints, parameters and permissions are the ones Stripe documented on 18 October 2026; answers
- * are read leniently, so a field added later changes nothing.
+ * are read leniently, so a field added later changes nothing. Every call names the API version the
+ * inbox reads (`Stripe-Version`), and so does the webhook it adds, so what Stripe answers does not
+ * change with the account's own default version.
  */
 
 export const STRIPE_API = "https://api.stripe.com";
+/** The Stripe API version every call and the inbox's webhook are read in: the fields used here are in it. */
+export const STRIPE_VERSION = "2024-06-20";
 /** Every checkout a Payment Link starts ends in one of these. */
 export const STRIPE_EVENTS: readonly string[] = [
   "checkout.session.completed",
@@ -62,9 +66,17 @@ export const stripeForm = z.object({
       .regex(/^(rk|sk|pk)_(live|test)_[A-Za-z0-9]+$/, "a Stripe restricted key starts with rk_live_ or rk_test_"),
     {
       label: "Restricted key",
-      help: "Stripe → Developers → API keys → Create restricted key. Write: Payment Links, Products, Prices, Webhook Endpoints. Read: Checkout Sessions. Everything else: None.",
+      help: "In Stripe: Developers → API keys → Create restricted key, then set:",
+      steps: [
+        "Payment Links · Write",
+        "Products · Write",
+        "Prices · Write",
+        "Webhook Endpoints · Write",
+        "Checkout Sessions · Read",
+      ],
       link: { href: KEY_PAGE, text: "Create the key in Stripe" },
-      placeholder: "rk_live_…",
+      placeholder: "rk_live_… or rk_test_…",
+      byMode: { live: "rk_live_…", test: "rk_test_…" },
     },
   ),
   webhook_secret: secretField(
@@ -106,6 +118,7 @@ async function call(
     headers: {
       authorization: `Bearer ${key}`,
       accept: "application/json",
+      "stripe-version": STRIPE_VERSION,
       ...(opts.body !== undefined ? { "content-type": "application/x-www-form-urlencoded" } : {}),
       ...(opts.idempotency ? { "idempotency-key": opts.idempotency } : {}),
     },
@@ -143,6 +156,20 @@ function messageOf(json: Record<string, unknown>): string {
   return typeof e?.message === "string" ? e.message.slice(0, 300) : "";
 }
 
+/**
+ * A refusal in the owner's words: the ones an owner meets are said plainly, any other in Stripe's
+ * own ("Stripe said: …").
+ */
+function refusalOf(json: Record<string, unknown>, status: number): string {
+  const e = (json.error ?? {}) as { code?: unknown; message?: unknown };
+  if (e.code === "amount_too_small") {
+    const least =
+      typeof e.message === "string" ? /at least (\S+?)(?:\s+[a-z]{3})?\.?$/i.exec(e.message)?.[1] : undefined;
+    return `Stripe takes payments of ${least ?? "a little more"} or more. Ask for payment another way.`;
+  }
+  return `Stripe said: ${messageOf(json) || `HTTP ${status}`}`;
+}
+
 /** A call that must work: a refusal said in Stripe's words, a missing permission named. */
 async function must(
   ctx: Ctx,
@@ -161,14 +188,21 @@ async function must(
     );
   }
   if (res.status === 404) throw new ConnectorError("not_found", messageOf(json) || "Stripe has no such thing.");
-  if (res.status >= 400) {
-    throw new ConnectorError("refused", `Stripe said: ${messageOf(json) || `HTTP ${res.status}`}`);
-  }
+  if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
   return json;
 }
 
 function modeOf(key: string): Mode {
   return key.includes("_live_") ? "live" : "test";
+}
+
+/**
+ * The mode a typed restricted key is for, before Stripe is asked anything; null for anything else (a
+ * secret or publishable key is refused for what it is, by `connect`).
+ */
+function modeOfInput(input: Readonly<Record<string, string>>): Mode | null {
+  const m = /^rk_(live|test)_/.exec(String(input.api_key ?? "").trim());
+  return m ? (m[1] as Mode) : null;
 }
 
 function accountLabel(key: string): string {
@@ -245,11 +279,53 @@ async function connect(ctx: ConnectContext, input: Readonly<Record<string, strin
       "This inbox does not know its own public https address (INBOX_PUBLIC_URL, or the Inbox address in Settings), so Stripe could not tell it of payments.",
     );
   }
+  // What the inbox added for the key before (connecting again in place): it goes once the new key is kept.
+  const before = ctx.previous?.extra.webhook === "added" ? ctx.previous.extra.endpoint_id : undefined;
+  const dropBefore = async () => {
+    if (typeof before === "string" && before) await removeEndpoint(ctx, key, before);
+  };
   if (given) {
-    return connected(key, mode, { webhook_secret: given }, { webhook: "by_hand" });
+    return connected(key, mode, { webhook_secret: given }, { webhook: "by_hand" }, async (kept) => {
+      if (kept) await dropBefore();
+    });
   }
-  // The webhook, added afresh: Stripe shows a signing secret only once, when the endpoint is made. The
-  // ones this inbox added before go once the new one is there.
+  if (ctx.hooksLive === false) {
+    // A hosted inbox before it goes live answers only its owner: a webhook added now would fail, and
+    // Stripe would write to the business about it and switch it off. It is added on the first sync
+    // once the inbox is live; until then a payment is found by asking Stripe.
+    return connected(key, mode, {}, { webhook: "pending" }, async (kept) => {
+      if (kept) await dropBefore();
+    });
+  }
+  // The webhook, added afresh: Stripe shows a signing secret only once, when the endpoint is made.
+  const made = await addEndpoint(ctx, key, ctx.hookUrl);
+  return connected(
+    key,
+    mode,
+    { webhook_secret: made.secret },
+    { webhook: "added", endpoint_id: made.id, hook_url: ctx.hookUrl },
+    async (kept) => {
+      if (!kept) {
+        // Refused after all (the mode is connected already): what was just made goes, the working one stays.
+        await removeEndpoint(ctx, key, made.id);
+        return;
+      }
+      // Kept: the endpoints this inbox added before go, now that the new one is in place.
+      for (const e of endpoints) {
+        const id = typeof e.id === "string" ? e.id : "";
+        const meta = (e.metadata ?? {}) as Record<string, unknown>;
+        if (!id || id === made.id) continue;
+        if (meta.sdi_inbox === ctx.inbox.id || e.url === ctx.hookUrl) await removeEndpoint(ctx, key, id);
+      }
+      if (typeof before === "string" && before !== made.id && !endpoints.some((e) => e.id === before)) {
+        await dropBefore();
+      }
+    },
+  );
+}
+
+/** Adds the inbox's webhook endpoint in the account: its id and the signing secret Stripe shows only now. */
+async function addEndpoint(ctx: Ctx & Pick<ConnectContext, "inbox">, key: string, url: string) {
   const made = await must(
     ctx,
     key,
@@ -258,35 +334,38 @@ async function connect(ctx: ConnectContext, input: Readonly<Record<string, strin
     { doing: "add the webhook", permission: STRIPE_PERMISSIONS.webhooks },
     {
       body: form([
-        ["url", ctx.hookUrl],
+        ["url", url],
         ...STRIPE_EVENTS.map((e) => ["enabled_events[]", e] as const),
+        ["api_version", STRIPE_VERSION],
         ["description", `Inbox at ${ctx.inbox.host}: marks orders paid`],
         ["metadata[sdi_inbox]", ctx.inbox.id],
       ]),
     },
   );
-  const endpointId = typeof made.id === "string" ? made.id : "";
+  const id = typeof made.id === "string" ? made.id : "";
   const secret = typeof made.secret === "string" ? made.secret : "";
-  if (!endpointId || !secret.startsWith("whsec_")) {
+  if (!id || !secret.startsWith("whsec_")) {
     throw new ConnectorError("bad_response", "Stripe added the webhook but did not give its signing secret.");
   }
-  for (const e of endpoints) {
-    const id = typeof e.id === "string" ? e.id : "";
-    const meta = (e.metadata ?? {}) as Record<string, unknown>;
-    if (!id || id === endpointId) continue;
-    if (meta.sdi_inbox === ctx.inbox.id || e.url === ctx.hookUrl) {
-      await call(ctx, key, "DELETE", `/v1/webhook_endpoints/${encodeURIComponent(id)}`).catch(() => {});
-    }
-  }
-  return connected(
-    key,
-    mode,
-    { webhook_secret: secret },
-    { webhook: "added", endpoint_id: endpointId, hook_url: ctx.hookUrl },
-  );
+  return { id, secret };
 }
 
-function connected(key: string, mode: Mode, secret: Record<string, string>, extra: Record<string, unknown>): Connected {
+/** Takes one of the inbox's webhook endpoints away again. Best effort: never throws. */
+async function removeEndpoint(ctx: Ctx, key: string, id: string): Promise<void> {
+  try {
+    await call(ctx, key, "DELETE", `/v1/webhook_endpoints/${encodeURIComponent(id)}`);
+  } catch {
+    // A courtesy to the account: an endpoint left behind is listed, and removed, on the next connect.
+  }
+}
+
+function connected(
+  key: string,
+  mode: Mode,
+  secret: Record<string, string>,
+  extra: Record<string, unknown>,
+  settle?: (kept: boolean) => Promise<void>,
+): Connected {
   return {
     account: accountLabel(key),
     // One Stripe account per mode per inbox: a restricted key cannot say which account it is without
@@ -298,6 +377,7 @@ function connected(key: string, mode: Mode, secret: Record<string, string>, extr
     destinations: [],
     defaults: { busy: [], destination: null },
     mode,
+    ...(settle ? { settle } : {}),
   };
 }
 
@@ -391,8 +471,9 @@ function factOf(session: Record<string, unknown>, failed: boolean): PaymentFact 
   };
 }
 
-async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | null> {
-  if (!link.externalId) return null;
+/** Every paid checkout on the link, read with the key: two paid on one link are both seen. */
+async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact[]> {
+  if (!link.externalId) return [];
   const json = await must(
     ctx,
     keyOf(ctx),
@@ -400,9 +481,10 @@ async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | nu
     `/v1/checkout/sessions?payment_link=${encodeURIComponent(link.externalId)}&limit=10`,
     { doing: "read checkouts", permission: STRIPE_PERMISSIONS.sessions },
   );
-  const sessions = arrayOf(json.data);
-  const paid = sessions.find((s) => s.payment_status === "paid" && s.payment_link === link.externalId);
-  return paid ? factOf(paid, false) : null;
+  return arrayOf(json.data)
+    .filter((s) => s.payment_status === "paid" && s.payment_link === link.externalId)
+    .map((s) => factOf(s, false))
+    .filter((f): f is PaymentFact => f !== null);
 }
 
 /**
@@ -455,9 +537,12 @@ async function disconnect(ctx: RunContext): Promise<void> {
 }
 
 /**
- * Every few hours: the key still works, and the webhook this inbox added still points at the inbox's
- * address, which moves when a business takes its inbox to its own domain. One that points elsewhere
- * is moved; one that was removed in Stripe is said, so the owner connects again.
+ * Every few hours, and on each sync while a link waits to be paid: the key still works, and the
+ * webhook this inbox added still points at the inbox's address (which moves when a business takes
+ * its inbox to its own domain) and is switched on. One that points elsewhere is moved; one Stripe
+ * switched off (deliveries that kept failing) is switched on again; one removed in Stripe is said,
+ * so the owner connects again. A webhook still to be added (the inbox was not live yet) is added
+ * once it is.
  */
 async function refresh(ctx: RunContext) {
   const key = keyOf(ctx);
@@ -465,6 +550,12 @@ async function refresh(ctx: RunContext) {
     doing: "read payment links",
     permission: STRIPE_PERMISSIONS.links,
   });
+  const base = { account: accountLabel(key), calendars: [], destinations: [] };
+  if (ctx.extra.webhook === "pending" && ctx.hookUrl && ctx.hooksLive !== false) {
+    const made = await addEndpoint(ctx, key, ctx.hookUrl);
+    await ctx.saveSecret({ ...ctx.secret, webhook_secret: made.secret });
+    return { ...base, extra: { ...ctx.extra, webhook: "added", endpoint_id: made.id, hook_url: ctx.hookUrl } };
+  }
   const id = ctx.extra.endpoint_id;
   if (ctx.extra.webhook === "added" && typeof id === "string" && ctx.hookUrl) {
     const path = `/v1/webhook_endpoints/${encodeURIComponent(id)}`;
@@ -483,29 +574,31 @@ async function refresh(ctx: RunContext) {
       }
       throw error;
     }
-    if (endpoint.url !== ctx.hookUrl) {
+    const moved = endpoint.url !== ctx.hookUrl;
+    const off = endpoint.status === "disabled";
+    if (moved || off) {
       await must(
         ctx,
         key,
         "POST",
         path,
         { doing: "change the webhook", permission: STRIPE_PERMISSIONS.webhooks },
-        { body: form([["url", ctx.hookUrl]]) },
+        { body: form([["url", ctx.hookUrl], ...(off ? [["disabled", "false"] as const] : [])]) },
       );
     }
-    return {
-      account: accountLabel(key),
-      calendars: [],
-      destinations: [],
-      extra: { ...ctx.extra, hook_url: ctx.hookUrl },
-    };
+    return { ...base, extra: { ...ctx.extra, hook_url: ctx.hookUrl } };
   }
-  return { account: accountLabel(key), calendars: [], destinations: [] };
+  return base;
 }
 
-/** The inbox moved to another address since the webhook was last pointed at it. */
-function stale(ctx: RunContext): boolean {
-  return ctx.extra.webhook === "added" && Boolean(ctx.hookUrl) && ctx.extra.hook_url !== ctx.hookUrl;
+/**
+ * Read again now: the inbox moved to another address since the webhook was last pointed at it, went
+ * live with it still to add, or has a link waiting to be paid (its webhook is looked at every sync).
+ */
+function stale(ctx: RunContext, opts?: { readonly openLinks: boolean }): boolean {
+  if (!ctx.hookUrl) return false;
+  if (ctx.extra.webhook === "pending") return ctx.hooksLive !== false;
+  return ctx.extra.webhook === "added" && (ctx.extra.hook_url !== ctx.hookUrl || opts?.openLinks === true);
 }
 
 function keyOf(ctx: Pick<RunContext, "secret">): string {
@@ -533,6 +626,7 @@ export function stripeConnector(): ConnectorDefinition {
     form: stripeForm,
     note: "Orders you accept get a link to pay into your own Stripe account. Refunds stay in Stripe.",
     hookEvents: STRIPE_EVENTS,
+    modeOf: modeOfInput,
     connect,
     refresh,
     stale,

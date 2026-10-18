@@ -1,12 +1,13 @@
 import { businessFacts } from "../customer/audience";
-import { subjectIn } from "../customer/describe";
+import { moreLines } from "../customer/describe";
 import { moneyIn, oneLine, shortRef } from "../customer/format";
-import { customerLang } from "../customer/lang";
+import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import type { Money } from "../domain/types";
 import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { readSettings } from "../settings/schema";
+import { isHundredthsCurrency } from "../util/locale";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -16,6 +17,7 @@ import {
   ConnectorError,
   type InboundRequest,
   type KnownLink,
+  type PayAmount,
   type PaymentFact,
   type PaymentsHandler,
   type RunContext,
@@ -30,15 +32,26 @@ import {
  * The rules that shape it:
  * - **One live link per order** (`connector_payments_live`). Two jobs that meet make one, never two,
  *   and only the job that holds a link's claim asks the platform for it.
- * - **A link for what the order comes to now.** When the total changes, the link is closed on the
- *   platform and a new one sent; when the order ends without a payment, it is closed.
+ * - **Orders the connection is for.** An order accepted once the platform was connected, one the
+ *   owner asks to pay without a link of their own, or one that has a link of ours already. An order
+ *   accepted before keeps what it had (a business that is paid on delivery is never asked by surprise).
+ * - **A link for what the order comes to.** None while a change to it waits for an answer; when the
+ *   total changes, the link is closed on the platform and a new one sent; when the order ends
+ *   without a payment, it is closed.
+ * - **Only money this inbox counts right.** Every amount here is in hundredths; an order in a
+ *   currency counted otherwise (JPY, KWD) gets no link, and the owner is told, never a link for a
+ *   hundred times the order.
  * - **Nothing the request says is believed.** A webhook is checked by its signature (Stripe) or not
  *   at all (Mollie's per-link one carries only an id), and what it is about is always read back from
  *   the platform with the business's own key before anything is marked paid.
  * - **Test keys for test orders, live keys for real ones.** Nobody is asked for real money for a
  *   test, and no real order is marked paid with a test card.
  * - **A payment that cannot be recorded is said, not swallowed**: one paid after the order was
- *   cancelled, or paid twice, is the owner's to refund, and they are told where.
+ *   cancelled, paid twice (on two links, or twice on one), is the owner's to refund, and they are
+ *   told where.
+ * - **A refusal stands until what it was about changes**: a link the platform would not make is not
+ *   asked for again on every event, nor told to the owner twice; a new total, connection or currency,
+ *   or the owner asking for payment, tries again.
  * - **The owner's own link stays theirs**: an order whose payment link the owner set is left alone.
  */
 
@@ -50,6 +63,12 @@ const CLAIM_MS = 2 * 60_000;
 const MAX_ATTEMPTS = 8;
 /** Platform calls one reconciliation run makes; the rest wait for the next. */
 const CHECKS_PER_RUN = 10;
+/** A request naming one of our links is read back at most this often: an unsigned nudge cannot make the inbox ask the platform on every POST. */
+const NUDGE_EVERY_MS = 15_000;
+/** Why a link was not made for an order in a currency this inbox does not count in hundredths. */
+const NOT_HUNDREDTHS = "This currency is not counted in hundredths here, so no link was made.";
+/** The note on a link closed because its connection was disconnected. */
+const DISCONNECTED = "the payment platform was disconnected";
 export type PayState = "creating" | "open" | "paid" | "failed" | "closed" | "error";
 
 interface PayRow {
@@ -123,6 +142,10 @@ export interface PayConnection {
   readonly mode: "live" | "test";
   readonly status: string;
   readonly payOn: boolean;
+  /** When it was connected: orders accepted before keep what they had. */
+  readonly createdAt: number;
+  /** Being disconnected: it makes no new link, and still hears of payments on the ones it made. */
+  readonly disconnecting: boolean;
   readonly payments: PaymentsHandler;
   readonly ctx: RunContext;
 }
@@ -147,10 +170,13 @@ export interface PaymentView {
   readonly provider: string;
   readonly state: PayState;
   readonly amount: Money;
+  /** Where the customer pays, while the link is open; never a link that is closed. */
   readonly url: string | null;
   readonly livemode: boolean;
   readonly paid_at: number | null;
   readonly paid_amount: Money | null;
+  /** The platform's id for the payment (`pi_…`, `tr_…`): what a refund made in its dashboard is recorded against. */
+  readonly payment_id: string | null;
   readonly method: string | null;
   /** The payment in the business's dashboard: where it is refunded. */
   readonly dashboard_url: string | null;
@@ -160,22 +186,47 @@ export interface PaymentView {
   readonly closed_at: number | null;
 }
 
-const PROVIDER: Readonly<Record<string, string>> = { stripe: "Stripe", mollie: "Mollie" };
-const providerOf = (kind: string) => PROVIDER[kind] ?? kind;
+/** What one notice to the owner is about, as its job carries it. */
+export interface PayNotice {
+  readonly payId?: string | undefined;
+  readonly reason: PayNoticeReason;
+  /** A second payment on a link already paid: that payment, not the first. */
+  readonly paymentId?: string | undefined;
+  readonly amount?: PayAmount | null | undefined;
+  readonly dashboardUrl?: string | null | undefined;
+  /** A connection disconnected: its platform, the orders left waiting on a closed link, and links not switched off. */
+  readonly provider?: string | undefined;
+  readonly waiting?: readonly string[] | undefined;
+  readonly unclosed?: readonly string[] | undefined;
+  readonly dashboard?: string | null | undefined;
+}
 
-/** The words on the platform's page, in the customer's language. */
+const PROVIDER: Readonly<Record<string, string>> = { stripe: "Stripe", mollie: "Mollie" };
+export const providerOf = (kind: string) => PROVIDER[kind] ?? kind;
+
+/**
+ * The words on the platform's page, in the customer's language, true whatever happened: the thanks
+ * once they paid (a card or a bank payment still on its way alike), and the line on a link that is
+ * closed (paid, the order changed or ended, or the platform was disconnected), which sends them to
+ * the business's latest email rather than promising a new link.
+ */
 const PAGE_WORDS: Readonly<
-  Record<"en" | "pt", { order: string; thanks: (b: string, ref: string) => string; inactive: (b: string) => string }>
+  Record<
+    CustomerLang,
+    { order: string; thanks: (ref: string) => string; inactive: (b: string | null, ref: string) => string }
+  >
 > = {
   en: {
     order: "Order",
-    thanks: (b, ref) => `Thank you. ${b} will confirm your payment for order ${ref} by email.`,
-    inactive: (b) => `This payment link is no longer in use. ${b} has sent you the latest by email.`,
+    thanks: (ref) => `Thank you for your payment for order ${ref}.`,
+    inactive: (b, ref) =>
+      `This link to pay is closed. ${b ? `${b}'s latest email` : "Our latest email"} about order ${ref} says what is still to pay, if anything.`,
   },
   pt: {
     order: "Encomenda",
-    thanks: (b, ref) => `Obrigado. ${b} vai confirmar o seu pagamento da encomenda ${ref} por email.`,
-    inactive: (b) => `Este link de pagamento já não está em uso. ${b} enviou-lhe o mais recente por email.`,
+    thanks: (ref) => `Obrigado pelo seu pagamento da encomenda ${ref}.`,
+    inactive: (b, ref) =>
+      `Este link de pagamento está fechado. ${b ? `O email mais recente de ${b}` : "O nosso email mais recente"} sobre a encomenda ${ref} diz o que falta pagar, se faltar alguma coisa.`,
   },
 };
 
@@ -198,14 +249,80 @@ export class PaymentLinks {
     return rows.map(rowOf).map(viewOf);
   }
 
-  /** Counts for a connection's tile: links waiting, paid, and the last one paid. */
-  async counts(
-    connectorId: string,
-  ): Promise<{ open: number; paid: number; failing: number; lastPaidAt: number | null }> {
+  /**
+   * Why an order that could have a link has none, in one quiet line for the owner, or null: a key of
+   * the other mode only, links switched off, accepted before the platform was connected, or a change
+   * waiting for an answer. Nothing to say for an order with a link (its row says it), or none to want.
+   */
+  async whyNone(itemId: string, now: number): Promise<string | null> {
+    const order = await this.order(itemId);
+    if (!order || !WANTS_LINK.has(order.state) || order.total.value <= 0 || order.legacy || order.paid) return null;
+    if (order.paymentUrl !== null) return null;
+    if ((await this.rowsFor(itemId)).length > 0) return null;
+    const all = (await this.host.payConnections(now)).filter((c) => !c.disconnecting);
+    if (all.length === 0) return null;
+    const mode = order.sandbox ? "test" : "live";
+    const ofMode = all.filter((c) => c.mode === mode);
+    if (ofMode.length === 0) {
+      const other = all[0] as PayConnection;
+      return mode === "live"
+        ? `No link: ${providerOf(other.kind)} is connected with a test key, which makes links only for orders made in Test mode.`
+        : `No link: ${providerOf(other.kind)} is connected with a live key, which makes links only for real orders.`;
+    }
+    const conn = ofMode.find((c) => c.payOn && c.status !== "disabled");
+    if (!conn) return `No link: links to pay are off for ${providerOf((ofMode[0] as PayConnection).kind)}.`;
+    if (order.changeOpen) return "No link yet: a change to the order waits for an answer.";
+    if (!(await this.eligible(order, [], conn))) {
+      return `No link: the order was accepted before ${providerOf(conn.kind)} was connected. Ask for payment to send one.`;
+    }
+    return null;
+  }
+
+  /** Whether the order's payment link (`payload.paymentUrl`) is one of ours, which the owner app shows as the platform's. */
+  async ownsOrderLink(itemId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT 1 FROM items i JOIN connector_payments p ON p.item_id = i.id AND p.url = json_extract(i.payload, '$.paymentUrl')
+             WHERE i.id = ? LIMIT 1`,
+      params: [itemId],
+      method: "all",
+    });
+    return rows.length > 0;
+  }
+
+  /** Whether the connection has a link waiting to be paid. */
+  async hasOpen(connectorId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT 1 FROM connector_payments WHERE connector_id = ? AND state = 'open' LIMIT 1",
+      params: [connectorId],
+      method: "all",
+    });
+    return rows.length > 0;
+  }
+
+  /** Counts for a connection's tile: links waiting, paid, orders without one, and links still to switch off. */
+  async counts(connectorId: string): Promise<{
+    open: number;
+    paid: number;
+    failing: number;
+    closing: number;
+    lastPaidAt: number | null;
+  }> {
     const { rows } = await this.db.client.query({
       sql: `SELECT SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END), SUM(CASE WHEN state = 'paid' THEN 1 ELSE 0 END),
-                   SUM(CASE WHEN state IN ('creating', 'error') AND last_error IS NOT NULL THEN 1 ELSE 0 END), MAX(paid_at)
+                   SUM(CASE WHEN state IN ('closed', 'failed') AND retry_at IS NOT NULL AND external_id IS NOT NULL THEN 1 ELSE 0 END),
+                   MAX(paid_at)
               FROM connector_payments WHERE connector_id = ?`,
+      params: [connectorId],
+      method: "all",
+    });
+    // Orders, not rows: one that still waits to be paid, whose newest link is one the platform did not
+    // make (or is still being tried), with nothing live or paid since.
+    const { rows: failing } = await this.db.client.query({
+      sql: `SELECT COUNT(DISTINCT p.item_id) FROM connector_payments p JOIN items i ON i.id = p.item_id
+             WHERE p.connector_id = ? AND p.state IN ('creating', 'error') AND p.last_error IS NOT NULL
+               AND i.state IN ('accepted', 'awaiting_payment', 'payment_failed')
+               AND NOT EXISTS (SELECT 1 FROM connector_payments q WHERE q.item_id = p.item_id
+                                 AND q.state IN ('open', 'paid') AND q.created_at >= p.created_at)`,
       params: [connectorId],
       method: "all",
     });
@@ -213,7 +330,8 @@ export class PaymentLinks {
     return {
       open: Number(r[0] ?? 0),
       paid: Number(r[1] ?? 0),
-      failing: Number(r[2] ?? 0),
+      failing: Number(failing[0]?.[0] ?? 0),
+      closing: Number(r[2] ?? 0),
       lastPaidAt: r[3] === null || r[3] === undefined ? null : Number(r[3]),
     };
   }
@@ -244,7 +362,9 @@ export class PaymentLinks {
     if (!order) return "not an order";
     const rows = await this.rowsFor(itemId);
     const live = rows.find((r) => r.state === "creating" || r.state === "open") ?? null;
-    const connections = (await this.host.payConnections(now)).filter((c) => c.status !== "disabled" && c.payOn);
+    const connections = (await this.host.payConnections(now)).filter(
+      (c) => c.status !== "disabled" && c.payOn && !c.disconnecting,
+    );
     const conn = connections.find((c) => c.mode === (order.sandbox ? "test" : "live")) ?? null;
     const ours = new Set(rows.map((r) => r.url).filter((u): u is string => u !== null));
     // The owner set a link of their own: it is theirs, and ours goes.
@@ -265,22 +385,45 @@ export class PaymentLinks {
       }
       return "nothing to do";
     }
+    // What the order comes to is not settled while a change to it waits: its answer queues this again.
+    if (order.changeOpen) return "waits for the change";
     if (!conn) {
       // Nothing takes this order (paused, pay links off, or only a key of the other mode): a link already
       // made keeps working, and none is made.
       return order.sandbox ? "no test-mode payment connection" : "no live payment connection";
     }
     if (live) {
-      const same = live.connectorId === conn.id && live.amount === want.value && live.currency === want.currency;
-      if (same && live.state === "open") return this.request(order, live, conn, now);
-      if (same && live.state === "creating") return this.make(order, live, conn, now, depth);
+      // A link of another connection that is still there keeps working while the order comes to it.
+      const other = live.connectorId === conn.id ? conn : await this.host.payConnection(live.connectorId, now);
+      const liveConn = other && !other.disconnecting ? other : null;
+      const same = live.amount === want.value && live.currency === want.currency && liveConn !== null;
+      if (same && liveConn && live.state === "open") return this.request(order, live, liveConn, now);
+      if (same && liveConn && live.state === "creating") return this.make(order, live, liveConn, now, depth);
       const closed = await this.close(
         live,
         live.connectorId === conn.id ? "the order's total changed" : "another payment account took over",
         now,
       );
       if (closed === "held") return "held";
+    } else if (!(await this.eligible(order, rows, conn))) {
+      return `not ours: accepted before ${providerOf(conn.kind)} was connected, and not asked to pay since`;
     }
+    // A refusal stands until what it was about changes, or the owner asks for payment again.
+    const last = rows.at(-1);
+    if (
+      !live &&
+      last?.state === "error" &&
+      last.connectorId === conn.id &&
+      last.amount === want.value &&
+      last.currency === want.currency
+    ) {
+      const askedAt = (await this.history(order.id)).askedAt;
+      if (askedAt === null || askedAt <= last.createdAt) {
+        return `no link: ${last.lastError ?? "the platform would not make it"}`;
+      }
+    }
+    // Every amount here is in hundredths: a currency counted otherwise would be a link a hundred times wrong.
+    if (!isHundredthsCurrency(want.currency)) return this.refuse(order, conn, want, NOT_HUNDREDTHS, now);
     // A new link: the row first, under the one-live-link index, then the platform.
     const id = ulid(now);
     const token = randomToken(12);
@@ -310,6 +453,61 @@ export class PaymentLinks {
   }
 
   /**
+   * Whether the connection is for this order: it was accepted once the platform was connected, or a
+   * person asked for its payment since without a link of their own, or it has a link of ours already
+   * (one waiting, failed or refused). An order accepted before keeps what it had.
+   */
+  private async eligible(order: OrderFacts, rows: readonly PayRow[], conn: PayConnection): Promise<boolean> {
+    if (rows.some((r) => r.state === "creating" || r.state === "open" || r.state === "failed" || r.state === "error")) {
+      return true;
+    }
+    const h = await this.history(order.id);
+    return (
+      (h.acceptedAt !== null && h.acceptedAt >= conn.createdAt) || (h.askedAt !== null && h.askedAt >= conn.createdAt)
+    );
+  }
+
+  /** When the order was accepted, and when a person last asked for its payment (not the connector). */
+  private async history(itemId: string): Promise<{ acceptedAt: number | null; askedAt: number | null }> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT (SELECT MIN(created_at) FROM item_events WHERE item_id = ? AND to_state = 'accepted'),
+                   (SELECT MAX(created_at) FROM item_events WHERE item_id = ? AND event = 'request_payment' AND actor_kind <> 'connector')`,
+      params: [itemId, itemId],
+      method: "all",
+    });
+    const r = rows[0] ?? [];
+    const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+    return { acceptedAt: n(r[0]), askedAt: n(r[1]) };
+  }
+
+  /** No link, said once: a row that says why, and one email to the owner. */
+  private async refuse(order: OrderFacts, conn: PayConnection, want: Money, why: string, now: number): Promise<string> {
+    const id = ulid(now);
+    await this.db.client.query({
+      sql: `INSERT INTO connector_payments
+              (id, connector_id, kind, item_id, amount, currency, livemode, state, last_error, last_error_at, closed_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?)`,
+      params: [
+        id,
+        conn.id,
+        conn.kind,
+        order.id,
+        want.value,
+        want.currency,
+        conn.mode === "live" ? 1 : 0,
+        why,
+        now,
+        now,
+        now,
+        now,
+      ],
+      method: "run",
+    });
+    await this.linkFailed(id, order.id, why, now);
+    return `no link: ${why}`;
+  }
+
+  /**
    * Asks the platform for the link, under the row's claim. `token` is the claim the caller already
    * holds (a row it just made); otherwise one is taken here, from a job whose claim ran out.
    */
@@ -335,12 +533,11 @@ export class PaymentLinks {
     }
     const settings = await readSettings(this.db);
     const facts = await businessFacts(this.db, settings);
-    const lang = customerLang(order.locale, facts.languages) === "pt" ? "pt" : "en";
+    const lang: CustomerLang = customerLang(order.locale, facts.languages) === "pt" ? "pt" : "en";
     const words = PAGE_WORDS[lang];
     const reference = shortRef(order.id);
-    const business = oneLine(facts.name) || "We";
-    const named = oneLine(order.subject);
-    const title = (named ? `${named} (${reference})` : `${words.order} ${reference}`).slice(0, 250);
+    const business = oneLine(facts.name) || null;
+    const title = (await this.titleOf(order, lang, reference, words.order)).slice(0, 250);
     const hookUrl = conn.ctx.hookUrl ? `${conn.ctx.hookUrl}?ref=${encodeURIComponent(row.id)}` : "";
     try {
       if (!conn.ctx.hookUrl) {
@@ -356,15 +553,16 @@ export class PaymentLinks {
         title,
         reference,
         language: lang,
-        thanks: words.thanks(business, reference),
-        inactive: words.inactive(business),
+        thanks: words.thanks(reference),
+        inactive: words.inactive(business, reference),
         hookUrl,
       });
       const kept = await this.db.client.query({
+        // Never asked about yet (`checked_at` stays empty): its first word from the platform is read at once.
         sql: `UPDATE connector_payments SET state = 'open', external_id = ?, url = ?, claim_until = NULL, claimed_by = NULL,
-                     attempts = attempts + 1, retry_at = NULL, last_error = NULL, last_error_at = NULL, checked_at = ?, updated_at = ?
+                     attempts = attempts + 1, retry_at = NULL, last_error = NULL, last_error_at = NULL, updated_at = ?
                WHERE id = ? AND claimed_by = ? AND state = 'creating'`,
-        params: [link.externalId, link.url, now, now, row.id, token],
+        params: [link.externalId, link.url, now, row.id, token],
         method: "run",
       });
       if (kept.changes !== 1) return "lost: another job took over this link";
@@ -372,7 +570,9 @@ export class PaymentLinks {
       // The order may have changed while the platform answered: it is looked at again, once, as it is now.
       if (depth >= 1) {
         const fresh = await this.row(row.id);
-        return fresh ? this.request(await this.order(order.id), fresh, conn, now) : "gone";
+        const again = await this.order(order.id);
+        if (again?.changeOpen) return "made; waits for the change";
+        return fresh ? this.request(again, fresh, conn, now) : "gone";
       }
       return `made a ${providerOf(conn.kind)} link; ${await this.ensureOnce(order.id, now, depth + 1)}`;
     } catch (error) {
@@ -390,25 +590,47 @@ export class PaymentLinks {
       const giveUp = attempts >= MAX_ATTEMPTS || error.code === "config" || error.code === "refused";
       if (error.code === "auth" || error.code === "config") await this.host.failed(conn.id, error, now);
       if (giveUp) {
+        const message = error.message.slice(0, 500);
         await this.db.client.query({
           sql: `UPDATE connector_payments SET state = 'error', claim_until = NULL, claimed_by = NULL, attempts = ?,
                        last_error = ?, last_error_at = ?, closed_at = ?, updated_at = ?
                  WHERE id = ? AND claimed_by = ?`,
-          params: [attempts, error.message.slice(0, 500), now, now, now, row.id, token],
+          params: [attempts, message, now, now, now, row.id, token],
           method: "run",
         });
-        await this.notice(row.id, "link_failed", now);
+        await this.linkFailed(row.id, order.id, message, now);
         return `given up: ${error.message}`;
       }
       const retryAt = now + (error.retryAfterMs ?? retryDelay(attempts));
       await this.releaseClaim(row.id, token, error.message, retryAt, now, attempts);
-      await ensureJob(this.db, PAY_LINK_KIND, `paylink:${order.id}:retry:${attempts}`, {
+      await ensureJob(this.db, PAY_LINK_KIND, `paylink:${order.id}:retry:${row.id}:${attempts}`, {
         now,
         runAt: retryAt,
         payload: { itemId: order.id },
       });
       return `failed, tried again at ${new Date(retryAt).toISOString()}: ${error.message}`;
     }
+  }
+
+  /**
+   * What the customer sees on the platform's page and the business's statement: the catalogue's own
+   * names for its products ("Sourdough and 2 more"), never words a customer's agent typed (a name,
+   * an address), and the order's reference; "Order 4F2K9Q" when a line is not from the catalogue.
+   */
+  private async titleOf(order: OrderFacts, lang: CustomerLang, reference: string, noun: string): Promise<string> {
+    const ids = order.productIds;
+    const plain = `${noun} ${reference}`;
+    if (ids.length === 0 || ids.some((id) => id === null)) return plain;
+    const { rows } = await this.db.client.query({
+      sql: `SELECT id, name FROM products WHERE id IN (${ids.map(() => "?").join(", ")})`,
+      params: ids as string[],
+      method: "all",
+    });
+    const names = new Map(rows.map((r) => [String(r[0]), oneLine(String(r[1] ?? ""))]));
+    const first = names.get(ids[0] as string);
+    if (!first || ids.some((id) => !names.get(id as string))) return plain;
+    const named = ids.length > 1 ? moreLines(first, ids.length - 1, lang) : first;
+    return `${named} (${reference})`;
   }
 
   private async releaseClaim(
@@ -509,29 +731,65 @@ export class PaymentLinks {
     });
   }
 
+  /**
+   * A link of ours the order was asked to pay at is closed while the order still waits (the payment on
+   * it did not go through, or the platform was disconnected): the order no longer names it, so neither
+   * the customer's agent nor the next email sends anyone to a link that takes no payment.
+   */
+  private async dropOrderLink(itemId: string, url: string | null): Promise<void> {
+    if (!url) return;
+    await this.db.client.query({
+      sql: `UPDATE items SET payload = json_remove(payload, '$.paymentUrl')
+             WHERE id = ? AND type = 'order' AND state IN ('accepted', 'awaiting_payment', 'payment_failed')
+               AND json_extract(payload, '$.paymentUrl') = ?`,
+      params: [itemId, url],
+      method: "run",
+    });
+  }
+
   /* --- what the platform says -------------------------------------------------- */
 
   /**
    * A request a platform sent to `POST /v1/hooks/<kind>`. A request naming one of our links (`ref`,
-   * Mollie's per-link webhook) is handed to that link's connection only; any other to each connection
-   * of the kind until one's signature checks out. Answers the HTTP status to send back: 200 when it
-   * was read (or is not ours), 400 when no signature checked out, 503 when the platform could not be
-   * asked back (the platform sends it again).
+   * Mollie's per-link webhook) is handed to that link's connection only, and read back at most every
+   * few seconds; any other to each connection of the kind until one's signature checks out. Answers
+   * the HTTP status to send back: 200 when it was read (or is not ours), 400 when no signature
+   * checked out, 503 when the platform could not be asked back (the platform sends it again).
    */
   async receive(
     kind: string,
     request: InboundRequest,
     now: number,
-  ): Promise<{ readonly status: 200 | 400 | 404 | 503; readonly body: Record<string, unknown> }> {
+  ): Promise<{
+    readonly status: 200 | 400 | 404 | 503;
+    readonly body: Record<string, unknown>;
+    readonly retryAfterS?: number | undefined;
+  }> {
     const ref = request.query.get("ref");
     let candidates: PayConnection[];
+    let nudged: PayRow | null = null;
     if (ref) {
       const row = await this.row(ref);
       if (!row || row.kind !== kind)
         return { status: 200, body: { ok: true, handled: 0, note: "not a link of this inbox" } };
+      // An unsigned nudge names a link anyone who saw the address can name: the platform is asked about
+      // it at most every few seconds, and a nudge in between is asked to come again (the platform
+      // sends its own again; one made up is never read).
+      if (
+        row.checkedAt !== null &&
+        now - row.checkedAt < NUDGE_EVERY_MS &&
+        !request.headers.has("x-mollie-signature")
+      ) {
+        return {
+          status: 503,
+          body: { error: "unavailable", detail: "Asked about a moment ago: send it again shortly." },
+          retryAfterS: Math.ceil(NUDGE_EVERY_MS / 1000),
+        };
+      }
       const conn = await this.host.payConnection(row.connectorId, now);
       if (!conn) return { status: 200, body: { ok: true, handled: 0, note: "that connection is gone" } };
       candidates = [conn];
+      nudged = row;
     } else {
       candidates = (await this.host.payConnections(now)).filter((c) => c.kind === kind);
       if (candidates.length === 0)
@@ -558,6 +816,8 @@ export class PaymentLinks {
           return { status: 503, body: { error: "unavailable", detail: error.message } };
         }
         throw error;
+      } finally {
+        if (nudged && !request.headers.has("x-mollie-signature")) await this.checked(nudged.id, now);
       }
       if (!result) return { status: 200, body: { ok: true, handled: 0 } };
       const seen = await this.db.client.query({
@@ -594,11 +854,19 @@ export class PaymentLinks {
       : { status: 200, body: { ok: true, handled: 0 } };
   }
 
+  private async checked(id: string, now: number): Promise<void> {
+    await this.db.client.query({
+      sql: "UPDATE connector_payments SET checked_at = ?, updated_at = ? WHERE id = ?",
+      params: [now, now, id],
+      method: "run",
+    });
+  }
+
   /**
    * What the platform confirmed, applied once: the link marked paid (a compare-and-set, so a request
    * sent twice, or a webhook and a reconciliation that meet, record it once), then the order. A
-   * payment that cannot go on the order (it was cancelled, or paid already) is kept on the link and
-   * the owner told where to refund it.
+   * payment that cannot go on the order (it was cancelled, or paid already, or it is a second one on
+   * a link paid already) is kept on the link and the owner told where to refund it.
    */
   async apply(conn: PayConnection, fact: PaymentFact, now: number): Promise<{ done: boolean; itemId: string | null }> {
     const row =
@@ -609,6 +877,7 @@ export class PaymentLinks {
     if (fact.livemode !== row.livemode) return { done: false, itemId: row.itemId };
     if (fact.status === "pending") return { done: false, itemId: row.itemId };
     if (fact.status === "failed") return this.failed(conn, row, fact, now);
+    const before = row.state;
     const paid = await this.db.client.query({
       sql: `UPDATE connector_payments SET state = 'paid', payment_id = ?, method = ?, paid_amount = ?, paid_currency = ?,
                    dashboard_url = ?, paid_at = ?, claim_until = NULL, claimed_by = NULL, retry_at = NULL, checked_at = ?, updated_at = ?
@@ -626,23 +895,10 @@ export class PaymentLinks {
       ],
       method: "run",
     });
-    if (paid.changes !== 1) return { done: false, itemId: row.itemId };
+    if (paid.changes !== 1) return this.paidAgain(row, fact, now);
     const order = await this.order(row.itemId);
     const amount = fact.amount ?? { value: row.amount, currency: row.currency };
-    if (!order || !WANTS_LINK.has(order.state) || order.paid) {
-      const why = !order
-        ? "the order is gone"
-        : order.paid || order.state === "paid" || order.state === "fulfilling" || order.state === "fulfilled"
-          ? "the order was paid already"
-          : `the order is ${order.state.replaceAll("_", " ")}`;
-      await this.db.client.query({
-        sql: "UPDATE connector_payments SET note = ?, updated_at = ? WHERE id = ?",
-        params: [`paid after ${why}: refund it in ${providerOf(row.kind)} if it is not wanted`, now, row.id],
-        method: "run",
-      });
-      await this.notice(row.id, order?.paid ? "paid_twice" : "paid_after", now);
-      return { done: true, itemId: row.itemId };
-    }
+    if (!order || !WANTS_LINK.has(order.state) || order.paid) return this.paidAfter(row, order, now);
     try {
       await transitionItem(this.db, connectorCaller(conn.id, now, `paid:${row.id}`), {
         itemId: row.itemId,
@@ -654,11 +910,18 @@ export class PaymentLinks {
         },
       });
     } catch (error) {
-      // The row says paid, the order does not: the row is put back, so the platform's next word (or the
-      // next reconciliation) records it, and the error is ours to read.
+      // The order moved on between the read and the write (cancelled, paid by hand): the payment is
+      // the owner's to settle, as one that came after.
+      if (error instanceof WriteError && (error.code === "wrong_state" || error.code === "not_allowed")) {
+        return this.paidAfter(row, await this.order(row.itemId), now);
+      }
+      // The row says paid, the order does not: the row is put back exactly as it was, so the platform's
+      // next word (or the next reconciliation) records it, and the error is ours to read.
       await this.db.client.query({
-        sql: `UPDATE connector_payments SET state = 'open', last_error = ?, last_error_at = ?, updated_at = ? WHERE id = ? AND state = 'paid'`,
-        params: [`not recorded: ${String((error as Error)?.message ?? error)}`.slice(0, 500), now, now, row.id],
+        sql: `UPDATE connector_payments SET state = ?, payment_id = NULL, method = NULL, paid_amount = NULL, paid_currency = NULL,
+                     dashboard_url = NULL, paid_at = NULL, last_error = ?, last_error_at = ?, updated_at = ?
+               WHERE id = ? AND state = 'paid'`,
+        params: [before, `not recorded: ${String((error as Error)?.message ?? error)}`.slice(0, 500), now, now, row.id],
         method: "run",
       });
       throw error;
@@ -666,6 +929,66 @@ export class PaymentLinks {
     if (amount.value !== order.total.value || amount.currency !== order.total.currency) {
       await this.notice(row.id, "amount_differs", now);
     }
+    return { done: true, itemId: row.itemId };
+  }
+
+  /** A payment the order cannot take (it was cancelled, or paid already): kept on the link, and the owner told. */
+  private async paidAfter(
+    row: PayRow,
+    order: OrderFacts | null,
+    now: number,
+  ): Promise<{ done: boolean; itemId: string | null }> {
+    const twice =
+      order !== null &&
+      (order.paid || order.state === "paid" || order.state === "fulfilling" || order.state === "fulfilled");
+    const why = !order
+      ? "the order is gone"
+      : twice
+        ? "the order was paid already"
+        : `the order is ${order.state.replaceAll("_", " ")}`;
+    await this.db.client.query({
+      sql: "UPDATE connector_payments SET note = ?, updated_at = ? WHERE id = ?",
+      params: [`paid after ${why}: refund it in ${providerOf(row.kind)} if it is not wanted`, now, row.id],
+      method: "run",
+    });
+    await this.notice(row.id, twice ? "paid_twice" : "paid_after", now);
+    return { done: true, itemId: row.itemId };
+  }
+
+  /**
+   * A paid link the platform says took another payment as well (two checkouts begun before the first
+   * was paid): the owner is told once per payment, with that payment's own amount and page.
+   */
+  private async paidAgain(
+    row: PayRow,
+    fact: PaymentFact,
+    now: number,
+  ): Promise<{ done: boolean; itemId: string | null }> {
+    const current = await this.row(row.id);
+    const paymentId = fact.paymentId.slice(0, 200);
+    if (current?.state !== "paid" || !current.paymentId || current.paymentId === paymentId) {
+      return { done: false, itemId: row.itemId };
+    }
+    const seen = await this.db.client.query({
+      sql: `INSERT OR IGNORE INTO connector_events (id, connector_id, external_id, topic, received_at, status, item_id, handled_at, raw)
+            VALUES (?, ?, ?, 'payment.again', ?, 'handled', ?, ?, ?)`,
+      params: [
+        ulid(now),
+        row.connectorId,
+        `again:${paymentId}`,
+        now,
+        row.itemId,
+        now,
+        JSON.stringify({ ...fact, dashboardUrl: undefined }),
+      ],
+      method: "run",
+    });
+    if (seen.changes === 0) return { done: false, itemId: row.itemId };
+    await this.notice(row.id, "paid_twice", now, {
+      paymentId,
+      amount: fact.amount,
+      dashboardUrl: fact.dashboardUrl ?? null,
+    });
     return { done: true, itemId: row.itemId };
   }
 
@@ -698,6 +1021,8 @@ export class PaymentLinks {
           throw error;
       }
     }
+    // The order no longer sends anyone to the spent link, the email about the failure included.
+    await this.dropOrderLink(row.itemId, row.url);
     // A new link is made straight away; the email about the failure waits for it (PAY_LINK_GRACE_MS).
     await ensureJob(this.db, PAY_LINK_KIND, `paylink:${row.itemId}:after-failure:${row.id}`, {
       now,
@@ -709,15 +1034,20 @@ export class PaymentLinks {
   /* --- the regular look ----------------------------------------------------------- */
 
   /**
-   * What a webhook may have missed, for one connection, run with its five-minute sync: links still to
-   * be closed on the platform, links whose making stopped half way, and open links asked about now and
-   * then (often at first, then less: 10 minutes for two hours, hourly for two days, twice a day for
-   * a fortnight, then no more), within a budget of calls.
+   * What a webhook may have missed, for one connection, run with its five-minute sync, within a budget
+   * of calls: links still to be closed on the platform, links whose making stopped half way, open links
+   * asked about as each falls due (every sync for their first day, hourly to two days, twice a day to
+   * a fortnight, then daily for as long as they are open), and, where the key may read them, refunds
+   * made in the dashboard for a refund the inbox owes.
    */
-  async reconcile(conn: PayConnection, now: number): Promise<{ checked: number; paid: number; closed: number }> {
+  async reconcile(
+    conn: PayConnection,
+    now: number,
+  ): Promise<{ checked: number; paid: number; closed: number; refunded: number }> {
     let calls = 0;
     let paid = 0;
     let closed = 0;
+    let refunded = 0;
     const { rows: closing } = await this.db.client.query({
       sql: `SELECT ${COLUMNS} FROM connector_payments
              WHERE connector_id = ? AND state IN ('closed', 'failed') AND retry_at IS NOT NULL AND retry_at <= ? AND external_id IS NOT NULL
@@ -743,26 +1073,28 @@ export class PaymentLinks {
         payload: { itemId: String(r[0]) },
       });
     }
+    // Only the links due now: one not due never holds a place another needs. Links of the last two days
+    // first (a customer who just paid is waiting to hear), then the older ones, soonest due first.
     const { rows: open } = await this.db.client.query({
-      sql: `SELECT ${COLUMNS} FROM connector_payments
-             WHERE connector_id = ? AND state = 'open' AND external_id IS NOT NULL
-             ORDER BY COALESCE(checked_at, 0) LIMIT 50`,
-      params: [conn.id],
+      sql: `SELECT * FROM (
+              SELECT ${COLUMNS}, COALESCE(checked_at, created_at) + CASE
+                       WHEN ? - created_at < ${DAY_MS} THEN ${FIRST_DAY_EVERY_MS}
+                       WHEN ? - created_at < ${2 * DAY_MS} THEN ${HOUR_MS}
+                       WHEN ? - created_at < ${15 * DAY_MS} THEN ${12 * HOUR_MS}
+                       ELSE ${DAY_MS} END AS due
+                FROM connector_payments WHERE connector_id = ? AND state = 'open' AND external_id IS NOT NULL)
+             WHERE due <= ? ORDER BY CASE WHEN created_at > ? THEN 0 ELSE 1 END, due LIMIT ?`,
+      params: [now, now, now, conn.id, now, now - 2 * DAY_MS, CHECKS_PER_RUN],
       method: "all",
     });
     for (const r of open.map(rowOf)) {
       if (calls >= CHECKS_PER_RUN) break;
-      const every = checkEvery(now - r.createdAt);
-      if (every === null || (r.checkedAt !== null && now - r.checkedAt < every)) continue;
       calls++;
       try {
-        const fact = await conn.payments.check(conn.ctx, { ref: r.id, externalId: r.externalId, itemId: r.itemId });
-        await this.db.client.query({
-          sql: "UPDATE connector_payments SET checked_at = ?, updated_at = ? WHERE id = ?",
-          params: [now, now, r.id],
-          method: "run",
-        });
-        if (fact && fact.status !== "pending") {
+        const facts = await conn.payments.check(conn.ctx, { ref: r.id, externalId: r.externalId, itemId: r.itemId });
+        await this.checked(r.id, now);
+        for (const fact of facts) {
+          if (fact.status === "pending") continue;
           const applied = await this.apply(conn, fact, now);
           if (applied.done && fact.status === "paid") paid++;
         }
@@ -772,72 +1104,224 @@ export class PaymentLinks {
           await this.host.failed(conn.id, error, now);
           break;
         }
-        await this.db.client.query({
-          sql: "UPDATE connector_payments SET checked_at = ?, updated_at = ? WHERE id = ?",
-          params: [now, now, r.id],
-          method: "run",
-        });
+        await this.checked(r.id, now);
       }
     }
-    return { checked: calls, paid, closed };
+    if (conn.payments.refunded && calls < CHECKS_PER_RUN) {
+      refunded = await this.refunds(conn, now, CHECKS_PER_RUN - calls);
+    }
+    return { checked: calls, paid, closed, refunded };
   }
 
   /**
-   * Disconnecting: every link still open is closed on the platform (best effort), since nothing here
-   * would hear of a payment made on it any more. Paid links stay, as the record of where money went.
+   * Refunds the inbox owes on orders paid through this connection, asked of the platform hourly: once
+   * the dashboard refunded what is owed, the refund is marked done by the connector, against the
+   * platform's own refund id. Answers how many were marked.
    */
-  async closeAll(connectorId: string, now: number): Promise<number> {
+  private async refunds(conn: PayConnection, now: number, budget: number): Promise<number> {
+    const read = conn.payments.refunded;
+    if (!read) return 0;
     const { rows } = await this.db.client.query({
-      sql: `SELECT ${COLUMNS} FROM connector_payments WHERE connector_id = ? AND state IN ('creating', 'open')`,
-      params: [connectorId],
+      sql: `SELECT p.id, p.payment_id, r.id, json_extract(r.payload, '$.amount.value'), json_extract(r.payload, '$.amount.currency')
+              FROM connector_payments p JOIN items r ON r.linked_item_id = p.item_id AND r.type = 'refund'
+             WHERE p.connector_id = ? AND p.state = 'paid' AND p.payment_id IS NOT NULL AND p.livemode = ?
+               AND r.state IN ('approved', 'goods_received')
+               AND (p.checked_at IS NULL OR p.checked_at < ?)
+             ORDER BY COALESCE(p.checked_at, 0) LIMIT ?`,
+      params: [conn.id, conn.mode === "live" ? 1 : 0, now - HOUR_MS, budget],
       method: "all",
     });
-    const live = rows.map(rowOf);
-    const conn = await this.host.payConnection(connectorId, now);
-    for (const r of live) {
-      if (conn && r.externalId) {
-        try {
-          await conn.payments.closeLink(conn.ctx, { externalId: r.externalId });
-        } catch {
-          // A courtesy to the platform: the connection goes either way, and the owner was told the links stop.
+    let marked = 0;
+    for (const r of rows) {
+      const payId = String(r[0]);
+      const owed = { value: Number(r[3] ?? 0), currency: String(r[4] ?? "").toUpperCase() };
+      try {
+        const fact = await read(conn.ctx, { paymentId: String(r[1]) });
+        await this.checked(payId, now);
+        if (!fact || fact.amount.currency !== owed.currency || fact.amount.value < owed.value || owed.value <= 0)
+          continue;
+        await transitionItem(this.db, connectorCaller(conn.id, now, `refunded:${String(r[2])}`), {
+          itemId: String(r[2]),
+          event: "refund",
+          input: { paymentRef: (fact.refundIds[0] ?? String(r[1])).slice(0, 200), amount: owed },
+        });
+        marked++;
+      } catch (error) {
+        if (error instanceof WriteError) continue;
+        if (!(error instanceof ConnectorError)) throw error;
+        await this.checked(payId, now);
+        if (error.code === "auth") {
+          await this.host.failed(conn.id, error, now);
+          break;
         }
       }
     }
+    return marked;
+  }
+
+  /* --- disconnecting ---------------------------------------------------------------- */
+
+  /**
+   * One step of disconnecting: up to `limit` live links closed here and switched off on the platform,
+   * and the ones the platform could not be told yet told again. The connection, its key and its
+   * webhook stay until none is left, so a payment made on a link in the meantime is still recorded.
+   * Answers how many it closed and how many are left to switch off.
+   */
+  async closeForDisconnect(connectorId: string, now: number, limit: number): Promise<{ closed: number; left: number }> {
+    // A link being made right now is left to its job, which makes no more for this connection: the
+    // next step finds it made, and switches it off.
+    const { rows: live } = await this.db.client.query({
+      sql: `SELECT ${COLUMNS} FROM connector_payments
+             WHERE connector_id = ? AND (state = 'open' OR (state = 'creating' AND (claim_until IS NULL OR claim_until < ?)))
+             ORDER BY created_at LIMIT ?`,
+      params: [connectorId, now, limit],
+      method: "all",
+    });
+    let calls = 0;
+    let closed = 0;
+    for (const r of live.map(rowOf)) {
+      const done = await this.db.client.query({
+        sql: `UPDATE connector_payments SET state = 'closed', closed_at = ?, note = ?, claim_until = NULL, claimed_by = NULL,
+                     retry_at = CASE WHEN external_id IS NULL THEN NULL ELSE ? END, updated_at = ?
+               WHERE id = ? AND state IN ('creating', 'open')`,
+        params: [now, DISCONNECTED, now, now, r.id],
+        method: "run",
+      });
+      if (done.changes !== 1) continue;
+      closed++;
+      await this.dropOrderLink(r.itemId, r.url);
+      if (r.externalId) {
+        calls++;
+        await this.tellClosed(r, now);
+      }
+    }
+    const { rows: telling } = await this.db.client.query({
+      sql: `SELECT ${COLUMNS} FROM connector_payments
+             WHERE connector_id = ? AND state IN ('closed', 'failed') AND retry_at IS NOT NULL AND external_id IS NOT NULL
+             ORDER BY retry_at LIMIT ?`,
+      params: [connectorId, Math.max(limit - calls, 0)],
+      method: "all",
+    });
+    for (const r of telling.map(rowOf)) await this.tellClosed(r, now);
+    const { rows: left } = await this.db.client.query({
+      sql: `SELECT COUNT(*) FROM connector_payments WHERE connector_id = ?
+               AND (state IN ('creating', 'open') OR (state IN ('closed', 'failed') AND retry_at IS NOT NULL AND external_id IS NOT NULL))`,
+      params: [connectorId],
+      method: "all",
+    });
+    return { closed, left: Number(left[0]?.[0] ?? 0) };
+  }
+
+  /**
+   * What the owner is told once a connection is gone: the orders still waiting to be paid whose link
+   * went with it (to ask again), and the links that could not be switched off on the platform (to
+   * switch off in its dashboard). Null when there is nothing to tell.
+   */
+  async disconnectNotice(connectorId: string, kind: string, dashboard: string | null): Promise<PayNotice | null> {
+    const { rows: waiting } = await this.db.client.query({
+      sql: `SELECT DISTINCT p.item_id FROM connector_payments p JOIN items i ON i.id = p.item_id
+             WHERE p.connector_id = ? AND p.state = 'closed' AND p.note = ?
+               AND i.state IN ('accepted', 'awaiting_payment', 'payment_failed')
+               AND NOT EXISTS (SELECT 1 FROM connector_payments q WHERE q.item_id = p.item_id AND q.state IN ('creating', 'open', 'paid'))
+             LIMIT 50`,
+      params: [connectorId, DISCONNECTED],
+      method: "all",
+    });
+    const { rows: unclosed } = await this.db.client.query({
+      sql: `SELECT url FROM connector_payments
+             WHERE connector_id = ? AND state IN ('closed', 'failed') AND retry_at IS NOT NULL AND external_id IS NOT NULL AND url IS NOT NULL
+             LIMIT 50`,
+      params: [connectorId],
+      method: "all",
+    });
+    if (waiting.length === 0 && unclosed.length === 0) return null;
+    return {
+      reason: "disconnected",
+      provider: providerOf(kind),
+      waiting: waiting.map((r) => String(r[0])),
+      unclosed: unclosed.map((r) => String(r[0])),
+      dashboard,
+    };
+  }
+
+  /** Nothing more is tried for a connection that is gone: no link of it waits to be told. */
+  async forget(connectorId: string, now: number): Promise<void> {
     await this.db.client.query({
-      sql: `UPDATE connector_payments SET state = 'closed', closed_at = ?, retry_at = NULL, claim_until = NULL, claimed_by = NULL,
-                   note = 'the payment platform was disconnected', updated_at = ?
-             WHERE connector_id = ? AND state IN ('creating', 'open')`,
-      params: [now, now, connectorId],
+      sql: `UPDATE connector_payments SET retry_at = NULL, updated_at = ? WHERE connector_id = ? AND retry_at IS NOT NULL`,
+      params: [now, connectorId],
       method: "run",
     });
-    return live.length;
   }
 
   /* --- telling the owner -------------------------------------------------------- */
 
-  /** One email to the owner about one link, once per reason. */
-  private async notice(rowId: string, reason: PayNoticeReason, now: number): Promise<void> {
+  /** One email to the owner about one link, once per reason (or per payment, for a second one). */
+  private async notice(
+    rowId: string,
+    reason: PayNoticeReason,
+    now: number,
+    extra: Omit<PayNotice, "reason" | "payId"> = {},
+    dedupeKey = `paynotice:${rowId}:${reason}${extra.paymentId ? `:${extra.paymentId}` : ""}`,
+  ): Promise<void> {
+    await this.db.batch([jobStatement(PAY_NOTICE_KIND, { payId: rowId, reason, ...extra }, now, { dedupeKey })]);
+  }
+
+  /** A link the platform would not make: told once per order and reason, however many times it was tried. */
+  private async linkFailed(rowId: string, itemId: string, why: string, now: number): Promise<void> {
+    await this.notice(rowId, "link_failed", now, {}, `paynotice:${itemId}:link_failed:${hashOf(why)}`);
+  }
+
+  /** A notice for a connection that is gone: carried whole by its job, since its rows go with it. */
+  async noticeDisconnected(connectorId: string, notice: PayNotice, now: number): Promise<void> {
     await this.db.batch([
-      jobStatement(PAY_NOTICE_KIND, { payId: rowId, reason }, now, { dedupeKey: `paynotice:${rowId}:${reason}` }),
+      jobStatement(PAY_NOTICE_KIND, notice, now, { dedupeKey: `paynotice:${connectorId}:disconnected` }),
     ]);
   }
 
   /** The words of a notice, or null when it no longer applies. */
   async noticeText(
-    rowId: string,
-    reason: PayNoticeReason,
+    notice: PayNotice,
     appUrl: string,
-  ): Promise<{ readonly subject: string; readonly text: string; readonly itemId: string } | null> {
-    const row = await this.row(rowId);
+  ): Promise<{ readonly subject: string; readonly text: string; readonly itemId: string | null } | null> {
+    const base = appUrl ? appUrl.replace(/\/+$/, "") : "";
+    if (notice.reason === "disconnected") {
+      const provider = notice.provider ?? "The payment platform";
+      const waiting = notice.waiting ?? [];
+      const unclosed = notice.unclosed ?? [];
+      const lines: string[] = [`${provider} is disconnected from your inbox.`];
+      if (waiting.length > 0) {
+        lines.push(
+          "",
+          waiting.length === 1
+            ? `This order was waiting to be paid at a ${provider} link, which no longer works. Ask for payment again from the order:`
+            : `These orders were waiting to be paid at a ${provider} link, which no longer works. Ask for payment again from each order:`,
+          ...waiting.map((id) => `- ${shortRef(id)}${base ? `: ${base}/items/${id}` : ""}`),
+        );
+      }
+      if (unclosed.length > 0) {
+        lines.push(
+          "",
+          `${unclosed.length === 1 ? "This link" : "These links"} could not be switched off in ${provider}, so a payment there is not recorded here. Switch ${unclosed.length === 1 ? "it" : "them"} off in your ${provider} dashboard${notice.dashboard ? ` (${notice.dashboard})` : ""}:`,
+          ...unclosed.map((u) => `- ${u}`),
+        );
+      }
+      return { itemId: null, subject: `${provider} is disconnected`, text: lines.join("\n") };
+    }
+    if (!notice.payId) return null;
+    const row = await this.row(notice.payId);
     if (!row) return null;
+    const reason = notice.reason;
     const provider = providerOf(row.kind);
     const ref = shortRef(row.itemId);
-    const open = appUrl ? `${appUrl.replace(/\/+$/, "")}/items/${row.itemId}` : "";
+    const open = base ? `${base}/items/${row.itemId}` : "";
     const money = (value: number | null, currency: string | null) =>
       value === null || currency === null ? "" : moneyIn({ value, currency }, "en");
-    const refund = row.dashboardUrl
-      ? `Refund it in ${provider}: ${row.dashboardUrl}`
-      : `Refund it in your ${provider} dashboard.`;
+    // A second payment on a link paid already is that payment, not the first.
+    const second = notice.paymentId !== undefined;
+    const paidValue = second ? (notice.amount?.value ?? null) : row.paidAmount;
+    const paidCurrency = second ? (notice.amount?.currency ?? null) : row.paidCurrency;
+    const page = second ? (notice.dashboardUrl ?? null) : row.dashboardUrl;
+    const refund = page ? `Refund it in ${provider}: ${page}` : `Refund it in your ${provider} dashboard.`;
     switch (reason) {
       case "paid_after": {
         const order = await this.order(row.itemId);
@@ -846,7 +1330,7 @@ export class PaymentLinks {
           itemId: row.itemId,
           subject: `A payment for order ${ref} needs you`,
           text: [
-            `The customer paid ${money(row.paidAmount, row.paidCurrency)} for order ${ref} through ${provider}, but the order was ${state} by then, so it is not marked paid here.`,
+            `The customer paid ${money(paidValue, paidCurrency)} for order ${ref} through ${provider}, but the order was ${state} by then, so it is not marked paid here.`,
             "",
             "The money is in your account. If it should not be, refund it there.",
             refund,
@@ -859,7 +1343,7 @@ export class PaymentLinks {
           itemId: row.itemId,
           subject: `Order ${ref} was paid twice`,
           text: [
-            `A second payment of ${money(row.paidAmount, row.paidCurrency)} arrived for order ${ref} through ${provider}. The order was paid already.`,
+            `A second payment of ${money(paidValue, paidCurrency)} arrived for order ${ref} through ${provider}. The order was paid already.`,
             "",
             refund,
             ...(open ? ["", `The order: ${open}`] : []),
@@ -922,7 +1406,7 @@ export class PaymentLinks {
 
   private async order(itemId: string): Promise<OrderFacts | null> {
     const { rows } = await this.db.client.query({
-      sql: `SELECT i.id, i.state, i.payload, i.sandbox, i.legacy_promise, i.subject, p.contact
+      sql: `SELECT i.id, i.state, i.payload, i.sandbox, i.legacy_promise, p.contact
               FROM items i LEFT JOIN parties p ON p.id = i.party_id
              WHERE i.id = ? AND i.type = 'order'`,
       params: [itemId],
@@ -930,15 +1414,17 @@ export class PaymentLinks {
     });
     const r = rows[0];
     if (!r) return null;
-    const payload = parseJson(r[2]) as {
+    const payload = (parseJson(r[2]) ?? {}) as {
       totalPrice?: { value?: unknown; currency?: unknown };
       paymentUrl?: unknown;
       paymentRef?: unknown;
-      orderedItem?: { name?: unknown }[];
+      orderedItem?: { productId?: unknown }[];
+      change?: unknown;
     };
-    const contact = parseJson(r[6]) as { locale?: unknown } | null;
+    const contact = parseJson(r[5]) as { locale?: unknown } | null;
     const value = Number(payload.totalPrice?.value ?? 0);
     const state = String(r[1]);
+    const lines = Array.isArray(payload.orderedItem) ? payload.orderedItem : [];
     return {
       id: String(r[0]),
       state,
@@ -951,7 +1437,8 @@ export class PaymentLinks {
       paid: typeof payload.paymentRef === "string" && ["paid", "fulfilling", "fulfilled", "completed"].includes(state),
       sandbox: Number(r[3] ?? 0) === 1,
       legacy: Number(r[4] ?? 0) === 1,
-      subject: subjectIn({ type: "order", subject: r[5] === null ? null : String(r[5]), payload } as never, "en"),
+      changeOpen: payload.change !== undefined && payload.change !== null,
+      productIds: lines.map((l) => (typeof l?.productId === "string" && l.productId ? l.productId : null)),
       locale: typeof contact?.locale === "string" ? contact.locale : null,
     };
   }
@@ -965,11 +1452,14 @@ interface OrderFacts {
   readonly paid: boolean;
   readonly sandbox: boolean;
   readonly legacy: boolean;
-  readonly subject: string;
+  /** A change to the order waits for an answer: what it comes to is not settled. */
+  readonly changeOpen: boolean;
+  /** Each line's catalogue product, or null for a line named by whoever ordered. */
+  readonly productIds: readonly (string | null)[];
   readonly locale: string | null;
 }
 
-export type PayNoticeReason = "paid_after" | "paid_twice" | "amount_differs" | "link_failed";
+export type PayNoticeReason = "paid_after" | "paid_twice" | "amount_differs" | "link_failed" | "disconnected";
 
 /** An order's state, as the owner's email says it. */
 const STATE_WORDS: Readonly<Record<string, string>> = {
@@ -1000,11 +1490,12 @@ function viewOf(r: PayRow): PaymentView {
     provider: providerOf(r.kind),
     state: r.state,
     amount: { value: r.amount, currency: r.currency },
-    url: r.state === "open" ? r.url : r.url && r.state === "paid" ? r.url : null,
+    url: r.state === "open" ? r.url : null,
     livemode: r.livemode,
     paid_at: r.paidAt,
     paid_amount:
       r.paidAmount !== null && r.paidCurrency !== null ? { value: r.paidAmount, currency: r.paidCurrency } : null,
+    payment_id: r.state === "paid" ? r.paymentId : null,
     method: r.method,
     dashboard_url: r.dashboardUrl,
     error: r.state === "creating" || r.state === "error" ? r.lastError : null,
@@ -1014,19 +1505,24 @@ function viewOf(r: PayRow): PaymentView {
   };
 }
 
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+/** An open link's first day: asked about on each five-minute sync (a little under, so no sync passes it by). */
+const FIRST_DAY_EVERY_MS = 4 * 60_000;
+
 /** Five minutes doubling, at most six hours. */
 function retryDelay(attempts: number): number {
-  return Math.min(5 * 60_000 * 2 ** Math.max(attempts - 1, 0), 6 * 3_600_000);
+  return Math.min(5 * 60_000 * 2 ** Math.max(attempts - 1, 0), 6 * HOUR_MS);
 }
 
-/** How often an open link is asked about, by its age; null once it is old enough to be left. */
-function checkEvery(ageMs: number): number | null {
-  const h = 3_600_000;
-  if (ageMs < 10 * 60_000) return null;
-  if (ageMs < 2 * h) return 10 * 60_000;
-  if (ageMs < 48 * h) return h;
-  if (ageMs < 15 * 24 * h) return 12 * h;
-  return null;
+/** A short, stable fingerprint of a text, for a dedupe key (FNV-1a): never for anything secret. */
+function hashOf(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }
 
 function parseJson(v: unknown): unknown {

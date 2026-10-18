@@ -1,7 +1,16 @@
 import type { InboundRequest, KnownLink, PayLinkRequest, RunContext } from "@surfingdog/core";
-import { ConnectorError, decimalAmount, minorAmount } from "@surfingdog/core";
+import { ConnectorError, decimalAmount, describeForm, minorAmount } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { connectorHttp, hmacSha256Hex, mollieConnector, STRIPE_EVENTS, stripeConnector } from "../src/index";
+import {
+  connectorHttp,
+  hmacSha256Hex,
+  MOLLIE_METHODS,
+  mollieConnector,
+  STRIPE_EVENTS,
+  STRIPE_VERSION,
+  stripeConnector,
+  stripeForm,
+} from "../src/index";
 import {
   HOOK,
   INBOX_ID,
@@ -107,8 +116,9 @@ const REQUEST: PayLinkRequest = {
   title: "Colour and cut (4F2K9Q)",
   reference: "4F2K9Q",
   language: "en",
-  thanks: "Thank you. Ana's Salon will confirm your payment for order 4F2K9Q by email.",
-  inactive: "This payment link is no longer in use. Ana's Salon has sent you the latest by email.",
+  thanks: "Thank you for your payment for order 4F2K9Q.",
+  inactive:
+    "This link to pay is closed. Ana's Salon's latest email about order 4F2K9Q says what is still to pay, if anything.",
   hookUrl: `${HOOK}/mollie?ref=01JC0PAYREF0000000000000001`,
 };
 
@@ -130,17 +140,19 @@ async function signedStripe(body: string, opts: { at?: number; secret?: string; 
 /* --- money ------------------------------------------------------------------- */
 
 describe("amounts as platforms write them", () => {
-  it("writes minor units with each currency's own decimals, and reads them back", () => {
+  it("writes hundredths, as every amount here is kept, and reads them back; never another exponent", () => {
     expect(decimalAmount({ value: 4500, currency: "EUR" })).toBe("45.00");
     expect(decimalAmount({ value: 5, currency: "EUR" })).toBe("0.05");
-    expect(decimalAmount({ value: 500, currency: "JPY" })).toBe("500");
-    expect(decimalAmount({ value: 1250, currency: "KWD" })).toBe("1.250");
-    expect(minorAmount("45.00", "EUR")).toBe(4500);
-    expect(minorAmount("45.5", "EUR")).toBe(4550);
-    expect(minorAmount("500", "JPY")).toBe(500);
-    expect(minorAmount("45.001", "EUR")).toBeNull();
-    expect(minorAmount("-1.00", "EUR")).toBeNull();
-    expect(minorAmount("abc", "EUR")).toBeNull();
+    expect(decimalAmount({ value: 123_456, currency: "USD" })).toBe("1234.56");
+    // A currency not counted in hundredths never gets this far (no link is made): no guess either way.
+    expect(decimalAmount({ value: 500, currency: "JPY" })).toBe("5.00");
+    expect(minorAmount("45.00")).toBe(4500);
+    expect(minorAmount("45.5")).toBe(4550);
+    expect(minorAmount("45")).toBe(4500);
+    expect(minorAmount("45.000")).toBe(4500);
+    expect(minorAmount("45.001")).toBeNull();
+    expect(minorAmount("-1.00")).toBeNull();
+    expect(minorAmount("abc")).toBeNull();
   });
 });
 
@@ -200,7 +212,7 @@ describe("Stripe: connecting a restricted key", () => {
     expect(p.seen).toHaveLength(0);
   });
 
-  it("checks every permission without making anything, adds its webhook, and drops the one it added before", async () => {
+  it("checks every permission without making anything, adds its webhook, and drops the one it added before once the new one is kept", async () => {
     const p = stripeAccount();
     const c = await stripeConnector().connect?.(connectContext(p.http), { api_key: STRIPE_LIVE_KEY });
     expect(c).toMatchObject({
@@ -220,14 +232,20 @@ describe("Stripe: connecting a restricted key", () => {
       "GET /v1/checkout/sessions",
       "GET /v1/webhook_endpoints",
       "POST /v1/webhook_endpoints",
-      `DELETE /v1/webhook_endpoints/${STRIPE_OLD_ENDPOINTS.data[0]?.id}`,
     ]);
+    // Every call names the API version the inbox reads, and so does its webhook.
+    for (const call of p.seen) expect(call.headers.get("stripe-version")).toBe(STRIPE_VERSION);
     // The probes carry nothing: Stripe makes nothing from them.
     for (const probe of p.seen.slice(1, 4)) expect(probe.body).toBe("");
     const made = form(p.seen[6]?.body ?? "");
     expect(made.get("url")).toBe(`${HOOK}/stripe`);
     expect(made.getAll("enabled_events[]")).toEqual([...STRIPE_EVENTS]);
+    expect(made.get("api_version")).toBe(STRIPE_VERSION);
     expect(made.get("metadata[sdi_inbox]")).toBe(INBOX_ID);
+    // The one it added before goes only once the new connection is kept.
+    await c?.settle?.(true);
+    expect(p.seen.at(-1)).toMatchObject({ method: "DELETE" });
+    expect(p.seen.at(-1)?.url).toContain(`/v1/webhook_endpoints/${STRIPE_OLD_ENDPOINTS.data[0]?.id}`);
     // Another system's endpoint in the same account is never touched.
     expect(p.seen.some((s) => s.url.includes(STRIPE_OLD_ENDPOINTS.data[1]?.id ?? "-"))).toBe(false);
   });
@@ -317,13 +335,22 @@ describe("Stripe: pay links", () => {
     expect(made?.body).not.toContain("%40");
   });
 
-  it("says Stripe's refusal in Stripe's words, and a missing permission by name", async () => {
+  it("says a refusal an owner meets plainly, any other in Stripe's words, and a missing permission by name", async () => {
     const small = fakePlatform(() => json(STRIPE_AMOUNT_TOO_SMALL, 400));
     const err = await stripeConnector()
       .payments?.createLink(ctx(small.http), REQUEST)
       .catch((e) => e);
     expect((err as ConnectorError).code).toBe("refused");
-    expect((err as ConnectorError).message).toBe("Stripe said: Amount must be at least €0.50 eur");
+    expect((err as ConnectorError).message).toBe(
+      "Stripe takes payments of €0.50 or more. Ask for payment another way.",
+    );
+    const odd = fakePlatform(() =>
+      json({ error: { code: "parameter_invalid", message: "Invalid currency: xxx" } }, 400),
+    );
+    const said = await stripeConnector()
+      .payments?.createLink(ctx(odd.http), REQUEST)
+      .catch((e) => e);
+    expect((said as ConnectorError).message).toBe("Stripe said: Invalid currency: xxx");
     const p = stripeAccount({ forbid: ["prices"] });
     const no = await stripeConnector()
       .payments?.createLink(ctx(p.http), REQUEST)
@@ -345,17 +372,36 @@ describe("Stripe: pay links", () => {
 
   it("finds a payment a webhook never told of, by the link's own checkouts", async () => {
     const p = stripeAccount();
-    const fact = await stripeConnector().payments?.check(ctx(p.http), {
+    const facts = await stripeConnector().payments?.check(ctx(p.http), {
       ref: REQUEST.ref,
       externalId: STRIPE_PAYMENT_LINK.id,
       itemId: REQUEST.itemId,
     });
     expect(new URL(p.seen[0]?.url ?? "").searchParams.get("payment_link")).toBe(STRIPE_PAYMENT_LINK.id);
-    expect(fact).toMatchObject({
-      status: "paid",
-      linkId: STRIPE_PAYMENT_LINK.id,
-      amount: { value: 4500, currency: "EUR" },
+    expect(facts).toMatchObject([
+      { status: "paid", linkId: STRIPE_PAYMENT_LINK.id, amount: { value: 4500, currency: "EUR" } },
+    ]);
+  });
+
+  it("sees every paid checkout on a link: a second one is not missed", async () => {
+    const two = fakePlatform((r) =>
+      r.url.includes("/v1/checkout/sessions?")
+        ? json({
+            ...STRIPE_EMPTY_LIST("/v1/checkout/sessions"),
+            data: [
+              stripeSession(),
+              { ...stripeSession({ id: "cs_live_second" }), payment_intent: "pi_second" },
+              stripeSession({ id: "cs_live_open", paymentStatus: "unpaid" }),
+            ],
+          })
+        : undefined,
+    );
+    const facts = await stripeConnector().payments?.check(ctx(two.http), {
+      ref: REQUEST.ref,
+      externalId: STRIPE_PAYMENT_LINK.id,
+      itemId: REQUEST.itemId,
     });
+    expect(facts?.map((f) => f.paymentId)).toEqual(["pi_3QaZAeLkdIwHu7ix1cDe4500", "pi_second"]);
   });
 });
 
@@ -546,6 +592,16 @@ describe("Mollie: connecting the profile's API key", () => {
     expect(p.seen.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual(["GET /v2/profiles/me"]);
   });
 
+  it("asks only for the API key: a signing secret is taken through the API for a signed webhook, never drawn in the form", async () => {
+    expect(describeForm(mollieConnector().form as never).map((f) => f.key)).toEqual(["api_key"]);
+    expect(describeForm(mollieConnector().form as never)[0]).toMatchObject({
+      placeholder: "live_… or test_…",
+      byMode: { live: "live_…", test: "test_…" },
+    });
+    expect(mollieConnector().modeOf?.({ api_key: MOLLIE_TEST_KEY })).toBe("test");
+    expect(mollieConnector().modeOf?.({ api_key: "access_x" })).toBeNull();
+  });
+
   it("keeps a signing secret when the owner added a signed webhook; a test key is test mode", async () => {
     const p = mollieAccount({ key: MOLLIE_TEST_KEY });
     const c = await mollieConnector().connect?.(connectContext(p.http, { hookUrl: `${HOOK}/mollie` }), {
@@ -588,8 +644,8 @@ describe("Mollie: pay links", () => {
       webhookUrl: `${HOOK}/mollie?ref=${REQUEST.ref}`,
       reusable: false,
     });
-    await mollieConnector().payments?.createLink(ctx(p.http), { ...REQUEST, amount: { value: 1200, currency: "JPY" } });
-    expect(JSON.parse(p.seen[1]?.body ?? "{}").amount).toEqual({ currency: "JPY", value: "1200" });
+    await mollieConnector().payments?.createLink(ctx(p.http), { ...REQUEST, amount: { value: 1205, currency: "USD" } });
+    expect(JSON.parse(p.seen[1]?.body ?? "{}").amount).toEqual({ currency: "USD", value: "12.05" });
   });
 
   it("says Mollie's refusal in Mollie's words, and archives a link that is no longer wanted", async () => {
@@ -695,5 +751,194 @@ describe("Mollie: what a webhook says", () => {
         .catch((e) => e);
       expect((err as ConnectorError).code).toBe("refused");
     }
+  });
+});
+
+/* --- the fixes after review ---------------------------------------------------- */
+
+describe("Stripe: a key replaced, a webhook kept honest", () => {
+  it("asks for the key with the rows to tick on Stripe's page, for either mode", () => {
+    const [key] = describeForm(stripeForm as never);
+    expect(key).toMatchObject({
+      placeholder: "rk_live_… or rk_test_…",
+      byMode: { live: "rk_live_…", test: "rk_test_…" },
+      steps: [
+        "Payment Links · Write",
+        "Products · Write",
+        "Prices · Write",
+        "Webhook Endpoints · Write",
+        "Checkout Sessions · Read",
+      ],
+    });
+    expect(key?.help).toBe("In Stripe: Developers → API keys → Create restricted key, then set:");
+    expect(stripeConnector().modeOf?.({ api_key: STRIPE_TEST_KEY })).toBe("test");
+    expect(stripeConnector().modeOf?.({ api_key: STRIPE_LIVE_KEY })).toBe("live");
+    expect(stripeConnector().modeOf?.({ api_key: "nonsense" })).toBeNull();
+  });
+
+  it("refused after all, takes away the webhook it just added and leaves the working one alone", async () => {
+    const p = stripeAccount();
+    const c = await stripeConnector().connect?.(connectContext(p.http), { api_key: STRIPE_LIVE_KEY });
+    const before = p.seen.length;
+    await c?.settle?.(false);
+    const after = p.seen.slice(before).map((r) => `${r.method} ${new URL(r.url).pathname}`);
+    expect(after).toEqual([`DELETE /v1/webhook_endpoints/${STRIPE_ENDPOINT_CREATED.id}`]);
+  });
+
+  it("connected again with a signing secret by hand, takes away the webhook it had added itself", async () => {
+    const p = stripeAccount({ forbid: ["webhooks"] });
+    const ctx = {
+      ...connectContext(p.http),
+      previous: { externalId: "stripe:live", extra: { webhook: "added", endpoint_id: "we_1Before" } },
+    };
+    const c = await stripeConnector().connect?.(ctx, {
+      api_key: STRIPE_LIVE_KEY,
+      webhook_secret: STRIPE_WEBHOOK_SECRET,
+    });
+    expect(c?.extra).toEqual({ webhook: "by_hand" });
+    expect(p.seen.some((r) => r.method === "DELETE")).toBe(false);
+    await c?.settle?.(true);
+    expect(p.seen.at(-1)).toMatchObject({ method: "DELETE" });
+    expect(p.seen.at(-1)?.url).toContain("/v1/webhook_endpoints/we_1Before");
+  });
+
+  it("before the inbox is live adds no webhook (it would fail), and adds it on the first sync once it is", async () => {
+    const p = stripeAccount();
+    const c = await stripeConnector().connect?.(connectContext(p.http, { hooksLive: false }), {
+      api_key: STRIPE_LIVE_KEY,
+    });
+    expect(c?.extra).toEqual({ webhook: "pending" });
+    expect(c?.secret).toEqual({ api_key: STRIPE_LIVE_KEY });
+    expect(p.seen.some((r) => r.method === "POST" && r.url.endsWith("/v1/webhook_endpoints"))).toBe(false);
+    // Still not live: nothing to do. Live: it is added, and its signing secret sealed.
+    const saved: Record<string, string>[] = [];
+    const run = (hooksLive: boolean) =>
+      runContext(p.http, {
+        hooksLive,
+        secret: { api_key: STRIPE_LIVE_KEY },
+        extra: { webhook: "pending" },
+        saveSecret: async (next) => void saved.push({ ...next }),
+      });
+    expect(stripeConnector().stale?.(run(false))).toBe(false);
+    expect(stripeConnector().stale?.(run(true))).toBe(true);
+    const fresh = await stripeConnector().refresh?.(run(true));
+    expect(fresh?.extra).toEqual({
+      webhook: "added",
+      endpoint_id: STRIPE_ENDPOINT_CREATED.id,
+      hook_url: `${HOOK}/stripe`,
+    });
+    expect(saved).toEqual([{ api_key: STRIPE_LIVE_KEY, webhook_secret: STRIPE_WEBHOOK_SECRET }]);
+  });
+
+  it("switches its webhook on again when Stripe switched it off, and looks at it every sync while a link waits", async () => {
+    const p = fakePlatform((r) => {
+      const path = new URL(r.url).pathname;
+      if (path === "/v1/payment_links") return json(STRIPE_EMPTY_LIST("/v1/payment_links"));
+      if (path === "/v1/webhook_endpoints/we_1Ours" && r.method === "GET")
+        return json({
+          ...STRIPE_ENDPOINT_CREATED,
+          id: "we_1Ours",
+          url: `${HOOK}/stripe`,
+          status: "disabled",
+          secret: undefined,
+        });
+      if (path === "/v1/webhook_endpoints/we_1Ours" && r.method === "POST")
+        return json({ id: "we_1Ours", status: "enabled" });
+      return undefined;
+    });
+    const ctx = runContext(p.http, {
+      secret: { api_key: STRIPE_LIVE_KEY },
+      extra: { webhook: "added", endpoint_id: "we_1Ours", hook_url: `${HOOK}/stripe` },
+    });
+    expect(stripeConnector().stale?.(ctx, { openLinks: false })).toBe(false);
+    expect(stripeConnector().stale?.(ctx, { openLinks: true })).toBe(true);
+    await stripeConnector().refresh?.(ctx);
+    const on = p.seen.at(-1);
+    expect(on?.method).toBe("POST");
+    expect(Object.fromEntries(form(on?.body ?? ""))).toEqual({ url: `${HOOK}/stripe`, disabled: "false" });
+  });
+});
+
+describe("Mollie: how it was paid, in the network's words; refunds made in the dashboard", () => {
+  const ctx = (http: RunContext["http"]) =>
+    runContext(http, { secret: { api_key: MOLLIE_LIVE_KEY }, hookUrl: `${HOOK}/mollie` });
+  const known: KnownLink = { ref: REQUEST.ref, externalId: "pl_4Y0eZitmBnQ6IDoMqZQKh", itemId: REQUEST.itemId };
+
+  it("names each method as the payment-methods data does, and drops one with no word of its own", async () => {
+    expect(MOLLIE_METHODS).toMatchObject({
+      creditcard: "card",
+      banktransfer: "sepa",
+      directdebit: "sepa",
+      klarnapaylater: "klarna",
+      mbway: "mb_way",
+      applepay: "apple_pay",
+    });
+    const p = mollieAccount({
+      payments: [
+        { id: "tr_bank", method: "banktransfer" },
+        { id: "tr_odd", method: "voucher" },
+        { id: "tr_open", status: "open" },
+      ],
+    });
+    const facts = await mollieConnector().payments?.check(ctx(p.http), known);
+    expect(facts?.map((f) => [f.paymentId, f.method])).toEqual([
+      ["tr_bank", "sepa"],
+      ["tr_odd", undefined],
+    ]);
+  });
+
+  it("a second payment on a link is its own event", async () => {
+    const one = mollieAccount({ payments: [{ id: "tr_first" }] });
+    const two = mollieAccount({ payments: [{ id: "tr_first" }, { id: "tr_second" }] });
+    const nudge: InboundRequest = {
+      headers: new Headers(),
+      body: "id=tr_second",
+      query: new URLSearchParams({ ref: REQUEST.ref }),
+    };
+    const a = await mollieConnector().payments?.receive(ctx(one.http), nudge, async () => known);
+    const b = await mollieConnector().payments?.receive(ctx(two.http), nudge, async () => known);
+    expect(a?.eventId).toBe("tr_first:paid");
+    expect(b?.eventId).toBe("tr_first,tr_second:paid");
+    expect(b?.facts).toHaveLength(2);
+  });
+
+  it("reads what was refunded of a payment, counting only refunds that were made", async () => {
+    const p = fakePlatform((r) =>
+      new URL(r.url).pathname === "/v2/payments/tr_5B8cwPMGnU/refunds"
+        ? json({
+            count: 3,
+            _embedded: {
+              refunds: [
+                {
+                  resource: "refund",
+                  id: "re_1",
+                  status: "refunded",
+                  amount: { value: "20.00", currency: "EUR" },
+                  createdAt: "2026-10-19T09:00:00+00:00",
+                },
+                {
+                  resource: "refund",
+                  id: "re_2",
+                  status: "pending",
+                  amount: { value: "25.00", currency: "EUR" },
+                  createdAt: "2026-10-20T09:00:00+00:00",
+                },
+                {
+                  resource: "refund",
+                  id: "re_3",
+                  status: "failed",
+                  amount: { value: "45.00", currency: "EUR" },
+                  createdAt: "2026-10-21T09:00:00+00:00",
+                },
+              ],
+            },
+          })
+        : undefined,
+    );
+    const r = await mollieConnector().payments?.refunded?.(ctx(p.http), { paymentId: "tr_5B8cwPMGnU" });
+    expect(r).toEqual({ amount: { value: 4500, currency: "EUR" }, refundIds: ["re_2", "re_1"] });
+    expect(await mollieConnector().payments?.refunded?.(ctx(p.http), { paymentId: "pi_not_mollie" })).toBeNull();
+    // Stripe's restricted key asks for no refunds: it does not read them.
+    expect(stripeConnector().payments?.refunded).toBeUndefined();
   });
 });

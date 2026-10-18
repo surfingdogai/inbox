@@ -6,7 +6,7 @@ import { ownerAddressOf } from "../jobs/notify";
 import type { JobHandler } from "../jobs/runner";
 import { readSettings } from "../settings/schema";
 import { CONNECTOR_SYNC_INTERVAL_MS, type ConnectorCapabilities } from "./capability";
-import type { PayNoticeReason } from "./payments";
+import type { PayNotice } from "./payments";
 
 /**
  * The jobs a connection runs. A sync (every five minutes, and when the owner asks) writes bookings
@@ -64,22 +64,35 @@ export function connectorNoticeHandler(
       const notice = await connectors.failingNotice(id);
       if (!notice) return { note: `connection ${id} works again, or is gone: nothing to tell` };
       const appUrl = (settings.notifications.appUrl ?? publicUrl).replace(/\/+$/, "");
-      const text = [
-        `Your ${notice.title} stopped syncing${notice.error ? `: ${notice.error}` : "."}`,
-        "",
-        `Connect it again in Settings → Integrations${appUrl ? `: ${appUrl}/settings/integrations` : "."}`,
-        "",
-        "Until then, what you add in that calendar does not take times off what your inbox offers.",
-      ].join("\n");
+      const again = `Connect it again in Settings → Integrations${appUrl ? `: ${appUrl}/settings/integrations` : "."}`;
+      // A payment platform is not a calendar: what stops is the links to pay, not the busy times.
+      const payments = notice.group === "payments";
+      const text = payments
+        ? [
+            `${notice.title} stopped working with your inbox${notice.error ? `: ${notice.error}` : "."}`,
+            "",
+            again,
+            "",
+            `Until then, orders you accept get no link to pay. Payments on links already sent still go into your ${notice.title} account; check them there.`,
+          ].join("\n")
+        : [
+            `Your ${notice.title} stopped syncing${notice.error ? `: ${notice.error}` : "."}`,
+            "",
+            again,
+            "",
+            "Until then, what you add in that calendar does not take times off what your inbox offers.",
+          ].join("\n");
       logged = await storeMail(
         db,
         {
           itemId: null,
           jobKey: job.id,
           recipient: "owner",
-          template: "owner.connector_failing",
+          template: payments ? "owner.payments_failing" : "owner.connector_failing",
           lang: "en",
-          subject: oneLine(`Your ${notice.title} stopped syncing`),
+          subject: oneLine(
+            payments ? `${notice.title} stopped working with your inbox` : `Your ${notice.title} stopped syncing`,
+          ),
           text,
           ...(sender ? {} : { skip: "no_sender" as const }),
         },
@@ -139,9 +152,11 @@ export function payNoticeHandler(
   opts: { readonly baseUrl?: string | undefined } = {},
 ): JobHandler {
   return async (job, { db, now }) => {
-    const p = job.payload as { payId?: unknown; reason?: unknown } | null;
-    if (typeof p?.payId !== "string" || typeof p.reason !== "string") return { note: "no payment named" };
-    const reason = p.reason as PayNoticeReason;
+    const p = job.payload as PayNotice | null;
+    if (typeof p?.reason !== "string" || (p.reason !== "disconnected" && typeof p.payId !== "string")) {
+      return { note: "no payment named" };
+    }
+    const reason = p.reason;
     const settings = await readSettings(db);
     const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
     const facts = await businessFacts(db, settings);
@@ -149,8 +164,8 @@ export function payNoticeHandler(
     let logged = await mailByJob(db, job.id);
     if (!logged) {
       const appUrl = (settings.notifications.appUrl ?? publicUrl).replace(/\/+$/, "");
-      const notice = await connectors.payments.noticeText(p.payId, reason, appUrl);
-      if (!notice) return { note: `payment ${p.payId}: nothing to tell any more` };
+      const notice = await connectors.payments.noticeText(p, appUrl);
+      if (!notice) return { note: `payment ${p.payId ?? ""}: nothing to tell any more` };
       logged = await storeMail(
         db,
         {
@@ -192,5 +207,17 @@ export function payNoticeHandler(
       { final: job.attempts >= job.maxAttempts, now },
     );
     return { note: sent === null ? "not sent: held back" : `told the owner: ${reason.replaceAll("_", " ")}` };
+  };
+}
+
+/**
+ * A payment platform being disconnected (ADR-023): the next few of its links switched off on the
+ * platform, and the connection gone once none is left (or after a few tries).
+ */
+export function payCloseHandler(connectors: ConnectorCapabilities): JobHandler {
+  return async (job, { now }) => {
+    const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
+    if (typeof id !== "string") return { note: "no connection id" };
+    return { note: `connection ${id}: ${await connectors.continueDisconnect(id, now)}` };
   };
 }

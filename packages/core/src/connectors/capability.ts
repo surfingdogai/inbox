@@ -10,6 +10,7 @@ import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../w
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
 import { type GalleryCard, gallery } from "./gallery";
+import { PAY_CLOSE_KIND } from "./pay-queue";
 import { type PayConnection, type PayHost, PaymentLinks, type PaymentView } from "./payments";
 import {
   type CalendarChoice,
@@ -17,6 +18,7 @@ import {
   type ConnectorDefinition,
   ConnectorError,
   type ConnectorErrorCode,
+  type ConnectorGroup,
   type ConnectorHttp,
   calendarName,
   describeForm,
@@ -112,6 +114,12 @@ export interface PublicConfig {
   readonly payOn: boolean;
   /** A payment platform's mode: a test key makes links for test orders only, a live key for real ones. */
   readonly mode: "live" | "test" | null;
+  /**
+   * A payment platform being disconnected (ADR-023): since when, and how many times its links were
+   * tried. It makes no new link; its key and webhook stay until the links it made are switched off.
+   */
+  readonly disconnectingAt: number | null;
+  readonly disconnectTries: number;
 }
 
 /** A connection as every door shows it: never a secret. */
@@ -159,10 +167,16 @@ export interface ConnectionView {
     readonly paid: number;
     readonly failing: number;
     readonly last_paid_at: number | null;
-    /** How the platform tells this inbox of payments: a webhook it added itself, or one the owner added. */
-    readonly webhook: "added" | "by_hand" | "per_link" | null;
+    /**
+     * How the platform tells this inbox of payments: a webhook it added itself, one the owner added,
+     * one per link (Mollie), or one to add once the inbox is live (`pending`; until then it asks).
+     */
+    readonly webhook: "added" | "by_hand" | "per_link" | "pending" | null;
     /** The business's own dashboard on the platform: where payments are seen and refunded. */
     readonly dashboard_url: string | null;
+    /** Being disconnected: its links are being switched off, and how many are left. */
+    readonly disconnecting: boolean;
+    readonly closing: number;
   } | null;
 }
 
@@ -246,6 +260,11 @@ export class ConnectorCapabilities {
   private fixedRedirect: ((kind: string) => string | undefined) | null = null;
   /** Pay links in the business's own payment account (ADR-023). */
   readonly payments: PaymentLinks;
+  /**
+   * Whether platforms can reach this inbox's `/v1/hooks/*` now: a hosted inbox before it goes live
+   * answers only its owner (its host says so through the policy).
+   */
+  private hooksLive = true;
 
   constructor(
     private readonly db: Db,
@@ -253,6 +272,11 @@ export class ConnectorCapabilities {
     private readonly baseUrl: string | undefined,
   ) {
     this.payments = new PaymentLinks(this.payHost());
+  }
+
+  /** What the host says of this inbox's public doors: closed to platforms until it goes live. */
+  setHooksLive(live: boolean): void {
+    this.hooksLive = live;
   }
 
   /**
@@ -317,7 +341,14 @@ export class ConnectorCapabilities {
   async itemPayments(
     caller: Caller,
     itemId: string,
-  ): Promise<{ readonly item_id: string; readonly payments: readonly PaymentView[] }> {
+  ): Promise<{
+    readonly item_id: string;
+    readonly payments: readonly PaymentView[];
+    /** Why an order that could have a link has none, in a line for the owner; null otherwise. */
+    readonly none: string | null;
+    /** The order's payment link is one of these (shown as the platform's, never as a link of its own). */
+    readonly link_is_ours: boolean;
+  }> {
     requireOwnerSide(caller);
     const { rows } = await this.db.client.query({
       sql: "SELECT type FROM items WHERE id = ?",
@@ -325,7 +356,10 @@ export class ConnectorCapabilities {
       method: "all",
     });
     if (!rows[0]) throw new WriteError("not_found", "no such item", { details: { item_id: itemId } });
-    return { item_id: itemId, payments: await this.payments.forItem(itemId) };
+    const payments = await this.payments.forItem(itemId);
+    const none = payments.length === 0 ? await this.payments.whyNone(itemId, nowOf(caller)) : null;
+    const ours = payments.length > 0 && (await this.payments.ownsOrderLink(itemId));
+    return { item_id: itemId, payments, none, link_is_ours: ours };
   }
 
   /* --- connecting with a form ---------------------------------------------- */
@@ -380,6 +414,26 @@ export class ConnectorCapabilities {
     const checked = def.form.safeParse(values);
     if (!checked.success) throw fromZod(checked.error, "values");
     const now = nowOf(caller);
+    // A payment platform takes one key per mode: a second live key is refused before the platform is
+    // asked anything, so what the first one made there (its webhook) is never touched.
+    if (def.modeOf && !again) {
+      const mode = def.modeOf(checked.data as Record<string, string>);
+      const same = mode ? (await this.rows()).find((r) => r.kind === def.kind && r.config.mode === mode) : undefined;
+      if (same) {
+        throw new WriteError(
+          "wrong_state",
+          same.config.disconnectingAt !== null
+            ? `${def.title} is being disconnected: connect it again once that is done, in a minute or two.`
+            : `${def.title} is connected already. Use Change → New key to replace its key.`,
+          { details: { connection_id: same.id, mode } },
+        );
+      }
+    }
+    if (again?.config.disconnectingAt !== null && again?.config.disconnectingAt !== undefined) {
+      throw new WriteError("wrong_state", `${def.title} is being disconnected.`, {
+        details: { connection_id: again.id },
+      });
+    }
     let connected: Connected;
     try {
       const ctx = await this.connectContext(now, def.kind);
@@ -391,6 +445,7 @@ export class ConnectorCapabilities {
       throw asWriteError(error, def.title);
     }
     if (again && again.externalId !== connected.externalId) {
+      await settle(connected, false);
       const first = [...secret][0];
       throw new WriteError(
         "invalid_input",
@@ -405,7 +460,16 @@ export class ConnectorCapabilities {
     // Kept for connecting again: what the owner typed that is not a secret, nor fixed by the preset.
     const inputs: Record<string, string> = {};
     for (const [k, v] of Object.entries(values)) if (!secret.has(k) && !(k in (preset?.values ?? {}))) inputs[k] = v;
-    return this.store(def, presetId ?? null, connected, input.name, now, box, again !== null, inputs);
+    let view: ConnectionView;
+    try {
+      view = await this.store(def, presetId ?? null, connected, input.name, now, box, again !== null, inputs);
+    } catch (error) {
+      // Not kept after all: what the connector made for it on the platform goes again.
+      await settle(connected, false);
+      throw error;
+    }
+    await settle(connected, true);
+    return view;
   }
 
   /* --- connecting by signing in on the platform (OAuth with PKCE) ---------- */
@@ -522,6 +586,11 @@ export class ConnectorCapabilities {
     const input = parse(updateConnectionInput, raw);
     const row = await this.row(id);
     const now = nowOf(caller);
+    if (row.config.disconnectingAt !== null) {
+      throw new WriteError("wrong_state", "This connection is being disconnected.", {
+        details: { connection_id: row.id },
+      });
+    }
     const sets: string[] = [];
     const params: (string | number | null)[] = [];
     const json: [string, unknown][] = [];
@@ -566,6 +635,14 @@ export class ConnectorCapabilities {
       }
       json.push(["$.payOn", input.pay_on]);
     }
+    // One platform sends an order's links per mode: switching this one on switches the others of its
+    // mode off (their links already sent keep working).
+    const others =
+      input.pay_on === true && row.config.mode
+        ? (await this.rows()).filter(
+            (r) => r.id !== row.id && r.config.mode === row.config.mode && r.config.payOn && this.paysFor(r.kind),
+          )
+        : [];
     if (input.bookings_on !== undefined) json.push(["$.bookingsOn", input.bookings_on]);
     if (input.name !== undefined) {
       sets.push("name = ?");
@@ -586,6 +663,13 @@ export class ConnectorCapabilities {
       statements.push({
         sql: `UPDATE connectors SET ${sets.join(", ")}, updated_at = ? WHERE id = ?`,
         params: [...params, now, id],
+        method: "run",
+      });
+    }
+    for (const other of others) {
+      statements.push({
+        sql: "UPDATE connectors SET config_public = json_set(config_public, '$.payOn', json('false')), updated_at = ? WHERE id = ?",
+        params: [now, other.id],
         method: "run",
       });
     }
@@ -613,19 +697,40 @@ export class ConnectorCapabilities {
   /**
    * Disconnects. Busy times stop blocking at once. Bookings already written stay in the calendar: they
    * are the business's own entries now, and taking them out is not something a disconnect should do.
+   *
+   * A payment platform goes in two steps (ADR-023): it stops making links at once, and its links
+   * still waiting to be paid are switched off on the platform, a few here and the rest by a job,
+   * tried again when the platform does not answer. Its key and webhook stay until then, so a payment
+   * made on one of them meanwhile is still recorded; then they go, and the owner is told which orders
+   * were left waiting on a link that no longer works, and any link that could not be switched off.
    */
   async remove(
     caller: Caller,
     id: string,
-  ): Promise<{ removed: true; left_in_calendar: number; links_closed?: number }> {
+  ): Promise<{ removed: true; left_in_calendar: number; links_closed?: number; links_closing?: number }> {
     requireOwnerSide(caller);
     requirePerson(caller, "disconnect");
     const row = await this.row(id);
     const now = nowOf(caller);
     const left = (await liveLinks(this.db, row.id)).length;
+    if (this.paysFor(row.kind)) {
+      if (row.config.disconnectingAt === null) {
+        await this.db.client.query({
+          sql: `UPDATE connectors SET config_public = json_set(config_public, '$.disconnectingAt', ?, '$.disconnectTries', 0),
+                       updated_at = ? WHERE id = ?`,
+          params: [now, now, row.id],
+          method: "run",
+        });
+      }
+      const step = await this.payments.closeForDisconnect(row.id, now, DISCONNECT_NOW);
+      if (step.left === 0) {
+        await this.finishDisconnect(row.id, now);
+        return { removed: true, left_in_calendar: left, links_closed: step.closed };
+      }
+      await ensureJob(this.db, PAY_CLOSE_KIND, `payclose:${row.id}:0`, { now, payload: { connectorId: row.id } });
+      return { removed: true, left_in_calendar: left, links_closed: step.closed, links_closing: step.left };
+    }
     const def = this.definitions.get(row.kind);
-    // A payment platform's open links stop: nothing here would hear of a payment made on them any more.
-    const linksClosed = def?.payments ? await this.payments.closeAll(row.id, now) : undefined;
     if (def?.disconnect) {
       try {
         await def.disconnect(await this.runContext(row, now));
@@ -633,16 +738,61 @@ export class ConnectorCapabilities {
         // Giving the access back is a courtesy to the platform: the connection goes either way.
       }
     }
-    await this.db.batch([
-      { sql: "DELETE FROM connector_busy WHERE connector_id = ?", params: [row.id], method: "run" },
-      { sql: "DELETE FROM connector_links WHERE connector_id = ?", params: [row.id], method: "run" },
-      { sql: "DELETE FROM connectors WHERE id = ?", params: [row.id], method: "run" },
-    ]);
-    return {
-      removed: true,
-      left_in_calendar: left,
-      ...(linksClosed !== undefined ? { links_closed: linksClosed } : {}),
-    };
+    await this.db.batch(deleteStatements(row.id));
+    return { removed: true, left_in_calendar: left };
+  }
+
+  /**
+   * One step of a payment platform's disconnect, from its job: more links switched off, those the
+   * platform did not take tried again, and the connection gone once none is left (or after a few
+   * tries, with the owner told which links could not be switched off).
+   */
+  async continueDisconnect(connectorId: string, now: number): Promise<string> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row) return "gone";
+    if (row.config.disconnectingAt === null) return "not being disconnected";
+    const tries = row.config.disconnectTries + 1;
+    await this.db.client.query({
+      sql: "UPDATE connectors SET config_public = json_set(config_public, '$.disconnectTries', ?), updated_at = ? WHERE id = ?",
+      params: [tries, now, row.id],
+      method: "run",
+    });
+    const step = await this.payments.closeForDisconnect(row.id, now, DISCONNECT_STEP);
+    if (step.left === 0 || tries >= DISCONNECT_BACKOFF_MS.length) {
+      await this.finishDisconnect(row.id, now);
+      return `${step.closed} closed; disconnected${step.left > 0 ? `, ${step.left} could not be switched off` : ""}`;
+    }
+    const runAt = now + (DISCONNECT_BACKOFF_MS[tries - 1] ?? 60 * 60_000);
+    await ensureJob(this.db, PAY_CLOSE_KIND, `payclose:${row.id}:${tries}`, {
+      now,
+      runAt,
+      payload: { connectorId: row.id },
+    });
+    return `${step.closed} closed, ${step.left} left; tried again at ${new Date(runAt).toISOString()}`;
+  }
+
+  /** The connection goes: its webhook taken back, its rows deleted, and the owner told what is left to do. */
+  private async finishDisconnect(connectorId: string, now: number): Promise<void> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row) return;
+    const def = this.definitions.get(row.kind);
+    const notice = def?.payments
+      ? await this.payments.disconnectNotice(
+          row.id,
+          row.kind,
+          def.payments.dashboardUrl({ extra: row.config.extra ?? {} }, row.config.mode ?? "live"),
+        )
+      : null;
+    if (def?.disconnect) {
+      try {
+        await def.disconnect(await this.runContext(row, now));
+      } catch {
+        // Giving the access back is a courtesy to the platform: the connection goes either way.
+      }
+    }
+    await this.payments.forget(row.id, now);
+    if (notice) await this.payments.noticeDisconnected(row.id, notice, now);
+    await this.db.batch(deleteStatements(row.id));
   }
 
   /* --- the jobs ----------------------------------------------------------- */
@@ -696,7 +846,13 @@ export class ConnectorCapabilities {
     let truncated = false;
     let payNote = "";
     try {
-      if (def.refresh && (now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS || def.stale?.(ctx) === true)) {
+      // A payment platform with a link waiting to be paid looks at its webhook on every sync: one that was
+      // removed or switched off is found within minutes, not hours.
+      const openLinks = def.payments ? await this.payments.hasOpen(row.id) : false;
+      if (
+        def.refresh &&
+        (now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS || def.stale?.(ctx, { openLinks }) === true)
+      ) {
         const fresh = await def.refresh(ctx);
         await this.db.client.query({
           sql: `UPDATE connectors SET config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?),
@@ -730,7 +886,7 @@ export class ConnectorCapabilities {
       // A payment platform (ADR-023): what a webhook may have missed is asked of the platform.
       if (def.payments && def.capabilities.includes("pay_links")) {
         const r = await this.payments.reconcile(this.payConnectionOf(row, def, ctx), now);
-        payNote = `, ${r.checked} link${r.checked === 1 ? "" : "s"} checked, ${r.paid} paid`;
+        payNote = `, ${r.checked} link${r.checked === 1 ? "" : "s"} checked, ${r.paid} paid${r.refunded ? `, ${r.refunded} refunded` : ""}`;
       }
       await this.db.client.query({
         sql: `UPDATE connectors SET status = CASE WHEN status = 'disabled' THEN status ELSE 'active' END,
@@ -1104,9 +1260,19 @@ export class ConnectorCapabilities {
       inputs: inputs ?? {},
       payOn: def.capabilities.includes("pay_links"),
       mode: connected.mode ?? null,
+      disconnectingAt: null,
+      disconnectTries: 0,
     };
     const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
     const title = name?.trim() || presetLabel || def.title;
+    // A new payment platform sends the links of its mode from now on; the one that did stops making
+    // new ones (what it sent keeps working, and it still hears of their payments).
+    const replaced =
+      config.payOn && config.mode
+        ? (await this.rows()).filter(
+            (r) => r.kind !== def.kind && r.config.mode === config.mode && r.config.payOn && this.paysFor(r.kind),
+          )
+        : [];
     const existing = await this.db.client.query({
       sql: "SELECT id FROM connectors WHERE kind = ? AND external_id = ?",
       params: [def.kind, connected.externalId],
@@ -1156,6 +1322,13 @@ export class ConnectorCapabilities {
           params: [id, def.kind, title, connected.externalId, sealed, JSON.stringify(config), now, now],
           method: "run",
         },
+        ...replaced.map(
+          (r): Statement => ({
+            sql: "UPDATE connectors SET config_public = json_set(config_public, '$.payOn', json('false')), updated_at = ? WHERE id = ?",
+            params: [now, r.id],
+            method: "run",
+          }),
+        ),
         // The first sync straight away: the owner who just connected is watching the screen.
         jobStatement(CONNECTOR_SYNC_KIND, { connectorId: id }, now, { dedupeKey: `csync:${id}:first` }),
       ]);
@@ -1171,10 +1344,10 @@ export class ConnectorCapabilities {
   private async connectContext(
     now: number,
     kind: string,
-  ): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity; hookUrl: string | null }> {
+  ): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity; hookUrl: string | null; hooksLive: boolean }> {
     if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
     const inbox = await this.identity();
-    return { http: this.http, now, inbox, hookUrl: hookUrlOf(inbox.origin, kind) };
+    return { http: this.http, now, inbox, hookUrl: hookUrlOf(inbox.origin, kind), hooksLive: this.hooksLive };
   }
 
   /** Where platforms send what they tell this inbox: `<origin>/v1/hooks/<kind>`; null without an https origin. */
@@ -1222,6 +1395,7 @@ export class ConnectorCapabilities {
       now,
       inbox,
       hookUrl: hookUrlOf(inbox.origin, row.kind),
+      hooksLive: this.hooksLive,
       secret,
       extra: row.config.extra ?? {},
       calendars: row.config.calendars ?? [],
@@ -1292,12 +1466,23 @@ export class ConnectorCapabilities {
    * The words of the one email that says a connection stopped syncing, or null when it works again
    * (or is gone) by the time the email would go.
    */
-  async failingNotice(connectorId: string): Promise<{ readonly title: string; readonly error: string } | null> {
+  async failingNotice(connectorId: string): Promise<{
+    readonly title: string;
+    readonly error: string;
+    readonly group: ConnectorGroup | null;
+  } | null> {
     const row = await this.rowOrNull(connectorId);
     if (row?.status !== "error") return null;
     const def = this.definitions.get(row.kind);
     const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
-    return { title: calendarName(row.name || presetLabel || def?.title || row.kind), error: row.lastError ?? "" };
+    const name = row.name || presetLabel || def?.title || row.kind;
+    // A payment platform is named as it is ("Stripe"), never as a calendar.
+    const payments = def?.group === "payments";
+    return {
+      title: payments ? name : calendarName(name),
+      error: row.lastError ?? "",
+      group: def?.group ?? null,
+    };
   }
 
   private async rows(): Promise<ConnectorRow[]> {
@@ -1387,14 +1572,23 @@ export class ConnectorCapabilities {
               paid: pays.paid,
               failing: pays.failing,
               last_paid_at: pays.lastPaidAt,
-              webhook: hook === "added" || hook === "by_hand" || hook === "per_link" ? hook : null,
+              webhook:
+                hook === "added" || hook === "by_hand" || hook === "per_link" || hook === "pending" ? hook : null,
               dashboard_url: def.payments.dashboardUrl({ extra: row.config.extra ?? {} }, row.config.mode ?? "live"),
+              disconnecting: row.config.disconnectingAt !== null,
+              closing: pays.closing,
             }
           : null,
     };
   }
 
   /* --- payments (ADR-023) ------------------------------------------------------ */
+
+  /** Whether connections of this kind take payments here. */
+  private paysFor(kind: string): boolean {
+    const def = this.definitions.get(kind);
+    return Boolean(def?.payments && def.capabilities.includes("pay_links"));
+  }
 
   private payConnectionOf(row: ConnectorRow, def: ConnectorDefinition, ctx: RunContext): PayConnection {
     if (!def.payments) throw new Error(`${def.kind} takes no payments`);
@@ -1406,6 +1600,8 @@ export class ConnectorCapabilities {
       mode: row.config.mode ?? "live",
       status: row.status,
       payOn: row.config.payOn,
+      createdAt: row.createdAt,
+      disconnecting: row.config.disconnectingAt !== null,
       payments: def.payments,
       ctx,
     };
@@ -1533,13 +1729,45 @@ function normaliseConfig(raw: unknown): PublicConfig {
         : {},
     payOn: c.payOn === true,
     mode: c.mode === "live" || c.mode === "test" ? c.mode : null,
+    disconnectingAt: typeof c.disconnectingAt === "number" ? c.disconnectingAt : null,
+    disconnectTries: typeof c.disconnectTries === "number" ? c.disconnectTries : 0,
   };
+}
+
+/** Links a disconnect switches off in the owner's request; the rest by its job, more at a time. */
+const DISCONNECT_NOW = 5;
+const DISCONNECT_STEP = 20;
+/** When a disconnect's job looks again, after each try: then it is done, whatever is left. */
+const DISCONNECT_BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000, 60 * 60_000] as const;
+
+/**
+ * What a connection leaves when it goes: its busy times, its links to bookings, and what its platform
+ * told it (`connector_events` names it, so it goes first). A payment platform's links stay, as the
+ * business's record of where its money went.
+ */
+function deleteStatements(connectorId: string): Statement[] {
+  return [
+    { sql: "DELETE FROM connector_busy WHERE connector_id = ?", params: [connectorId], method: "run" },
+    { sql: "DELETE FROM connector_links WHERE connector_id = ?", params: [connectorId], method: "run" },
+    { sql: "DELETE FROM connector_events WHERE connector_id = ?", params: [connectorId], method: "run" },
+    { sql: "DELETE FROM connectors WHERE id = ?", params: [connectorId], method: "run" },
+  ];
 }
 
 /** `<origin>/v1/hooks/<kind>` for an https origin; null for none (a platform cannot reach it). */
 function hookUrlOf(origin: string, kind: string): string | null {
   if (!origin.startsWith("https://")) return null;
   return `${origin}/v1/hooks/${kind}`;
+}
+
+/** What the connector made on the platform for a key, kept or taken away again (`Connected.settle`). */
+async function settle(connected: Connected, kept: boolean): Promise<void> {
+  if (!connected.settle) return;
+  try {
+    await connected.settle(kept);
+  } catch {
+    // Best effort: what is left behind is listed, and removed, the next time it connects.
+  }
 }
 
 function bookingOf(itemId: string, r: readonly unknown[], origin: string): OutboundBooking | null {

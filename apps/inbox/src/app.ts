@@ -51,9 +51,11 @@ import {
   MANIFEST_PATH,
   MIGRATIONS,
   networkLane,
+  PAY_CLOSE_KIND,
   PAY_LINK_KIND,
   PAY_NOTICE_KIND,
   parseSecretKeys,
+  payCloseHandler,
   payLane,
   payLinkHandler,
   payNoticeHandler,
@@ -253,7 +255,8 @@ export function createInbox(deps: AppDeps): Inbox {
     // jobs one after another, and an email to the owner about a payment that needs them. An inbox with
     // no payment platform connected enqueues none of them.
     .register(PAY_LINK_KIND, payLinkHandler(caps.connectors), { lane: payLane })
-    .register(PAY_NOTICE_KIND, payNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }));
+    .register(PAY_NOTICE_KIND, payNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
+    .register(PAY_CLOSE_KIND, payCloseHandler(caps.connectors), { lane: connectorLane });
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -273,6 +276,7 @@ export function createInbox(deps: AppDeps): Inbox {
       CONNECTOR_NOTICE_KIND,
       PAY_LINK_KIND,
       PAY_NOTICE_KIND,
+      PAY_CLOSE_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(

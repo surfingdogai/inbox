@@ -99,10 +99,11 @@ export function useItem(id: string) {
  * An order's pay links (ADR-023). Read again while one is being made or waits to be paid, so "Paid"
  * shows without a reload once the platform says so.
  */
-export function useItemPayments(id: string, waiting: boolean) {
+export function useItemPayments(id: string | null | undefined, waiting: boolean) {
   return useQuery({
-    queryKey: qk.payments(id),
-    queryFn: () => api.itemPayments(id),
+    queryKey: qk.payments(id ?? ""),
+    queryFn: () => api.itemPayments(id ?? ""),
+    enabled: Boolean(id),
     staleTime: 10_000,
     refetchInterval: (q) =>
       waiting || q.state.data?.payments.some((p) => p.state === "creating" || p.state === "open") ? 15_000 : false,

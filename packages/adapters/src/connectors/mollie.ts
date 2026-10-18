@@ -24,10 +24,12 @@ import { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
  * with an idempotency key from the inbox's own id for the link. Each link names its own webhook
  * (`/v1/hooks/mollie?ref=<the inbox's id for it>`): Mollie posts there the id of a payment, unsigned,
  * and the inbox asks Mollie with the key what was paid on that link before it marks anything paid —
- * the body is never believed. An owner who also adds a signed webhook in Mollie (`payment-link.paid`,
- * `X-Mollie-Signature: sha256=<hex HMAC of the body>`) gives its signing secret, and those events are
+ * the body is never believed, so nothing needs adding in Mollie. Someone who also adds a signed
+ * webhook in Mollie (`payment-link.paid`, `X-Mollie-Signature: sha256=<hex HMAC of the body>`) can give
+ * its signing secret through the API (`webhook_secret`, not drawn in the form): those events are
  * checked by it as well, then read back the same way. A link whose order changed or ended is
- * archived. Refunds are made in Mollie, where the money is.
+ * archived. Refunds are made in Mollie, where the money is; what Mollie says was refunded of a
+ * payment marks the inbox's refund done.
  *
  * The endpoints and fields are the ones Mollie documented on 18 October 2026; answers are read
  * leniently, so a field added later changes nothing.
@@ -51,13 +53,15 @@ export const mollieForm = z.object({
       label: "API key",
       help: "In Mollie: Developers → API keys. Copy the Live API key, or the Test API key to try it first.",
       link: { href: KEY_PAGE, text: "Get your API key" },
-      placeholder: "live_…",
+      placeholder: "live_… or test_…",
+      byMode: { live: "live_…", test: "test_…" },
     },
   ),
+  // Mollie reports every payment either way; a signed webhook added in Mollie is for the few who want
+  // one (docs/payments). Taken through the API, never drawn in the form.
   webhook_secret: secretField(z.string().trim().min(16).max(200).optional(), {
     label: "Webhook signing secret",
-    help: "Mollie reports every payment either way. To have it signed too, add the address below in Mollie → Developers → Webhooks, with this event, and paste its signing secret.",
-    advanced: true,
+    hidden: true,
   }),
 });
 
@@ -123,6 +127,12 @@ function modeOf(key: string): Mode {
   return key.startsWith("live_") ? "live" : "test";
 }
 
+/** The mode a typed key is for, before Mollie is asked anything; null when it is not a profile key. */
+function modeOfInput(input: Readonly<Record<string, string>>): Mode | null {
+  const m = /^(live|test)_/.exec(String(input.api_key ?? "").trim());
+  return m ? (m[1] as Mode) : null;
+}
+
 function href(links: unknown, name: string): string | null {
   const l = (links as Record<string, { href?: unknown }> | undefined)?.[name];
   return typeof l?.href === "string" && l.href.startsWith("https://") ? l.href : null;
@@ -171,6 +181,7 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
     idempotency: `sdi-${req.ref}`,
     body: {
       description: req.title.slice(0, 255),
+      // Hundredths, as every amount here is: 4500 EUR is "45.00".
       amount: { currency: req.amount.currency.toUpperCase(), value: decimalAmount(req.amount) },
       webhookUrl: req.hookUrl,
       reusable: false,
@@ -190,16 +201,59 @@ async function closeLink(ctx: RunContext, link: { readonly externalId: string })
   });
 }
 
-/** Mollie's names for how it was paid, in the receipt's words. */
-const METHODS: Readonly<Record<string, string>> = {
+/**
+ * Mollie's names for how it was paid, in the network's payment words (the receipt's `pay`, which the
+ * payment-methods data reads): one with no word of its own there is left out rather than stored raw.
+ */
+export const MOLLIE_METHODS: Readonly<Record<string, string>> = {
   creditcard: "card",
+  banktransfer: "sepa",
+  directdebit: "sepa",
+  ideal: "ideal",
+  bancontact: "bancontact",
+  paypal: "paypal",
+  klarnapaylater: "klarna",
+  klarnapaynow: "klarna",
+  klarnasliceit: "klarna",
+  klarna: "klarna",
   applepay: "apple_pay",
   googlepay: "google_pay",
+  mbway: "mb_way",
+  multibanco: "multibanco",
+  blik: "blik",
+  twint: "twint",
 };
 
-/** What Mollie holds about the link's payments, read with the key: the paid one, if there is one. */
-async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | null> {
-  if (!link.externalId) return null;
+/** One Mollie payment as a fact, read with the key; null for one that is neither paid nor failed. */
+function factOf(p: Record<string, unknown>, link: KnownLink): PaymentFact | null {
+  if (typeof p.id !== "string" || !p.id.startsWith("tr_")) return null;
+  const status = p.status === "paid" ? "paid" : p.status === "failed" ? "failed" : null;
+  if (!status) return null;
+  const amount = p.amount as { value?: unknown; currency?: unknown } | undefined;
+  const currency = typeof amount?.currency === "string" ? amount.currency.toUpperCase() : "";
+  const value = typeof amount?.value === "string" && currency ? minorAmount(amount.value) : null;
+  const method = typeof p.method === "string" ? MOLLIE_METHODS[p.method] : undefined;
+  const paidAt = typeof p.paidAt === "string" ? Date.parse(p.paidAt) : Number.NaN;
+  const dashboardUrl = href(p._links, "dashboard");
+  return {
+    status,
+    linkId: link.externalId,
+    ref: link.ref || null,
+    paymentId: p.id,
+    amount: value === null ? null : { value, currency },
+    ...(method ? { method } : {}),
+    ...(status === "paid" && Number.isFinite(paidAt) ? { paidAt } : {}),
+    ...(dashboardUrl ? { dashboardUrl } : {}),
+    livemode: p.mode === "live",
+  };
+}
+
+/**
+ * What Mollie holds about the link's payments, read with the key: each one paid. A failed attempt on
+ * a Mollie link leaves the link open to try again, so only payments made count.
+ */
+async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact[]> {
+  if (!link.externalId) return [];
   const { json } = await call(
     ctx,
     keyOf(ctx),
@@ -208,25 +262,40 @@ async function check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | nu
   );
   const payments = ((json._embedded ?? {}) as { payments?: unknown }).payments;
   const list = Array.isArray(payments) ? (payments as Record<string, unknown>[]) : [];
-  const paid = list.find((p) => p && p.status === "paid" && typeof p.id === "string");
-  if (!paid) return null;
-  const amount = paid.amount as { value?: unknown; currency?: unknown } | undefined;
-  const currency = typeof amount?.currency === "string" ? amount.currency.toUpperCase() : "";
-  const value = typeof amount?.value === "string" && currency ? minorAmount(amount.value, currency) : null;
-  const method = typeof paid.method === "string" ? (METHODS[paid.method] ?? paid.method) : undefined;
-  const paidAt = typeof paid.paidAt === "string" ? Date.parse(paid.paidAt) : Number.NaN;
-  const dashboardUrl = href(paid._links, "dashboard");
-  return {
-    status: "paid",
-    linkId: link.externalId,
-    ref: link.ref,
-    paymentId: String(paid.id),
-    amount: value === null ? null : { value, currency },
-    ...(method ? { method: method.slice(0, 40) } : {}),
-    ...(Number.isFinite(paidAt) ? { paidAt } : {}),
-    ...(dashboardUrl ? { dashboardUrl } : {}),
-    livemode: paid.mode === "live",
-  };
+  return list
+    .filter((p) => p && typeof p === "object" && p.status === "paid")
+    .map((p) => factOf(p, link))
+    .filter((f): f is PaymentFact => f !== null);
+}
+
+/** What was refunded of a payment, read with the key: the dashboard's refunds mark the inbox's refund done. */
+async function refunded(ctx: RunContext, payment: { readonly paymentId: string }) {
+  if (!payment.paymentId.startsWith("tr_")) return null;
+  const { json } = await call(
+    ctx,
+    keyOf(ctx),
+    "GET",
+    `/v2/payments/${encodeURIComponent(payment.paymentId)}/refunds?limit=50`,
+  );
+  const listed = ((json._embedded ?? {}) as { refunds?: unknown }).refunds;
+  // Made: on its way back or back. One queued for want of balance, failed or cancelled is not.
+  const made = new Set(["pending", "processing", "refunded"]);
+  const refunds = (Array.isArray(listed) ? (listed as Record<string, unknown>[]) : []).filter(
+    (r) => r && typeof r === "object" && typeof r.id === "string" && made.has(String(r.status)),
+  );
+  let total = 0;
+  let currency = "";
+  for (const r of refunds) {
+    const a = r.amount as { value?: unknown; currency?: unknown } | undefined;
+    const value = typeof a?.value === "string" ? minorAmount(a.value) : null;
+    if (value === null || typeof a?.currency !== "string") continue;
+    if (currency && currency !== a.currency.toUpperCase()) return null;
+    currency = a.currency.toUpperCase();
+    total += value;
+  }
+  if (!currency || total <= 0) return null;
+  const newest = [...refunds].sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  return { amount: { value: total, currency }, refundIds: newest.map((r) => String(r.id)) };
 }
 
 /**
@@ -263,17 +332,18 @@ async function receive(ctx: RunContext, request: InboundRequest, lookup: (ref: s
     const eventId = typeof event.id === "string" ? event.id : "";
     const entityId = typeof event.entityId === "string" ? event.entityId : "";
     if (!MOLLIE_EVENTS.includes(type) || !eventId || !entityId.startsWith("pl_")) return null;
-    const fact = await check(ctx, { ref: "", externalId: entityId, itemId: "" });
-    return fact ? { eventId, topic: type, facts: [{ ...fact, ref: null }] } : null;
+    const facts = await check(ctx, { ref: "", externalId: entityId, itemId: "" });
+    return facts.length > 0 ? { eventId, topic: type, facts: facts.map((f) => ({ ...f, ref: null })) } : null;
   }
   const ref = request.query.get("ref");
   if (!ref) return null;
   const link = await lookup(ref);
   if (!link?.externalId) return null;
-  const fact = await check(ctx, link);
-  if (!fact) return null;
-  // The same payment told twice is one event.
-  return { eventId: `${fact.paymentId}:${fact.status}`, topic: "payment-link.payment", facts: [fact] };
+  const facts = await check(ctx, link);
+  if (facts.length === 0) return null;
+  // The same payments told twice are one event; a second payment on the link is another.
+  const ids = facts.map((f) => f.paymentId).sort();
+  return { eventId: `${ids.join(",")}:paid`.slice(0, 200), topic: "payment-link.payment", facts };
 }
 
 async function refresh(ctx: RunContext) {
@@ -302,12 +372,14 @@ export function mollieConnector(): ConnectorDefinition {
     form: mollieForm,
     note: "Orders you accept get a link to pay into your own Mollie account. Refunds stay in Mollie.",
     hookEvents: MOLLIE_EVENTS,
+    modeOf: modeOfInput,
     connect,
     refresh,
     payments: {
       createLink,
       closeLink,
       check,
+      refunded,
       receive,
       // Mollie opens the account's own organisation from here; each payment links to itself.
       dashboardUrl: () => MOLLIE_DASHBOARD,

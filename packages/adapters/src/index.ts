@@ -463,7 +463,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // link in the address. Nothing in the body is believed: the connection checks the signature and
   // reads the payment back from the platform with the business's own key before an order is marked
   // paid. 200 once read (or when it is not about a link here), 400 when no signature checks out,
-  // 503 when the platform could not be asked back (it sends it again).
+  // 503 when the platform could not be asked back, or the link was asked about a moment ago (it
+  // sends it again).
   app.post("/v1/hooks/:kind", async (c) => {
     const kind = String(c.req.param("kind"));
     if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
@@ -474,7 +475,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       { headers: c.req.raw.headers, body, query: url.searchParams },
       clock(),
     );
-    return c.json(r.body, r.status, { "cache-control": "no-store" });
+    return c.json(r.body, r.status, {
+      "cache-control": "no-store",
+      ...(r.retryAfterS ? { "retry-after": String(r.retryAfterS) } : {}),
+    });
   });
   app.route("/v1/owner", ownerRest(deps.caps, { baseUrl: deps.baseUrl }));
   // After the owner routes, so their check (an owner principal, its scopes) runs on these first.

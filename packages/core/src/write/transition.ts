@@ -1,7 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { findSlots, slotOffered } from "../capabilities/availability";
-import { hasLivePayLink, hasPayLinks, PAY_LINK_GRACE_MS, payLinkStatement } from "../connectors/pay-queue";
+import { hasLivePayLink, hasPayLinks, linkComing, PAY_LINK_GRACE_MS, payLinkStatement } from "../connectors/pay-queue";
 import { calendarName } from "../connectors/sdk";
 import { BUSY_HORIZON_MS, busyDetails } from "../connectors/store";
 import { audienceFor, businessFacts } from "../customer/audience";
@@ -1193,11 +1193,19 @@ async function attempt_(
   const payLinks = payItem !== null && (await hasPayLinks(db));
   const payFollows = payItem !== null && (payLinks || (await hasLivePayLink(db, payItem)));
   // While a link is on its way, the customer's email about the order waits a moment, so the one email
-  // they get carries the link (it is written from the order as it stands when it goes).
+  // they get carries the link (it is written from the order as it stands when it goes). Only when one
+  // is: an order the payments side makes none for (a test order with only a live key, nothing to pay,
+  // the owner's own link, a change still open) is told at once.
   const linkWait =
     payLinks &&
     item.type === "order" &&
-    (t.to === "accepted" || t.event === "payment_failed" || (t.event === "request_payment" && !data.paymentUrl));
+    (t.to === "accepted" || t.event === "payment_failed" || (t.event === "request_payment" && !data.paymentUrl)) &&
+    (await linkComing(
+      db,
+      { id: item.id, payload, sandbox: item.flags.sandbox === true },
+      now,
+      t.event === "request_payment" && caller.actor.kind !== "connector",
+    ));
   /** A refund's date, once fixed (Unix ms): its promise is made then (ADR-018 §8), and its outcome reads it. */
   const refundDueAt = (p: Record<string, unknown>): number | null => {
     const due = typeof p.refundDue === "string" ? Date.parse(p.refundDue) : Number.NaN;

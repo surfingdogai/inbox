@@ -24,6 +24,11 @@ export interface GalleryWay {
    * does not know its public address.
    */
   readonly hook?: { readonly url: string; readonly events: readonly string[] } | undefined;
+  /**
+   * What must be in place before the form is worth filling in, and where to do it: a payment platform
+   * needs this inbox's own public https address (Settings, Inbox address) to tell it of payments.
+   */
+  readonly needs?: { readonly text: string; readonly href: string } | undefined;
 }
 
 export interface GalleryCard {
@@ -138,20 +143,31 @@ export function gallery(
         ...(def?.hookEvents && ready === true && opts.hookBase
           ? { hook: { url: `${opts.hookBase}${w.kind}`, events: def.hookEvents } }
           : {}),
+        ...(def?.hookEvents && ready === true && !opts.hookBase
+          ? { needs: { text: NEEDS_ADDRESS.text, href: NEEDS_ADDRESS.href } }
+          : {}),
       };
     });
+    const needs = ways.length > 0 && ways.every((w) => w.needs !== undefined);
     // Ready first, the rest after in the order given: what can be pressed comes first.
     const sorted = [...ways.filter((w) => w.status === "ready"), ...ways.filter((w) => w.status !== "ready")];
     return {
       id: card.id,
       title: card.title,
-      line: card.id === "calendar" ? calendarLine(sorted) : card.line,
+      line: card.id === "calendar" ? calendarLine(sorted) : needs ? NEEDS_ADDRESS.line : card.line,
       group: card.group,
       status: ways.some((w) => w.status === "ready") ? "ready" : "soon",
       ways: sorted,
     };
   });
 }
+
+/** A payment platform tells this inbox of payments at its own address, which it needs to know first. */
+const NEEDS_ADDRESS = {
+  line: "Needs this inbox's address first",
+  text: "Stripe and Mollie tell this inbox of payments at its own https address. Add it first: Settings → General, Inbox address.",
+  href: "/settings#s-app-url",
+} as const;
 
 /**
  * The calendar card says which calendars it takes, as people know them: "iCloud, Fastmail, Nextcloud

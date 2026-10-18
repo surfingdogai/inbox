@@ -769,12 +769,16 @@ export const connectionSchema = z.looseObject({
       failing: z.number().int().describe("Links the platform did not make yet, or would not"),
       last_paid_at: z.number().int().nullable(),
       webhook: z
-        .enum(["added", "by_hand", "per_link"])
+        .enum(["added", "by_hand", "per_link", "pending"])
         .nullable()
         .describe(
-          "added: the inbox added the platform's webhook; by_hand: the owner did; per_link: each link names its own (Mollie)",
+          "added: the inbox added the platform's webhook; by_hand: the owner did; per_link: each link names its own (Mollie); pending: added once the inbox is live (until then payments are found by asking the platform)",
         ),
       dashboard_url: z.string().nullable().describe("The business's own dashboard on the platform"),
+      disconnecting: z
+        .boolean()
+        .describe("Being disconnected: it makes no new link, and its links are being switched off on the platform"),
+      closing: z.number().int().describe("Links still to be switched off on the platform"),
     })
     .nullable(),
 });
@@ -787,10 +791,16 @@ const paymentSchema = z.looseObject({
     .enum(["creating", "open", "paid", "failed", "closed", "error"])
     .describe("error: the platform would not make it (error says why); closed: the order changed or ended"),
   amount: money,
-  url: z.string().nullable().describe("Where the customer pays, while the link is open"),
+  url: z.string().nullable().describe("Where the customer pays, while the link is open; never a closed link"),
   livemode: z.boolean(),
   paid_at: z.number().int().nullable(),
   paid_amount: money.nullable(),
+  payment_id: z
+    .string()
+    .nullable()
+    .describe(
+      "The platform's id for the payment, once paid (pi_…, tr_…): a refund made in its dashboard is recorded against it",
+    ),
   method: z.string().nullable().describe("How it was paid, when the platform says (card, ideal, …)"),
   dashboard_url: z.string().nullable().describe("The payment in the business's own dashboard: refund it there"),
   error: z.string().nullable(),
@@ -799,7 +809,19 @@ const paymentSchema = z.looseObject({
   closed_at: z.number().int().nullable(),
 });
 
-export const itemPaymentsSchema = z.object({ item_id: z.string(), payments: z.array(paymentSchema) });
+export const itemPaymentsSchema = z.object({
+  item_id: z.string(),
+  payments: z.array(paymentSchema),
+  none: z
+    .string()
+    .nullable()
+    .describe(
+      "Why an order that could have a link has none, in a line for the owner (a key of the other mode only, links off, accepted before the platform was connected, a change waiting); null otherwise",
+    ),
+  link_is_ours: z
+    .boolean()
+    .describe("The order's paymentUrl is one of these links (the platform's), not one the owner gave"),
+});
 
 export const integrationsSchema = z.object({
   cards: z.array(

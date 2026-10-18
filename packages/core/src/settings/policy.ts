@@ -44,6 +44,12 @@ export interface HostPolicy {
    * decides otherwise (`applyHostSeed`).
    */
   readonly seed?: SettingsPatch | undefined;
+  /**
+   * Whether platforms can reach the inbox's public doors at its address now (a payment platform's
+   * webhook, `/v1/hooks/*`). A hosted inbox before it goes live answers only its owner: false until
+   * then, so nothing is added on a platform that would fail. Absent is true.
+   */
+  readonly hooksLive?: boolean | undefined;
 }
 
 /** The business's own site as its host knows it (`HostPolicy.home`). */

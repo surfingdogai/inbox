@@ -144,7 +144,7 @@ export const STRIPE_PAYMENT_LINK = {
   active: true,
   after_completion: {
     hosted_confirmation: {
-      custom_message: "Thank you. Ana's Salon will confirm your payment for order 4F2K9Q by email.",
+      custom_message: "Thank you for your payment for order 4F2K9Q.",
     },
     type: "hosted_confirmation",
   },
@@ -158,7 +158,8 @@ export const STRIPE_PAYMENT_LINK = {
   custom_fields: [],
   custom_text: { shipping_address: null, submit: null },
   customer_creation: "if_required",
-  inactive_message: "This payment link is no longer in use. Ana's Salon has sent you the latest by email.",
+  inactive_message:
+    "This link to pay is closed. Ana's Salon's latest email about order 4F2K9Q says what is still to pay, if anything.",
   livemode: true,
   metadata: { sdi_ref: "01JC0PAYREF0000000000000001", sdi_item: "01JC0ORDER00000000000004F2K9Q", sdi_inbox: INBOX_ID },
   on_behalf_of: null,

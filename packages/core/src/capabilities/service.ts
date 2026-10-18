@@ -338,6 +338,7 @@ export class Capabilities {
   attachPolicy(policy: HostPolicy | null): void {
     if (policy) checkHostPolicy(policy);
     this.policy = policy;
+    this.connectors.setHooksLive(policy?.hooksLive !== false);
   }
 
   /**
