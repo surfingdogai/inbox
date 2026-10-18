@@ -111,7 +111,7 @@
     },
     "level": {
       "type": "string",
-      "enum": ["listed", "readable", "askable", "bookable", "payable"]
+      "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
     },
     "answers": {
       "description": "Message, book, order, sign up, cancel and negotiate, in that order.",

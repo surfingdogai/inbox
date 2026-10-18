@@ -889,6 +889,8 @@ type Door = { type: string; url: string; level: string; status: string; kinds: r
 type Kind = "b" | "l";
 
 const LEVELS = ["listed", "readable", "askable", "bookable", "payable"];
+/** A level's rung: orderable is bookable's (§4.9), by another name. */
+const rung = (level: string) => LEVELS.indexOf(level === "orderable" ? "bookable" : level);
 const DOOR_LABELS: Record<string, string> = {
   inbox: "inbox",
   mcp: "MCP",
@@ -923,8 +925,8 @@ function whyOf(
     parts.push(card.answering ? "answers its inbox" : "its inbox has not answered in the last day");
   } else {
     const best = (card.doors ?? [])
-      .filter((d) => d.status === "live" && LEVELS.indexOf(d.level) >= 2)
-      .reduce<Door | undefined>((b, d) => (!b || LEVELS.indexOf(d.level) > LEVELS.indexOf(b.level) ? d : b), undefined);
+      .filter((d) => d.status === "live" && rung(d.level) >= 2)
+      .reduce<Door | undefined>((b, d) => (!b || rung(d.level) > rung(b.level) ? d : b), undefined);
     if (best) {
       const label = best.type.startsWith("platform:")
         ? `${best.type.slice("platform:".length)} (platform)`

@@ -25,6 +25,11 @@ or network:
   ping's answer gives the business, the `report` hint on a network's answers, and how a network's
   own reads move a door between live, failing and gone (`readDoorReports`, `doorReportEffect`,
   `classifyDoorRead`, `doorStatusAfter`; `vectors/door-reports.json`).
+- 0.5: `orderable` is a level of its own, the same rung as `bookable`, for doors that take orders
+  and none that books; `level=bookable` and `level=orderable` filter by what the doors take, so
+  `level=bookable` no longer returns a shop whose doors take orders alone; and a UCP or ACP profile
+  raises a business only on a site that shows it sells (Product markup with a price, or another
+  door of its own that takes orders). A reader pinned to 0.4 rejects `orderable`.
 
 The Zod schemas in `src/` are the source; `schemas/` holds one JSON Schema per message, generated
 from them. `vectors/` holds the test vectors, which decide any difference between two

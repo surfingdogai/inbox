@@ -725,6 +725,42 @@ describe("the emails a business sends its customer", () => {
       "Recusar: https://x.example/c/d",
       "Escolher outra hora: https://x.example/c/o",
     ]);
+    // Where a reply reaches nobody, no reply is asked for in the links' place; the links stay.
+    expect(answerLines(time, null, "en", false)).toEqual([]);
+    expect(answerLines(booking("needs_info"), null, "en", false)).toEqual([]);
+    expect(answerLines(time, links, "en", false)).toHaveLength(3);
+  });
+
+  it("asks for no reply when a reply reaches nobody (a pinned sender with no Reply-To)", () => {
+    const reply = mail(booking("confirmed"), {
+      event: "message",
+      words: "See you at the beach.",
+      actorKind: "owner",
+      replies: false,
+    });
+    expect(reply.text).not.toMatch(/[Rr]eply/);
+    expect(reply.text).toContain(`Reference: ${REF}`);
+    const auto = mail(booking("confirmed"), {
+      event: "message",
+      words: "See you at the beach.",
+      actorKind: "rule",
+      replies: false,
+    });
+    expect(auto.text).toContain("This reply was sent automatically.");
+    expect(auto.text).not.toContain("Reply to reach a person.");
+    const pt = mail(booking("confirmed"), {
+      event: "message",
+      words: "Até já.",
+      actorKind: "rule",
+      replies: false,
+      lang: "pt",
+    });
+    expect(pt.text).toContain("Esta resposta foi enviada automaticamente.");
+    expect(pt.text).not.toContain("Responda");
+    // Where a reply reaches the business, as before.
+    expect(
+      mail(booking("confirmed"), { event: "message", words: "Hi.", actorKind: "owner", replies: true }).text,
+    ).toContain("Reply to this email to reach us.");
   });
 
   it("answers a customer's request in the business's voice, and the owner as before", () => {

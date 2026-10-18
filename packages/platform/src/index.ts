@@ -61,6 +61,12 @@ export interface MailOut {
    */
   readonly pinned?: boolean | undefined;
   /**
+   * False when a reply to what this transport sends reaches nobody: a pinned sender whose address
+   * takes no mail and that names no Reply-To (`pinnedMailOut`). An email to a customer then asks
+   * for no reply. Absent, a reply is taken to reach the business.
+   */
+  readonly replies?: boolean | undefined;
+  /**
    * Whether this kind of email to a customer may go at all. Asked before each one is written and
    * again before it is sent; one that may not is kept on its item as not sent (`host_policy`).
    * Absent, every kind goes.

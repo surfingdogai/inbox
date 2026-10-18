@@ -256,6 +256,12 @@ describe("the owners' pages", () => {
       true,
     );
     expect(text).toContain('<a href="/v1/score-rules">published rules</a>');
+    // A UCP profile counts as the rules say it does (amended 15 and 18 October 2026): on Product
+    // markup with prices our read finds, or another door that takes orders; never prices a visitor
+    // sees or a cart page.
+    expect(text).toContain("Your UCP profile counts once our read finds Product markup with prices on your pages");
+    expect(text).toContain("or another door of yours that takes orders");
+    expect(text).not.toMatch(/product pages show your prices|or a cart\b/);
     // The points it gives are the rules' weights for a shop that sells goods: core (message, order,
     // pay) and after (change, cancel, return, receipt).
     const rules = scoreRulesV2 as {

@@ -166,8 +166,11 @@ export const listingHoursSchema = z.object({
 
 /* --- protocol 0.2: doors, readiness, and what a listing holds (§4.8–§4.11) ---------------------------------------- */
 
-/** The readiness ladder (§4.9), by name. A network never shows a number for a level. */
-export const levelNameSchema = z.enum(["listed", "readable", "askable", "bookable", "payable"]);
+/**
+ * The readiness ladder (§4.9), by name. A network never shows a number for a level. `bookable` and `orderable` are one
+ * rung: bookable when a door takes bookings, orderable when the doors take orders and no bookings.
+ */
+export const levelNameSchema = z.enum(["listed", "readable", "askable", "bookable", "orderable", "payable"]);
 export type LevelName = z.infer<typeof levelNameSchema>;
 
 /** What an AI can do through a door (§4.8): ask, ask for a quote, book, order, pay. */
@@ -433,7 +436,9 @@ export const businessesQuerySchema = z.object({
   level: z
     .enum(["listed", "readable", "askable", "bookable", "orderable", "payable"])
     .optional()
-    .describe("At this level or above (orderable is bookable); below askable nothing is listed yet."),
+    .describe(
+      "At this level or above; bookable and orderable are one rung, bookable asking for doors that take bookings and orderable for doors that take orders. Below askable nothing is listed yet.",
+    ),
   has_inbox: z.boolean().optional(),
   source: z.string().max(40).optional().describe("Comma-separated: member, registered, found; any of them."),
   order: z

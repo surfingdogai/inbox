@@ -40,6 +40,11 @@ export interface CustomerMailInput {
   readonly name?: string | null | undefined;
   /** The links that answer what we asked or proposed; none when links cannot be made. */
   readonly links?: ReadonlyMap<LinkAction, string> | null | undefined;
+  /**
+   * A reply to the email reaches the business (the transport's `replies`). False, the email asks for
+   * no reply: no "reply to this email" line, and where links cannot be made, no reply in their place.
+   */
+  readonly replies?: boolean | undefined;
   /** What an accepted quote became. */
   readonly linked?: Item | null | undefined;
   /** The request holds a price that is not ours yet (ADR-018 §3.2). */
@@ -189,7 +194,8 @@ export function renderCustomerMail(input: CustomerMailInput): RenderedMail {
   const body = bodyOf(input);
   const words = input.words?.trim() || "";
   const automated = input.automated ?? isAutomated(input.actorKind);
-  const answer = answerLines(input.item, input.links ?? null, input.lang);
+  const replies = input.replies !== false;
+  const answer = answerLines(input.item, input.links ?? null, input.lang, replies);
   const blocks: (readonly string[])[] = [];
   if (!body.bare) blocks.push([c.email.hello(vars({ name: oneLine(input.name) }))]);
   blocks.push(...body.blocks.filter((b) => b.length > 0));
@@ -198,9 +204,9 @@ export function renderCustomerMail(input: CustomerMailInput): RenderedMail {
   if (answer.length) blocks.push(answer);
   const ref = shortRef(input.item.id);
   blocks.push([
-    ...(automated ? [c.email.automated] : []),
+    ...(automated ? [replies ? c.email.automated : c.email.automatedNoReply] : []),
     c.email.reference(vars({ ref })),
-    ...(automated ? [] : [c.email.replyToReach]),
+    ...(automated || !replies ? [] : [c.email.replyToReach]),
   ]);
   if (input.business.trim()) blocks.push([input.business.trim()]);
   return {
@@ -213,9 +219,15 @@ export function renderCustomerMail(input: CustomerMailInput): RenderedMail {
 
 /**
  * The lines that let the customer answer what we asked or proposed: a link for each answer, or,
- * where links cannot be made, the reply that does the same. Nothing when nothing waits for them.
+ * where links cannot be made, the reply that does the same (when a reply reaches the business:
+ * `replies`). Nothing when nothing waits for them.
  */
-export function answerLines(item: Item, links: ReadonlyMap<LinkAction, string> | null, lang: CustomerLang): string[] {
+export function answerLines(
+  item: Item,
+  links: ReadonlyMap<LinkAction, string> | null,
+  lang: CustomerLang,
+  replies = true,
+): string[] {
   const c = copyFor(lang);
   const m = c.mail;
   const time = item.type === "booking" && item.state === "proposed" && item.payload.proposed;
@@ -224,7 +236,7 @@ export function answerLines(item: Item, links: ReadonlyMap<LinkAction, string> |
   const details = item.state === "needs_info";
   const change = openChange(item)?.by === "business";
   if (change) {
-    if (!links || links.size === 0) return [m.replyToAnswerChange];
+    if (!links || links.size === 0) return replies ? [m.replyToAnswerChange] : [];
     const at = (label: string, action: LinkAction) => {
       const url = links.get(action);
       return url ? [`${label}: ${url}`] : [];
@@ -235,8 +247,10 @@ export function answerLines(item: Item, links: ReadonlyMap<LinkAction, string> |
   const move = links?.get("change_time");
   if (item.type === "booking" && isChangeable(item) && move) return [`${m.changeTime}: ${move}`];
   if (!time && !quote && !order && !details) return [];
-  if (!links || links.size === 0)
+  if (!links || links.size === 0) {
+    if (!replies) return [];
     return [details ? m.replyWithDetails : order ? m.replyToAnswerOrder : m.replyToAnswer];
+  }
   const line = (label: string, action: LinkAction) => {
     const url = links.get(action);
     return url ? [`${label}: ${url}`] : [];

@@ -133,7 +133,7 @@ export const searchBusinessesInputSchema = z.object({
     .enum(["listed", "readable", "askable", "bookable", "orderable", "payable"])
     .optional()
     .describe(
-      "At this readiness level or above: askable (an AI can ask), bookable or orderable, payable. Nothing below askable is listed yet. This only leaves businesses out.",
+      "At this readiness level or above: askable (an AI can ask), bookable (a door takes bookings), orderable (a door takes orders), payable. bookable and orderable are one rung, and each asks for what the doors take. Nothing below askable is listed yet. This only leaves businesses out.",
     ),
   has_inbox: z
     .boolean()

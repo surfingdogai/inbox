@@ -4,6 +4,7 @@
 // about anyone, and is wiped every night. The feed below reads its public live view.
 import Layout from "../layouts/Layout.astro";
 import { DEMO_FEED, DEMO_LIVE, DEMO_MCP, DEMO_PROMPT, DEMO_URL } from "../lib/demo";
+import { HOSTED_CTA } from "../lib/hosted";
 
 /** A Saturday to put in the curl example; the script swaps in the coming one. 10:00Z is open all year. */
 const saturday = (() => {
@@ -151,11 +152,14 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
       <div class="glass panel own">
         <div>
           <h2 class="h-section" id="own-h">Want one for your business?</h2>
-          <p class="card-text">It is open source. Run it on your own server or on Cloudflare.</p>
+          <p class="card-text">
+            {HOSTED_CTA ? "We host it for you, free during the pilot, or you run the open-source inbox yourself." : "It is open source. Run it on your own server or on Cloudflare."}
+          </p>
         </div>
         <div class="own-actions">
-          <a class="btn btn-primary" href="/install/">Install it</a>
-          <a class="btn btn-secondary" href="/docs/quickstart/">Quickstart</a>
+          {HOSTED_CTA && <a class="btn btn-primary" href={HOSTED_CTA.href}>{HOSTED_CTA.label}</a>}
+          <a class={HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"} href="/install/">{HOSTED_CTA ? "Run it yourself" : "Install it"}</a>
+          {!HOSTED_CTA && <a class="btn btn-secondary" href="/docs/quickstart/">Quickstart</a>}
         </div>
       </div>
     </div>
