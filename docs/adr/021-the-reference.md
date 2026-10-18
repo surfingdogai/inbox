@@ -93,7 +93,7 @@ too high; decision 9 makes such a draft impossible to publish.
 
 ## Consequences
 
-- `packages/spec` 0.5: the vocabulary's schema grows optional fields (a version 1 document still
+- `packages/spec` 0.6: the vocabulary's schema grows optional fields (a version 1 document still
   reads), `conformance.ts`, the census's schemas (`census-edition`, `census-editions`), the MCP tool
   `get_census`'s schemas, the vectors `capability-names.json` and `census-edition.json`, and `$id`s.
 - The site serves `/spec/` (the pages and the files) and `/spec/check/`.

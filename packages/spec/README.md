@@ -33,8 +33,7 @@ or network:
 - 0.5.1 (optional for a network): a door's history from the network's own reads (`door_history` on
   a listing's detail, `get_business` and a check result; `doorHistorySchema`, `doorHistoryOf`;
   `vectors/door-history.json`). An answer without it reads as before.
-
-- 0.5 ([ADR-021](../../docs/adr/021-the-reference.md)): the capability vocabulary, version 2
+- 0.6 ([ADR-021](../../docs/adr/021-the-reference.md)): the capability vocabulary, version 2
   (`vocab/capabilities.json`; version 1 kept as `vocab/capabilities-v1.json`): for each capability a
   definition, other words for it, what partial means, what has to be seen at each step of the
   evidence ladder, what is not enough, and how each kind of door carries it, by example names that

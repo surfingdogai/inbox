@@ -1420,7 +1420,7 @@ like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server c
 door, for the doors it reads itself), so an agent's searches send it to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
 that reports.
 
-### 4.16 The census (spec 0.5, MAY)
+### 4.16 The census (spec 0.6, MAY)
 
 A network may publish, once a month, how many of the websites it checked an agent can do each thing
 with. The method Surfing Dog's network follows, with every definition, is at
