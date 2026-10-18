@@ -3,7 +3,7 @@ title: Agent inbox manifest
 description: "The format of /.well-known/agent-inbox.json, surfingdog-inbox/0: what a business's agent inbox takes and where its doors are. Versioned, with a JSON Schema and test vectors."
 ---
 
-**Format `surfingdog-inbox/0`**, last changed 12 October 2026. [JSON Schema](/spec/schemas/manifest.json) · vectors: [`doors-elsewhere.json`](/spec/vectors/doors-elsewhere.json), [`profile.json`](/spec/vectors/profile.json) · [check one](/spec/check/) · MIT licence.
+**Format `surfingdog-inbox/0`**, last changed 15 October 2026. [JSON Schema](/spec/schemas/manifest.json) · vectors: [`doors-elsewhere.json`](/spec/vectors/doors-elsewhere.json), [`profile.json`](/spec/vectors/profile.json) · [check one](/spec/check/) · MIT licence.
 
 An agent inbox publishes one JSON document that says what kinds of request it takes and where each of its doors is. An agent reads it to choose a door without opening every card. How Surfing Dog Inbox builds its own is on [Manifest](/docs/manifest/).
 
@@ -28,7 +28,7 @@ An agent inbox publishes one JSON document that says what kinds of request it ta
 | `agent_policy.guide` | no | a URL: how an agent says who it is, and who its person is, here | 23 Sep 2026 |
 | `receipt_keys` | yes | a JWKS of the Ed25519 public keys it signs receipts with (below); `{"keys": []}` when it signs none | 21 Sep 2026 |
 | `review_services` | yes | the networks it sends receipts to, as https origins; `[]` for none | 21 Sep 2026 |
-| `profile` | no | public facts the business chose to share: name, description, categories, languages, address, coordinates, website, hours, services, place category, attributes, price band, currencies | 21 Sep 2026; hours and services 26 Sep; place category, attributes, price band and currencies 6 Oct |
+| `profile` | no | public facts the business chose to share: name, description, categories, languages, address, coordinates, website, hours, services, place category, attributes, price band, currencies | 21 Sep 2026; hours and services 26 Sep; place category, attributes, price band and currencies 6 Oct; a day that closes at `24:00` 15 Oct |
 | `directory` | no | `{"listed": false}` keeps the business out of networks' directories | 26 Sep 2026 |
 | `claims` | no | network host → claim token: proof that a listing on that network is the business's own | 6 Oct 2026 |
 | `doors_elsewhere` | no | at most 5 `{"item_type", "url"}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host | 12 Oct 2026 |
@@ -52,10 +52,11 @@ Each key in `receipt_keys.keys` is an Ed25519 public JWK:
 
 ## How it changes
 
-New fields are added, and only as optional ones, so a reader of an older manifest keeps working. A change that would break a reader comes with a new `spec` value, `surfingdog-inbox/1`.
+New fields are added, and only as optional ones, so a reader of an older manifest keeps working. A field may also come to take a value it did not take before, as a day's hours that close at `24:00` did on 15 October 2026: a reader written before it refuses that one value, as it refuses any value it does not know, and reads the rest. A change that would break a reader comes with a new `spec` value, `surfingdog-inbox/1`.
 
 ## Changelog
 
+- **15 October 2026**: in `profile.hours`, a day may close at `24:00`: open until midnight, or all the time from `00:00`. A reader written before this day (`@surfingdog/spec` before 0.5) refuses `24:00` in that one day's hours, and keeps the rest of the profile.
 - **12 October 2026**: `doors_elsewhere`, the kinds of request a business takes somewhere else, and where.
 - **6 October 2026**: `claims`; in `profile`, `place_category`, `attributes`, `price_band` and `currencies`.
 - **26 September 2026**: `directory`; in `profile`, `hours` and `services`.

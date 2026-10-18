@@ -32,6 +32,8 @@ import {
   doorReportsResponseSchema,
   getBusinessInputSchema,
   getBusinessOutputSchema,
+  getCensusInputSchema,
+  getCensusOutputSchema,
   instanceRegistrationRequestSchema,
   instanceRegistrationResponseSchema,
   instanceStatusSchema,
@@ -189,6 +191,8 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
     schema: listAttributesOutputSchema,
     title: "MCP list_attributes: structuredContent",
   },
+  "mcp-get-census-input": { schema: getCensusInputSchema, title: "MCP get_census: arguments" },
+  "mcp-get-census-output": { schema: getCensusOutputSchema, title: "MCP get_census: structuredContent" },
   "mcp-register-business-input": { schema: registerBusinessInputSchema, title: "MCP register_business: arguments" },
   "mcp-register-business-output": {
     schema: registerBusinessOutputSchema,

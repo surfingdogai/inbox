@@ -1,0 +1,1404 @@
+{
+  "$comment": "An example edition of the census, made up: the shape GET /v1/census/{edition} answers, the numbers invented and consistent (the levels and no_ai add up to checked; the levels from askable up add up to agent_ready). Checked by packages/spec/test/census.test.ts.",
+  "edition": "2026-11",
+  "title": "What AI agents can do, November 2026",
+  "status": "published",
+  "as_of": "2026-12-01T00:31:07Z",
+  "published_at": "2026-12-02T09:00:00Z",
+  "note": null,
+  "method": {
+    "version": 1,
+    "url": "https://surfingdog.ai/spec/census/",
+    "min_sample": 100,
+    "city_read": 0.8,
+    "rules_hash": "0123456789abcdef",
+    "rules_share": 0.9993,
+    "door_registry": 3,
+    "places_sources": ["city-census-map-2026-10-13"]
+  },
+  "vocabulary": {
+    "version": 2,
+    "url": "https://surfingdog.ai/spec/capabilities/v2.json"
+  },
+  "score_rules": {
+    "version": 3,
+    "revised": "2026-10-18",
+    "url": "https://surfingdog.ai/v1/score-rules?version=3"
+  },
+  "capabilities": [
+    "find",
+    "catalogue",
+    "availability",
+    "message",
+    "negotiate",
+    "book",
+    "order",
+    "signup",
+    "pay",
+    "change",
+    "cancel",
+    "track",
+    "return",
+    "receipt",
+    "feedback",
+    "subscription",
+    "vouchers",
+    "waitlist",
+    "support",
+    "policies"
+  ],
+  "doors": ["inbox", "mcp", "a2a", "openapi", "ucp", "acp", "webmcp"],
+  "levels": ["none", "listed", "readable", "askable", "bookable", "orderable", "payable"],
+  "left_out": {
+    "country": 120,
+    "group": 3,
+    "platform": 40,
+    "source": 1,
+    "city": 0
+  },
+  "licence": {
+    "name": "ODbL-1.0",
+    "url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "attribution": "Surfing Dog (surfingdog.ai)"
+  },
+  "rows": [
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "checked",
+      "value": 120000
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "agent_ready",
+      "value": 3000
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:find",
+      "value": 2700
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:catalogue",
+      "value": 1200
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:availability",
+      "value": 360
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:message",
+      "value": 1860
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:book",
+      "value": 240
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:order",
+      "value": 1020
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:signup",
+      "value": 150
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:pay",
+      "value": 630
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:change",
+      "value": 90
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:cancel",
+      "value": 120
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:track",
+      "value": 300
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:return",
+      "value": 60
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:support",
+      "value": 600
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "can:policies",
+      "value": 900
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:inbox",
+      "value": 30
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:mcp",
+      "value": 1440
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:a2a",
+      "value": 90
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:openapi",
+      "value": 360
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:ucp",
+      "value": 930
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:acp",
+      "value": 60
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "door:webmcp",
+      "value": 30
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:none",
+      "value": 70000
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:listed",
+      "value": 30000
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:readable",
+      "value": 16900
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:askable",
+      "value": 1800
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:bookable",
+      "value": 90
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:orderable",
+      "value": 700
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "level:payable",
+      "value": 410
+    },
+    {
+      "scope": "all",
+      "key": "",
+      "metric": "no_ai",
+      "value": 100
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "checked",
+      "value": 9000
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "agent_ready",
+      "value": 310
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:find",
+      "value": 279
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:catalogue",
+      "value": 124
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:availability",
+      "value": 37
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:message",
+      "value": 192
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:book",
+      "value": 24
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:order",
+      "value": 105
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:signup",
+      "value": 15
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:pay",
+      "value": 65
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:change",
+      "value": 9
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:cancel",
+      "value": 12
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:track",
+      "value": 31
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:return",
+      "value": 6
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:support",
+      "value": 62
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "can:policies",
+      "value": 93
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:inbox",
+      "value": 3
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:mcp",
+      "value": 148
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:a2a",
+      "value": 9
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:openapi",
+      "value": 37
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:ucp",
+      "value": 96
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:acp",
+      "value": 6
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "door:webmcp",
+      "value": 3
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:none",
+      "value": 5200
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:listed",
+      "value": 2300
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:readable",
+      "value": 1180
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:askable",
+      "value": 200
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:bookable",
+      "value": 10
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:orderable",
+      "value": 60
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "level:payable",
+      "value": 40
+    },
+    {
+      "scope": "country",
+      "key": "GB",
+      "metric": "no_ai",
+      "value": 10
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "checked",
+      "value": 4000
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "agent_ready",
+      "value": 75
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:find",
+      "value": 67
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:catalogue",
+      "value": 30
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:availability",
+      "value": 9
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:message",
+      "value": 46
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:book",
+      "value": 6
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:order",
+      "value": 25
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:signup",
+      "value": 3
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:pay",
+      "value": 15
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:change",
+      "value": 2
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:cancel",
+      "value": 3
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:track",
+      "value": 7
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:return",
+      "value": 1
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:support",
+      "value": 15
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "can:policies",
+      "value": 22
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:inbox",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:mcp",
+      "value": 36
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:a2a",
+      "value": 2
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:openapi",
+      "value": 9
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:ucp",
+      "value": 23
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:acp",
+      "value": 1
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "door:webmcp",
+      "value": 0
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:none",
+      "value": 2600
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:listed",
+      "value": 900
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:readable",
+      "value": 420
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:askable",
+      "value": 40
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:bookable",
+      "value": 5
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:orderable",
+      "value": 20
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "level:payable",
+      "value": 10
+    },
+    {
+      "scope": "group",
+      "key": "food-drink",
+      "metric": "no_ai",
+      "value": 5
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "checked",
+      "value": 6000
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "agent_ready",
+      "value": 1150
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:find",
+      "value": 1035
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:catalogue",
+      "value": 460
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:availability",
+      "value": 138
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:message",
+      "value": 713
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:book",
+      "value": 92
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:order",
+      "value": 391
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:signup",
+      "value": 57
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:pay",
+      "value": 241
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:change",
+      "value": 34
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:cancel",
+      "value": 46
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:track",
+      "value": 115
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:return",
+      "value": 23
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:support",
+      "value": 230
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "can:policies",
+      "value": 345
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:inbox",
+      "value": 11
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:mcp",
+      "value": 552
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:a2a",
+      "value": 34
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:openapi",
+      "value": 138
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:ucp",
+      "value": 356
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:acp",
+      "value": 23
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "door:webmcp",
+      "value": 11
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:none",
+      "value": 2000
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:listed",
+      "value": 1500
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:readable",
+      "value": 1340
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:askable",
+      "value": 300
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:bookable",
+      "value": 0
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:orderable",
+      "value": 500
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "level:payable",
+      "value": 350
+    },
+    {
+      "scope": "platform",
+      "key": "shopify",
+      "metric": "no_ai",
+      "value": 10
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "checked",
+      "value": 2000
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "agent_ready",
+      "value": 250
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:find",
+      "value": 225
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:catalogue",
+      "value": 100
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:availability",
+      "value": 30
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:message",
+      "value": 155
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:book",
+      "value": 20
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:order",
+      "value": 85
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:signup",
+      "value": 12
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:pay",
+      "value": 52
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:change",
+      "value": 7
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:cancel",
+      "value": 10
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:track",
+      "value": 25
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:return",
+      "value": 5
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:support",
+      "value": 50
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "can:policies",
+      "value": 75
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:inbox",
+      "value": 2
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:mcp",
+      "value": 120
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:a2a",
+      "value": 7
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:openapi",
+      "value": 30
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:ucp",
+      "value": 77
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:acp",
+      "value": 5
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "door:webmcp",
+      "value": 2
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:none",
+      "value": 900
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:listed",
+      "value": 450
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:readable",
+      "value": 400
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:askable",
+      "value": 180
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:bookable",
+      "value": 10
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:orderable",
+      "value": 40
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "level:payable",
+      "value": 20
+    },
+    {
+      "scope": "source",
+      "key": "registry",
+      "metric": "no_ai",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "checked",
+      "value": 3500
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "agent_ready",
+      "value": 40
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:find",
+      "value": 36
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:catalogue",
+      "value": 16
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:availability",
+      "value": 4
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:message",
+      "value": 24
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:negotiate",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:book",
+      "value": 3
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:order",
+      "value": 13
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:signup",
+      "value": 2
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:pay",
+      "value": 8
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:change",
+      "value": 1
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:cancel",
+      "value": 1
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:track",
+      "value": 4
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:return",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:receipt",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:feedback",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:subscription",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:vouchers",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:waitlist",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:support",
+      "value": 8
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "can:policies",
+      "value": 12
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:inbox",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:mcp",
+      "value": 19
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:a2a",
+      "value": 1
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:openapi",
+      "value": 4
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:ucp",
+      "value": 12
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:acp",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "door:webmcp",
+      "value": 0
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:none",
+      "value": 2400
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:listed",
+      "value": 700
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:readable",
+      "value": 358
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:askable",
+      "value": 20
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:bookable",
+      "value": 4
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:orderable",
+      "value": 10
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "level:payable",
+      "value": 6
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "no_ai",
+      "value": 2
+    },
+    {
+      "scope": "city",
+      "key": "lisbon",
+      "metric": "places",
+      "value": 25000
+    }
+  ]
+}

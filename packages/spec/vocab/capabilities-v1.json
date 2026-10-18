@@ -3,7 +3,7 @@
   "name": "Surfing Dog capability vocabulary",
   "states": ["yes", "partial", "no", "na"],
   "evidence": ["declared", "tested", "proven"],
-  "produced": ["declared"],
+  "produced": ["declared", "tested"],
   "lead": ["message", "book", "order", "signup", "cancel", "negotiate"],
   "journeys": ["before", "doing", "after", "ongoing", "policies"],
   "capabilities": [

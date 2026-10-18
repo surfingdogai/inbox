@@ -20,8 +20,8 @@ A receipt is a compact JWS an inbox signs when it makes a promise (a booking con
 | `iss` | 1, 2 | yes | the inbox's origin; https in v2 |
 | `sub` | 1, 2 | yes | the customer, as `base64url(HMAC-SHA-256(pepper, identity))`, 16 to 64 characters; never an address, never a bare hash of one |
 | `itm` | 1, 2 | yes | the item's id at the inbox, 1 to 64 characters |
-| `typ` | 1, 2 | yes | v1: `message`, `quote_request`, `booking`, `order` or `refund`; v2: `booking`, `order`, and `refund` from network rules 6 |
-| `knd` | 1, 2 | yes | v1: `confirmed` or `paid`; v2 adds `accepted`, `outcome`, and `amended` from rules 6 |
+| `typ` | 1, 2 | yes | v1: `message`, `quote_request`, `booking`, `order` or `refund`; v2: `booking`, `order`, and `refund` (added 27 September 2026) |
+| `knd` | 1, 2 | yes | v1: `confirmed` or `paid`; v2 adds `accepted`, `outcome`, and `amended` (added 27 September 2026) |
 | `iat` | 1, 2 | yes | Unix seconds: when the event happened |
 | `nonce` | 1, 2 | yes | 32 lowercase hex characters; a network counts `(iss, nonce)` once |
 | `amt` | 1, 2 | no | `{"value", "currency"}`, value in minor units (4500 is 45.00); never below 0 in v2 |
@@ -31,12 +31,12 @@ A receipt is a compact JWS an inbox signs when it makes a promise (a booking con
 | `end` | 2 | no | a booking's end, never before `due`, on a booking only |
 | `out` | 2 | with an outcome | how the promise ended: one of the outcomes below, of the item's own type |
 | `ref` | 2 | with an outcome or an amendment | the `nonce` of the item's earliest promise |
-| `trm` | 2 (rules 6) | with an amendment | the agreed terms' fingerprint, 43 base64url characters; on a promise or an amendment, never on an outcome |
-| `acc` | 2 (rules 6) | with an amendment | who accepted the change: `customer` or `business`; on an amendment only |
+| `trm` | 2 (27 Sep 2026) | with an amendment | the agreed terms' fingerprint, 43 base64url characters; on a promise or an amendment, never on an outcome |
+| `acc` | 2 (27 Sep 2026) | with an amendment | who accepted the change: `customer` or `business`; on an amendment only |
 | `aut` | 2 | no | `1` when the system did it, not a person |
 | `per` | 2 | no | at most 8 `{"n": network host, "p": presentation id}` |
 
-The outcomes an inbox signs: `booking.completed`, `booking.no_show_customer`, `booking.cancelled_by_business`, `booking.cancelled_by_customer`, `booking.cancelled_late_by_customer`, `order.fulfilled`, `order.not_fulfilled`, `order.cancelled_by_customer`, `order.payment_failed`, `order.charged_back`, `order.lapsed`, and from rules 6 `refund.honoured`, `refund.late` and `refund.cancelled_by_customer`.
+The outcomes an inbox signs: `booking.completed`, `booking.no_show_customer`, `booking.cancelled_by_business`, `booking.cancelled_by_customer`, `booking.cancelled_late_by_customer`, `order.fulfilled`, `order.not_fulfilled`, `order.cancelled_by_customer`, `order.payment_failed`, `order.charged_back`, `order.lapsed`, and, added 27 September 2026, `refund.honoured`, `refund.late` and `refund.cancelled_by_customer`.
 
 A receipt never carries a name, an address or what was ordered.
 
@@ -73,10 +73,10 @@ payload  {"rcp":"<receipt id>","sha":"<base64url(SHA-256(receipt JWS))>","iat":<
 
 ## How it changes
 
-Claim names never change: a receipt outlives the software that signed it. New claims and values are added. A reader ignores a claim it does not know and refuses a value it does not know. Rules 6 shows how that works: a reader on rules 5 drops `trm` and `acc`, and refuses refunds and amendments (`receipts-v6.json`). A change that would break a reader comes with a new `ver`.
+Claim names never change: a receipt outlives the software that signed it. New claims and values are added. A reader ignores a claim it does not know and refuses a value it does not know. The additions of 27 September 2026 show how that works: a reader written before that day drops `trm` and `acc`, and refuses refunds and amendments (`receipts-v6.json` shows exactly what it keeps). A change that would break a reader comes with a new `ver`.
 
 ## Changelog
 
-- **27 September 2026** (network rules 6): the kind `amended`, the type `refund` with its three outcomes, `trm` and `acc`.
+- **27 September 2026**: the kind `amended`, the type `refund` with its three outcomes, `trm` and `acc`.
 - **23 September 2026**: claims version 2: the kinds `accepted` and `outcome`, `due`, `end`, `out`, `ref`, `aut` and `per`; an acknowledgement may name a pass (`pas`).
 - **22 September 2026**: receipts: `iss`, `sub`, `itm`, `typ`, `knd`, `iat`, `nonce`, `amt` and `pay`, and an acknowledgement bound to the receipt's hash (`sha`).

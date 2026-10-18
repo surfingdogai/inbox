@@ -7,6 +7,7 @@
 
 :root {
   --sl-font: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --sl-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sd-display:
     "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --sl-color-accent-low: #2a2260;
@@ -141,4 +142,19 @@
   html {
     scroll-behavior: smooth;
   }
+}
+
+/* The capability vocabulary's kinds of door (/spec/capabilities/): a definition list, which reads on a phone where a
+   three-column table did not. */
+.sl-markdown-content dl.spec-doors {
+  margin-top: 1rem;
+}
+.sl-markdown-content dl.spec-doors dt {
+  margin-top: 0.9rem;
+  font-weight: 500;
+  color: var(--sl-color-white);
+}
+.sl-markdown-content dl.spec-doors dd {
+  margin: 0.2rem 0 0;
+  color: var(--sl-color-gray-2);
 }

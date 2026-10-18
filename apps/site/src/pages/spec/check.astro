@@ -10,6 +10,7 @@ import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 <StarlightPage
   frontmatter={{
     title: "Check a manifest or a receipt",
+    tableOfContents: false,
     description:
       "Paste an agent inbox manifest, a receipt or an acknowledgement, and see whether it holds to the published specs, and if not, why. It runs in your browser.",
   }}
@@ -45,6 +46,7 @@ import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
     <p class="verdict" data-verdict></p>
     <p class="read" data-read></p>
     <div data-errors hidden><h3>What does not hold</h3><ul></ul></div>
+    <div data-unchecked hidden><h3>Not checked</h3><ul></ul></div>
     <div data-warnings hidden><h3>Worth fixing</h3><ul></ul></div>
     <div data-passed hidden><h3>What holds</h3><ul></ul></div>
   </div>
@@ -147,6 +149,10 @@ import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
     content: "× ";
     color: var(--sl-color-orange);
   }
+  .verdict[data-ok="partly"]::before {
+    content: "○ ";
+    color: var(--sl-color-gray-3);
+  }
   .read {
     color: var(--sl-color-gray-3);
     font-size: var(--sl-text-sm);
@@ -224,20 +230,38 @@ import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
     return li;
   }
 
+  /**
+   * What the check could not check without more (the inbox's keys, the receipt, when it arrived): never "worth
+   * fixing", and never a plain "it holds".
+   */
+  const NOT_CHECKED = new Set(["signature_not_checked", "receipt_not_given", "age_not_checked"]);
+
+  function verdictOf(r: ConformanceReport, unchecked: readonly ConformanceFinding[]): { ok: string; text: string } {
+    const n = r.errors.length;
+    if (!r.ok) return { ok: "false", text: `It does not hold to the spec: ${n} ${n === 1 ? "problem" : "problems"}.` };
+    if (unchecked.some((f) => f.code === "signature_not_checked"))
+      return { ok: "partly", text: "Its form holds to the spec. Its signature was not checked: paste the inbox's keys below." };
+    if (unchecked.some((f) => f.code === "receipt_not_given"))
+      return { ok: "partly", text: "Its form holds to the spec. What it acknowledges was not checked: paste the receipt below." };
+    return { ok: "true", text: "It holds to the spec." };
+  }
+
   function show(r: ConformanceReport) {
     if (!result) return;
     const verdict = result.querySelector<HTMLElement>("[data-verdict]");
     const read = result.querySelector<HTMLElement>("[data-read]");
+    const unchecked = r.warnings.filter((w) => NOT_CHECKED.has(w.code));
     if (verdict) {
-      verdict.dataset.ok = String(r.ok);
-      const n = r.errors.length;
-      verdict.textContent = r.ok ? "It holds to the spec." : `It does not hold to the spec: ${n} ${n === 1 ? "problem" : "problems"}.`;
+      const v = verdictOf(r, unchecked);
+      verdict.dataset.ok = v.ok;
+      verdict.textContent = v.text;
     }
     if (read) {
       read.textContent = r.kind ? `Read as ${KINDS[r.kind]}${r.version ? `, ${r.version}` : ""}.` : "";
     }
     list("errors", r.errors, finding);
-    list("warnings", r.warnings, finding);
+    list("unchecked", unchecked, finding);
+    list("warnings", r.warnings.filter((w) => !NOT_CHECKED.has(w.code)), finding);
     list("passed", r.passed, text);
     result.hidden = false;
   }

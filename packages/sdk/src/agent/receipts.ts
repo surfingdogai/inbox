@@ -44,7 +44,10 @@ export interface ReceiptKey {
   readonly kid?: string;
 }
 
-/** A receipt's claims (both versions: v2 adds `ver`, `due`, `out`, `ref` and the rest). */
+/**
+ * A receipt's claims (both versions: v2 adds `ver`, `due`, `out`, `ref` and the rest; since 27 September 2026, the
+ * kind `amended`, the type `refund` and its outcomes, `trm` and `acc`).
+ */
 export interface ReceiptClaims {
   /** The issuing inbox, an https origin. */
   readonly iss: string;
@@ -53,7 +56,7 @@ export interface ReceiptClaims {
   /** The item's id at the inbox. */
   readonly itm: string;
   readonly typ: string;
-  /** `confirmed`, `paid`, `accepted` (promises) or `outcome`. */
+  /** `confirmed`, `paid`, `accepted` (promises), `amended` (a change both sides agreed) or `outcome`. */
   readonly knd: string;
   readonly iat: number;
   readonly nonce: string;
@@ -62,8 +65,12 @@ export interface ReceiptClaims {
   readonly ver?: 2;
   /** With an outcome: how it ended, like `booking.completed`. */
   readonly out?: string;
-  /** With an outcome: the nonce of the item's first promise. */
+  /** With an outcome or an amendment: the nonce of the item's first promise. */
   readonly ref?: string;
+  /** On a promise or an amendment: the fingerprint of the terms both sides agreed (43 base64url). */
+  readonly trm?: string;
+  /** With an amendment: who accepted the change. */
+  readonly acc?: "customer" | "business";
   readonly due?: number;
   readonly end?: number;
   /** 1 when the system recorded it, not a person. */
@@ -213,9 +220,12 @@ async function keyFor(keys: readonly ReceiptKey[], kid: string): Promise<Receipt
 // ---- claims (ADR-016; ADR-017 §3.2) -----------------------------------------------------------
 
 const ITEM_TYPES = new Set(["message", "quote_request", "booking", "order", "refund"]);
-const V2_KINDS = new Set(["confirmed", "paid", "accepted", "outcome"]);
-/** The eleven outcomes an inbox records, and the item type each belongs to. */
-const OUTCOME_TYPES: Readonly<Record<string, "booking" | "order">> = {
+const V2_KINDS = new Set(["confirmed", "paid", "accepted", "outcome", "amended"]);
+/**
+ * The outcomes an inbox records, and the item type each belongs to: eleven, and since 27 September 2026 a refund's
+ * three. The same table as @surfingdog/spec's OUTCOMES; vectors/receipts-v2.json and receipts-v6.json decide both.
+ */
+const OUTCOME_TYPES: Readonly<Record<string, "booking" | "order" | "refund">> = {
   "booking.completed": "booking",
   "order.fulfilled": "order",
   "booking.cancelled_by_business": "booking",
@@ -227,7 +237,11 @@ const OUTCOME_TYPES: Readonly<Record<string, "booking" | "order">> = {
   "booking.cancelled_by_customer": "booking",
   "order.cancelled_by_customer": "order",
   "order.lapsed": "order",
+  "refund.honoured": "refund",
+  "refund.late": "refund",
+  "refund.cancelled_by_customer": "refund",
 };
+const FINGERPRINT = /^[A-Za-z0-9_-]{43}$/;
 const MAX_TIME = 2 ** 37;
 const HOST = /^(?:[a-z0-9-]|[a-z0-9-][a-z0-9.-]{0,251}[a-z0-9-])$/;
 
@@ -260,8 +274,9 @@ function claimsProblem(c: Record<string, unknown>): string | null {
   if (!isUrl(c.iss, true)) return "iss is an https origin";
   if (typeof c.sub !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(c.sub)) return "sub is 16 to 64 base64url";
   if (!str(c.itm, 1, 64)) return "itm is 1 to 64 characters";
-  if (c.typ !== "booking" && c.typ !== "order") return "a v2 receipt is about a booking or an order";
-  if (typeof c.knd !== "string" || !V2_KINDS.has(c.knd)) return "knd is confirmed, paid, accepted or outcome";
+  if (c.typ !== "booking" && c.typ !== "order" && c.typ !== "refund")
+    return "a v2 receipt is about a booking, an order or a refund";
+  if (typeof c.knd !== "string" || !V2_KINDS.has(c.knd)) return "knd is confirmed, paid, accepted, amended or outcome";
   if (!int(c.iat, 1)) return "iat is Unix seconds";
   if (typeof c.nonce !== "string" || !/^[0-9a-f]{32}$/.test(c.nonce)) return "nonce is 32 hex";
   if (c.amt !== undefined && !money(c.amt, 0)) return "amt is {value ≥ 0, currency}";
@@ -277,15 +292,30 @@ function claimsProblem(c: Record<string, unknown>): string | null {
       if (typeof e.p !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(e.p)) return "per names a presentation";
     }
   }
+  if (c.trm !== undefined && (typeof c.trm !== "string" || !FINGERPRINT.test(c.trm)))
+    return "trm is 43 base64url characters";
+  if (c.acc !== undefined && c.acc !== "customer" && c.acc !== "business") return "acc is customer or business";
+  const nonceRef = typeof c.ref === "string" && /^[0-9a-f]{32}$/.test(c.ref);
   if (c.knd === "outcome") {
     const t = typeof c.out === "string" ? OUTCOME_TYPES[c.out] : undefined;
     if (!t) return "an outcome names one of the inbox's outcomes";
     if (t !== c.typ) return `${String(c.out)} is not an outcome of a ${c.typ}`;
-    if (typeof c.ref !== "string" || !/^[0-9a-f]{32}$/.test(c.ref)) return "an outcome names its promise's nonce";
+    if (!nonceRef) return "an outcome names its promise's nonce";
+    if (c.trm !== undefined) return "trm belongs to a promise or an amendment";
+  } else if (c.knd === "amended") {
+    if (c.typ === "refund") return "a refund is not amended: a new one is made";
+    if (c.out !== undefined) return "out belongs to an outcome";
+    if (!nonceRef) return "an amendment names its promise's nonce";
+    if (c.trm === undefined) return "an amendment names the fingerprint of the terms agreed";
+    if (c.acc === undefined) return "an amendment says who accepted it";
   } else {
     if (c.out !== undefined) return "out belongs to an outcome";
-    if (c.ref !== undefined) return "ref belongs to an outcome";
+    if (c.ref !== undefined) return "ref belongs to an outcome or an amendment";
   }
+  if (c.acc !== undefined && c.knd !== "amended") return "acc belongs to an amendment";
+  // A refund's promise is the date it must be paid by; confirmations and payments are a booking's or an order's.
+  if (c.typ === "refund" && c.knd !== "accepted" && c.knd !== "outcome")
+    return "a refund's receipts are its promise (accepted) and its outcome";
   if (c.end !== undefined) {
     if (c.typ !== "booking") return "end is a booking's end";
     if ((c.end as number) < (c.due as number)) return "end must not be before due";

@@ -68,7 +68,16 @@ describe("receipts, as the vectors decide them", () => {
     for (const r of v6.receipts) {
       const report = await checkReceipt(r.jws, { keys: { keys: [v6.issuer.public_jwk] }, now: at(v6.now), rules: 5 });
       expect(report.ok, r.name).toBe(r.rules_5 !== null);
+      // Said by date, never by the network's internal rule numbers.
+      const said = [...report.passed, ...report.errors.map((e) => e.message)].join(" ");
+      expect(said, r.name).not.toMatch(/rules \d/);
+      if (!report.ok) expect(said, r.name).toContain("A reader from before 27 September 2026 refuses these claims.");
     }
+    const latest = await checkReceipt(v6.receipts[0]?.jws ?? "", {
+      keys: { keys: [v6.issuer.public_jwk] },
+      now: at(v6.now),
+    });
+    expect(latest.passed).toContain("The claims are well formed (claims v2, as read since 27 September 2026).");
   });
 
   it("checks the claims alone when no key is given, and says the signature was not checked", async () => {
@@ -190,10 +199,33 @@ describe("checkDocument: what was pasted, read as what it is", () => {
     expect(ack.ok).toBe(true);
   });
 
-  it("says what it could not read", async () => {
+  it("says what it could not read: keys that are not JSON are said to be so, not taken for no keys", async () => {
     expect(codes(await checkDocument("{ not json"))).toEqual(["not_json"]);
     expect(codes(await checkDocument("hello"))).toEqual(["unknown"]);
     const keysWrong = await checkDocument(v1.receipts[0]?.jws ?? "", { keys: "[not json" });
-    expect(codes(keysWrong)).toEqual(["unknown_key"]);
+    expect(keysWrong.errors).toEqual([
+      { path: "$keys", code: "malformed", message: "The keys are not JSON: paste a JWKS or a manifest." },
+    ]);
+    expect(keysWrong.kind).toBe("receipt");
+  });
+
+  it("reads a receipt pasted across lines, as from an email or a terminal", async () => {
+    const r = v1.receipts[0];
+    const jws = r?.jws ?? "";
+    const broken = `${jws.slice(0, 40)}\n${jws.slice(40, 90)}\r\n  ${jws.slice(90)}\n`;
+    const report = await checkDocument(broken, { keys: JSON.stringify(issuerKeys), now: at(1790000461) });
+    expect(report.kind).toBe("receipt");
+    expect(report.errors).toEqual([]);
+  });
+});
+
+describe("what the check could not check, it says", () => {
+  it("an acknowledgement checked without its receipt or the time it arrived warns of both", async () => {
+    const a = v1.acknowledgements[0];
+    const alone = await checkAcknowledgement(a?.jws ?? "");
+    expect(alone.ok).toBe(true);
+    expect(alone.warnings.map((w) => w.code)).toEqual(["receipt_not_given", "age_not_checked"]);
+    const whole = await checkAcknowledgement(a?.jws ?? "", { receipt: a?.receipt_jws, now: at(a?.verify_at ?? 0) });
+    expect(whole.warnings).toEqual([]);
   });
 });

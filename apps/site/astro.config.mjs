@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
 import { BEACON_HEAD } from "./src/lib/analytics.ts";
+import { headingIdsMarkdown } from "./src/lib/heading-ids.ts";
 import { HOSTED_LLMS, HOSTED_OWNERSHIP } from "./src/lib/hosted.ts";
 import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
 
@@ -30,6 +31,8 @@ export default defineConfig({
     // Docs written in two versions, one for each state of the hosted pilot, keep the one the switch
     // says (src/lib/hosted-markdown.ts).
     hostedPilotMarkdown(),
+    // A heading may name its own id: `### Membership {#subscription}` (src/lib/heading-ids.ts).
+    headingIdsMarkdown(),
     // Starlight adds this integration itself when it is missing; given here, it also lists the
     // network's sitemap in sitemap-index.xml.
     sitemap({ customSitemaps: [NETWORK_SITEMAP] }),

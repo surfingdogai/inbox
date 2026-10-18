@@ -5,11 +5,11 @@ description: "The capability vocabulary, version 2: what an AI agent can do at a
 
 <!-- Written from packages/spec/vocab/capabilities.json by apps/site/src/lib/spec-capabilities.ts. Edit the JSON, then run UPDATE_SPEC_PAGES=1 pnpm vitest run apps/site/test/spec.node.test.ts. -->
 
-**Version 2**, published 15 October 2026. As JSON: [the latest](/spec/capabilities.json) · [version 2](/spec/capabilities/v2.json) · [version 1](/spec/capabilities/v1.json) · [its JSON Schema](/spec/schemas/capabilities.json). MIT licence.
+**Version 2**, published 15 October 2026. As JSON: [the latest](/spec/capabilities.json) · [version 2](/spec/capabilities/v2.json) · [version 1](/spec/capabilities/v1.json) · [its JSON Schema](/spec/schemas/capabilities.json) · [how names are read, as vectors](/spec/vectors/capability-names.json). MIT licence.
 
 The things an AI agent can do for a person at a business, from finding it to getting a refund. Each one has a definition, what has to be seen before anyone may say a business offers it, and how it is met through each kind of agent door. The ids never change: a capability is added, never renamed.
 
-## How to read it
+## How to read it {#how-to-read-it}
 
 A capability is in one of four states at a business:
 
@@ -28,30 +28,40 @@ How anyone knows, from weakest to strongest:
 | `tested` | A network's own read of the door, signed as its crawler, saw the door answer and list it (a tool, a skill, an operation or a kind of item) in the 7 days before. A read lists what a door offers and does nothing else: nobody has carried it out. |
 | `proven` | Someone other than the business carried it out and signed what happened: a receipt the customer's agent counter-signed, or the signed reports of agent platforms a network recognises. |
 
-Surfing Dog's network gives `declared` and `tested` today. The six a result leads with are `message`, `book`, `order`, `signup`, `cancel`, `negotiate`.
+Unless a capability says otherwise below, its `tested` step is: A network's read of the door saw it answer and list it.
 
-## Doors
+**Surfing Dog's network.** It gives `declared` and `tested` today, and its result pages lead with `message`, `book`, `order`, `signup`, `cancel`, `negotiate`. These are the network's choices, not part of what the capabilities mean.
+
+## Doors {#doors}
 
 A capability is met through a door an agent can use. Each kind of door is read by one thing:
 
-| Door | Read by | How |
-| --- | --- | --- |
-| [Agent inbox](https://surfingdog.ai/spec/manifest/) | item type | The manifest at /.well-known/agent-inbox.json lists the kinds of request the inbox takes (item_types). Each kind meets the capabilities it carries: a booking meets book, and changing, cancelling and following it. |
-| [MCP server](https://modelcontextprotocol.io) | tool | A tool whose name says the action. A tool the server marks read-only, or one whose name only reads (get, list, search), meets only the capabilities that read. |
-| [A2A agent](https://a2a-protocol.org) | skill | Any agent card can be sent a message. A skill whose name says the action meets that capability too. |
-| [OpenAPI](https://www.openapis.org) | operation | An operation, by its method and path or its operationId. POST adds create, PUT and PATCH add update, DELETE adds delete. An operation by GET only reads. |
-| REST API | endpoint | An endpoint the business documents for agents, read as an OpenAPI operation is. |
-| [UCP](https://ucp.dev) | capability | The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. |
-| [ACP](https://www.agenticcommerce.dev) | capability | Checkout means orders. Delegated payment (delegated_payment) means payment. |
-| [WebMCP](https://github.com/webmachinelearning/webmcp) (experimental) | tool | A tool a web page registers for the browser's agent, read as an MCP tool is. Experimental: it counts toward a score and never toward a readiness level. |
+<dl class="spec-doors">
+<dt><a href="https://surfingdog.ai/spec/manifest/">Agent inbox</a> · read by item type</dt>
+<dd>The manifest at /.well-known/agent-inbox.json lists the kinds of request the inbox takes (item_types). Each kind meets the capabilities it carries: a booking meets book, and changing, cancelling and following it.</dd>
+<dt><a href="https://modelcontextprotocol.io">MCP server</a> · read by tool</dt>
+<dd>A tool whose name says the action. A tool the server marks read-only, or one whose name only reads (get, list, search), meets only the capabilities that read.</dd>
+<dt><a href="https://a2a-protocol.org">A2A agent</a> · read by skill</dt>
+<dd>Any agent card can be sent a message. A skill whose name says the action meets that capability too.</dd>
+<dt><a href="https://www.openapis.org">OpenAPI</a> · read by operation</dt>
+<dd>An operation, by its method and path or its operationId. POST adds create, PUT and PATCH add update, DELETE adds delete. An operation by GET only reads.</dd>
+<dt>REST API · read by endpoint</dt>
+<dd>An endpoint the business documents for agents, read as an OpenAPI operation is.</dd>
+<dt><a href="https://ucp.dev">UCP</a> · read by capability</dt>
+<dd>The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works): a website platform that serves the same profile on every site it hosts gives none of these on its own.</dd>
+<dt><a href="https://www.agenticcommerce.dev">ACP</a> · read by capability</dt>
+<dd>Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works).</dd>
+<dt><a href="https://github.com/webmachinelearning/webmcp">WebMCP</a> (experimental) · read by tool</dt>
+<dd>A tool a web page registers for the browser's agent, read as an MCP tool is. Experimental: it counts toward a score and never toward a readiness level.</dd>
+</dl>
 
 An email address, a phone number, a text or chat-app link, a web form or a page written for people never meets a capability. A person can use them; an agent cannot rely on them.
 
-A tool, skill or operation name is split into words (create_booking and createBooking are the same two words). The action and its object must both be there, each in its own word: book alone, or create with booking. Words that name something else rule it out: a tool that cancels a cart is not cancelling an order.
+A tool, skill or operation name is split into words (create_booking and createBooking are the same two words). The action and its object must both be there, each in its own word: book alone, or create with booking. Words that name something else rule it out: a tool that cancels a cart is not cancelling an order. A name that says it reads documentation (doc, docs, documentation, readme) meets no capability.
 
-## Before
+## Before {#journey-before}
 
-### Find
+### Find {#find}
 
 `find` · also about, hours, location, profile
 
@@ -71,14 +81,14 @@ Not enough:
 
 - Hours or an address that are only in the text of a page, or in an image.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `get_business_profile`, `get_store_hours` |
-| A2A agent | `business-info` |
-| OpenAPI | `GET /business`, `getStoreInfo` |
-| REST API | `GET /location` |
+Through each kind of door, for example:
 
-### Catalogue
+- MCP server: `get_business_profile`, `get_store_hours`
+- A2A agent: `business-info`
+- OpenAPI: `GET /business`, `getStoreInfo`
+- REST API: `GET /location`
+
+### Catalogue {#catalogue}
 
 `catalogue` · also menu, products, services, price list
 
@@ -90,7 +100,7 @@ Read what the business sells or offers, with prices: its products, its services 
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it, or a tool, skill or operation that lists products, services or a menu. |
+| `declared` | schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that lists products, services or a menu. |
 | `tested` | A network's read of the door saw it answer and list a tool, skill or operation that lists them. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that such a listing answered. |
 
@@ -98,17 +108,18 @@ Not enough:
 
 - A menu or price list that is only a PDF or an image.
 - A commerce profile that names a catalogue and lists nothing the business sells.
+- A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `list_services`, `list_products`, `search_products`, `get_menu` |
-| A2A agent | `product-search` |
-| OpenAPI | `GET /products`, `listServices` |
-| REST API | `GET /menu` |
-| UCP | `catalog` |
-| WebMCP | `search_products` |
+Through each kind of door, for example:
 
-### Availability
+- MCP server: `list_services`, `list_products`, `search_products`, `get_menu`
+- A2A agent: `product-search`
+- OpenAPI: `GET /products`, `listServices`
+- REST API: `GET /menu`
+- UCP: `catalog`
+- WebMCP: `search_products`
+
+### Availability {#availability}
 
 `availability` · also free slots, openings, stock
 
@@ -120,24 +131,24 @@ Check what is free before asking for it: open times for a booking, rooms or seat
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock. |
-| `tested` | A network's read of the door saw it answer and list it. |
+| `declared` | A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, or a cart that works). |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a check answered with times or stock. |
 
 Not enough:
 
 - A calendar shown as a picture or a widget for people.
+- A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `booking` |
-| MCP server | `check_availability`, `get_available_slots` |
-| A2A agent | `check-availability` |
-| OpenAPI | `GET /availability`, `getSlots` |
-| REST API | `GET /slots` |
-| UCP | `catalog` |
+Through each kind of door, for example:
 
-### Message
+- Agent inbox: `booking`
+- MCP server: `check_availability`, `get_available_slots`
+- A2A agent: `check-availability`
+- OpenAPI: `GET /availability`, `getSlots`
+- REST API: `GET /slots`
+- UCP: `catalog`
+
+### Message {#message}
 
 `message` · also ask, contact, enquire · a directory's `accepts=ask`
 
@@ -150,7 +161,6 @@ Send the business a question or a request in words and get an answer back throug
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes messages, an A2A agent card, or a tool, skill or operation that sends the business a message or opens a support request. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a message was taken, and the business's answer reached them. |
 
 Not enough:
@@ -158,15 +168,15 @@ Not enough:
 - An email address, a phone number, a chat-app link or a contact form for people.
 - A chat widget that only a person in a browser can use.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `message` |
-| MCP server | `send_message`, `contact_business`, `create_support_ticket` |
-| A2A agent | `SendMessage (any agent card)` |
-| OpenAPI | `POST /messages`, `createInquiry` |
-| REST API | `POST /contact` |
+Through each kind of door, for example:
 
-### Negotiate
+- Agent inbox: `message`
+- MCP server: `send_message`, `contact_business`, `create_support_ticket`
+- A2A agent: `SendMessage (any agent card)`
+- OpenAPI: `POST /messages`, `createInquiry`
+- REST API: `POST /contact`
+
+### Negotiate {#negotiate}
 
 `negotiate` · also quote, offer, counter-offer, estimate · a directory's `accepts=quote`
 
@@ -179,24 +189,23 @@ Ask for a quote, and answer one: accept it, decline it or propose something else
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes quote requests, or a tool, skill or operation that asks for a quote or answers an offer. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a quote request was taken and answered. |
 
 Not enough:
 
 - A price calculator that only shows a number and takes no request.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `quote_request` |
-| MCP server | `request_quote`, `accept_offer`, `decline_offer` |
-| A2A agent | `request-quote` |
-| OpenAPI | `POST /quotes`, `createQuoteRequest` |
-| REST API | `POST /quote` |
+Through each kind of door, for example:
 
-## Doing it
+- Agent inbox: `quote_request`
+- MCP server: `request_quote`, `accept_offer`, `decline_offer`
+- A2A agent: `request-quote`
+- OpenAPI: `POST /quotes`, `createQuoteRequest`
+- REST API: `POST /quote`
 
-### Book
+## Doing it {#journey-doing}
+
+### Book {#book}
 
 `book` · also reserve, appointment, schedule · a directory's `accepts=book`
 
@@ -209,7 +218,6 @@ Make a booking for a person (a time, a table, a room, a seat or an appointment) 
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes bookings, or a tool, skill or operation that makes a booking. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | A signed receipt of a confirmed booking that the customer's agent counter-signed, or signed reports from agent platforms a network recognises, saying that a booking was made. |
 
 Not enough:
@@ -217,16 +225,16 @@ Not enough:
 - A booking page or a booking widget for people.
 - A tool that only lists free times: that is availability.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `booking` |
-| MCP server | `create_booking`, `book_appointment`, `reserve_table` |
-| A2A agent | `book-table` |
-| OpenAPI | `POST /bookings`, `createReservation` |
-| REST API | `POST /appointments` |
-| WebMCP | `book_table` |
+Through each kind of door, for example:
 
-### Order
+- Agent inbox: `booking`
+- MCP server: `create_booking`, `book_appointment`, `reserve_table`
+- A2A agent: `book-table`
+- OpenAPI: `POST /bookings`, `createReservation`
+- REST API: `POST /appointments`
+- WebMCP: `book_table`
+
+### Order {#order}
 
 `order` · also buy, purchase, checkout · a directory's `accepts=order`
 
@@ -239,7 +247,6 @@ Place an order for goods or food with its options and quantities, and get back t
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes orders, a UCP or ACP checkout, or a tool, skill or operation that places an order, together with something the business really sells: products or offers with prices on its own site, or a cart that works. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | A signed receipt of an accepted or paid order that the customer's agent counter-signed, or signed reports from agent platforms a network recognises, saying that an order was placed. |
 
 Not enough:
@@ -247,18 +254,18 @@ Not enough:
 - A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 - A tool that changes, cancels or returns an order that exists: that is change, cancel or return.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `order` |
-| MCP server | `create_order`, `place_order`, `checkout` |
-| A2A agent | `place-order` |
-| OpenAPI | `POST /orders`, `createCheckout` |
-| REST API | `POST /cart/checkout` |
-| UCP | `checkout` |
-| ACP | `checkout` |
-| WebMCP | `add_to_cart` |
+Through each kind of door, for example:
 
-### Sign up
+- Agent inbox: `order`
+- MCP server: `create_order`, `place_order`, `checkout`
+- A2A agent: `place-order`
+- OpenAPI: `POST /orders`, `createCheckout`
+- REST API: `POST /cart/checkout`
+- UCP: `checkout`
+- ACP: `checkout`
+- WebMCP: `add_to_cart`
+
+### Sign up {#signup}
 
 `signup` · also register, enrol, join, create account
 
@@ -271,7 +278,6 @@ Sign the person up for the business's own service: an account, a membership, a c
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | A tool, skill or operation that signs a person up, or a schema.org RegisterAction or JoinAction. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a sign-up went through. |
 
 Not enough:
@@ -279,14 +285,14 @@ Not enough:
 - Signing in, or anything that only logs a person in.
 - Registering a tool, a webhook, a key or a device, or adding staff.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `sign_up`, `create_account`, `join_membership` |
-| A2A agent | `enrol-in-class` |
-| OpenAPI | `POST /register`, `registerCustomer` |
-| REST API | `POST /signup` |
+Through each kind of door, for example:
 
-### Pay
+- MCP server: `sign_up`, `create_account`, `join_membership`
+- A2A agent: `enrol-in-class`
+- OpenAPI: `POST /register`, `registerCustomer`
+- REST API: `POST /signup`
+
+### Pay {#pay}
 
 `pay` · also payment, pay online · a directory's `accepts=pay`
 
@@ -298,26 +304,26 @@ Pay for a booking or an order, or learn exactly how payment happens: on the spot
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | UCP payment handlers, ACP delegated payment, or a tool, skill or operation that takes a payment. |
-| `tested` | A network's read of the door saw it answer and list it. |
+| `declared` | UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that takes a payment. |
 | `proven` | A signed receipt of a paid order or booking that the customer's agent counter-signed. |
 
 Not enough:
 
 - Card logos or a payment page for people.
+- A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `pay_order`, `create_payment` |
-| A2A agent | `pay-invoice` |
-| OpenAPI | `POST /payments`, `completeCheckout` |
-| REST API | `POST /pay` |
-| UCP | `payment_handlers` |
-| ACP | `delegated_payment` |
+Through each kind of door, for example:
 
-## After
+- MCP server: `pay_order`, `create_payment`
+- A2A agent: `pay-invoice`
+- OpenAPI: `POST /payments`, `completeCheckout`
+- REST API: `POST /pay`
+- UCP: `payment_handlers`
+- ACP: `delegated_payment`
 
-### Change
+## After {#journey-after}
+
+### Change {#change}
 
 `change` · also reschedule, modify, amend
 
@@ -330,22 +336,21 @@ Change a booking or an order that exists: another time, another size, another ad
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes bookings or orders, or a tool, skill or operation that changes or reschedules one. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | A signed receipt of an agreed change (an amended receipt), or signed reports from agent platforms a network recognises, saying that a change went through. |
 
 Not enough:
 
 - Changing a cart before it is an order.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `booking`, `order` |
-| MCP server | `reschedule_booking`, `update_order` |
-| A2A agent | `reschedule` |
-| OpenAPI | `PATCH /bookings/{id}`, `modifyOrder` |
-| REST API | `PUT /orders/{id}` |
+Through each kind of door, for example:
 
-### Cancel
+- Agent inbox: `booking`, `order`
+- MCP server: `reschedule_booking`, `update_order`
+- A2A agent: `reschedule`
+- OpenAPI: `PATCH /bookings/{id}`, `modifyOrder`
+- REST API: `PUT /orders/{id}`
+
+### Cancel {#cancel}
 
 `cancel` · also call off, void
 
@@ -358,7 +363,6 @@ Cancel a booking or an order that exists. A request to cancel that comes back wi
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes bookings or orders, or a tool, skill or operation that cancels one. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | A signed receipt of the cancellation's outcome, or signed reports from agent platforms a network recognises, saying that a cancellation went through. |
 
 Not enough:
@@ -366,15 +370,15 @@ Not enough:
 - Cancelling a cart, a basket or a checkout.
 - A cancellation policy: that is policies.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `booking`, `order` |
-| MCP server | `cancel_item`, `cancel_booking`, `cancel_order` |
-| A2A agent | `cancel-reservation` |
-| OpenAPI | `DELETE /bookings/{id}`, `cancelOrder` |
-| REST API | `POST /orders/{id}/cancel` |
+Through each kind of door, for example:
 
-### Track
+- Agent inbox: `booking`, `order`
+- MCP server: `cancel_item`, `cancel_booking`, `cancel_order`
+- A2A agent: `cancel-reservation`
+- OpenAPI: `DELETE /bookings/{id}`, `cancelOrder`
+- REST API: `POST /orders/{id}/cancel`
+
+### Track {#track}
 
 `track` · also status, where is my order
 
@@ -386,24 +390,24 @@ Follow a booking, an order or a delivery: whether it is confirmed, where it is, 
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes bookings or orders, a UCP order capability, or a tool, skill or operation that reads a status. |
-| `tested` | A network's read of the door saw it answer and list it. |
+| `declared` | An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that reads a status. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a status read answered. |
 
 Not enough:
 
 - A tracking page a person opens from an email.
+- A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `booking`, `order` |
-| MCP server | `get_item_status`, `track_order` |
-| A2A agent | `order-status` |
-| OpenAPI | `GET /orders/{id}/status`, `getShipmentStatus` |
-| REST API | `GET /track/{id}` |
-| UCP | `order` |
+Through each kind of door, for example:
 
-### Return or refund
+- Agent inbox: `booking`, `order`
+- MCP server: `get_item_status`, `track_order`
+- A2A agent: `order-status`
+- OpenAPI: `GET /orders/{id}/status`, `getShipmentStatus`
+- REST API: `GET /track/{id}`
+- UCP: `order`
+
+### Return or refund {#return}
 
 `return` · also refund, exchange, withdraw
 
@@ -415,24 +419,24 @@ Start a return, a refund or an exchange. A request that comes back with a refere
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes refunds, a UCP return capability, or a tool, skill or operation that starts a return or a refund. |
-| `tested` | A network's read of the door saw it answer and list it. |
+| `declared` | An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that starts a return or a refund. |
 | `proven` | A signed receipt of the refund's promise or its outcome, or signed reports from agent platforms a network recognises, saying that a return was started. |
 
 Not enough:
 
 - A returns policy: that is policies.
+- A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `refund` |
-| MCP server | `request_return`, `create_refund` |
-| A2A agent | `start-return` |
-| OpenAPI | `POST /returns`, `requestRefund` |
-| REST API | `POST /orders/{id}/return` |
-| UCP | `return` |
+Through each kind of door, for example:
 
-### Receipt
+- Agent inbox: `refund`
+- MCP server: `request_return`, `create_refund`
+- A2A agent: `start-return`
+- OpenAPI: `POST /returns`, `requestRefund`
+- REST API: `POST /orders/{id}/return`
+- UCP: `return`
+
+### Receipt {#receipt}
 
 `receipt` · also invoice, proof of purchase
 
@@ -445,22 +449,21 @@ Get a receipt or an invoice for what was booked, ordered or paid.
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes orders (it gives signed receipts), or a tool, skill or operation that returns a receipt or an invoice. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | A signed receipt the customer's agent counter-signed. |
 
 Not enough:
 
 - A receipt only sent to a person's email.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `order` |
-| MCP server | `get_receipt`, `get_invoice` |
-| A2A agent | `get-receipt` |
-| OpenAPI | `GET /orders/{id}/invoice`, `getReceipt` |
-| REST API | `GET /invoices/{id}` |
+Through each kind of door, for example:
 
-### Feedback
+- Agent inbox: `order`
+- MCP server: `get_receipt`, `get_invoice`
+- A2A agent: `get-receipt`
+- OpenAPI: `GET /orders/{id}/invoice`, `getReceipt`
+- REST API: `GET /invoices/{id}`
+
+### Feedback {#feedback}
 
 `feedback` · also review, rating
 
@@ -473,23 +476,22 @@ Leave feedback or a review with the business itself.
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | A tool, skill or operation that leaves feedback or a review. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that feedback was taken. |
 
 Not enough:
 
 - A link to a review site run by someone else.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `leave_review`, `submit_feedback` |
-| A2A agent | `leave-feedback` |
-| OpenAPI | `POST /reviews` |
-| REST API | `POST /feedback` |
+Through each kind of door, for example:
 
-## Ongoing
+- MCP server: `leave_review`, `submit_feedback`
+- A2A agent: `leave-feedback`
+- OpenAPI: `POST /reviews`
+- REST API: `POST /feedback`
 
-### Membership
+## Ongoing {#journey-ongoing}
+
+### Membership {#subscription}
 
 `subscription` · also subscription, plan
 
@@ -502,21 +504,20 @@ Manage a membership or a subscription that exists: pause it, resume it, change t
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | A tool, skill or operation that pauses, resumes, changes or ends a membership or subscription. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that the change went through. |
 
 Not enough:
 
 - A page that says to email the business to cancel.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `pause_subscription`, `cancel_membership` |
-| A2A agent | `renew-membership` |
-| OpenAPI | `PATCH /subscriptions/{id}` |
-| REST API | `POST /memberships/{id}/pause` |
+Through each kind of door, for example:
 
-### Vouchers
+- MCP server: `pause_subscription`, `cancel_membership`
+- A2A agent: `renew-membership`
+- OpenAPI: `PATCH /subscriptions/{id}`
+- REST API: `POST /memberships/{id}/pause`
+
+### Vouchers {#vouchers}
 
 `vouchers` · also gift card, coupon, loyalty
 
@@ -529,21 +530,20 @@ Use or check a gift card, a voucher, a promotion code or loyalty points.
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | A tool, skill or operation that redeems or checks a voucher, a gift card or points. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a voucher was taken. |
 
 Not enough:
 
 - A promotion code printed on a page.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `redeem_voucher`, `apply_gift_card` |
-| A2A agent | `redeem-voucher` |
-| OpenAPI | `POST /vouchers/redeem` |
-| REST API | `POST /loyalty/redeem` |
+Through each kind of door, for example:
 
-### Waitlist
+- MCP server: `redeem_voucher`, `apply_gift_card`
+- A2A agent: `redeem-voucher`
+- OpenAPI: `POST /vouchers/redeem`
+- REST API: `POST /loyalty/redeem`
+
+### Waitlist {#waitlist}
 
 `waitlist` · also waiting list
 
@@ -556,21 +556,20 @@ Join a waitlist for a time, a table, a class or a product, and leave it.
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | A tool, skill or operation that joins a waitlist. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a place on the list was taken. |
 
 Not enough:
 
 - A form for people to leave their email.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `join_waitlist` |
-| A2A agent | `join-waitlist` |
-| OpenAPI | `POST /waitlist` |
-| REST API | `POST /waitinglist` |
+Through each kind of door, for example:
 
-### Support
+- MCP server: `join_waitlist`
+- A2A agent: `join-waitlist`
+- OpenAPI: `POST /waitlist`
+- REST API: `POST /waitinglist`
+
+### Support {#support}
 
 `support` · also complaint, ticket, dispute
 
@@ -583,24 +582,23 @@ Raise a complaint or a problem with a booking or an order, and follow it.
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | An agent inbox that takes messages, or a tool, skill or operation that opens a support ticket or a complaint. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a ticket was opened and answered. |
 
 Not enough:
 
 - A help centre of articles for people.
 
-| Door | For example |
-| --- | --- |
-| Agent inbox | `message` |
-| MCP server | `create_support_ticket`, `file_complaint` |
-| A2A agent | `open-ticket` |
-| OpenAPI | `POST /tickets` |
-| REST API | `POST /complaints` |
+Through each kind of door, for example:
 
-## Policies
+- Agent inbox: `message`
+- MCP server: `create_support_ticket`, `file_complaint`
+- A2A agent: `open-ticket`
+- OpenAPI: `POST /tickets`
+- REST API: `POST /complaints`
 
-### Policies
+## Policies {#journey-policies}
+
+### Policies {#policies}
 
 `policies` · also terms, returns policy, cancellation policy
 
@@ -613,24 +611,25 @@ Read the terms that matter before and after: cancellation, returns, deposits, no
 | Evidence | What has to be seen |
 | --- | --- |
 | `declared` | schema.org MerchantReturnPolicy or similar data, a policy in the inbox's terms, or a tool, skill or operation that reads a policy. |
-| `tested` | A network's read of the door saw it answer and list it. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that the policy read answered. |
 
 Not enough:
 
 - A policy only in a PDF.
 
-| Door | For example |
-| --- | --- |
-| MCP server | `get_policies`, `get_return_policy` |
-| A2A agent | `policies` |
-| OpenAPI | `GET /policies` |
-| REST API | `GET /terms` |
+Through each kind of door, for example:
 
-## Changelog
+- MCP server: `get_policies`, `get_return_policy`
+- A2A agent: `policies`
+- OpenAPI: `GET /policies`
+- REST API: `GET /terms`
 
-- **Version 2**, published 15 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order needs something the business really sells: a commerce platform's profile that every site on it gets is not enough on its own. No capability was added, renamed or removed: every id, label and question is as in version 1.
+## Changelog {#changelog}
+
+- **Version 2**, published 15 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1.
 - **Version 1**, amended 13 October 2026. Tested is produced: a network's own read of a door that saw it answer and list a capability in the 7 days before.
 - **Version 1**, published 7 October 2026. Twenty capabilities in five parts of a customer's journey, each with a label and a question, the states yes, partial, no and na, and the evidence ladder declared, tested, proven.
+
+Version 1 is kept as it was last served, as amended on 13 October 2026 ([`/spec/capabilities/v1.json`](/spec/capabilities/v1.json)).
 
 Ids never change: a capability is added, never renamed or removed. What counts toward a score, and how much, is a score's own rules, published apart ([the agentic score's](https://surfingdog.ai/v1/score-rules)).

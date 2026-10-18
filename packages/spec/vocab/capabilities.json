@@ -62,14 +62,14 @@
       "label": "UCP",
       "via": "capability",
       "spec": "https://ucp.dev",
-      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment."
+      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works): a website platform that serves the same profile on every site it hosts gives none of these on its own."
     },
     {
       "id": "acp",
       "label": "ACP",
       "via": "capability",
       "spec": "https://www.agenticcommerce.dev",
-      "how": "Checkout means orders. Delegated payment (delegated_payment) means payment."
+      "how": "Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, or a cart that works)."
     },
     {
       "id": "webmcp",
@@ -81,7 +81,7 @@
     }
   ],
   "never_doors": "An email address, a phone number, a text or chat-app link, a web form or a page written for people never meets a capability. A person can use them; an agent cannot rely on them.",
-  "names": "A tool, skill or operation name is split into words (create_booking and createBooking are the same two words). The action and its object must both be there, each in its own word: book alone, or create with booking. Words that name something else rule it out: a tool that cancels a cart is not cancelling an order.",
+  "names": "A tool, skill or operation name is split into words (create_booking and createBooking are the same two words). The action and its object must both be there, each in its own word: book alone, or create with booking. Words that name something else rule it out: a tool that cancels a cart is not cancelling an order. A name that says it reads documentation (doc, docs, documentation, readme) meets no capability.",
   "capabilities": [
     {
       "id": "find",
@@ -113,13 +113,14 @@
       "aliases": ["menu", "products", "services", "price list"],
       "partial": "Items without prices, or prices only behind the customer's account.",
       "evidence": {
-        "declared": "schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it, or a tool, skill or operation that lists products, services or a menu.",
+        "declared": "schema.org Product, Offer, Menu or Service data with prices on the business's own site, a product feed, a UCP or ACP catalogue with items in it on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that lists products, services or a menu.",
         "tested": "A network's read of the door saw it answer and list a tool, skill or operation that lists them.",
         "proven": "Signed reports from agent platforms a network recognises, saying that such a listing answered."
       },
       "not_enough": [
         "A menu or price list that is only a PDF or an image.",
-        "A commerce profile that names a catalogue and lists nothing the business sells."
+        "A commerce profile that names a catalogue and lists nothing the business sells.",
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
       ],
       "doors": {
         "mcp": ["list_services", "list_products", "search_products", "get_menu"],
@@ -139,11 +140,14 @@
       "aliases": ["free slots", "openings", "stock"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock.",
+        "declared": "A tool, skill or operation that checks free times or stock, an agent inbox that takes bookings, or a UCP catalogue with stock on a site that shows it sells (products or offers with prices on its own pages, or a cart that works).",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "Signed reports from agent platforms a network recognises, saying that a check answered with times or stock."
       },
-      "not_enough": ["A calendar shown as a picture or a widget for people."],
+      "not_enough": [
+        "A calendar shown as a picture or a widget for people.",
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
+      ],
       "doors": {
         "inbox": ["booking"],
         "mcp": ["check_availability", "get_available_slots"],
@@ -292,11 +296,14 @@
       "kind": "pay",
       "partial": "How to pay is described and a person has to pay.",
       "evidence": {
-        "declared": "UCP payment handlers, ACP delegated payment, or a tool, skill or operation that takes a payment.",
+        "declared": "UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that takes a payment.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of a paid order or booking that the customer's agent counter-signed."
       },
-      "not_enough": ["Card logos or a payment page for people."],
+      "not_enough": [
+        "Card logos or a payment page for people.",
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
+      ],
       "doors": {
         "mcp": ["pay_order", "create_payment"],
         "a2a": ["pay-invoice"],
@@ -359,11 +366,14 @@
       "aliases": ["status", "where is my order"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "An agent inbox that takes bookings or orders, a UCP order capability, or a tool, skill or operation that reads a status.",
+        "declared": "An agent inbox that takes bookings or orders, a UCP order capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that reads a status.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "Signed reports from agent platforms a network recognises, saying that a status read answered."
       },
-      "not_enough": ["A tracking page a person opens from an email."],
+      "not_enough": [
+        "A tracking page a person opens from an email.",
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
+      ],
       "doors": {
         "inbox": ["booking", "order"],
         "mcp": ["get_item_status", "track_order"],
@@ -382,11 +392,14 @@
       "aliases": ["refund", "exchange", "withdraw"],
       "partial": "Only behind the customer's own account.",
       "evidence": {
-        "declared": "An agent inbox that takes refunds, a UCP return capability, or a tool, skill or operation that starts a return or a refund.",
+        "declared": "An agent inbox that takes refunds, a UCP return capability on a site that shows it sells (products or offers with prices on its own pages, or a cart that works), or a tool, skill or operation that starts a return or a refund.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of the refund's promise or its outcome, or signed reports from agent platforms a network recognises, saying that a return was started."
       },
-      "not_enough": ["A returns policy: that is policies."],
+      "not_enough": [
+        "A returns policy: that is policies.",
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
+      ],
       "doors": {
         "inbox": ["refund"],
         "mcp": ["request_return", "create_refund"],
@@ -549,18 +562,21 @@
   "changelog": [
     {
       "version": 1,
-      "published": "2026-10-07",
+      "date": "2026-10-07",
+      "change": "published",
       "summary": "Twenty capabilities in five parts of a customer's journey, each with a label and a question, the states yes, partial, no and na, and the evidence ladder declared, tested, proven."
     },
     {
       "version": 1,
-      "amended": "2026-10-13",
+      "date": "2026-10-13",
+      "change": "amended",
       "summary": "Tested is produced: a network's own read of a door that saw it answer and list a capability in the 7 days before."
     },
     {
       "version": 2,
-      "published": "2026-10-15",
-      "summary": "Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order needs something the business really sells: a commerce platform's profile that every site on it gets is not enough on its own. No capability was added, renamed or removed: every id, label and question is as in version 1."
+      "date": "2026-10-15",
+      "change": "published",
+      "summary": "Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1."
     }
   ]
 }

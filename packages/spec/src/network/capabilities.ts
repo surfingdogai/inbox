@@ -65,7 +65,19 @@ export const vocabDoorIdSchema = z.enum(VOCAB_DOOR_IDS);
 export type VocabDoorId = z.infer<typeof vocabDoorIdSchema>;
 
 /** The directory's request kinds (`vocab/doors.json` `kinds`) a capability is filtered by: ask is message, quote is negotiate. */
-export const requestKindSchema = z.enum(["ask", "quote", "book", "order", "pay"]);
+export const REQUEST_KINDS = ["ask", "quote", "book", "order", "pay"] as const;
+export const requestKindSchema = z.enum(REQUEST_KINDS);
+
+/**
+ * A name the vocabulary gives (a capability's id, a kind of door, a request kind, a part of the journey), as the
+ * published schema reads it: any lower-case name, not a closed list. The vocabulary changes by adding (a capability is
+ * added, never renamed; a reader ignores what it does not know), so a validator holding a document to the schema must
+ * not refuse a later version for a name it adds. The names this version gives are the lists above.
+ */
+export const vocabNameSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{0,31}$/)
+  .describe("A name the vocabulary gives: lower case, never renamed. The list of this version is in the document.");
 
 const evidenceTextSchema = z
   .object({ declared: z.string(), tested: z.string(), proven: z.string() })
@@ -76,20 +88,20 @@ const evidenceTextSchema = z
  * all optional, so a version 1 document still reads.
  */
 export const vocabCapabilitySchema = z.object({
-  id: capabilityIdSchema,
-  journey: journeySchema,
+  id: vocabNameSchema,
+  journey: vocabNameSchema,
   label: z.string(),
   question: z.string(),
   definition: z.string().optional().describe("Version 2: what doing it means, in one or two sentences."),
   aliases: z.array(z.string()).optional().describe("Version 2: other words people and agents use for it."),
-  kind: requestKindSchema
+  kind: vocabNameSchema
     .optional()
     .describe("Version 2: the request kind a directory filters by for it (`accepts=`), where there is one."),
   partial: z.string().optional().describe("Version 2: what the state partial means for it."),
   evidence: evidenceTextSchema.optional().describe("Version 2: what has to be seen at each step of the ladder."),
   not_enough: z.array(z.string()).optional().describe("Version 2: things that look like it and never meet it."),
   doors: z
-    .partialRecord(vocabDoorIdSchema, z.array(z.string()).min(1))
+    .record(vocabNameSchema, z.array(z.string()).min(1))
     .optional()
     .describe(
       "Version 2: how each kind of door meets it, by example names (an item type, a tool, a skill, an operation, a " +
@@ -111,13 +123,23 @@ export const capabilitiesVocabSchema = z.object({
   state_meanings: z.partialRecord(capabilityStateSchema, z.string()).optional(),
   evidence: z.array(evidenceSchema),
   evidence_meanings: z.partialRecord(evidenceSchema, z.string()).optional(),
-  produced: z.array(evidenceSchema),
-  lead: z.array(capabilityIdSchema),
-  journeys: z.array(journeySchema),
+  produced: z
+    .array(evidenceSchema)
+    .describe(
+      "The evidence steps the publishing network produces today. Not part of what the capabilities mean: another " +
+        "network may produce other steps of the same ladder.",
+    ),
+  lead: z
+    .array(vocabNameSchema)
+    .describe(
+      "Which capabilities the publishing network's result pages show first. A presentation choice, not part of what " +
+        "the capabilities mean.",
+    ),
+  journeys: z.array(vocabNameSchema),
   doors: z
     .array(
       z.object({
-        id: vocabDoorIdSchema,
+        id: vocabNameSchema,
         label: z.string(),
         via: z.string().describe("What of the door is read: an item type, a tool, a skill, an operation…"),
         spec: z.url().optional().describe("The door's own specification."),
@@ -134,8 +156,10 @@ export const capabilitiesVocabSchema = z.object({
     .array(
       z.object({
         version: z.int().min(1),
-        published: z.iso.date().optional(),
-        amended: z.iso.date().optional(),
+        date: z.iso.date().describe("The day of the change."),
+        change: z
+          .enum(["published", "amended"])
+          .describe("published: the version came out; amended: it was changed in place, compatibly."),
         summary: z.string(),
       }),
     )

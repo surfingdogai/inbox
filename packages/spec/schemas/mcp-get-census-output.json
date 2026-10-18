@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP get_census: structuredContent",
+  "type": "object",
+  "properties": {
+    "edition": {
+      "type": "string",
+      "pattern": "^20\\d\\d-(0[1-9]|1[0-2])$",
+      "description": "The month the edition records, YYYY-MM."
+    },
+    "title": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["published", "withdrawn"]
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "note": {
+      "description": "Why a withdrawn edition was withdrawn; null otherwise.",
+      "type": ["string", "null"]
+    },
+    "scope": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "description": "all, country, group, platform, source or city; a reader skips a scope it does not know."
+    },
+    "key": {
+      "description": "The key asked for, or null for the whole scope.",
+      "type": ["string", "null"]
+    },
+    "rows": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "all, country, group, platform, source or city; a reader skips a scope it does not know."
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The scope's key: empty for all."
+          },
+          "metric": {
+            "type": "string",
+            "pattern": "^(checked|agent_ready|places|no_ai|can:[a-z][a-z0-9_]*|door:[a-z0-9_]+|level:[a-z]+)$",
+            "description": "checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, or for a city places."
+          },
+          "value": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["scope", "key", "metric", "value"]
+      },
+      "description": "The counts: every metric of one key, or the headline ones of each key."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "Whether more keys are in the edition than rows holds."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "The edition's page."
+    },
+    "json": {
+      "type": "string",
+      "format": "uri",
+      "description": "Every count of the edition."
+    },
+    "csv": {
+      "type": "string",
+      "format": "uri"
+    },
+    "method": {
+      "type": "string",
+      "format": "uri",
+      "description": "How it was counted, with every definition."
+    },
+    "vocabulary": {
+      "type": "string",
+      "format": "uri",
+      "description": "The capability vocabulary the can: metrics are defined in."
+    },
+    "licence": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "ODbL-1.0"
+        },
+        "url": {
+          "type": "string",
+          "const": "https://opendatacommons.org/licenses/odbl/1-0/"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "How to credit it: \"Surfing Dog (surfingdog.ai)\"."
+        }
+      },
+      "required": ["name", "url", "attribution"]
+    }
+  },
+  "required": [
+    "edition",
+    "title",
+    "status",
+    "as_of",
+    "published_at",
+    "note",
+    "scope",
+    "key",
+    "rows",
+    "truncated",
+    "url",
+    "json",
+    "csv",
+    "method",
+    "vocabulary",
+    "licence"
+  ]
+}

@@ -37,12 +37,21 @@ export function vocabularyVersions(): { version: number; source: string }[] {
     .sort((a, b) => a.version - b.version);
 }
 
-/** Every file served under /spec/, in path order. */
+/** The capability vocabulary's own files in vocab/: served at /spec/capabilities.json and /spec/capabilities/v<N>.json. */
+const VOCABULARY_FILE = /^capabilities(-v\d+)?\.json$/;
+
+/**
+ * Every file served under /spec/, in path order: each at one address. The capability vocabulary is at
+ * /spec/capabilities.json (the latest) and /spec/capabilities/v<N>.json (each version), never under /spec/vocab/.
+ */
 export function specFiles(): SpecFile[] {
   const files: SpecFile[] = [{ path: "capabilities.json", source: "vocab/capabilities.json" }];
   for (const v of vocabularyVersions()) files.push({ path: `capabilities/v${v.version}.json`, source: v.source });
   for (const dir of ["schemas", "vectors", "vocab"]) {
-    for (const f of jsonIn(dir)) files.push({ path: `${dir}/${f}`, source: `${dir}/${f}` });
+    for (const f of jsonIn(dir)) {
+      if (dir === "vocab" && VOCABULARY_FILE.test(f)) continue;
+      files.push({ path: `${dir}/${f}`, source: `${dir}/${f}` });
+    }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
@@ -58,8 +67,10 @@ export interface SpecDoc {
   readonly title: string;
   /** What it is, in one line. */
   readonly summary: string;
-  /** The version as the document names it. */
-  readonly version: string;
+  /** The version, for a machine to compare: a number, or the manifest's identifier. */
+  readonly version: number | string;
+  /** The version as the document names it, in words. */
+  readonly label: string;
   /** The day its rules last changed, YYYY-MM-DD. */
   readonly revised: string;
   /** Its page. */
@@ -79,17 +90,24 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
     title: "What an AI agent can do at a business",
     summary:
       "The capability vocabulary: twenty things an agent can do, what each means, the evidence for it, and how each kind of agent door carries it.",
-    version: `version ${vocabulary.version}`,
+    version: vocabulary.version,
+    label: `version ${vocabulary.version}`,
     revised: vocabulary.published,
     page: "/spec/capabilities/",
-    files: ["capabilities.json", `capabilities/v${vocabulary.version}.json`, "schemas/capabilities.json"],
+    files: [
+      "capabilities.json",
+      `capabilities/v${vocabulary.version}.json`,
+      "schemas/capabilities.json",
+      "vectors/capability-names.json",
+    ],
   },
   {
     id: "manifest",
     title: "Agent inbox manifest",
     summary: "The document at /.well-known/agent-inbox.json: what a business's inbox takes and where its doors are.",
     version: "surfingdog-inbox/0",
-    revised: "2026-10-12",
+    label: "surfingdog-inbox/0",
+    revised: "2026-10-15",
     page: "/spec/manifest/",
     files: ["schemas/manifest.json", "vectors/doors-elsewhere.json", "vectors/profile.json"],
   },
@@ -97,7 +115,8 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
     id: "receipts",
     title: "Receipts",
     summary: "The signed record of a promise and how it ended, and the customer's agent's counter-signature.",
-    version: "claims version 2",
+    version: 2,
+    label: "claims version 2",
     revised: "2026-09-27",
     page: "/spec/receipts/",
     files: [
@@ -114,11 +133,19 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
     id: "census",
     title: "The census of what AI agents can do",
     summary:
-      "How the monthly census counts what agents can do at the businesses checked, and the format of its open data.",
-    version: "method version 1",
-    revised: "2026-10-15",
+      "How the monthly census counts what agents can do at the websites checked, and the format of its open data.",
+    version: 1,
+    label: "method version 1",
+    revised: "2026-10-18",
     page: "/spec/census/",
-    files: ["schemas/census-edition.json", "schemas/census-editions.json"],
+    files: [
+      "schemas/census-edition.json",
+      "schemas/census-editions.json",
+      "vectors/census-edition.json",
+      "schemas/mcp-get-census-input.json",
+      "schemas/mcp-get-census-output.json",
+      "vocab/score-rules-v3.json",
+    ],
   },
 ];
 
@@ -135,9 +162,19 @@ export function specIndex(): Record<string, unknown> {
       title: d.title,
       summary: d.summary,
       version: d.version,
+      version_label: d.label,
       revised: d.revised,
       page: `${SPEC_ORIGIN}${d.page}`,
       files: d.files.map(url),
+      ...(d.id === "capabilities"
+        ? {
+            latest: url("capabilities.json"),
+            versions: vocabularyVersions().map((v) => ({
+              version: v.version,
+              url: url(`capabilities/v${v.version}.json`),
+            })),
+          }
+        : {}),
     })),
     files: specFiles().map((f) => url(f.path)),
   };

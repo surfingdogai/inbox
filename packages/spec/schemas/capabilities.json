@@ -73,41 +73,24 @@
       "items": {
         "type": "string",
         "enum": ["declared", "tested", "proven"]
-      }
+      },
+      "description": "The evidence steps the publishing network produces today. Not part of what the capabilities mean: another network may produce other steps of the same ladder."
     },
     "lead": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": [
-          "find",
-          "catalogue",
-          "availability",
-          "message",
-          "negotiate",
-          "book",
-          "order",
-          "signup",
-          "pay",
-          "change",
-          "cancel",
-          "track",
-          "return",
-          "receipt",
-          "feedback",
-          "subscription",
-          "vouchers",
-          "waitlist",
-          "support",
-          "policies"
-        ]
-      }
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
+      },
+      "description": "Which capabilities the publishing network's result pages show first. A presentation choice, not part of what the capabilities mean."
     },
     "journeys": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["before", "doing", "after", "ongoing", "policies"]
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
       }
     },
     "doors": {
@@ -118,7 +101,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "enum": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "webmcp"]
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
           },
           "label": {
             "type": "string"
@@ -157,32 +141,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "enum": [
-              "find",
-              "catalogue",
-              "availability",
-              "message",
-              "negotiate",
-              "book",
-              "order",
-              "signup",
-              "pay",
-              "change",
-              "cancel",
-              "track",
-              "return",
-              "receipt",
-              "feedback",
-              "subscription",
-              "vouchers",
-              "waitlist",
-              "support",
-              "policies"
-            ]
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
           },
           "journey": {
             "type": "string",
-            "enum": ["before", "doing", "after", "ongoing", "policies"]
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
           },
           "label": {
             "type": "string"
@@ -204,7 +169,7 @@
           "kind": {
             "description": "Version 2: the request kind a directory filters by for it (`accepts=`), where there is one.",
             "type": "string",
-            "enum": ["ask", "quote", "book", "order", "pay"]
+            "pattern": "^[a-z][a-z0-9_]{0,31}$"
           },
           "partial": {
             "description": "Version 2: what the state partial means for it.",
@@ -238,7 +203,8 @@
             "type": "object",
             "propertyNames": {
               "type": "string",
-              "enum": ["inbox", "mcp", "a2a", "openapi", "api", "ucp", "acp", "webmcp"]
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
             },
             "additionalProperties": {
               "minItems": 1,
@@ -263,21 +229,22 @@
             "minimum": 1,
             "maximum": 9007199254740991
           },
-          "published": {
+          "date": {
             "type": "string",
             "format": "date",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "The day of the change."
           },
-          "amended": {
+          "change": {
             "type": "string",
-            "format": "date",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            "enum": ["published", "amended"],
+            "description": "published: the version came out; amended: it was changed in place, compatibly."
           },
           "summary": {
             "type": "string"
           }
         },
-        "required": ["version", "summary"]
+        "required": ["version", "date", "change", "summary"]
       }
     }
   },

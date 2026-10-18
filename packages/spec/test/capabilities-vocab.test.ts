@@ -110,17 +110,51 @@ describe("the capability vocabulary", () => {
       for (const t of c.doors?.inbox ?? []) expect(items.has(t), `${c.id}: ${t}`).toBe(true);
   });
 
-  it("keeps a changelog, oldest first, ending with this version", () => {
+  it("keeps a changelog of one shape, oldest first, ending with this version's publication", () => {
     const log = v.changelog ?? [];
     expect(log.length).toBeGreaterThanOrEqual(3);
     for (let i = 1; i < log.length; i++) {
-      const at = (e: (typeof log)[number]) => e.published ?? e.amended ?? "";
       expect(log[i]?.version ?? 0).toBeGreaterThanOrEqual(log[i - 1]?.version ?? 0);
-      expect(at(log[i] as (typeof log)[number]) >= at(log[i - 1] as (typeof log)[number])).toBe(true);
+      expect((log[i]?.date ?? "") >= (log[i - 1]?.date ?? "")).toBe(true);
     }
+    for (const e of log) expect(Object.keys(e).sort()).toEqual(["change", "date", "summary", "version"]);
     const last = log[log.length - 1];
     expect(last?.version).toBe(v.version);
-    expect(last?.published).toBe(v.published);
+    expect(last).toMatchObject({ change: "published", date: v.published });
+    // Version 1 is archived as it was last served: as amended on 13 October 2026, producing tested.
+    expect(old.produced).toEqual(["declared", "tested"]);
+    expect(log.find((e) => e.version === 1 && e.change === "amended")?.date).toBe("2026-10-13");
+  });
+
+  it("is read by its schema as a later version adding a capability, a kind of door and a request kind would be", () => {
+    const next = structuredClone(latest) as typeof latest & { version: number };
+    next.version = 3;
+    next.capabilities.push({
+      ...latest.capabilities[3],
+      id: "deliver",
+      label: "Deliver",
+      kind: "deliver",
+      doors: { ap2: ["x"] },
+    } as never);
+    next.doors.push({ id: "ap2", label: "AP2", via: "mandate", how: "A mandate." } as never);
+    next.journeys.push("later");
+    expect(capabilitiesVocabSchema.safeParse(next).success).toBe(true);
+    // The closed lists stay in the code, for this version's own readers.
+    expect(CAPABILITY_IDS).not.toContain("deliver");
+  });
+
+  it("asks something a business really sells before a commerce profile counts, and reads no documentation tool", () => {
+    const byId = new Map(v.capabilities.map((c) => [c.id, c]));
+    for (const id of ["order", "pay", "catalogue", "availability", "track", "return"]) {
+      const c = byId.get(id);
+      expect(c?.not_enough, id).toContain(
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.",
+      );
+    }
+    for (const id of ["pay", "catalogue", "availability", "track", "return"])
+      expect(byId.get(id)?.evidence?.declared, id).toMatch(/on a site that shows it sells/);
+    expect(v.names).toMatch(/doc, docs, documentation, readme/);
+    for (const d of ["ucp", "acp"]) expect(v.doors?.find((x) => x.id === d)?.how, d).toMatch(/shows it sells/);
   });
 
   it("speaks plainly: no claim of being first or only, and no line that is only a heading", () => {

@@ -42,7 +42,10 @@ export interface ReceiptCheckOptions {
   readonly issuer?: string | undefined;
   /** Milliseconds since the epoch; defaults to the clock. */
   readonly now?: number | undefined;
-  /** The network rules version the reader takes; defaults to 6, the latest. */
+  /**
+   * The network rules version the reader takes; defaults to 6, the one read since 27 September 2026 (amendments and
+   * refunds). A code option only: what a reader of an earlier date takes is said by its date.
+   */
   readonly rules?: number | undefined;
 }
 
@@ -270,6 +273,19 @@ export async function checkManifest(input: unknown): Promise<ConformanceReport> 
 
 /* --- receipts ------------------------------------------------------------------------------------------------------- */
 
+/** A compact JWS with every space and line break taken out: none belongs in one. */
+function compact(jws: string): string {
+  return jws.replace(/\s+/g, "");
+}
+
+/**
+ * Who reads claims under network rules version n, said by date: rules 6 (27 September 2026) added amendments and
+ * refunds; rules 5 and earlier are the readers before it.
+ */
+function readerOf(rules: number): string {
+  return rules >= RULES_V6 ? "since 27 September 2026" : "from before 27 September 2026";
+}
+
 interface ParsedJws {
   header: Record<string, unknown>;
   payload: Record<string, unknown>;
@@ -387,11 +403,11 @@ export async function checkReceipt(jws: string, opts: ReceiptCheckOptions = {}):
       const schema = ver === 2 ? receiptPayloadV2Schema : receiptPayloadSchema;
       const r = schema.safeParse(payload);
       if (!r.success) zodFindings(f, r.error, "bad_payload", ["payload"]);
-      else f.error("$.payload", "bad_payload", `A reader on network rules ${rules} refuses these claims.`);
+      else f.error("$.payload", "bad_payload", `A reader ${readerOf(rules)} refuses these claims.`);
     }
     return f.report("receipt", version);
   }
-  f.passed.push(`The claims are well formed (${version}), as a network on rules ${rules} reads them.`);
+  f.passed.push(`The claims are well formed (${version}, as read ${readerOf(rules)}).`);
 
   const iss = claims.claims.iss;
   const o = httpsOrigin(iss);
@@ -403,7 +419,8 @@ export async function checkReceipt(jws: string, opts: ReceiptCheckOptions = {}):
   if (claims.claims.iat > now + MAX_FUTURE_SECONDS) {
     f.error("$.payload.iat", "not_yet", "Dated more than five minutes ahead of the clock.");
   }
-  if (f.errors.length === 0) f.passed.push(`Its hash, which an acknowledgement names, is ${await sha256(jws.trim())}.`);
+  if (f.errors.length === 0)
+    f.passed.push(`Its hash, which an acknowledgement names, is ${await sha256(compact(jws))}.`);
   return f.report("receipt", version);
 }
 
@@ -471,11 +488,13 @@ export async function checkAcknowledgement(
     f.error("$.payload.rcp", "bad_payload", `It names receipt ${claims.data.rcp}, not ${opts.receiptId}.`);
   }
   if (opts.receipt !== undefined) {
-    if (claims.data.sha !== (await sha256(opts.receipt.trim()))) {
+    if (claims.data.sha !== (await sha256(compact(opts.receipt)))) {
       f.error("$.payload.sha", "bad_payload", "sha is not this receipt's hash: it acknowledges another receipt.");
     } else {
       f.passed.push("sha is the hash of the receipt given.");
     }
+  } else {
+    f.warn("$.payload.sha", "receipt_not_given", "sha was not checked: paste the receipt it acknowledges.");
   }
   if (opts.now !== undefined) {
     const now = Math.floor(opts.now / 1000);
@@ -483,6 +502,8 @@ export async function checkAcknowledgement(
       f.error("$.payload.iat", "not_yet", "Dated more than five minutes ahead.");
     else if (claims.data.iat < now - ACK_WINDOW_SECONDS)
       f.error("$.payload.iat", "expired", "More than an hour old: an inbox refuses it.");
+  } else {
+    f.warn("$.payload.iat", "age_not_checked", "Its age was not checked: an inbox takes one at most an hour old.");
   }
   return f.report("acknowledgement", version);
 }
@@ -498,8 +519,8 @@ export async function checkDocument(
   text: string,
   opts: { keys?: unknown; receipt?: string; receiptId?: string; now?: number } = {},
 ): Promise<ConformanceReport> {
-  const t = text.trim();
-  if (t.startsWith("{")) {
+  if (text.trim().startsWith("{")) {
+    const t = text.trim();
     let doc: unknown;
     try {
       doc = JSON.parse(t);
@@ -510,6 +531,8 @@ export async function checkDocument(
     }
     return checkManifest(doc);
   }
+  // A compact JWS pasted from an email or a terminal may be broken across lines: no part of one holds a space.
+  const t = compact(text);
   const parsed = parseJws(t);
   if (!parsed) {
     const f = new Findings();
@@ -521,7 +544,9 @@ export async function checkDocument(
     try {
       keys = keys.trim() === "" ? undefined : JSON.parse(keys);
     } catch {
-      keys = [];
+      const f = new Findings();
+      f.error("$keys", "malformed", "The keys are not JSON: paste a JWKS or a manifest.");
+      return f.report(parsed.header.typ === ACK_TYP || "jwk" in parsed.header ? "acknowledgement" : "receipt", null);
     }
   }
   if (parsed.header.typ === ACK_TYP || "jwk" in parsed.header) {
