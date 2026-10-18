@@ -20,7 +20,12 @@ export type ConnectorCapability =
   /** Times the platform says are busy take those times off what the inbox offers. */
   | "busy_times"
   /** Bookings the inbox confirms are written on the platform, and kept in step when they move or end. */
-  | "write_bookings";
+  | "write_bookings"
+  /**
+   * Orders the inbox accepts get a link to pay in the business's own account on the platform, and the
+   * platform's signed word that it was paid marks them paid (ADR-023). The money never passes the inbox.
+   */
+  | "pay_links";
 
 export type ConnectorGroup = "calendars" | "payments" | "shops";
 
@@ -227,6 +232,11 @@ export interface Connected {
   readonly destinations: readonly CalendarChoice[];
   /** What is chosen until the owner chooses otherwise. */
   readonly defaults: { readonly busy: readonly string[]; readonly destination: string | null };
+  /**
+   * A payment platform's mode: a test key makes links for test items only, and a live key for real
+   * ones, so nobody is ever asked for real money for a test, nor marked paid with a test card.
+   */
+  readonly mode?: "live" | "test" | undefined;
 }
 
 /**
@@ -248,6 +258,18 @@ export interface ConnectContext {
   readonly http: ConnectorHttp;
   readonly now: number;
   readonly inbox: InboxIdentity;
+  /**
+   * Connecting again in place: what the connection said about itself before (`extra`), so a connector
+   * can find what it made on the platform last time (a payment platform's webhook endpoint).
+   */
+  readonly previous?:
+    | { readonly externalId: string | null; readonly extra: Readonly<Record<string, unknown>> }
+    | undefined;
+  /**
+   * Where the platform sends what it tells this inbox (`POST /v1/hooks/<kind>`), on the inbox's own
+   * public address; null when the inbox does not know its address (no INBOX_PUBLIC_URL, nor an Inbox address in Settings).
+   */
+  readonly hookUrl?: string | null | undefined;
 }
 
 /** What this inbox has written on the platform, so a connector leaves it out of busy times. */
@@ -336,6 +358,109 @@ export interface BookingWriter {
   find?(ctx: RunContext, booking: OutboundBooking): Promise<LinkState | null>;
 }
 
+/* --- getting paid (ADR-023) ------------------------------------------------ */
+
+/** Money in minor units (cents), with its ISO 4217 code in capitals. */
+export interface PayAmount {
+  readonly value: number;
+  readonly currency: string;
+}
+
+/**
+ * A link to pay for one order, as the inbox asks for it. `ref` is the inbox's own id for the link:
+ * it makes the request safe to send again (the platform's idempotency key is made from it) and comes
+ * back on everything the platform says about the payment.
+ */
+export interface PayLinkRequest {
+  readonly ref: string;
+  readonly itemId: string;
+  readonly amount: PayAmount;
+  /** What the customer sees on the platform's page: "Sourdough and 2 more (4F2K9Q)". */
+  readonly title: string;
+  /** The order's six-character reference, as the business's emails give it. */
+  readonly reference: string;
+  /** The customer's language, for the few words the platform shows after paying. */
+  readonly language: string;
+  /** Shown on the platform's page once the customer paid. */
+  readonly thanks: string;
+  /** Shown when the link is no longer in use (the order changed, was cancelled, or paid). */
+  readonly inactive: string;
+  /** Where the platform says a payment changed, for platforms told per link (Mollie). */
+  readonly hookUrl: string;
+}
+
+export interface PayLink {
+  /** The platform's id for the link: `plink_…` (Stripe), `pl_…` (Mollie). */
+  readonly externalId: string;
+  /** Where the customer pays. */
+  readonly url: string;
+}
+
+/** A payment as the platform confirmed it, read back with the business's own key. */
+export interface PaymentFact {
+  /** `paid`: the money is the business's; `failed`: this attempt did not go through and the link is spent. */
+  readonly status: "paid" | "failed" | "pending";
+  /** The link it was made through: the platform's id, and the inbox's own (`ref`) when the platform kept it. */
+  readonly linkId: string | null;
+  readonly ref: string | null;
+  /** The platform's id for the payment: `pi_…`/`cs_…` (Stripe), `tr_…` (Mollie). */
+  readonly paymentId: string;
+  readonly amount: PayAmount | null;
+  /** How it was paid, in the receipt's words (`card`, `ideal`, `bancontact`), when the platform says. */
+  readonly method?: string | undefined;
+  readonly paidAt?: number | undefined;
+  /** The payment in the business's own dashboard: where it is refunded. */
+  readonly dashboardUrl?: string | undefined;
+  readonly livemode: boolean;
+}
+
+/** A request a platform sent to `POST /v1/hooks/<kind>`, as it arrived. */
+export interface InboundRequest {
+  readonly headers: Headers;
+  /** The body exactly as sent: signatures are over these bytes. */
+  readonly body: string;
+  readonly query: URLSearchParams;
+}
+
+/** The link a request is about, as the inbox knows it, for a platform whose request names only ours. */
+export interface KnownLink {
+  readonly ref: string;
+  readonly externalId: string | null;
+  readonly itemId: string;
+}
+
+/** What a platform's request said, once its signature (or the platform itself) vouched for it. */
+export interface InboundResult {
+  /** The platform's id for what it sent, so a request sent twice is counted once. */
+  readonly eventId: string;
+  readonly topic: string;
+  /** Read back from the platform with the business's key: never what the request body claimed. */
+  readonly facts: readonly PaymentFact[];
+}
+
+export interface PaymentsHandler {
+  /** Makes the link in the business's own account. Safe to call again with the same `ref`. */
+  createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
+  /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
+  closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void>;
+  /** What happened on the link so far, asked of the platform (a webhook that never came). */
+  check(ctx: RunContext, link: KnownLink): Promise<PaymentFact | null>;
+  /**
+   * A request the platform sent. Throws `ConnectorError("refused")` when its signature does not
+   * check out. Answers null when it is not about a payment (another event, another inbox's link).
+   * `lookup` finds the link a request names by the inbox's own `ref` (from the address it was sent
+   * to), for platforms that send nothing signed (Mollie's per-link webhook: only an id, checked by
+   * asking Mollie).
+   */
+  receive(
+    ctx: RunContext,
+    request: InboundRequest,
+    lookup: (ref: string) => Promise<KnownLink | null>,
+  ): Promise<InboundResult | null>;
+  /** The business's own dashboard, for the owner app's "Open Stripe" link. */
+  dashboardUrl(ctx: Pick<RunContext, "extra">, mode: "live" | "test"): string;
+}
+
 export interface OAuthClient {
   readonly clientId: string;
   readonly clientSecret: string;
@@ -374,14 +499,33 @@ export interface ConnectorDefinition {
   /** Checks what the owner gave against the platform, and reads what they can choose. Called on save. */
   connect?(ctx: ConnectContext, input: Readonly<Record<string, string>>): Promise<Connected>;
   readonly oauth?: OAuthFlow | undefined;
-  /** Reads the account's calendars and destinations again (they change). */
-  refresh?(ctx: RunContext): Promise<Pick<Connected, "account" | "calendars" | "destinations">>;
+  /**
+   * Reads the account's calendars and destinations again (they change). `extra`, when given, replaces
+   * what the connector keeps about itself (a payment platform's webhook moved to a new address).
+   */
+  refresh?(ctx: RunContext): Promise<
+    Pick<Connected, "account" | "calendars" | "destinations"> & {
+      readonly extra?: Readonly<Record<string, unknown>> | undefined;
+    }
+  >;
+  /**
+   * Whether to read again before the usual six hours: a payment platform whose webhook names another
+   * address than the inbox's own now (a business took its inbox to its own domain).
+   */
+  stale?(ctx: RunContext): boolean;
   /**
    * Busy times inside the window, leaving out what this inbox wrote itself (`ctx.own`). A connector
    * that could not read all of the window says how far it got (`BusyRead`).
    */
   busy?(ctx: RunContext, window: Interval): Promise<Interval[] | BusyRead>;
   readonly bookings?: BookingWriter | undefined;
+  /** Pay links in the business's own account, and the platform's word that they were paid (ADR-023). */
+  readonly payments?: PaymentsHandler | undefined;
+  /**
+   * For a connector the platform tells of payments by webhook: the events to send to
+   * `POST /v1/hooks/<kind>`, so the form can say what to add by hand when the key cannot add it.
+   */
+  readonly hookEvents?: readonly string[] | undefined;
   /** Gives the access back on the platform, as the connection goes (best effort). */
   disconnect?(ctx: RunContext): Promise<void>;
 }
@@ -434,4 +578,55 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
     out.push(...pieces);
   }
   return out;
+}
+
+/* --- money ---------------------------------------------------------------- */
+
+/** ISO 4217 currencies without a minor unit (500 JPY is 500) and with three (1 KWD is 1000). */
+const NO_MINOR = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "ISK",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+const THREE_MINOR = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+
+/** How many digits a currency has after the decimal point (ISO 4217): 2 unless it says otherwise. */
+export function currencyExponent(currency: string): number {
+  const c = currency.toUpperCase();
+  if (NO_MINOR.has(c)) return 0;
+  if (THREE_MINOR.has(c)) return 3;
+  return 2;
+}
+
+/** Minor units as a decimal string, the way some platforms want it: 4500 EUR → "45.00", 500 JPY → "500". */
+export function decimalAmount(amount: PayAmount): string {
+  const exp = currencyExponent(amount.currency);
+  if (exp === 0) return String(amount.value);
+  const s = String(Math.abs(amount.value)).padStart(exp + 1, "0");
+  return `${amount.value < 0 ? "-" : ""}${s.slice(0, -exp)}.${s.slice(-exp)}`;
+}
+
+/** A decimal string back to minor units ("45.00" EUR → 4500), or null when it is not one. */
+export function minorAmount(value: string, currency: string): number | null {
+  const exp = currencyExponent(currency);
+  const m = /^(\d{1,15})(?:\.(\d{1,6}))?$/.exec(value.trim());
+  if (!m) return null;
+  const whole = Number(m[1]);
+  const fraction = m[2] ?? "";
+  if (fraction.length > exp && /[1-9]/.test(fraction.slice(exp))) return null;
+  const minor = Number((fraction + "0".repeat(exp)).slice(0, exp) || "0");
+  return whole * 10 ** exp + minor;
 }

@@ -838,6 +838,57 @@ export const connectorAuth = sqliteTable("connector_auth", {
   usedAt: integer("used_at"),
 });
 
+/**
+ * A link an order was given to pay in the business's own Stripe or Mollie account (0023, ADR-023):
+ * what it asks for, where the customer pays, and what the platform said. At most one per order is
+ * live (`creating`, `open`); `paid`, `failed` and `closed` are history, kept after a disconnect,
+ * since a paid one is where the money went and where it is refunded. `state`: `creating` | `open` |
+ * `paid` | `failed` | `closed`.
+ */
+export const connectorPayments = sqliteTable(
+  "connector_payments",
+  {
+    id: id(),
+    /** The connection that made it; not a foreign key, so the history outlives a disconnect. */
+    connectorId: text("connector_id").notNull(),
+    kind: text("kind").notNull(),
+    itemId: text("item_id").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    livemode: integer("livemode").notNull(),
+    state: text("state").notNull().default("creating"),
+    /** The platform's id for the link (`plink_…`, `pl_…`). */
+    externalId: text("external_id"),
+    url: text("url"),
+    /** The platform's id for the payment made through it (`pi_…`, `tr_…`). */
+    paymentId: text("payment_id"),
+    method: text("method"),
+    paidAmount: integer("paid_amount"),
+    paidCurrency: text("paid_currency"),
+    /** The payment in the business's own dashboard, where it is refunded. */
+    dashboardUrl: text("dashboard_url"),
+    claimUntil: integer("claim_until"),
+    claimedBy: text("claimed_by"),
+    attempts: integer("attempts").notNull().default(0),
+    retryAt: integer("retry_at"),
+    /** When the platform was last asked about it, in case a webhook never came. */
+    checkedAt: integer("checked_at"),
+    lastError: text("last_error"),
+    lastErrorAt: integer("last_error_at"),
+    /** Why it closed, or what the owner should know (paid after the order was cancelled). */
+    note: text("note"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    paidAt: integer("paid_at"),
+    closedAt: integer("closed_at"),
+  },
+  (t) => [
+    index("connector_payments_item").on(t.itemId, t.createdAt),
+    unique("connector_payments_external").on(t.connectorId, t.externalId),
+    index("connector_payments_open").on(t.connectorId, t.state, t.checkedAt),
+  ],
+);
+
 /** Facts about this inbox itself (0022): `instance_id`, made once at random, which its calendar entries carry. */
 export const instanceMeta = sqliteTable("instance_meta", {
   key: text("key").primaryKey(),

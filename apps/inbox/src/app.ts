@@ -51,7 +51,12 @@ import {
   MANIFEST_PATH,
   MIGRATIONS,
   networkLane,
+  PAY_LINK_KIND,
+  PAY_NOTICE_KIND,
   parseSecretKeys,
+  payLane,
+  payLinkHandler,
+  payNoticeHandler,
   readSettings,
   VERSION,
 } from "@surfingdog/core";
@@ -243,7 +248,12 @@ export function createInbox(deps: AppDeps): Inbox {
     // An instance with nothing connected enqueues none of them.
     .register(CONNECTOR_SYNC_KIND, connectorSyncHandler(caps.connectors), { lane: connectorLane })
     .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane })
-    .register(CONNECTOR_NOTICE_KIND, connectorNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }));
+    .register(CONNECTOR_NOTICE_KIND, connectorNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
+    // Pay links (ADR-023): an order's link made, kept or closed after each of its events, one order's
+    // jobs one after another, and an email to the owner about a payment that needs them. An inbox with
+    // no payment platform connected enqueues none of them.
+    .register(PAY_LINK_KIND, payLinkHandler(caps.connectors), { lane: payLane })
+    .register(PAY_NOTICE_KIND, payNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }));
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -254,13 +264,15 @@ export function createInbox(deps: AppDeps): Inbox {
     ]) {
       runner.register(kind, noNetworkHandler);
     }
-    // Nor does anything a tester typed leave by a webhook, or reach a calendar, whoever set one up.
+    // Nor does anything a tester typed leave by a webhook, reach a calendar or make a pay link, whoever set one up.
     for (const kind of [
       WEBHOOK_FANOUT_KIND,
       WEBHOOK_DELIVERY_KIND,
       CONNECTOR_SYNC_KIND,
       CONNECTOR_PUSH_KIND,
       CONNECTOR_NOTICE_KIND,
+      PAY_LINK_KIND,
+      PAY_NOTICE_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(

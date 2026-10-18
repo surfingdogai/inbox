@@ -1,5 +1,14 @@
 import clsx from "clsx";
-import { CalendarDays, ChevronRight, CreditCard, ExternalLink, RefreshCw, ShoppingBag } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  RefreshCw,
+  ShoppingBag,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
@@ -155,7 +164,13 @@ export function IntegrationsCard() {
               {
                 onSuccess: () => {
                   setOpen(null);
-                  setNotice({ tone: "success", text: "Connected. Reading your calendar now." });
+                  setNotice({
+                    tone: "success",
+                    text:
+                      card.group === "payments"
+                        ? `${card.title} is connected. Orders you accept get a link to pay.`
+                        : "Connected. Reading your calendar now.",
+                  });
                 },
               },
             )
@@ -473,7 +488,10 @@ function WayForm({
             <span className="disclosure-open">Fewer options</span>
             <span className="disclosure-closed">More options</span>
           </summary>
-          <div className="advanced-body stack">{advanced.map(input)}</div>
+          <div className="advanced-body stack">
+            {advanced.map(input)}
+            {way.hook && <HookAddress hook={way.hook} />}
+          </div>
         </details>
       )}
       {general && (
@@ -490,6 +508,31 @@ function WayForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Where a payment platform sends what it says, for an owner who adds the webhook by hand: the
+ * address, ready to copy, and the events to tick.
+ */
+function HookAddress({ hook }: { hook: { readonly url: string; readonly events: readonly string[] } }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="int-hook stack-xs">
+      <span className="label">Webhook address</span>
+      <span className="int-hook-row">
+        <code className="int-hook-url">{hook.url}</code>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm btn-icon"
+          aria-label={copied ? "Address copied" : "Copy the address"}
+          onClick={() => void navigator.clipboard.writeText(hook.url).then(() => setCopied(true))}
+        >
+          {copied ? <Check className="icon-xs" aria-hidden="true" /> : <Copy className="icon-xs" aria-hidden="true" />}
+        </button>
+      </span>
+      <span className="hint">Events: {hook.events.join(", ")}</span>
+    </div>
   );
 }
 
@@ -533,21 +576,30 @@ function ConnectionLine({
   const way = cards
     .find((card) => card.id === cardOf(c.kind))
     ?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
-  const meta = [
-    c.busy_on
-      ? c.status === "configured"
-        ? "reading busy times"
-        : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
-      : "busy times off",
-    writes
-      ? c.bookings_on
-        ? destination && c.kind !== "calcom"
-          ? `bookings go to ${destination.name}`
-          : "bookings go out"
-        : "bookings off"
-      : null,
-    c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
-  ].filter(Boolean);
+  const pays = c.payments;
+  const meta = pays
+    ? [
+        c.mode === "test" ? "test mode" : null,
+        c.pay_on ? "pay links on" : "pay links off",
+        pays.open > 0 ? `${pays.open} waiting to be paid` : null,
+        pays.paid > 0 ? `${pays.paid} paid` : null,
+        c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
+      ].filter(Boolean)
+    : [
+        c.busy_on
+          ? c.status === "configured"
+            ? "reading busy times"
+            : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
+          : "busy times off",
+        writes
+          ? c.bookings_on
+            ? destination && c.kind !== "calcom"
+              ? `bookings go to ${destination.name}`
+              : "bookings go out"
+            : "bookings off"
+          : null,
+        c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
+      ].filter(Boolean);
   const problem = write.error ? problemOf(write.error) : null;
   const failing = c.status === "error";
   return (
@@ -567,6 +619,14 @@ function ConnectionLine({
         {c.busy_on && c.busy_partial && c.busy_until && (
           <div className="hint">
             Read to {dayOf(c.busy_until)}: this calendar has more ahead than is read, so later times stay closed.
+          </div>
+        )}
+        {pays && pays.failing > 0 && (
+          <div className="hint error" role="alert">
+            {pays.failing === 1
+              ? "An order has no payment link yet"
+              : `${pays.failing} orders have no payment link yet`}
+            : it shows on the order.
           </div>
         )}
         {c.bookings_failing > 0 && c.booking_error && (
@@ -607,6 +667,12 @@ function ConnectionLine({
           >
             <RefreshCw className="icon-sm" aria-hidden="true" />
           </button>
+        )}
+        {pays?.dashboard_url && (
+          <a className="btn btn-ghost btn-sm" href={pays.dashboard_url} target="_blank" rel="noopener noreferrer">
+            Open {c.title}
+            <ExternalLink className="icon-xs" aria-hidden="true" />
+          </a>
         )}
         <button
           type="button"
@@ -649,7 +715,10 @@ function ConnectionLine({
                   {
                     onSuccess: () => {
                       setPanel(null);
-                      onNotice({ tone: "success", text: "Connected again. Reading your calendar now." });
+                      onNotice({
+                        tone: "success",
+                        text: pays ? "Connected again." : "Connected again. Reading your calendar now.",
+                      });
                     },
                   },
                 )
@@ -658,11 +727,20 @@ function ConnectionLine({
           )}
         </div>
       )}
-      {panel === "change" && <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />}
+      {panel === "change" &&
+        (pays ? (
+          <PayChoices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
+        ) : (
+          <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
+        ))}
       {confirming && (
         <div className="confirm row-glass wide">
           <h3>Disconnect {c.title}</h3>
-          <p className="hint">Its busy times stop blocking at once. Bookings already added stay in the calendar.</p>
+          <p className="hint">
+            {pays
+              ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.`
+              : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
+          </p>
           <div className="rowx">
             <button
               type="button"
@@ -682,6 +760,56 @@ function ConnectionLine({
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** A payment platform's one choice: whether accepted orders get a link to pay. */
+function PayChoices({
+  connection: c,
+  onDone,
+  onNotice,
+}: {
+  connection: ConnectionView;
+  onDone: () => void;
+  onNotice: (n: Notice) => void;
+}) {
+  const write = useIntegrationWrite();
+  const [on, setOn] = useState(c.pay_on);
+  return (
+    <div className="confirm row-glass wide stack">
+      <Switch checked={on} onChange={setOn}>
+        Send a link to pay when you accept an order
+      </Switch>
+      <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
+      <div className="rowx">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={write.isPending}
+          onClick={() =>
+            write.mutate(
+              { id: c.id, patch: { pay_on: on } },
+              {
+                onSuccess: () => {
+                  onDone();
+                  onNotice({ tone: "success", text: "Saved." });
+                },
+              },
+            )
+          }
+        >
+          Save
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
+          Close
+        </button>
+      </div>
+      {write.error && (
+        <p className="hint error" role="alert">
+          {problemOf(write.error).detail}
+        </p>
       )}
     </div>
   );

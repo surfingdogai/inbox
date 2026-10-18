@@ -10,6 +10,7 @@ import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../w
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
 import { type GalleryCard, gallery } from "./gallery";
+import { type PayConnection, type PayHost, PaymentLinks, type PaymentView } from "./payments";
 import {
   type CalendarChoice,
   type Connected,
@@ -107,6 +108,10 @@ export interface PublicConfig {
    * only for the new password or key.
    */
   readonly inputs: Readonly<Record<string, string>>;
+  /** A payment platform makes pay links for accepted orders (ADR-023): on when connected. */
+  readonly payOn: boolean;
+  /** A payment platform's mode: a test key makes links for test orders only, a live key for real ones. */
+  readonly mode: "live" | "test" | null;
 }
 
 /** A connection as every door shows it: never a secret. */
@@ -144,6 +149,21 @@ export interface ConnectionView {
   readonly error_code: string | null;
   readonly failing_since: number | null;
   readonly created_at: number;
+  /** A payment platform: pay links for accepted orders on or off (ADR-023). */
+  readonly pay_on: boolean;
+  /** `live` or `test` for a payment platform; null otherwise. */
+  readonly mode: "live" | "test" | null;
+  /** A payment platform's links: waiting to be paid, paid, and failing to be made; null otherwise. */
+  readonly payments: {
+    readonly open: number;
+    readonly paid: number;
+    readonly failing: number;
+    readonly last_paid_at: number | null;
+    /** How the platform tells this inbox of payments: a webhook it added itself, or one the owner added. */
+    readonly webhook: "added" | "by_hand" | "per_link" | null;
+    /** The business's own dashboard on the platform: where payments are seen and refunded. */
+    readonly dashboard_url: string | null;
+  } | null;
 }
 
 export interface IntegrationsView {
@@ -174,6 +194,8 @@ export const updateConnectionInput = z.object({
   destination: z.string().max(2048).nullable().optional(),
   services: z.array(z.string().max(64)).max(200).nullable().optional(),
   paused: z.boolean().optional(),
+  /** A payment platform: make pay links for the orders the inbox accepts (ADR-023). */
+  pay_on: z.boolean().optional(),
 });
 export type UpdateConnectionInput = z.input<typeof updateConnectionInput>;
 
@@ -222,12 +244,16 @@ export class ConnectorCapabilities {
   private http: ConnectorHttp | null = null;
   /** The one redirect address every sign-in uses, when the host keeps one (hosted); else per inbox. */
   private fixedRedirect: ((kind: string) => string | undefined) | null = null;
+  /** Pay links in the business's own payment account (ADR-023). */
+  readonly payments: PaymentLinks;
 
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretBox | null,
     private readonly baseUrl: string | undefined,
-  ) {}
+  ) {
+    this.payments = new PaymentLinks(this.payHost());
+  }
 
   /**
    * The connectors this inbox offers and how they reach the world: plugged in by the host, so core
@@ -265,7 +291,7 @@ export class ConnectorCapabilities {
   async integrations(caller: Caller): Promise<IntegrationsView> {
     requireOwnerSide(caller);
     return {
-      cards: gallery(this.definitions),
+      cards: gallery(this.definitions, { hookBase: await this.hookBase() }),
       connections: await this.list(caller),
       can_connect: this.secrets !== null,
     };
@@ -282,6 +308,24 @@ export class ConnectorCapabilities {
   async get(caller: Caller, id: string): Promise<ConnectionView> {
     requireOwnerSide(caller);
     return this.view(await this.row(id), nowOf(caller));
+  }
+
+  /**
+   * An order's pay links (ADR-023): where the customer pays, what the platform said, and where the
+   * payment is refunded. The owner's side only; never a secret, and nothing about the customer.
+   */
+  async itemPayments(
+    caller: Caller,
+    itemId: string,
+  ): Promise<{ readonly item_id: string; readonly payments: readonly PaymentView[] }> {
+    requireOwnerSide(caller);
+    const { rows } = await this.db.client.query({
+      sql: "SELECT type FROM items WHERE id = ?",
+      params: [itemId],
+      method: "all",
+    });
+    if (!rows[0]) throw new WriteError("not_found", "no such item", { details: { item_id: itemId } });
+    return { item_id: itemId, payments: await this.payments.forItem(itemId) };
   }
 
   /* --- connecting with a form ---------------------------------------------- */
@@ -338,7 +382,11 @@ export class ConnectorCapabilities {
     const now = nowOf(caller);
     let connected: Connected;
     try {
-      connected = await def.connect(await this.connectContext(now), checked.data as Record<string, string>);
+      const ctx = await this.connectContext(now, def.kind);
+      connected = await def.connect(
+        again ? { ...ctx, previous: { externalId: again.externalId, extra: again.config.extra } } : ctx,
+        checked.data as Record<string, string>,
+      );
     } catch (error) {
       throw asWriteError(error, def.title);
     }
@@ -453,7 +501,7 @@ export class ConnectorCapabilities {
     }
     try {
       const verifier = await this.secrets.open("connector-config", `auth:${stateHash}`, String(row[1]));
-      const ctx = await this.connectContext(p.now);
+      const ctx = await this.connectContext(p.now, def.kind);
       const connected = await def.oauth.exchange(ctx, { code: p.code, verifier, redirectUri: String(row[2]) });
       const view = await this.store(def, null, connected, undefined, p.now, this.secrets, true);
       return { returnTo, ok: true, message: `${def.title} is connected.`, id: view.id };
@@ -510,6 +558,14 @@ export class ConnectorCapabilities {
       json.push(["$.services", input.services === null ? null : [...new Set(input.services)]]);
     }
     if (input.busy_on !== undefined) json.push(["$.busyOn", input.busy_on]);
+    if (input.pay_on !== undefined) {
+      if (!this.definitions.get(row.kind)?.capabilities.includes("pay_links")) {
+        throw new WriteError("invalid_input", "This connection takes no payments.", {
+          fields: [{ path: "pay_on", problem: "invalid", message: "not a payment platform" }],
+        });
+      }
+      json.push(["$.payOn", input.pay_on]);
+    }
     if (input.bookings_on !== undefined) json.push(["$.bookingsOn", input.bookings_on]);
     if (input.name !== undefined) {
       sets.push("name = ?");
@@ -558,13 +614,18 @@ export class ConnectorCapabilities {
    * Disconnects. Busy times stop blocking at once. Bookings already written stay in the calendar: they
    * are the business's own entries now, and taking them out is not something a disconnect should do.
    */
-  async remove(caller: Caller, id: string): Promise<{ removed: true; left_in_calendar: number }> {
+  async remove(
+    caller: Caller,
+    id: string,
+  ): Promise<{ removed: true; left_in_calendar: number; links_closed?: number }> {
     requireOwnerSide(caller);
     requirePerson(caller, "disconnect");
     const row = await this.row(id);
     const now = nowOf(caller);
     const left = (await liveLinks(this.db, row.id)).length;
     const def = this.definitions.get(row.kind);
+    // A payment platform's open links stop: nothing here would hear of a payment made on them any more.
+    const linksClosed = def?.payments ? await this.payments.closeAll(row.id, now) : undefined;
     if (def?.disconnect) {
       try {
         await def.disconnect(await this.runContext(row, now));
@@ -577,7 +638,11 @@ export class ConnectorCapabilities {
       { sql: "DELETE FROM connector_links WHERE connector_id = ?", params: [row.id], method: "run" },
       { sql: "DELETE FROM connectors WHERE id = ?", params: [row.id], method: "run" },
     ]);
-    return { removed: true, left_in_calendar: left };
+    return {
+      removed: true,
+      left_in_calendar: left,
+      ...(linksClosed !== undefined ? { links_closed: linksClosed } : {}),
+    };
   }
 
   /* --- the jobs ----------------------------------------------------------- */
@@ -629,17 +694,19 @@ export class ConnectorCapabilities {
 
     let busy: number | null = null;
     let truncated = false;
+    let payNote = "";
     try {
-      if (def.refresh && now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS) {
+      if (def.refresh && (now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS || def.stale?.(ctx) === true)) {
         const fresh = await def.refresh(ctx);
         await this.db.client.query({
           sql: `UPDATE connectors SET config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?),
-                       '$.destinations', json(?), '$.refreshedAt', ?), updated_at = ? WHERE id = ?`,
+                       '$.destinations', json(?), '$.refreshedAt', ?${fresh.extra ? ", '$.extra', json(?)" : ""}), updated_at = ? WHERE id = ?`,
           params: [
             fresh.account,
             JSON.stringify(fresh.calendars),
             JSON.stringify(fresh.destinations),
             now,
+            ...(fresh.extra ? [JSON.stringify(fresh.extra)] : []),
             now,
             row.id,
           ],
@@ -660,6 +727,11 @@ export class ConnectorCapabilities {
         // Switched off while a sync was reading: whatever it left is taken away again.
         await this.db.batch(clearBusyStatements(row.id));
       }
+      // A payment platform (ADR-023): what a webhook may have missed is asked of the platform.
+      if (def.payments && def.capabilities.includes("pay_links")) {
+        const r = await this.payments.reconcile(this.payConnectionOf(row, def, ctx), now);
+        payNote = `, ${r.checked} link${r.checked === 1 ? "" : "s"} checked, ${r.paid} paid`;
+      }
       await this.db.client.query({
         sql: `UPDATE connectors SET status = CASE WHEN status = 'disabled' THEN status ELSE 'active' END,
                      last_sync_at = ?, last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL,
@@ -676,7 +748,7 @@ export class ConnectorCapabilities {
       ok: true,
       ...push,
       busy,
-      note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed`,
+      note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed${payNote}`,
     };
   }
 
@@ -1030,6 +1102,8 @@ export class ConnectorCapabilities {
       bookingsOn: def.capabilities.includes("write_bookings"),
       refreshedAt: now,
       inputs: inputs ?? {},
+      payOn: def.capabilities.includes("pay_links"),
+      mode: connected.mode ?? null,
     };
     const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
     const title = name?.trim() || presetLabel || def.title;
@@ -1055,7 +1129,7 @@ export class ConnectorCapabilities {
                        last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL, failures = 0,
                        notified_at = NULL,
                        config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?), '$.destinations', json(?),
-                       '$.extra', json(?), '$.refreshedAt', ?${inputs ? ", '$.inputs', json(?)" : ""}), updated_at = ? WHERE id = ?`,
+                       '$.extra', json(?), '$.refreshedAt', ?, '$.mode', ?${inputs ? ", '$.inputs', json(?)" : ""}), updated_at = ? WHERE id = ?`,
           params: [
             sealed,
             config.account,
@@ -1063,6 +1137,7 @@ export class ConnectorCapabilities {
             JSON.stringify(config.destinations),
             JSON.stringify(config.extra),
             now,
+            config.mode,
             ...(inputs ? [JSON.stringify(inputs)] : []),
             now,
             id,
@@ -1093,9 +1168,19 @@ export class ConnectorCapabilities {
     return this.view(await this.row(id), now);
   }
 
-  private async connectContext(now: number): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity }> {
+  private async connectContext(
+    now: number,
+    kind: string,
+  ): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity; hookUrl: string | null }> {
     if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
-    return { http: this.http, now, inbox: await this.identity() };
+    const inbox = await this.identity();
+    return { http: this.http, now, inbox, hookUrl: hookUrlOf(inbox.origin, kind) };
+  }
+
+  /** Where platforms send what they tell this inbox: `<origin>/v1/hooks/<kind>`; null without an https origin. */
+  private async hookBase(): Promise<string | null> {
+    const origin = (await this.identity()).origin;
+    return hookUrlOf(origin, "") === null ? null : `${origin}/v1/hooks/`;
   }
 
   private async identity(): Promise<InboxIdentity> {
@@ -1131,10 +1216,12 @@ export class ConnectorCapabilities {
     if (!box || !row.configEnc) throw new Error("no secret");
     const secret = JSON.parse(await box.open("connector-config", row.id, row.configEnc)) as Record<string, string>;
     const db = this.db;
+    const inbox = await this.identity();
     return {
       http: this.http,
       now,
-      inbox: await this.identity(),
+      inbox,
+      hookUrl: hookUrlOf(inbox.origin, row.kind),
       secret,
       extra: row.config.extra ?? {},
       calendars: row.config.calendars ?? [],
@@ -1259,6 +1346,8 @@ export class ConnectorCapabilities {
     ]);
     const l = links.rows[0] ?? [];
     const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    const pays = def?.payments && def.capabilities.includes("pay_links") ? await this.payments.counts(row.id) : null;
+    const hook = row.config.extra?.webhook;
     return {
       id: row.id,
       kind: row.kind,
@@ -1289,6 +1378,79 @@ export class ConnectorCapabilities {
       error_code: row.errorCode,
       failing_since: row.failingSince,
       created_at: row.createdAt,
+      pay_on: row.config.payOn,
+      mode: row.config.mode,
+      payments:
+        pays && def?.payments
+          ? {
+              open: pays.open,
+              paid: pays.paid,
+              failing: pays.failing,
+              last_paid_at: pays.lastPaidAt,
+              webhook: hook === "added" || hook === "by_hand" || hook === "per_link" ? hook : null,
+              dashboard_url: def.payments.dashboardUrl({ extra: row.config.extra ?? {} }, row.config.mode ?? "live"),
+            }
+          : null,
+    };
+  }
+
+  /* --- payments (ADR-023) ------------------------------------------------------ */
+
+  private payConnectionOf(row: ConnectorRow, def: ConnectorDefinition, ctx: RunContext): PayConnection {
+    if (!def.payments) throw new Error(`${def.kind} takes no payments`);
+    const presetLabel = row.config.preset ? def.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    return {
+      id: row.id,
+      kind: row.kind,
+      title: presetLabel ?? def.title,
+      mode: row.config.mode ?? "live",
+      status: row.status,
+      payOn: row.config.payOn,
+      payments: def.payments,
+      ctx,
+    };
+  }
+
+  /** What the payments side is given: the database, the payment connections opened, and their state. */
+  private payHost(): PayHost {
+    const open = async (row: ConnectorRow, now: number): Promise<PayConnection | null> => {
+      const def = this.definitions.get(row.kind);
+      if (!def?.payments || !def.capabilities.includes("pay_links") || !this.http || !this.secrets) return null;
+      try {
+        return this.payConnectionOf(row, def, await this.runContext(row, now));
+      } catch {
+        // Credentials that do not open here (another instance key): nothing can be asked of the platform.
+        return null;
+      }
+    };
+    return {
+      db: this.db,
+      payConnections: async (now) => {
+        const out: PayConnection[] = [];
+        for (const row of await this.rows()) {
+          if (!this.definitions.get(row.kind)?.payments) continue;
+          const conn = await open(row, now);
+          if (conn) out.push(conn);
+        }
+        return out;
+      },
+      payConnection: async (id, now) => {
+        const row = await this.rowOrNull(id);
+        return row ? open(row, now) : null;
+      },
+      failed: async (id, error, now) => {
+        const row = await this.rowOrNull(id);
+        if (row) await this.markError(row, error, now);
+      },
+      worked: async (id, now) => {
+        await this.db.client.query({
+          sql: `UPDATE connectors SET status = 'active', last_error = NULL, last_error_at = NULL, error_code = NULL,
+                       failing_since = NULL, failures = 0, notified_at = NULL, updated_at = ?
+                 WHERE id = ? AND status IN ('error', 'configured')`,
+          params: [now, id],
+          method: "run",
+        });
+      },
     };
   }
 }
@@ -1369,7 +1531,15 @@ function normaliseConfig(raw: unknown): PublicConfig {
       c.inputs && typeof c.inputs === "object"
         ? Object.fromEntries(Object.entries(c.inputs).filter(([, v]) => typeof v === "string"))
         : {},
+    payOn: c.payOn === true,
+    mode: c.mode === "live" || c.mode === "test" ? c.mode : null,
   };
+}
+
+/** `<origin>/v1/hooks/<kind>` for an https origin; null for none (a platform cannot reach it). */
+function hookUrlOf(origin: string, kind: string): string | null {
+  if (!origin.startsWith("https://")) return null;
+  return `${origin}/v1/hooks/${kind}`;
 }
 
 function bookingOf(itemId: string, r: readonly unknown[], origin: string): OutboundBooking | null {

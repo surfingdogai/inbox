@@ -27,6 +27,7 @@ import { Emails } from "./Emails";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
+import { Payments } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
 import { Sheet } from "./Sheet";
@@ -154,6 +155,7 @@ export function ItemDetailView({
         <WhoLine party={party} channel={item.channel} />
         <CustomerBlock customer={query.data.customer} currency={money} tz={tz} />
         <Fields item={item} tz={tz} />
+        {item.type === "order" && <Payments itemId={item.id} state={item.state} tz={tz} />}
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         <Emails mail={query.data.mail ?? []} tz={tz} />
         <CustomerData

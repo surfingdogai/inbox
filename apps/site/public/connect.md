@@ -42,6 +42,11 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
   what is offered, about three months ahead; confirmed bookings are written into the calendar. The
   owner connects one in Settings → Integrations, in person: an AI or an integration key can only
   `list_integrations` and `sync_integration`. See https://surfingdog.ai/docs/calendars/.
+- Payments: the business's own Stripe account (a restricted key) or Mollie account (its API key).
+  Every order the inbox accepts gets a link to pay into that account, and is marked paid once the
+  platform confirms it; refunds stay in the platform's dashboard. The owner connects it in Settings →
+  Integrations, in person; an AI reads an order's links with `list_payments` and records no money.
+  See https://surfingdog.ai/docs/payments/.
 - The email door: mail sent or forwarded to the inbox's address becomes a message.
 - An idempotency key on every owner write.
 
@@ -55,7 +60,8 @@ work around it in a way that pretends it exists.
   n8n), and the bridge calls the inbox.
 - Two-way calendar sync: a booking cancelled in Cal.com or a calendar is not cancelled in the inbox.
 - A hosted booking form, and a widget for the business's website.
-- Native connectors for Shopify, WooCommerce, Stripe, Mollie and Outlook calendars. They are on the
+- Pay links for bookings (deposits), and refunds made from the inbox.
+- Native connectors for Shopify, WooCommerce and Outlook calendars. They are on the
   requests board, https://surfingdog.ai/requests, where the person can vote for them.
 
 ---

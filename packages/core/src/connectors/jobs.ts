@@ -6,6 +6,7 @@ import { ownerAddressOf } from "../jobs/notify";
 import type { JobHandler } from "../jobs/runner";
 import { readSettings } from "../settings/schema";
 import { CONNECTOR_SYNC_INTERVAL_MS, type ConnectorCapabilities } from "./capability";
+import type { PayNoticeReason } from "./payments";
 
 /**
  * The jobs a connection runs. A sync (every five minutes, and when the owner asks) writes bookings
@@ -111,5 +112,85 @@ export function connectorNoticeHandler(
       { final: job.attempts >= job.maxAttempts, now },
     );
     return { note: sent === null ? "not sent: held back" : "told the owner the connection stopped syncing" };
+  };
+}
+
+/**
+ * An order's pay link brought in step with the order (ADR-023): made when it is accepted, made again
+ * when its total changes or a payment failed, closed when it ends. Every order event queues one, when
+ * a payment platform is connected or the order holds a live link.
+ */
+export function payLinkHandler(connectors: ConnectorCapabilities): JobHandler {
+  return async (job, { now }) => {
+    const itemId = (job.payload as { itemId?: unknown } | null)?.itemId;
+    if (typeof itemId !== "string") return { note: "no item id" };
+    return { note: `order ${itemId}: ${await connectors.payments.ensure(itemId, now)}` };
+  };
+}
+
+/**
+ * One email to the owner about one payment that needs them: paid after the order ended, paid twice,
+ * paid another amount, or a link that could not be made. In the inbox's own words, once per reason,
+ * through the mail log like every other email.
+ */
+export function payNoticeHandler(
+  connectors: ConnectorCapabilities,
+  mailOut: MailOut,
+  opts: { readonly baseUrl?: string | undefined } = {},
+): JobHandler {
+  return async (job, { db, now }) => {
+    const p = job.payload as { payId?: unknown; reason?: unknown } | null;
+    if (typeof p?.payId !== "string" || typeof p.reason !== "string") return { note: "no payment named" };
+    const reason = p.reason as PayNoticeReason;
+    const settings = await readSettings(db);
+    const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
+    const facts = await businessFacts(db, settings);
+    const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
+    let logged = await mailByJob(db, job.id);
+    if (!logged) {
+      const appUrl = (settings.notifications.appUrl ?? publicUrl).replace(/\/+$/, "");
+      const notice = await connectors.payments.noticeText(p.payId, reason, appUrl);
+      if (!notice) return { note: `payment ${p.payId}: nothing to tell any more` };
+      logged = await storeMail(
+        db,
+        {
+          itemId: notice.itemId,
+          jobKey: job.id,
+          recipient: "owner",
+          template: `owner.payment_${reason}`,
+          lang: "en",
+          subject: oneLine(notice.subject),
+          text: notice.text,
+          ...(sender ? {} : { skip: "no_sender" as const }),
+        },
+        mailDomain(sender?.from.address, publicUrl),
+        now,
+      );
+    }
+    if (logged.status === "skipped") return { note: `not sent: ${logged.skipReason ?? "skipped"}` };
+    if (logged.status === "sent" || logged.status === "failed") return { note: `already ${logged.status}` };
+    const address = await ownerAddressOf(db, settings);
+    if (!address || !sender) {
+      await db.client.query({
+        sql: "UPDATE outbound_mail SET status = 'skipped', skip_reason = ?, updated_at = ? WHERE id = ?",
+        params: [address ? "no_sender" : "no_address", now, logged.id],
+        method: "run",
+      });
+      return { note: `not sent: ${address ? "no sender" : "no address"}` };
+    }
+    const sent = await sendLogged(
+      db,
+      mailOut,
+      logged,
+      {
+        ...sender,
+        to: [address],
+        subject: logged.subject,
+        text: logged.bodyText,
+        headers: autoHeaders({ automatic: true, template: logged.template }),
+      },
+      { final: job.attempts >= job.maxAttempts, now },
+    );
+    return { note: sent === null ? "not sent: held back" : `told the owner: ${reason.replaceAll("_", " ")}` };
   };
 }

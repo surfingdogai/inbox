@@ -12,7 +12,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | Data | Your D1 database | Your SQLite file and blob directory | One database file per business on our servers |
 | Email out | Cloudflare Email Sending on Workers Paid, from `MAIL_FROM` on a domain onboarded there; or Resend | Cloudflare Email Sending or Resend; with neither, printed to the console | Included, from an address of ours that carries your business's name |
 | Email in | Email Routing (needs a Cloudflare zone) or a provider webhook | Forwarding, a subdomain MX, or a provider webhook | Not in the pilot: requests arrive through the inbox's doors and its page |
-| Connectors (coming) | The same MIT connector SDK; you bring your own credentials (a Shopify custom app token, a Google OAuth client, a Stripe restricted key…) | Same | The same connectors |
+| Connectors | The same MIT connector SDK; you bring your own credentials (a calendar's app password, a Google OAuth client, a Stripe restricted key, a Mollie API key…) | Same | The same connectors |
 | Backups | Yours (D1 time travel) | Yours; Litestream or nightly snapshots are the documented path | Done by us: every hour, encrypted |
 | Network | Join any network, or none, from settings; the setup suggests network.surfingdog.ai | Same | On network.surfingdog.ai from the day it goes live; switch it off, or add others, from settings |
 | Domain | Your Worker route or custom domain | Yours | A hostname on your own domain, such as `inbox.yourbusiness.com`, by one DNS record |

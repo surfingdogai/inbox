@@ -25,6 +25,7 @@ import type {
   Money,
   NetworkView,
   Page,
+  PaymentView,
   Profile,
   ReceiptStatus,
   ReceiptView,
@@ -70,6 +71,7 @@ export type {
   Money,
   NetworkView,
   Page,
+  PaymentView,
   Profile,
   ReceiptStatus,
   ReceiptView,
@@ -328,4 +330,6 @@ export interface ConnectionPatch {
   readonly destination?: string | null;
   readonly services?: readonly string[] | null;
   readonly paused?: boolean;
+  /** A payment platform: accepted orders get a link to pay (ADR-023). */
+  readonly pay_on?: boolean;
 }

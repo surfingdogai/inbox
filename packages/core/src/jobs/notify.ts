@@ -300,6 +300,16 @@ async function customerMail(
     returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
     now: o.now,
   });
+  // A payment is asked for in one email (ADR-023): every email is written from the order as it stands
+  // when it goes, so one about an order accepted and then asked to pay a moment later says the same as
+  // the request's own. Whichever goes second, once the first asked the customer to pay, stays.
+  if (
+    rendered.template === "order.awaiting_payment" &&
+    p.eventId &&
+    (await paymentAskedSince(db, item.id, p.eventId))
+  ) {
+    return { note: "no email: the customer was asked to pay in an email since" };
+  }
   const held = skip ?? (await heldAs(o.mailOut, kind, customerMailKind(p.event, cause, rendered.template)));
   return {
     itemId: item.id,
@@ -314,6 +324,24 @@ async function customerMail(
     text: cutLinks(rendered.text),
     ...(held ? { skip: held } : {}),
   };
+}
+
+/**
+ * Whether the customer was sent an email asking them to pay this order since the event: written from
+ * the order as it stood then, so it carried that request's link, or a newer one. One that failed to
+ * go does not count.
+ */
+async function paymentAskedSince(db: Db, itemId: string, eventId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM outbound_mail m
+           WHERE m.item_id = ? AND m.recipient = 'customer' AND m.template = 'order.awaiting_payment'
+             AND m.status IN ('queued', 'sent', 'retrying')
+             AND m.created_at >= (SELECT e.created_at FROM item_events e WHERE e.id = ?)
+           LIMIT 1`,
+    params: [itemId, eventId],
+    method: "all",
+  });
+  return rows.length > 0;
 }
 
 /**

@@ -277,6 +277,14 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         }),
       );
     }
+    // What a payment platform sends (ADR-023) is checked by its own signature, or read back from the
+    // platform, and is nobody's caller: it takes a token from the flood guard and goes straight on.
+    if (c.req.path.startsWith("/v1/hooks/")) {
+      const refused = await limited(c, ["public"]);
+      if (refused) return refused;
+      await next();
+      return;
+    }
     const caller = await callerFromRequest(deps.db, c.req.raw, {
       channel: "rest",
       sandbox: await sandbox(),
@@ -450,6 +458,23 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       return c.json(result, 429, { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterSec))) });
     }
     return c.json(result, result.outcome === "rejected" ? 422 : 200);
+  });
+  // A payment platform tells this inbox of a payment (ADR-023): Stripe signs it, Mollie names the
+  // link in the address. Nothing in the body is believed: the connection checks the signature and
+  // reads the payment back from the platform with the business's own key before an order is marked
+  // paid. 200 once read (or when it is not about a link here), 400 when no signature checks out,
+  // 503 when the platform could not be asked back (it sends it again).
+  app.post("/v1/hooks/:kind", async (c) => {
+    const kind = String(c.req.param("kind"));
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
+    const body = await c.req.text();
+    const url = new URL(c.req.url);
+    const r = await deps.caps.connectors.payments.receive(
+      kind,
+      { headers: c.req.raw.headers, body, query: url.searchParams },
+      clock(),
+    );
+    return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
   app.route("/v1/owner", ownerRest(deps.caps, { baseUrl: deps.baseUrl }));
   // After the owner routes, so their check (an owner principal, its scopes) runs on these first.
