@@ -2499,13 +2499,22 @@ legend.label-line {
   justify-items: start;
 }
 .found-line > textarea,
-.found-rows textarea {
+.found-rows textarea,
+.found-fix pre {
   width: 100%;
 }
 .found-code {
+  margin: 0;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
+}
+pre.found-code {
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm, 8px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .found-rec {
   display: grid;
@@ -2524,6 +2533,19 @@ legend.label-line {
 .found-wrap {
   overflow-wrap: anywhere;
 }
+.found-platform {
+  display: grid;
+  gap: 10px;
+}
+.found-soon {
+  display: inline-block;
+  padding: 0 7px;
+  margin-right: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
 .found-steps {
   display: grid;
   gap: 4px;
@@ -2532,6 +2554,13 @@ legend.label-line {
   line-height: 1.5;
   font-size: 13px;
   color: var(--ink-2);
+}
+.found-dns {
+  display: grid;
+  gap: 8px;
+}
+.found-dns > summary {
+  cursor: pointer;
 }
 .found-check {
   display: grid;
@@ -2547,6 +2576,10 @@ legend.label-line {
 }
 .found-ready {
   color: var(--c-success);
+}
+.found-group {
+  display: grid;
+  gap: 6px;
 }
 .found-rows {
   display: grid;
@@ -2566,9 +2599,19 @@ legend.label-line {
   font-weight: 500;
   color: var(--ink);
 }
-.found-rows li.is-ok > span:first-child {
+.found-rows li.is-ok > .found-mark {
   color: var(--c-success);
 }
-.found-rows li > textarea {
+.found-rows li.is-missing > .found-mark {
+  color: var(--ink-3);
+}
+.found-rows li.is-bad > .found-mark {
+  color: var(--c-warning-ink);
+  font-weight: 600;
+}
+.found-fix {
   grid-column: 2;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
 }

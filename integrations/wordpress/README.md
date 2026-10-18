@@ -1,14 +1,18 @@
 # Surfing Dog Inbox for WordPress
 
-A WordPress plugin that lets AI agents find a business's agent inbox from its website, from one
-setting (the inbox's address, `inbox.<domain>` unless set). It publishes the lines of ADR-022 and
+A WordPress plugin that points AI agents from a business's website to its agent inbox, from one
+setting (the inbox's address, `inbox.<domain>` unless set). Once the address is saved and the inbox
+answers there with its manifest, it publishes the lines of ADR-022 and
 `packages/spec/vectors/discovery.json`:
 
 - `<link rel="agent-inbox">` in every page's head, and the same as an HTTP `Link` header;
 - schema.org structured data on the front page, with a `potentialAction` pointing to the inbox;
-- `/llms.txt`, when the site has none of its own;
-- `/.well-known/agent-inbox.json`: a copy of the inbox's manifest, refreshed twice a day and checked
-  before it is served (an agent inbox's, naming the inbox's address as its own), else a redirect.
+- `/llms.txt`, when nothing else answers it (WordPress would answer 404);
+- `/.well-known/agent-inbox.json`, the same way: a copy of the inbox's manifest, checked before it is
+  kept (an agent inbox's, naming the inbox's address as its own).
+
+The copy is fetched by WP-Cron twice a day and when the address is saved, never while a visitor
+waits; a failed fetch waits 15 minutes; with no good copy for a week, nothing is published.
 
 Settings → Agent inbox also has Check, which asks Surfing Dog's checker (`GET /v1/discovery/{domain}`)
 what is in place and what is missing, robots.txt included, only when pressed.

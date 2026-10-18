@@ -6,17 +6,34 @@ import { useId, useState } from "react";
 import { ErrorState } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { api, problemOf } from "../lib/api";
-import { FIX_SHOWN, headLines, ITEM_WORDS, PLATFORMS, type Platform, webPersonMailto } from "../lib/found";
-import type { DiscoveryResult, DiscoveryView } from "../lib/types";
+import {
+  DNS_RECORD,
+  DNS_RECORD_LINE,
+  FIX_SHOWN,
+  GROUP_OF,
+  GROUPS,
+  headLines,
+  ITEM_WORDS,
+  PLATFORMS,
+  type Platform,
+  ROBOTS_LEAD,
+  ROBOTS_NOTE,
+  shortDetail,
+  verdict,
+  webPersonEmail,
+  webPersonMailto,
+} from "../lib/found";
+import type { DiscoveryItem, DiscoveryResult, DiscoverySnippets, DiscoveryView } from "../lib/types";
 
 export const Route = createFileRoute("/settings/found")({
   component: FoundPage,
 });
 
 /**
- * Settings → Be found (ADR-022): the few lines that lead AI agents from the business's own website to
- * this inbox, the steps where the site is, an email for whoever runs it, and a check by Surfing Dog's
- * checker, which reads the site's public pages only when the owner presses Check.
+ * Settings → Be found (ADR-022), in the order a small owner needs it: where the website is, that platform's
+ * steps with only the lines it needs, one DNS record folded for whoever manages DNS, Check and an email for
+ * whoever runs the site, then what the check found. Surfing Dog's checker reads the site's public pages only
+ * when the owner presses Check; the platform it read is then picked, unless the owner picked one.
  */
 function FoundPage() {
   const view = useQuery({ queryKey: ["discovery"], queryFn: api.discovery, staleTime: 60_000 });
@@ -45,7 +62,7 @@ function Found({
   view: DiscoveryView;
   check: ReturnType<typeof useMutation<DiscoveryResult, Error, void>>;
 }) {
-  const [platform, setPlatform] = useState<Platform["id"]>("wordpress");
+  const [chosen, setChosen] = useState<Platform["id"] | null>(null);
   const name = useId();
   if (!view.host) {
     return <p className="hint">This inbox has no public address yet. Once it has one, the lines are here.</p>;
@@ -58,7 +75,8 @@ function Found({
     );
   }
   const s = view.snippets;
-  const steps = PLATFORMS.find((p) => p.id === platform) ?? PLATFORMS[0];
+  const picked = chosen ?? check.data?.platform ?? null;
+  const platform = PLATFORMS.find((p) => p.id === picked);
   const problem = check.error ? problemOf(check.error) : null;
   return (
     <>
@@ -66,53 +84,34 @@ function Found({
         On <b>{view.domain}</b>, leading to <b>{view.host}</b>.
         {view.domainFrom === "inbox" && " Not your website? Name it in General."}
       </p>
-      {check.data && <CheckCard result={check.data} />}
-      {problem && (
-        <p className="hint error" role="alert">
-          {problem.detail}
-        </p>
-      )}
-      <CopyLine label="Inside <head> on every page" text={headLines(s)} rows={4} />
-      <CopyLine label="In llms.txt" text={s.llms_line} rows={2} />
-      <div className="found-line">
-        <span className="label">A DNS record, beside the one for this inbox</span>
-        <dl className="found-rec mono-soft">
-          <dt>Type</dt>
-          <dd>TXT</dd>
-          <dt>Name</dt>
-          <dd>{s.dns_name}</dd>
-          <dt>Value</dt>
-          <dd>{s.dns_value}</dd>
-        </dl>
-        <CopyButton text={s.dns_value} what="the value" />
-      </div>
-      <p className="hint">
-        And at <span className="mono-soft found-wrap">{s.well_known}</span>: a copy of this inbox's manifest, or a
-        redirect to it.
-      </p>
       <fieldset className="chips-field">
         <legend className="label">Where is your website?</legend>
         <div className="chips" role="radiogroup">
           {PLATFORMS.map((p) => (
             <label key={p.id} className="chip">
-              <input type="radio" name={name} checked={platform === p.id} onChange={() => setPlatform(p.id)} />
+              <input type="radio" name={name} checked={picked === p.id} onChange={() => setChosen(p.id)} />
               <span>{p.name}</span>
             </label>
           ))}
         </div>
       </fieldset>
-      {steps && (
-        <ol className="found-steps">
-          {steps.steps.map((st) => (
-            <li key={st}>{st}</li>
-          ))}
-          {steps.note && <li className="hint">{steps.note}</li>}
-        </ol>
-      )}
+      {platform && <PlatformSteps p={platform} s={s} />}
+      <details className="found-dns">
+        <summary className="label">{DNS_RECORD}</summary>
+        <div className="found-line">
+          <span className="label">{DNS_RECORD_LINE}</span>
+          <dl className="found-rec mono-soft">
+            <dt>Type</dt>
+            <dd>TXT</dd>
+            <dt>Name</dt>
+            <dd>{s.dns_name}</dd>
+            <dt>Value</dt>
+            <dd>{s.dns_value}</dd>
+          </dl>
+          <CopyButton text={s.dns_value} what="the value" />
+        </div>
+      </details>
       <div className="form-actions">
-        <a className="btn btn-ghost btn-sm" href={webPersonMailto(view.domain, view.host, s)}>
-          Send to my web person
-        </a>
         <button
           type="button"
           className="btn btn-primary btn-sm"
@@ -121,44 +120,106 @@ function Found({
         >
           {check.isPending ? "Checking…" : "Check"}
         </button>
+        <a className="btn btn-ghost btn-sm" href={webPersonMailto(view.domain, view.host, s)}>
+          Send to my web person
+        </a>
+        <CopyButton text={webPersonEmail(view.domain, view.host, s)} what="the email" label="Copy the email" />
       </div>
       <p className="hint">
         Check asks Surfing Dog's checker to read your website's public pages, as a browser would. Nothing is sent until
         you press it.
       </p>
+      {problem && (
+        <p className="hint error" role="alert">
+          {problem.detail}
+        </p>
+      )}
+      {check.data && <CheckCard result={check.data} />}
     </>
+  );
+}
+
+function PlatformSteps({ p, s }: { p: Platform; s: DiscoverySnippets }) {
+  return (
+    <div className="found-platform">
+      {p.soon && (
+        <p className="hint">
+          <span className="found-soon">Soon</span> {p.soon}
+        </p>
+      )}
+      <ol className="found-steps">
+        {p.steps.map((st) => (
+          <li key={st}>{st}</li>
+        ))}
+      </ol>
+      {p.blocks.includes("head") && <CopyLine label="Inside <head> on every page" text={headLines(s)} rows={4} />}
+      {p.blocks.includes("llms_line") && <CopyLine label="In llms.txt" text={s.llms_line} rows={2} />}
+      {p.blocks.includes("llms_file") && (
+        <CopyLine label="No llms.txt yet? The whole file" text={s.llms_file} rows={5} />
+      )}
+      {p.blocks.includes("inbox_file") && (
+        <p className="hint">
+          The inbox file, at <span className="mono-soft found-wrap">{s.well_known}</span>: a copy of{" "}
+          <span className="mono-soft found-wrap">{s.manifest}</span>, or a redirect to it.
+        </p>
+      )}
+      {p.note && <p className="hint">{p.note}</p>}
+    </div>
   );
 }
 
 function CheckCard({ result }: { result: DiscoveryResult }) {
   return (
     <div className="found-check" role="status">
-      <p className={clsx("found-verdict", result.ready && "found-ready")}>
-        {result.ready
-          ? `Agents can find it: ${result.ways} of 5 ways in place.`
-          : `Not yet: ${result.ways} of 5 ways in place.`}
-      </p>
-      <ul className="found-rows">
-        {result.items.map((it) => (
-          <li key={it.id} className={it.state === "ok" ? "is-ok" : "is-no"}>
-            <span aria-hidden="true">{it.state === "ok" ? "✓" : "·"}</span>
-            <span>
-              <b className="found-item">{ITEM_WORDS[it.id]}</b> {it.detail}
+      <p className={clsx("found-verdict", result.ready && "found-ready")}>{verdict(result)}</p>
+      {(["inbox", "site"] as const).map((g) => {
+        const rows = result.items.filter((it) => GROUP_OF[it.id] === g);
+        if (rows.length === 0) return null;
+        return (
+          <div key={g} className="found-group">
+            <span className="label">
+              {GROUPS[g].replace("{domain}", result.domain).replace("{ways}", String(result.ways))}
             </span>
-            {it.state !== "ok" && it.fix && FIX_SHOWN.has(it.id) && (
-              <textarea
-                className="input found-code"
-                readOnly
-                rows={6}
-                value={it.fix}
-                aria-label={`The fix: ${ITEM_WORDS[it.id]}`}
-              />
-            )}
-          </li>
-        ))}
-      </ul>
+            <ul className="found-rows">
+              {rows.map((it) => (
+                <Row key={it.id} it={it} domain={result.domain} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
       {result.next && <p className="hint">Next: {result.next.split("\n")[0]}</p>}
     </div>
+  );
+}
+
+function Row({ it, domain }: { it: DiscoveryItem; domain: string }) {
+  const mark = it.state === "ok" ? "ok" : it.state === "missing" ? "missing" : "bad";
+  const fix = mark !== "ok" && FIX_SHOWN.has(it.id) ? it.fix : undefined;
+  return (
+    <li className={`is-${mark}`}>
+      <span className="found-mark" aria-hidden="true">
+        {mark === "ok" ? "✓" : mark === "missing" ? "○" : "!"}
+      </span>
+      <span>
+        <b className="found-item">{ITEM_WORDS[it.id]}</b> {shortDetail(it.detail, it.state, domain)}
+      </span>
+      {fix && it.id === "robots" && it.fix_lines && (
+        <div className="found-fix">
+          <span>{ROBOTS_LEAD}</span>
+          <pre className="found-code">{it.fix_lines}</pre>
+          <CopyButton text={it.fix_lines} what="the robots.txt lines" />
+          <span className="hint">{ROBOTS_NOTE}</span>
+        </div>
+      )}
+      {fix && it.id === "robots" && !it.fix_lines && (
+        <div className="found-fix">
+          <span>{fix.split("\n\n")[0]}</span>
+          <span className="hint">{ROBOTS_NOTE}</span>
+        </div>
+      )}
+      {fix && it.id !== "robots" && <span className="found-fix">{fix}</span>}
+    </li>
   );
 }
 
@@ -175,13 +236,13 @@ function CopyLine({ label, text, rows }: { label: string; text: string; rows: nu
   );
 }
 
-function CopyButton({ text, what }: { text: string; what: string }) {
+function CopyButton({ text, what, label = "Copy" }: { text: string; what: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
       className="btn btn-ghost btn-sm"
-      aria-label={`Copy ${what}`}
+      aria-label={label === "Copy" ? `Copy ${what}` : label}
       onClick={() =>
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
@@ -190,7 +251,7 @@ function CopyButton({ text, what }: { text: string; what: string }) {
       }
     >
       {copied ? <Check className="icon" aria-hidden="true" /> : <Copy className="icon" aria-hidden="true" />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? "Copied" : label}
     </button>
   );
 }

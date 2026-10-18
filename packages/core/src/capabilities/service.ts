@@ -1,5 +1,5 @@
 import type { MailOut } from "@surfingdog/platform";
-import { type DiscoveryResult, type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
+import { type DiscoveryAnswer, type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
@@ -437,7 +437,7 @@ export class Capabilities {
   }
 
   /** The network's discovery check of those lines, when the owner asks: nothing is sent unasked. */
-  async checkDiscovery(caller: Caller): Promise<DiscoveryResult> {
+  async checkDiscovery(caller: Caller): Promise<DiscoveryAnswer> {
     return checkDiscovery(await this.getDiscovery(caller), this.discoveryFetch);
   }
 

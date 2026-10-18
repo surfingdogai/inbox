@@ -365,16 +365,20 @@ export interface DiscoveryItem {
   readonly state: "ok" | "missing" | "wrong" | "blocked" | "unreadable";
   readonly detail: string;
   readonly fix?: string | undefined;
+  readonly fix_lines?: string | undefined;
 }
 
+/** The check as the inbox read it (the spec's DiscoveryAnswer): a state this version does not know is left out. */
 export interface DiscoveryResult {
   readonly domain: string;
   readonly host: string;
   readonly manifest: string;
   readonly checked_at: string;
   readonly ready: boolean;
+  readonly state?: "ready" | "unreachable" | "blocked" | "robots_unreadable" | "dns_only" | "no_way" | undefined;
   readonly ways: number;
-  readonly hosted?: "live" | "lost" | "closed" | undefined;
+  readonly site_ways?: number | undefined;
+  readonly platform?: "wordpress" | "shopify" | "wix" | "squarespace" | undefined;
   readonly next: string;
   readonly items: readonly DiscoveryItem[];
 }

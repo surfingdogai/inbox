@@ -1081,11 +1081,14 @@ sent a code before.
 
 A network SHOULD offer the same to a business's owner with no AI and no account: the reference
 network's is `/b/<domain>/owner` (the result page's `owner.manage`), with the `dns` and `code`
-proofs. A code goes only to an address at the domain: the owner picks the name before
-`@<domain>` and never types the domain. A correction is kept field by field (what was declared or
-shown before, what it is now, the proof's label, and whether it came from the page or the tools), and
+proofs. A code goes only to an address at the domain the owner picks, never one typed: a role
+address, or one the site itself publishes. The address that holds a listing's code claim is never
+locked out of a new code. A correction is kept field by field (what was declared or shown before,
+what it is now, the proof's label, who made it, and whether it came from the page or the tools), and
 every fact a listing shows that the business said itself, by registering or correcting, carries
 `via: "business"` in its `facts` (§4.10), so a reader tells the business's word from what was read.
+Nothing a person does on that page lifts a suppression the site asked for, unless they ask for it
+to be read again.
 
 `update_business` needs a claim token or a proof at least as strong as the listing's, **opt-out
 included**, for a listing that is claimed or registered. An opt-out without a proof, through the tool
@@ -1337,10 +1340,18 @@ A network MAY check them: `GET /v1/discovery/{domain}?host=&target=` (`schemas/d
 and the MCP tool `check_dns` with the same answer. It reads as a browser would and nothing the site's
 robots.txt keeps its reader off, follows redirects only within the domain, its `www.` and the inbox's
 host, and answers each item (`cname`, `manifest`, `robots`, and the five ways) with `ok`, `missing`,
-`wrong`, `blocked` or `unreadable`, a sentence, and when it is not `ok`, the exact fix. `robots` is
-`blocked` when robots.txt keeps out an AI assistant that fetches for a person (`ChatGPT-User`,
-`Claude-User`, `Perplexity-User`…); keeping out training crawlers is the owner's choice and never a
-finding. `ready` is the inbox answering, no assistant kept out, and at least one way in place.
+`wrong`, `blocked` or `unreadable`, a sentence, and when it is not `ok`, the exact fix (`fix_lines`:
+the text to paste alone). `robots` is `blocked` when robots.txt keeps out an AI assistant that fetches
+for a person (`ChatGPT-User`, `Claude-User`, `Perplexity-User`…); keeping out training crawlers is
+the owner's choice and never a finding. A robots.txt that answers 5xx or 429, or does not answer, is
+read as RFC 9309 says (nothing else of the site is read) and is `unreadable`; a 4xx is no rules.
+`ready` is the inbox answering, no assistant kept out, and at least one of the four ways **on the
+website** in place; `state` says which of these holds (`ready`, `unreachable`, `blocked`,
+`robots_unreadable`, `dns_only`, `no_way`), `site_ways` counts the website's ways, and `platform`
+names the site's platform when the check read one. The public answer never says whether a host is a
+hosted inbox's. An inbox reads the answer leniently (`readDiscoveryAnswer`): an item or a state it
+does not know is left out, so a network can add them. The words a surface shows for it are
+`vectors/discovery-words.json`.
 
 A network MAY also offer `start_inbox`, the link where an owner sets up a hosted inbox for the domain:
 the link carries the domain and nothing else, and the tool never signs anyone up or takes an email.

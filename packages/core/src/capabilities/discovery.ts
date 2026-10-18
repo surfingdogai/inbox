@@ -1,9 +1,9 @@
 import {
-  type DiscoveryResult,
+  type DiscoveryAnswer,
   type DiscoverySnippets,
-  discoveryResultSchema,
   discoverySnippets,
   MANIFEST_PATH,
+  readDiscoveryAnswer,
 } from "@surfingdog/spec";
 import type { Settings } from "../settings/schema";
 import { DEFAULT_NETWORK } from "../settings/schema";
@@ -96,10 +96,11 @@ const CHECK_MAX_BYTES = 256 * 1024;
 
 /**
  * Asks the network's discovery check about the view's domain and host: one GET, https only, no
- * redirect followed, a short timeout, at most 256 KiB read, and the answer held to the published
- * schema before anything is shown. `fetchImpl` is the host's outbound fetch (`pinnedFetch` on Node).
+ * redirect followed, a short timeout, at most 256 KiB read, and the answer read as an inbox reads it
+ * (`readDiscoveryAnswer`: what this version knows of it, never refused because the network says more)
+ * before anything is shown. `fetchImpl` is the host's outbound fetch (`pinnedFetch` on Node).
  */
-export async function checkDiscovery(view: DiscoveryView, fetchImpl: typeof fetch = fetch): Promise<DiscoveryResult> {
+export async function checkDiscovery(view: DiscoveryView, fetchImpl: typeof fetch = fetch): Promise<DiscoveryAnswer> {
   if (!view.domain || !view.host) {
     throw new WriteError("wrong_state", "Name your website in Settings first: the check reads it.");
   }
@@ -125,6 +126,7 @@ export async function checkDiscovery(view: DiscoveryView, fetchImpl: typeof fetc
   }
   const text = await readUpTo(res, CHECK_MAX_BYTES);
   if (res.status === 429) throw new WriteError("too_many_attempts", "Checked a moment ago. Try again in a minute.");
+  if (res.status === 503) throw new WriteError("internal", "The checker is busy just now. Try again in a minute.");
   if (res.status === 422) {
     let detail = "This site can't be checked.";
     try {
@@ -144,9 +146,9 @@ export async function checkDiscovery(view: DiscoveryView, fetchImpl: typeof fetc
   } catch {
     throw new WriteError("internal", "The checker answered something that is not a check.");
   }
-  const result = discoveryResultSchema.safeParse(parsed);
-  if (!result.success) throw new WriteError("internal", "The checker answered something that is not a check.");
-  return result.data;
+  const result = readDiscoveryAnswer(parsed);
+  if (!result) throw new WriteError("internal", "The checker answered something that is not a check.");
+  return result;
 }
 
 /** The body as text, or null past max bytes. */

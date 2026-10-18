@@ -120,6 +120,22 @@ export const discoveryItemIdSchema = z.enum([
   "dns_txt",
 ]);
 
+/** The ways that lead from the business's website to its inbox: what a check needs one of to be ready. */
+export const DISCOVERY_SITE_WAYS = ["well_known", "llms_txt", "link", "schema_org"] as const;
+
+/**
+ * What a check found, as a whole: `ready`; `unreachable`, the inbox does not answer at its host;
+ * `blocked`, robots.txt keeps AI assistants out; `robots_unreadable`, robots.txt cannot be read, so crawlers
+ * that follow it read nothing; `dns_only`, only the DNS pointer leads to the inbox (few agents read it yet);
+ * `no_way`, nothing does. New states may be added: a reader takes one it does not know as not ready.
+ */
+export const DISCOVERY_STATES = ["ready", "unreachable", "blocked", "robots_unreadable", "dns_only", "no_way"] as const;
+export type DiscoveryState = (typeof DISCOVERY_STATES)[number];
+
+/** The platforms a check names, for their steps (vectors/discovery-words.json). */
+export const DISCOVERY_PLATFORMS = ["wordpress", "shopify", "wix", "squarespace"] as const;
+export type DiscoveryPlatform = (typeof DISCOVERY_PLATFORMS)[number];
+
 /** One thing a discovery check looked at, and when it is not found, the exact fix. */
 export const discoveryItemSchema = z.object({
   id: discoveryItemIdSchema,
@@ -135,10 +151,14 @@ export const discoveryItemSchema = z.object({
     ),
   detail: z.string().describe("One sentence: what was found."),
   fix: z.string().optional().describe("The exact record, line or file to add, when it is not ok."),
+  fix_lines: z.string().optional().describe("The text to paste, alone, when the fix is one."),
 });
 export type DiscoveryItem = z.infer<typeof discoveryItemSchema>;
 
-/** `GET /v1/discovery/{domain}`: whether agents find a business's inbox from its domain. */
+/**
+ * `GET /v1/discovery/{domain}`: whether agents find a business's inbox from its domain. It never says whether a
+ * host is a hosted inbox's: that is its owner's to see, on its own Connect page.
+ */
 export const discoveryResultSchema = z.object({
   domain: z.string().describe("The business's own domain (its registrable domain)."),
   host: z.string().describe("Where the inbox answers: inbox.<domain> unless another was named."),
@@ -147,17 +167,84 @@ export const discoveryResultSchema = z.object({
   ready: z
     .boolean()
     .describe(
-      "The inbox answers at its host, robots.txt keeps no AI assistant out, and at least one way from the domain leads to it.",
+      "The inbox answers at its host, robots.txt keeps no AI assistant out, and at least one way on the business's website leads to it (the DNS pointer alone does not).",
     ),
+  state: z.enum(DISCOVERY_STATES).describe("What the check found, as a whole; ready is state ready."),
   ways: z.int().min(0).max(5).describe("How many of well_known, llms_txt, link, schema_org and dns_txt lead to it."),
-  hosted: z
-    .enum(["live", "lost", "closed"])
+  site_ways: z.int().min(0).max(4).describe("How many of those are on the website (all but dns_txt)."),
+  platform: z
+    .enum(DISCOVERY_PLATFORMS)
     .optional()
-    .describe("When the host is a Surfing Dog hosted inbox's: whether it is live there."),
+    .describe("The site's platform, when its homepage (or the network's last read of it) shows one of these."),
   next: z.string().describe("The one step worth doing first."),
   items: z.array(discoveryItemSchema),
 });
 export type DiscoveryResult = z.infer<typeof discoveryResultSchema>;
+
+/**
+ * A network's answer as an inbox reads it: leniently, since a network grows before the inboxes that ask it
+ * are upgraded. An item whose id or state this version does not know is left out, a state it does not know is
+ * read as not ready, and ways and site_ways have no ceiling. `discoveryResultSchema` stays the network's own
+ * contract.
+ */
+export interface DiscoveryAnswer {
+  readonly domain: string;
+  readonly host: string;
+  readonly manifest: string;
+  readonly checked_at: string;
+  readonly ready: boolean;
+  readonly state?: DiscoveryState | undefined;
+  readonly ways: number;
+  readonly site_ways?: number | undefined;
+  readonly platform?: DiscoveryPlatform | undefined;
+  readonly next: string;
+  readonly items: readonly DiscoveryItem[];
+}
+
+const discoveryAnswerShape = z.object({
+  domain: z.string(),
+  host: z.string(),
+  manifest: z.string(),
+  checked_at: z.string(),
+  ready: z.boolean(),
+  state: z.string().optional(),
+  ways: z.int().min(0),
+  site_ways: z.int().min(0).optional(),
+  platform: z.string().optional(),
+  next: z.string(),
+  items: z.array(z.unknown()),
+});
+
+/** Reads a network's answer as an inbox does (`DiscoveryAnswer`); null for one that is not a check at all. */
+export function readDiscoveryAnswer(value: unknown): DiscoveryAnswer | null {
+  const r = discoveryAnswerShape.safeParse(value);
+  if (!r.success) return null;
+  const a = r.data;
+  const items: DiscoveryItem[] = [];
+  for (const it of a.items) {
+    const p = discoveryItemSchema.safeParse(it);
+    if (p.success) items.push(p.data);
+  }
+  const state = (DISCOVERY_STATES as readonly string[]).includes(a.state ?? "")
+    ? (a.state as DiscoveryState)
+    : undefined;
+  const platform = (DISCOVERY_PLATFORMS as readonly string[]).includes(a.platform ?? "")
+    ? (a.platform as DiscoveryPlatform)
+    : undefined;
+  return {
+    domain: a.domain,
+    host: a.host,
+    manifest: a.manifest,
+    checked_at: a.checked_at,
+    ready: a.ready && (state === undefined ? a.state === undefined : state === "ready"),
+    state,
+    ways: a.ways,
+    site_ways: a.site_ways,
+    platform,
+    next: a.next,
+    items,
+  };
+}
 
 /** `check_dns`: is the inbox's DNS record in place, and does the domain lead agents to it. */
 export const checkDnsInputSchema = z.object({

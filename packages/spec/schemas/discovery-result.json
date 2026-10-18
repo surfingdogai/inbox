@@ -24,7 +24,12 @@
     },
     "ready": {
       "type": "boolean",
-      "description": "The inbox answers at its host, robots.txt keeps no AI assistant out, and at least one way from the domain leads to it."
+      "description": "The inbox answers at its host, robots.txt keeps no AI assistant out, and at least one way on the business's website leads to it (the DNS pointer alone does not)."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["ready", "unreachable", "blocked", "robots_unreadable", "dns_only", "no_way"],
+      "description": "What the check found, as a whole; ready is state ready."
     },
     "ways": {
       "type": "integer",
@@ -32,10 +37,16 @@
       "maximum": 5,
       "description": "How many of well_known, llms_txt, link, schema_org and dns_txt lead to it."
     },
-    "hosted": {
-      "description": "When the host is a Surfing Dog hosted inbox's: whether it is live there.",
+    "site_ways": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "How many of those are on the website (all but dns_txt)."
+    },
+    "platform": {
+      "description": "The site's platform, when its homepage (or the network's last read of it) shows one of these.",
       "type": "string",
-      "enum": ["live", "lost", "closed"]
+      "enum": ["wordpress", "shopify", "wix", "squarespace"]
     },
     "next": {
       "type": "string",
@@ -67,11 +78,15 @@
           "fix": {
             "description": "The exact record, line or file to add, when it is not ok.",
             "type": "string"
+          },
+          "fix_lines": {
+            "description": "The text to paste, alone, when the fix is one.",
+            "type": "string"
           }
         },
         "required": ["id", "need", "state", "detail"]
       }
     }
   },
-  "required": ["domain", "host", "manifest", "checked_at", "ready", "ways", "next", "items"]
+  "required": ["domain", "host", "manifest", "checked_at", "ready", "state", "ways", "site_ways", "next", "items"]
 }

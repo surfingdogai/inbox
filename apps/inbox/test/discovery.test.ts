@@ -19,8 +19,11 @@ const ANSWER = {
   manifest: "https://inbox.oficinamare.pt/.well-known/agent-inbox.json",
   checked_at: "2026-10-18T09:00:01.250Z",
   ready: false,
+  state: "blocked",
   ways: 1,
-  next: "Add this to https://oficinamare.pt/robots.txt, above any other group:\n\nUser-agent: Claude-User\nAllow: /\n",
+  site_ways: 1,
+  platform: "wordpress",
+  next: "Let AI assistants in: add the robots.txt lines above.",
   items: [
     { id: "cname", need: "required", state: "ok", detail: "inbox.oficinamare.pt points to k3x9.hosted.surfingdog.ai." },
     { id: "manifest", need: "required", state: "ok", detail: "The inbox answers at inbox.oficinamare.pt." },
@@ -29,7 +32,8 @@ const ANSWER = {
       need: "required",
       state: "blocked",
       detail: "robots.txt keeps out AI assistants that people use: Claude-User.",
-      fix: "Add this to https://oficinamare.pt/robots.txt, above any other group:\n\nUser-agent: Claude-User\nAllow: /\n",
+      fix: "Add these lines at the top of https://oficinamare.pt/robots.txt:\n\nUser-agent: Claude-User\nAllow: /\n\nBlocking training crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot) is fine: it doesn't stop assistants.",
+      fix_lines: "User-agent: Claude-User\nAllow: /\n",
     },
     { id: "llms_txt", need: "recommended", state: "ok", detail: "llms.txt names the inbox." },
   ],
@@ -106,8 +110,36 @@ describe("Be found", () => {
     expect(calls[0]?.init?.redirect).toBe("manual");
   });
 
+  it("reads a newer network's answer as far as it knows it, never refusing it for saying more", async () => {
+    const newer = {
+      ...ANSWER,
+      state: "a_state_of_later",
+      ways: 6,
+      site_ways: 5,
+      platform: "a-builder-of-later",
+      hosted: "lost",
+      items: [
+        ...ANSWER.items,
+        { id: "a_sixth_way", need: "optional", state: "ok", detail: "…" },
+        { ...ANSWER.items[0], state: "odd" },
+      ],
+    };
+    const { call } = await setup(() => json(newer));
+    await call("PUT", "/v1/owner/settings", { doc: { directory: { url: "https://oficinamare.pt" } } });
+    const res = await call("POST", "/v1/owner/discovery/check");
+    expect(res.status).toBe(200);
+    const got = (await res.json()) as Record<string, unknown>;
+    expect(got.ready).toBe(false);
+    expect(got.state).toBeUndefined();
+    expect(got.platform).toBeUndefined();
+    expect(got.hosted).toBeUndefined();
+    expect(got.ways).toBe(6);
+    expect((got.items as unknown[]).length).toBe(ANSWER.items.length);
+  });
+
   for (const [name, answer, status, words] of [
-    ["an answer that is not a check", () => json({ ...ANSWER, ways: 9 }), 500, "not a check"],
+    ["an answer that is not a check", () => json({ ...ANSWER, ready: "yes" }), 500, "not a check"],
+    ["a checker too busy to read", () => json({ title: "Busy" }, 503), 500, "busy"],
     [
       "a redirect, never followed",
       () => new Response(null, { status: 302, headers: { location: "https://elsewhere.example/" } }),

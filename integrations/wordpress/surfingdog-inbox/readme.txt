@@ -8,22 +8,24 @@ Stable tag: 0.1.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
-Lets AI agents find your agent inbox from your website. One setting.
+Points AI agents from your website to your agent inbox. One setting.
 
 == Description ==
 
-Your agent inbox answers at its own address, like inbox.yourdomain.com. This plugin makes your website lead AI agents there:
+Your agent inbox answers at its own address, like inbox.yourdomain.com. This plugin makes your website point AI agents there:
 
 * a link in every page's head (`<link rel="agent-inbox">`) and the same as an HTTP Link header;
 * structured data on your front page (schema.org, with a potentialAction pointing to the inbox);
-* `/llms.txt`, when your site has none of its own, with your site's name and the inbox's line;
-* `/.well-known/agent-inbox.json`: a copy of your inbox's manifest, refreshed twice a day and checked before it is served, or a redirect to it.
+* `/llms.txt`, when nothing else on your site answers it, with your site's name and the inbox's line;
+* `/.well-known/agent-inbox.json`, when nothing else answers it: a copy of your inbox's manifest, checked before it is kept.
 
-Settings → Agent inbox has the one setting (the inbox's address: inbox.yourdomain.com unless you set another), what is published, and Check, which asks Surfing Dog's checker whether agents can find your inbox and what is missing, robots.txt included.
+It publishes nothing until you save the address in Settings → Agent inbox and your inbox answers there as an agent inbox, so agents are never sent to an inbox that is not there. The copy is refreshed twice a day in the background, never while a visitor waits.
+
+Settings → Agent inbox has the one setting (the inbox's address: inbox.yourdomain.com unless you set another), what is published, and Check, which asks Surfing Dog's checker what is in place and what is missing, robots.txt included.
 
 = What it contacts =
 
-* Your inbox's own manifest, at the address you set, twice a day at most, to keep its copy.
+* Your inbox's own manifest, at the address you set: twice a day, in the background (WP-Cron), and when you save the address.
 * Surfing Dog's checker (network.surfingdog.ai), only when you press Check: it receives your site's domain and the inbox's address, and reads your site's public pages as a browser would.
 
 Nothing else. No tracking, no account.
@@ -44,7 +46,7 @@ WordPress must answer at the root of your domain for `/llms.txt` and `/.well-kno
 
 = My site already has an llms.txt =
 
-A file on disk, or one another plugin serves first, stays as it is. Add the line the settings page shows to it.
+A file on disk, or one another plugin serves, stays as it is: this plugin answers /llms.txt only when nothing else does. Add the line the settings page shows to yours.
 
 = Does it change robots.txt? =
 
