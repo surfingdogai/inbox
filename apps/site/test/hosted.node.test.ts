@@ -336,22 +336,23 @@ describe("hosted first, once the pilot is open", () => {
     expect(HOSTED_HOW_DATA).toEqual(hostedHowData(HOSTED_PILOT_OPEN));
   });
 
-  it("/hosted/, /try/ and /assistants/: the hosted inbox's start is their primary button while open", () => {
+  it("/hosted/, /try/ and /inbox/assistants/: the hosted inbox's start is their primary button while open", () => {
     expect(HOSTED_CTA).toEqual(hostedCta(HOSTED_PILOT_OPEN));
     expect(hostedCta(true)).toEqual({ label: "Get your agent inbox", href: START_URL });
     expect(hostedCta(false)).toBeNull();
     for (const page of [
       "src/pages/hosted/[...slug].astro",
       "src/pages/try.astro",
-      "src/pages/assistants/index.astro",
+      "src/pages/inbox/assistants.astro",
     ]) {
       const src = read(page);
       expect(src, page).toContain("import { HOSTED_CTA");
       expect(src, page).toMatch(/<a class="btn btn-primary" href=\{HOSTED_CTA\.href\}>/);
     }
-    // While open, /try/ and /assistants/ step their own buttons back.
+    // While open, /try/ and /inbox/assistants/ step their own buttons back; /assistants/ is a person's page, with none.
     expect(read("src/pages/try.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
-    expect(read("src/pages/assistants/index.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+    expect(read("src/pages/inbox/assistants.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+    expect(read("src/pages/assistants/index.astro")).not.toContain("HOSTED_CTA");
   });
 
   it("install.md starts with the hosted inbox, and an AI hands the email and the code to the person", () => {

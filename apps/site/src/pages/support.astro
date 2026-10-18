@@ -3,7 +3,7 @@
 // directories link to for help with Surfing Dog's server (ADR-020). Few words; each address is for
 // one thing.
 import Layout from "../layouts/Layout.astro";
-import { CARRY_PROMISE, MCP_URL, SUPPORT } from "../lib/gateway";
+import { CARRY_PROMISE, HOSTED_KEEPS, MCP_URL, SUPPORT } from "../lib/gateway";
 
 const ld = {
   "@context": "https://schema.org",
@@ -28,19 +28,19 @@ const topics: { q: string; a: string }[] = [
   },
   {
     q: "A request you sent through your assistant",
-    a: "It is with the business, in its own inbox, and the business answers you by email. We keep only a record that it was delivered, so we cannot read it or change it: your assistant has the address to see where it stands.",
+    a: "It went straight to the business's own inbox, and the business can answer you by email. We keep only a record that it was delivered, so we cannot see it or change it. To follow it up, reply to the business's email, or ask your assistant: it has the link to the request.",
   },
   {
-    q: "Your business, and the requests we carry",
-    a: "Switch carried requests off in your inbox, under Settings → Networks; your own doors still take every request. To correct or remove your listing, use update_business, or write to us.",
+    q: "Your business",
+    a: `To stop people's assistants reaching you through Surfing Dog, switch off Requests from AI assistants in your inbox, under Settings → Networks; your inbox still takes requests sent to it directly. To correct or remove your listing, ask your own AI to update it on Surfing Dog, or <a class="link" href="mailto:${SUPPORT.email}">write to us</a>.`,
   },
   {
     q: "Something that should not be listed, or a request that was misused",
-    a: `Write to ${SUPPORT.abuse}, with the business's domain and what happened.`,
+    a: `Write to <a class="link" href="mailto:${SUPPORT.abuse}">${SUPPORT.abuse}</a>, with the business's domain and what happened.`,
   },
   {
     q: "Your data",
-    a: `What we keep, and for how long, is on the <a class="link" href="/privacy/">privacy page</a>. To see or delete what we hold about you, write to ${SUPPORT.privacy}.`,
+    a: `What we keep, and for how long, is on the <a class="link" href="/privacy/">privacy page</a>. To see or delete what we hold about you, write to <a class="link" href="mailto:${SUPPORT.privacy}">${SUPPORT.privacy}</a>.`,
   },
 ];
 ---
@@ -74,11 +74,7 @@ const topics: { q: string; a: string }[] = [
   <section class="wrap wrap-read section" aria-labelledby="promise-h">
     <h2 class="h-section" id="promise-h">What we promise</h2>
     <p>{CARRY_PROMISE}</p>
-    <p class="fine">
-      Addresses: <a class="link" href={`mailto:${SUPPORT.email}`}>{SUPPORT.email}</a> for anything,
-      <a class="link" href={`mailto:${SUPPORT.privacy}`}>{SUPPORT.privacy}</a> for your data,
-      <a class="link" href={`mailto:${SUPPORT.abuse}`}>{SUPPORT.abuse}</a> for misuse. Surfing Dog Lda.
-    </p>
+    <p class="fine">{HOSTED_KEEPS} Surfing Dog Lda.</p>
   </section>
 </Layout>
 

@@ -264,7 +264,7 @@ export const ASSISTANTS: readonly Assistant[] = [
     ],
     signIn:
       "OAuth 2.1, which your inbox runs itself; ChatGPT registers on its own, so there is nothing to set up by hand.",
-    plans: "Developer mode is on the plans OpenAI offers it on.",
+    plans: "Paid plans only. OpenAI lists developer mode with full MCP, which booking needs, on Business, Enterprise and Edu.",
     notes: [],
     source: { label: "OpenAI Help Center", href: "https://help.openai.com" },
     post: {
@@ -436,8 +436,7 @@ export const ASSISTANTS: readonly Assistant[] = [
     ],
     signIn:
       "OAuth 2.1 with dynamic client registration, which your inbox runs itself, or an owner API key in the Authorization header.",
-    plans:
-      "Copilot Studio. Microsoft 365 Copilot federated connectors are read-only today; Microsoft says writes start rolling out in October 2026.",
+    plans: "Copilot Studio agents. The Copilot app itself takes no server of your own yet.",
     notes: [],
     source: {
       label: "Microsoft Learn: connect an agent to an existing MCP server",

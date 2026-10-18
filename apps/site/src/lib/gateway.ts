@@ -13,16 +13,29 @@ export const MCP_URL = "https://surfingdog.ai/mcp";
 export const CARRY_PROMISE =
   "Surfing Dog never touches the money and never keeps what anyone writes. When a business allows it, we carry an assistant's request to the business's own inbox and keep only a record that it was delivered.";
 
+/**
+ * What a hosted inbox keeps, said beside the promise wherever both are read (/support, /privacy):
+ * the promise is the network's, and a hosted inbox is the business's own, on our servers.
+ */
+export const HOSTED_KEEPS =
+  "A hosted inbox is the business's own: what its customers write is kept there, for that business.";
+
+/** The one name a person gives the connector, in every assistant's steps (the server calls itself the same). */
+export const CONNECTOR_NAME = "Surfing Dog Search";
+
 /** When the steps below were last read against each assistant's own pages. */
 export const STEPS_CHECKED = "18 October 2026";
 
-/** Where a person stands with one assistant today. */
-export type Reach = "works" | "paid" | "region" | "not_yet";
+/** Where a person stands with one assistant today, in the order the page lists them. */
+export type Reach = "works" | "paid" | "region" | "unconfirmed" | "not_yet";
+
+export const REACH_ORDER: readonly Reach[] = ["works", "paid", "region", "unconfirmed", "not_yet"];
 
 export const REACH_WORDS: Record<Reach, string> = {
   works: "Works",
   paid: "Paid plans",
   region: "Some countries",
+  unconfirmed: "Not confirmed",
   not_yet: "Not yet",
 };
 
@@ -38,20 +51,7 @@ export interface AssistantSteps {
   readonly source: { readonly label: string; readonly href: string };
 }
 
-export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
-  {
-    slug: "chatgpt",
-    name: "ChatGPT",
-    maker: "OpenAI",
-    reach: "works",
-    steps: [
-      "Settings, then Apps and connectors: turn on developer mode.",
-      `Create a connector named Surfing Dog with ${MCP_URL}, and no sign-in.`,
-      "In a chat, choose it from the tools menu and ask.",
-    ],
-    note: "Developer mode is on the plans OpenAI offers it on.",
-    source: { label: "OpenAI Help Center", href: "https://help.openai.com" },
-  },
+const STEPS: readonly AssistantSteps[] = [
   {
     slug: "claude",
     name: "Claude",
@@ -59,7 +59,7 @@ export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
     reach: "works",
     steps: [
       "Settings, then Connectors: Add custom connector.",
-      `Name it Surfing Dog and paste ${MCP_URL}. No sign-in.`,
+      `Name it ${CONNECTOR_NAME} and paste ${MCP_URL}. No sign-in.`,
       "In a chat, switch it on from the tools menu and ask.",
     ],
     source: {
@@ -89,13 +89,29 @@ export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
     reach: "works",
     steps: [
       "Connectors, then Add Connector, then the Custom MCP Connector tab.",
-      `Name it SurfingDog, with no space, and paste ${MCP_URL}; Connect. Le Chat finds that it needs no sign-in.`,
+      `Name it ${CONNECTOR_NAME.replaceAll(" ", "")}, with no spaces, paste ${MCP_URL} and Connect. No sign-in.`,
       "In a chat, switch its tools on and ask.",
     ],
     note: "An account's owner adds connectors on Free, Pro and Student; on a team plan, its admin.",
     source: {
       label: "Mistral: MCP connectors",
       href: "https://docs.mistral.ai/le-chat/knowledge-integrations/connectors/mcp-connectors",
+    },
+  },
+  {
+    slug: "chatgpt",
+    name: "ChatGPT",
+    maker: "OpenAI",
+    reach: "paid",
+    steps: [
+      "On the web: Settings, then Apps and connectors, and turn on developer mode. On a workspace, its admin allows it first.",
+      `Create a connector named ${CONNECTOR_NAME} with ${MCP_URL}, and no sign-in.`,
+      "In a chat, choose it from the tools menu and ask.",
+    ],
+    note: "OpenAI lists developer mode with full MCP, which asking a business needs, on Business, Enterprise and Edu; not on Free. On Plus and Pro we have not confirmed it.",
+    source: {
+      label: "OpenAI Help Center: developer mode and MCP apps",
+      href: "https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt-beta",
     },
   },
   {
@@ -106,21 +122,33 @@ export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
     steps: [
       "grok.com/connectors: New Connector, then Custom.",
       `Paste ${MCP_URL}. No sign-in.`,
-      `In Grok Bot, say: Add a custom MCP server called Surfing Dog at ${MCP_URL}.`,
+      `In Grok Bot, say: Add a custom MCP server called ${CONNECTOR_NAME} at ${MCP_URL}.`,
     ],
     note: "Custom connectors are on xAI's paid plans; Grok Bot is in early beta.",
     source: { label: "xAI: Grok connectors", href: "https://docs.x.ai/grok/connectors" },
   },
   {
+    slug: "meta-ai",
+    name: "Meta AI and Muse",
+    maker: "Meta",
+    reach: "region",
+    steps: [
+      `Muse: ask it to use ${MCP_URL}. It can build a connector from a server's address.`,
+      "The Meta AI app takes no server of your own yet.",
+    ],
+    note: "Muse is in the US and Canada.",
+    source: { label: "Meta: the Muse developer platform", href: "https://muse.ai/platform" },
+  },
+  {
     slug: "perplexity",
     name: "Perplexity",
     maker: "Perplexity",
-    reach: "paid",
+    reach: "unconfirmed",
     steps: [
       "In the web app: Settings, then Connectors, then add a custom connector.",
       `Choose remote, and paste ${MCP_URL}.`,
     ],
-    note: "On Pro, Max and Enterprise. We have not yet confirmed that it connects to a server with no sign-in.",
+    note: "Custom connectors are on Pro, Max and Enterprise. We have not yet seen it connect to a server with no sign-in.",
     source: {
       label: "Perplexity Help Center: MCP",
       href: "https://www.perplexity.ai/help-center/en/articles/11502712-local-and-remote-mcps-for-perplexity",
@@ -141,18 +169,6 @@ export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
     },
   },
   {
-    slug: "meta-ai",
-    name: "Meta AI and Muse",
-    maker: "Meta",
-    reach: "region",
-    steps: [
-      `Muse: ask it to use ${MCP_URL}. It can build a connector from a server's address.`,
-      "The Meta AI app takes no server of your own yet.",
-    ],
-    note: "Muse is in the US and Canada.",
-    source: { label: "Meta: the Muse developer platform", href: "https://muse.ai/platform" },
-  },
-  {
     slug: "dots",
     name: "dots",
     maker: "OpenAI",
@@ -161,6 +177,11 @@ export const ASSISTANT_STEPS: readonly AssistantSteps[] = [
     source: { label: "OpenAI: introducing dots", href: "https://openai.com/index/introducing-dots/" },
   },
 ];
+
+/** Every assistant, in reach order: the ones that work first, "not yet" last. */
+export const ASSISTANT_STEPS: readonly AssistantSteps[] = [...STEPS].sort(
+  (a, b) => REACH_ORDER.indexOf(a.reach) - REACH_ORDER.indexOf(b.reach),
+);
 
 /** Where people write to us, and what each address is for. */
 export const SUPPORT = {

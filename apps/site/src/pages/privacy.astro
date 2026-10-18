@@ -13,7 +13,7 @@
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
-import { CARRY_PROMISE } from "../lib/gateway";
+import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const UPDATED = "18 October 2026";
@@ -187,14 +187,18 @@ const UPDATED = "18 October 2026";
           with the listing, so a code sent to another address cannot take it over.
         </li>
         <li>
-          <b>Requests we carry to a business.</b> {CARRY_PROMISE} When your assistant asks us to send a business your
-          question, a request for a quote or a request for a booking, we pass your words, your email address and the
-          name you give, if any, to that business's own inbox, and nothing else; we write none of it down. We keep a
-          record that it was delivered: when, to which business, which kind of request and how it went, never who sent
-          it or what it said, for 400 days. The business alone is told how many arrived. To apply the limits we count,
-          in memory and for a day at most, how often one person, one email address (as a keyed hash) and the same
-          words (as a keyed hash, for an hour) are sent. We never carry a phone number. Your request is then the
-          business's, in its inbox, as any customer's is, and it answers you by email.
+          <b>Requests we carry to a business.</b> {CARRY_PROMISE} {HOSTED_KEEPS} When your assistant asks us to send a
+          business your question, a request for a quote or a request for a booking, we pass your words, the details of
+          the request (a service, a time, a quantity, the language you want), your email address and the name you give,
+          if any, to that business's own inbox, and nothing else; we write none of it down. With it go a key made from
+          the request itself, so that a retry is not sent twice, and a code that tells the business's inbox which
+          requests came from the same sender that day, without saying who; it is different for each business and each
+          day. We keep a record that it was delivered: when, to which business, which kind of request and how it went,
+          never who sent it or what it said, for 400 days. The business alone is told how many arrived. To apply the
+          limits we count, in memory, how often one person, one address, one email address (as a keyed hash) and the
+          same words (as a keyed hash, for about an hour) are sent, each forgotten a day after its last use at most.
+          We never carry a phone number. Your request is then the business's, in its inbox, as any customer's is, and
+          it can answer you by email.
         </li>
         <li>
           <b>Logs and limits.</b> The service's own log records each request's method, path and how long it took: not

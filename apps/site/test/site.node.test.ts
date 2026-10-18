@@ -365,9 +365,12 @@ describe("the home page and the three products", () => {
     expect(hostedOwnership(true).faq).toContain(
       "Surfing Dog never touches the money and never keeps what anyone writes",
     );
-    expect(hostedOwnership(true).faq).toContain(
+    // The carried requests have an answer of their own, where an owner looks for them.
+    expect(faq).toContain(`q: "Can people's AI assistants reach me through Surfing Dog?"`);
+    expect(faq).toContain(
       "we carry an assistant's request to your own inbox and keep only a record that it was delivered",
     );
+    expect(faq).toContain("Settings → Networks → Requests from AI assistants");
     expect(read("public/install.md")).not.toContain("not in the middle");
     const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
     expect(opening).toContain("**The inbox is the business's own.**");
@@ -1275,15 +1278,17 @@ describe("what the directory and the connector claim", () => {
     expect(page).toContain("else manifest.remove();");
   });
 
-  it("says the connector finds and links, and never that it books, orders or lists verified businesses", () => {
+  it("says the connector finds and links, carries a request only where a business has its own inbox, and never that it books or lists verified businesses", () => {
     for (const path of [
       "src/pages/assistants/index.astro",
       "src/pages/assistants/[slug].astro",
       "src/pages/index.astro",
     ]) {
       const text = visible(read(path));
-      expect(text, path).toMatch(/finds and links/);
+      expect(text, path).toMatch(/finds businesses/);
+      expect(text, path).toMatch(/own inbox|your inbox/);
       expect(text, path).not.toMatch(/verified businesses/);
+      expect(text, path).not.toMatch(/\bbooks (?:a time|at)\b|gets a quote or books/);
     }
   });
 });
