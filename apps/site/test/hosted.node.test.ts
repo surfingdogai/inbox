@@ -532,7 +532,10 @@ describe("hosted first, once the pilot is open", () => {
       hostedLlms(true),
     ]);
     expect(open).not.toMatch(/does not put (a|the) business on Surfing Dog/);
-    const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /not in the middle/.test(t));
+    // Open, "not in the middle" gives way to the promise of carried requests (ADR-020); keeping
+    // nothing anyone writes is still said only of an inbox the business runs itself.
+    expect(open).not.toContain("not in the middle");
+    const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /never keeps what anyone writes/.test(t));
     expect(sentences.length).toBeGreaterThan(0);
     for (const t of sentences) expect(t, t).toMatch(/runs? it (yourself|itself)/);
     // The pages read these words rather than their own.
@@ -574,7 +577,10 @@ describe("hosted first, once the pilot is open", () => {
         hostedHowData(open),
         hostedLlms(open),
       ]);
-      expect(words).not.toMatch(/free forever|forever free|\b(first|only)\b|guarantee/i);
+      // The promise of carried requests (ADR-020) says "keep only a record": its words, not a claim.
+      expect(words.replace(/\bkeep only a record that it was delivered\b/g, "")).not.toMatch(
+        /free forever|forever free|\b(first|only)\b|guarantee/i,
+      );
       // Hosting is free during the pilot, and said so wherever a price is.
       if (open) expect(words.match(/free during the pilot/g)?.length).toBeGreaterThanOrEqual(7);
       else expect(words).not.toMatch(/free during the pilot|European Union|app\.surfingdog\.ai/);
@@ -663,8 +669,10 @@ describe("the docs, in both states", () => {
     );
     const open = version(SETUP, true);
     expect(open).toContain("at its own subdomain, hosted by us or on its own Cloudflare account or server.");
-    expect(open).toContain("When the business runs it itself, Surfing Dog is not in the middle");
-    expect(open).not.toMatch(/\. Surfing Dog is not in the middle/);
+    expect(open).toContain(
+      "When the business runs it itself, Surfing Dog never touches the money and never keeps what anyone writes",
+    );
+    expect(open).not.toContain("not in the middle");
   });
 });
 

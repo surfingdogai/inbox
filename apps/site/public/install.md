@@ -29,8 +29,11 @@ of this file.
 **The inbox is the business's own.** Run this way, it is open-source software (MIT) that runs on
 their Cloudflare account or their own server, at their own subdomain, and its manifest and doors name
 their business. Customers and their agents write to the business there, directly. Installing it
-does not put the business on Surfing Dog: Surfing Dog is not in the middle of any message, booking,
-order or payment, and the business can leave whenever it likes, its data in its own database.
+does not put the business on Surfing Dog: Surfing Dog never touches the money and never keeps what
+anyone writes, and the business can leave whenever it likes, its data in its own database. When a
+business allows it, we carry an assistant's request to the business's own inbox and keep only a
+record that it was delivered; it is on by default, and the owner switches it off in Settings →
+Networks.
 Joining a network (Step 5) is optional and separate: a network lists the business in its directory
 and records the receipts the inbox signs, with no names, no messages and nothing of what was
 ordered; Step 5 lists exactly what a network receives. If the person asks, tell them this plainly.

@@ -1,0 +1,106 @@
+---
+// Support: where to write, about what, and the answers people need first. The page the MCP
+// directories link to for help with Surfing Dog's server (ADR-020). Few words; each address is for
+// one thing.
+import Layout from "../layouts/Layout.astro";
+import { CARRY_PROMISE, MCP_URL, SUPPORT } from "../lib/gateway";
+
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "ContactPage",
+  name: "Surfing Dog support",
+  url: new URL("/support/", Astro.site).toString(),
+  mainEntity: {
+    "@type": "Organization",
+    name: "Surfing Dog",
+    url: "https://surfingdog.ai",
+    contactPoint: [
+      { "@type": "ContactPoint", contactType: "customer support", email: SUPPORT.email },
+      { "@type": "ContactPoint", contactType: "privacy", email: SUPPORT.privacy },
+      { "@type": "ContactPoint", contactType: "abuse", email: SUPPORT.abuse },
+    ],
+  },
+};
+const topics: { q: string; a: string }[] = [
+  {
+    q: "Adding Surfing Dog to your assistant",
+    a: `The address is ${MCP_URL}, with no sign-in. Each assistant's steps are on the <a class="link" href="/assistants/">assistants page</a>, and how the server works in <a class="link" href="/docs/mcp/">the docs</a>.`,
+  },
+  {
+    q: "A request you sent through your assistant",
+    a: "It is with the business, in its own inbox, and the business answers you by email. We keep only a record that it was delivered, so we cannot read it or change it: your assistant has the address to see where it stands.",
+  },
+  {
+    q: "Your business, and the requests we carry",
+    a: "Switch carried requests off in your inbox, under Settings → Networks; your own doors still take every request. To correct or remove your listing, use update_business, or write to us.",
+  },
+  {
+    q: "Something that should not be listed, or a request that was misused",
+    a: `Write to ${SUPPORT.abuse}, with the business's domain and what happened.`,
+  },
+  {
+    q: "Your data",
+    a: `What we keep, and for how long, is on the <a class="link" href="/privacy/">privacy page</a>. To see or delete what we hold about you, write to ${SUPPORT.privacy}.`,
+  },
+];
+---
+
+<Layout
+  title="Support · Surfing Dog"
+  description="Help with Surfing Dog: adding it to your AI assistant, a request you sent to a business, your listing, and your data."
+  ld={ld}
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="support-h">
+    <p class="eyebrow">Support</p>
+    <h1 class="h-page" id="support-h">How can we help?</h1>
+    <p class="lede">
+      Write to <a class="link" href={`mailto:${SUPPORT.email}`}>{SUPPORT.email}</a>. We answer by email.
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-label="Topics">
+    <dl class="topics" data-reveal="stagger">
+      {
+        topics.map((t) => (
+          <div class="topic">
+            <dt>{t.q}</dt>
+            <dd set:html={t.a} />
+          </div>
+        ))
+      }
+    </dl>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="promise-h">
+    <h2 class="h-section" id="promise-h">What we promise</h2>
+    <p>{CARRY_PROMISE}</p>
+    <p class="fine">
+      Addresses: <a class="link" href={`mailto:${SUPPORT.email}`}>{SUPPORT.email}</a> for anything,
+      <a class="link" href={`mailto:${SUPPORT.privacy}`}>{SUPPORT.privacy}</a> for your data,
+      <a class="link" href={`mailto:${SUPPORT.abuse}`}>{SUPPORT.abuse}</a> for misuse. Surfing Dog Lda.
+    </p>
+  </section>
+</Layout>
+
+<style>
+  .topics {
+    margin: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .topic {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .topic dt {
+    font-weight: 500;
+  }
+  .topic dd {
+    margin: 4px 0 0;
+    color: var(--ink-2);
+    font-size: var(--fs-ui);
+    line-height: 1.6;
+  }
+  .wrap-read.section p + p {
+    margin-top: var(--sp-3);
+  }
+</style>
