@@ -3,6 +3,7 @@ import type { PingDoors } from "@surfingdog/spec";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { DEFAULT_NETWORK, enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
+import { isPublicHost } from "../util/hosts";
 import { jobStatement } from "../write/common";
 import { storedPingDoors } from "./doors";
 
@@ -674,6 +675,12 @@ function statusOf(r: readonly unknown[]): NetworkStatusRow {
 export interface NetworkView {
   readonly origin: string;
   readonly enabled: boolean;
+  /**
+   * Held off by the inbox's host (a hosted inbox before it is live at the business's own address):
+   * whether it comes back on when the hold ends. Null when nothing holds it: `enabled` is then the
+   * owner's to switch.
+   */
+  readonly held: { readonly on_when_released: boolean } | null;
   readonly issue: boolean;
   readonly share: NetworkEntry["share"];
   readonly registration: Registration;
@@ -739,7 +746,38 @@ export interface NetworkView {
   };
 }
 
-export async function networkViews(db: Db, settings: Settings): Promise<NetworkView[]> {
+/**
+ * The domain this inbox reports to a network as: the host of its public address (`INBOX_PUBLIC_URL`,
+ * else the Inbox address in Settings), when that is an https origin on a public host name and port
+ * 443, which is what a network can verify. Otherwise the one sentence that says why not.
+ */
+export function reportableDomain(base: string | null | undefined): { domain: string } | { problem: string } {
+  if (!base) return { problem: "no public address: set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    return { problem: `the inbox address ${base} is not a URL` };
+  }
+  if (url.protocol !== "https:" || !isPublicHost(url.hostname)) {
+    return { problem: `the inbox address ${url.origin} is not a public https origin; a network cannot verify it` };
+  }
+  if (url.port) {
+    return { problem: `the inbox address ${url.origin} has a port; a network verifies https on port 443 only` };
+  }
+  return { domain: url.hostname };
+}
+
+/**
+ * Every network in settings, with how it is doing. `opts.held`: the inbox's host holds the networks
+ * now, so a network that remembers whether it comes back on (`resume`) is shown as held. Without a
+ * hold, a `resume` left in the settings (a copy of a hosted inbox, opened elsewhere) means nothing.
+ */
+export async function networkViews(
+  db: Db,
+  settings: Settings,
+  opts: { readonly held?: boolean } = {},
+): Promise<NetworkView[]> {
   const origins = Object.keys(settings.networks);
   if (origins.length === 0) return [];
   const marks = origins.map(() => "?").join(", ");
@@ -786,6 +824,7 @@ export async function networkViews(db: Db, settings: Settings): Promise<NetworkV
     return {
       origin,
       enabled: entry.enabled,
+      held: opts.held && entry.resume !== undefined ? { on_when_released: entry.resume } : null,
       issue: entry.issue,
       share: entry.share,
       registration: s?.registration ?? "unregistered",

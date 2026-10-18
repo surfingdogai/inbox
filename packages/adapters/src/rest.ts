@@ -877,13 +877,29 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.getReceiptStatus(c.get("caller"))),
   );
 
+  app.post(
+    "/receipt-keys/rotate",
+    owner({
+      tags: ["owner"],
+      summary: "Make a new receipt key: the one that signed until now signs nothing more from this inbox",
+      description:
+        "For when a copy of the key may be in the wrong hands (a download with receipt-keys.json that you did not make). The key receipts were signed with until now is retired and a new one signs from now on; the old one stays published, so every receipt it signed still verifies. The owner in person only: refused (403 owner_in_person) to the owner's AI and to integration keys, whatever their scopes. 409 wrong_state when this inbox has no receipt key yet, or no INBOX_SECRET_KEY. Send an Idempotency-Key to make a retry safe; without one, each call makes another key.",
+      responses: json(
+        "The key that was retired, and the one that signs now",
+        z.object({ retired: z.array(z.string()), active: z.string() }),
+      ),
+      write: true,
+    }),
+    async (c) => once(c, "receipts.replace_key", {}, (caller) => caps.replaceReceiptKey(caller)),
+  );
+
   app.get(
     "/networks",
     owner({
       tags: ["owner"],
       summary: "The networks this inbox reports to, and how each one is doing",
       description:
-        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin; the owner's AI and integration keys may switch one off or share less with it, not switch one on, let it issue keys or share more.",
+        "Every network in settings, switched on or not: what it is sent, whether it has verified this instance, the last ping it took, the last error in a few words, and how many receipts it has. `held` is set while the inbox's host holds every network off (a hosted inbox before it is live at the business's own address): `on_when_released` says whether the network comes back on then. The owner can choose that now, with PUT /settings and `networks.<origin>.resume` (or `enabled`, which while held means the same); it takes effect when the hold ends. `reportable` says whether a network could verify this inbox at its address now (an https origin on a public host, port 443). Add, switch on or switch off a network with PUT /settings and `networks` keyed by origin; the owner's AI and integration keys may switch one off or share less with it (held or not), not switch one on, let it issue keys or share more. POST /receipt-keys/rotate makes a new receipt key.",
       responses: json("Networks", R.looseSchema),
     }),
     async (c) => c.json(await caps.getNetworks(c.get("caller"))),

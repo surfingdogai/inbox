@@ -179,6 +179,7 @@ describe("the manifest", () => {
         {
           origin: "https://network.surfingdog.ai",
           enabled: false,
+          held: null,
           issue: true,
           share: { listing: true, counts: true, receipts: true },
           registration: "unregistered",
@@ -197,8 +198,41 @@ describe("the manifest", () => {
           receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
         },
       ],
+      // https://inbox.test: a host name a network cannot verify (a reserved name), so nothing to join yet.
+      reportable: false,
     });
     expect((await s.app.request(`${ORIGIN}/v1/owner/networks`)).status).toBe(401);
+  });
+
+  it("makes a new receipt key for the owner in person, never for a key handed to another system", async () => {
+    const s = await setup();
+    const auth = (key: string) => ({ authorization: `Bearer ${key}`, "content-type": "application/json" });
+    const rotate = (key: string) =>
+      s.app.request(`${ORIGIN}/v1/owner/receipt-keys/rotate`, { method: "POST", headers: auth(key), body: "{}" });
+    // No key yet: nothing to replace, said so.
+    const none = await rotate(s.ownerKey);
+    expect(none.status).toBe(409);
+    expect(await none.json()).toMatchObject({ code: "wrong_state" });
+    const old = await s.inbox.caps.receipts.keys.active();
+    const zap = await createApiKey(s.db, {
+      kind: "integration",
+      name: "Zapier",
+      scopes: ["settings:read", "settings:write"],
+    });
+    const refused = await rotate(zap.key);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "not_allowed" });
+    expect((await s.inbox.caps.receipts.keys.active()).kid).toBe(old.kid);
+
+    const res = await rotate(s.ownerKey);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { retired: string[]; active: string };
+    expect(body.retired).toEqual([old.kid]);
+    expect(body.active).not.toBe(old.kid);
+    expect((await s.inbox.caps.receipts.keys.active()).kid).toBe(body.active);
+    // Both published: what the old key signed still verifies.
+    const jwks = (await (await s.app.request(`${ORIGIN}/.well-known/jwks.json`)).json()) as { keys: { kid: string }[] };
+    expect(jwks.keys.map((k) => k.kid).sort()).toEqual([old.kid, body.active].sort());
   });
 });
 

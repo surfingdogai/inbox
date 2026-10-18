@@ -232,7 +232,14 @@ export const api = {
   getSettings: () => call<SettingsDoc>("GET", "/v1/owner/settings"),
   receiptStatus: () => call<ReceiptStatus>("GET", "/v1/owner/receipts"),
   putSettings: (body: SettingsBody) => call<SettingsDoc>("PUT", "/v1/owner/settings", { body }),
-  networks: () => call<{ networks: NetworkView[] }>("GET", "/v1/owner/networks"),
+  /** `reportable`: whether a network could verify this inbox at its address now (absent from an older server). */
+  networks: () => call<{ networks: NetworkView[]; reportable?: boolean }>("GET", "/v1/owner/networks"),
+  /** A new key to sign receipts with; the old one signs nothing more from this inbox (the owner in person only). */
+  replaceReceiptKey: () =>
+    call<{ retired: string[]; active: string }>("POST", "/v1/owner/receipt-keys/rotate", {
+      body: {},
+      idempotent: true,
+    }),
   /** Whether email goes out at all, has an address to go from, and can carry answer links. */
   mailStatus: () => call<MailStatus>("GET", "/v1/owner/mail"),
 
@@ -241,10 +248,11 @@ export const api = {
   exportCustomer: (partyId: string) => call<unknown>("GET", `${customerPath(partyId)}/export`),
   /** Six digits to the owner's own address, which a download needs. */
   /** Whether a download works here: a 501 `not_available` says how to copy the database instead. */
-  downloadAvailable: () => call<{ available: true }>("GET", "/v1/owner/download"),
+  downloadAvailable: () => call<{ available: true; leaving?: boolean }>("GET", "/v1/owner/download"),
   downloadCode: () => call<{ sent_to: string; expires_at: string }>("POST", "/v1/owner/download/code", { body: {} }),
-  /** The whole inbox as a zip, for the code just emailed. */
-  downloadInbox: (code: string) => file("/v1/owner/download", { code }),
+  /** The whole inbox as a zip, for the code just emailed; with the receipt key only when asked for. */
+  downloadInbox: (code: string, receiptKeys = false) =>
+    file("/v1/owner/download", receiptKeys ? { code, receipt_keys: true } : { code }),
   stopNetworks: (partyId: string, itemId?: string) =>
     call<CustomerSummary>("POST", `${customerPath(partyId)}/networks-off`, {
       body: itemId ? { item_id: itemId } : {},

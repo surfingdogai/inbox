@@ -32,6 +32,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /settings": [READ_SETUP],
   "PUT /settings": ["settings:write"],
   "GET /receipts": [READ_SETUP],
+  // The owner's in person, checked by the capability whatever the scopes: never the AI, never a key.
+  "POST /receipt-keys/rotate": ["*"],
   "GET /networks": [READ_SETUP],
   "GET /profile": [READ_SETUP],
   "PUT /profile": ["settings:write"],

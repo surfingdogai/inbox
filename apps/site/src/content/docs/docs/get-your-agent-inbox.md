@@ -165,7 +165,7 @@ The Connect screen checks for your record every minute while it is open, and les
 
 - **Open your inbox** at `https://inbox.yourbusiness.com`. Requests from agents and people arrive there; your rules answer the routine ones.
 - **Connect your AI** to `https://inbox.yourbusiness.com/mcp/owner` ([how](/docs/connect-your-ai/)).
-- **Join a network** in Settings, if you want to be listed. Nothing is listed until you do.
+- **You are on the network.** Your inbox joins network.surfingdog.ai the day it goes live. It lists you where AI agents search, and keeps your track record: each booking and order, and whether it was kept. Switch it off in Settings → Networks if you would rather not, even before it goes live.
 - **Keep the record.** If it is removed or changed, agents can't reach your inbox there. Put it back within 72 hours and nothing else changes; after that your inbox stops taking requests from agents until the record is back. Meanwhile you can still open your inbox from your account.
 
 ## Questions
@@ -176,4 +176,4 @@ The Connect screen checks for your record every minute while it is open, and les
 
 **What does it cost?** Nothing during the pilot. We count confirmed bookings and accepted orders, and tell you at least 30 days before any charge ([terms](/hosted/terms/)).
 
-**Can I leave?** At any time. Download everything as one file that the open-source inbox opens, then close your inbox, or point `inbox.yourbusiness.com` at an inbox you run yourself ([self-hosted vs hosted](/docs/self-hosted-vs-hosted/)).
+**Can I leave?** At any time. Download everything as one file that the open-source inbox opens, with the key your receipts are signed with if you choose, so an inbox you run yourself signs as this one did. Your track record stays with your address, `inbox.yourbusiness.com`, wherever you point it. Then close your inbox, or point `inbox.yourbusiness.com` at an inbox you run yourself ([self-hosted vs hosted](/docs/self-hosted-vs-hosted/)).

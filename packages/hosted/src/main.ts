@@ -12,7 +12,7 @@ import {
   transportFrom,
 } from "./config";
 import { socketControlPlane } from "./control-plane";
-import { isTenantId } from "./host";
+import { isTenantId, shardOf } from "./host";
 import { runtimeKey } from "./keys";
 import { Ledger } from "./ledger";
 import { migrateCheck } from "./migrate-check";
@@ -21,6 +21,8 @@ import { installRedaction } from "./redact";
 import { CachedResolver } from "./resolver";
 import { serveRouter, serveShard } from "./server";
 import { Shard } from "./shard";
+import { signHeaders } from "./sign";
+import { jsonOf, socketRequest } from "./sockets";
 import { startWatchdog } from "./watchdog";
 
 /**
@@ -31,6 +33,8 @@ import { startWatchdog } from "./watchdog";
  *   all                    the router, with every shard as a child process started again when it ends
  *                          (for running it without a service manager, and in development)
  *   maintenance-off <id>   lets an inbox out of maintenance
+ *   join-networks <id>     joins an inbox made before hosted inboxes joined from day one: its policy's
+ *                          networks on and listed, held until it is live (run with a shard's settings)
  *   migrate-check <file>   brings a copy of an inbox's file to this release's schema, or fails
  *
  * Every setting comes from the environment (config.ts).
@@ -175,6 +179,30 @@ if (command === "router") {
   ledger.clearMaintenance(arg);
   ledger.close();
   console.log(`${arg} is out of maintenance`);
+} else if (command === "join-networks") {
+  // Through the inbox's own shard, signed as the router signs, so the write is one like any other
+  // the shard makes and its jobs run there: never a second process writing to the file.
+  const c = config("shard");
+  if (!isTenantId(arg)) {
+    console.error("usage: join-networks <tenant id>");
+    process.exit(2);
+  }
+  const target = `/admin/v1/tenants/${arg}/networks/join`;
+  const res = await socketRequest(shardAdminSocket(c, shardOf(arg, c.shards)), {
+    method: "POST",
+    target,
+    headers: signHeaders(c.shardKey, "POST", target),
+    timeoutMs: 30_000,
+  }).catch((error: unknown) => {
+    console.error(`${arg}: the shard did not answer (${error instanceof Error ? error.message : String(error)})`);
+    process.exit(1);
+  });
+  const body = jsonOf(res.body) as Record<string, unknown> | null;
+  if (res.status !== 200) {
+    console.error(`${arg}: ${res.status} ${String(body?.detail ?? body?.code ?? "")}`.trim());
+    process.exit(1);
+  }
+  console.log(JSON.stringify({ tenant_id: arg, ...body }));
 } else if (command === "migrate-check") {
   // Needs no settings: a deploy runs it on a copy of each inbox's file before any shard restarts.
   if (!arg) {
@@ -189,6 +217,8 @@ if (command === "router") {
     process.exit(1);
   }
 } else {
-  console.error("usage: router | shard <n> | all | maintenance-off <tenant id> | migrate-check <file>");
+  console.error(
+    "usage: router | shard <n> | all | maintenance-off <tenant id> | join-networks <tenant id> | migrate-check <file>",
+  );
   process.exit(2);
 }

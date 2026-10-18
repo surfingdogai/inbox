@@ -111,6 +111,14 @@ export const policyPayloadSchema = z.looseObject({
     .url({ protocol: /^https$/ })
     .max(2048)
     .optional(),
+  /**
+   * The networks a new inbox here joins, as https origins: switched on with its very first settings,
+   * listed in their directories, held off until it is live at the business's own address (level 2)
+   * and on from then, for the owner to switch off. Absent, the inbox's own default network
+   * (`DEFAULT_NETWORK`); empty, none. An inbox that already has settings is never changed by it,
+   * except by the admin call `POST /admin/v1/tenants/{id}/networks/join`.
+   */
+  join_networks: z.array(httpsOrigin).max(8).optional(),
 });
 export type PolicyPayload = z.infer<typeof policyPayloadSchema>;
 

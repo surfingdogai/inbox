@@ -118,6 +118,10 @@ No customer name, no address, no line items. A receipt proves a transaction happ
 
 The public keys are in two places, identical: the manifest under `receipt_keys`, and `/.well-known/jwks.json` for anything that expects a JWKS. `kid` is the RFC 7638 thumbprint of the key, so it is derivable from the key itself. A retired key stays published so an old receipt still verifies.
 
+A business that moves its inbox can take its key along. A network keeps the record by the business's address, and verifies each receipt against any key the manifest there publishes, so a copy opened without the key still verifies what was signed before and signs new receipts with a key of its own. With the key, the inbox it moves to signs with the same one. A download carries it only when the owner asks (`receipt_keys: true`, a switch in the owner app), in `receipt-keys.json`, beside the database and never inside it (`{"format": "surfingdog-receipt-keys/1", "active": kid, "keys": [{kid, jwk, created_at, retired_at}]}`): the key that signs now, its private half in the clear, and no retired one. `node server.mjs import-receipt-keys receipt-keys.json` on an inbox you run on Node checks it (its `kid` is its own thumbprint, and its private half signs what its public half verifies), seals it with that instance's `INBOX_SECRET_KEY` and makes it the one that signs. Taking the same file in twice changes nothing.
+
+If a copy of the key may be in the wrong hands, make a new one: Settings → Networks, "Make a new receipt key", or `POST /v1/owner/receipt-keys/rotate` (the owner in person only). The old key is retired: your inbox signs nothing more with it, and it stays published, so every receipt it signed still verifies. The published keys do not say when one was retired, so a network would still accept a receipt someone else signed with the old key.
+
 The verifier decides the algorithm, not the token: refuse anything whose header is not `EdDSA` and `sdi-receipt+jws`, find the key by `kid`, verify the signature over `<header>.<payload>`, then read the claims. With the MIT `@surfingdog/sdk`:
 
 ```ts

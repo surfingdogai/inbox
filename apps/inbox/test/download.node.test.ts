@@ -2,7 +2,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApiKey, createSession } from "@surfingdog/adapters";
-import { createDb, type Db, MIGRATIONS, type SetupPlanInput, schema, ulid } from "@surfingdog/core";
+import {
+  createDb,
+  type Db,
+  importReceiptKeys,
+  MIGRATIONS,
+  type ReceiptKeyFile,
+  type SetupPlanInput,
+  schema,
+  ulid,
+} from "@surfingdog/core";
 import { logMailOut, runMigrations } from "@surfingdog/platform";
 import { nodeSnapshot, nodeSqliteClient } from "@surfingdog/platform/node";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,7 +24,8 @@ import { confirmed, futureDay, nextDay } from "./harness";
  * receipt, a webhook, a session, keys and every secret an inbox holds. The zip's copy leaves out who
  * is signed in, keys, connected apps, rate limits and every sealed secret, and it opens in a fresh
  * inbox with the same requests, services, hours and settings, where the owner signs in again and
- * the receipts signed before still verify.
+ * the receipts signed before still verify. The key receipts are signed with goes beside it, in
+ * receipt-keys.json, and once taken in the fresh inbox signs as the old one did.
  */
 const BASE = "https://inbox.test";
 const OWNER = "rosa@salaorosa.pt";
@@ -64,7 +74,7 @@ async function rows(db: Db, sql: string): Promise<unknown[][]> {
 }
 
 describe("a download of a real inbox", () => {
-  it("leaves out every way in and every secret, and opens in a fresh inbox with the same business", {
+  it("leaves out every way in and every secret but the receipt key, carried beside it, and opens in a fresh inbox", {
     timeout: 30_000,
   }, async () => {
     // ---- the salon, on a database file ----
@@ -133,17 +143,47 @@ describe("a download of a real inbox", () => {
     expect(oldKey?.[0]).toBeTruthy();
     expect((await rows(db, "SELECT count(*) FROM receipts"))[0]?.[0]).toBe(1);
 
-    // ---- the download ----
-    expect((await call(inbox.app, "POST", "/v1/owner/download/code", owner, {})).status).toBe(200);
-    const code = /code: (\d{6})/.exec(mail.sent.at(-1)?.text ?? "")?.[1];
-    const res = await call(inbox.app, "POST", "/v1/owner/download", owner, { code });
-    expect(res.status).toBe(200);
-    const files = await unzip(new Uint8Array(await res.arrayBuffer()));
-    const readme = new TextDecoder().decode(files.find((f) => f.name === "README.txt")?.data);
-    const manifest = JSON.parse(new TextDecoder().decode(files.find((f) => f.name === "manifest.json")?.data)) as {
+    // ---- a routine download: no receipt key unless asked for ----
+    type Manifest = {
       tables: { name: string; rows: number; left_out?: string }[];
+      receipt_keys: { file: string; active: string; kids: string[] } | null;
     };
+    const download = async (body: Record<string, unknown>) => {
+      expect((await call(inbox.app, "POST", "/v1/owner/download/code", owner, {})).status).toBe(200);
+      const code = /code: (\d{6})/.exec(mail.sent.at(-1)?.text ?? "")?.[1];
+      const res = await call(inbox.app, "POST", "/v1/owner/download", owner, { code, ...body });
+      expect(res.status).toBe(200);
+      const files = await unzip(new Uint8Array(await res.arrayBuffer()));
+      const manifest = JSON.parse(
+        new TextDecoder().decode(files.find((f) => f.name === "manifest.json")?.data),
+      ) as Manifest;
+      return { files, manifest };
+    };
+    const plain = await download({});
+    expect(plain.files.map((f) => f.name).sort()).toEqual(["README.txt", "inbox.db", "manifest.json"]);
+    expect(plain.manifest.receipt_keys).toBeNull();
+    expect(plain.manifest.tables.find((t) => t.name === "signing_keys")?.left_out).toBeTruthy();
+    expect(mail.sent.at(-1)?.text).not.toContain("receipts are signed with");
+
+    // ---- the download that takes the key along, to move to a server of the owner's own ----
+    const { files, manifest } = await download({ receipt_keys: true });
+    const readme = new TextDecoder().decode(files.find((f) => f.name === "README.txt")?.data);
     expect(mail.sent.at(-1)).toMatchObject({ to: [OWNER], subject: "A copy of Salão Rosa's inbox was downloaded" });
+    expect(mail.sent.at(-1)?.text).toContain("the key your receipts are signed with");
+    expect(mail.sent.at(-1)?.text).toContain("make a new receipt key");
+
+    // The key receipts are signed with goes along, in a file of its own, so the inbox the business
+    // moves to signs as this one did: never inside inbox.db.
+    const keyFile = JSON.parse(
+      new TextDecoder().decode(files.find((f) => f.name === "receipt-keys.json")?.data),
+    ) as ReceiptKeyFile;
+    expect(keyFile).toMatchObject({ format: "surfingdog-receipt-keys/1", active: oldKey?.[0] });
+    expect(keyFile.keys.map((k) => k.kid)).toEqual([oldKey?.[0]]);
+    expect(keyFile.keys[0]?.jwk.d).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(manifest.receipt_keys).toEqual({ file: "receipt-keys.json", active: oldKey?.[0], kids: [oldKey?.[0]] });
+    expect(manifest.tables.find((t) => t.name === "signing_keys")?.left_out).toBeUndefined();
+    expect(readme).toContain("node server.mjs import-receipt-keys receipt-keys.json");
+    expect(readme).toContain("Keep it as safe as a password");
 
     // What was left out: every way in, and every secret.
     const table = (name: string) => manifest.tables.find((t) => t.name === name);
@@ -163,7 +203,9 @@ describe("a download of a real inbox", () => {
     expect(table("items")?.rows).toBe(1);
     const bytes = files.find((f) => f.name === "inbox.db")?.data as Uint8Array;
     const text = new TextDecoder("latin1").decode(bytes);
-    for (const secret of [INBOUND, "zapier-secret-123"]) expect(text).not.toContain(secret);
+    for (const secret of [INBOUND, "zapier-secret-123", String(keyFile.keys[0]?.jwk.d)]) {
+      expect(text).not.toContain(secret);
+    }
 
     // ---- opened where the owner runs it ----
     const file = path.join(tempDir(), "inbox.db");
@@ -211,6 +253,23 @@ describe("a download of a real inbox", () => {
       keys: { kid: string }[];
     };
     expect(jwks.keys.map((k) => k.kid).sort()).toEqual([kid, String(oldKey?.[0])].sort());
+    // The key taken in: the copy signs as the inbox it came from, the key it made meanwhile retired
+    // (its receipts still verify), and taking the same file in again changes nothing.
+    const took = await importReceiptKeys(copy, fresh.caps.secrets, keyFile);
+    expect(took).toEqual({ imported: [oldKey?.[0]], already: [], active: oldKey?.[0], retired: [kid] });
+    expect((await fresh.caps.receipts.keys.active()).kid).toBe(oldKey?.[0]);
+    expect(await rows(copy, "SELECT kid, retired_at IS NOT NULL FROM signing_keys ORDER BY created_at")).toEqual([
+      [oldKey?.[0], 0],
+      [kid, 1],
+    ]);
+    const again = await importReceiptKeys(copy, fresh.caps.secrets, keyFile);
+    expect(again).toEqual({ imported: [], already: [oldKey?.[0]], active: oldKey?.[0], retired: [] });
+    // Never in the clear in the copy's database: sealed with the new inbox's own key.
+    const sealedNow = String(
+      (await rows(copy, "SELECT private_jwk_enc FROM signing_keys ORDER BY created_at LIMIT 1"))[0]?.[0],
+    );
+    expect(sealedNow).toMatch(/^v1\./);
+    expect(sealedNow).not.toContain(String(keyFile.keys[0]?.jwk.d));
     // The owner signs in again by email: the address is known there.
     const link = await fresh.app.request(
       new Request("https://inbox.salaorosa.pt/auth/magic-link", {

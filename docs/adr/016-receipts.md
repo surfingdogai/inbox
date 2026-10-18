@@ -107,3 +107,74 @@ service itself; the verification is identical, and nothing in it depends on who 
 Reviews. A review is only accepted against a receipt, in both directions, and both are sealed
 until the window closes — but none of that is built here, and the reveal rules live with the
 network. This ADR is the receipt alone.
+
+## Amendment, 18 October 2026: on from the first day, and the key can go with the business
+
+**Status:** accepted.
+
+A business's track record starts with its first receipt that reaches a network, and a network
+counts a promise that reaches it more than a day late at half its weight. An inbox that joins a
+month after it opens has a month that never counts. So the network is on by default where we can
+say so honestly, and a business that moves its inbox can take its signing key with it.
+
+**Hosted inboxes join their host's network with their first settings.** The host policy carries a
+seed (`HostPolicy.seed`, core `settings/policy.ts`): the settings a new inbox starts with, written
+once, with the very first settings it stores, and the owner's from then on. A hosted inbox is seeded
+with network.surfingdog.ai switched on and listed, with its listing, counts and receipts, and with
+`issue` off: no first-time customer's email goes to a network until a person at the business
+switches "Give first-time customers a key" on (`join_networks` in the policy payload names other
+networks, or none). An inbox that already had settings is never seeded on its own; its host can do
+it on purpose (`POST /admin/v1/tenants/{id}/networks/join`, the runtime's `join-networks <id>`).
+
+**A host's hold remembers, and the owner chooses during it.** While a hosted inbox is only at its
+setup address, its host holds every network off and the business out of every directory. The hold
+used to switch them off: `enabled: false`, `listed: false`, indistinguishable from the owner's own
+choice, so an inbox that went live stayed off until the owner noticed. Now each held network keeps
+`resume`, what it comes back to, and so does the listing (`directory.resume`). When the hold ends,
+each comes back as it was and `resume` goes; a network the host switched on during a hold (a seed)
+resumes on. The owner's choice survives a hold too: an inbox that loses its DNS record and gets it
+back is on or off as its owner left it.
+
+During a hold nothing reaches a network, and what comes back is the business's to choose before it
+does. The host and the owner in person write `resume`, either way; anyone may set it to false (the
+owner's AI and integration keys included, as they may switch a network off at any time). While
+held, `networks.<origin>.enabled` and `directory.listed` sent alone mean the same as `resume`, since
+nothing can be on meanwhile, so a client that knows nothing of holds still switches a network off
+for good. Sharing less (`issue`, `share.*` to false) is anyone's during a hold too; adding a network,
+sharing more, or removing a hold is the host's alone. Where no host holds the networks, nobody sets
+`resume`; one left in a copy of a hosted inbox may be taken away, and a download strips it.
+
+**Self-hosted inboxes are asked.** Nothing on an instance that is already running changes: a stored
+document, or none, reads exactly as before, and an instance whose wizard is skipped stays off the
+network. The setup wizard's last step, on a first setup at a public https address, offers
+network.surfingdog.ai switched on (listing, counts and receipts; keys for first-time customers off);
+at localhost, on a private address or on a port it only says to list the inbox once it has a public
+address, since no network can verify it there. Run again, the wizard leaves the network to
+Settings → Networks.
+
+**The demo and our own inbox sign receipts.** The demo signs a receipt for each booking it confirms
+and order it accepts, and publishes none: it speaks for nobody to a network.
+
+**The key can go with the business.** A network keeps a business's record by its address (the
+domain of `iss`), and verifies a receipt against any key the business's manifest publishes; a copy
+opened without the private key still publishes the old public halves, so the receipts signed before
+still verify, and signs new ones with a key of its own. What the private key adds is that the inbox
+the business moves to signs with the same key as before. So it travels only when the owner asks for
+it: a download (`POST /v1/owner/download`) with `receipt_keys: true` carries `receipt-keys.json`
+beside `inbox.db`, holding the key that signs now and no other (a retired key never signs again,
+and its private half would be of use only to someone forging a back-dated receipt), its private
+half in the clear. `inbox.db` still never holds one. The owner app offers the key behind a switch,
+off for a routine download and on from the start while a hosted inbox closes. `import-receipt-keys`
+on a Node instance the business runs checks the key (its `kid` is its own thumbprint; its private
+half signs what its public half verifies; no `kid` twice; none held there for another purpose),
+seals it under that instance's own secret key, and makes it the one that signs; a key that instance
+made meanwhile is retired and still verifies. Every check runs before anything is written, and the
+same file taken in twice changes nothing. Taking a key into a hosted inbox is not built.
+
+**A key can be replaced.** `POST /v1/owner/receipt-keys/rotate` (Settings → Networks, "Make a new
+receipt key"), the owner's in person only, retires the key that signs and makes a new one: this
+inbox never signs with the old key again, and it stays published, so every receipt it signed still
+verifies. A verifier cannot tell from the published keys when one was retired, so a key that leaked
+can still be used to sign a receipt a network would accept; recording when a key was retired, and
+networks honouring it, is left to ADR-017. The download notice tells an owner who did not make a
+download that took the key to make a new one.

@@ -244,6 +244,38 @@ describe("demo mode", { timeout: 30_000 }, () => {
     for (const [kind, note] of rows) expect(`${kind}: ${note}`).not.toMatch(/could not connect|reporting to/);
   });
 
+  // The demo shows what a real inbox does with a promise: it signs a receipt for the booking it
+  // confirms and the order it accepts, verifiable at its own JWKS, and hands it to no network.
+  it("signs a receipt for what it confirms and accepts, and publishes none", async () => {
+    const outbound: string[] = [];
+    const s = await demoInbox({
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        outbound.push(String(input));
+        return new Response("no", { status: 500 });
+      }) as typeof fetch,
+    });
+    const { bookingId, orderId } = await visit(s);
+    await drain(s.inbox, s.db);
+    const signed = await s.db.client.query({
+      sql: "SELECT item_id, kind FROM receipts WHERE item_id IN (?, ?) ORDER BY kind",
+      params: [bookingId, orderId],
+      method: "all",
+    });
+    expect(signed.rows).toEqual([
+      [orderId, "accepted"],
+      [bookingId, "confirmed"],
+    ]);
+    const jwks = (await (await s.app.request(`${BASE}/.well-known/jwks.json`)).json()) as { keys: unknown[] };
+    expect(jwks.keys).toHaveLength(1);
+    const manifest = (await (await s.app.request(`${BASE}/.well-known/agent-inbox.json`)).json()) as {
+      review_services: string[];
+    };
+    expect(manifest.review_services).toEqual([]);
+    const published = await s.db.client.query({ sql: "SELECT COUNT(*) FROM network_publications", method: "all" });
+    expect(Number(published.rows[0]?.[0])).toBe(0);
+    expect(outbound).toEqual([]);
+  });
+
   it("shows the live view with nothing about anyone in it", async () => {
     const s = await demoInbox();
     const t = Date.now();

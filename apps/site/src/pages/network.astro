@@ -24,8 +24,8 @@ const contents = [
 
 const steps = [
   {
-    title: "Switch it on",
-    text: "Flip the switch in your inbox's Settings. The network checks the address is really yours by reading your inbox's public profile there. Then you're listed.",
+    title: "Join",
+    text: "A hosted inbox joins the day it goes live; one you run yourself has it switched on at setup. The network checks the address is really yours by reading your inbox's public profile there. Then you're listed.",
   },
   {
     title: "Get found by agents",
@@ -89,7 +89,7 @@ const shared = [
 
 <Layout
   title="An open directory AI assistants can search · Surfing Dog"
-  description="A directory of businesses that AI agents can search. Your inbox joins with one switch, if you want it to, and the network records the receipts your inbox signs, never your messages. Nobody can buy a place: the order comes from promises kept."
+  description="A directory of businesses that AI agents can search. A hosted inbox joins the day it goes live, one you run yourself asks during setup, and the network records the receipts your inbox signs, never your messages. Nobody can buy a place: the order comes from promises kept."
 >
   <section class="wrap section is-head top" aria-labelledby="page-h">
     <div class="copy">
@@ -98,8 +98,9 @@ const shared = [
       <p class="lede">
         The network is a directory of businesses. When someone asks an assistant like ChatGPT, Claude or Gemini to book
         or order something, the assistant can search here for a business that does it, then deals with that business
-        directly. Your inbox joins with one switch, off until you turn it on, and the network then records the receipts
-        your inbox signs, never your messages.
+        directly. A hosted inbox joins network.surfingdog.ai the day it goes live; one you run yourself asks during
+        setup. Switch any network off in Settings → Networks. The network records the receipts your inbox signs, never
+        your messages.
       </p>
       <nav class="contents" aria-label="On this page">
         {contents.map((c) => <a class="btn btn-secondary btn-sm" href={c.href}>{c.label}</a>)}
@@ -115,8 +116,8 @@ const shared = [
       <div class="sec-head">
         <div>
           <p class="eyebrow">How it works</p>
-          <h2 class="h-section" id="how-h">Three steps, one switch</h2>
-          <p class="lede">Join, and agents can find you. Every booking confirmed and order paid goes on your record.</p>
+          <h2 class="h-section" id="how-h">Three steps</h2>
+          <p class="lede">Join, and you are listed where agents search. Each booking and order, and whether it was kept, goes on your record.</p>
         </div>
       </div>
 
@@ -290,21 +291,22 @@ const shared = [
         <div>
           <p class="eyebrow">Get started</p>
           <h2 class="h-section" id="join-h">Join the network</h2>
-          <p class="lede">One switch in your inbox's Settings.</p>
+          <p class="lede">On from the start.</p>
         </div>
       </div>
 
       <div class="says">
         <p>
-          Open Settings, and under <b>Network</b>, switch on <b>Join the directory</b>. Your inbox needs a public https address so
-          the network can check it's yours. The rest happens on its own.
+          A hosted inbox joins the day it goes live. One you run yourself offers it at the end of setup; later it is the
+          switch beside <b>network.surfingdog.ai</b> in <b>Settings → Networks</b>. Your inbox needs a public https address
+          so the network can check it's yours. The rest happens on its own.
         </p>
       </div>
 
       <div class="glass panel cta">
         <p class="position">
           <span class="u-line" aria-hidden="true"></span>
-          <span>No inbox yet? Set one up first. Joining is one switch after that.</span>
+          <span>No inbox yet? Get one: it joins from the start.</span>
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="/install/">Get your inbox</a>

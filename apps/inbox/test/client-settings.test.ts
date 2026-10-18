@@ -202,6 +202,7 @@ describe("Settings → Networks", () => {
   const base: NetworkView = {
     origin: "https://network.example.com",
     enabled: true,
+    held: null,
     issue: true,
     share: { listing: true, counts: true, receipts: true },
     registration: "registered",
@@ -238,6 +239,13 @@ describe("Settings → Networks", () => {
 
   it("says in one line how each network is doing", () => {
     expect(networkStatus({ ...base, enabled: false }, now).line).toBe("Off");
+    // Held by the host until the inbox is live at the business's own address.
+    expect(networkStatus({ ...base, enabled: false, held: { on_when_released: true } }, now).line).toBe(
+      "On as soon as your inbox is live at your own address",
+    );
+    expect(networkStatus({ ...base, enabled: false, held: { on_when_released: false } }, now).line).toBe(
+      "Off, and stays off when your inbox is live",
+    );
     expect(networkStatus({ ...base, last_ping_at: "2026-09-23T14:27:00Z" }, now)).toMatchObject({
       line: "Reporting, last ping 3 min ago",
       tone: "success",

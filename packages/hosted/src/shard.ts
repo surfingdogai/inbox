@@ -7,7 +7,15 @@ import {
   type OwnerEmailChange,
   userFromCookie,
 } from "@surfingdog/adapters";
-import { type Caller, createDb, type Db, ensureLifecycleSweep, nextDueAt, WriteError } from "@surfingdog/core";
+import {
+  type Caller,
+  createDb,
+  type Db,
+  ensureLifecycleSweep,
+  nextDueAt,
+  readSettings,
+  WriteError,
+} from "@surfingdog/core";
 import type { Inbox } from "@surfingdog/inbox/app";
 import type { MailOut } from "@surfingdog/platform";
 import { type NodeSqliteClient, nodeSqliteClient } from "@surfingdog/platform/node";
@@ -591,6 +599,7 @@ export class Shard {
     if (action === "sandbox/archive" && method === "POST") return await this.archive(id, body);
     if (action === "handoff" && method === "POST") return await this.handoff(id, body);
     if (action === "usage" && method === "GET") return await this.usage(id, url.searchParams.get("month"));
+    if (action === "networks/join" && method === "POST") return await this.joinNetworks(id);
     if (action === "jwks" && method === "GET")
       return await this.withEntry(id, async (e) => ({ status: 200, body: await e.inbox.caps.receipts.jwks() }));
     return problem(404, "not_found", "No such call.");
@@ -694,6 +703,35 @@ export class Shard {
         }
         throw error;
       }
+    });
+  }
+
+  /**
+   * What a new inbox starts with (its policy's networks on and listed, `join_networks`), written to
+   * one made before hosted inboxes joined from day one: by hand, never on its own (`join-networks`).
+   * Held as any network is until the inbox is live at the business's own address. Twice is once.
+   */
+  private async joinNetworks(id: string): Promise<AdminAnswer> {
+    return await this.withEntry(id, async (entry) => {
+      if (entry.policy.read_only) return problem(423, "read_only", "This inbox is read-only.");
+      const wrote = await entry.inbox.caps.applyHostSeed(this.now());
+      await this.refreshDue(entry);
+      const settings = await readSettings(entry.db);
+      const networks = Object.entries(settings.networks).map(([origin, n]) => ({
+        origin,
+        on: n.enabled,
+        ...(n.resume !== undefined ? { held: true, on_when_live: n.resume } : {}),
+      }));
+      return {
+        status: 200,
+        body: {
+          changed: wrote,
+          level: entry.policy.level,
+          listed: settings.directory.listed,
+          ...(settings.directory.resume !== undefined ? { listed_when_live: settings.directory.resume } : {}),
+          networks,
+        },
+      };
     });
   }
 

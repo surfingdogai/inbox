@@ -105,3 +105,26 @@ export function openedNetworks(before: Settings, after: Settings): string[] {
   }
   return out;
 }
+
+/**
+ * The values a host's hold keeps (`resume`, `settings/policy.ts`): what a held network or the held
+ * directory listing comes back to when the host lets go. Changed by anyone but the host outside what
+ * a hold lets them choose (`holdChoices`), the hold could be turned into a switch that opens a
+ * network with nobody at the business deciding, so the write is refused; one that sends them back
+ * as they are changes nothing. `removed`: the write takes the value away rather than setting one.
+ */
+export function hostOnlyChanges(
+  before: Settings,
+  after: Settings,
+): { readonly path: string; readonly removed: boolean }[] {
+  const out: { path: string; removed: boolean }[] = [];
+  if (before.directory.resume !== after.directory.resume) {
+    out.push({ path: "directory.resume", removed: after.directory.resume === undefined });
+  }
+  for (const origin of new Set([...Object.keys(before.networks), ...Object.keys(after.networks)])) {
+    const now = after.networks[origin]?.resume;
+    if (before.networks[origin]?.resume !== now)
+      out.push({ path: `networks.${origin}.resume`, removed: now === undefined });
+  }
+  return out;
+}

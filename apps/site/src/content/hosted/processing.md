@@ -2,7 +2,7 @@
 title: Processing agreement
 description: How we process your customers' personal data for you when we run your inbox (GDPR article 28).
 eyebrow: Terms · hosted pilot
-updated: 14 October 2026
+updated: 18 October 2026
 order: 2
 ---
 
@@ -22,7 +22,7 @@ We process the data to run your inbox and for nothing else, on your instructions
 
 ## 3. Confidentiality
 
-The people who run the service, and nobody else, can reach your inbox's data, and they are bound to keep it confidential. We do not read, analyse, sell, share or train any model on your customers' data. A network gets what your own settings send to it and nothing more, and none is on until you switch it on.
+The people who run the service, and nobody else, can reach your inbox's data, and they are bound to keep it confidential. We do not read, analyse, sell, share or train any model on your customers' data. Your inbox joins network.surfingdog.ai, which lists your business in its directory, the day it goes live; a network gets what Settings → Networks says it is sent and nothing more, and you can switch any network off there at any time, before your inbox goes live too.
 
 ## 4. Security (article 32)
 

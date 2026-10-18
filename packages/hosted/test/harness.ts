@@ -57,6 +57,8 @@ export interface FakeTenant {
   version: number;
   domain: string;
   jwks: { keys: Record<string, unknown>[] } | null;
+  /** The policy's `join_networks`, when the test names it; absent, the payload leaves it out. */
+  joinNetworks?: string[] | undefined;
 }
 
 let slugs = 0;
@@ -92,6 +94,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     },
     read_only: t.state === "closing" || t.state === "closed",
     suspended_reason: t.state === "suspended" ? "a test" : null,
+    ...(t.joinNetworks ? { join_networks: t.joinNetworks } : {}),
   };
 }
 
@@ -165,6 +168,11 @@ export interface Runtime {
   readonly shards: Shard[];
   readonly resolver: CachedResolver;
   readonly mail: { from: OutboundMail["from"]; mail: OutboundMail }[];
+  /**
+   * Every address an inbox here tried to call (a network, a webhook): none is reached. A hosted inbox
+   * joins its network once it is live, and a test must never call a real one.
+   */
+  readonly outbound: string[];
   readonly routerSocket: string;
   readonly shardSocket: (n: number) => string;
   /** Moves the shards' clock (their inboxes' too) forward. */
@@ -184,7 +192,7 @@ export interface Runtime {
     headers: Record<string, string>,
     body?: string | undefined,
   ): Promise<Reply>;
-  createTenant(o?: { domain?: string; plan?: SetupPlanInput | null }): Promise<FakeTenant>;
+  createTenant(o?: { domain?: string; plan?: SetupPlanInput | null; joinNetworks?: string[] }): Promise<FakeTenant>;
   /** Moves a tenant to a state as the control plane does: a new policy pushed, the hosts invalidated. */
   setState(
     t: FakeTenant,
@@ -214,6 +222,11 @@ export async function startRuntime(
     writeFileSync(join(clientDir, "favicon.svg"), "<svg/>");
   }
   const transports = new Map<string, LogMailOut>();
+  const outbound: string[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL) => {
+    outbound.push(input instanceof Request ? input.url : String(input));
+    throw new Error("test: no address outside the test is ever called");
+  }) as typeof fetch;
   let offset = 0;
   const now = () => Date.now() + offset;
   const shards: Shard[] = [];
@@ -245,6 +258,7 @@ export async function startRuntime(
         return t;
       },
       clientDir,
+      fetchImpl,
       maxOpen: o.maxOpen,
       maxTenantBytes: o.maxTenantBytes,
       now,
@@ -338,6 +352,7 @@ export async function startRuntime(
     shards,
     resolver,
     mail,
+    outbound,
     routerSocket,
     shardSocket,
     later(ms) {
@@ -359,6 +374,7 @@ export async function startRuntime(
         version: 1,
         domain,
         jwks: null,
+        joinNetworks: c.joinNetworks,
       };
       cp.tenants.set(t.tenantId, t);
       const created = await admin("POST", "/admin/v1/tenants", {

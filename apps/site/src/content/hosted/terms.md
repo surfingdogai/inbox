@@ -2,7 +2,7 @@
 title: Hosted inbox terms
 description: The terms for an inbox we run for you during the pilot, on your own domain.
 eyebrow: Terms · hosted pilot
-updated: 14 October 2026
+updated: 18 October 2026
 order: 1
 ---
 
@@ -12,7 +12,7 @@ These terms are between Surfing Dog Lda, a company registered in Portugal ("we")
 
 - An instance of Surfing Dog Inbox that we run and keep up to date for you.
 - While you set it up, it lives at a private address of ours (a generated name under `surfingdog.ai`). Nobody but you can open it there. It takes no requests from agents or people, is not listed anywhere, and asks search engines not to index it.
-- It goes live at a hostname on your own domain (`inbox.yourbusiness.com` by default) once you have added the DNS record in section 2 and the certificate for that hostname is issued. From then on agents and people reach it, and you can list it in a network. Not before.
+- It goes live at a hostname on your own domain (`inbox.yourbusiness.com` by default) once you have added the DNS record in section 2 and the certificate for that hostname is issued. From then on agents and people reach it, and it is listed on network.surfingdog.ai, which you can switch off in Settings → Networks, before it goes live too. Not before.
 - The open-source inbox's features as they are when you use it. A feature that is described as coming is not part of these terms until it ships.
 
 ## 2. A domain of your own, and one DNS record
@@ -46,7 +46,7 @@ These terms are between Surfing Dog Lda, a company registered in Portugal ("we")
 
 ## 6. Leaving, switching and closing
 
-- **Download.** At any time, with a code sent to your address, you can download everything your inbox holds as one SQLite file that the open-source inbox opens: your items, messages, customers, services, hours, rules and settings. It leaves out sign-in sessions, API keys, the secrets your connections use and the key that signs receipts; you set those up again where you go. Receipts your inbox already sent to a network stay with that network.
+- **Download.** At any time, with a code sent to your address, you can download everything your inbox holds as one SQLite file that the open-source inbox opens: your items, messages, customers, services, hours, rules and settings. It can include the key that signs your receipts, in a file of its own, so an inbox you run yourself keeps signing as yours; keep that file as safe as a password. It leaves out sign-in sessions, API keys and the secrets your connections use; you set those up again where you go. Receipts your inbox already sent to a network stay with that network.
 - **Switching.** To move to your own server, another provider or back to us, point your hostname at the new place. You can do it at any time, without notice. We charge nothing for downloading or switching, and we answer your questions about it.
 - **Closing.** You can close your inbox at any time, with a code sent to your address. It then stays read-only for 30 days, and you can still download it. After that we delete it; copies in our backups are gone within 30 more days. The DNS record is yours: we tell you which one you may remove.
 - **Ending the pilot.** We may end the pilot for everyone with 30 days' notice by email. You keep the download and the 30 days in every case.

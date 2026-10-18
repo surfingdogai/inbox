@@ -13,7 +13,7 @@ import { OWNER, PARENT, type Runtime, startRuntime } from "./harness";
  * Host policy by level (acceptance 14) and mail (acceptance 16), as a hosted inbox lives them: at
  * level 1 the owner cannot switch a network on, list the inbox or change the sender, the Inbox
  * address, private targets or extra authorities, and nobody but the owner is written to; at level 2
- * listing unlocks and stays off until the owner chooses. Every email goes from the inbox's pinned
+ * listing and the networks are the owner's, as a new inbox starts them: on. Every email goes from the inbox's pinned
  * sender. The ledger holds what no inbox sees alone: a recipient's day across inboxes, the
  * addresses nobody writes to, and inboxes whose sending is paused. Logs keep no secret.
  */
@@ -38,7 +38,6 @@ describe("the host policy by level", () => {
     const cookie = await rt.signIn(t, t.slugHost);
     for (const doc of [
       { networks: { "https://network.example.org": { enabled: true } } },
-      { directory: { listed: true } },
       { email: { fromAddress: "me@salaorosa.pt" } },
       { email: { replyTo: "me@salaorosa.pt" } },
       { notifications: { appUrl: "https://elsewhere.example.org" } },
@@ -51,20 +50,28 @@ describe("the host policy by level", () => {
     }
     // Its own details are the owner's.
     expect((await put(t.slugHost, cookie, { business: { name: "Salão Rosa e Filhas" } })).status).toBe(200);
+    // Listed or not is the owner's choice for when it is live: taken now, out of the directories meanwhile.
+    expect((await put(t.slugHost, cookie, { directory: { listed: false } })).status).toBe(200);
+    const s = (await rt.http(t.slugHost, "GET", "/v1/owner/settings", { headers: { cookie } })).json as {
+      doc: { directory: { listed: boolean; resume?: boolean } };
+    };
+    expect(s.doc.directory).toMatchObject({ listed: false, resume: false });
   });
 
-  it("at level 2 names the business's site and unlocks listing, which stays off until the owner joins", async () => {
+  it("at level 2 names the business's site and hands listing to the owner: listed, as a new inbox starts", async () => {
     const t = await rt.createTenant();
     await rt.setState(t, "live", { ownResolves: true });
     const manifest = (await rt.http(t.ownHost ?? "", "GET", "/.well-known/agent-inbox.json")).json as {
       directory?: { listed?: boolean };
     };
-    expect(manifest.directory?.listed).toBe(false);
+    expect(manifest.directory?.listed).toBeUndefined();
     const cookie = await rt.signIn(t, t.ownHost ?? "");
     const settings = (await rt.http(t.ownHost ?? "", "GET", "/v1/owner/settings", { headers: { cookie } })).json as {
       doc: { directory: { url: string; listed: boolean } };
     };
     expect(settings.doc.directory.url).toBe(`https://${t.domain}`);
+    expect(settings.doc.directory.listed).toBe(true);
+    expect((await put(t.ownHost ?? "", cookie, { directory: { listed: false } })).status).toBe(200);
     expect((await put(t.ownHost ?? "", cookie, { directory: { listed: true } })).status).toBe(200);
     // Still held: the sender and the Inbox address.
     expect((await put(t.ownHost ?? "", cookie, { email: { fromAddress: "me@salaorosa.pt" } })).text).toContain(

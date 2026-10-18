@@ -13,6 +13,7 @@ import { countryOfZone, emailLangOfCountry } from "../lib/geo";
 import { languageName, languagesToSave } from "../lib/languages";
 import {
   useApplyPreset,
+  useNetworks,
   useProducts,
   useProductWrite,
   useProfile,
@@ -23,7 +24,16 @@ import {
   useServiceWrite,
   useSettings,
 } from "../lib/queries";
-import { offerBodies, ownerEmailDoc, type WizardDoors, wizardDoorsDoc, wizardPreset } from "../lib/setup";
+import {
+  joinNetworkDoc,
+  networkOffer,
+  offerBodies,
+  ownerEmailDoc,
+  SETUP_NETWORK,
+  type WizardDoors,
+  wizardDoorsDoc,
+  wizardPreset,
+} from "../lib/setup";
 import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
@@ -162,6 +172,20 @@ function SetupWizard() {
   const [nextId, setNextId] = useState(2);
   const [hours, setHours] = useState<Weekly>(DEFAULT_HOURS);
   const [rules, setRules] = useState(true);
+  // On unless the owner says no: the business is listed where agents search, and its record starts.
+  const [join, setJoin] = useState(true);
+  // A first setup is one that found nothing set up when it opened: run again, it leaves the network
+  // to Settings → Networks, where the owner already chose.
+  const [firstRun, setFirstRun] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (firstRun !== null || !profile.data || !services.data || !products.data) return;
+    setFirstRun(looksUnconfigured(profile.data.name, services.data.items.length, products.data.items.length));
+  }, [firstRun, profile.data, services.data, products.data]);
+  const networks = useNetworks();
+  const offer =
+    settings.data && networks.data && firstRun !== null
+      ? networkOffer(settings.data, { firstRun, reportable: networks.data.reportable === true })
+      : null;
   const [done, setDone] = useState(false);
 
   // Whatever is in flight is the error worth showing; they never overlap.
@@ -223,6 +247,8 @@ function SetupWizard() {
       }
       if (step === 4) {
         if (rules && preset) await applyPreset.mutateAsync({ key: preset, replace: false });
+        // A merge of the one key: only the owner in person switches a network on, and this is them.
+        if (join && offer === "switch") await saveSettings.mutateAsync({ doc: joinNetworkDoc() });
         setDone(true);
         return true;
       }
@@ -482,6 +508,23 @@ function SetupWizard() {
               </>
             ) : (
               <p className="hint">Messages come to you; nothing answers on its own.</p>
+            )}
+            {offer && (
+              <div className="setup-network">
+                <h3 className="sec">Be found</h3>
+                {offer === "switch" ? (
+                  <>
+                    <Switch checked={join} onChange={setJoin} disabled={busy}>
+                      List your business on {SETUP_NETWORK.replace(/^https:\/\//, "")}
+                    </Switch>
+                    <p className="hint">
+                      It lists you where AI agents search and keeps your track record. Off any time, in Settings.
+                    </p>
+                  </>
+                ) : (
+                  <p className="hint">Once your inbox has a public https address, list it in Settings → Networks.</p>
+                )}
+              </div>
             )}
           </>
         )}
