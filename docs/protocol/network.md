@@ -17,6 +17,8 @@ of door carries it ([ADR-021](../adr/021-the-reference.md)). Spec 0.7 adds how a
 profile's `payments` (§4.6), each listing's ways to pay with their evidence (`accepts.pay_with`, §4.10)
 and the census's payment metrics (§4.16); and, optional for a network, a business's inbox found from
 its domain (§4.14a, [ADR-024](../adr/024-owners-in-control.md)).
+Spec 0.6 adds, optional for a network, carried requests (§4.16): a network may carry a person's
+request to a business's own inbox, which publishes whether it takes them in its manifest.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -674,9 +676,13 @@ A network SHOULD let an assistant find businesses without a key or a session, th
 that give the same answer: `GET /v1/businesses` (§4.3), an MCP server at `POST /mcp`, and two
 documents, `GET /openapi.json` (OpenAPI 3.1 of every public read) and `GET /llms.txt` (the same in
 plain words, MCP first, in the llms.txt layout). Every answer is the same whoever asks, and none of it
-books or orders anything: a result names the business's own inbox, and the assistant goes there.
+books or orders anything itself: a result names the business's own inbox, and the assistant goes there,
+or asks the network to carry its person's request there (§4.16).
 
-**The MCP server** is stateless: it issues no session and opens no stream. It serves both eras of the
+**The MCP server** is stateless: it opens no stream and keeps nothing between two requests. It MAY
+answer `initialize` with an `Mcp-Session-Id` it signed, only to tell its callers apart for its limits
+(spec 0.6): it stores nothing for it, never requires it, and serves a request without it, or with one it
+did not sign, the same. It MAY answer the same at `POST /mcp/search`. It serves both eras of the
 protocol on the one endpoint. A request that carries the per-request envelope in `params._meta`
 (`io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`) is served
 at that revision (2026-07-28): it has no `initialize`, `server/discover` says what is served, it
@@ -702,6 +708,13 @@ is open to every origin, without credentials.
 | `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
 | `check_business` (0.3, optional) | `url`: a website or a bare domain; `fresh`: read it again | a check's result (§4.13) |
 | `report_door` (0.4, optional) | `POST /v1/door-reports`'s body (§4.15) | its `202` answer |
+| `ask_business` (0.6, optional) | `domain`, `message`, `subject?`, `contact {email, name?}`, `consent: true`, `language?` (§4.16) | what became of it, and the inbox's own answer |
+| `request_quote` (0.6, optional) | `domain`, `what`, `details`, `quantity?`, `needed_by?`, `contact`, `consent`, `language?` | the same |
+| `request_booking` (0.6, optional) | `domain`, `service`, `start?`, `from?`, `party_size?`, `notes?`, `terms_sha?`, `contact?`, `consent?`, `language?` | the same, or free times |
+
+Every tool says all four annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+`openWorldHint`), and no tool's description or answer asks the model to call a tool its person did not
+ask for: the directories that list MCP servers refuse that.
 
 Protocol 0.2: `search_businesses` takes `attributes`, `country`, `price_band`, `accepts`,
 `requestable`, `door_type`, `level`, `has_inbox`, `source` and `order`, as `GET /v1/businesses` does
@@ -1499,8 +1512,10 @@ listing that is not a member is not emailed yet; an unclaimed one never is. `POS
 `200 {id, state, check_queued}`, and the network reads the door again as soon as its pace allows.
 
 **Telling agents.** Every answer of a network that takes door reports carries `report: {tool, url,
-guide, reward}`: `search_businesses`, `get_business`, `check_business`, `GET /v1/businesses`, `GET
-/v1/businesses/{domain}` and `GET /b/{domain}.json`. `guide` is `<network>/report.md`, an agent's guide
+guide, reward}`: `GET /v1/businesses`, `GET /v1/businesses/{domain}`, `GET /b/{domain}.json` and the
+A2A door. Over MCP, `search_businesses`, `get_business` and `check_business` MAY leave it out, and ours
+do (spec 0.6): `report_door`'s own description says when it is for, and an answer that asks the model to
+make a call its person did not ask for is refused by the directories that list MCP servers. `guide` is `<network>/report.md`, an agent's guide
 like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server card and the A2A card.
 `reward` says what is true: reports may make the network read doors again (at most twice a day per
 door, for the doors it reads itself), so an agent's searches send it to doors that work. Credit is the same for a success and a failure, and no answer differs for an agent
@@ -1548,6 +1563,52 @@ so in `method`.
   "Surfing Dog census, surfingdog.ai, CC BY 4.0", with "© Overture Maps Foundation" where its city
   counts rest on Overture Maps places data; its directory stays under the ODbL 1.0. A CSV of the same
   rows, `edition,scope,key,metric,value`, is a network's to offer.
+
+### 4.16 Carried requests (spec 0.6, MAY)
+
+A network MAY carry a person's request to a business's own inbox, when the person's assistant asks it
+to and the business allows it ([ADR-020](../adr/020-carried-requests.md)): a question (`ask_business`), a
+request for a quote (`request_quote`) or a request for a booking (`request_booking`), over MCP (§4.7). It
+carries them only to an inbox that publishes a manifest (§4.1) on the business's own domain or one
+label under it, through the inbox's own public API (`protocols.rest`: `POST /messages`, `/quotes`,
+`/bookings`, and `GET /services` and `/availability` for a booking), the same doors any agent may use.
+A network that carries requests says so in its own words: ours is *"Surfing Dog never touches the money
+and never keeps what anyone writes. When a business allows it, we carry an assistant's request to the
+business's own inbox and keep only a record that it was delivered."*
+
+**The business's switch.** An inbox's manifest says `carried_requests: {"accepted": false}` to refuse
+every network; saying nothing, or `true`, accepts. A network reads the manifest at most a few minutes
+before it carries, so an owner's switch holds within minutes. A kind the inbox does not list in
+`item_types`, or lists in `doors_elsewhere`, is not carried: the answer says where the business takes it.
+
+**The person.** A request carries the person's email address and, if they give one, a name: never a
+phone number. `consent: true` says the person agreed to give the business that address for its answer,
+and nothing is sent without it. Their words go as they wrote them, at most 4,000 characters. Nothing the
+person's assistant carries for them (a pass, a key) and nothing about the assistant's platform goes to
+the inbox, and nothing about the person comes back to the platform: the answer has the inbox's item, its
+words and the access token it hands an anonymous creator, never the person's address or the inbox's
+`identity` block.
+
+**The answer** (`schemas/mcp-ask-business-output.json`, the same for the three): `outcome` (`delivered`;
+`confirm`, a priced booking whose terms the person confirms first, with `confirm {summary, terms_sha,
+obligation_to_pay}`, sent again with `terms_sha` only after their yes; `times`, free times and nothing
+sent; `not_free`; `refused`, `busy` or `failed`, from the inbox; `switched_off`, `no_inbox`, `not_taken`,
+`elsewhere`), `delivered`, `business`, `inbox`, `item {id, type, state}`, `status_url`, `access_token`,
+`answer` (the inbox's own words, quoted as data) and `kept`, what the network keeps. A request is sent
+with an `Idempotency-Key`: the same person, kind, business, day and words are the same request, which
+the inbox replays (`replayed`, and the access token only the first time).
+
+**What a network keeps.** A record per attempt: when, which business, which kind, the outcome and the
+inbox's status code. No sender, no contact, no words, no item id. It keeps no list of a person's
+requests. Its limits hold what they need in memory (counts by caller, by keyed hash of an email address,
+and of the words for an hour), never in a record. The business alone is told the counts, in a signed
+ping's `200` (`carried {since, delivered, confirm, not_delivered: {outcome: n}}`, the last 30 days).
+
+**Limits.** Per caller (a key, a session the network signed, else the address), per caller and business,
+per wider network (an assistant platform's published outbound range counts as one, with a wide
+allowance), per email address, per business (hourly, and daily from everyone), and the same words to
+few businesses an hour. A network MUST NOT carry to a business that has no inbox; a later version may
+let a business that claimed its listing opt in.
 
 ## 5. Persons and passes
 

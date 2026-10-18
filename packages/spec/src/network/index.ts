@@ -3,6 +3,7 @@
  * each endpoint; the vectors in `packages/spec/vectors/` decide any difference.
  */
 export * from "./capabilities";
+export * from "./carry";
 export * from "./census";
 export * from "./common";
 export * from "./directory";

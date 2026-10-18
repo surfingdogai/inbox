@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pingCarriedSchema } from "./carry";
 import {
   nextRulesSchema,
   passRefSchema,
@@ -177,6 +178,11 @@ export const signedPingResponseSchema = z.object({
     .optional()
     .describe(
       "How agents got on at the business's own doors, and what the network's own reads saw (§4.15); absent from a network that takes no door reports.",
+    ),
+  carried: pingCarriedSchema
+    .optional()
+    .describe(
+      "The requests this network carried to the inbox for assistants, and tried to, over the last 30 days (§4.16): counts only. Absent from a network that carries none.",
     ),
 });
 

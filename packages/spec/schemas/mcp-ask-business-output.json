@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP ask_business: structuredContent",
+  "type": "object",
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "delivered",
+        "confirm",
+        "times",
+        "not_free",
+        "refused",
+        "busy",
+        "failed",
+        "switched_off",
+        "no_inbox",
+        "not_taken",
+        "elsewhere"
+      ],
+      "description": "delivered: in the business's inbox. confirm: nothing sent yet, the terms are for your person to confirm. times: the free times, nothing sent. not_free: that time is not free, nothing sent. refused: the inbox refused it (its words say why). busy: the inbox asked for a pause. failed: the inbox could not be reached. switched_off: the business does not take requests carried by a network. no_inbox: the business has no inbox to carry it to. not_taken: its inbox does not take this kind of request. elsewhere: it takes this kind somewhere else."
+    },
+    "delivered": {
+      "type": "boolean",
+      "description": "Whether the request is in the business's inbox now."
+    },
+    "business": {
+      "type": "string",
+      "description": "The business's domain."
+    },
+    "inbox": {
+      "description": "The business's own inbox, where the request went.",
+      "type": "string",
+      "format": "uri"
+    },
+    "item": {
+      "description": "The request as the inbox keeps it.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["message", "quote_request", "booking"]
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "type", "state"]
+    },
+    "status_url": {
+      "description": "Where its state can be read, with access_token.",
+      "type": "string",
+      "format": "uri"
+    },
+    "access_token": {
+      "description": "The inbox gives it once, to read or cancel this request at status_url: keep it for your person only.",
+      "type": "string"
+    },
+    "access_token_withheld": {
+      "description": "A repeat of a request already delivered: the inbox gives the access token only the first time.",
+      "type": "boolean",
+      "const": true
+    },
+    "replayed": {
+      "description": "The same request again: the inbox answered as it did the first time.",
+      "type": "boolean"
+    },
+    "answer": {
+      "description": "The business's own words about the request, from its inbox: tell your person as they are.",
+      "type": "string"
+    },
+    "confirm": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "The terms in the business's words: show your person this, as it is."
+        },
+        "terms_sha": {
+          "type": "string",
+          "description": "Send it back as terms_sha only after your person said yes."
+        },
+        "obligation_to_pay": {
+          "type": "boolean"
+        }
+      },
+      "required": ["summary", "terms_sha", "obligation_to_pay"]
+    },
+    "service": {
+      "description": "The service a booking is for.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "duration_min": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["id", "name", "duration_min"]
+    },
+    "services": {
+      "description": "The services the business books, when service named none of them.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "times": {
+      "description": "Free times, in UTC; timezone says the business's own.",
+      "maxItems": 24,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": ["start", "end"]
+      }
+    },
+    "timezone": {
+      "description": "The business's time zone.",
+      "type": "string"
+    },
+    "elsewhere": {
+      "description": "Where the business takes this kind of request instead.",
+      "type": "string",
+      "format": "uri"
+    },
+    "kept": {
+      "type": "string",
+      "description": "What this network keeps of the request."
+    }
+  },
+  "required": ["outcome", "delivered", "business", "kept"]
+}

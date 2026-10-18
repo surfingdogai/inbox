@@ -68,6 +68,12 @@ or network:
   a business's inbox found from its domain (`discovery-result`, the MCP tools `check_dns` and
   `start_inbox`, `vectors/discovery.json` and `vectors/discovery-words.json`; protocol §4.14a), and
   the owner's page in a listing's `owner.manage`.
+- 0.6 (optional for a network): carried requests (ADR-020): `ask_business`, `request_quote` and
+  `request_booking` carry a person's request to a business's own inbox (`schemas/mcp-ask-business-*`,
+  `mcp-request-quote-*`, `mcp-request-booking-*`); the manifest's optional `carried_requests`, which an
+  owner sets to `{"accepted": false}` to refuse them; and the `carried` counts a signed ping's answer gives
+  the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
+  signed session id used only for its limits.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at

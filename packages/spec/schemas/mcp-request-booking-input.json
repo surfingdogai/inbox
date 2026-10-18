@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP request_booking: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's domain, as search_businesses or get_business gave it, like bikes.example."
+    },
+    "service": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The service's name, as get_business lists it, or its id from this tool's answer."
+    },
+    "start": {
+      "description": "When your person wants it to start, from this tool's free times. Leave it out to see them first.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "from": {
+      "description": "Without start: the first day to show free times for (today when left out).",
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+    },
+    "party_size": {
+      "description": "How many people it is for, when that matters.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "notes": {
+      "description": "Anything the business should know.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "terms_sha": {
+      "description": "The confirm.terms_sha of the last answer, sent only after your person said yes to its summary.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "contact": {
+      "description": "Needed with start: where the business answers.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 254,
+          "pattern": "^[^\\s@<>()\\[\\],;:\"]{1,64}@[^\\s@<>()\\[\\],;:\"]+\\.[^\\s@<>()\\[\\],;:\"]{2,}$",
+          "description": "Your person's email address, which they agreed to give this business for its answer."
+        },
+        "name": {
+          "description": "The name your person wants the business to use.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": ["email"],
+      "additionalProperties": false
+    },
+    "consent": {
+      "description": "Needed with start: true only when your person agreed to give this business their email address.",
+      "type": "boolean",
+      "const": true
+    },
+    "language": {
+      "description": "The language your person wants the answer in, as a tag like en, pt or pt-BR.",
+      "type": "string",
+      "maxLength": 12,
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    }
+  },
+  "required": ["domain", "service"]
+}
