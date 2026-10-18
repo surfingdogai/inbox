@@ -1,7 +1,8 @@
 # ADR-021 — The reference: a vocabulary of what agents can do, versioned specs, a monthly census
 
-**Status:** proposed, 15 October 2026; amended 18 October 2026 after review. The minimum sample of
-100, the census's day, what a city needs, and the census's licence are proposals until accepted.
+**Status:** proposed, 15 October 2026; amended 18 October 2026 after review. On 18 October 2026 the
+founder decided the census's licence: its counts are CC BY 4.0, not the ODbL (decision 8). The
+minimum sample of 100, the census's day and what a city needs are proposals until accepted.
 
 ## Context
 
@@ -66,7 +67,11 @@ agents can actually do.
    as they are, since each counts public features of websites and no row names one. A city is marked
    partial until 80% of its list is read. A change from the previous edition is shown as a change in
    share, in percentage points, since the sites checked grow from month to month. Its counts are open
-   data under the ODbL; the specs and code are MIT, like the rest of this repository.
+   data under Creative Commons Attribution 4.0 (CC BY 4.0, the founder's decision of 18 October
+   2026), credited "Surfing Dog census, surfingdog.ai, CC BY 4.0", with "© Overture Maps Foundation"
+   where city counts rest on Overture Maps places data; aggregate counts need no share-alike, and
+   anyone may reuse them for anything. The directory's own data (listings, `/v1/businesses`) stays
+   under the ODbL. The specs and code are MIT, like the rest of this repository.
 9. **An edition counts one set of rules, the honest one, and the one a person read.** An edition
    records the score rules it was counted under by version, revision date and content hash, and how
    many of the checked were scored under them. It is not taken while the scores move to new rules
@@ -105,7 +110,5 @@ too high; decision 9 makes such a draft impossible to publish.
 
 ## Open
 
-- Whether the census's counts should be CC BY 4.0, as an earlier note on readiness asked, rather
-  than the ODbL the directory's data uses.
 - Whether a city waits until most of its list is read before it is shown at all; today it shows
   once 100 of its sites are checked, marked partial below 80%.

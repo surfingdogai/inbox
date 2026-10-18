@@ -3,7 +3,7 @@ title: Specs
 description: Open specs for agent-ready businesses — what an AI agent can do at a business, the agent inbox manifest, receipts and the census — each versioned, with JSON Schemas and test vectors.
 ---
 
-Four specs, each with a version and a changelog; JSON Schemas and test vectors anyone can test against, for each wire format and for how the vocabulary reads a door's names. The specs and the code are MIT. The census's counts are open data under the [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
+Four specs, each with a version and a changelog; JSON Schemas and test vectors anyone can test against, for each wire format and for how the vocabulary reads a door's names. The specs and the code are MIT. The census's counts are open data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), credited "Surfing Dog census, surfingdog.ai, CC BY 4.0".
 
 | Spec | Version | Last changed |
 | --- | --- | --- |

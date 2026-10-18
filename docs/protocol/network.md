@@ -1453,8 +1453,11 @@ so in `method`.
 - A published edition's counts never change. A mistake withdraws it (`status: "withdrawn"`, `note`
   says why); it stays readable. A draft is never served to anyone but the network's operators. An
   edition published from a draft taken before its month ended says why in `publish_note`.
-- The data is open: `licence` names it (Surfing Dog's is the ODbL 1.0), and a CSV of the same rows,
-  `edition,scope,key,metric,value`, is a network's to offer.
+- The data is open: `licence` names it, with the line to credit it by (`attribution`) and the credit
+  for others' data the counts rest on (`credits`). Surfing Dog's census is CC BY 4.0, credited
+  "Surfing Dog census, surfingdog.ai, CC BY 4.0", with "© Overture Maps Foundation" where its city
+  counts rest on Overture Maps places data; its directory stays under the ODbL 1.0. A CSV of the same
+  rows, `edition,scope,key,metric,value`, is a network's to offer.
 
 ## 5. Persons and passes
 

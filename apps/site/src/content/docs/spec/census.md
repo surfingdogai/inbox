@@ -3,7 +3,7 @@ title: The census of what AI agents can do
 description: "How the monthly census counts what AI agents can do at the websites we checked, and the format of its open data. Method version 1."
 ---
 
-**Method version 1**, last changed 18 October 2026. JSON Schemas: [an edition](/spec/schemas/census-edition.json), [the list of editions](/spec/schemas/census-editions.json) · an example: [`census-edition.json`](/spec/vectors/census-edition.json). The counts are open data under the [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
+**Method version 1**, last changed 18 October 2026. JSON Schemas: [an edition](/spec/schemas/census-edition.json), [the list of editions](/spec/schemas/census-editions.json) · an example: [`census-edition.json`](/spec/vectors/census-edition.json). The counts are open data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): credit "Surfing Dog census, surfingdog.ai, CC BY 4.0".
 
 Once a month we count how many of the websites we checked an AI agent can do each thing with: send a message, book, order, pay, and the rest of [the capability vocabulary](/spec/capabilities/). The census counts. It never names a website.
 
@@ -59,9 +59,9 @@ The levels and `no_ai` add up to `checked`. A capability's state comes from the 
 - `GET https://surfingdog.ai/v1/census` lists the editions.
 - `GET https://surfingdog.ai/v1/census/{edition}` is one edition as JSON; `https://surfingdog.ai/census/{edition}.csv` the same rows as CSV, with the header `edition,scope,key,metric,value`. The MCP tool `get_census` answers the same, cut to one scope or key.
 - Rows are long: one count per scope, key and metric. Every published key has a row for every metric, zero included. A reader skips a scope or a metric it does not know: both are added to, never renamed.
-- Credit "Surfing Dog (surfingdog.ai)". A database you make from it is shared under the same licence. City counts also rest on data from the Overture Maps Foundation.
+- The counts are open data under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0): use them for anything, crediting "Surfing Dog census, surfingdog.ai, CC BY 4.0". City counts rest on Overture Maps places data: credit "© Overture Maps Foundation" with them (`licence.credits`). The directory's own data stays under the Open Database License 1.0.
 
 ## Changelog
 
-- **18 October 2026**: websites, not businesses; where the sites came from (`source`); the levels from askable up among the agent-ready, and `no_ai`; the score rules by revision, hash and share; changes in percentage points; cities partial below 80% of their list; a draft published by when it was taken. Nothing was published before.
+- **18 October 2026**: websites, not businesses; where the sites came from (`source`); the levels from askable up among the agent-ready, and `no_ai`; the score rules by revision, hash and share; changes in percentage points; cities partial below 80% of their list; a draft published by when it was taken; the counts under CC BY 4.0, credited "Surfing Dog census, surfingdog.ai, CC BY 4.0" (the founder's decision of this day; the ODbL before). Nothing was published before.
 - **15 October 2026**: method version 1.

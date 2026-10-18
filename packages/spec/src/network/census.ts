@@ -6,7 +6,10 @@ import { timestampSchema } from "./common";
  * The census (`docs/protocol/network.md` §4.16, optional for a network): once a month, how many of the websites a
  * network checked an AI agent can do each thing with, as counts and nothing else. No row names a website. An edition
  * is taken as a draft, read by a person, and published; once published its counts never change (a mistake found later
- * withdraws the edition, with a note, and it stays readable). The dataset is open under the Open Database License 1.0.
+ * withdraws the edition, with a note, and it stays readable). The counts are open data under Creative Commons
+ * Attribution 4.0 (CC BY 4.0), credited "Surfing Dog census, surfingdog.ai, CC BY 4.0", and "© Overture Maps
+ * Foundation" with them where they rest on Overture Maps places data (the cities). A network's directory may be under
+ * another licence: ours is the ODbL.
  *
  * Rows are long: one count per scope, key and metric, so a table of any shape can be made from them, and a CSV of
  * the same rows reads the same as the JSON.
@@ -57,10 +60,18 @@ export const censusRowSchema = z.object({
 });
 export type CensusRow = z.infer<typeof censusRowSchema>;
 
+/** The counts' licence: CC BY 4.0, and how to credit them. */
 export const censusLicenceSchema = z.object({
-  name: z.literal("ODbL-1.0"),
-  url: z.literal("https://opendatacommons.org/licenses/odbl/1-0/"),
-  attribution: z.string().describe('How to credit it: "Surfing Dog (surfingdog.ai)".'),
+  name: z.literal("CC-BY-4.0"),
+  url: z.literal("https://creativecommons.org/licenses/by/4.0/"),
+  attribution: z.string().describe('How to credit it: "Surfing Dog census, surfingdog.ai, CC BY 4.0".'),
+  credits: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Credit for others\' data the counts rest on, given with the attribution: "© Overture Maps Foundation" when ' +
+        "the cities are counted from Overture Maps places data.",
+    ),
 });
 
 /** `GET /v1/census/{edition}`, and the same rows as CSV at `/census/{edition}.csv` (edition,scope,key,metric,value). */

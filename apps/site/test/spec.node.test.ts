@@ -180,10 +180,13 @@ describe("the specs for people", () => {
   it("the census's method states the minimum sample, the licence and the credit the code uses", () => {
     const page = read("src/content/docs/spec/census.md");
     expect(page).toContain("at least 100 of its sites");
-    expect(page).toContain("Open Database License 1.0");
-    expect(page).toContain('Credit "Surfing Dog (surfingdog.ai)"');
+    expect(page).toContain("[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)");
+    expect(page).toContain('crediting "Surfing Dog census, surfingdog.ai, CC BY 4.0"');
+    expect(page).toContain('credit "© Overture Maps Foundation"');
+    expect(page).not.toContain("A database you make from it is shared under the same licence");
     expect(page).toContain("edition,scope,key,metric,value");
-    expect(censusEditionSchema.shape.licence.shape.url.value).toBe("https://opendatacommons.org/licenses/odbl/1-0/");
+    expect(censusEditionSchema.shape.licence.shape.name.value).toBe("CC-BY-4.0");
+    expect(censusEditionSchema.shape.licence.shape.url.value).toBe("https://creativecommons.org/licenses/by/4.0/");
   });
 
   it("puts the specs in the docs' sidebar, the check with them", () => {

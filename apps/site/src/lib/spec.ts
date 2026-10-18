@@ -154,7 +154,11 @@ export function specIndex(): Record<string, unknown> {
   const url = (p: string) => `${SPEC_ORIGIN}/spec/${p}`;
   return {
     title: "Surfing Dog specs",
-    licence: { code_and_docs: "MIT", data: "ODbL-1.0 (the census's counts)" },
+    licence: {
+      code_and_docs: "MIT",
+      data: "CC-BY-4.0 (the census's counts)",
+      data_attribution: "Surfing Dog census, surfingdog.ai, CC BY 4.0",
+    },
     conformance: `${SPEC_ORIGIN}/spec/check/`,
     source: "https://github.com/surfingdogai/inbox/tree/main/packages/spec",
     specs: SPEC_DOCS.map((d) => ({

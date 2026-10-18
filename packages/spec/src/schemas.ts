@@ -229,7 +229,7 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "ai-catalog": { schema: aiCatalogSchema, title: "/.well-known/ai-catalog.json (ARD), as a network serves it" },
   "census-edition": {
     schema: censusEditionSchema,
-    title: "GET /v1/census/{edition}: one month of the census, as counts (ODbL)",
+    title: "GET /v1/census/{edition}: one month of the census, as counts (CC BY 4.0)",
   },
   "census-editions": { schema: censusEditionsSchema, title: "GET /v1/census: the published editions" },
 };

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://surfingdog.ai/spec/schemas/census-edition.json",
-  "title": "GET /v1/census/{edition}: one month of the census, as counts (ODbL)",
+  "title": "GET /v1/census/{edition}: one month of the census, as counts (CC BY 4.0)",
   "type": "object",
   "properties": {
     "edition": {
@@ -194,15 +194,22 @@
       "properties": {
         "name": {
           "type": "string",
-          "const": "ODbL-1.0"
+          "const": "CC-BY-4.0"
         },
         "url": {
           "type": "string",
-          "const": "https://opendatacommons.org/licenses/odbl/1-0/"
+          "const": "https://creativecommons.org/licenses/by/4.0/"
         },
         "attribution": {
           "type": "string",
-          "description": "How to credit it: \"Surfing Dog (surfingdog.ai)\"."
+          "description": "How to credit it: \"Surfing Dog census, surfingdog.ai, CC BY 4.0\"."
+        },
+        "credits": {
+          "description": "Credit for others' data the counts rest on, given with the attribution: \"© Overture Maps Foundation\" when the cities are counted from Overture Maps places data.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": ["name", "url", "attribution"]
