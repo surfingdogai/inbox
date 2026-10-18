@@ -64,7 +64,8 @@ pnpm test              # every test, on Node and on Workers
 ```
 
 - `apps/inbox`: the server and the owner app, one codebase for Workers and Node
-- `apps/site`: surfingdog.ai, with the docs
+- `apps/site`: surfingdog.ai, with the docs. It counts visits with Cloudflare Web Analytics only when built with
+  `WEB_ANALYTICS_TOKEN` set, as our deploy does; any other build sends nothing anywhere
 - `packages/core`: items, their states, rules and receipts
 - `packages/adapters`: REST, MCP, sign-in, email in, webhooks and networks
 - `packages/platform`: the database, mail and job seams for each runtime
