@@ -1,4 +1,11 @@
-import { APP_SCHEME, type Capabilities, type PhoneCapabilities, pairingUri, signInLinkUri } from "@surfingdog/core";
+import {
+  APP_SCHEME,
+  type Capabilities,
+  type PhoneCapabilities,
+  pairingUri,
+  signInLinkUri,
+  WriteError,
+} from "@surfingdog/core";
 import { type Context, Hono } from "hono";
 import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
@@ -141,6 +148,24 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     return c.json(await phones.sendTest(id, clock()), 200, noStore);
   });
 
+  // The owner's phones, from one of them (Settings → Notifications → Phones): a lost one is removed
+  // from another as from the computer.
+  app.get("/phones", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    return c.json({ phones: await phones.listPhones(), this: id }, 200, noStore);
+  });
+
+  app.delete("/phones/:id", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    const other = String(c.req.param("id"));
+    // Only a phone of the same person: the owner's phones, never a colleague's.
+    if ((await phones.ownerOf(other)) !== (await phones.ownerOf(id)))
+      return problemResponse(c, new WriteError("not_found", "No such phone here."));
+    return c.json(await phones.removePhone(other, clock()), 200, noStore);
+  });
+
   // "Remove this inbox" on the phone: it signs itself out here, and the relay forgets it.
   app.delete("/", async (c) => {
     const id = device(c);
@@ -219,18 +244,4 @@ main{width:min(380px,90vw);padding:24px 8px}h1{font:600 22px/1.3 "Plus Jakarta S
 a.b{display:none;margin-top:8px;height:48px;border-radius:9999px;background:#14163c;color:#fff;font-weight:600;text-decoration:none;align-items:center;justify-content:center}@media(prefers-color-scheme:dark){a.b{background:#f2f1ff;color:#0d0e26}}</style></head>
 <body><main><h1 id="h">Open this in the app</h1><p id="t">On your phone, open the Surfing Dog Inbox app and scan the code from there.</p><a class="b" id="go" href="#">Open in the app</a></main>
 <script>(function(){var f=new URLSearchParams(location.hash.slice(1));history.replaceState(null,"",location.pathname);var s=f.get("link");if(f.get("v")!=="1"||!s||!/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(s))return;document.getElementById("h").textContent="Sign in on your phone";document.getElementById("t").textContent="Open this on the phone that asked for it.";var a=document.getElementById("go");a.href="${APP_SCHEME}://link?o="+encodeURIComponent(location.origin)+"&s="+s;a.style.display="flex";})();</script></body></html>`;
-}
-
-/**
- * `/.well-known/assetlinks.json`: lets the Android app open this inbox's `https://<inbox>/i/<id>`
- * links itself (Android App Links), for the signing certificates the host names. None named, none.
- */
-export function assetLinks(certs: readonly string[]): unknown[] {
-  if (certs.length === 0) return [];
-  return [
-    {
-      relation: ["delegate_permission/common.handle_all_urls"],
-      target: { namespace: "android_app", package_name: APP_SCHEME, sha256_cert_fingerprints: [...certs] },
-    },
-  ];
 }

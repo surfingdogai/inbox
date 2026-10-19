@@ -33,8 +33,6 @@ type Bindings = Env & {
   GOOGLE_OAUTH_REDIRECT_URI?: string;
   /** The push relay for the owner's phones (ADR-026): its address, or `off`. Absent, Surfing Dog's. */
   INBOX_PUSH_RELAY?: string;
-  /** SHA-256 fingerprints of the Android app's signing certificates, comma-separated (App Links). */
-  INBOX_ANDROID_CERTS?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -60,7 +58,6 @@ function inboxFor(env: Bindings): Inbox {
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
       ...oauthFrom(env),
       pushRelay: env.INBOX_PUSH_RELAY,
-      androidCerts: listFrom(env.INBOX_ANDROID_CERTS),
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>
         env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers })),

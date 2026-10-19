@@ -25,7 +25,7 @@ import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin, sameOrigin } from "./origin";
 import { type OwnerEmailChange, ownerEmailRoutes } from "./owner-email";
-import { assetLinks, ownerPhoneRoutes, phonePage, phoneRoutes } from "./phone";
+import { ownerPhoneRoutes, phonePage, phoneRoutes } from "./phone";
 import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
@@ -96,11 +96,6 @@ export interface DoorDeps {
   readonly snapshot?: SqliteSnapshot | undefined;
   /** The inbox is closing (a hosted inbox its owner is leaving): the download offers the receipt key first. */
   readonly leaving?: boolean | undefined;
-  /**
-   * The SHA-256 fingerprints of the certificates the Android app is signed with
-   * (INBOX_ANDROID_CERTS), so the app opens this inbox's item links itself (ADR-026). None, none.
-   */
-  readonly androidCerts?: readonly string[] | undefined;
 }
 
 /**
@@ -539,15 +534,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       "Referrer-Policy": "no-referrer",
     }),
   );
-  // An item's link: the owner app on a computer; the Android app opens it itself where it may.
+  // An item's link (ADR-026): the owner app, on whatever opens it. The phone app opens its own items
+  // from its notifications, by its own scheme.
   app.get("/i/:id", (c) => {
     const id = String(c.req.param("id"));
     if (!/^[0-9A-Za-z_-]{1,64}$/.test(id)) return c.json({ error: "not_found" }, 404);
     return c.redirect(`/items/${id}`, 302);
   });
-  app.get("/.well-known/assetlinks.json", (c) =>
-    c.json(assetLinks(deps.androidCerts ?? []), 200, { "Cache-Control": "public, max-age=3600" }),
-  );
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
   // holding the link can open it, so every request takes a token, and a POST one from its own class.
   app.use("/c/*", async (c, next) => {

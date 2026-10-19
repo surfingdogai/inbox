@@ -74,7 +74,6 @@ async function setup() {
     secretKey: KEY,
     fetchImpl: relay.fetchImpl,
     pushRelay: RELAY,
-    androidCerts: ["AA:BB"],
   });
   const cookie = await signInByCode(inbox.app, mail, ORIGIN, OWNER);
   return { db, mail, relay, inbox, app: inbox.app, cookie };
@@ -217,6 +216,29 @@ describe("what a phone may do", () => {
   });
 });
 
+describe("a lost phone", () => {
+  it("is removed from another of the owner's phones, which sees them all", async () => {
+    const { app, cookie } = await setup();
+    const kept = await pairPhone(app, cookie, await makePhone());
+    const lost = await pairPhone(app, cookie, await makePhone());
+    const list = (await (await phoneReq(app, kept.tokens.access_token, "GET", "/v1/phone/phones")).json()) as {
+      phones: { id: string }[];
+      this: string;
+    };
+    expect(list.this).toBe(kept.tokens.device_id);
+    expect(list.phones.map((p) => p.id).sort()).toEqual([kept.tokens.device_id, lost.tokens.device_id].sort());
+    const removed = await phoneReq(
+      app,
+      kept.tokens.access_token,
+      "DELETE",
+      `/v1/phone/phones/${lost.tokens.device_id}`,
+    );
+    expect(removed.status).toBe(200);
+    expect((await phoneReq(app, lost.tokens.access_token, "GET", "/v1/owner/items")).status).toBe(401);
+    expect((await phoneReq(app, kept.tokens.access_token, "GET", "/v1/owner/items")).status).toBe(200);
+  });
+});
+
 describe("the sign-in link", () => {
   it("emails a link the asking phone alone can redeem, and says the same to a stranger's address", async () => {
     const { app, mail } = await setup();
@@ -276,14 +298,6 @@ describe("the sign-in link", () => {
     const item = await app.request(`${ORIGIN}/i/01ABC`);
     expect(item.status).toBe(302);
     expect(item.headers.get("location")).toBe("/items/01ABC");
-    const links = (await (await app.request(`${ORIGIN}/.well-known/assetlinks.json`)).json()) as {
-      target: { package_name: string; sha256_cert_fingerprints: string[] };
-    }[];
-    expect(links[0]?.target).toEqual({
-      namespace: "android_app",
-      package_name: "ai.surfingdog.inbox",
-      sha256_cert_fingerprints: ["AA:BB"],
-    });
   });
 });
 

@@ -163,8 +163,6 @@ export interface AppDeps {
    * address, `off` for none, absent for Surfing Dog's own. It is handed only ciphertext.
    */
   readonly pushRelay?: string | undefined;
-  /** The Android app's signing certificate fingerprints (INBOX_ANDROID_CERTS), for its App Links. */
-  readonly androidCerts?: readonly string[] | undefined;
 }
 
 export interface Inbox {
@@ -538,7 +536,6 @@ export function createInbox(deps: AppDeps): Inbox {
       return [...(deps.ownerEmails ?? []), ...(fromSettings ? [fromSettings] : [])];
     },
     onOwnerEmailChange: deps.onOwnerEmailChange,
-    androidCerts: deps.androidCerts,
   });
 
   // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.
