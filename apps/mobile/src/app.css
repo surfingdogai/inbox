@@ -250,6 +250,18 @@ h2 {
     sans-serif;
   flex: none;
 }
+.badge.tone-1 {
+  background: var(--lagoon-bg);
+  color: var(--lagoon);
+}
+.badge.tone-2 {
+  background: var(--tangerine-bg);
+  color: var(--tangerine);
+}
+.badge.tone-3 {
+  background: var(--palm-bg);
+  color: var(--palm);
+}
 .badge.lg {
   width: 40px;
   height: 40px;
@@ -454,6 +466,11 @@ button.card {
   border: 0;
   background: transparent;
   color: var(--link);
+}
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 .btn:disabled {
   opacity: 0.5;

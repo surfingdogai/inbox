@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useApp } from "../context";
 import { badgeOf } from "../lib/view";
 import { ChevronLeft, PlusIcon } from "./icons";
@@ -6,6 +7,10 @@ import { OfflineBanner } from "./Offline";
 /** Your inboxes (the approved screen): for people who look after more than one business. */
 export function Inboxes() {
   const app = useApp();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: counted once, when the list opens
+  useEffect(() => {
+    void app.countAll();
+  }, []);
   return (
     <div className="screen">
       {app.offlineSince !== null && <OfflineBanner since={app.offlineSince} queued={app.queued.length} />}
@@ -20,7 +25,7 @@ export function Inboxes() {
         <div className="sub">For people who look after more than one business</div>
       </header>
       <main className="body">
-        {app.inboxes.map((e) => {
+        {app.inboxes.map((e, i) => {
           const n = app.needCounts[e.alias];
           return (
             <button
@@ -31,7 +36,7 @@ export function Inboxes() {
               aria-current={app.active?.alias === e.alias ? "true" : undefined}
               onClick={() => app.choose(e)}
             >
-              <span className="badge lg">{badgeOf(e.name)}</span>
+              <span className={`badge lg tone-${i % 4}`}>{badgeOf(e.name)}</span>
               <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
                 <span className="who" style={{ fontSize: 15 }}>
                   {e.name}

@@ -310,6 +310,26 @@ export function App({ deps }: { deps: Deps }) {
     native.onPushToken(register);
   }, [ready, locked, inboxes, native, sessions, deps.fetch]);
 
+  const countAll = useCallback(async () => {
+    if (!box) return;
+    for (const e of inboxes) {
+      const cached = await box.get<{ at: number; views: ItemView[] }>(`list.${e.alias}`);
+      if (cached) setNeedCounts((c) => ({ ...c, [e.alias]: cached.views.filter(needsYou).length }));
+    }
+    if (offlineSince !== null) return;
+    await Promise.all(
+      inboxes.map(async (e) => {
+        try {
+          const page = await new InboxClient(e, sessions, deps.fetch).items("all");
+          await box.put(`list.${e.alias}`, { at: Date.now(), views: page.items });
+          setNeedCounts((c) => ({ ...c, [e.alias]: page.items.filter(needsYou).length }));
+        } catch {
+          // That inbox can't be reached now: its cached count stays.
+        }
+      }),
+    );
+  }, [box, inboxes, offlineSince, sessions, deps.fetch]);
+
   const value: AppValue = {
     native,
     sessions,
@@ -330,6 +350,7 @@ export function App({ deps }: { deps: Deps }) {
       setStack([{ name: "inbox" }]);
     },
     refresh,
+    countAll,
     loadItem,
     act,
     connected,

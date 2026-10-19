@@ -33,6 +33,8 @@ export interface App {
   back(): void;
   choose(entry: InboxEntry): void;
   refresh(): Promise<void>;
+  /** What needs the owner in every inbox: from each one's cache at once, then from the inbox when online. */
+  countAll(): Promise<void>;
   loadItem(id: string): Promise<ItemDetail | null>;
   /** Does it now if the inbox can be reached, else keeps it to send when it can. */
   act(itemId: string, kind: "transition" | "reply", body: Record<string, unknown>, label: string): Promise<void>;

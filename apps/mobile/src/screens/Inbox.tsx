@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { relativeTime } from "../../../inbox/client/src/lib/format";
+import { relativeTime, stateWord } from "../../../inbox/client/src/lib/format";
 import type { ItemView } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import { badgeOf, cardAmount, cardLine, cardTitle, channelPhrase, KIND_WORD, needsYou } from "../lib/view";
@@ -84,7 +84,7 @@ export function Inbox() {
                 <div className="meta">
                   <span>
                     <span className={`chip ${v.item.type}`}>{KIND_WORD[v.item.type]}</span>
-                    {v.item.closedAt ? v.human.split(".")[0]?.toLowerCase() : "answered by your rules"}
+                    {stateWord(v.item.state).toLowerCase()}
                   </span>
                   <span>{relativeTime(v.item.updatedAt)}</span>
                 </div>

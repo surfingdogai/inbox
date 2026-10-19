@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatDay, formatMoney, formatWhen, partyName, relativeTime } from "../../../inbox/client/src/lib/format";
+import {
+  formatDay,
+  formatMoney,
+  formatWhen,
+  partyName,
+  relativeTime,
+  stateWord,
+} from "../../../inbox/client/src/lib/format";
 import type { ItemDetail } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import type { Slots } from "../lib/client";
@@ -224,7 +231,7 @@ function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
   } else if (item.type === "refund") {
     rows.push(["Amount", formatMoney(item.payload.amount)]);
   }
-  rows.push(["Status", detail.human.split(".")[0] ?? item.state]);
+  rows.push(["Status", stateWord(item.state)]);
   return (
     <div className="facts">
       {rows.map(([k, v]) => (
