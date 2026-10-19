@@ -1,6 +1,8 @@
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { findSlots, slotOffered } from "../capabilities/availability";
+import { calendarName } from "../connectors/sdk";
+import { BUSY_HORIZON_MS, busyDetails } from "../connectors/store";
 import { audienceFor, businessFacts } from "../customer/audience";
 import { copyFor, vars } from "../customer/copy";
 import type { Audience } from "../customer/describe";
@@ -40,7 +42,7 @@ import {
   diagnoseFailure,
   eventStatement,
   findIdempotent,
-  hasActiveWebhook,
+  hasEventListeners,
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
@@ -454,9 +456,9 @@ async function attempt_(
     }
     // …and one that is free as we propose it (ADR-018 N7): nothing is held, so it may still go before
     // they answer, but never before we ask.
-    const plan = planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, item.id));
+    const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, item.id));
     if (!plan.ok) {
-      throw new WriteError("slot_taken", "that time is fully booked", {
+      throw new WriteError("slot_taken", await ownerSlotWords(db, spec, plan.fullBucket), {
         details: { guard: "slot_available", bucket: plan.fullBucket, capacity: spec.capacity },
       });
     }
@@ -878,7 +880,7 @@ async function attempt_(
           if (!linkedBooking) break;
           const spec = await slotSpecFor(db, linkedBooking.payload);
           const buckets = bucketsFor(spec, linkedBooking.startTime, linkedBooking.endTime);
-          const plan = planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, ""));
+          const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, ""));
           if (!plan.ok) {
             throw new WriteError(
               "slot_taken",
@@ -894,12 +896,12 @@ async function attempt_(
         if (item.type !== "booking") break;
         const spec = await slotSpecFor(db, payload);
         const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
-        const taken = await readClaims(db, spec.resourceKey, buckets, item.id);
+        const taken = await readClaims(db, spec, buckets, item.id);
         const plan = planClaims(spec, buckets, taken);
         if (!plan.ok) {
           throw new WriteError(
             "slot_taken",
-            audience ? copyFor(audience.lang).problems.slotTaken : "that time is fully booked",
+            audience ? copyFor(audience.lang).problems.slotTaken : await ownerSlotWords(db, spec, plan.fullBucket),
             {
               details: { guard, bucket: plan.fullBucket, capacity: spec.capacity },
             },
@@ -1038,7 +1040,7 @@ async function attempt_(
         plan,
         causationId: eventId,
         now,
-        webhooks: await hasActiveWebhook(db),
+        webhooks: await hasEventListeners(db),
       });
       refundMade.push(...made.statements);
       // Owed at once, with nothing to come back: its date is fixed as it is made, and so is its promise.
@@ -1259,7 +1261,7 @@ async function attempt_(
       dedupeKey: `rules:${eventId}`,
     }),
   );
-  if (await hasActiveWebhook(db)) {
+  if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
     if (linkedEvent) statements.push(webhookFanoutStatement(linkedEvent, now));
   }
@@ -2198,9 +2200,9 @@ async function planChange(
           fields: [{ path: "input.endTime", problem: "invalid", message: error.message }],
         });
       }
-      const plan = planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, item.id));
+      const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, item.id));
       if (!plan.ok) {
-        throw new WriteError("slot_taken", "that time is fully booked", {
+        throw new WriteError("slot_taken", await ownerSlotWords(db, spec, plan.fullBucket), {
           details: { guard: "slot_available", bucket: plan.fullBucket, capacity: spec.capacity },
         });
       }
@@ -2373,7 +2375,7 @@ async function holdForChange(
     return undefined;
   const spec = await slotSpecFor(db, payload);
   const buckets = bucketsFor(spec, c.startTime, c.endTime);
-  const plan = planClaims(spec, buckets, await readClaims(db, spec.resourceKey, buckets, ""));
+  const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, ""));
   return plan.ok ? { resourceKey: spec.resourceKey, claims: plan.claims } : undefined;
 }
 
@@ -2762,3 +2764,20 @@ function replay(hit: { requestHash: string; response: unknown }, requestHash: st
 }
 
 export type { Transition };
+
+/**
+ * What the owner is told when a time cannot be booked: fully booked, busy in a calendar they
+ * connected (ADR-022), which no booking in the inbox explains, or further ahead than that calendar
+ * was read. The calendar is named, so the owner knows where to free the time.
+ */
+async function ownerSlotWords(db: Db, spec: SlotSpec, bucket: number): Promise<string> {
+  const busy = await busyDetails(db, bucket, bucket + spec.granularityMin * 60_000, spec.resourceKey);
+  const known = busy.find((b) => !b.beyond);
+  if (known) return `that time is busy in your ${calendarName(known.name || "connected")}`;
+  const beyond = busy[0];
+  if (beyond) {
+    const days = Math.round(BUSY_HORIZON_MS / 86_400_000);
+    return `your ${calendarName(beyond.name || "connected")} is read only ${days} days ahead, and that time is further`;
+  }
+  return "that time is fully booked";
+}

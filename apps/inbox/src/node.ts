@@ -24,7 +24,7 @@ import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platfor
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
-import { listFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
@@ -184,6 +184,12 @@ const { app, runner, prepare } = createInbox({
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
+  // Google Calendar's OAuth client (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET): "set up" without it.
+  ...oauthFrom({
+    GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    GOOGLE_OAUTH_REDIRECT_URI: process.env.GOOGLE_OAUTH_REDIRECT_URI,
+  }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),
   // The owner can download the inbox: a copy of this file, without who is signed in or any secret,

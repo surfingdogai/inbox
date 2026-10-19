@@ -23,7 +23,7 @@ import type { Settings } from "../settings/schema";
 import { actorMeta, type Caller } from "./caller";
 import {
   eventStatement,
-  hasActiveWebhook,
+  hasEventListeners,
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
@@ -463,7 +463,7 @@ export async function draftStatements(o: {
       dedupeKey: `notify:draft:${item.id}:${Math.floor(now / 3_600_000)}`,
     }),
   );
-  if (await hasActiveWebhook(o.db)) {
+  if (await hasEventListeners(o.db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.draft_offer`, itemId: item.id }, now));
   }
   return { statements, view, drafted };
@@ -606,7 +606,7 @@ export async function heldReplyStatements(o: {
       dedupeKey: `notify:held:${item.id}:${Math.floor(now / 3_600_000)}`,
     }),
   ];
-  if (await hasActiveWebhook(o.db)) {
+  if (await hasEventListeners(o.db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.flags`, itemId: item.id }, now));
   }
   return {

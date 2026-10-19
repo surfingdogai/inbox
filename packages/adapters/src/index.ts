@@ -1,5 +1,5 @@
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
-import { type Caller, type Capabilities, copyFor, type Db, WriteError } from "@surfingdog/core";
+import { type Caller, type Capabilities, copyFor, type Db, safeReturnPath, WriteError } from "@surfingdog/core";
 import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -34,6 +34,7 @@ import { stepUpRoutes } from "./step-up";
 export * from "./access";
 export * from "./auth";
 export * from "./auth-page";
+export * from "./connectors/index";
 export * from "./customer-page";
 export * from "./download";
 export * from "./email";
@@ -372,6 +373,37 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // from them), a code to the address they have now; then the change itself, and its undo.
   app.route("/auth/step-up", stepUpRoutes(ownerMail));
   app.route("/auth/email", ownerEmailRoutes({ ...ownerMail, onOwnerEmailChange: deps.onOwnerEmailChange }));
+  // A platform sends the owner back here after they signed in to connect it (ADR-022). The state is
+  // the proof: minted for this inbox, used once, gone in ten minutes. The code in the address never
+  // leaves: the answer is a redirect into the owner app with no Referer.
+  app.get("/oauth/connect/:kind/callback", async (c) => {
+    const kind = String(c.req.param("kind"));
+    const state = c.req.query("state") ?? "";
+    const r = state
+      ? await deps.caps.connectors.finishAuthorization({
+          kind,
+          state,
+          code: c.req.query("code"),
+          error: c.req.query("error"),
+          now: clock(),
+        })
+      : { returnTo: "/settings/integrations", ok: false, message: "That sign-in came back without its state." };
+    // The path is checked again as the browser will read it: never `//another.site`.
+    let target = new URL(safeReturnPath(r.returnTo), "https://inbox.invalid");
+    if (target.origin !== "https://inbox.invalid" || target.pathname.startsWith("//")) {
+      target = new URL("/settings/integrations", "https://inbox.invalid");
+    }
+    if (r.ok) target.searchParams.set("connected", "id" in r && r.id ? r.id : kind);
+    else target.searchParams.set("connect_error", r.message);
+    return new Response(null, {
+      status: 303,
+      headers: {
+        location: `${target.pathname}${target.search}`,
+        "cache-control": "no-store",
+        "referrer-policy": "no-referrer",
+      },
+    });
+  });
   app.route(
     "/oauth",
     oauthRoutes({
@@ -417,7 +449,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }
     return c.json(result, result.outcome === "rejected" ? 422 : 200);
   });
-  app.route("/v1/owner", ownerRest(deps.caps));
+  app.route("/v1/owner", ownerRest(deps.caps, { baseUrl: deps.baseUrl }));
   // After the owner routes, so their check (an owner principal, its scopes) runs on these first.
   app.route(
     "/v1/owner",

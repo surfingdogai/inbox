@@ -5,6 +5,9 @@ import type {
   Availability,
   BusinessProfile,
   Closure,
+  ConnectBody,
+  ConnectionPatch,
+  ConnectionView,
   CreatedKey,
   CreateKeyBody,
   CreateWebhookBody,
@@ -13,6 +16,7 @@ import type {
   EraseResult,
   FeedConnector,
   Floor,
+  IntegrationsView,
   ItemDetail,
   ItemView,
   KeyList,
@@ -290,6 +294,22 @@ export const api = {
     }),
 
   // ---- integrations: what comes in, and where events go ----
+  integrations: () => call<IntegrationsView>("GET", "/v1/owner/integrations"),
+  connect: (body: ConnectBody) => call<ConnectionView>("POST", "/v1/owner/integrations", { body, idempotent: true }),
+  authorizeIntegration: (kind: string) =>
+    call<{ authorize_url: string }>("POST", "/v1/owner/integrations/authorize", {
+      body: { kind, return_to: "/settings/integrations" },
+    }),
+  updateConnection: (id: string, body: ConnectionPatch) =>
+    call<ConnectionView>("PATCH", `/v1/owner/integrations/${encodeURIComponent(id)}`, { body, idempotent: true }),
+  syncConnection: (id: string) =>
+    call<{ queued: true; connection_id: string }>("POST", `/v1/owner/integrations/${encodeURIComponent(id)}/sync`, {
+      idempotent: true,
+    }),
+  removeConnection: (id: string) =>
+    call<{ removed: true; left_in_calendar: number }>("DELETE", `/v1/owner/integrations/${encodeURIComponent(id)}`, {
+      idempotent: true,
+    }),
   feeds: () => call<{ items: FeedConnector[] }>("GET", "/v1/owner/feeds"),
   addFeed: (body: AddFeedBody) => call<FeedConnector>("POST", "/v1/owner/feeds", { body }),
   importFeed: (id: string) =>

@@ -696,3 +696,94 @@ export const mailServiceSchema = z.object({
   sender: z.boolean().describe("There is an address to send from."),
   links: z.boolean().describe("Emails can carry answer links."),
 });
+
+/* --- integrations (ADR-022) ------------------------------------------------ */
+
+const calendarChoiceSchema = z.looseObject({
+  id: z.string(),
+  name: z.string(),
+  writable: z.boolean(),
+  primary: z.boolean().optional(),
+  lengths: z.array(z.number().int()).optional().describe("A Cal.com event type's lengths, in minutes"),
+});
+
+const formFieldSchema = z.looseObject({
+  key: z.string(),
+  label: z.string(),
+  input: z.enum(["text", "email", "url", "password"]),
+  required: z.boolean(),
+  secret: z.boolean().describe("Sealed before it is stored and never shown again"),
+  advanced: z.boolean(),
+  help: z.string().optional(),
+  link: z.object({ href: z.string(), text: z.string() }).optional(),
+  placeholder: z.string().optional(),
+});
+
+export const connectionSchema = z.looseObject({
+  id: z.string(),
+  kind: z.string().describe("caldav, google_calendar, ics (a calendar's private link: busy times only) or calcom"),
+  preset: z.string().nullable().describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar"),
+  title: z.string(),
+  name: z.string(),
+  account: z.string(),
+  status: z.enum(["configured", "active", "error", "disabled"]),
+  capabilities: z.array(z.string()),
+  busy_on: z.boolean(),
+  bookings_on: z.boolean(),
+  calendars: z.array(calendarChoiceSchema),
+  busy_calendars: z.array(z.string()),
+  destinations: z.array(calendarChoiceSchema),
+  destination: z.string().nullable(),
+  services: z.array(z.string()).nullable().describe("The services busy times apply to; null for all"),
+  busy_times: z.number().int().describe("The busy times still ahead, as last read"),
+  busy_read_at: z.number().int().nullable().describe("Unix milliseconds"),
+  busy_until: z
+    .number()
+    .int()
+    .nullable()
+    .describe("How far ahead the busy times were read (Unix milliseconds): past it no time is offered"),
+  busy_partial: z.boolean().describe("Read less far ahead than usual: the calendar had more ahead than one sync reads"),
+  bookings_written: z.number().int(),
+  bookings_failing: z.number().int(),
+  booking_error: z.string().nullable(),
+  last_sync_at: z.number().int().nullable(),
+  last_error: z.string().nullable(),
+  last_error_at: z.number().int().nullable(),
+  error_code: z
+    .string()
+    .nullable()
+    .describe("While it fails: auth (connect it again), config, unreachable, rate_limited, refused, bad_response"),
+  failing_since: z.number().int().nullable(),
+  created_at: z.number().int(),
+});
+
+export const integrationsSchema = z.object({
+  cards: z.array(
+    z.looseObject({
+      id: z.string(),
+      title: z.string(),
+      line: z.string(),
+      group: z.enum(["calendars", "payments", "shops"]),
+      status: z.enum(["ready", "soon"]),
+      ways: z.array(
+        z.looseObject({
+          kind: z.string(),
+          preset: z.string().nullable(),
+          label: z.string(),
+          status: z
+            .enum(["ready", "soon", "setup"])
+            .describe("setup: it needs something on the server first, said in hint and explained at href"),
+          auth: z.enum(["form", "oauth"]),
+          form: z.array(formFieldSchema),
+          note: z.string().optional(),
+          hint: z.string().optional(),
+          href: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+  connections: z.array(connectionSchema),
+  can_connect: z.boolean().describe("False without INBOX_SECRET_KEY: nothing can be connected"),
+});
+
+export const authorizeSchema = z.object({ authorize_url: z.string().describe("Open it in the owner's browser") });

@@ -97,3 +97,43 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
   }
   return { ranges, bad };
 }
+
+/**
+ * The OAuth clients this inbox signs owners in to platforms with, from GOOGLE_OAUTH_CLIENT_ID and
+ * GOOGLE_OAUTH_CLIENT_SECRET (both, or neither: one alone is said and left out), and
+ * GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect address for all its inboxes. Without a
+ * client, Google Calendar shows as "set up" in Settings → Integrations ("Soon" on a hosted inbox).
+ */
+export function oauthFrom(
+  env: {
+    readonly GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
+    readonly GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
+    readonly GOOGLE_OAUTH_REDIRECT_URI?: string | undefined;
+  },
+  log: (line: string) => void = console.error,
+): {
+  oauth: { google: { clientId: string; clientSecret: string } | null };
+  oauthRedirect: ((kind: string) => string | undefined) | undefined;
+} {
+  const id = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "";
+  const secret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "";
+  if ((id && !secret) || (!id && secret)) {
+    log("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET go together; with one alone Google stays off");
+  }
+  const google = id && secret ? { clientId: id, clientSecret: secret } : null;
+  const redirect = env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? "";
+  let fixed: string | undefined;
+  if (redirect) {
+    try {
+      const url = new URL(redirect);
+      if (url.protocol === "https:" && !url.search && !url.hash) fixed = url.toString();
+      else log(`GOOGLE_OAUTH_REDIRECT_URI is not an https address without a query (${redirect}); it is ignored`);
+    } catch {
+      log(`GOOGLE_OAUTH_REDIRECT_URI is not an address (${redirect}); it is ignored`);
+    }
+  }
+  return {
+    oauth: { google },
+    oauthRedirect: fixed ? (kind) => (kind === "google_calendar" ? fixed : undefined) : undefined,
+  };
+}

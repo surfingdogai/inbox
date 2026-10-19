@@ -4,6 +4,7 @@ import { Check, Copy, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
+import { IntegrationsCard } from "../components/Integrations";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import {
@@ -28,13 +29,14 @@ export const Route = createFileRoute("/settings/integrations")({
 });
 
 /**
- * Integrations: what comes in, and where events go. Two halves that never meet — a feed fills the
- * catalogue, a webhook carries what happens to it — but they are the same question for an owner,
- * which is "is this inbox talking to the rest of my shop".
+ * Integrations: what is connected, what comes in, and where events go. The gallery first (calendars
+ * now; payments and shops say soon), then feeds and webhooks beside it — the same question for an
+ * owner, which is "is this inbox talking to the rest of my business".
  */
 function IntegrationsPage() {
   return (
     <>
+      <IntegrationsCard />
       <FeedsCard />
       <WebhooksCard />
     </>

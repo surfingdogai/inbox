@@ -152,24 +152,29 @@ export const availabilityRules = sqliteTable("availability_rules", {
   createdAt: createdAt(),
 });
 
-export const parties = sqliteTable("parties", {
-  id: id(),
-  kind: text("kind").notNull(),
-  displayName: text("display_name"),
-  locale: text("locale"),
-  contact: text("contact", { mode: "json" }),
-  notes: text("notes"),
-  erasedAt: integer("erased_at"),
-  /** The party this one was merged into once a one-time code proved they are the same customer (0009). */
-  mergedInto: text("merged_into"),
-  /**
-   * Since when this customer asked the business not to use booking networks for them (0013): nothing
-   * more about their items goes to any network, and no network is asked about them.
-   */
-  networksOffAt: integer("networks_off_at"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const parties = sqliteTable(
+  "parties",
+  {
+    id: id(),
+    kind: text("kind").notNull(),
+    displayName: text("display_name"),
+    locale: text("locale"),
+    contact: text("contact", { mode: "json" }),
+    notes: text("notes"),
+    erasedAt: integer("erased_at"),
+    /** The party this one was merged into once a one-time code proved they are the same customer (0009). */
+    mergedInto: text("merged_into"),
+    /**
+     * Since when this customer asked the business not to use booking networks for them (0013): nothing
+     * more about their items goes to any network, and no network is asked about them.
+     */
+    networksOffAt: integer("networks_off_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  /** The customers whose name changed or who were erased since a calendar's sync last looked (0022). */
+  (t) => [index("parties_updated").on(t.updatedAt)],
+);
 
 /**
  * Fingerprints of stopped customers (0013): SHA-256 of their email address and phone number as the
@@ -405,6 +410,8 @@ export const items = sqliteTable(
     index("items_request_expiry").on(t.requestExpiresAt).where(sql`${t.requestExpiresAt} IS NOT NULL`),
     /** The returns and refunds of an order or a booking, found by it (0015). */
     index("items_linked").on(t.linkedItemId).where(sql`${t.linkedItemId} IS NOT NULL`),
+    /** The bookings that changed since a connected calendar's sync last looked (0022). */
+    index("items_type_updated").on(t.type, t.updatedAt),
   ],
 );
 
@@ -741,6 +748,19 @@ export const connectors = sqliteTable(
     lastSyncAt: integer("last_sync_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /** The generation of `connector_busy` rows that is current (0022, ADR-022); null before the first. */
+    busyGen: integer("busy_gen"),
+    /** When those busy times were read from the platform. */
+    busyAt: integer("busy_at"),
+    /** How far ahead they were read: past it nothing is known, so nothing is offered. */
+    busyUntil: integer("busy_until"),
+    /** The kind of the last failure (`auth`, `config`, `unreachable`, …), while it fails. */
+    errorCode: text("error_code"),
+    /** Since when it fails, and how many syncs in a row did: the sync backs off on them. */
+    failingSince: integer("failing_since"),
+    failures: integer("failures").notNull().default(0),
+    /** When the owner was told it stopped syncing: once, until it works again. */
+    notifiedAt: integer("notified_at"),
   },
   (t) => [
     unique("connectors_kind_external").on(t.kind, t.externalId),
@@ -748,6 +768,82 @@ export const connectors = sqliteTable(
     index("connectors_status").on(t.status),
   ],
 );
+
+/**
+ * What a connected calendar says is busy (0022, ADR-022): one generation per connector, the one named by
+ * `connectors.busy_gen`. Busy times only ever remove times the inbox would offer; they never move or
+ * cancel a booking.
+ */
+export const connectorBusy = sqliteTable(
+  "connector_busy",
+  {
+    connectorId: text("connector_id")
+      .notNull()
+      .references(() => connectors.id),
+    gen: integer("gen").notNull(),
+    startMs: integer("start_ms").notNull(),
+    endMs: integer("end_ms").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.connectorId, t.gen, t.startMs, t.endMs] }),
+    index("connector_busy_span").on(t.endMs, t.startMs),
+  ],
+);
+
+/**
+ * A booking a connector keeps in step on the platform (0022, ADR-022): the platform's id for it, what was
+ * last written there (`synced_hash`, `synced_start`, `synced_end`), and the claim that lets one job at a
+ * time call the platform for it. `state`: `pending` | `synced` | `removed` | `failed`.
+ */
+export const connectorLinks = sqliteTable(
+  "connector_links",
+  {
+    connectorId: text("connector_id")
+      .notNull()
+      .references(() => connectors.id),
+    itemId: text("item_id").notNull(),
+    externalId: text("external_id"),
+    etag: text("etag"),
+    calendar: text("calendar"),
+    syncedHash: text("synced_hash"),
+    syncedStart: integer("synced_start"),
+    syncedEnd: integer("synced_end"),
+    state: text("state").notNull().default("pending"),
+    claimUntil: integer("claim_until"),
+    /** Which job holds the claim: a job whose claim ran out records nothing over the next one's. */
+    claimedBy: text("claimed_by"),
+    attempts: integer("attempts").notNull().default(0),
+    retryAt: integer("retry_at"),
+    lastError: text("last_error"),
+    lastErrorAt: integer("last_error_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.connectorId, t.itemId] }),
+    index("connector_links_item").on(t.itemId),
+    index("connector_links_retry").on(t.connectorId, t.state, t.retryAt),
+  ],
+);
+
+/** A sign-in with a platform on its way (0022): the state's hash, the PKCE verifier sealed, ten minutes. */
+export const connectorAuth = sqliteTable("connector_auth", {
+  stateHash: text("state_hash").primaryKey(),
+  kind: text("kind").notNull(),
+  verifierEnc: text("verifier_enc").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  returnTo: text("return_to").notNull(),
+  createdAt: createdAt(),
+  expiresAt: integer("expires_at").notNull(),
+  usedAt: integer("used_at"),
+});
+
+/** Facts about this inbox itself (0022): `instance_id`, made once at random, which its calendar entries carry. */
+export const instanceMeta = sqliteTable("instance_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  createdAt: createdAt(),
+});
 
 /** The inbound mirror of `webhook_deliveries`: what a platform sent us, and what we made of it. */
 export const connectorEvents = sqliteTable(

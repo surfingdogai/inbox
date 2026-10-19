@@ -392,7 +392,7 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   let slotIsFree = false;
   try {
     const buckets = bucketsFor(spec, item.payload.startTime, item.payload.endTime);
-    const taken = await readClaims(db, spec.resourceKey, buckets, item.id);
+    const taken = await readClaims(db, spec, buckets, item.id);
     slotIsFree = planClaims(spec, buckets, taken).ok;
   } catch {
     slotIsFree = false;

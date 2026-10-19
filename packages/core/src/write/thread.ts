@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { ulid } from "../ids";
 import { type Caller, nowOf } from "./caller";
-import { hasActiveWebhook, jobStatement, threadEntryStatement, webhookFanoutStatement } from "./common";
+import { hasEventListeners, jobStatement, threadEntryStatement, webhookFanoutStatement } from "./common";
 
 /**
  * Adds a conversation entry without changing state; customer-facing ones queue a notification.
@@ -44,7 +44,7 @@ export async function appendThreadEntry(
     statements.push(jobStatement("notify", { to, itemId: item.id, event: "message", entry: entryId }, now));
   }
   // Only an inbound entry is an event: `events_v1` carries what the customer said, never our reply.
-  if (direction === "in" && (await hasActiveWebhook(db))) {
+  if (direction === "in" && (await hasEventListeners(db))) {
     statements.push(webhookFanoutStatement({ id: entryId, type: `${item.type}.message`, itemId: item.id }, now));
   }
   await db.batch(statements);

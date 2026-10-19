@@ -1,4 +1,11 @@
-import { type JobHandler, matchesEvent, schema, ulid, WEBHOOK_FANOUT_KIND } from "@surfingdog/core";
+import {
+  connectorPushStatements,
+  type JobHandler,
+  matchesEvent,
+  schema,
+  ulid,
+  WEBHOOK_FANOUT_KIND,
+} from "@surfingdog/core";
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { deliverJobStatement, readEvent } from "./deliver";
@@ -64,7 +71,18 @@ export function webhookFanoutHandler(): JobHandler {
     // the job row — durable evidence rather than a log line that scrolls away.
     const wanted = matched.slice(0, MAX_ENDPOINTS_PER_EVENT);
     const skipped = matched.length - wanted.length;
-    if (wanted.length === 0) return { note: `no active endpoint is subscribed to ${eventType}` };
+    // A booking event reaches every calendar that keeps bookings in step (ADR-022): one push job per
+    // connection, once per event, beside the deliveries.
+    const pushes = eventType.startsWith("booking.") ? await connectorPushStatements(db, p.eventId, now) : [];
+    if (wanted.length === 0) {
+      if (pushes.length > 0) await db.batch(pushes);
+      return {
+        note:
+          pushes.length > 0
+            ? `${eventType} → ${pushes.length} calendar${pushes.length === 1 ? "" : "s"}, no endpoint`
+            : `no active endpoint is subscribed to ${eventType}`,
+      };
+    }
 
     // A fanout that runs twice must write the same rows, not new ones: where a delivery already
     // exists for this pair, its id is reused, so both the unique index and the job dedupe key
@@ -86,10 +104,12 @@ export function webhookFanoutHandler(): JobHandler {
         deliverJobStatement({ deliveryId, webhookId: endpoint.id, eventId: p.eventId, attempt: 0 }, now, now),
       );
     }
+    statements.push(...pushes);
     await db.batch(statements);
     return {
       note:
         `${eventType} → ${wanted.length} endpoint${wanted.length === 1 ? "" : "s"}` +
+        (pushes.length ? ` and ${pushes.length} calendar${pushes.length === 1 ? "" : "s"}` : "") +
         (skipped ? ` (${skipped} over the ${MAX_ENDPOINTS_PER_EVENT} cap, not delivered)` : ""),
     };
   };

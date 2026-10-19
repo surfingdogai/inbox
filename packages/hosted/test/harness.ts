@@ -198,7 +198,7 @@ export interface Runtime {
 }
 
 export async function startRuntime(
-  o: { shards?: number; maxOpen?: number; maxTenantBytes?: number; client?: boolean } = {},
+  o: { shards?: number; maxOpen?: number; maxTenantBytes?: number; client?: boolean; oauthRelayHost?: string } = {},
 ): Promise<Runtime> {
   const n = o.shards ?? 2;
   const dir = mkdtempSync(join(tmpdir(), "sdh-"));
@@ -271,6 +271,7 @@ export async function startRuntime(
       shardKey: SHARD_KEY,
       socket: routerSocket,
       adminSocket: join(dir, "a.sock"),
+      oauthRelayHost: o.oauthRelayHost,
       log: () => {},
     }),
   );

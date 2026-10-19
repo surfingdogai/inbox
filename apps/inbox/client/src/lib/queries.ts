@@ -4,6 +4,8 @@ import { countsFrom } from "./filters";
 import type {
   AddFeedBody,
   Closure,
+  ConnectBody,
+  ConnectionPatch,
   CreateKeyBody,
   CreateWebhookBody,
   FeedConnector,
@@ -37,6 +39,7 @@ export const qk = {
   rules: ["rules"] as const,
   presets: ["presets"] as const,
   feeds: ["feeds"] as const,
+  integrations: ["integrations"] as const,
   webhooks: ["webhooks"] as const,
   keys: ["keys"] as const,
   deliveries: (id: string) => ["deliveries", id] as const,
@@ -321,6 +324,44 @@ export function useRuleWrite() {
 }
 
 // ---- integrations ----------------------------------------------------------------------------
+
+/**
+ * What can be connected and what is. While a connection has not finished its first sync, it is read
+ * again every few seconds, so "Reading your calendar…" turns into what it found without a reload.
+ */
+export function useIntegrations() {
+  return useQuery({
+    queryKey: qk.integrations,
+    queryFn: api.integrations,
+    staleTime: 10_000,
+    refetchInterval: (q) => (q.state.data?.connections.some((c) => c.status === "configured") ? 3_000 : 60_000),
+  });
+}
+
+/** Every write to a connection refreshes the list, and the free times it changes. */
+export function useIntegrationWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      op:
+        | { readonly connect: ConnectBody }
+        | { readonly id: string; readonly patch: ConnectionPatch }
+        | { readonly id: string; readonly sync: true }
+        | { readonly id: string; readonly remove: true },
+    ): Promise<unknown> =>
+      "connect" in op
+        ? api.connect(op.connect)
+        : "patch" in op
+          ? api.updateConnection(op.id, op.patch)
+          : "sync" in op
+            ? api.syncConnection(op.id)
+            : api.removeConnection(op.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.integrations });
+      void qc.invalidateQueries({ queryKey: qk.availability });
+    },
+  });
+}
 
 export function useFeeds() {
   return useQuery({ queryKey: qk.feeds, queryFn: api.feeds, staleTime: 15_000 });

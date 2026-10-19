@@ -6,7 +6,7 @@ import { ulid } from "../ids";
 import { items } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { actorMeta, type Caller, nowOf, permissionKind } from "./caller";
-import { diagnoseFailure, eventStatement, hasActiveWebhook, webhookFanoutStatement } from "./common";
+import { diagnoseFailure, eventStatement, hasEventListeners, webhookFanoutStatement } from "./common";
 import { hiddenTransitions } from "./corrections";
 import { WriteError } from "./errors";
 import { type ItemView, rowToItem, viewFor } from "./views";
@@ -51,7 +51,7 @@ export async function setFlags(
   // cursor sees it. An endpoint has to see the same event, or the two halves of ADR-015 disagree
   // about what an event is — and "needs a human" being raised is exactly what an integration is
   // for.
-  if (await hasActiveWebhook(db)) {
+  if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.flags`, itemId: item.id }, now));
   }
   try {

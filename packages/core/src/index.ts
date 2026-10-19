@@ -7,6 +7,7 @@ export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
 export { MANIFEST_PATH, manifestSchema, readDoorsElsewhere } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
+export * from "./connectors/index";
 export * from "./customer/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";

@@ -10,6 +10,8 @@
  * - Sign-in: `/auth/*`.
  * - The owner's own API, `/v1/owner/*`, with a session cookie and no `Authorization` header: no key,
  *   no AI app's token, only the owner in the browser.
+ * - Coming back from signing in to a calendar (`GET /oauth/connect/<kind>/callback`), with a session
+ *   cookie: the owner's own browser, sent back by the platform.
  * - `GET /`: the app for someone with a session cookie, else a neutral page that names nobody.
  *
  * Everything else is refused: the manifest and every other `/.well-known` document, the rest of
@@ -34,6 +36,8 @@ export const OWNER_PAGES = [
 export const OWNER_PAGE_PREFIXES = ["/items/", "/settings/"] as const;
 export const OWNER_AUTH_PREFIX = "/auth/";
 export const OWNER_API_PREFIX = "/v1/owner/";
+/** Where a platform sends the owner back after they signed in to connect it (ADR-022). */
+export const OWNER_CONNECT_RETURN = /^\/oauth\/connect\/[a-z][a-z0-9_]{0,39}\/callback$/;
 
 /** The session cookie's names (the `__Host-` one over https, the plain one over http). */
 const SESSION = /(?:^|;\s*)(?:__Host-)?sdi_session=[^;\s]/;
@@ -77,6 +81,7 @@ export function ownerVerdict(r: OwnerRequest): OwnerVerdict {
   }
   if (isOwnerPage(path)) return reads(method) ? "allow" : "refuse";
   if (path.startsWith(OWNER_AUTH_PREFIX)) return "allow";
+  if (OWNER_CONNECT_RETURN.test(path)) return reads(method) && hasSessionCookie(r.cookie) ? "allow" : "refuse";
   if (path.startsWith(OWNER_API_PREFIX)) {
     const bearer = typeof r.authorization === "string" && r.authorization.trim() !== "";
     return hasSessionCookie(r.cookie) && !bearer ? "allow" : "refuse";
