@@ -1,0 +1,159 @@
+name: android
+
+# The phone app (apps/mobile, ADR-026): its screens built and bundled, the JVM tests of its native code,
+# and a debug APK a person can install, kept as the run's artifact for 14 days. A second job runs the
+# Keystore tests on an emulator. Nothing is published to any store from here.
+#
+# Two optional repository secrets (Settings → Secrets and variables → Actions):
+#   GOOGLE_SERVICES_JSON  the Firebase config for ai.surfingdog.inbox. Without it the APK builds and
+#                         works, but cannot receive notifications.
+#   DEBUG_KEYSTORE_BASE64 a debug keystore, base64. Without it each run signs with a new debug key, so a
+#                         newer APK installs only after the older one is removed.
+# Neither is ever printed: they are written to files and the files are not shown.
+on:
+  push:
+    branches: [main, phone-app]
+    paths:
+      - "apps/mobile/**"
+      - "packages/core/src/phones/**"
+      - "packages/spec/vectors/push.json"
+      - "apps/inbox/client/src/lib/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "packages/core/src/phones/**"
+      - "packages/spec/vectors/push.json"
+      - "apps/inbox/client/src/lib/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: phone app · screens · JVM tests · debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+
+      - name: the screens, typed and tested
+        run: |
+          pnpm --filter @surfingdog/mobile typecheck
+          pnpm exec vitest run --project node apps/mobile/test packages/core/test/phones-crypto.test.ts
+      - name: the screens, built and copied into the Android project
+        run: |
+          pnpm --filter @surfingdog/mobile build
+          pnpm --filter @surfingdog/mobile exec cap sync android
+
+      - name: Firebase config, when the secret is set
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/mobile/android/app/google-services.json
+            echo "notifications: on (google-services.json written)"
+          else
+            echo "notifications: off (no GOOGLE_SERVICES_JSON secret); the APK builds without them"
+          fi
+      - name: a fixed debug key, when the secret is set
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            echo "signing: the repository's debug key"
+          else
+            echo "signing: a new debug key for this run"
+          fi
+
+      - name: JVM tests and the debug APK
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: 0.1.${{ github.run_number }}
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+
+      - name: the APK's name
+        id: apk
+        run: |
+          short="$(git rev-parse --short HEAD)"
+          mv apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk "surfingdog-inbox-debug-${{ github.run_number }}-${short}.apk"
+          echo "name=surfingdog-inbox-debug-${{ github.run_number }}-${short}" >> "$GITHUB_OUTPUT"
+          sha256sum surfingdog-inbox-debug-*.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: surfingdog-inbox-debug-*.apk
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unit-test-reports
+          path: apps/mobile/android/app/build/reports/tests
+          retention-days: 7
+
+  emulator:
+    name: phone app · Keystore tests on an emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: the screens, built and copied into the Android project
+        run: |
+          pnpm --filter @surfingdog/mobile build
+          pnpm --filter @surfingdog/mobile exec cap sync android
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: apps/mobile/android
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: instrumented-test-reports
+          path: apps/mobile/android/app/build/reports/androidTests
+          retention-days: 7

@@ -1,0 +1,215 @@
+import {
+  formatClock,
+  formatDay,
+  formatMoney,
+  localDateKey,
+  partyName,
+  truncate,
+} from "../../../inbox/client/src/lib/format";
+import type { Item, ItemView } from "../../../inbox/client/src/lib/types";
+
+/**
+ * What the phone's screens say about an item, as the approved design has it (ADR-026). Pure, so the
+ * words are tested on both runtimes; the owner app's own formatting does the dates and money.
+ */
+const INITIAL: Readonly<Record<Item["type"], string>> = {
+  booking: "requested",
+  order: "received",
+  quote_request: "received",
+  message: "open",
+  refund: "requested",
+};
+
+export const KIND_WORD: Readonly<Record<Item["type"], string>> = {
+  booking: "Booking",
+  order: "Order",
+  quote_request: "Quote",
+  message: "Message",
+  refund: "Refund",
+};
+
+const REQUEST_WORD: Readonly<Record<Item["type"], string>> = {
+  booking: "Booking request",
+  order: "Order",
+  quote_request: "Quote request",
+  message: "Message",
+  refund: "Refund request",
+};
+
+export function requestWord(item: Item): string {
+  return REQUEST_WORD[item.type];
+}
+
+/**
+ * Whether it waits for the owner: a rule asked for a person, nobody has answered it since it came, or
+ * the customer asked for a change to what was agreed.
+ */
+export function needsYou(view: ItemView): boolean {
+  const { item } = view;
+  if (item.closedAt !== null) return false;
+  if (item.flags.needsHuman) return true;
+  if (item.state === INITIAL[item.type]) return true;
+  const change = (item.payload as { change?: { by?: string } }).change;
+  return change?.by === "customer";
+}
+
+/** How it came: "via an assistant", "via the website", "via email". */
+export function channelPhrase(item: Item): string {
+  switch (item.channel) {
+    case "email":
+      return "via email";
+    case "form":
+      return "via the website";
+    case "owner_ui":
+      return "added by you";
+    default:
+      return "via an assistant";
+  }
+}
+
+/** The first line of a card: who, or for an order, what. */
+export function cardTitle(view: ItemView): string {
+  const { item } = view;
+  if (item.type === "order") {
+    const count = item.payload.orderedItem.reduce((n, l) => n + l.quantity, 0);
+    const delivery = item.payload.delivery;
+    const when = delivery?.when ? ` ${formatDay(delivery.when)}` : "";
+    const how =
+      delivery?.method === "pickup" ? ` · pick-up${when}` : delivery?.method === "delivery" ? ` · delivery${when}` : "";
+    return `${count} item${count === 1 ? "" : "s"}${how}`;
+  }
+  return partyName(view.party);
+}
+
+/** The second line: when and what, or the first words. */
+export function cardLine(view: ItemView, tz?: string): string {
+  const { item } = view;
+  switch (item.type) {
+    case "booking":
+      return `${item.payload.reservationFor.name} · ${formatDay(item.payload.startTime, tz)}, ${formatClock(item.payload.startTime, tz)}`;
+    case "order":
+      return truncate(item.payload.orderedItem.map((l) => l.name).join(", "), 80);
+    case "quote_request":
+      return `${item.payload.itemOffered.name} · asks for a price`;
+    case "message":
+      return `“${truncate(item.payload.text, 70)}”`;
+    case "refund":
+      return truncate(item.payload.reason ?? "A refund to decide", 70);
+  }
+}
+
+/** The money on a card, when there is any. */
+export function cardAmount(item: Item): string {
+  if (item.type === "booking" || item.type === "order")
+    return item.payload.totalPrice ? formatMoney(item.payload.totalPrice) : "";
+  if (item.type === "refund") return formatMoney(item.payload.amount);
+  return "";
+}
+
+/** The event the owner most likely means, first: accepting it as it is. */
+const PRIMARY = ["confirm", "accept", "accept_change", "approve", "answer", "quote", "fulfil", "complete"];
+const DANGER = new Set(["decline", "reject", "cancel", "decline_change", "mark_spam", "no_show"]);
+
+export interface Actions {
+  readonly primary: { readonly event: string; readonly label: string } | null;
+  readonly propose: { readonly event: string; readonly label: string } | null;
+  readonly decline: { readonly event: string; readonly label: string } | null;
+}
+
+/** The three buttons the design gives an item: accept, propose another time, decline. */
+export function actionsFor(view: ItemView, tz?: string): Actions {
+  const t = view.transitions;
+  const found = PRIMARY.map((e) => t.find((x) => x.event === e)).find(Boolean) ?? null;
+  // Answering a message takes words, which the reply field gives: it is not a button of its own.
+  const primary = found && found.event !== "answer" && found.event !== "quote" ? found : null;
+  const label =
+    primary && view.item.type === "booking" && primary.event === "confirm"
+      ? `Accept ${formatClock(view.item.payload.startTime, tz)}`
+      : primary?.event === "accept" && view.item.type === "order"
+        ? "Accept order"
+        : (primary?.label ?? "");
+  const propose = view.item.type === "booking" ? (t.find((x) => x.event === "propose") ?? null) : null;
+  const decline = t.find((x) => x.event === "decline") ?? null;
+  return {
+    primary: primary ? { event: primary.event, label } : null,
+    propose: propose ? { event: propose.event, label: "Propose another time" } : null,
+    decline: decline && DANGER.has(decline.event) ? { event: decline.event, label: "Decline" } : null,
+  };
+}
+
+/** Initials for an inbox's badge: "Atelier Lumen" → "AL". */
+export function badgeOf(name: string): string {
+  const words = name
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const letters = words.length > 1 ? `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}` : (words[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
+}
+
+export interface TodayRow {
+  readonly at: string;
+  readonly kind: "booking" | "ask" | "free";
+  readonly title: string;
+  readonly line: string;
+  readonly itemId?: string;
+}
+
+/**
+ * Today, as the design lays it out: the day's bookings in time order, the requests for a time today
+ * marked to review, and the free stretches between them over an hour long.
+ */
+export function today(
+  views: readonly ItemView[],
+  now: number,
+  tz: string,
+): {
+  rows: TodayRow[];
+  bookings: number;
+  toConfirm: number;
+  orders: ItemView[];
+} {
+  const day = localDateKey(now, tz);
+  const todays = views
+    .filter((v) => v.item.type === "booking" && v.item.closedAt === null)
+    .filter((v) => v.item.type === "booking" && localDateKey(v.item.payload.startTime, tz) === day)
+    .sort((a, b) =>
+      a.item.type === "booking" && b.item.type === "booking"
+        ? Date.parse(a.item.payload.startTime) - Date.parse(b.item.payload.startTime)
+        : 0,
+    );
+  const rows: TodayRow[] = [];
+  let lastEnd: number | null = null;
+  let toConfirm = 0;
+  for (const v of todays) {
+    if (v.item.type !== "booking") continue;
+    const start = Date.parse(v.item.payload.startTime);
+    const end = Date.parse(v.item.payload.endTime);
+    if (lastEnd !== null && start - lastEnd >= 3_600_000) {
+      rows.push({
+        at: formatClock(new Date(lastEnd).toISOString(), tz),
+        kind: "free",
+        title: `Free until ${formatClock(v.item.payload.startTime, tz)}`,
+        line: "",
+      });
+    }
+    const asks = needsYou(v);
+    if (asks) toConfirm++;
+    const minutes = Math.round((end - start) / 60_000);
+    rows.push({
+      at: formatClock(v.item.payload.startTime, tz),
+      kind: asks ? "ask" : "booking",
+      title: partyName(v.party),
+      line: asks
+        ? `Asks for this time · ${v.item.payload.reservationFor.name}`
+        : `${v.item.payload.reservationFor.name} · ${minutes} min`,
+      itemId: v.item.id,
+    });
+    lastEnd = Math.max(lastEnd ?? 0, end);
+  }
+  const orders = views.filter(
+    (v) =>
+      v.item.type === "order" && v.item.closedAt === null && ["accepted", "paid", "fulfilling"].includes(v.item.state),
+  );
+  return { rows, bookings: todays.length, toConfirm, orders };
+}
