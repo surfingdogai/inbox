@@ -13,8 +13,8 @@
  *
  * Every count is a link to the list of the businesses it counts, on the network: "agent-ready"
  * to every agent-ready business, "real businesses verified" to the real businesses among them (a member,
- * registered or claimed, or a site the crawler matched to the place it names: the listing rules of
- * 19 October 2026; shown once the network counts them), and each
+ * registered or claimed, or a site the crawler matched to its entry on public maps or in a business
+ * register: the listing rules of 19 October 2026; shown once the network counts them, and never a 0), and each
  * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
  * the same businesses its count counts: it names them, or says how many more it counts and does not
  * name.
@@ -44,6 +44,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: baseline;
     gap: var(--sp-1) var(--sp-3);
     margin: 0;
     font-size: var(--fs-ui);
@@ -78,8 +79,8 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
   .c-dot {
     color: var(--ink-3);
   }
-  /* On a phone the two counts stack, so the dot between them would hang at a line's end. */
-  @media (max-width: 420px) {
+  /* Where the two counts stack (they wrap at about 470px), the dot between them would hang at a line's end. */
+  @media (max-width: 520px) {
     .c-dot {
       display: none;
     }
@@ -189,8 +190,8 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
         `${fmt.format(d.agent_ready)} agent-ready businesses` +
-        (d.real === null ? "." : `, ${fmt.format(d.real)} real businesses verified.`) +
-        (rows.length ? ` Of those, ${rows.join(", ")}.` : "");
+        (d.real === null ? "." : `, ${fmt.format(d.real)} of them real businesses verified.`) +
+        (rows.length ? ` Of the agent-ready, ${rows.join(", ")}.` : "");
     }
     // The real businesses' count shows once the network counts them.
     if (d.real !== null) {

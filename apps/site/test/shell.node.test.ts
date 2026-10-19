@@ -180,6 +180,7 @@ describe("shell.css", () => {
       "sd-state",
       "sd-more",
       "sd-lb",
+      "sd-lb-break",
       "sd-chips",
       "sd-prose",
       // a check while it reads, and the result as a guide

@@ -142,7 +142,7 @@ describe("the checker's pages and components", () => {
     // The rules in force: version 3, amended on 19 October 2026 (listing).
     const rules = scoreRulesSchema.parse(scoreRulesV3);
     expect(rules.named).toContain(
-      "when it is agent-ready (askable or above) and, for a local business we found, once its site matches its place or its owner proves it is theirs; never a site that is parked, empty or taken over. Others are counted, not named.",
+      "once it is agent-ready (askable or above). A local business we found is named once we match its site to its entry on public maps or registers, or its owner proves the site is theirs. Parked, empty or taken-over sites never are. Others are counted, not named.",
     );
     expect(rules.named).toContain(
       "If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
@@ -516,6 +516,12 @@ describe("the home page and the three products", () => {
         directory: { checked: 9, agent_ready: 4, real_businesses_verified: "3", as_of: "2026-10-19T22:00:00Z" },
       })?.real,
     ).toBeNull();
+    // A 0 is never shown: a network that counts none yet (a rebuild under way) shows the agent-ready count alone.
+    expect(
+      readDirectory({
+        directory: { checked: 9, agent_ready: 4, real_businesses_verified: 0, as_of: "2026-10-19T22:00:00Z" },
+      })?.real,
+    ).toBeNull();
     // Every count links to the list of the businesses it counts.
     expect(CHECKED_HREF).toBe("/leaderboard");
     expect(READY_HREF).toBe("/leaderboard?ready=1");
@@ -525,6 +531,10 @@ describe("the home page and the three products", () => {
     expect(counts).not.toMatch(/CHECKED_HREF/); // how many were checked stays internal
     expect(counts).toMatch(/href=\{READY_HREF\}/);
     expect(counts).toMatch(/href=\{REAL_HREF\}[^>]*>.*real businesses verified/);
+    // A screen reader hears the real businesses as a part of the agent-ready, and the capabilities as the agent-ready's.
+    expect(counts).toContain("of them real businesses verified.");
+    expect(counts).toContain("Of the agent-ready, ${rows.join");
+    expect(counts).toMatch(/@media \(max-width: 520px\) \{\s*\.c-dot \{\s*display: none;/);
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");

@@ -39,7 +39,7 @@
           "type": "boolean"
         },
         "real": {
-          "description": "A home-page list: the real businesses among the agent-ready.",
+          "description": "A home-page list: the real businesses among the agent-ready (0.8.1).",
           "type": "boolean"
         }
       }
@@ -125,7 +125,7 @@
           },
           "real_business": {
             "type": "boolean",
-            "description": "A real business: a member, registered or claimed, or matched to the place it names. Above the rest."
+            "description": "A real business (0.8.1): a member, registered or claimed, or a site matched to its entry on public maps or in a business register. Above the rest. Absent from a network without listing rules."
           },
           "can_book_order_or_sign_up": {
             "type": "string",
@@ -166,7 +166,6 @@
           "position",
           "domain",
           "name",
-          "real_business",
           "can_book_order_or_sign_up",
           "score",
           "grade",

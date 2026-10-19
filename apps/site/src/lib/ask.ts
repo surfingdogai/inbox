@@ -26,8 +26,9 @@ export interface DirectoryStats {
   agent_ready: number;
   /**
    * Of the agent-ready, the real businesses (`real_businesses_verified`, since the listing rules of 19 October 2026: a
-   * member, registered or claimed, or a site the network's crawler matched to the place it names). Null from a network
-   * that does not count them.
+   * member, registered or claimed, or a site the network's crawler matched to its entry on public maps or in a business
+   * register). Null from a network that does not count them, while it does not apply the rules, and when it counts none:
+   * a 0 is never shown.
    */
   real: number | null;
   capabilities: Partial<Record<CapabilityKey, number>>;
@@ -102,7 +103,10 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
   return {
     checked: o.checked as number,
     agent_ready: o.agent_ready as number,
-    real: n(o.real_businesses_verified) ? (o.real_businesses_verified as number) : null,
+    real:
+      n(o.real_businesses_verified) && (o.real_businesses_verified as number) > 0
+        ? (o.real_businesses_verified as number)
+        : null,
     capabilities: caps,
     as_of: o.as_of,
   };

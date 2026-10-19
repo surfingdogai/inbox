@@ -2038,6 +2038,20 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     // Since 19 October 2026 (the score rules' listing): real businesses above the rest, and the list of them.
     expect(LEADERBOARD_ORDER_BY[0]).toBe("real_business");
     expect(leaderboardSchema.safeParse({ ...list, scope: { real: true } }).success).toBe(true);
+    // A row from a network without listing rules (0.8) carries no real_business, and still validates.
+    const row = {
+      position: 1,
+      domain: "salon.example",
+      name: "A salon",
+      can_book_order_or_sign_up: "yes",
+      score: 72,
+      grade: "B",
+      answers: { message: "yes" },
+      checked_at: at,
+      result_url: `${site}/b/salon.example`,
+    };
+    expect(leaderboardSchema.safeParse({ ...list, named: [row] }).success).toBe(true);
+    expect(leaderboardSchema.safeParse({ ...list, named: [{ ...row, real_business: "yes" }] }).success).toBe(false);
     const catalog = {
       specVersion: "1.0",
       host: { displayName: "A network", identifier: "did:web:network.example" },

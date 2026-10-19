@@ -377,7 +377,7 @@
       "type": "string"
     },
     "listing": {
-      "description": "Version 3 as amended on 19 October 2026: who the directory lists and a leaderboard names. A business a network found in a local business's group when it is a real business (a member, registered or claimed, or a site its crawler matched to the place it names); none whose site was found parked, empty or taken over; online shops and software companies on their doors; real businesses above the rest.",
+      "description": "Version 3 as amended on 19 October 2026 (0.8.1): who the directory lists and a leaderboard names. A local business a network found when it is a real business (a member, registered or claimed, or a site its crawler matched to its entry on public maps or in a business register); none whose site was found parked, empty or taken over, unless a member's; online shops and software companies on their doors; real businesses above the rest.",
       "type": "string"
     },
     "directory": {

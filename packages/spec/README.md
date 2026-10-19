@@ -75,6 +75,11 @@ or network:
   `Surfing-Dog-Carried` and `Surfing-Dog-Carried-For` headers a carried request comes with; and the
   `carried` counts a signed ping's answer gives the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
   signed session id used only for its limits.
+- 0.8.1 (optional for a network): listing rules. The score rules' `listing` (`vocab/score-rules-v3.json`, as amended on
+  19 October 2026: who a network's directory lists and its leaderboards name, real businesses above the rest); a
+  leaderboard row's `real_business`, `order_by`'s `real_business` and the home-page list `scope.real` (`?real=1`); and
+  `/v1/stats` `directory.real_businesses_verified`, given only while the rules are applied. A row without
+  `real_business` reads as before.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
