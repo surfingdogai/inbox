@@ -37,6 +37,11 @@ const MORE: Readonly<Record<CustomerLang, (first: string, more: number) => strin
   pt: (first, more) => `${first} e mais ${more} ${more === 1 ? "artigo" : "artigos"}`,
 };
 
+/** "Bread and 2 more" in the customer's language: an order of several lines, by its first. */
+export function moreLines(first: string, more: number, lang: CustomerLang): string {
+  return MORE[lang](first, more);
+}
+
 /** The subjects the inbox gives a request nobody named, in English: said by the noun instead. */
 const PLAIN: Readonly<Partial<Record<ItemType, string>>> = {
   booking: "Booking",

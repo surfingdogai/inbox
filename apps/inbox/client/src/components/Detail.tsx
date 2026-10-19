@@ -8,6 +8,7 @@ import {
   channelWord,
   currencyOf,
   formatDateTime,
+  formatMoney,
   partyName,
   stateWord,
   TYPE_CLASS,
@@ -15,7 +16,7 @@ import {
   titleFor,
 } from "../lib/format";
 import { usePhone } from "../lib/media";
-import { useItem, useReply, useSettings, useTransition } from "../lib/queries";
+import { useItem, useItemPayments, useReply, useSettings, useTransition } from "../lib/queries";
 import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
@@ -27,10 +28,14 @@ import { Emails } from "./Emails";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
+import { Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
 import { Sheet } from "./Sheet";
 import { Timeline } from "./Timeline";
+
+/** The order states in which a link may be on its way, so its payment is looked for now and then. */
+const WAITING: ReadonlySet<string> = new Set(["accepted", "awaiting_payment", "payment_failed"]);
 
 /**
  * One item: the typed card with who is asking, the facts and the valid next actions (happy path
@@ -49,6 +54,12 @@ export function ItemDetailView({
   currency: string | undefined;
 }) {
   const query = useItem(id);
+  // Pay links (ADR-023): an order's own, or, on a refund, the order's it pays back.
+  const loaded = query.data?.item;
+  const pays = useItemPayments(
+    loaded?.type === "order" ? loaded.id : loaded?.type === "refund" ? loaded.linkedItemId : null,
+    loaded?.type === "order" && WAITING.has(loaded.state),
+  );
   const settings = useSettings();
   const minNoticeMin = settings.data?.doc.booking.minNoticeMin ?? 0;
   const transition = useTransition(id);
@@ -76,8 +87,23 @@ export function ItemDetailView({
   }
 
   const { item, thread, events, party } = query.data;
-  const transitions = orderActions(query.data.transitions);
-  const tones = tonesFor(transitions);
+  const payments = pays.data?.payments ?? [];
+  // The order waits at a link the platform will mark paid on its own: nothing invites recording it
+  // twice, and asking again sends that link.
+  const openLink = item.type === "order" ? (payments.find((p) => p.state === "open") ?? null) : null;
+  const paidBy = payments.find((p) => p.state === "paid" && p.payment_id) ?? null;
+  const refundBy =
+    item.type === "refund" && paidBy?.payment_id
+      ? { provider: paidBy.provider, paymentRef: paidBy.payment_id, amount: item.payload.amount }
+      : undefined;
+  const transitions = orderActions(query.data.transitions).map((t) =>
+    openLink && t.event === "record_payment"
+      ? { ...t, label: "Paid another way…" }
+      : refundBy && t.event === "refund"
+        ? { ...t, label: `Refunded in ${refundBy.provider}` }
+        : t,
+  );
+  const tones = tonesFor(transitions).map((tone) => (openLink && tone === "primary" ? "secondary" : tone));
   const money = currencyOf(item) ?? currency ?? "EUR";
   const waiting = waitingLine(item, (iso) => formatDateTime(iso, tz), minNoticeMin);
 
@@ -127,6 +153,8 @@ export function ItemDetailView({
       onSubmit={(input) => run(pending, input)}
       onCancel={() => setPending(null)}
       onSwitch={pick}
+      payLink={openLink ? { provider: openLink.provider, customer: party?.name?.trim() || "the customer" } : undefined}
+      refundBy={refundBy}
     />
   );
 
@@ -153,7 +181,16 @@ export function ItemDetailView({
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
         <CustomerBlock customer={query.data.customer} currency={money} tz={tz} />
-        <Fields item={item} tz={tz} />
+        <Fields
+          item={item}
+          tz={tz}
+          platform={
+            item.type === "order" && payments.length > 0
+              ? { linkIsOurs: pays.data?.link_is_ours ?? false, paidRef: paidBy?.payment_id ?? null }
+              : undefined
+          }
+        />
+        {item.type === "order" && <Payments payments={payments} none={pays.data?.none ?? null} tz={tz} />}
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         <Emails mail={query.data.mail ?? []} tz={tz} />
         <CustomerData
@@ -171,6 +208,9 @@ export function ItemDetailView({
           />
         )}
         {waiting && <p className="hint">{waiting}</p>}
+        {refundBy && paidBy && transitions.some((t) => t.event === "refund") && (
+          <RefundAt payment={paidBy} owed={formatMoney(refundBy.amount)} />
+        )}
         {transitions.length > 0 ? (
           <div className="actions">
             {transitions.map((t, i) => (

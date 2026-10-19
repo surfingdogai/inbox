@@ -161,8 +161,10 @@ describe("REST door", () => {
     expect(failed.status).toBe(200);
     const view = (await failed.json()) as { view: { item: { state: string }; transitions: { event: string }[] } };
     expect(view.view.item.state).toBe("payment_failed");
+    // After a failed payment the customer can be asked again, with a new link (ADR-023).
     expect(view.view.transitions.map((t) => t.event)).toEqual([
       "record_payment",
+      "request_payment",
       "propose_change",
       "cancel",
       "record_cancel",

@@ -16,6 +16,7 @@ import {
   createWebhookInput,
   customerInput,
   customerSummary,
+  decimalAmount,
   declineOfferInput,
   deliveryIdInput,
   getItemInput,
@@ -1550,16 +1551,17 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "List integrations",
         description:
-          "What this inbox can connect (a calendar: iCloud, Fastmail, Nextcloud, any CalDAV, or a calendar's private .ics link for busy times only; Google when this inbox has a Google client; Cal.com; the answer's Soon line names what is not here yet) and what is connected: each connection's status, when it last synced, how many busy times it holds ahead, how many bookings it wrote and any that failed, and its last error. Busy times in a connected calendar take those times off what the inbox offers, and nothing is offered past how far ahead it was read; confirmed bookings are written to it. Connecting, changing what a connection does, or disconnecting takes the owner's password or sign-in and changes what customers are offered, so only the owner does it, in Settings → Integrations; tell them in a note what you suggest.",
+          "What this inbox can connect (a calendar: iCloud, Fastmail, Nextcloud, any CalDAV, or a calendar's private .ics link for busy times only; Google when this inbox has a Google client; Cal.com; Stripe and Mollie for getting paid; the answer's Soon line names what is not here yet) and what is connected: each connection's status, when it last synced, how many busy times it holds ahead, how many bookings it wrote and any that failed, how many pay links wait and were paid, and its last error. Busy times in a connected calendar take those times off what the inbox offers, and nothing is offered past how far ahead it was read; confirmed bookings are written to it. A connected Stripe or Mollie gives each order the owner accepts a link to pay into the business's own account, and marks it paid once the platform confirms it; the money never passes this inbox, and refunds are made in the platform's own dashboard. Connecting, changing what a connection does, or disconnecting takes the owner's password, key or sign-in and changes what customers are offered, so only the owner does it, in Settings → Integrations; tell them in a note what you suggest.",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
       () =>
         guarded("list_integrations", async () => {
           const r = await caps.connectors.integrations(caller);
-          const connected = r.connections.map(
-            (c) =>
-              `${c.id} ${c.title} [${c.status}] ${c.busy_on ? `${c.busy_times} busy time${c.busy_times === 1 ? "" : "s"} ahead${c.busy_until ? ` (read to ${new Date(c.busy_until).toISOString().slice(0, 10)})` : ""}` : "busy times off"}, ${c.capabilities.includes("write_bookings") ? (c.bookings_on ? `${c.bookings_written} booking${c.bookings_written === 1 ? "" : "s"} written` : "bookings off") : "busy times only"}${c.bookings_failing ? `, ${c.bookings_failing} failing` : ""}${c.last_sync_at ? `, synced ${new Date(c.last_sync_at).toISOString()}` : ", not synced yet"}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`,
+          const connected = r.connections.map((c) =>
+            c.payments
+              ? `${c.id} ${c.title} [${c.status}${c.payments.disconnecting ? ", disconnecting" : ""}] ${c.mode === "test" ? "test key (links for test orders only), " : ""}${c.pay_on ? "links to pay on" : "links to pay off"}, ${c.payments.open} waiting to be paid, ${c.payments.paid} paid${c.payments.failing ? `, ${c.payments.failing} order${c.payments.failing === 1 ? "" : "s"} without a link` : ""}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`
+              : `${c.id} ${c.title} [${c.status}] ${c.busy_on ? `${c.busy_times} busy time${c.busy_times === 1 ? "" : "s"} ahead${c.busy_until ? ` (read to ${new Date(c.busy_until).toISOString().slice(0, 10)})` : ""}` : "busy times off"}, ${c.capabilities.includes("write_bookings") ? (c.bookings_on ? `${c.bookings_written} booking${c.bookings_written === 1 ? "" : "s"} written` : "bookings off") : "busy times only"}${c.bookings_failing ? `, ${c.bookings_failing} failing` : ""}${c.last_sync_at ? `, synced ${new Date(c.last_sync_at).toISOString()}` : ", not synced yet"}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`,
           );
           // What cannot be connected here yet, by name: whole cards, and the ways of a ready card
           // ("Google Calendar") that are soon, or need setting up on the server.
@@ -1603,6 +1605,28 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
             caps.connectors.syncNow(c, connection_id),
           );
           return { text: `Sync of ${connection_id} queued.${again(r.replayed)}`, structured: r.result };
+        }),
+    );
+    server.registerTool(
+      "list_payments",
+      {
+        title: "An order's pay links",
+        description:
+          "The links an order was given to pay in the business's own Stripe or Mollie account, newest first: each one's state (creating, open: waiting to be paid; paid; failed: a payment did not go through and a new link followed; closed: the order changed or ended; error: the platform would not make it, and why), what it asks for, what was paid and how, and where the payment is in the business's dashboard. A refund is made there, by the owner; recording money is never yours. Nothing about the customer and never a key.",
+        inputSchema: z.object({ item_id: z.string().min(1) }),
+        annotations: readOnly,
+      },
+      ({ item_id }) =>
+        guarded("list_payments", async () => {
+          const r = await caps.connectors.itemPayments(caller, item_id);
+          const lines = r.payments.map(
+            (p) =>
+              `${p.provider} ${p.state}: ${decimalAmount(p.amount)} ${p.amount.currency}${p.url ? ` at ${p.url}` : ""}${p.paid_amount ? `, paid ${decimalAmount(p.paid_amount)} ${p.paid_amount.currency}${p.method ? ` by ${p.method}` : ""}` : ""}${p.error ? ` (${p.error})` : ""}${p.note ? ` (${p.note})` : ""}`,
+          );
+          return {
+            text: lines.length ? lines.join("\n") : (r.none ?? "No pay links for this item."),
+            structured: r,
+          };
         }),
     );
     server.registerTool(

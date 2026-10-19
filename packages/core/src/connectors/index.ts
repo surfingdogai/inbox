@@ -20,7 +20,36 @@ export {
   updateConnectionInput,
 } from "./capability";
 export { cardOf, GALLERY, type GalleryCard, type GalleryWay, gallery } from "./gallery";
-export { connectorNoticeHandler, connectorPushHandler, connectorSyncHandler } from "./jobs";
+export {
+  connectorNoticeHandler,
+  connectorPushHandler,
+  connectorSyncHandler,
+  payCloseHandler,
+  payLinkHandler,
+  payNoticeHandler,
+} from "./jobs";
+export {
+  hasLivePayLink,
+  hasPayLinks,
+  linkComing,
+  PAY_CLOSE_KIND,
+  PAY_LINK_GRACE_MS,
+  PAY_LINK_KIND,
+  PAY_NOTICE_KIND,
+  payLane,
+  payLinkStatement,
+} from "./pay-queue";
+export {
+  connectorCaller,
+  type PayConnection,
+  type PayHost,
+  PaymentLinks,
+  type PaymentView,
+  type PayNotice,
+  type PayNoticeReason,
+  type PayState,
+  providerOf,
+} from "./payments";
 export * from "./sdk";
 export {
   BUSY_HORIZON_MS,

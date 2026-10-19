@@ -349,4 +349,15 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- Facts about this inbox itself: `instance_id`, made once at random, which the calendar entries it\n-- writes carry, so it knows its own wherever its address moves.\nCREATE TABLE IF NOT EXISTS `instance_meta` (\n\t`key` text PRIMARY KEY NOT NULL,\n\t`value` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
     ],
   },
+  {
+    version: 24,
+    name: "0023_pay_links",
+    statements: [
+      "-- Pay links (ADR-023). One row per link an order was given to pay in the business's own Stripe or\n-- Mollie account: what it asks for, where the customer pays, and what the platform said about it. One\n-- new table and its indexes; nothing that exists changes, and an inbox with no payment platform\n-- connected writes no row here.\n--\n-- `connector_id` names the connection that made the link but is not a foreign key: a paid link is\n-- the business's record of where the money went (and where to refund it), and stays after the\n-- platform is disconnected. `kind` says which platform, for that same reason.\n--\n-- At most one link per order is live at a time (`creating` or `open`): the partial unique index is\n-- what makes two jobs that meet create one link, never two. `claim_until` and `claimed_by` are the\n-- compare-and-set that lets one job, and only one, ask the platform for it.\nCREATE TABLE IF NOT EXISTS `connector_payments` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`connector_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`item_id` text NOT NULL,\n\t`amount` integer NOT NULL,\n\t`currency` text NOT NULL,\n\t`livemode` integer NOT NULL,\n\t`state` text DEFAULT 'creating' NOT NULL,\n\t`external_id` text,\n\t`url` text,\n\t`payment_id` text,\n\t`method` text,\n\t`paid_amount` integer,\n\t`paid_currency` text,\n\t`dashboard_url` text,\n\t`claim_until` integer,\n\t`claimed_by` text,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`retry_at` integer,\n\t`checked_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`note` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`paid_at` integer,\n\t`closed_at` integer\n);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open');",
+      "CREATE INDEX IF NOT EXISTS `connector_payments_item` ON `connector_payments` (`item_id`, `created_at`);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_external` ON `connector_payments` (`connector_id`, `external_id`);",
+      "-- The links still waiting for their payment, read back from the platform now and then in case a\n-- webhook never came: by connection, state and when each was last asked about.\nCREATE INDEX IF NOT EXISTS `connector_payments_open` ON `connector_payments` (`connector_id`, `state`, `checked_at`);",
+    ],
+  },
 ];

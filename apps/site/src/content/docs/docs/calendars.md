@@ -84,4 +84,4 @@ curl -X POST https://<your-instance>/v1/owner/integrations \
 
 ## Writing a connector
 
-A connector is a small object in `packages/adapters/src/connectors`: what it does for the Inbox (`busy_times`, `write_bookings`), a Zod schema for what the owner gives it with its secret fields marked (`secretField`), and the handlers that sync. The Settings form is drawn from the schema; sealing, the HTTP client's checks, claims that stop two jobs writing one booking twice, the five-minute schedule and its back-off, and telling the owner when it fails are the Inbox's. See `packages/core/src/connectors/sdk.ts`.
+A connector is a small object in `packages/adapters/src/connectors`: what it does for the Inbox (`busy_times`, `write_bookings`, `pay_links`), a Zod schema for what the owner gives it with its secret fields marked (`secretField`), and the handlers that sync. The Settings form is drawn from the schema; sealing, the HTTP client's checks, claims that stop two jobs writing one booking twice, the five-minute schedule and its back-off, and telling the owner when it fails are the Inbox's. See `packages/core/src/connectors/sdk.ts`.

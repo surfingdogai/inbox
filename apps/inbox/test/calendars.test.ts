@@ -155,7 +155,7 @@ async function connectIcloud(s: Awaited<ReturnType<typeof setup>>, password = AP
 }
 
 describe("Settings → Integrations", () => {
-  it("shows every card, with Google ready only when the inbox has a client and the rest saying soon", async () => {
+  it("shows every card, with Google ready only when the inbox has a client, the payment platforms ready, and the shops saying soon", async () => {
     const withGoogle = await setup();
     const res = await withGoogle.app.request(req("GET", "/v1/owner/integrations", undefined, withGoogle.owner));
     expect(res.status).toBe(200);
@@ -176,8 +176,8 @@ describe("Settings → Integrations", () => {
     expect(body.cards.map((c) => [c.id, c.status])).toEqual([
       ["calendar", "ready"],
       ["calcom", "ready"],
-      ["stripe", "soon"],
-      ["mollie", "soon"],
+      ["stripe", "ready"],
+      ["mollie", "ready"],
       ["shopify", "soon"],
       ["woocommerce", "soon"],
     ]);
@@ -352,7 +352,7 @@ describe("an iCloud calendar, end to end", () => {
     // The PATCH synced at once: the work calendar holds nothing here.
     expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
     expect(listed.content[0]?.text).toContain("), 0 bookings written");
-    expect(listed.content[0]?.text).toContain("Soon: Outlook Calendar, Stripe, Mollie, Shopify, WooCommerce.");
+    expect(listed.content[0]?.text).toContain("Soon: Outlook Calendar, Shopify, WooCommerce.");
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;

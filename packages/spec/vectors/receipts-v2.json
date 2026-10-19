@@ -3092,6 +3092,105 @@
     },
     {
       "typ": "order",
+      "event": "request_payment",
+      "from": "accepted",
+      "to": "awaiting_payment",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "awaiting_payment",
+      "to": "awaiting_payment",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "payment_failed",
+      "to": "awaiting_payment",
+      "actor": "owner",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "payment_failed",
+      "to": "awaiting_payment",
+      "actor": "staff",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "payment_failed",
+      "to": "awaiting_payment",
+      "actor": "owner_ai",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "payment_failed",
+      "to": "awaiting_payment",
+      "actor": "rule",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
+      "event": "request_payment",
+      "from": "payment_failed",
+      "to": "awaiting_payment",
+      "actor": "connector",
+      "out": null,
+      "aut": 0
+    },
+    {
+      "typ": "order",
       "event": "record_payment",
       "from": "accepted",
       "to": "paid",

@@ -78,7 +78,9 @@ export function tenantMailOut(d: BuildDeps): MailOut {
 
 export function buildInbox(d: BuildDeps): Inbox {
   const p = d.policy;
-  const policy: HostedPolicy = { ...hostedPolicy(p), ...(d.agentsOpen ? { agents: "open" as const } : {}) };
+  const open: HostedPolicy = { ...hostedPolicy(p), ...(d.agentsOpen ? { agents: "open" as const } : {}) };
+  // A platform reaches the inbox's webhook doors only once its doors are open (it is live).
+  const policy: HostedPolicy = { ...open, hooksLive: open.agents === "open" };
   const inbox = createInbox({
     db: d.db,
     mailOut: tenantMailOut(d),

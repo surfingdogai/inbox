@@ -1,6 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { findSlots, slotOffered } from "../capabilities/availability";
+import { hasLivePayLink, hasPayLinks, linkComing, PAY_LINK_GRACE_MS, payLinkStatement } from "../connectors/pay-queue";
 import { calendarName } from "../connectors/sdk";
 import { BUSY_HORIZON_MS, busyDetails } from "../connectors/store";
 import { audienceFor, businessFacts } from "../customer/audience";
@@ -1186,6 +1187,25 @@ async function attempt_(
       }),
     );
   }
+  // Pay links (ADR-023): the order this event concerns (or the order an accepted quote became), when a
+  // payment platform takes this inbox's orders or the order holds a live link a change may close.
+  const payItem = item.type === "order" ? item.id : linkedEvent?.type === "order.create" ? linkedEvent.itemId : null;
+  const payLinks = payItem !== null && (await hasPayLinks(db));
+  const payFollows = payItem !== null && (payLinks || (await hasLivePayLink(db, payItem)));
+  // While a link is on its way, the customer's email about the order waits a moment, so the one email
+  // they get carries the link (it is written from the order as it stands when it goes). Only when one
+  // is: an order the payments side makes none for (a test order with only a live key, nothing to pay,
+  // the owner's own link, a change still open) is told at once.
+  const linkWait =
+    payLinks &&
+    item.type === "order" &&
+    (t.to === "accepted" || t.event === "payment_failed" || (t.event === "request_payment" && !data.paymentUrl)) &&
+    (await linkComing(
+      db,
+      { id: item.id, payload, sandbox: item.flags.sandbox === true },
+      now,
+      t.event === "request_payment" && caller.actor.kind !== "connector",
+    ));
   /** A refund's date, once fixed (Unix ms): its promise is made then (ADR-018 §8), and its outcome reads it. */
   const refundDueAt = (p: Record<string, unknown>): number | null => {
     const due = typeof p.refundDue === "string" ? Date.parse(p.refundDue) : Number.NaN;
@@ -1252,6 +1272,7 @@ async function attempt_(
       statements.push(
         jobStatement("notify", { to, itemId: item.id, event: t.event, eventId }, now, {
           dedupeKey: `notify:${eventId}:${to}`,
+          ...(to === "customer" && linkWait ? { runAt: now + PAY_LINK_GRACE_MS } : {}),
         }),
       );
     }
@@ -1261,6 +1282,7 @@ async function attempt_(
       dedupeKey: `rules:${eventId}`,
     }),
   );
+  if (payFollows && payItem) statements.push(payLinkStatement(payItem, eventId, now));
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
     if (linkedEvent) statements.push(webhookFanoutStatement(linkedEvent, now));
@@ -1338,6 +1360,7 @@ function applyInput(
   if (type === "order" && event === "record_payment") {
     payload.paymentRef = data.paymentRef;
     if (data.amount) payload.paidAmount = data.amount;
+    if (typeof data.method === "string") payload.paymentMethod = data.method;
   }
   if (type === "order" && event === "request_payment" && data.paymentUrl) payload.paymentUrl = data.paymentUrl;
 }

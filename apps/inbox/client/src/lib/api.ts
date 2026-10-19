@@ -26,6 +26,7 @@ import type {
   NetworkView,
   Page,
   PatchWebhookBody,
+  PaymentView,
   Preset,
   PresetKey,
   Problem,
@@ -315,9 +316,17 @@ export const api = {
       idempotent: true,
     }),
   removeConnection: (id: string) =>
-    call<{ removed: true; left_in_calendar: number }>("DELETE", `/v1/owner/integrations/${encodeURIComponent(id)}`, {
-      idempotent: true,
-    }),
+    call<{ removed: true; left_in_calendar: number; links_closed?: number; links_closing?: number }>(
+      "DELETE",
+      `/v1/owner/integrations/${encodeURIComponent(id)}`,
+      { idempotent: true },
+    ),
+  /** An order's pay links in the business's own Stripe or Mollie account (ADR-023). */
+  itemPayments: (id: string) =>
+    call<{ item_id: string; payments: PaymentView[]; none: string | null; link_is_ours: boolean }>(
+      "GET",
+      `/v1/owner/items/${encodeURIComponent(id)}/payments`,
+    ),
   feeds: () => call<{ items: FeedConnector[] }>("GET", "/v1/owner/feeds"),
   addFeed: (body: AddFeedBody) => call<FeedConnector>("POST", "/v1/owner/feeds", { body }),
   importFeed: (id: string) =>

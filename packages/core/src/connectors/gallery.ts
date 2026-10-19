@@ -18,6 +18,17 @@ export interface GalleryWay {
   readonly note?: string | undefined;
   readonly hint?: string | undefined;
   readonly href?: string | undefined;
+  /**
+   * For a payment platform: where it sends what it says (this inbox's own address) and which events,
+   * for an owner whose key cannot add the webhook itself and adds it by hand. Absent when this inbox
+   * does not know its public address.
+   */
+  readonly hook?: { readonly url: string; readonly events: readonly string[] } | undefined;
+  /**
+   * What must be in place before the form is worth filling in, and where to do it: a payment platform
+   * needs this inbox's own public https address (Settings, Inbox address) to tell it of payments.
+   */
+  readonly needs?: { readonly text: string; readonly href: string } | undefined;
 }
 
 export interface GalleryCard {
@@ -40,9 +51,10 @@ interface CardSpec {
 }
 
 /**
- * Every card, in the order they are shown: the calendar most businesses have first. Payments and
- * shops are on their way and say so; the kinds they name do not exist yet, so they resolve to "Soon"
- * until a connector registers them. Outlook is named so an Outlook owner sees it is not forgotten.
+ * Every card, in the order they are shown: the calendar most businesses have first, then Cal.com, then
+ * the payment platforms (ADR-023). Shops are on their way and say so; the kinds they name do not exist
+ * yet, so they resolve to "Soon" until a connector registers them. Outlook is named so an Outlook
+ * owner sees it is not forgotten.
  */
 export const GALLERY: readonly CardSpec[] = [
   {
@@ -71,14 +83,14 @@ export const GALLERY: readonly CardSpec[] = [
   {
     id: "stripe",
     title: "Stripe",
-    line: "Payments",
+    line: "Paid into your own account",
     group: "payments",
     ways: [{ kind: "stripe", preset: null, label: "Stripe" }],
   },
   {
     id: "mollie",
     title: "Mollie",
-    line: "Payments",
+    line: "Paid into your own account",
     group: "payments",
     ways: [{ kind: "mollie", preset: null, label: "Mollie" }],
   },
@@ -103,8 +115,15 @@ export function cardOf(kind: string): string | undefined {
   return GALLERY.find((c) => c.ways.some((w) => w.kind === kind))?.id;
 }
 
-/** The cards as this instance can offer them, from the connectors it registered. */
-export function gallery(definitions: ReadonlyMap<string, ConnectorDefinition>): GalleryCard[] {
+/**
+ * The cards as this instance can offer them, from the connectors it registered. `hookBase` is where
+ * platforms reach this inbox (`https://inbox.example.com/v1/hooks/`), for the webhook a payment
+ * platform's form names.
+ */
+export function gallery(
+  definitions: ReadonlyMap<string, ConnectorDefinition>,
+  opts: { readonly hookBase?: string | null | undefined } = {},
+): GalleryCard[] {
   return GALLERY.map((card) => {
     const ways = card.ways.map((w): GalleryWay => {
       const def = definitions.get(w.kind);
@@ -121,20 +140,34 @@ export function gallery(definitions: ReadonlyMap<string, ConnectorDefinition>): 
         ...((preset?.note ?? def?.note) ? { note: preset?.note ?? def?.note } : {}),
         ...(unready?.hint ? { hint: unready.hint } : {}),
         ...(unready?.href ? { href: unready.href } : {}),
+        ...(def?.hookEvents && ready === true && opts.hookBase
+          ? { hook: { url: `${opts.hookBase}${w.kind}`, events: def.hookEvents } }
+          : {}),
+        ...(def?.hookEvents && ready === true && !opts.hookBase
+          ? { needs: { text: NEEDS_ADDRESS.text, href: NEEDS_ADDRESS.href } }
+          : {}),
       };
     });
+    const needs = ways.length > 0 && ways.every((w) => w.needs !== undefined);
     // Ready first, the rest after in the order given: what can be pressed comes first.
     const sorted = [...ways.filter((w) => w.status === "ready"), ...ways.filter((w) => w.status !== "ready")];
     return {
       id: card.id,
       title: card.title,
-      line: card.id === "calendar" ? calendarLine(sorted) : card.line,
+      line: card.id === "calendar" ? calendarLine(sorted) : needs ? NEEDS_ADDRESS.line : card.line,
       group: card.group,
       status: ways.some((w) => w.status === "ready") ? "ready" : "soon",
       ways: sorted,
     };
   });
 }
+
+/** A payment platform tells this inbox of payments at its own address, which it needs to know first. */
+const NEEDS_ADDRESS = {
+  line: "Needs this inbox's address first",
+  text: "Stripe and Mollie tell this inbox of payments at its own https address. Add it first: Settings → General, Inbox address.",
+  href: "/settings#s-app-url",
+} as const;
 
 /**
  * The calendar card says which calendars it takes, as people know them: "iCloud, Fastmail, Nextcloud

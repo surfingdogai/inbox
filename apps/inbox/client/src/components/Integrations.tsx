@@ -1,6 +1,15 @@
 import clsx from "clsx";
-import { CalendarDays, ChevronRight, CreditCard, ExternalLink, RefreshCw, ShoppingBag } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  RefreshCw,
+  ShoppingBag,
+} from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
@@ -74,6 +83,12 @@ export function IntegrationsCard() {
   for (const c of connections) byCard.set(cardOf(c.kind), [...(byCard.get(cardOf(c.kind)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
   const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
+  // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named.
+  const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
+  const insteadOf = (cardId: string): string | null => {
+    const other = sending.find((c) => cardOf(c.kind) !== cardId);
+    return other ? other.title : null;
+  };
   // Cal.com adds the bookings it is given to the calendar it checks, so with both adding them each
   // booking would show twice there.
   const calcom = connections.find((c) => c.kind === "calcom" && c.bookings_on && c.status !== "disabled");
@@ -101,7 +116,13 @@ export function IntegrationsCard() {
       {connections.length > 0 && (
         <div className="stack int-connections">
           {connections.map((c) => (
-            <ConnectionLine key={c.id} connection={c} cards={data?.cards ?? []} onNotice={setNotice} />
+            <ConnectionLine
+              key={c.id}
+              connection={c}
+              connections={connections}
+              cards={data?.cards ?? []}
+              onNotice={setNotice}
+            />
           ))}
         </div>
       )}
@@ -130,6 +151,7 @@ export function IntegrationsCard() {
               key={c.id}
               card={c}
               connections={byCard.get(c.id) ?? []}
+              instead={c.group === "payments" && !(byCard.get(c.id) ?? []).length ? insteadOf(c.id) : null}
               open={open === c.id}
               disabled={!data.can_connect}
               onOpen={() => {
@@ -141,28 +163,50 @@ export function IntegrationsCard() {
           ))}
         </div>
       )}
-      {card && card.status === "ready" && data?.can_connect && (
-        <ConnectPanel
+      {card && card.group === "payments" && (byCard.get(card.id) ?? []).length > 0 && data?.can_connect && (
+        <PayKeyPanel
           key={card.id}
           card={card}
-          email={email}
-          pending={write.isPending}
-          error={write.error ? problemOf(write.error) : null}
+          connections={byCard.get(card.id) ?? []}
           onCancel={() => setOpen(null)}
-          onConnect={(body) =>
-            write.mutate(
-              { connect: body },
-              {
-                onSuccess: () => {
-                  setOpen(null);
-                  setNotice({ tone: "success", text: "Connected. Reading your calendar now." });
-                },
-              },
-            )
-          }
-          onError={(text) => setNotice({ tone: "danger", text })}
+          onNotice={(n) => {
+            if (n.tone === "success") setOpen(null);
+            setNotice(n);
+          }}
         />
       )}
+      {card &&
+        card.status === "ready" &&
+        !(card.group === "payments" && (byCard.get(card.id) ?? []).length > 0) &&
+        data?.can_connect && (
+          <ConnectPanel
+            key={card.id}
+            card={card}
+            email={email}
+            instead={card.group === "payments" ? insteadOf(card.id) : null}
+            pending={write.isPending}
+            error={write.error ? problemOf(write.error) : null}
+            onCancel={() => setOpen(null)}
+            onConnect={(body) =>
+              write.mutate(
+                { connect: body },
+                {
+                  onSuccess: () => {
+                    setOpen(null);
+                    setNotice({
+                      tone: "success",
+                      text:
+                        card.group === "payments"
+                          ? `${card.title} is connected. Orders you accept get a link to pay.`
+                          : "Connected. Reading your calendar now.",
+                    });
+                  },
+                },
+              )
+            }
+            onError={(text) => setNotice({ tone: "danger", text })}
+          />
+        )}
       {soon.length > 0 && <p className="int-soon-line">Soon: {soon.map((c) => c.title).join(" · ")}</p>}
     </section>
   );
@@ -171,6 +215,7 @@ export function IntegrationsCard() {
 /** What a card's tag says: the worst of its connections. */
 function tagOf(connections: readonly ConnectionView[]): { text: string; tone: "on" | "warn" | "quiet" } | null {
   if (connections.length === 0) return null;
+  if (connections.every((c) => c.payments?.disconnecting)) return { text: "Disconnecting", tone: "quiet" };
   if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
   if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
   return { text: "Connected", tone: "on" };
@@ -179,12 +224,15 @@ function tagOf(connections: readonly ConnectionView[]): { text: string; tone: "o
 function Tile({
   card,
   connections,
+  instead,
   open,
   disabled,
   onOpen,
 }: {
   card: GalleryCard;
   connections: readonly ConnectionView[];
+  /** A payment platform not connected while another sends the links: "Instead of Mollie". */
+  instead?: string | null;
   open: boolean;
   disabled: boolean;
   onOpen: () => void;
@@ -197,7 +245,7 @@ function Tile({
       <Icon className="icon int-icon" aria-hidden="true" />
       <span className="int-text">
         <span className="int-name">{card.title}</span>
-        <span className="int-line">{card.line}</span>
+        <span className="int-line">{instead && card.status === "ready" ? `Instead of ${instead}` : card.line}</span>
       </span>
       {soon ? (
         <span className="int-tag">Soon</span>
@@ -265,6 +313,7 @@ function preferredWay(card: GalleryCard, email: string | null): { way: GalleryWa
 function ConnectPanel({
   card,
   email,
+  instead,
   pending,
   error,
   onConnect,
@@ -273,6 +322,8 @@ function ConnectPanel({
 }: {
   card: GalleryCard;
   email: string | null;
+  /** Another payment platform sends the links now: connecting this one asks to send them from it instead. */
+  instead?: string | null;
   pending: boolean;
   error: ApiProblem | null;
   onConnect: (body: { kind: string; preset?: string; values: Record<string, string> }) => void;
@@ -282,8 +333,8 @@ function ConnectPanel({
   const [picked, setPicked] = useState<string | null>(null);
   const preferred = preferredWay(card, email);
   const way = card.ways.find((w) => keyOf(w) === (picked ?? keyOf(preferred.way))) ?? preferred.way;
-  if (!way) return null;
   const setup = card.ways.filter((w) => w.status === "setup");
+  if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
       {card.ways.length > 1 && (
@@ -317,7 +368,19 @@ function ConnectPanel({
           )}
         </p>
       ))}
-      {way.auth === "oauth" ? (
+      {way.needs ? (
+        <>
+          <p className="hint">{way.needs.text}</p>
+          <div className="rowx">
+            <a className="btn btn-secondary btn-sm" href={way.needs.href}>
+              Open Settings
+            </a>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+              Close
+            </button>
+          </div>
+        </>
+      ) : way.auth === "oauth" ? (
         <SignIn way={way} onCancel={onCancel} onError={onError} />
       ) : (
         <WayForm
@@ -326,6 +389,7 @@ function ConnectPanel({
           email={email}
           pending={pending}
           error={error}
+          question={instead ? `Send links from ${card.title} instead of ${instead}?` : undefined}
           onCancel={onCancel}
           onSubmit={(values) => onConnect({ kind: way.kind, ...(way.preset ? { preset: way.preset } : {}), values })}
         />
@@ -399,6 +463,9 @@ function WayForm({
   way,
   email,
   account,
+  mode,
+  question,
+  submitLabel,
   pending,
   error,
   onSubmit,
@@ -408,6 +475,11 @@ function WayForm({
   email?: string | null;
   /** Connecting again: the account, as it is connected; only the secret fields are asked for. */
   account?: string;
+  /** A payment platform's key for this mode: its placeholder says which ("rk_test_…"). */
+  mode?: "live" | "test" | undefined;
+  /** Asked above the buttons, answered by them: "Send links from Stripe instead of Mollie?" */
+  question?: string | undefined;
+  submitLabel?: string | undefined;
   pending: boolean;
   error: ApiProblem | null;
   onSubmit: (values: Record<string, string>) => void;
@@ -437,12 +509,19 @@ function WayForm({
           inputMode={f.input === "url" ? "url" : f.input === "email" ? "email" : undefined}
           {...(f.secret ? NO_FILL : { autoComplete: f.autocomplete ?? "off" })}
           spellCheck={false}
-          placeholder={f.placeholder}
+          placeholder={(mode && f.byMode?.[mode]) || f.placeholder}
           value={values[f.key] ?? ""}
           onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
           required={f.required}
         />
       </Field>
+      {f.steps && f.steps.length > 0 && (
+        <ol className="int-steps">
+          {f.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
       {f.link && (
         <a className="int-link" href={f.link.href} target="_blank" rel="noopener noreferrer">
           {f.link.text}
@@ -473,7 +552,10 @@ function WayForm({
             <span className="disclosure-open">Fewer options</span>
             <span className="disclosure-closed">More options</span>
           </summary>
-          <div className="advanced-body stack">{advanced.map(input)}</div>
+          <div className="advanced-body stack">
+            {advanced.map(input)}
+            {way.hook && <HookAddress hook={way.hook} />}
+          </div>
         </details>
       )}
       {general && (
@@ -481,15 +563,53 @@ function WayForm({
           {error.detail}
         </p>
       )}
+      {question && <p className="hint int-question">{question}</p>}
       <div className="rowx">
         <button type="submit" className="btn btn-primary" disabled={pending || missing}>
-          {pending ? "Checking…" : account !== undefined ? "Connect again" : "Connect"}
+          {pending ? "Checking…" : (submitLabel ?? (account !== undefined ? "Connect again" : "Connect"))}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
           Cancel
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Where a payment platform sends what it says, for an owner who adds the webhook by hand: the
+ * address, ready to copy, and the events to tick.
+ */
+function HookAddress({ hook }: { hook: { readonly url: string; readonly events: readonly string[] } }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="int-hook stack-xs">
+      <span className="label">Webhook address</span>
+      <span className="int-hook-row">
+        <code className="int-hook-url">
+          {hook.url.split("/").map((part, i, all) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one address, in order.
+            <Fragment key={i}>
+              {part}
+              {i < all.length - 1 && (
+                <>
+                  /<wbr />
+                </>
+              )}
+            </Fragment>
+          ))}
+        </code>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm btn-icon"
+          aria-label={copied ? "Address copied" : "Copy the address"}
+          onClick={() => void navigator.clipboard.writeText(hook.url).then(() => setCopied(true))}
+        >
+          {copied ? <Check className="icon-xs" aria-hidden="true" /> : <Copy className="icon-xs" aria-hidden="true" />}
+        </button>
+      </span>
+      <span className="hint">Events: {hook.events.join(", ")}</span>
+    </div>
   );
 }
 
@@ -518,10 +638,12 @@ function dayOf(ms: number): string {
 
 function ConnectionLine({
   connection: c,
+  connections,
   cards,
   onNotice,
 }: {
   connection: ConnectionView;
+  connections: readonly ConnectionView[];
   cards: readonly GalleryCard[];
   onNotice: (n: Notice) => void;
 }) {
@@ -533,21 +655,44 @@ function ConnectionLine({
   const way = cards
     .find((card) => card.id === cardOf(c.kind))
     ?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
-  const meta = [
-    c.busy_on
-      ? c.status === "configured"
-        ? "reading busy times"
-        : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
-      : "busy times off",
-    writes
-      ? c.bookings_on
-        ? destination && c.kind !== "calcom"
-          ? `bookings go to ${destination.name}`
-          : "bookings go out"
-        : "bookings off"
-      : null,
-    c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
-  ].filter(Boolean);
+  const pays = c.payments;
+  const disconnecting = pays?.disconnecting === true;
+  // Which platform sends an order's links, said only where there is a choice: the default is not news.
+  const sender = connections.find(
+    (o) => o.id !== c.id && o.payments && o.pay_on && o.mode === c.mode && !o.payments.disconnecting,
+  );
+  const several = connections.filter((o) => o.payments).length > 1;
+  const meta = pays
+    ? [
+        c.mode === "test" ? "test key · links only for orders made in Test mode" : null,
+        disconnecting
+          ? `switching off ${pays.closing} ${pays.closing === 1 ? "link" : "links"}`
+          : !c.pay_on
+            ? sender
+              ? `not used: ${sender.title} sends your links`
+              : "links off"
+            : several
+              ? "sends your links"
+              : null,
+        pays.open > 0 ? `${pays.open} waiting` : null,
+        pays.paid > 0 ? `${pays.paid} paid` : null,
+        c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
+      ].filter(Boolean)
+    : [
+        c.busy_on
+          ? c.status === "configured"
+            ? "reading busy times"
+            : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
+          : "busy times off",
+        writes
+          ? c.bookings_on
+            ? destination && c.kind !== "calcom"
+              ? `bookings go to ${destination.name}`
+              : "bookings go out"
+            : "bookings off"
+          : null,
+        c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
+      ].filter(Boolean);
   const problem = write.error ? problemOf(write.error) : null;
   const failing = c.status === "error";
   return (
@@ -556,9 +701,24 @@ function ConnectionLine({
         <div className="int-conn-head">
           <span className="int-title">{c.title}</span>
           <span className="int-account">{c.account}</span>
-          <span className={clsx("pill pill-xs", failing && "is-warn")}>{STATUS[c.status] ?? c.status}</span>
+          <span className={clsx("pill pill-xs", failing && "is-warn")}>
+            {disconnecting ? "Disconnecting" : (STATUS[c.status] ?? c.status)}
+          </span>
         </div>
-        <div className="int-meta">{meta.join(" · ")}</div>
+        <div className="int-meta">
+          {meta.join(" · ")}
+          {pays?.dashboard_url && !disconnecting && (
+            <a className="int-link int-open-link" href={pays.dashboard_url} target="_blank" rel="noopener noreferrer">
+              Open {c.title}
+              <ExternalLink className="icon-xs" aria-hidden="true" />
+            </a>
+          )}
+        </div>
+        {pays?.webhook === "pending" && !disconnecting && (
+          <div className="hint">
+            {c.title} tells this inbox of payments once it is live; until then the inbox asks {c.title} on each sync.
+          </div>
+        )}
         {failing && c.last_error && (
           <div className="hint error" role="alert">
             {c.last_error}
@@ -567,6 +727,13 @@ function ConnectionLine({
         {c.busy_on && c.busy_partial && c.busy_until && (
           <div className="hint">
             Read to {dayOf(c.busy_until)}: this calendar has more ahead than is read, so later times stay closed.
+          </div>
+        )}
+        {pays && pays.failing > 0 && !disconnecting && (
+          <div className="hint error" role="alert">
+            {pays.failing === 1
+              ? "An order has no payment link: it shows on the order."
+              : `${pays.failing} orders have no payment link: each shows on its order.`}
           </div>
         )}
         {c.bookings_failing > 0 && c.booking_error && (
@@ -581,47 +748,62 @@ function ConnectionLine({
           </div>
         )}
       </div>
-      <div className="rowx int-actions">
-        {failing && way?.status === "ready" ? (
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            aria-expanded={panel === "again"}
-            onClick={() => setPanel(panel === "again" ? null : "again")}
-          >
-            Connect again
-          </button>
-        ) : (
+      {!disconnecting && (
+        <div className="rowx int-actions">
+          {failing && way?.status === "ready" ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              aria-expanded={panel === "again"}
+              onClick={() => setPanel(panel === "again" ? null : "again")}
+            >
+              Connect again
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-label={`Sync ${c.title} now`}
+              title="Sync now"
+              disabled={write.isPending || c.status === "disabled"}
+              onClick={() =>
+                write.mutate(
+                  { id: c.id, sync: true },
+                  { onSuccess: () => onNotice({ tone: "success", text: "Syncing now." }) },
+                )
+              }
+            >
+              <RefreshCw className="icon-sm" aria-hidden="true" />
+            </button>
+          )}
+          {pays?.dashboard_url && (
+            <a
+              className="btn btn-ghost btn-sm int-open-btn"
+              href={pays.dashboard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open {c.title}
+              <ExternalLink className="icon-xs" aria-hidden="true" />
+            </a>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            aria-label={`Sync ${c.title} now`}
-            title="Sync now"
-            disabled={write.isPending || c.status === "disabled"}
-            onClick={() =>
-              write.mutate(
-                { id: c.id, sync: true },
-                { onSuccess: () => onNotice({ tone: "success", text: "Syncing now." }) },
-              )
-            }
+            aria-expanded={panel === "change"}
+            onClick={() => setPanel(panel === "change" ? null : "change")}
           >
-            <RefreshCw className="icon-sm" aria-hidden="true" />
+            Change
           </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          aria-expanded={panel === "change"}
-          onClick={() => setPanel(panel === "change" ? null : "change")}
-        >
-          Change
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
-          Disconnect
-        </button>
-      </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
+            Disconnect
+          </button>
+        </div>
+      )}
       {panel === "again" && way && (
         <div className="confirm row-glass wide stack int-panel">
+          {pays && <h3>New key for {c.title}</h3>}
+          {pays && <p className="hint">Paste the new key. Your orders and their links stay as they are.</p>}
           {way.auth === "oauth" ? (
             <SignIn
               way={way}
@@ -633,6 +815,8 @@ function ConnectionLine({
             <WayForm
               way={way}
               account={c.account}
+              mode={c.mode ?? undefined}
+              submitLabel={pays ? "Use this key" : undefined}
               pending={write.isPending}
               error={problem}
               onCancel={() => setPanel(null)}
@@ -649,7 +833,10 @@ function ConnectionLine({
                   {
                     onSuccess: () => {
                       setPanel(null);
-                      onNotice({ tone: "success", text: "Connected again. Reading your calendar now." });
+                      onNotice({
+                        tone: "success",
+                        text: pays ? `${c.title} uses the new key.` : "Connected again. Reading your calendar now.",
+                      });
                     },
                   },
                 )
@@ -658,11 +845,20 @@ function ConnectionLine({
           )}
         </div>
       )}
-      {panel === "change" && <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />}
+      {panel === "change" &&
+        (pays ? (
+          <PayChoices connection={c} onNewKey={() => setPanel("again")} onNotice={onNotice} />
+        ) : (
+          <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
+        ))}
       {confirming && (
         <div className="confirm row-glass wide">
           <h3>Disconnect {c.title}</h3>
-          <p className="hint">Its busy times stop blocking at once. Bookings already added stay in the calendar.</p>
+          <p className="hint">
+            {pays
+              ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.`
+              : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
+          </p>
           <div className="rowx">
             <button
               type="button"
@@ -671,7 +867,19 @@ function ConnectionLine({
               onClick={() =>
                 write.mutate(
                   { id: c.id, remove: true },
-                  { onSuccess: () => onNotice({ tone: "success", text: `${c.title} is disconnected.` }) },
+                  {
+                    onSuccess: (r) => {
+                      setConfirming(false);
+                      const closing = (r as { links_closing?: number } | undefined)?.links_closing ?? 0;
+                      onNotice({
+                        tone: "success",
+                        text:
+                          closing > 0
+                            ? `${c.title} is being disconnected: its links waiting to be paid are being switched off.`
+                            : `${c.title} is disconnected.`,
+                      });
+                    },
+                  },
                 )
               }
             >
@@ -682,6 +890,168 @@ function ConnectionLine({
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A payment platform's one choice, whether accepted orders get a link to pay, which applies at once;
+ * and a new key for the same account.
+ */
+function PayChoices({
+  connection: c,
+  onNewKey,
+  onNotice,
+}: {
+  connection: ConnectionView;
+  onNewKey: () => void;
+  onNotice: (n: Notice) => void;
+}) {
+  const write = useIntegrationWrite();
+  return (
+    <div className="confirm row-glass wide stack">
+      <Switch
+        checked={c.pay_on}
+        onChange={(on) =>
+          write.mutate(
+            { id: c.id, patch: { pay_on: on } },
+            {
+              onSuccess: () =>
+                onNotice({ tone: "success", text: on ? "Links to pay are on." : "Links to pay are off." }),
+            },
+          )
+        }
+      >
+        Send a link to pay when you accept an order
+      </Switch>
+      <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
+      <div className="rowx">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
+          New key
+        </button>
+      </div>
+      {write.error && (
+        <p className="hint error" role="alert">
+          {problemOf(write.error).detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A payment platform's tile when it is connected (ADR-023): a new key for the connection there is,
+ * never a second one of the same mode beside it; and, when only one mode is connected, a key of the
+ * other ("Add a test key · links for test orders only").
+ */
+function PayKeyPanel({
+  card,
+  connections,
+  onCancel,
+  onNotice,
+}: {
+  card: GalleryCard;
+  connections: readonly ConnectionView[];
+  onCancel: () => void;
+  onNotice: (n: Notice) => void;
+}) {
+  const write = useIntegrationWrite();
+  const way = card.ways.find((w) => w.status === "ready");
+  const kept = connections.filter((c) => !c.payments?.disconnecting);
+  const [target, setTarget] = useState<string>(kept[0]?.id ?? "");
+  const [adding, setAdding] = useState(false);
+  if (!way) return null;
+  if (kept.length === 0) {
+    return (
+      <div className="confirm row-glass stack int-panel">
+        <p className="hint">
+          {card.title} is being disconnected: its links waiting to be paid are being switched off. Connect it again once
+          that is done.
+        </p>
+        <div className="rowx">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const current = kept.find((c) => c.id === target) ?? kept[0];
+  const other: "live" | "test" | null =
+    kept.some((c) => c.mode === "live") && kept.some((c) => c.mode === "test")
+      ? null
+      : kept[0]?.mode === "test"
+        ? "live"
+        : "test";
+  const problem = write.error ? problemOf(write.error) : null;
+  if (adding && other) {
+    return (
+      <div className="confirm row-glass stack int-panel">
+        <h3>{other === "test" ? `A test key for ${card.title}` : `A live key for ${card.title}`}</h3>
+        <p className="hint">
+          {other === "test"
+            ? "Links for orders made in Test mode only. Your live key stays as it is."
+            : "Links for real orders. Your test key stays for orders made in Test mode."}
+        </p>
+        <WayForm
+          way={{ ...way, form: way.form.filter((f) => !f.advanced) }}
+          mode={other}
+          pending={write.isPending}
+          error={problem}
+          onCancel={() => setAdding(false)}
+          onSubmit={(values) =>
+            write.mutate(
+              { connect: { kind: way.kind, values } },
+              {
+                onSuccess: () =>
+                  onNotice({
+                    tone: "success",
+                    text:
+                      other === "test" ? `Test orders get a ${card.title} test link.` : `${card.title} is connected.`,
+                  }),
+              },
+            )
+          }
+        />
+      </div>
+    );
+  }
+  if (!current) return null;
+  return (
+    <div className="confirm row-glass stack int-panel">
+      <h3>New key for {card.title}</h3>
+      <p className="hint">Paste the new key. Your orders and their links stay as they are.</p>
+      {kept.length > 1 && (
+        <fieldset className="seg">
+          <legend className="sr-only">Which key</legend>
+          {kept.map((c) => (
+            <button key={c.id} type="button" aria-pressed={c.id === current.id} onClick={() => setTarget(c.id)}>
+              {c.mode === "test" ? "Test key" : "Live key"}
+            </button>
+          ))}
+        </fieldset>
+      )}
+      <WayForm
+        key={current.id}
+        way={way}
+        account={current.account}
+        mode={current.mode ?? undefined}
+        submitLabel="Use this key"
+        pending={write.isPending}
+        error={problem}
+        onCancel={onCancel}
+        onSubmit={(values) =>
+          write.mutate(
+            { connect: { kind: way.kind, connection_id: current.id, values } },
+            { onSuccess: () => onNotice({ tone: "success", text: `${card.title} uses the new key.` }) },
+          )
+        }
+      />
+      {other && (
+        <button type="button" className="int-inline int-add-mode" onClick={() => setAdding(true)}>
+          {other === "test" ? "Add a test key · links for test orders only" : "Add a live key · links for real orders"}
+        </button>
       )}
     </div>
   );

@@ -17,6 +17,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /items/:id": ["inbox:read"],
   "POST /items/:id/transitions": ["inbox:write"],
   "GET /items/:id/offers": ["inbox:read"],
+  "GET /items/:id/payments": ["inbox:read"],
   "POST /items/:id/offers": ["inbox:write"],
   // Sending is the owner's in person, checked by the capability whatever the scopes.
   "POST /items/:id/offers/draft/send": ["inbox:write"],
@@ -140,6 +141,7 @@ export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
   remove_feed: ["integrations:write"],
   list_integrations: [READ_SETUP, "integrations:write"],
   sync_integration: ["integrations:write"],
+  list_payments: ["inbox:read"],
   get_settings: [READ_SETUP],
   get_networks: [READ_SETUP],
   update_settings: ["settings:write"],

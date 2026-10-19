@@ -326,6 +326,7 @@ describe("MCP doors", () => {
       "remove_feed",
       "list_integrations",
       "sync_integration",
+      "list_payments",
       "get_settings",
       "get_networks",
       "update_settings",

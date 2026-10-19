@@ -31,6 +31,7 @@ export const qk = {
   networks: ["networks"] as const,
   items: (params: ListParams) => ["items", params] as const,
   item: (id: string) => ["item", id] as const,
+  payments: (id: string) => ["payments", id] as const,
   counts: (sandbox: boolean) => ["counts", sandbox] as const,
   profile: ["profile"] as const,
   services: ["services"] as const,
@@ -92,6 +93,21 @@ export function useItemPages(params: ListParams) {
 
 export function useItem(id: string) {
   return useQuery({ queryKey: qk.item(id), queryFn: () => api.getItem(id) });
+}
+
+/**
+ * An order's pay links (ADR-023). Read again while one is being made or waits to be paid, so "Paid"
+ * shows without a reload once the platform says so.
+ */
+export function useItemPayments(id: string | null | undefined, waiting: boolean) {
+  return useQuery({
+    queryKey: qk.payments(id ?? ""),
+    queryFn: () => api.itemPayments(id ?? ""),
+    enabled: Boolean(id),
+    staleTime: 10_000,
+    refetchInterval: (q) =>
+      waiting || q.state.data?.payments.some((p) => p.state === "creating" || p.state === "open") ? 15_000 : false,
+  });
 }
 
 /** Counts for the rail from the first hundred open and closed items: exact for a small inbox, "n+" beyond. */

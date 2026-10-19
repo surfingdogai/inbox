@@ -721,7 +721,9 @@ const formFieldSchema = z.looseObject({
 
 export const connectionSchema = z.looseObject({
   id: z.string(),
-  kind: z.string().describe("caldav, google_calendar, ics (a calendar's private link: busy times only) or calcom"),
+  kind: z
+    .string()
+    .describe("caldav, google_calendar, ics (a calendar's private link: busy times only), calcom, stripe or mollie"),
   preset: z.string().nullable().describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar"),
   title: z.string(),
   name: z.string(),
@@ -755,6 +757,70 @@ export const connectionSchema = z.looseObject({
     .describe("While it fails: auth (connect it again), config, unreachable, rate_limited, refused, bad_response"),
   failing_since: z.number().int().nullable(),
   created_at: z.number().int(),
+  pay_on: z.boolean().describe("A payment platform: accepted orders get a link to pay in the business's own account"),
+  mode: z
+    .enum(["live", "test"])
+    .nullable()
+    .describe("A payment platform's mode: a test key makes links for test orders only"),
+  payments: z
+    .looseObject({
+      open: z.number().int().describe("Links waiting to be paid"),
+      paid: z.number().int(),
+      failing: z.number().int().describe("Links the platform did not make yet, or would not"),
+      last_paid_at: z.number().int().nullable(),
+      webhook: z
+        .enum(["added", "by_hand", "per_link", "pending"])
+        .nullable()
+        .describe(
+          "added: the inbox added the platform's webhook; by_hand: the owner did; per_link: each link names its own (Mollie); pending: added once the inbox is live (until then payments are found by asking the platform)",
+        ),
+      dashboard_url: z.string().nullable().describe("The business's own dashboard on the platform"),
+      disconnecting: z
+        .boolean()
+        .describe("Being disconnected: it makes no new link, and its links are being switched off on the platform"),
+      closing: z.number().int().describe("Links still to be switched off on the platform"),
+    })
+    .nullable(),
+});
+
+const paymentSchema = z.looseObject({
+  id: z.string(),
+  kind: z.string().describe("stripe or mollie"),
+  provider: z.string(),
+  state: z
+    .enum(["creating", "open", "paid", "failed", "closed", "error"])
+    .describe("error: the platform would not make it (error says why); closed: the order changed or ended"),
+  amount: money,
+  url: z.string().nullable().describe("Where the customer pays, while the link is open; never a closed link"),
+  livemode: z.boolean(),
+  paid_at: z.number().int().nullable(),
+  paid_amount: money.nullable(),
+  payment_id: z
+    .string()
+    .nullable()
+    .describe(
+      "The platform's id for the payment, once paid (pi_…, tr_…): a refund made in its dashboard is recorded against it",
+    ),
+  method: z.string().nullable().describe("How it was paid, when the platform says (card, ideal, …)"),
+  dashboard_url: z.string().nullable().describe("The payment in the business's own dashboard: refund it there"),
+  error: z.string().nullable(),
+  note: z.string().nullable(),
+  created_at: z.number().int(),
+  closed_at: z.number().int().nullable(),
+});
+
+export const itemPaymentsSchema = z.object({
+  item_id: z.string(),
+  payments: z.array(paymentSchema),
+  none: z
+    .string()
+    .nullable()
+    .describe(
+      "Why an order that could have a link has none, in a line for the owner (a key of the other mode only, links off, accepted before the platform was connected, a change waiting); null otherwise",
+    ),
+  link_is_ours: z
+    .boolean()
+    .describe("The order's paymentUrl is one of these links (the platform's), not one the owner gave"),
 });
 
 export const integrationsSchema = z.object({
@@ -778,6 +844,10 @@ export const integrationsSchema = z.object({
           note: z.string().optional(),
           hint: z.string().optional(),
           href: z.string().optional(),
+          hook: z
+            .object({ url: z.string(), events: z.array(z.string()) })
+            .optional()
+            .describe("A payment platform: the webhook address and events, for an owner who adds the webhook by hand"),
         }),
       ),
     }),

@@ -675,6 +675,18 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.listOffers(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
+  app.get(
+    "/items/:id/payments",
+    owner({
+      tags: ["owner"],
+      summary: "An order's pay links in your own Stripe or Mollie account, newest first, and what each came to",
+      description:
+        "Where the customer pays (url, while it is open; never a closed link), its state (creating, open, paid, failed, closed, error), what was paid and how (payment_id, method), and dashboard_url: the payment in your own Stripe or Mollie dashboard, where it is refunded. `none` says why an order that could have a link has none. Nothing about the customer and never a key.",
+      responses: json("Payments", R.itemPaymentsSchema),
+    }),
+    async (c) => c.json(await caps.connectors.itemPayments(c.get("caller"), String(c.req.param("id")))),
+  );
+
   app.post(
     "/items/:id/offers",
     owner({
@@ -1345,9 +1357,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations",
     owner({
       tags: ["integrations"],
-      summary: "What can be connected (calendars, Cal.com; payments and shops marked soon) and what is connected",
+      summary: "What can be connected (calendars, Cal.com, Stripe, Mollie; shops marked soon) and what is connected",
       description:
-        "Each card lists its ways in, with the form to fill in (secret fields marked) or a sign-in on the platform. Connections never carry a secret.",
+        "Each card lists its ways in, with the form to fill in (secret fields marked) or a sign-in on the platform; a payment platform's way names the webhook address and events (hook) for an owner who adds the webhook by hand. Connections never carry a secret.",
       responses: json("Integrations", R.integrationsSchema),
     }),
     async (c) => c.json(await caps.connectors.integrations(c.get("caller"))),
@@ -1356,7 +1368,8 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations",
     owner({
       tags: ["integrations"],
-      summary: "Connect with a form: a calendar's email and app password, its private link, or Cal.com's API key",
+      summary:
+        "Connect with a form: a calendar's email and app password, its private link, Cal.com's API key, a Stripe restricted key or a Mollie API key",
       description:
         "Checked against the platform before anything is kept: wrong credentials answer 422 with the field to fix. Secrets are sealed with INBOX_SECRET_KEY and never returned. The first sync starts at once. With `connection_id`, connects that connection again in place (a new app password or key for the same account): only the secret fields are needed, and every choice is kept. Connecting is the owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Connection", R.connectionSchema, 201),
@@ -1400,9 +1413,10 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations/:id",
     owner({
       tags: ["integrations"],
-      summary: "Choose calendars, where bookings go and which services busy times apply to; pause or resume",
+      summary:
+        "Choose calendars, where bookings go and which services busy times apply to; pay links on or off; pause or resume",
       description:
-        "What is chosen changes which times customers are offered, so it is the owner's, in person: the owner's AI and an integration key are refused (403).",
+        "What is chosen changes which times customers are offered, or whether accepted orders get a link to pay, so it is the owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Connection", R.connectionSchema),
       write: true,
     }),
@@ -1430,7 +1444,8 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations/:id",
     owner({
       tags: ["integrations"],
-      summary: "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar.",
+      summary:
+        "Disconnect. Busy times stop blocking at once; bookings already written stay in the calendar. A payment platform makes no new link at once; its links waiting to be paid are switched off on the platform (links_closed now, links_closing still to go, by a job within two hours), and its key and webhook stay until then so a payment on one is still recorded.",
       description: "The owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Removed", R.looseSchema),
       write: true,

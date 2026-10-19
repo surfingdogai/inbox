@@ -43,7 +43,12 @@ export const quoteInput = z.object({
   /** Defaults to the start plus the service's duration. */
   endTime: isoDateTime.optional(),
 });
-export const paymentInput = z.object({ paymentRef: z.string().min(1).max(200), amount: moneySchema.optional() });
+export const paymentInput = z.object({
+  paymentRef: z.string().min(1).max(200),
+  amount: moneySchema.optional(),
+  /** How it was paid (`card`, `ideal`), when the payment provider says: the receipt's `pay`. */
+  method: z.string().min(1).max(40).optional(),
+});
 export const paymentRequestInput = z.object({ paymentUrl: z.url().optional() });
 export const noteInput = z.object({
   note: z.string().max(2_000).optional(),
@@ -852,11 +857,23 @@ export const orderMachine: Machine<OrderState> = {
       effects: ["notify_customer", "close"],
     },
     {
+      // The payment connector asks too, with a link in the business's own account (ADR-023).
       event: "request_payment",
       label: "Request payment",
       from: ["accepted"],
       to: "awaiting_payment",
-      by: owners,
+      by: [...owners, "connector"],
+      input: paymentRequestInput,
+      effects: ["notify_customer"],
+    },
+    {
+      // Asked again: a new link once the amount changed or a payment failed, or the same one sent again.
+      // The fourteen days before an unpaid order lapses count from the last request.
+      event: "request_payment",
+      label: "Request payment again",
+      from: ["awaiting_payment", "payment_failed"],
+      to: "awaiting_payment",
+      by: [...owners, "connector"],
       input: paymentRequestInput,
       effects: ["notify_customer"],
     },

@@ -383,6 +383,29 @@ const RECEIPT_KIND_WORDS: Record<string, string> = {
  * ended — "Completed", "No-show", "Refunded on time" — marked "automatically" when the system
  * recorded it (ADR-017 §3, Amendment 3).
  */
+/**
+ * How a payment was made, by its name: the network's payment words (`card`, `sepa`, `ideal`, …) as a
+ * person says them. One with no name here is shown as it is.
+ */
+const METHOD_NAMES: Readonly<Record<string, string>> = {
+  card: "card",
+  sepa: "SEPA bank transfer",
+  ideal: "iDEAL",
+  bancontact: "Bancontact",
+  paypal: "PayPal",
+  klarna: "Klarna",
+  apple_pay: "Apple Pay",
+  google_pay: "Google Pay",
+  mb_way: "MB WAY",
+  multibanco: "Multibanco",
+  blik: "BLIK",
+  twint: "TWINT",
+};
+
+export function methodName(method: string): string {
+  return METHOD_NAMES[method] ?? method.replaceAll("_", " ");
+}
+
 export function receiptWord(r: Pick<Receipt, "kind" | "outcome" | "payload">): string {
   if (r.kind === "accepted" && (r.payload as { typ?: unknown }).typ === "refund") return "Refund due";
   if (r.kind !== "outcome") return RECEIPT_KIND_WORDS[r.kind] ?? capitalise(r.kind);
