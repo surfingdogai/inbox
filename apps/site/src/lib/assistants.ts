@@ -264,7 +264,8 @@ export const ASSISTANTS: readonly Assistant[] = [
     ],
     signIn:
       "OAuth 2.1, which your inbox runs itself; ChatGPT registers on its own, so there is nothing to set up by hand.",
-    plans: "Paid plans only. OpenAI lists developer mode with full MCP, which booking needs, on Business, Enterprise and Edu.",
+    plans:
+      "Paid plans only. OpenAI lists developer mode with full MCP, which booking needs, on Business, Enterprise and Edu.",
     notes: [],
     source: { label: "OpenAI Help Center", href: "https://help.openai.com" },
     post: {
