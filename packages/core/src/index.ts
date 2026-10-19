@@ -23,6 +23,7 @@ export * from "./connectors/index";
 export * from "./customer/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
+export * from "./email/index";
 export * from "./feeds/parse";
 export * from "./identity/index";
 export { isUlid, randomToken, ulid } from "./ids";

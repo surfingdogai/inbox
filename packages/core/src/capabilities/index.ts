@@ -27,6 +27,7 @@ export {
   downloadStrip,
   SEARCH_TABLES,
 } from "./download";
+export * from "./email";
 export * from "./feeds";
 export * from "./front";
 export { type CustomerView, customerSummary, issuingNetworks, type PersonView } from "./identity";

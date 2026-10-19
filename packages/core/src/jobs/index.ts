@@ -1,5 +1,6 @@
 import type { MailOut } from "@surfingdog/platform";
 import type { InboxOutcomeCode, ReceiptKind } from "@surfingdog/spec";
+import { EMAIL_CHECK_KIND, emailCheckHandler } from "../email/check";
 import { BACKFILL_BATCH, backfillPartyContacts, PARTY_CONTACTS_BACKFILL_KIND } from "../identity/contacts";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
@@ -38,6 +39,8 @@ export function createRunner(deps: {
       )
       // Owner alerts past the hour's cap, in one email at the end of the hour.
       .register(OWNER_DIGEST_KIND, ownerDigestHandler(deps.mailOut, deps.baseUrl ? { baseUrl: deps.baseUrl } : {}))
+      // The live "forwarding works" check (ADR-026 §2): an email to the business's own address.
+      .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
       .register("rules", async (job, { db, now }) => {
         const p = job.payload as { itemId: string; eventId: string; trigger: string };
         const r = await runRulesForEvent(db, { ...p, now });

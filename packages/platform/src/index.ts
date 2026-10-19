@@ -11,6 +11,7 @@ export * from "./addresses";
 export * from "./db";
 export * from "./mail";
 export * from "./migrate";
+export * from "./ses";
 
 export interface Blob {
   put(key: string, body: ReadableStream | ArrayBuffer | string, meta?: { contentType?: string }): Promise<void>;

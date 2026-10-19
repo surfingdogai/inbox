@@ -25,6 +25,9 @@ export const ADMIN_KEY = "test-admin-key-0123456789abcdef0123456789";
 /** The key the router signs again with towards the shards; never the control plane's. */
 export const SHARD_KEY = "test-shard-key-0123456789abcdef0123456789";
 export const OWNER = "owner@example.com";
+/** The key the email gateway signs its deliveries with (ADR-026 §1). */
+export const INBOUND_KEY = "test-inbound-key-0123456789abcdef0123456789";
+export const INBOUND_HOST = "mail-in.example.net";
 
 export const salon: SetupPlanInput = {
   profile: { name: "Salão Rosa", timezone: "Europe/Lisbon", currency: "EUR", languages: ["pt", "en"] },
@@ -59,6 +62,8 @@ export interface FakeTenant {
   jwks: { keys: Record<string, unknown>[] } | null;
   /** The policy's `join_networks`, when the test names it; absent, the payload leaves it out. */
   joinNetworks?: string[] | undefined;
+  /** Sending from the business's own address, as the control plane says it stands (ADR-026 §3). */
+  own?: PolicyPayload["mail"]["own"];
 }
 
 let slugs = 0;
@@ -87,10 +92,13 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     mail: {
       from: `${t.slugHost.split(".")[0]}@mail.${PARENT}`,
       from_name: level === 2 ? "Salão Rosa" : "Surfing Dog Inbox",
-      // As the control plane sets it: the business's own address at level 2, so a reply reaches it.
+      // What the held control plane once set: the owner's own address. The runtime takes it out
+      // (ADR-026 §6): a customer's reply goes to its conversation's own address instead.
       reply_to: level === 2 ? OWNER : null,
       customer_mail: live,
       customer_daily_cap: live ? 200 : 0,
+      inbound: `${t.slugHost.split(".")[0]}@in.${PARENT}`,
+      ...(t.own !== undefined ? { own: t.own } : {}),
     },
     read_only: t.state === "closing" || t.state === "closed",
     suspended_reason: t.state === "suspended" ? "a test" : null,
@@ -201,6 +209,8 @@ export interface Runtime {
   ): Promise<void>;
   /** Signs the owner in at `host` by a handoff; returns the session cookie. */
   signIn(t: FakeTenant, host: string): Promise<string>;
+  /** Delivers an email as the gateway does: signed, to the router's inbound name (ADR-026 §1). */
+  mailIn(o: { to: string; from: string; raw: string; auth?: string; key?: string }): Promise<Reply>;
   shardOf(t: FakeTenant): Shard;
   close(): Promise<void>;
 }
@@ -286,6 +296,8 @@ export async function startRuntime(
       socket: routerSocket,
       adminSocket: join(dir, "a.sock"),
       oauthRelayHost: o.oauthRelayHost,
+      inboundHost: INBOUND_HOST,
+      inboundKey: INBOUND_KEY,
       log: () => {},
     }),
   );
@@ -416,6 +428,25 @@ export async function startRuntime(
       const cookie = /(__Host-sdi_session=[^;]+)/.exec(posted.headers["set-cookie"] ?? "")?.[1];
       if (!cookie) throw new Error(`no session from the handoff (${posted.status}: ${posted.text.slice(0, 200)})`);
       return cookie;
+    },
+    async mailIn(m) {
+      const slug = m.to.split("@")[0]?.split("+")[0] ?? "";
+      const q = new URLSearchParams({ to: m.to, from: m.from, ...(m.auth ? { auth: m.auth } : {}) });
+      const target = `/v1/inbound/${slug}?${q.toString()}`;
+      const bytes = new TextEncoder().encode(m.raw);
+      return reply(
+        await socketRequest(routerSocket, {
+          method: "POST",
+          target,
+          headers: {
+            host: INBOUND_HOST,
+            "content-type": "message/rfc822",
+            ...signHeaders(m.key ?? INBOUND_KEY, "POST", target, bytes),
+          },
+          body: bytes,
+          timeoutMs: 60_000,
+        }),
+      );
     },
     shardOf(t) {
       const s = shards[shardOf(t.tenantId, n)];

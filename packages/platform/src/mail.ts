@@ -291,13 +291,20 @@ export function pinnedMailOut(
     readonly replyTo?: string | undefined;
     /** The pinned address takes mail: a reply to it, with no Reply-To, reaches someone. */
     readonly fromTakesReplies?: boolean | undefined;
+    /**
+     * The domains a message's own Reply-To may be on when it is a conversation's address (ADR-026 §4):
+     * `name+t…@domain`, a secret token after the plus. The inbox's own domain, and the business's.
+     * Any other Reply-To a message names is left out, as before.
+     */
+    readonly replyDomains?: readonly string[] | undefined;
   },
 ): MailOut {
   const sender = pin.from.name ? { address: pin.from.address, name: pin.from.name } : { address: pin.from.address };
+  const domains = (pin.replyDomains ?? []).map((d) => d.trim().toLowerCase()).filter(Boolean);
   return {
     sender,
     pinned: true,
-    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true,
+    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true || domains.length > 0,
     ...(inner.delivers === false ? { delivers: false } : {}),
     ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
     ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),
@@ -311,10 +318,11 @@ export function pinnedMailOut(
           Object.entries(mail.headers ?? {}).filter(([header]) => !ADDRESS_HEADERS.test(header.trim())),
         ),
       );
+      const replyTo = conversationAddress(mail.replyTo, domains) ?? pin.replyTo;
       return inner.send({
         from: name ? { address: pin.from.address, name } : { address: pin.from.address },
         to: mail.to,
-        ...(pin.replyTo ? { replyTo: pin.replyTo } : {}),
+        ...(replyTo ? { replyTo } : {}),
         subject: mail.subject,
         text: mail.text,
         ...(mail.html ? { html: mail.html } : {}),
@@ -322,6 +330,17 @@ export function pinnedMailOut(
       });
     },
   };
+}
+
+/**
+ * `address` when it is a conversation's own address on one of `domains` (`name+t…@domain`, ADR-026
+ * §4), else undefined. One address, on one line, with nothing around it.
+ */
+export function conversationAddress(address: string | undefined, domains: readonly string[]): string | undefined {
+  if (!address || domains.length === 0) return undefined;
+  const m = /^([a-z0-9._-]{1,64})\+[toc][a-z2-7]{16}@([a-z0-9.-]{1,253})$/.exec(address.trim().toLowerCase());
+  if (!m || !domains.includes(m[2] ?? "")) return undefined;
+  return address.trim().toLowerCase();
 }
 
 function headersOf(mail: OutboundMail): { headers?: Record<string, string> } {

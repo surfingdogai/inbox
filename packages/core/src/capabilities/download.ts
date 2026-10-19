@@ -73,6 +73,15 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   mail_refs: {},
   action_links: { note: "The links in emails to customers, which answer only at the inbox that sent them." },
   blobs: { note: "Where attachments are kept. The files themselves are not in this download." },
+  mail_attachments: { note: "What came attached to customers' emails, and what became of each file." },
+  mail_attachment_chunks: { note: "The attached files themselves, in pieces." },
+  mail_tokens: {
+    note: "The secret part of each conversation's own email address; replies to them reach the inbox that opens the copy once its email address is set again.",
+  },
+  email_forwards: {
+    leftOut: "Confirmation links and codes a mail provider sent for forwarding: they answered only once.",
+    strip: () => ["UPDATE email_forwards SET confirm_code = NULL, confirm_url = NULL"],
+  },
   // The networks this inbox reports to.
   network_status: {},
   network_publications: {},

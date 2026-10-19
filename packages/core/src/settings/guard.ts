@@ -32,6 +32,8 @@ export const DATA_OUT_SETTINGS: readonly Watched[] = [
   { path: ["email", "fromAddress"] },
   { path: ["email", "fromName"] },
   { path: ["email", "replyTo"] },
+  // Where every customer's reply, and the owner's own answers by email, are taken in (ADR-026).
+  { path: ["email", "inboundAddress"] },
   { path: ["integrations", "webhooks", "enabled"], on: "switched_on" },
   { path: ["testMode"], on: "switched_on" },
   { path: ["doorsElsewhere"] },

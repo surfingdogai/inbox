@@ -4,7 +4,9 @@ import {
   createHandoff,
   ensureNetworkPing,
   HANDOFF_TTL_MS,
+  ingestEmail,
   type OwnerEmailChange,
+  parseMailAuth,
   userFromCookie,
 } from "@surfingdog/adapters";
 import {
@@ -240,6 +242,7 @@ export class Shard {
         oauthRedirect: this.o.oauthRedirect,
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
+        onMailSender: (type, data) => this.event(id, type, data),
         now: this.o.now,
       });
       // Migrated and set as the policy says before anything is served or run.
@@ -351,6 +354,10 @@ export class Shard {
       const path = url.pathname;
       const method = request.method.toUpperCase();
       const p = entry.policy;
+      // Email the router took from the gateway (ADR-026 §1): its header is the router's own, never a visitor's.
+      if (request.headers.get("x-sd-mail-in") === "1" && path === "/v1/email/inbound" && method === "POST") {
+        return await this.mailIn(entry, request);
+      }
       if (slug || p.agents === "closed") {
         const verdict = ownerVerdict({
           method,
@@ -391,6 +398,40 @@ export class Shard {
       this.o.watchdog?.setCurrent(null);
       if (!handedOn) this.release(entry);
     }
+  }
+
+  /**
+   * One email for this inbox, from the gateway through the router: taken in as the inbox's own email
+   * door takes it, at every level (an owner sets forwarding up before the inbox is live). Answered by
+   * status for the gateway: 200 taken, 422 refused for good, 429 and 5xx later.
+   */
+  private async mailIn(entry: Entry, request: Request): Promise<Response> {
+    const p = entry.policy;
+    const plain = (status: number, text: string, headers: Record<string, string> = {}) =>
+      new Response(`${text}\n`, { status, headers: { "content-type": "text/plain; charset=utf-8", ...headers } });
+    if (p.read_only) return plain(422, "This inbox takes no email.");
+    if (fileBytes(this.dbPath(entry.tenantId)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)) {
+      return plain(507, "This inbox is full.");
+    }
+    const raw = new Uint8Array(await request.arrayBuffer());
+    if (raw.byteLength === 0) return plain(422, "Empty.");
+    const result = await ingestEmail(
+      entry.db,
+      entry.inbox.caps,
+      {
+        raw,
+        envelopeTo: request.headers.get("x-envelope-to") ?? undefined,
+        envelopeFrom: request.headers.get("x-envelope-from") ?? undefined,
+        auth: parseMailAuth(request.headers.get("x-inbox-email-auth")),
+      },
+      { now: () => this.now() },
+    );
+    await this.refreshDue(entry);
+    if (result.outcome === "limited") {
+      return plain(429, "Too many right now.", { "retry-after": String(result.retryAfterSec) });
+    }
+    if (result.outcome === "rejected") return plain(422, result.reason);
+    return Response.json({ outcome: result.outcome }, { status: 200 });
   }
 
   /** The response, with the inbox held open until its body has been read to the end. */

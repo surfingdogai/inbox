@@ -102,6 +102,38 @@ export const policyPayloadSchema = z.looseObject({
     reply_to: z.email().nullable(),
     customer_mail: z.boolean(),
     customer_daily_cap: z.number().int().min(0),
+    /**
+     * The inbox's own address (ADR-026 §1), e.g. `<slug>@in.surfingdog.ai`: the gateway delivers what
+     * is sent or forwarded to it, and each conversation is one of its plus addresses. Absent from a
+     * control plane that has none: the inbox then has no address of its own.
+     */
+    inbound: z.email().optional(),
+    /**
+     * Sending from the business's own address (ADR-026 §3), as the control plane says it stands: the
+     * address asked for, the DNS rows to add with what its last look found, and whether email goes
+     * from it now (`verified`, and then `from` is it). Absent or null: not asked for.
+     */
+    own: z
+      .looseObject({
+        address: z.email().nullable(),
+        state: z.enum(["none", "dns", "verifying", "verified", "failed", "unavailable"]),
+        records: z
+          .array(
+            z.looseObject({
+              type: z.enum(["CNAME", "TXT", "MX"]),
+              name: z.string().max(253),
+              value: z.string().max(1024),
+              priority: z.number().int().min(0).max(65_535).optional(),
+              ok: z.boolean().optional(),
+              purpose: z.string().max(120).optional(),
+            }),
+          )
+          .max(12),
+        checked_at: z.string().max(40).nullable().optional(),
+        problem: z.string().max(500).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
   }),
   read_only: z.boolean(),
   suspended_reason: z.string().max(2_000).nullable(),
@@ -138,7 +170,8 @@ export function normalizePolicy(p: PolicyPayload): PolicyPayload {
     site: level2 ? p.site : null,
     mail: {
       ...p.mail,
-      reply_to: level2 ? p.mail.reply_to : null,
+      // Never the address the owner signs in with: a customer never sees it (ADR-026 §6).
+      reply_to: level2 && p.mail.reply_to?.toLowerCase() !== p.owner_email.toLowerCase() ? p.mail.reply_to : null,
       customer_mail: level2 && p.state === "live" && p.mail.customer_mail,
       customer_daily_cap: level2 ? p.mail.customer_daily_cap : 0,
     },

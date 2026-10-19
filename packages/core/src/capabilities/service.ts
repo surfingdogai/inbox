@@ -98,6 +98,7 @@ import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
 import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
+import { EmailChannelCapabilities } from "./email";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { applySetupPlan, type SetupPlanInput, type SetupPlanResult } from "./plan";
@@ -327,6 +328,13 @@ export class Capabilities {
    */
   readonly customers: CustomerData;
 
+  /**
+   * The email channel (ADR-026): the inbox's own address, the business's addresses forwarded to it,
+   * and who customers' emails are from. A host that sends the inbox's mail attaches its say
+   * (`email.attachHost`).
+   */
+  readonly email: EmailChannelCapabilities;
+
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
   private readonly discoveryFetch: typeof fetch | undefined;
@@ -502,6 +510,7 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.email = new EmailChannelCapabilities(db, () => this.mail, baseUrl);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -1129,6 +1138,8 @@ export class Capabilities {
         body: t.bodyText,
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
+        // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
+        ...(Array.isArray(t.attachments) && t.attachments.length ? { attachments: t.attachments } : {}),
       })),
       mail: mail.map((m) => ({
         id: m.id,

@@ -89,6 +89,8 @@ export function hostPolicyFor(o: {
   readonly connectUrl?: string | null | undefined;
   /** Networks a new inbox joins (https origins); none when absent. */
   readonly joins?: readonly string[] | undefined;
+  /** The inbox's own email address, the host's (ADR-026 §1); left as it is when absent. */
+  readonly inbound?: string | null | undefined;
 }): HostPolicy {
   const linked = o.site !== null;
   const joins = o.joins ?? [];
@@ -99,6 +101,7 @@ export function hostPolicyFor(o: {
       integrations: { webhooks: { allowPrivateTargets: false } },
       identity: { extraAuthorities: [] },
       directory: { url: o.site ?? "", ...(linked ? releaseListing(current) : holdListing(current)) },
+      ...(o.inbound ? { email: { inboundAddress: o.inbound } } : {}),
       ...(linked ? releaseNetworks(current) : holdNetworks(current)),
     }),
     locked: ["email", "notifications.ownerEmail", "security.contact", ...(linked ? [] : ["networks"])],

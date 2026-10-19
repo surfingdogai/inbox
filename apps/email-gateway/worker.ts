@@ -1,17 +1,32 @@
 /**
- * The email gateway: Cloudflare Email Routing hands a message to this Worker, and the Worker
- * hands it, byte for byte, to an Inbox's `POST /v1/email/inbound` with that Inbox's shared
- * secret. Nothing is parsed here and nothing is stored: the Inbox does the threading, the
- * deduplication on Message-ID and the reply parsing, so this stays small enough to trust.
+ * The email gateway: Cloudflare Email Routing hands a message to this Worker, and the Worker hands
+ * it, byte for byte, to the inbox it is for. Nothing is parsed here and nothing is stored: the inbox
+ * does the threading, the deduplication on Message-ID, the loop and spam checks and the reply
+ * parsing, so this stays small enough to trust (ADR-005, ADR-026 §1).
  *
- * One tenant today, our own inbox. Hosted tenancy makes ROUTES a lookup keyed on the local part
- * of the address rather than a single secret; the shape of this file does not change.
+ * Two kinds of address reach it:
+ *
+ * - an address on the hosted inbound domain (`HOSTED_INBOUND_DOMAIN`, e.g. `in.surfingdog.ai`):
+ *   `<slug>@…` is a hosted inbox's own address and `<slug>+<token>@…` one of its conversations. The
+ *   message goes to the hosted router (`HOSTED_INBOUND_URL`), signed with `HOSTED_INBOUND_KEY`, the
+ *   envelope and what the receiving server found about the sender in the signed query;
+ * - any other address routed here: our own inbox (`INBOX_INBOUND_URL`), with its inbound secret.
  */
+import { authSummary, deliveryTarget, routeFor, signDelivery, verdictOf } from "./route";
+
 interface Env {
-  /** Where to deliver, e.g. https://inbox.surfingdog.ai/v1/email/inbound */
+  /** Our own inbox, e.g. https://inbox.surfingdog.ai/v1/email/inbound */
   readonly INBOX_INBOUND_URL: string;
-  /** The Inbox's `email.inboundSecret`, set with `wrangler secret put`. */
+  /** Our own inbox's `email.inboundSecret`, set with `wrangler secret put`. */
   readonly INBOX_EMAIL_SECRET: string;
+  /** The domain hosted inboxes' addresses are on, e.g. in.surfingdog.ai. Unset: no hosted mail. */
+  readonly HOSTED_INBOUND_DOMAIN?: string;
+  /** The hosted router's delivery address, e.g. https://mail-in.example.org (the router's HOSTED_INBOUND_HOST). */
+  readonly HOSTED_INBOUND_URL?: string;
+  /** The key deliveries are signed with: the router's HOSTED_INBOUND_KEY, set with `wrangler secret put`. */
+  readonly HOSTED_INBOUND_KEY?: string;
+  /** The receiving server's Authentication-Results ids to read (comma-separated; default mx.cloudflare.net). */
+  readonly TRUSTED_AUTHSERV?: string;
 }
 
 interface EmailMessage {
@@ -32,28 +47,53 @@ export default {
       message.setReject("message too large");
       return;
     }
-    const raw = await new Response(message.raw).arrayBuffer();
+    const route = routeFor(message.to, env.HOSTED_INBOUND_DOMAIN);
+    if (route.kind === "refuse") {
+      message.setReject(route.reason);
+      return;
+    }
+    const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
+    const auth = authSummary(message.headers, (env.TRUSTED_AUTHSERV ?? "mx.cloudflare.net").split(","));
     let res: Response;
     try {
-      res = await fetch(env.INBOX_INBOUND_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "message/rfc822",
-          "x-inbox-email-secret": env.INBOX_EMAIL_SECRET,
-          "x-envelope-from": message.from,
-          "x-envelope-to": message.to,
-        },
-        body: raw,
-      });
+      if (route.kind === "hosted") {
+        if (!env.HOSTED_INBOUND_URL || !env.HOSTED_INBOUND_KEY) {
+          // Hosted addresses routed here before the gateway was told where they go: held, never bounced.
+          throw new Error("hosted delivery is not set up");
+        }
+        const target = deliveryTarget({ slug: route.slug, to: message.to, from: message.from, auth });
+        res = await fetch(new URL(target, env.HOSTED_INBOUND_URL), {
+          method: "POST",
+          headers: {
+            "content-type": "message/rfc822",
+            ...(await signDelivery(env.HOSTED_INBOUND_KEY, "POST", target, raw)),
+          },
+          body: raw,
+        });
+      } else {
+        res = await fetch(env.INBOX_INBOUND_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "message/rfc822",
+            "x-inbox-email-secret": env.INBOX_EMAIL_SECRET,
+            "x-envelope-from": message.from,
+            "x-envelope-to": message.to,
+            ...(auth ? { "x-inbox-email-auth": auth } : {}),
+          },
+          body: raw,
+        });
+      }
     } catch (error) {
-      // The Inbox is unreachable. Throwing answers the sending server with a temporary failure,
+      // The inbox is unreachable. Throwing answers the sending server with a temporary failure,
       // and every real mail server retries those for days; a reject would bounce the message.
       throw new Error(`inbox unreachable: ${(error as Error).message}`);
     }
-    if (res.ok) return;
-    // 5xx, and 429 (too many from this sender right now): temporary, so the sending server retries.
-    if (res.status >= 500 || res.status === 429) throw new Error(`inbox answered ${res.status}`);
-    // 4xx is a permanent answer: wrong secret, refused sender, too large. Bounce with the reason.
-    message.setReject(`inbox refused the message (${res.status})`);
+    const verdict = verdictOf(res.status);
+    if (verdict === "taken") return;
+    if (verdict === "later") throw new Error(`inbox answered ${res.status}`);
+    // A permanent answer: no such inbox, a refused sender, too large. Bounced with the reason.
+    message.setReject(
+      route.kind === "hosted" && res.status === 422 ? "no such address" : `inbox refused the message (${res.status})`,
+    );
   },
 };

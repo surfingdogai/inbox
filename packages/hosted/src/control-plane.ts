@@ -32,6 +32,10 @@ export const EVENT_TYPES = [
   "maintenance",
   "blamed",
   "mail_paused",
+  // The owner asked to send from the business's own address (`data.address`, null to stop), or to
+  // look at its DNS again (ADR-026 §3).
+  "mail_sender",
+  "mail_sender_check",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

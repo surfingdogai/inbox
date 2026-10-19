@@ -412,7 +412,8 @@ export function createInbox(deps: AppDeps): Inbox {
       await demoActive().catch((error) => console.error("demo:", error instanceof Error ? error.message : error));
     await next();
     if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
-      const work = runner.runDue(deps.db, { workerId: "request" });
+      // On the inbox's own clock, as every other run of its jobs (a host may keep one of its own).
+      const work = runner.runDue(deps.db, { workerId: "request", ...(deps.now ? { now: deps.now() } : {}) });
       try {
         c.executionCtx.waitUntil(work);
       } catch {

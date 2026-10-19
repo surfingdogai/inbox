@@ -590,6 +590,14 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
                 message_id = NULL, in_reply_to = NULL WHERE item_id IN ${theirItems}`,
         [ERASED, ...part],
       ),
+      // What they attached to their emails goes with their words (ADR-026 §7), and so do the secret
+      // addresses of their conversations: a reply to one starts afresh.
+      run(
+        `DELETE FROM mail_attachment_chunks WHERE attachment_id IN (SELECT id FROM mail_attachments WHERE item_id IN ${theirItems})`,
+        [...part],
+      ),
+      run(`DELETE FROM mail_attachments WHERE item_id IN ${theirItems}`, [...part]),
+      run(`DELETE FROM mail_tokens WHERE item_id IN ${theirItems}`, [...part]),
       // Who the customer was, as each event and entry names them: a customer who wrote by email is
       // `email:<their address>`. The kind stays (the customer did it); the id goes.
       run(`UPDATE item_events SET actor_id = ? WHERE item_id IN ${theirItems} AND actor_kind IN (${CUSTOMER_ACTORS})`, [

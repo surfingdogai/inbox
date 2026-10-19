@@ -1,4 +1,4 @@
-import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
+import { authFromResults, ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
 import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
 import {
   cloudflareEmailMailOut,
@@ -109,6 +109,8 @@ export default {
       envelopeTo: message.to,
       envelopeFrom: message.from,
       authenticated: false,
+      // What Email Routing found about the sender, when it says: a second signal only (ADR-026 §7).
+      auth: authFromResults(message.headers, ["mx.cloudflare.net"]),
     });
     // Too many right now: a temporary failure, which the sending server retries, never a bounce.
     if (result.outcome === "limited") throw new Error(`inbound email limited: retry in ${result.retryAfterSec}s`);

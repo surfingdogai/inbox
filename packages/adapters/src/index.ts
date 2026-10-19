@@ -6,7 +6,7 @@ import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
 import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
 import { downloadRoutes } from "./download";
-import { ingestEmail } from "./email";
+import { ingestEmail, parseMailAuth } from "./email";
 import { frontHomePage, frontPage, hasOwnerSession } from "./front-page";
 import { agentFromRequest } from "./identity";
 import {
@@ -459,7 +459,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     const result = await ingestEmail(
       deps.db,
       deps.caps,
-      { raw, envelopeTo: c.req.header("x-envelope-to"), envelopeFrom: c.req.header("x-envelope-from") },
+      {
+        raw,
+        envelopeTo: c.req.header("x-envelope-to"),
+        envelopeFrom: c.req.header("x-envelope-from"),
+        // What the receiving server found (ADR-026 §7), as the gateway the secret let in says.
+        auth: parseMailAuth(c.req.header("x-inbox-email-auth")),
+      },
       { now: deps.now },
     );
     // Too many from this sender, or for the whole mailbox: a 429 the gateway answers the sending
