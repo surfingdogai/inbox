@@ -409,6 +409,7 @@ function GeneralForm({
           timezone={draft.timezone}
           sources={sources}
           home={profile.home}
+          conversations={Boolean(initial.doc.email.inboundAddress)}
         />
       </Advanced>
       {dirty && (
@@ -759,6 +760,7 @@ function AdvancedSections({
   timezone,
   sources,
   home,
+  conversations,
 }: {
   form: SettingsFormState;
   set: SetForm;
@@ -770,6 +772,8 @@ function AdvancedSections({
   timezone: string;
   sources: SettingsDoc["doc"]["setup"]["sources"];
   home: Profile["home"];
+  /** The inbox has an address of its own: every email carries its conversation's (ADR-026 §4). */
+  conversations: boolean;
 }) {
   const [email, setEmail] = useState<string | null>(null);
   useEffect(() => {
@@ -1228,7 +1232,11 @@ function AdvancedSections({
               label="Customers reply to"
               optional
               error={field("email.replyTo")}
-              hint="Usually the business mailbox."
+              hint={
+                conversations
+                  ? "Not used: each conversation has its own address (Email)."
+                  : "Usually the business mailbox."
+              }
             >
               <input
                 id="s-reply"
