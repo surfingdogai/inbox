@@ -67,6 +67,7 @@ export function App({ deps }: { deps: Deps }) {
   const [needCounts, setNeedCounts] = useState<Record<string, number>>({});
   const pendingLink = useRef<string | null>(null);
   const hiddenAt = useRef<number | null>(null);
+  const unlockedAt = useRef(0);
 
   const route = stack[stack.length - 1] ?? { name: "inbox" };
   const client = useMemo(
@@ -260,8 +261,10 @@ export function App({ deps }: { deps: Deps }) {
       } catch {
         action = undefined;
       }
-      // Accept from a notification asks for the owner's fingerprint or face first, every time.
-      if (action && (await native.canAuthenticate().catch(() => false))) {
+      // Accept from a notification asks for the owner's fingerprint or face first, every time: once,
+      // when the app has just been unlocked for it.
+      const justUnlocked = Date.now() - unlockedAt.current < 30_000;
+      if (action && !justUnlocked && (await native.canAuthenticate().catch(() => false))) {
         const ok = await native.authenticate("Accept from a notification").catch(() => false);
         if (!ok) action = undefined;
       }
@@ -301,14 +304,16 @@ export function App({ deps }: { deps: Deps }) {
   }, [ready, locked, openLink]);
 
   // Every inbox's push registration stays current: the push token changes now and then.
+  const registerPush = useRef<() => void>(() => undefined);
+  registerPush.current = () => {
+    for (const e of inboxes) void setUpPush(native, new InboxClient(e, sessions, deps.fetch), e.alias, false);
+  };
   useEffect(() => {
-    if (!ready || locked) return;
-    const register = () => {
-      for (const e of inboxes) void setUpPush(native, new InboxClient(e, sessions, deps.fetch), e.alias, false);
-    };
-    register();
-    native.onPushToken(register);
-  }, [ready, locked, inboxes, native, sessions, deps.fetch]);
+    native.onPushToken(() => registerPush.current());
+  }, [native]);
+  useEffect(() => {
+    if (ready && !locked && inboxes.length > 0) registerPush.current();
+  }, [ready, locked, inboxes]);
 
   const countAll = useCallback(async () => {
     if (!box) return;
@@ -363,7 +368,12 @@ export function App({ deps }: { deps: Deps }) {
   if (locked)
     return (
       <AppContext.Provider value={value}>
-        <Lock onUnlock={() => setLocked(false)} />
+        <Lock
+          onUnlock={() => {
+            unlockedAt.current = Date.now();
+            setLocked(false);
+          }}
+        />
       </AppContext.Provider>
     );
   const screen =

@@ -21,7 +21,9 @@
       "/c/*",
       "/",
       "/p/*",
-      "/demo/*"
+      "/demo/*",
+      "/phone",
+      "/i/*"
     ]
   },
   // This file is a template. The Deploy to Cloudflare button creates the database and the queue from

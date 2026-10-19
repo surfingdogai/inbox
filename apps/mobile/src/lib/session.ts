@@ -131,8 +131,14 @@ export class Sessions {
       accessUntil: this.clock() + answer.expires_in * 1000 - 30_000,
       refresh: answer.refresh_token,
     });
-    const list = (await this.list()).filter((e) => e.origin !== origin);
-    await this.saveList([...list, entry]);
+    const before = await this.list();
+    // Connected again to an inbox it was connected to: the old keys and token go.
+    for (const old of before.filter((e) => e.origin === origin && e.alias !== alias)) {
+      this.access.delete(old.alias);
+      await this.native.secureRemove(tokenKey(old.alias));
+      await this.native.deleteKeys(old.alias);
+    }
+    await this.saveList([...before.filter((e) => e.origin !== origin), entry]);
     return entry;
   }
 

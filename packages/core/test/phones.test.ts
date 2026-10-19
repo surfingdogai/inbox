@@ -612,3 +612,30 @@ describe("payloads", () => {
     expect(b64uDecode(b64uEncode(new Uint8Array([1, 2, 3])))).toEqual(new Uint8Array([1, 2, 3]));
   });
 });
+
+describe("the relay's address", () => {
+  it("is Surfing Dog's unless the host names another https one, or switches it off", async () => {
+    const { relayAddress, DEFAULT_RELAY, httpRelay } = await import("../src/phones/relay");
+    expect(relayAddress(undefined)).toBe(DEFAULT_RELAY);
+    expect(relayAddress("")).toBe(DEFAULT_RELAY);
+    expect(relayAddress("off")).toBeNull();
+    expect(relayAddress("https://push.example.org/")).toBe("https://push.example.org");
+    expect(relayAddress("http://push.example.org")).toBeNull();
+    expect(relayAddress("http://localhost:9000")).toBe("http://localhost:9000");
+    expect(relayAddress("not a url")).toBeNull();
+    // What goes over the wire: the secret as a bearer, the ciphertext as base64url, nothing else.
+    const seen: { url: string; init: RequestInit | undefined }[] = [];
+    const relay = httpRelay("https://push.example.org", (async (url: string, init?: RequestInit) => {
+      seen.push({ url, init });
+      return new Response(null, { status: 410 });
+    }) as typeof fetch);
+    const r = await relay.send({ device: "pd_1", secret: "ps_x" }, new Uint8Array([1, 2, 3]), {
+      ttlS: 60,
+      urgency: "high",
+    });
+    expect(r).toEqual({ ok: false, gone: true, status: 410 });
+    expect(seen[0]?.url).toBe("https://push.example.org/v1/devices/pd_1/messages");
+    expect(new Headers(seen[0]?.init?.headers).get("authorization")).toBe("Bearer ps_x");
+    expect(JSON.parse(String(seen[0]?.init?.body))).toEqual({ payload: "AQID", ttl: 60, urgency: "high" });
+  });
+});
