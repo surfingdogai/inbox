@@ -93,6 +93,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /api-keys": ["keys:write"],
   "DELETE /api-keys/:id": ["keys:write"],
   "DELETE /connected-apps/:id": ["keys:write"],
+  // Settings → Phone (ADR-026): the owner signed in on a computer, checked by the route whatever the scopes.
+  "GET /phones": ["*"],
+  "POST /phones/pairings": ["*"],
+  "GET /phones/pairings/:id": ["*"],
+  "POST /phones/:id/test": ["*"],
+  "DELETE /phones/:id": ["*"],
   // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.
   "GET /download": ["*"],
   "POST /download/code": ["*"],
@@ -151,6 +157,23 @@ export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
   create_api_key: ["keys:write"],
   revoke_api_key: ["keys:write"],
 };
+
+/**
+ * What one of the owner's phones may do through the owner's door (ADR-026), whatever its token's
+ * scopes and whatever `security.enforceScopes` says: read the inbox and answer it. Settings, keys,
+ * money floors, connections, downloads and the phones themselves stay the owner app's on a computer.
+ */
+export const PHONE_OPERATIONS: ReadonlySet<string> = new Set([
+  "GET /items",
+  "GET /items/:id",
+  "POST /items/:id/transitions",
+  "POST /items/:id/replies",
+  "GET /items/:id/offers",
+  "POST /items/:id/offers",
+  "POST /items/:id/offers/draft/send",
+  "DELETE /items/:id/offers/draft",
+  "GET /items/:id/payments",
+]);
 
 /** Where the owner REST door is mounted; the map above is keyed on paths below it. */
 export const OWNER_BASE = "/v1/owner";

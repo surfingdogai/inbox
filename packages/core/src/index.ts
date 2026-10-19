@@ -70,6 +70,7 @@ export {
   type Standing,
 } from "./negotiation/rewards";
 export * from "./network/index";
+export * from "./phones/index";
 export * from "./protocol/index";
 export * from "./receipts/index";
 export * from "./rules/index";

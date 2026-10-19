@@ -60,9 +60,9 @@ import {
 import { type Context, Hono } from "hono";
 import { type DescribeRouteOptions, describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
-import { ownerOperation, routeScopes } from "./access";
+import { ownerOperation, PHONE_OPERATIONS, routeScopes } from "./access";
 import { publicOrigin } from "./origin";
-import { problemResponse, unauthorized } from "./problem";
+import { forbidden, problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
 
 /**
@@ -569,6 +569,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     const caller = c.get("caller");
     if (caller.auth?.kind !== "owner") return unauthorized(c);
     const operation = ownerOperation(c);
+    // A phone answers the inbox; everything else is the owner app's on a computer (ADR-026).
+    if (caller.principal?.via === "device" && !(operation && PHONE_OPERATIONS.has(operation)))
+      return forbidden(c, "This is done in the owner app on a computer, not from the phone.");
     if (operation) await caps.access.requireScope(caller, routeScopes(operation), operation);
     await next();
   });

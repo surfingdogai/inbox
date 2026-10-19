@@ -141,7 +141,7 @@ type Idem = NonNullable<Caller["idempotency"]>;
 function requester(caller: Caller): string {
   const p = caller.principal;
   if (!p) return `internal:${caller.actor.kind}:${caller.actor.id}`;
-  if (p.via === "session") return `user:${p.userId ?? p.id}`;
+  if (p.via === "session" || p.via === "device") return `user:${p.userId ?? p.id}`;
   if (p.via === "oauth") return `oauth:${p.id}:${p.userId ?? ""}`;
   return `key:${p.id}`;
 }

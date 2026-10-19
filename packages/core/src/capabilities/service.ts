@@ -24,6 +24,7 @@ import {
   reportableDomain,
   wantsListed,
 } from "../network/index";
+import { PhoneCapabilities } from "../phones/phones";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import { replaceReceiptKey } from "../receipts/keys";
 import {
@@ -327,6 +328,12 @@ export class Capabilities {
    */
   readonly customers: CustomerData;
 
+  /**
+   * The owner's phones (ADR-026): pairing, their tokens, what each hears about, and push through the
+   * relay the host attaches (`phones.attachRelay`).
+   */
+  readonly phones: PhoneCapabilities;
+
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
   private readonly discoveryFetch: typeof fetch | undefined;
@@ -499,6 +506,7 @@ export class Capabilities {
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);
+    this.phones = new PhoneCapabilities(db, secrets);
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);

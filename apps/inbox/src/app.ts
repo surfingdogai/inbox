@@ -46,6 +46,7 @@ import {
   enabledNetworks,
   FRONT_PATHS,
   type HostPolicy,
+  httpRelay,
   IDENTITY_ISSUE_KIND,
   type JobRunner,
   MANIFEST_PATH,
@@ -60,6 +61,7 @@ import {
   payLinkHandler,
   payNoticeHandler,
   readSettings,
+  relayAddress,
   VERSION,
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
@@ -156,6 +158,13 @@ export interface AppDeps {
    * `/oauth/connect/<kind>/callback`.
    */
   readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
+  /**
+   * The push relay the owner's phones are reached through (INBOX_PUSH_RELAY, ADR-026): an https
+   * address, `off` for none, absent for Surfing Dog's own. It is handed only ciphertext.
+   */
+  readonly pushRelay?: string | undefined;
+  /** The Android app's signing certificate fingerprints (INBOX_ANDROID_CERTS), for its App Links. */
+  readonly androidCerts?: readonly string[] | undefined;
 }
 
 export interface Inbox {
@@ -223,9 +232,19 @@ export function createInbox(deps: AppDeps): Inbox {
     http: connectorHttp({ fetchImpl: demo ? noNetworkFetch : deps.fetchImpl }),
     redirectUri: deps.oauthRedirect,
   });
+  // The owner's phones (ADR-026): notifications go through the relay, encrypted for each phone. A demo
+  // reaches no phone.
+  const relay = demo ? null : relayAddress(deps.pushRelay);
+  caps.phones.attachRelay(relay ? httpRelay(relay, deps.fetchImpl) : null);
   // Throws here, as the inbox is built, on a policy that names something that is not a setting.
   caps.attachPolicy(deps.policy ?? null);
-  const runner = createRunner({ mailOut, baseUrl: deps.baseUrl, receipts: caps.receipts, secrets: caps.secrets })
+  const runner = createRunner({
+    mailOut,
+    baseUrl: deps.baseUrl,
+    receipts: caps.receipts,
+    secrets: caps.secrets,
+    phones: caps.phones,
+  })
     // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
     // call to a network runs in that network's own lane, so a slow one never delays another.
     .register(NETWORK_PING_KIND, networkPingHandler(network))
@@ -519,6 +538,7 @@ export function createInbox(deps: AppDeps): Inbox {
       return [...(deps.ownerEmails ?? []), ...(fromSettings ? [fromSettings] : [])];
     },
     onOwnerEmailChange: deps.onOwnerEmailChange,
+    androidCerts: deps.androidCerts,
   });
 
   // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.

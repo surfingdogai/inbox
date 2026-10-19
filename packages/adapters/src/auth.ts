@@ -7,7 +7,9 @@ import {
   hashApiKey,
   mintApiKey,
   OWNER_KEY_PREFIX,
+  PHONE_ACCESS_PREFIX,
   type Principal,
+  resolvePhoneAccess,
   schema,
   type TrustTier,
 } from "@surfingdog/core";
@@ -35,8 +37,11 @@ export interface ApiKeyInfo {
   readonly scopes: readonly string[];
   readonly userId: string | null;
   readonly partyId: string | null;
-  /** How the principal proved itself. Cookie sessions need same-origin checks on writes. */
-  readonly via: "api_key" | "session" | "oauth";
+  /**
+   * How the principal proved itself. Cookie sessions need same-origin checks on writes. A `device` is
+   * one of the owner's paired phones (ADR-026), held to `PHONE_OPERATIONS` whatever its scopes.
+   */
+  readonly via: "api_key" | "session" | "oauth" | "device";
 }
 
 export async function hashKey(key: string): Promise<string> {
@@ -61,6 +66,9 @@ export async function createApiKey(
     createdBy: input.kind === "owner" ? "cli" : null,
   });
 }
+
+/** What a phone's token holds (ADR-026); `PHONE_OPERATIONS` is what it may do, whatever this says. */
+export const PHONE_SCOPES: readonly string[] = ["inbox:read", "inbox:write"];
 
 /** `last_used_at` is written at most this often per key, so a busy integration is not a write per call. */
 const TOUCH_EVERY_MS = 60_000;
@@ -115,7 +123,20 @@ export async function callerFromRequest(
   const sandbox =
     opts.sandbox === true || request.headers.get("x-sandbox") === "1" || url.hostname.startsWith("sandbox.");
   let key = bearer ? await resolveApiKey(db, bearer, now()) : null;
-  if (!key && bearer) {
+  if (!key && bearer?.startsWith(PHONE_ACCESS_PREFIX)) {
+    const phone = await resolvePhoneAccess(db, bearer, now());
+    if (phone)
+      key = {
+        id: phone.deviceId,
+        kind: "owner",
+        name: phone.name,
+        scopes: PHONE_SCOPES,
+        userId: phone.userId,
+        partyId: null,
+        via: "device",
+      };
+  }
+  if (!key && bearer && !bearer.startsWith(PHONE_ACCESS_PREFIX)) {
     const grant = await resolveAccessToken(db, bearer, now());
     if (grant)
       key = {
