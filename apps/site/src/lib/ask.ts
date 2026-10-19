@@ -24,6 +24,12 @@ export function looksLikeAddress(raw: string): boolean {
 export interface DirectoryStats {
   checked: number;
   agent_ready: number;
+  /**
+   * Of the agent-ready, the real businesses (`real_businesses_verified`, since the listing rules of 19 October 2026: a
+   * member, registered or claimed, or a site the network's crawler matched to the place it names). Null from a network
+   * that does not count them.
+   */
+  real: number | null;
   capabilities: Partial<Record<CapabilityKey, number>>;
   as_of: string;
 }
@@ -63,6 +69,7 @@ export const COUNTED: readonly { key: CapabilityKey; label: string; always: bool
  */
 export const CHECKED_HREF = "/leaderboard";
 export const READY_HREF = "/leaderboard?ready=1";
+export const REAL_HREF = "/leaderboard?real=1";
 export function countHref(key: CapabilityKey): string {
   return `/leaderboard?can=${key}`;
 }
@@ -95,6 +102,7 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
   return {
     checked: o.checked as number,
     agent_ready: o.agent_ready as number,
+    real: n(o.real_businesses_verified) ? (o.real_businesses_verified as number) : null,
     capabilities: caps,
     as_of: o.as_of,
   };

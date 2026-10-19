@@ -12,17 +12,21 @@
  * its final number.
  *
  * Every count is a link to the list of the businesses it counts, on the network: "agent-ready"
- * to every agent-ready business, and each
+ * to every agent-ready business, "real businesses verified" to the real businesses among them (a member,
+ * registered or claimed, or a site the crawler matched to the place it names: the listing rules of
+ * 19 October 2026; shown once the network counts them), and each
  * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
  * the same businesses its count counts: it names them, or says how many more it counts and does not
  * name.
  */
-import { READY_HREF } from "../lib/ask";
+import { READY_HREF, REAL_HREF } from "../lib/ask";
 ---
 
 <div class="counts" data-counts>
   <p class="c-main">
     <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready businesses"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready businesses</a>
+    <span class="c-dot" aria-hidden="true" data-real hidden>·</span>
+    <a class="c-pair c-link" href={REAL_HREF} data-label="real businesses verified" data-real hidden><b class="c-n tabular" data-n="real" aria-hidden="true">–</b> real businesses verified</a>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
@@ -184,11 +188,17 @@ import { READY_HREF } from "../lib/ask";
     if (said) {
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
-        `${fmt.format(d.agent_ready)} agent-ready businesses.` +
+        `${fmt.format(d.agent_ready)} agent-ready businesses` +
+        (d.real === null ? "." : `, ${fmt.format(d.real)} real businesses verified.`) +
         (rows.length ? ` Of those, ${rows.join(", ")}.` : "");
     }
+    // The real businesses' count shows once the network counts them.
+    if (d.real !== null) {
+      for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-real]"))) el.hidden = false;
+    }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
-      const n = d.agent_ready;
+      const n = el.dataset.n === "real" ? d.real : d.agent_ready;
+      if (n === null) continue;
       count(el, n);
       const link = el.closest<HTMLAnchorElement>("a");
       link?.setAttribute("aria-label", `${fmt.format(n)} ${link.dataset.label ?? ""}`.trim());

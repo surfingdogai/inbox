@@ -2005,6 +2005,7 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
             position: 1,
             domain: "salon.example",
             name: "A salon",
+            real_business: true,
             can_book_order_or_sign_up: "yes",
             score: 72,
             grade: "B",
@@ -2034,6 +2035,9 @@ describe("capabilities and the agentic score: vocab/capabilities.json, score-rul
     expect(leaderboardSchema.safeParse({ ...list, order_by: undefined }).success).toBe(false);
     expect(leaderboardSchema.safeParse({ ...list, named_total: undefined }).success).toBe(false);
     expect(LEADERBOARD_CAN).toContain("signup");
+    // Since 19 October 2026 (the score rules' listing): real businesses above the rest, and the list of them.
+    expect(LEADERBOARD_ORDER_BY[0]).toBe("real_business");
+    expect(leaderboardSchema.safeParse({ ...list, scope: { real: true } }).success).toBe(true);
     const catalog = {
       specVersion: "1.0",
       host: { displayName: "A network", identifier: "did:web:network.example" },
