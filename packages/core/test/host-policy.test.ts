@@ -138,9 +138,10 @@ describe("a host's policy", () => {
     await caps.applyHostPolicy(T0);
     const v = await version(db);
     const attempts: [Record<string, unknown>, string[]][] = [
-      [{ networks: { [DEFAULT_NETWORK]: { enabled: true } } }, [`networks`]],
+      // A network added is held as the rest are: nobody adds one while they are held.
       [{ networks: { [OTHER]: { enabled: true } } }, ["networks"]],
-      [{ directory: { listed: true } }, ["directory.listed"]],
+      // On now, and off when the hold ends, at once: not a choice, a network switched on.
+      [{ networks: { [DEFAULT_NETWORK]: { enabled: true, resume: false } } }, ["networks"]],
       [{ email: { fromAddress: "owner@personal.example" } }, ["email"]],
       [{ email: { fromName: "Someone else" } }, ["email"]],
       [{ email: { replyTo: "owner@personal.example" } }, ["email"]],
@@ -155,14 +156,42 @@ describe("a host's policy", () => {
         await refused(caps.updateSettings(who, { doc }), paths);
       }
     }
-    // The legacy pair is a network too.
-    await refused(caps.updateSettings(owner, { doc: { network: { join: true } } }), ["networks"]);
     expect(await version(db)).toBe(v);
     const s = await readSettings(db);
     expect(s.email.fromAddress).toBeUndefined();
     expect(s.notifications.appUrl).toBe(ADDRESS);
     expect(s.directory.listed).toBe(false);
     expect(Object.values(s.networks).every((n) => !n.enabled)).toBe(true);
+  });
+
+  it("takes a network or the listing switched on while held as what comes back, from the owner in person only", async () => {
+    const { db, caps } = await setup();
+    await caps.applyHostPolicy(T0);
+    for (const who of [integration, ai]) {
+      for (const doc of [{ networks: { [DEFAULT_NETWORK]: { enabled: true } } }, { directory: { listed: true } }]) {
+        const e = await caps.updateSettings(who, { doc }).then(
+          () => null,
+          (error: unknown) => error as WriteError,
+        );
+        expect(e?.code, JSON.stringify(doc)).toBe("not_allowed");
+        expect(e?.details?.reason).toBe("owner_in_person");
+      }
+    }
+    for (const who of [owner, ownerKey, system]) {
+      await caps.updateSettings(who, {
+        doc: { networks: { [DEFAULT_NETWORK]: { enabled: true } }, directory: { listed: true } },
+      });
+      const s = await readSettings(db);
+      // Still off and out while held: on, and listed, from the moment the site links to the inbox.
+      expect(s.networks[DEFAULT_NETWORK]).toMatchObject({ enabled: false, resume: true });
+      expect(s.directory).toMatchObject({ listed: false, resume: true });
+      await caps.updateSettings(who, {
+        doc: { networks: { [DEFAULT_NETWORK]: { resume: false } }, directory: { resume: false } },
+      });
+    }
+    // The legacy pair is a network too.
+    await caps.updateSettings(owner, { doc: { network: { join: true } } });
+    expect((await readSettings(db)).networks[DEFAULT_NETWORK]).toMatchObject({ enabled: false, resume: true });
   });
 
   it("holds what a forced patch would set over a write too: a network added is one it switches off", async () => {
@@ -220,9 +249,12 @@ describe("a host's policy", () => {
     expect(await caps.applyHostPolicy(T0 + 1)).toBe(true);
     let s = await readSettings(db);
     expect(s.directory.url).toBe("https://oficinamare.pt");
-    // Still off: the owner switches them on, in person.
-    expect(s.directory.listed).toBe(false);
+    // What was held comes back as it was: listed, as every inbox starts; the network still off, as
+    // it was before the hold, for the owner to switch on in person. Nothing is held any more.
+    expect(s.directory.listed).toBe(true);
+    expect(s.directory.resume).toBeUndefined();
     expect(s.networks[DEFAULT_NETWORK]?.enabled).toBe(false);
+    expect(s.networks[DEFAULT_NETWORK]?.resume).toBeUndefined();
     await caps.updateSettings(owner, {
       doc: { directory: { listed: true }, networks: { [DEFAULT_NETWORK]: { enabled: true } } },
     });

@@ -18,7 +18,7 @@ const BASE = "https://inbox.test";
 const OWNER = "rosa@salaorosa.pt";
 const T0 = Date.parse("2026-10-12T14:03:00Z");
 
-async function setup(opts: { snapshot?: boolean; mailOut?: MailOut } = {}) {
+async function setup(opts: { snapshot?: boolean; mailOut?: MailOut; leaving?: boolean } = {}) {
   const db = await freshDb();
   let now = T0;
   const mail = logMailOut();
@@ -34,6 +34,7 @@ async function setup(opts: { snapshot?: boolean; mailOut?: MailOut } = {}) {
     now: () => now,
     background: () => {},
     ...(opts.snapshot === false ? {} : { snapshot }),
+    ...(opts.leaving ? { leaving: true } : {}),
   });
   const userId = ulid();
   await db.orm.insert(schema.users).values({ id: userId, email: OWNER, role: "owner", createdAt: T0 });
@@ -99,6 +100,7 @@ describe("downloading the inbox", () => {
     expect(res.headers.get("content-disposition")).toBe('attachment; filename="salao-rosa-2026-10-12.zip"');
     expect(res.headers.get("cache-control")).toBe("no-store");
     const files = await unzip(new Uint8Array(await res.arrayBuffer()));
+    // No receipt key unless asked for; and asked for, none here yet (no INBOX_SECRET_KEY): none goes.
     expect(files.map((f) => f.name)).toEqual(["README.txt", "manifest.json", "inbox.db"]);
     expect(s.strips).toHaveLength(1);
     expect(s.strips[0]).toContain("DELETE FROM sessions");
@@ -197,7 +199,10 @@ describe("downloading the inbox", () => {
     const here = await setup();
     const yes = await here.get("/v1/owner/download");
     expect(yes.status).toBe(200);
-    expect(await yes.json()).toEqual({ available: true });
+    expect(await yes.json()).toEqual({ available: true, leaving: false });
+    // Closing: the owner app starts the download with the receipt key taken along.
+    const closing = await setup({ leaving: true });
+    expect(await (await closing.get("/v1/owner/download")).json()).toEqual({ available: true, leaving: true });
     const d1 = await setup({ snapshot: false });
     const no = await d1.get("/v1/owner/download");
     expect(no.status).toBe(501);

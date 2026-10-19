@@ -1,4 +1,11 @@
-import { buildDownload, type Capabilities, maskEmail, readSettings, WriteError } from "@surfingdog/core";
+import {
+  buildDownload,
+  type Capabilities,
+  exportReceiptKeys,
+  maskEmail,
+  readSettings,
+  WriteError,
+} from "@surfingdog/core";
 import type { SqliteSnapshot } from "@surfingdog/platform";
 import { type Context, Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
@@ -12,7 +19,9 @@ import { checkStepUp, requireStepUpCaller, STEP_UP_TTL_MS, type StepUpDeps, send
 /**
  * Downloading the inbox (`POST /v1/owner/download`): the whole database as one SQLite file in a zip,
  * with a README and a manifest, without who is signed in, keys, connected apps or any secret
- * (`capabilities/download.ts`). The owner in person only, with a step-up code sent to their own
+ * (`capabilities/download.ts`), and beside it, when the owner asks for it, the key receipts are signed
+ * with now, in a file of its own (`receipt-keys.json`), so the inbox they move to signs as this one
+ * did. The owner in person only, with a step-up code sent to their own
  * address (`step-up.ts`: `POST /v1/owner/download/code` here, or `POST /auth/step-up` from the owner
  * app), and told by email once it is done.
  *
@@ -25,6 +34,11 @@ export interface DownloadDeps extends StepUpDeps {
   readonly version: string;
   /** Copies the database (Node: `nodeSnapshot`). Absent, the routes answer 501. */
   readonly snapshot?: SqliteSnapshot | undefined;
+  /**
+   * The inbox is closing (a hosted inbox the owner is leaving): `GET /download` says so, and the owner
+   * app then starts with the receipt key taken along.
+   */
+  readonly leaving?: boolean | undefined;
 }
 
 const OWNER_SECURITY = [{ ownerKey: [] }];
@@ -47,12 +61,16 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
       tags: ["owner"],
       summary: "Whether the inbox can be downloaded here",
       description:
-        "200 when POST /download/code and POST /download work on this runtime; 501 not_available, with how to copy the database instead, where they do not (Cloudflare D1). Sends nothing and changes nothing.",
+        "200 when POST /download/code and POST /download work on this runtime; 501 not_available, with how to copy the database instead, where they do not (Cloudflare D1). `leaving` is true while the inbox is closing: the copy is then the way to keep it, receipt key included. Sends nothing and changes nothing.",
       security: OWNER_SECURITY,
       responses: {
         200: {
           description: "It can",
-          content: { "application/json": { schema: resolver(z.object({ available: z.literal(true) })) } },
+          content: {
+            "application/json": {
+              schema: resolver(z.object({ available: z.literal(true), leaving: z.boolean() })),
+            },
+          },
         },
         ...ERRORS,
       },
@@ -60,7 +78,7 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
     async (c) => {
       requireStepUpCaller(c.get("caller"), "download the inbox");
       if (!deps.snapshot) return notAvailable(c);
-      return c.json({ available: true as const }, 200);
+      return c.json({ available: true as const, leaving: deps.leaving === true }, 200);
     },
   );
 
@@ -109,7 +127,7 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
       tags: ["owner"],
       summary: "Download the inbox: one SQLite file in a zip, with a README and a manifest",
       description:
-        "Send the code from POST /download/code. The zip holds inbox.db, every request, conversation, customer, service, hour, rule and setting, without who is signed in, keys, connected AI apps, rate limits or any secret; README.txt lists every table and what was left out, and manifest.json says the same for a program. The file opens in an inbox you run yourself. The owner is told by email.",
+        "Send the code from POST /download/code. The zip holds inbox.db, every request, conversation, customer, service, hour, rule and setting, without who is signed in, keys, connected AI apps, rate limits or any secret; README.txt lists every table and what was left out, and manifest.json says the same for a program. With receipt_keys: true, receipt-keys.json beside it holds the key receipts are signed with now (its private half, in the clear), so an inbox you run yourself signs as this one did (`node server.mjs import-receipt-keys receipt-keys.json`); it is absent while no key exists, and the download is refused (422, details.reason key_unreadable) when this inbox cannot open its own key. The file opens in an inbox you run yourself. The owner is told by email.",
       security: OWNER_SECURITY,
       requestBody: {
         content: {
@@ -121,6 +139,12 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
                   type: "string",
                   pattern: "^[0-9]{6}$",
                   description: "The six digits POST /download/code sent to the owner's email.",
+                },
+                receipt_keys: {
+                  type: "boolean",
+                  default: false,
+                  description:
+                    "Take the key receipts are signed with, in receipt-keys.json: only when moving to a server of your own. Keep the file as safe as a password.",
                 },
               },
               required: ["code"],
@@ -134,7 +158,10 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
           content: { "application/zip": { schema: { type: "string", format: "binary" } } },
         },
         ...ERRORS,
-        422: { description: "bad_code or code_expired: ask for a new code." },
+        422: {
+          description:
+            "bad_code or code_expired: ask for a new code. invalid_input with details.reason key_unreadable: this inbox cannot open its own receipt key; download without it (the code is not used up).",
+        },
         429: { description: "too_many_attempts: wait a few minutes and ask for a new code." },
       },
     }),
@@ -143,7 +170,16 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
       requireStepUpCaller(caller, "download the inbox");
       const snapshot = deps.snapshot;
       if (!snapshot) return notAvailable(c);
-      const body = (await c.req.json().catch(() => ({}))) as { code?: unknown };
+      const body = (await c.req.json().catch(() => ({}))) as { code?: unknown; receipt_keys?: unknown };
+      // Opened before the code is used, so a key this inbox cannot open costs the owner no code.
+      const exported = body.receipt_keys === true ? await exportReceiptKeys(deps.db, deps.caps.secrets) : null;
+      if (exported && !exported.file) {
+        throw new WriteError(
+          "invalid_input",
+          "This inbox cannot open the key its receipts are signed with, so it cannot go with the copy. Download without it: the inbox that opens the copy makes a key of its own, and the receipts signed here still verify.",
+          { details: { reason: "key_unreadable" } },
+        );
+      }
       const owner = await stepUpOwner(deps.db, caller);
       const now = clock();
       await checkStepUp(deps.db, owner, "download", typeof body.code === "string" ? body.code : "", now, deps.secrets);
@@ -153,8 +189,10 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
         business: profile.name.trim(),
         address: publicOrigin(c.req.raw, deps.baseUrl),
         version: deps.version,
+        receiptKeys: exported?.file ?? null,
       });
-      await tellOwner(deps, owner.email, profile.name.trim(), now).catch((error) => {
+      const withKey = download.manifest.receipt_keys !== null;
+      await tellOwner(deps, owner.email, profile.name.trim(), now, withKey).catch((error) => {
         console.error("download: the owner was not told:", error instanceof Error ? error.message : error);
       });
       return new Response(download.zip as BodyInit, {
@@ -176,7 +214,13 @@ export function downloadRoutes(deps: DownloadDeps): Hono<CallerEnv> {
  * The owner is told of every download: at the address the code went to, and at the owner email in
  * Settings when that is another one.
  */
-async function tellOwner(deps: DownloadDeps, codeWentTo: string, name: string, now: number): Promise<void> {
+async function tellOwner(
+  deps: DownloadDeps,
+  codeWentTo: string,
+  name: string,
+  now: number,
+  withKey: boolean,
+): Promise<void> {
   const settings = await readSettings(deps.db);
   const to = [
     ...new Set(
@@ -201,9 +245,13 @@ async function tellOwner(deps: DownloadDeps, codeWentTo: string, name: string, n
       subject: `A copy of ${whose} was downloaded`,
       text: [
         `A copy of ${whose} was downloaded on ${when} UTC, with the code sent to ${maskEmail(codeWentTo)}.`,
-        "It holds every request and conversation, the customers, the services and the settings, and no sign-in, key or secret.",
+        withKey
+          ? "It holds every request and conversation, the customers, the services, the settings and the key your receipts are signed with, and no sign-in or other secret."
+          : "It holds every request and conversation, the customers, the services and the settings, and no sign-in, key or secret.",
         "",
-        "If this was not you, someone can read that mailbox and is signed in to your inbox: change your email password first, then sign in and check Settings → Keys.",
+        withKey
+          ? "If this was not you, someone can read that mailbox and is signed in to your inbox: change your email password first, then sign in and check Settings → Keys, then, in Settings → Networks, make a new receipt key, so your inbox stops signing with the one in the copy."
+          : "If this was not you, someone can read that mailbox and is signed in to your inbox: change your email password first, then sign in and check Settings → Keys.",
       ].join("\n"),
     });
   }

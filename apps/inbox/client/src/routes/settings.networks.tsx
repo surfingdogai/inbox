@@ -5,13 +5,14 @@ import { Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
-import { type ApiProblem, problemOf } from "../lib/api";
+import { type ApiProblem, api, problemOf } from "../lib/api";
 import {
   type DoorPanel,
   doorPanel,
   emailWords,
   hostOf,
   MAX_NETWORKS,
+  NETWORKS_WHY,
   networkStatus,
   parseNetworkOrigin,
   receiptWords,
@@ -46,11 +47,17 @@ function NetworksPage() {
   const problem = save.error ? problemOf(save.error) : null;
   const conflict = problem?.code === "version_conflict";
   const rows = networks.data?.networks ?? [];
+  // A host that holds the networks (a hosted inbox before it is live at its own address): no network
+  // is added meanwhile, and each one's switch says whether it comes on when the inbox is live.
+  const held = (settings.data?.locked ?? []).some((l) => l === "networks" || l.startsWith("networks."));
 
   const change = (
     origin: string,
-    /** One network's keys to change, merged into what is stored; null removes the network. */
-    entry: { enabled?: boolean; issue?: boolean } | null,
+    /**
+     * One network's keys to change, merged into what is stored; null removes the network. `resume`,
+     * while the host holds it: whether it comes on when the inbox is live.
+     */
+    entry: { enabled?: boolean; issue?: boolean; resume?: boolean } | null,
     done: string,
     from: string = origin,
     after?: () => void,
@@ -79,24 +86,27 @@ function NetworksPage() {
   return (
     <section className="card glass stack">
       <SectionHead title="Networks" />
-      <p className="lede small">Your inbox can report to several networks. Each one lists you in its own directory.</p>
-      <p className="hint">
-        A network you switch on gets your inbox's address, a count of new bookings, orders, quotes and messages every
-        hour, and every receipt your inbox signs: each booking confirmed and order accepted, and how it ended. Receipts
-        name customers by a pseudonym only: no names, messages or what was ordered.
-      </p>
-      <p className="hint">
-        Customers' assistants may carry a pass from a network. Your inbox shows it to the network that issued it, with
-        the customer's email, to learn whether the network knows them; you then see their standing there. With "Give
-        first-time customers a key" on, a customer's first booking or order with an email sends that email to the
-        network, which keeps only a keyed hash of it and gives your inbox a key to email to them. A network gets
-        customers' email addresses only once it has verified your inbox. Test items never reach a network.
-      </p>
-      <p className="hint">
-        A network you switch on later gets your older receipts too. It counts a booking or an order whose promise
-        reaches it more than a day late at half its weight, until the customer's assistant confirms it, so switching on
-        early is what counts.
-      </p>
+      <p className="lede small">{NETWORKS_WHY}</p>
+      <details className="net-sent">
+        <summary className="hint">What a network is sent</summary>
+        <p className="hint">
+          Your inbox's address, a count of new bookings, orders, quotes and messages every hour, and every receipt your
+          inbox signs: each booking confirmed and order accepted, and how it ended. Receipts name customers by a
+          pseudonym only: no names, messages or what was ordered.
+        </p>
+        <p className="hint">
+          Customers' assistants may carry a pass from a network. Your inbox shows it to the network that issued it, with
+          the customer's email, to learn whether the network knows them; you then see their standing there. With "Give
+          first-time customers a key" on, a customer's first booking or order with an email sends that email to the
+          network, which keeps only a keyed hash of it and gives your inbox a key to email to them. A network gets
+          customers' email addresses only once it has verified your inbox. Test items never reach a network.
+        </p>
+        <p className="hint">
+          A network you switch on later gets your older receipts too. It counts a booking or an order whose promise
+          reaches it more than a day late at half its weight, until the customer's assistant confirms it, so switching
+          on early is what counts.
+        </p>
+      </details>
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {conflict && (
         <Toast
@@ -132,13 +142,21 @@ function NetworksPage() {
             pending={save.isPending}
             error={acting === n.origin && problem && !conflict ? problem : null}
             onToggle={(on) =>
-              change(
-                n.origin,
-                { enabled: on },
-                on
-                  ? `${hostOf(n.origin)} is on. Your inbox reports to it within a minute.`
-                  : `${hostOf(n.origin)} is off. Nothing more is sent to it; switch it on again to send what it missed.`,
-              )
+              n.held
+                ? change(
+                    n.origin,
+                    { resume: on },
+                    on
+                      ? `${hostOf(n.origin)} comes on as soon as your inbox is live at your own address.`
+                      : `${hostOf(n.origin)} stays off when your inbox is live. Nothing is sent to it.`,
+                  )
+                : change(
+                    n.origin,
+                    { enabled: on },
+                    on
+                      ? `${hostOf(n.origin)} is on. Your inbox reports to it within a minute.`
+                      : `${hostOf(n.origin)} is off. Nothing more is sent to it; switch it on again to send what it missed.`,
+                  )
             }
             onIssue={(on) =>
               change(
@@ -153,7 +171,7 @@ function NetworksPage() {
           />
         ))}
       </div>
-      {networks.isSuccess && (
+      {networks.isSuccess && !held && (
         <AddNetwork
           existing={rows}
           pending={save.isPending || !settings.data}
@@ -169,7 +187,47 @@ function NetworksPage() {
           }
         />
       )}
+      {networks.isSuccess && <NewReceiptKey />}
     </section>
+  );
+}
+
+/**
+ * Making a new receipt key (`POST /v1/owner/receipt-keys/rotate`): folded away, for the day a copy
+ * of the key may be in the wrong hands. The owner in person only, which is who is here.
+ */
+function NewReceiptKey() {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const make = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await api.replaceReceiptKey();
+      setNotice({ tone: "success", text: "A new key signs your receipts from now on." });
+      void qc.invalidateQueries({ queryKey: qk.networks });
+    } catch (error) {
+      setNotice({ tone: "danger", text: problemOf(error).detail });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <details className="net-sent">
+      <summary className="hint">The key your receipts are signed with</summary>
+      <p className="hint">
+        If a copy of it may be in the wrong hands, make a new one: your inbox signs with it from then on, and what the
+        old one signed still verifies.
+      </p>
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
+      <div className="rowx">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void make()} disabled={busy}>
+          {busy && <span className="spinner" aria-hidden="true" />}
+          Make a new receipt key
+        </button>
+      </div>
+    </details>
   );
 }
 
@@ -195,9 +253,9 @@ function NetworkLine({
   const doors = doorPanel(n);
   const emails = n.enabled ? emailWords(n) : null;
   return (
-    <div className={clsx("catalogue-row row-glass", !n.enabled && "is-archived")}>
+    <div className={clsx("catalogue-row row-glass", !n.enabled && !n.held?.on_when_released && "is-archived")}>
       <div className="catalogue-main">
-        <Switch checked={n.enabled} onChange={onToggle} disabled={pending}>
+        <Switch checked={n.held ? n.held.on_when_released : n.enabled} onChange={onToggle} disabled={pending}>
           <b className="mono">{n.origin}</b>
         </Switch>
         <div className="s net-status">
@@ -243,7 +301,7 @@ function NetworkLine({
             {c}
           </span>
         ))}
-        {!n.enabled && (
+        {!n.enabled && !n.held && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove} disabled={pending}>
             Remove
           </button>

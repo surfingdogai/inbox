@@ -9,6 +9,7 @@ import {
   createDb,
   createSecretBox,
   ensureLifecycleSweep,
+  importReceiptKeys,
   MIGRATIONS,
   parseSecretKeys,
   type SetupPlanInput,
@@ -60,6 +61,9 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs seed-surfingdog    add Surfing Dog itself if the instance is empty
  *   node server.mjs network-ping       report to every network now instead of at the next hour
  *   node server.mjs apply-plan <file>  apply a setup plan (JSON); --dry-run says what it would do
+ *   node server.mjs import-receipt-keys <file>
+ *                                      take in the receipt-keys.json of a download, sealed with this
+ *                                      instance's INBOX_SECRET_KEY, so receipts are signed as before
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 const command = process.argv[2];
@@ -141,9 +145,38 @@ if (command) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
+  } else if (command === "import-receipt-keys") {
+    const keyFile = process.argv[3];
+    if (!keyFile) {
+      console.error("usage: import-receipt-keys <receipt-keys.json>");
+      process.exit(2);
+    }
+    const box = createSecretBox(parseSecretKeys(process.env.INBOX_SECRET_KEY));
+    if (!box) {
+      console.error("set INBOX_SECRET_KEY first: the key is sealed with it, and is never stored in the clear");
+      process.exit(2);
+    }
+    try {
+      const r = await importReceiptKeys(db, box, JSON.parse(readFileSync(keyFile, "utf8")));
+      const n = (list: readonly string[]) => `${list.length} key${list.length === 1 ? "" : "s"}`;
+      console.log(
+        [
+          r.imported.length ? `took in ${n(r.imported)}` : "no key was new here",
+          r.already.length ? `${n(r.already)} already here` : "",
+          r.active ? `receipts are signed with ${r.active} from now on` : "",
+          r.retired.length ? `retired ${r.retired.join(", ")} (its receipts still verify)` : "",
+        ]
+          .filter(Boolean)
+          .join("; "),
+      );
+      console.log(`${keyFile} can be deleted now: the key is sealed in the database.`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   } else {
     console.error(
-      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping or apply-plan`,
+      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping, apply-plan or import-receipt-keys`,
     );
     process.exit(2);
   }

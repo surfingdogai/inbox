@@ -1,16 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { api, problemOf } from "../lib/api";
 import { saveFile } from "../lib/download";
 import { Toast } from "./Feedback";
-import { Field } from "./Form";
+import { Field, Switch } from "./Form";
 
 /**
  * Downloading the inbox: one file with every request and conversation, the customers, the services,
  * the hours, the rules and the settings, to run on a server of the owner's own. The inbox emails the
- * owner a code first, and tells them once it is done. Where the inbox cannot copy its own database
- * (Cloudflare D1) the card says how to copy it instead, and offers no button that could only fail.
+ * owner a code first, and tells them once it is done. The key receipts are signed with goes too only
+ * when the owner switches it on (on from the start while the inbox is closing): a routine backup
+ * never carries a password-like key. Where the inbox cannot copy its own database (Cloudflare D1)
+ * the card says how to copy it instead, and offers no button that could only fail.
  */
 export function DownloadInbox() {
   const here = useQuery({
@@ -25,6 +27,12 @@ export function DownloadInbox() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [withKey, setWithKey] = useState(false);
+  // Leaving (a hosted inbox closing): the copy is how the business keeps its inbox, key included.
+  const leaving = here.data?.leaving === true;
+  useEffect(() => {
+    if (leaving) setWithKey(true);
+  }, [leaving]);
 
   const ask = async () => {
     setProblem(null);
@@ -45,7 +53,7 @@ export function DownloadInbox() {
     setProblem(null);
     setBusy(true);
     try {
-      const { blob, filename } = await api.downloadInbox(code.trim());
+      const { blob, filename } = await api.downloadInbox(code.trim(), withKey);
       saveFile(blob, filename);
       setSaved(`Saved ${filename}. An email tells you it was downloaded.`);
       setSentTo(null);
@@ -73,10 +81,15 @@ export function DownloadInbox() {
     <section className="card glass stack">
       <h3 className="sec">Download your inbox</h3>
       <p className="hint">
-        One file with every request and conversation, the customers, the services, the hours, the rules and the
-        settings, which you can run on a server of your own. It leaves out who is signed in, keys, connected AI apps and
-        every secret.
+        Everything in your inbox in one file, ready to run on a server of your own. Sign-ins, API keys and connected AI
+        apps stay behind.
       </p>
+      <div>
+        <Switch checked={withKey} onChange={setWithKey} disabled={busy}>
+          Take the key your receipts are signed with
+        </Switch>
+        <p className="hint">Only when you are moving to a server of your own. Keep the file as safe as a password.</p>
+      </div>
       {problem && <Toast tone="danger" text="Not downloaded." sub={problem} onDismiss={() => setProblem(null)} />}
       {saved && <Toast tone="success" text={saved} onDismiss={() => setSaved(null)} />}
       {sentTo === null ? (

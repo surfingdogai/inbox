@@ -99,6 +99,20 @@ async function importPublic(jwk: PublicJwk): Promise<CryptoKey> {
   return crypto.subtle.importKey("jwk", { ...rest, key_ops: ["verify"], ext: true }, ED25519, false, ["verify"]);
 }
 
+/**
+ * Whether a private key is the private half of `publicJwk`: it signs a fixed message and the public
+ * half must verify it. What an imported key is checked with before it is ever trusted to sign.
+ */
+export async function keyPairMatches(privateJwk: PrivateJwk, publicJwk: PublicJwk): Promise<boolean> {
+  try {
+    const message = encoder.encode("surfingdog receipt key check") as BufferSource;
+    const signature = await crypto.subtle.sign(ED25519, await importPrivate(privateJwk), message);
+    return await crypto.subtle.verify(ED25519, await importPublic(publicJwk), signature, message);
+  } catch {
+    return false;
+  }
+}
+
 /* --- signing ------------------------------------------------------------- */
 
 /** A receipt, signed. The header's `typ` is ours, so a receipt cannot be mistaken for a token. */

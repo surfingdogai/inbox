@@ -55,6 +55,12 @@ export const networkEntrySchema = z.object({
         .describe("Publish every receipt and acknowledgement; the manifest names the network under review_services."),
     })
     .prefault({}),
+  resume: z
+    .boolean()
+    .optional()
+    .describe(
+      "Written only by a host that holds every network off for now (a hosted inbox until it is live at the business's own address): whether this one comes back on when the host lets go. Nobody else writes it.",
+    ),
 });
 export type NetworkEntry = z.infer<typeof networkEntrySchema>;
 export type NetworkShare = keyof NetworkEntry["share"];
@@ -636,6 +642,12 @@ const sections = {
   directory: z
     .object({
       listed: z.boolean().default(true).describe("Be in the directories of the networks you report to."),
+      resume: z
+        .boolean()
+        .optional()
+        .describe(
+          "Written only by a host that holds the business out of the directories for now: whether it comes back in when the host lets go. Nobody else writes it.",
+        ),
       description: z.string().max(500).default("").describe("A sentence or two about the business, in public."),
       categories: z
         .array(z.string().max(60))

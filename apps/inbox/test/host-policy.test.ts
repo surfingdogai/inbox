@@ -123,14 +123,21 @@ async function connectOwner(app: App, bearer: string) {
 
 /** Every change the policy holds: networks, the listing, the sender, Reply-To, the address, trust. */
 const HELD: Record<string, unknown>[] = [
-  { networks: { "https://network.surfingdog.ai": { enabled: true } } },
   { networks: { "https://people.example.org": { enabled: true } } },
-  { directory: { listed: true } },
   { email: { fromAddress: "someone@personal.example" } },
   { email: { replyTo: "someone@personal.example" } },
   { notifications: { appUrl: "https://evil.example" } },
   { integrations: { webhooks: { allowPrivateTargets: true } } },
   { identity: { extraAuthorities: ["evil.example"] } },
+];
+
+/**
+ * Held, and the business's to choose for when the hold ends: whether a network, and the listing,
+ * come back on. On is the owner's in person only, as switching a network on is.
+ */
+const LATER: Record<string, unknown>[] = [
+  { networks: { "https://network.surfingdog.ai": { enabled: true } } },
+  { directory: { listed: true } },
 ];
 
 describe("an inbox under a host's policy", () => {
@@ -160,7 +167,20 @@ describe("an inbox under a host's policy", () => {
         expect(text).toContain("set by your host");
       }
     }
+    for (const doc of LATER) {
+      const zap = await app.request(
+        req("PUT", "/v1/owner/settings", { doc }, { authorization: `Bearer ${zapierKey}` }),
+      );
+      expect(zap.status, JSON.stringify(doc)).toBe(403);
+      expect(await zap.text()).toContain("Only the owner");
+      const mine = await app.request(
+        req("PUT", "/v1/owner/settings", { doc }, { authorization: `Bearer ${ownerKey}` }),
+      );
+      expect(mine.status, JSON.stringify(doc)).toBe(200);
+    }
     const s = await readSettings(db);
+    // Chosen for later: still off, and out of the directories, while held.
+    expect(s.directory.resume).toBe(true);
     expect(s.directory.listed).toBe(false);
     expect(s.notifications.appUrl).toBe(ADDRESS);
     expect(s.integrations.webhooks.allowPrivateTargets).toBe(false);
@@ -194,6 +214,11 @@ describe("an inbox under a host's policy", () => {
       const r = await claude.callTool({ name: "update_settings", arguments: { doc } });
       expect(r.isError, JSON.stringify(doc)).toBe(true);
       expect((r.content as { text: string }[])[0]?.text).toContain("set by your host");
+    }
+    for (const doc of LATER) {
+      const r = await claude.callTool({ name: "update_settings", arguments: { doc } });
+      expect(r.isError, JSON.stringify(doc)).toBe(true);
+      expect((r.content as { text: string }[])[0]?.text).toContain("Only the owner");
     }
     await claude.close();
     expect((await readSettings(db)).directory.listed).toBe(false);

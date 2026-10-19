@@ -19,7 +19,7 @@ Those are checks on the name, and a public name can point anywhere. So on Node, 
 
 ## What reaches a network
 
-An instance can report to several networks, and each one lists it in its own directory. The owner switches each one on or off in Settings → Networks; none is on until the owner switches it on, and a network that is off receives nothing.
+An instance can report to several networks, and each one lists it in its own directory. A hosted inbox joins network.surfingdog.ai the day it goes live; one you run yourself asks during setup. The owner switches any network off, or on, in Settings → Networks, and a network that is off receives nothing.
 
 Message text, names, phone numbers, postal addresses, line items and payment references never leave the instance. What can leave, to each network that is on:
 

@@ -71,7 +71,14 @@ export {
   type SecretPurpose,
 } from "./secrets/box";
 export { mergeSettings } from "./settings/merge";
-export { type HostHome, type HostPolicy, hostPolicyFor, SET_BY_HOST, type SettingsPatch } from "./settings/policy";
+export {
+  type HostHome,
+  type HostPolicy,
+  hostPolicyFor,
+  joinPatch,
+  SET_BY_HOST,
+  type SettingsPatch,
+} from "./settings/policy";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency } from "./util/locale";

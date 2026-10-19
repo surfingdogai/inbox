@@ -8,6 +8,10 @@ import type { NetworkView } from "./types";
 /** At most this many networks: the server's limit, repeated so the page can say so first. */
 export const MAX_NETWORKS = 8;
 
+/** Why a business is on a network, in one line: what Settings → Networks says first. */
+export const NETWORKS_WHY =
+  "A network lists you where AI agents search, and keeps your track record: each booking and order, and whether it was kept.";
+
 const BLOCKED_SUFFIXES = [
   ".localhost",
   ".local",
@@ -64,6 +68,12 @@ export function networkStatus(
   now: number = Date.now(),
   locale?: string,
 ): { line: string; tone: NetworkTone; detail: string | null } {
+  // Held by the host until the inbox is live at the business's own address: nothing goes to it yet.
+  if (n.held) {
+    return n.held.on_when_released
+      ? { line: "On as soon as your inbox is live at your own address", tone: "neutral", detail: null }
+      : { line: "Off, and stays off when your inbox is live", tone: "neutral", detail: null };
+  }
   if (!n.enabled) return { line: "Off", tone: "neutral", detail: null };
   if (n.failing_since) {
     return {

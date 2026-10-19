@@ -21,9 +21,11 @@ import {
   type NetworkView,
   networkStartStatements,
   networkViews,
+  reportableDomain,
   wantsListed,
 } from "../network/index";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
+import { replaceReceiptKey } from "../receipts/keys";
 import {
   business,
   itemEvents,
@@ -36,13 +38,22 @@ import {
   threadEntries,
 } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { changedSettings, DATA_OUT_SETTINGS, OWNER_ONLY_SETTINGS, openedNetworks } from "../settings/guard";
+import {
+  changedSettings,
+  DATA_OUT_SETTINGS,
+  hostOnlyChanges,
+  OWNER_ONLY_SETTINGS,
+  openedNetworks,
+} from "../settings/guard";
 import { mergeSettings, patchPaths } from "../settings/merge";
 import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
 import {
   checkHostPolicy,
   forcedPatch,
+  type HoldChoices,
   type HostPolicy,
+  holdChoices,
+  holdsNetworks,
   hostLockedChanges,
   hostLockedError,
   hostLockedPaths,
@@ -342,13 +353,8 @@ export class Capabilities {
     return (await this.applyForcedSettings(policy, now)) || domain;
   }
 
-  private async applyForcedSettings(policy: HostPolicy, now: number): Promise<boolean> {
-    const host: Caller = {
-      actor: { kind: "system", id: "host", channel: "system" },
-      tier: "verified_principal",
-      sandbox: false,
-      now: () => now,
-    };
+  private async applyForcedSettings(policy: HostPolicy, now: number, seedNow = false): Promise<boolean> {
+    const host = hostCaller(now);
     for (let attempt = 0; ; attempt++) {
       const [row] = await this.db.orm
         .select({ doc: settingsTable.doc, version: settingsTable.version })
@@ -356,16 +362,32 @@ export class Capabilities {
         .limit(1);
       const stored = row && isPlainObject(row.doc) ? row.doc : {};
       const current = parseStoredSettings(stored).settings;
-      const patch = forcedPatch(policy, current);
+      // A new inbox (no settings stored yet) starts with what its host seeds it with, in the same
+      // write as what the policy holds, so it never serves a moment without either, and nothing the
+      // policy holds is ever on for a moment between two writes. `seedNow` writes it over settings
+      // that are there already (`applyHostSeed`).
+      let seeded: Record<string, unknown> | null = null;
+      let base = stored;
+      if (policy.seed && (!row || seedNow)) {
+        const prepared = prepareSettingsWrite(stored, { ...policy.seed });
+        if ("problems" in prepared) throw new Error(`host policy: seed ${describeProblems(prepared.problems)}`);
+        seeded = prepared.patch;
+        base = mergeSettings(prepared.base, prepared.patch) as Record<string, unknown>;
+      }
+      const forced = forcedPatch(policy, parseStoredSettings(base).settings);
+      const patch = seeded ? (mergeSettings(seeded, forced) as Record<string, unknown>) : forced;
       if (Object.keys(patch).length === 0) return false;
       const prepared = prepareSettingsWrite(stored, patch);
       if ("problems" in prepared) throw new Error(`host policy: forced ${describeProblems(prepared.problems)}`);
       const after = parseStoredSettings(mergeSettings(prepared.base, prepared.patch)).settings;
-      const drifted = changedSettings(
-        current,
-        after,
-        patchPaths(prepared.patch).map((path) => ({ path })),
-      );
+      const drifted =
+        seeded && !row
+          ? ["(a new inbox)"]
+          : changedSettings(
+              current,
+              after,
+              patchPaths(prepared.patch).map((path) => ({ path })),
+            );
       if (drifted.length === 0) return false;
       try {
         await this.writeSettings(host, { doc: patch, ...(row ? { expected_version: row.version } : {}) }, true);
@@ -377,6 +399,20 @@ export class Capabilities {
         throw error;
       }
     }
+  }
+
+  /**
+   * Writes the host's seed (`HostPolicy.seed`) over the settings as they stand, as a new inbox starts
+   * with it, for an inbox that already had settings when its host began seeding: only when whoever
+   * runs it decides to (the hosted runtime's `join-networks`), never on its own. What the policy
+   * holds is held in the same write: a network the host holds is remembered as on, not switched on.
+   * True when it wrote anything.
+   */
+  async applyHostSeed(now: number = Date.now()): Promise<boolean> {
+    const policy = this.policy;
+    if (!policy?.seed) return false;
+    const wrote = await this.applyForcedSettings(policy, now, true);
+    return (await this.applyHostPolicy(now)) || wrote;
   }
 
   /**
@@ -965,6 +1001,40 @@ export class Capabilities {
     return this.receipts.status();
   }
 
+  /**
+   * A new key to sign receipts with, the one that signed until now retired (`receipts/keys.ts`): what
+   * the owner does when a copy of the key may be in the wrong hands (a download they did not make).
+   * This inbox never signs with the old key again; it stays published, so every receipt it signed
+   * still verifies. The owner's in person only: never the owner's AI, never a key handed to another
+   * system, which could be made to ask for it by what a customer wrote.
+   */
+  async replaceReceiptKey(caller: Caller): Promise<{ readonly retired: readonly string[]; readonly active: string }> {
+    requireBusiness(caller);
+    if (!isOwnerOrSystem(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the owner can make a new receipt key, signed in to the owner app (Settings → Networks). Nothing was changed; tell the owner what you suggest.",
+        { details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" } },
+      );
+    }
+    if (!this.secrets) {
+      throw new WriteError(
+        "wrong_state",
+        "This inbox signs no receipts: INBOX_SECRET_KEY is not set, so it holds no receipt key to replace.",
+        { details: { reason: "no_receipt_key" } },
+      );
+    }
+    const replaced = await replaceReceiptKey(this.db, this.receipts.keys, nowOf(caller));
+    if (!replaced) {
+      throw new WriteError(
+        "wrong_state",
+        "This inbox has no receipt key yet: it makes one with its first receipt, so there is nothing to replace.",
+        { details: { reason: "no_receipt_key" } },
+      );
+    }
+    return replaced;
+  }
+
   async getItem(caller: Caller, input: T.GetItemInput): Promise<ItemDetail> {
     requireBusiness(caller);
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
@@ -1369,6 +1439,19 @@ export class Capabilities {
     }
     const stored = row && isPlainObject(row.doc) ? row.doc : {};
     let doc = withoutMaskedSecrets(input.doc);
+    // While the host holds the networks (a hosted inbox before it is live at the business's own
+    // address), what a write may still choose is taken out first (`holdChoices`): whether each
+    // network and the listing come back on when the hold ends, and less to share. Off is anyone's to
+    // choose; on is the owner's in person, as switching a network on is.
+    let hold: HoldChoices | null = null;
+    if (this.policy && !asHost && holdsNetworks(this.policy, parseStoredSettings(stored).settings)) {
+      const ready = prepareSettingsWrite(stored, doc);
+      if (!("problems" in ready)) {
+        hold = holdChoices(parseStoredSettings(stored).settings, ready.patch);
+        doc = hold.rest;
+        if (hold.opened.length && !isOwnerOrSystem(caller)) throw networkOpenedError(hold.opened);
+      }
+    }
     // What the host set or locked is the host's (`settings/policy.ts`): nobody changes it here, the
     // owner and the inbox itself included, and that is checked before anything else so whoever asks
     // is told the real reason. Sending it back unchanged changes nothing and is never refused.
@@ -1406,12 +1489,17 @@ export class Capabilities {
         fields: prepared.problems,
       });
     }
-    const merged = mergeSettings(prepared.base, prepared.patch) as Record<string, unknown>;
+    // What the write chose during a hold goes back in, past the lock it was taken out for.
+    const patch =
+      hold && Object.keys(hold.choices).length
+        ? (mergeSettings(prepared.patch, hold.choices) as Record<string, unknown>)
+        : prepared.patch;
+    const merged = mergeSettings(prepared.base, patch) as Record<string, unknown>;
     merged.schemaVersion = SETTINGS_SCHEMA_VERSION;
     syncLegacyPair(merged);
     const checked = settingsWriteSchema.safeParse(merged);
     if (!checked.success) {
-      const changed = patchPaths(prepared.patch);
+      const changed = patchPaths(patch);
       const issues = checked.error.issues.filter((issue) => {
         const at = issue.path.map(String);
         return changed.some((p) => startsWith(at, p) || startsWith(p, at));
@@ -1420,7 +1508,7 @@ export class Capabilities {
     }
     // Rewards (ADR-018 §4, Q3) are checked when written: a condition on the customer's record only, a
     // percentage within bounds, words fit for a customer. One that does not check out is never applied.
-    const rewardsPatch = (prepared.patch as { negotiation?: { rewards?: unknown } }).negotiation?.rewards;
+    const rewardsPatch = (patch as { negotiation?: { rewards?: unknown } }).negotiation?.rewards;
     if (rewardsPatch !== undefined) {
       const problems = rewardProblems(
         (merged.negotiation as { rewards?: unknown } | undefined)?.rewards,
@@ -1439,6 +1527,18 @@ export class Capabilities {
     }
     const before = parseStoredSettings(stored).settings;
     const after = parseStoredSettings(merged).settings;
+    // What a held network or the held listing comes back to is the host's to keep (`settings/policy.ts`):
+    // nobody else writes it but through what a hold lets them choose (`hold` above). Where nothing
+    // holds the networks (a copy of a hosted inbox opened on a server of the owner's own), a value
+    // left from a hold may be taken away, so the network can be switched and removed; never set.
+    if (!asHost) {
+      const holding = holdsNetworks(this.policy, before);
+      const hostOnly = hostOnlyChanges(before, after)
+        .filter((c) => !hold?.resumed.includes(c.path))
+        .filter((c) => holding || !c.removed)
+        .map((c) => c.path);
+      if (hostOnly.length) throw holding ? hostLockedError(hostOnly) : noHoldError(hostOnly);
+    }
     // Where this inbox sends email, alerts and events, and who it trusts, are never the owner's AI's
     // to change: it reads what customers write, and a customer can write "send everything to me"
     // (`access/outbound.ts`, `settings/guard.ts`). Sending a value back unchanged changes nothing.
@@ -1525,23 +1625,7 @@ export class Capabilities {
     // switch one off or share less with it, never switch one on, let it issue keys, or share more.
     if (isOwnerAssistant(caller) || caller.principal?.keyKind === "integration") {
       const opened = openedNetworks(before, after);
-      if (opened.length) {
-        throw new WriteError(
-          "not_allowed",
-          "Only the owner can switch a network on, let it have more, or put the business back in the directories, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses. Nothing was changed; tell the owner what you suggest.",
-          {
-            details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" },
-            fields: opened.map((path) => ({
-              path: `doc.${path}`,
-              problem: "invalid" as const,
-              message:
-                path === "directory.listed"
-                  ? "only the owner in person can put the business back in the directories"
-                  : "only the owner in person can switch a network on or share more with it",
-            })),
-          },
-        );
-      }
+      if (opened.length) throw networkOpenedError(opened);
     }
     let version: number;
     if (!row) {
@@ -1627,10 +1711,18 @@ export class Capabilities {
     }
   }
 
-  /** Every network in settings, switched on or not, with how it is going and what it has been sent. */
-  async getNetworks(caller: Caller): Promise<{ networks: NetworkView[] }> {
+  /**
+   * Every network in settings, switched on or not, with how it is going and what it has been sent;
+   * and whether a network could verify this inbox at its address now (`reportable`: an https origin
+   * on a public host, port 443), so a page offers to join one only where joining can work.
+   */
+  async getNetworks(caller: Caller): Promise<{ networks: NetworkView[]; reportable: boolean }> {
     requireBusiness(caller);
-    return { networks: await networkViews(this.db, await readSettings(this.db)) };
+    const settings = await readSettings(this.db);
+    return {
+      networks: await networkViews(this.db, settings, { held: holdsNetworks(this.policy, settings) }),
+      reportable: "domain" in reportableDomain(this.baseUrl ?? settings.notifications.appUrl),
+    };
   }
 
   // ---- helpers ---------------------------------------------------------------
@@ -1865,4 +1957,53 @@ function takenElsewhere(kind: "booking" | "order", url: string): WriteError {
     `This business takes ${what} at ${url}, not here: send the customer there. Nothing was written. Messages and quote requests still come here.`,
     { details: { reason: "taken_elsewhere", item_type: kind, url } },
   );
+}
+
+/**
+ * The refusal for a write that would switch a network on, let it have more, or put the business back
+ * in the directories (or, while the host holds them, have one come back on: `….resume`), from
+ * anyone but the owner in person: a network is sent customers' email addresses.
+ */
+function networkOpenedError(opened: readonly string[]): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "Only the owner can switch a network on, let it have more, or put the business back in the directories, signed in to the owner app (Settings → Networks): a network is sent customers' email addresses. Nothing was changed; tell the owner what you suggest.",
+    {
+      details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" },
+      fields: opened.map((path) => ({
+        path: `doc.${path}`,
+        problem: "invalid" as const,
+        message:
+          path === "directory.listed" || path === "directory.resume"
+            ? "only the owner in person can put the business back in the directories"
+            : "only the owner in person can switch a network on or share more with it",
+      })),
+    },
+  );
+}
+
+/** The refusal for setting `resume` where no host holds the networks: there is nothing to come back from. */
+function noHoldError(paths: readonly string[]): WriteError {
+  return new WriteError(
+    "not_allowed",
+    `${paths.join(", ")}: only a host that holds the networks keeps this, and none holds them here. Switch the network itself instead (enabled, or directory.listed). Nothing was changed.`,
+    {
+      details: { reason: "no_hold" },
+      fields: paths.map((path) => ({
+        path: `doc.${path}`,
+        problem: "invalid" as const,
+        message: "kept only by a host's hold; switch enabled instead",
+      })),
+    },
+  );
+}
+
+/** The host, as the writes its policy makes are recorded: past its own lock, as the system. */
+function hostCaller(now: number): Caller {
+  return {
+    actor: { kind: "system", id: "host", channel: "system" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => now,
+  };
 }

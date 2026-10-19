@@ -17,6 +17,13 @@ Many inboxes on one machine, for whoever runs Surfing Dog Inbox for other people
 - **Admin API.** A signed API over a local socket lets the operator's control plane do the rest:
   create an inbox, apply a setup plan, test its doors, hand the owner over, change its policy, read
   its usage and remove it once closed.
+- **A network from day one.** A new inbox joins the networks its policy names (`join_networks`;
+  absent, network.surfingdog.ai; empty, none) with its first settings, listed in their directories,
+  with listing, counts and receipts and with keys for first-time customers off. They are held off
+  while it is only at its setup address and come on the moment it is live at the business's own
+  name; the owner can switch them off, before then too, and that choice survives the inbox going
+  back to its setup address and live again. An inbox made before this is left as it was until the
+  operator joins it on purpose: `POST /admin/v1/tenants/{id}/networks/join`, or `join-networks`.
 
 Every name, socket, key and directory comes from the environment; see `src/config.ts`.
 
@@ -27,6 +34,7 @@ node dist/hosted.mjs shard 0                # one shard (0 … HOSTED_SHARDS-1)
 node dist/hosted.mjs all                    # the router and every shard, restarted when one ends
 node dist/hosted.mjs migrate-check <file>   # brings a copy of an inbox's file to this release's schema, or fails
 node dist/hosted.mjs maintenance-off <id>   # lets an inbox out of maintenance
+node dist/hosted.mjs join-networks <id>     # joins an inbox made before day-one joining (with a shard's settings)
 ```
 
 Run `migrate-check` on a copy of every inbox's file before restarting a shard on a new release: a

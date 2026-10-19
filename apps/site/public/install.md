@@ -485,8 +485,9 @@ was granted. It tells the person what to set instead.
 
 A network is a directory of businesses, and it keeps a record of how reliably businesses and
 customers keep their bookings and orders. An inbox can report to several networks, and each one lists
-it in its own directory. Joining is the person's choice: ask first, and tell them what each network
-they switch on receives, in these words:
+it in its own directory. Joining is the person's choice: ask first, and recommend it (the network
+lists the business where AI agents search, and its track record starts with its first booking or
+order). Tell them what each network they switch on receives, in these words:
 
 - the inbox's address, and every hour a count of new bookings, orders, quotes and messages;
 - every receipt the inbox signs — each booking confirmed or order accepted, and how it ended — which

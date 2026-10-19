@@ -103,3 +103,36 @@ export function wizardPreset(d: WizardDoors): "appointments" | "trades" | null {
   if (d.quoteRequest) return "trades";
   return null;
 }
+
+/** The network a new inbox is offered at setup, switched on unless the owner says no (core `DEFAULT_NETWORK`). */
+export const SETUP_NETWORK = "https://network.surfingdog.ai";
+
+/**
+ * What the wizard's last step says about joining `SETUP_NETWORK`:
+ *
+ * - `switch`: the switch, on unless the owner says no;
+ * - `later`: only a line saying to list it once the inbox has a public https address, since a
+ *   network cannot verify one at localhost, on a private address or on a port;
+ * - null: nothing, when the host holds the networks (it joins a hosted inbox itself), when the inbox
+ *   reports to it already, and when this is not a first setup (the wizard run again by an owner who
+ *   chose already: Settings → Networks is where they switch it).
+ */
+export function networkOffer(
+  settings: {
+    readonly locked?: readonly string[] | undefined;
+    readonly doc: { readonly networks: Readonly<Record<string, { readonly enabled: boolean }>> };
+  },
+  o: { readonly firstRun: boolean; readonly reportable: boolean },
+): "switch" | "later" | null {
+  if ((settings.locked ?? []).some((l) => l === "networks" || l.startsWith("networks."))) return null;
+  if (!o.firstRun || settings.doc.networks[SETUP_NETWORK]?.enabled === true) return null;
+  return o.reportable ? "switch" : "later";
+}
+
+/**
+ * The settings write that joins it, a merge: every other network stays as it is. Listing, counts and
+ * receipts; giving first-time customers a key stays off until the owner switches it on in Settings.
+ */
+export function joinNetworkDoc(): { networks: Record<string, { enabled: true; issue: false }> } {
+  return { networks: { [SETUP_NETWORK]: { enabled: true, issue: false } } };
+}

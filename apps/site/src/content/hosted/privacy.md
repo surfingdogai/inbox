@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted pilot
-updated: 14 October 2026
+updated: 18 October 2026
 order: 3
 ---
 
@@ -16,6 +16,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
 - **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you (the pilot is free; the counts are what a future price would follow).
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
+- **Your listing on network.surfingdog.ai**: from the day your inbox goes live, your business is listed in its directory, where AI agents search, and the receipts your inbox signs are kept there ([what it gets](/privacy/#network-h)). Basis: our contract with you. Switch it off in Settings → Networks.
 - **Reports and our decisions about them**, if anyone reports your inbox. Basis: our legal duties under the Digital Services Act.
 
 ## How long

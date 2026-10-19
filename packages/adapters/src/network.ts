@@ -48,6 +48,7 @@ import {
   readNetworkStatus,
   readPingDoors,
   readSettings,
+  reportableDomain,
   reportsTo,
   type Settings,
   shortError,
@@ -61,7 +62,7 @@ import type { Statement } from "@surfingdog/platform";
 import { z } from "zod";
 import { pruneIdentity } from "./identity";
 import { pruneRateLimits } from "./limits";
-import { isPublicHost, readCapped } from "./safe-fetch";
+import { readCapped } from "./safe-fetch";
 import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
 
 /**
@@ -1089,19 +1090,5 @@ export function instanceDomain(
   deps: Pick<NetworkDeps, "baseUrl">,
   settings: Settings,
 ): { domain: string } | { problem: string } {
-  const base = deps.baseUrl ?? settings.notifications.appUrl;
-  if (!base) return { problem: "no public address: set the Inbox address in Settings (or INBOX_PUBLIC_URL)" };
-  let url: URL;
-  try {
-    url = new URL(base);
-  } catch {
-    return { problem: `the inbox address ${base} is not a URL` };
-  }
-  if (url.protocol !== "https:" || !isPublicHost(url.hostname)) {
-    return { problem: `the inbox address ${url.origin} is not a public https origin; a network cannot verify it` };
-  }
-  if (url.port) {
-    return { problem: `the inbox address ${url.origin} has a port; a network verifies https on port 443 only` };
-  }
-  return { domain: url.hostname };
+  return reportableDomain(deps.baseUrl ?? settings.notifications.appUrl);
 }

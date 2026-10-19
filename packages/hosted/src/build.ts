@@ -1,6 +1,6 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { OAuthClients, OwnerEmailChange } from "@surfingdog/adapters";
-import { type Db, type HostPolicy, hostPolicyFor } from "@surfingdog/core";
+import { type Db, DEFAULT_NETWORK, type HostPolicy, hostPolicyFor } from "@surfingdog/core";
 import { createInbox, type Inbox } from "@surfingdog/inbox/app";
 import { isDoor } from "@surfingdog/inbox/doors";
 import { type MailOut, pinnedMailOut } from "@surfingdog/platform";
@@ -11,7 +11,9 @@ import type { PolicyPayload } from "./types";
 /**
  * One inbox, built from its policy (C8.3) the same way every time:
  *
- * - the host policy is `hostPolicyFor({address, site})` with the doors for agents open or closed;
+ * - the host policy is `hostPolicyFor({address, site})` with the doors for agents open or closed,
+ *   and a new inbox joins the policy's networks (`join_networks`, else the default network) from
+ *   its first settings: held until it is live at the business's own address, on from then;
  * - every link points at `address`, the inbox's canonical name;
  * - the owner is `owner_email`;
  * - mail goes from the pinned sender, with the shared ledger deciding what may go (`allowCustomerMail`
@@ -24,7 +26,13 @@ export type HostedPolicy = HostPolicy & { readonly agents: "open" | "closed" };
 
 export function hostedPolicy(p: PolicyPayload): HostedPolicy {
   return {
-    ...hostPolicyFor({ address: p.address, site: p.site, domain: p.domain, connectUrl: p.connect_url }),
+    ...hostPolicyFor({
+      address: p.address,
+      site: p.site,
+      domain: p.domain,
+      connectUrl: p.connect_url,
+      joins: p.join_networks ?? [DEFAULT_NETWORK],
+    }),
     agents: p.agents,
   };
 }
@@ -83,6 +91,8 @@ export function buildInbox(d: BuildDeps): Inbox {
     privateFetchImpl: d.fetchImpl,
     onOwnerEmailChange: d.onOwnerEmailChange,
     snapshot: nodeSnapshot(d.client, d.dir),
+    // Closing: the owner's download is the way to keep the inbox, so it starts with the receipt key.
+    leaving: p.state === "closing",
     oauth: d.oauth,
     oauthRedirect: d.oauthRedirect,
     now: d.now,

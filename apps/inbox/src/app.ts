@@ -134,6 +134,11 @@ export interface AppDeps {
    */
   readonly snapshot?: SqliteSnapshot | undefined;
   /**
+   * The inbox is closing (a hosted inbox its owner is leaving): the owner's download starts with the
+   * key receipts are signed with taken along.
+   */
+  readonly leaving?: boolean | undefined;
+  /**
    * The OAuth clients this inbox signs owners in to platforms with (GOOGLE_OAUTH_CLIENT_ID and
    * GOOGLE_OAUTH_CLIENT_SECRET). Without one, Google shows as "Soon" on a hosted inbox and "set up" on one's own server.
    */
@@ -476,6 +481,7 @@ export function createInbox(deps: AppDeps): Inbox {
     sharedLimits: demo ? DEMO_SHARED : undefined,
     // A demo is wiped every night and holds strangers' requests: nobody downloads it.
     snapshot: demo ? undefined : deps.snapshot,
+    leaving: deps.leaving,
     businessName: async () => (await caps.getBusinessProfile()).name,
     appShell: deps.appShell,
     fetchClientMetadata: deps.fetchClientMetadata,

@@ -92,6 +92,8 @@ export interface DoorDeps {
   readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
   /** Copies the database for a download (Node: `nodeSnapshot`). Absent, a download answers 501. */
   readonly snapshot?: SqliteSnapshot | undefined;
+  /** The inbox is closing (a hosted inbox its owner is leaving): the download offers the receipt key first. */
+  readonly leaving?: boolean | undefined;
 }
 
 /**
@@ -453,7 +455,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // After the owner routes, so their check (an owner principal, its scopes) runs on these first.
   app.route(
     "/v1/owner",
-    downloadRoutes({ ...ownerMail, caps: deps.caps, version: deps.version, snapshot: deps.snapshot }),
+    downloadRoutes({
+      ...ownerMail,
+      caps: deps.caps,
+      version: deps.version,
+      snapshot: deps.snapshot,
+      leaving: deps.leaving,
+    }),
   );
   app.route("/v1", publicRest(deps.caps));
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone

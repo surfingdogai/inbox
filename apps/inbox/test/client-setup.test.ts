@@ -1,4 +1,4 @@
-import { PRESETS, type RuleDefinition, summarizeRule as serverSummary } from "@surfingdog/core";
+import { DEFAULT_NETWORK, PRESETS, type RuleDefinition, summarizeRule as serverSummary } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { summarizeRule } from "../client/src/lib/describe";
 import {
@@ -10,8 +10,9 @@ import {
   toDraft,
   toWeekly,
 } from "../client/src/lib/hours";
+import { NETWORKS_WHY } from "../client/src/lib/networks";
 import { EMPTY_RULE, parseValue, showValue, toDefinition, toForm } from "../client/src/lib/rules";
-import { offerBodies, ownerEmailDoc } from "../client/src/lib/setup";
+import { joinNetworkDoc, networkOffer, offerBodies, ownerEmailDoc, SETUP_NETWORK } from "../client/src/lib/setup";
 
 // The rule editor reads rules back as the server words them, and turns its forms into the JSON the engine runs.
 describe("client rule summaries", () => {
@@ -195,5 +196,43 @@ describe("the setup wizard's offers", () => {
   it("saves where the owner hears of new requests as one merged key, empty meaning their sign-in address", () => {
     expect(ownerEmailDoc(" ana@oficinamare.pt ")).toEqual({ notifications: { ownerEmail: "ana@oficinamare.pt" } });
     expect(ownerEmailDoc("")).toEqual({ notifications: { ownerEmail: null } });
+  });
+});
+
+describe("the setup wizard's network", () => {
+  const settings = (locked: string[], networks: Record<string, { enabled: boolean }>) => ({
+    locked,
+    doc: { networks },
+  });
+  const first = { firstRun: true, reportable: true };
+
+  it("offers the default network, switched on, on a first setup at a public https address", () => {
+    expect(SETUP_NETWORK).toBe(DEFAULT_NETWORK);
+    expect(networkOffer(settings([], { [DEFAULT_NETWORK]: { enabled: false } }), first)).toBe("switch");
+    expect(networkOffer(settings([], {}), first)).toBe("switch");
+  });
+
+  it("says to list it later where a network could not verify the inbox (localhost, a private address, a port)", () => {
+    expect(networkOffer(settings([], {}), { firstRun: true, reportable: false })).toBe("later");
+  });
+
+  it("offers nothing when the host holds the networks, it is on already, or the wizard is run again", () => {
+    expect(networkOffer(settings([], { [DEFAULT_NETWORK]: { enabled: true } }), first)).toBeNull();
+    expect(networkOffer(settings(["email", "networks"], { [DEFAULT_NETWORK]: { enabled: false } }), first)).toBeNull();
+    // An owner who switched it off in Settings and opens the wizard again is not switched back on.
+    expect(
+      networkOffer(settings([], { [DEFAULT_NETWORK]: { enabled: false } }), { ...first, firstRun: false }),
+    ).toBeNull();
+  });
+
+  it("joins it with one merged key, keys for first-time customers left off, every other network as it is", () => {
+    expect(joinNetworkDoc()).toEqual({ networks: { [DEFAULT_NETWORK]: { enabled: true, issue: false } } });
+  });
+
+  it("says why in one line", () => {
+    expect(NETWORKS_WHY.split(". ").length).toBe(1);
+    expect(NETWORKS_WHY.length).toBeLessThan(130);
+    // Both sides of a track record: kept, and not.
+    expect(NETWORKS_WHY).toContain("whether it was kept");
   });
 });
