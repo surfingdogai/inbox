@@ -1,0 +1,42 @@
+---
+/**
+ * A translated page's body (src/lib/i18n.ts): where it sits, its heading and the line under it, then
+ * the page itself. The route files give the Layout the head (src/lib/local.ts localPage) and put
+ * this inside it.
+ */
+import "../styles/local.css";
+import { dict, navWord } from "../i18n";
+import { guideHref } from "../lib/guides";
+import { type Lang, type PageId, pagePath } from "../lib/i18n";
+import { headOf } from "../lib/local";
+import LocalExamples from "./LocalExamples.astro";
+import LocalPayments from "./LocalPayments.astro";
+import LocalTools from "./LocalTools.astro";
+import LocalValidate from "./LocalValidate.astro";
+
+interface Props {
+  id: PageId;
+  lang: Lang;
+}
+const { id, lang } = Astro.props;
+const d = dict(lang);
+const head = headOf(d, id);
+// An English guide sits under the checklist's hub; a guide in another language under that
+// language's hub, which lists its tools and guides. The hub itself names its first section.
+const parent =
+  id === "tools"
+    ? null
+    : lang === "en"
+      ? { name: navWord("en", "Guides"), href: guideHref("") }
+      : { name: d.hub.short, href: pagePath("tools", lang) };
+---
+
+<article class="wrap wrap-read section is-head lg" aria-labelledby="lg-title">
+  <p class="eyebrow">{parent ? <a href={parent.href}>{parent.name}</a> : d.hub.toolsH}</p>
+  <h1 class="h-page" id="lg-title">{head.h1}</h1>
+  <p class="lede">{head.intro}</p>
+  {id === "tools" && <LocalTools lang={lang} />}
+  {id === "validate-llms-txt" && <LocalValidate lang={lang} />}
+  {id === "llms-txt-examples" && <LocalExamples lang={lang} />}
+  {id === "ai-agent-assisted-payments" && <LocalPayments lang={lang} />}
+</article>

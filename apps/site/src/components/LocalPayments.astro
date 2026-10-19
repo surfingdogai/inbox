@@ -1,0 +1,185 @@
+---
+/**
+ * What is AI agent-assisted payment, in the page's language: the answer in short, assisted against
+ * agentic (Forrester's line, sourced), how it works, the standards in one table, what a small
+ * business can do now, and the directory's own counts, read live from GET /v1/stats and dated by
+ * its as_of: at rest the line says counts will appear, and it never prints a number it did not read.
+ * No inbox line: the inbox never touches the money. In English, the bank-statement meaning too.
+ */
+import { dict } from "../i18n";
+import { type Lang, toolEn, toolPath } from "../lib/i18n";
+import { relatedOf, rich } from "../lib/local";
+import CoverPay from "./CoverPay.astro";
+import Faqs from "./Faqs.astro";
+import GuideAnswer from "./GuideAnswer.astro";
+import LocalRelated from "./LocalRelated.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const d = dict(lang);
+const p = d.payments;
+---
+
+<div class="lg-cover" data-idea={p.idea}>
+  <CoverPay labels={p.cover} alt={p.coverAlt} />
+</div>
+
+<GuideAnswer label={d.ui.inShort} text={p.answer} />
+
+<section class="lg-sec" aria-labelledby="lg-kinds-h">
+  <h2 id="lg-kinds-h">{p.kindsH}</h2>
+  <dl class="lg-pair">
+    {
+      p.kinds.map((k) => (
+        <div>
+          <dt>{k.name}</dt>
+          <dd>{k.says}</dd>
+        </div>
+      ))
+    }
+  </dl>
+  <p class="lg-fine" set:html={rich(p.kindsSource, lang)} />
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-how-h">
+  <h2 id="lg-how-h">{p.stepsH}</h2>
+  <ol class="lg-steps">
+    {p.steps.map((s) => <li set:html={rich(s, lang)} />)}
+  </ol>
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-std-h">
+  <h2 id="lg-std-h">{p.standardsH}</h2>
+  <table class="lg-table">
+    <thead>
+      <tr><th scope="col">{p.standardsCols[0]}</th><th scope="col">{p.standardsCols[1]}</th></tr>
+    </thead>
+    <tbody>
+      {
+        p.standards.map((s) => (
+          <tr>
+            <td>
+              {s.href ? (
+                <a class="link" href={s.href} rel="noopener">
+                  {s.name}
+                </a>
+              ) : (
+                s.name
+              )}
+            </td>
+            <td set:html={rich(s.what, lang)} />
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <p class="lg-fine">{p.standardsNote}</p>
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-do-h">
+  <h2 id="lg-do-h">{p.doH}</h2>
+  <ul class="lg-list">
+    {p.do.map((s) => <li set:html={rich(s, lang)} />)}
+  </ul>
+</section>
+
+<section class="lg-sec lg-counts" aria-labelledby="lg-counts-h">
+  <h2 id="lg-counts-h">{p.counts.h}</h2>
+  <p data-pay-counts data-line={p.counts.line} data-none={p.counts.none} data-lang={lang} aria-live="polite">
+    {p.counts.wait}
+  </p>
+  <p class="lg-fine">
+    <a class="link" href="/leaderboard?can=pay" hreflang={lang !== "en" ? "en" : undefined}>{p.counts.link}</a
+    >{lang !== "en" && <span lang="en"> (EN)</span>}
+  </p>
+</section>
+
+{
+  p.statement && (
+    <section class="lg-sec" aria-labelledby="lg-statement-h">
+      <h2 id="lg-statement-h">{p.statement.h}</h2>
+      <p>
+        {p.statement.text}{" "}
+        <a
+          class="link lg-src"
+          href="https://helpwithmybank.gov/help-topics/credit-cards/fees-terms/fees/fees-making-payment.html"
+          rel="noopener"
+        >
+          (HelpWithMyBank.gov)
+        </a>
+      </p>
+    </section>
+  )
+}
+
+<p class="lg-next">
+  <a class="link" href={toolPath("check", lang)} hreflang={toolEn("check", lang) ? "en" : undefined}>{d.ui.wholeSite}</a
+  >{toolEn("check", lang) && <span lang="en"> (EN)</span>}: {p.next}
+</p>
+
+<Faqs faqs={p.faqs} title={d.ui.questions} id="lg-faq-h" />
+
+<LocalRelated lang={lang} links={relatedOf("ai-agent-assisted-payments", lang)} />
+
+<script>
+  import { readDirectory } from "../lib/ask";
+
+  /**
+   * The directory's counts, from GET /v1/stats on this same address: how many business websites the
+   * directory has checked, and how many of them take payment through a door an agent can use, with
+   * the day they were counted. The base is every site checked, not the agent-ready ones, so the
+   * share reads as what it is: few, so far. Nothing answered, nothing printed but the line that says so.
+   */
+  async function paint(el: HTMLElement): Promise<void> {
+    const lang = el.dataset.lang || "en";
+    let stats: unknown = null;
+    try {
+      const res = await fetch("/v1/stats", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+      if (res.ok) stats = await res.json();
+    } catch {
+      stats = null;
+    }
+    const d = readDirectory(stats);
+    const pay = d?.capabilities.pay;
+    if (!d || pay === undefined || d.checked <= 0) {
+      el.textContent = el.dataset.none ?? "";
+      return;
+    }
+    const num = new Intl.NumberFormat(lang);
+    // English day first, as the rest of the site writes it (src/lib/i18n.ts longDate).
+    const date = new Intl.DateTimeFormat(lang === "en" ? "en-GB" : lang, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(d.as_of));
+    const parts: Record<string, Node> = {};
+    for (const [k, v] of [
+      ["checked", num.format(d.checked)],
+      ["pay", num.format(pay)],
+    ] as const) {
+      const b = document.createElement("b");
+      b.className = "lg-n";
+      b.textContent = v;
+      parts[k] = b;
+    }
+    const t = document.createElement("time");
+    t.dateTime = d.as_of;
+    t.textContent = date;
+    parts.date = t;
+    const line = el.dataset.line ?? "";
+    const nodes: (Node | string)[] = [];
+    let at = 0;
+    for (const m of line.matchAll(/\{(checked|pay|date)\}/g)) {
+      nodes.push(line.slice(at, m.index));
+      nodes.push(parts[m[1] ?? ""] ?? "");
+      at = (m.index ?? 0) + m[0].length;
+    }
+    nodes.push(line.slice(at));
+    el.replaceChildren(...nodes);
+  }
+
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>("[data-pay-counts]"))) void paint(el);
+</script>

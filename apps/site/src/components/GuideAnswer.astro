@@ -6,12 +6,14 @@
  */
 interface Props {
   text: string;
+  /** The label above it, in the page's language. */
+  label?: string;
 }
-const { text } = Astro.props;
+const { text, label = "In short" } = Astro.props;
 ---
 
 <div class="g-answer">
-  <p class="g-answer-label">In short</p>
+  <p class="g-answer-label">{label}</p>
   <p class="g-answer-text">{text}</p>
 </div>
 

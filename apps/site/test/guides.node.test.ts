@@ -17,6 +17,7 @@ import {
   wordCount,
 } from "../src/lib/guides";
 import { HOSTED_LINE } from "../src/lib/hosted";
+import { LOCAL_GUIDES, PAGES } from "../src/lib/i18n";
 
 /**
  * The guides at /guides/: every address the network's result pages link to answers, each guide ends
@@ -213,6 +214,10 @@ describe("the guides", () => {
       if (proxied.some((r) => r.test(p))) return true;
       const guide = p.match(/^\/guides\/([a-z0-9-]+)\/$/)?.[1];
       if (guide && PLATFORM_PAGES.some((pp) => pp.slug === guide)) {
+        return !anchor && existsSync(site(`src/pages/guides/${guide}.astro`));
+      }
+      // The guides that go with the free tools, in English: pages of their own (src/lib/i18n.ts).
+      if (guide && LOCAL_GUIDES.some((g) => PAGES[g].en === p)) {
         return !anchor && existsSync(site(`src/pages/guides/${guide}.astro`));
       }
       if (guide) {

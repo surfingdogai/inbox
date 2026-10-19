@@ -9,7 +9,7 @@ To speak for you, an assistant needs to know what your business is and where the
 ## What it does
 
 - **It helps an assistant read about you**: what you do, where, for whom, and where the details are.
-- **It can name your doors.** A line that says what an address is ("MCP server: https://…") is how many readers, ours included, find a door that has no well-known file of its own. See [findable doors](/guides/findable-agent-doors/) for the lines we read.
+- **It can name your doors.** A link whose words say what an address is (`- [MCP server](https://…)`) is how many readers, ours included, find a door that has no well-known file of its own. See [findable doors](/guides/findable-agent-doors/) for the lines we read.
 - **It can carry a basket hand-off or an order lookup**, which a reader can act on.
 
 ## What it doesn't do
@@ -26,15 +26,17 @@ To speak for you, an assistant needs to know what your business is and where the
 
 ## About
 
-- Services and prices: https://yourbusiness.example/services
-- Opening hours and where we are: https://yourbusiness.example/visit
+- [Services and prices](https://yourbusiness.example/services)
+- [Opening hours and where we are](https://yourbusiness.example/visit)
 
 ## For AI agents
 
-- MCP server (streamable HTTP): https://agent.yourbusiness.example/mcp
-- Order lookup API: POST https://yourbusiness.example/api/orders/lookup</code></pre>
+- [MCP server](https://agent.yourbusiness.example/mcp): streamable HTTP
+- [Order lookup API](https://yourbusiness.example/api/orders/lookup): POST, by order number and email</code></pre>
 
-Write each door's line so its words say what it is, keep the addresses on your own domain, and keep the file short.
+Write each line as a Markdown link, `- [Name](https://…): a short note`, so its words say what it is; keep the addresses on your own domain, and keep the file short. Chrome's Lighthouse fails a file with no Markdown link.
+
+To check yours line by line, see [how to validate your llms.txt](/guides/validate-llms-txt/). To start from a file made for a business like yours, see [llms.txt examples for small businesses](/guides/llms-txt-examples/).
 
 ## What counts in the check
 

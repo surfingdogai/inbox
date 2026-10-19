@@ -1,0 +1,143 @@
+---
+/**
+ * How to validate your llms.txt, in the page's language: the checker's form first (it asks the
+ * network's llms.txt checker in this language, which reads the file line by line, the same form
+ * and limits as the checker's own page), the whole-site line after it, the steps
+ * (also the page's HowTo data, src/lib/local.ts), the common errors with their fixes, a valid file,
+ * and what a valid file does and doesn't do.
+ */
+import { dict } from "../i18n";
+import { type Lang, pagePath, toolEn, toolPath } from "../lib/i18n";
+import { plain } from "../lib/inline";
+import { relatedOf, rich } from "../lib/local";
+import CoverValidate from "./CoverValidate.astro";
+import Faqs from "./Faqs.astro";
+import LocalRelated from "./LocalRelated.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const d = dict(lang);
+const v = d.validate;
+const site = (Astro.site?.toString() ?? "https://surfingdog.ai/").replace(/\/+$/, "");
+const url = `${site}${pagePath("validate-llms-txt", lang)}`;
+// "Send these steps to my web person": the steps in plain words and the page's address, in an
+// e-mail the visitor writes from their own mail app. No account, and nobody's address kept. An
+// e-mail has no "top of this page", so the validator step names the checker's own address.
+const checker = `${site}${toolPath("llms-txt", lang)}`;
+const VALIDATOR_STEP = 4;
+const mailBody = [
+  v.mail.intro,
+  v.steps
+    .map(
+      (s, i) =>
+        `${i + 1}. ${s.name}: ${i === VALIDATOR_STEP ? v.mail.validator.replace("{url}", checker) : plain(s.text)}`,
+    )
+    .join("\n"),
+  `${v.mail.outro}\n${url}`,
+].join("\n\n");
+const mailto = `mailto:?subject=${encodeURIComponent(v.mail.subject)}&body=${encodeURIComponent(mailBody)}`;
+// The animation's file: the restaurant example's first lines, in this language.
+const restaurant = d.examples.kinds.find((k) => k.id === "restaurant")?.file ?? "";
+---
+
+<section class="lg-sec lg-ask" aria-labelledby="lg-ask-h">
+  <h2 id="lg-ask-h">{v.form.title}</h2>
+  <form class="lg-form" method="post" action={toolPath("llms-txt", lang)}>
+    <label for="lg-url">{v.form.label}</label>
+    <input
+      class="input"
+      id="lg-url"
+      name="url"
+      type="text"
+      inputmode="url"
+      autocomplete="url"
+      autocapitalize="off"
+      spellcheck="false"
+      maxlength="2048"
+      placeholder={v.form.placeholder}
+      required
+    />
+    <button class="btn btn-secondary btn-sm" type="submit">{v.form.button}</button>
+  </form>
+  <p class="lg-fine">{v.form.note}</p>
+</section>
+<p class="lg-next">
+  <a class="link" href={toolPath("check", lang)} hreflang={toolEn("check", lang) ? "en" : undefined}>{d.ui.wholeSite}</a
+  >{toolEn("check", lang) && <span lang="en"> (EN)</span>}: {d.ui.wholeSiteLine}
+</p>
+
+<div class="lg-cover" data-idea={v.idea}>
+  <CoverValidate file={restaurant} labels={v.cover} alt={v.coverAlt} />
+</div>
+
+<section class="lg-sec" aria-labelledby="lg-steps-h">
+  <h2 id="lg-steps-h">{v.stepsH}</h2>
+  <ol class="lg-steps">
+    {
+      v.steps.map((s, i) => (
+        <li id={`step-${i + 1}`}>
+          <b>{s.name}</b>
+          <br />
+          <span set:html={rich(s.text, lang)} />
+        </li>
+      ))
+    }
+  </ol>
+  <p class="lg-fine"><a class="link" href={mailto}>{v.mail.label}</a></p>
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-errors-h">
+  <h2 id="lg-errors-h">{v.errorsH}</h2>
+  <table class="lg-table">
+    <thead>
+      <tr><th scope="col">{v.errorsCols[0]}</th><th scope="col">{v.errorsCols[1]}</th></tr>
+    </thead>
+    <tbody>
+      {
+        v.errors.map((e) => (
+          <tr>
+            <td set:html={rich(e.problem, lang)} />
+            <td set:html={rich(e.fix, lang)} />
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-sample-h">
+  <h2 id="lg-sample-h">{v.sampleH}</h2>
+  <p>{v.sampleIntro}</p>
+  <div class="lg-file">
+    <pre><code>{v.sample}</code></pre>
+    <button
+      class="lg-copy"
+      type="button"
+      data-copy={v.sample}
+      data-copied={d.ui.copied}
+      data-copy-failed={d.ui.copyFailed}
+      aria-label={`${d.ui.copy}: ${v.sampleH}`}
+      hidden
+    >
+      {d.ui.copy}
+    </button>
+  </div>
+  <p set:html={rich(v.sampleMore, lang)} />
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-limits-h">
+  <h2 id="lg-limits-h">{v.limitsH}</h2>
+  {v.limits.map((l) => <p set:html={rich(l, lang)} />)}
+</section>
+
+<Faqs faqs={v.faqs} title={d.ui.questions} id="lg-faq-h" />
+
+<LocalRelated lang={lang} links={relatedOf("validate-llms-txt", lang)} />
+
+<script>
+  import { wireCopyButtons } from "../lib/copy";
+
+  wireCopyButtons(".lg-copy");
+</script>

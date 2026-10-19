@@ -1,0 +1,92 @@
+---
+/**
+ * The free tools' hub, in the page's language: every tool with one line on what it tells you, then
+ * every guide with one line, the readiness checklist's eight (in English) named in this language,
+ * and one quiet line to the whole-site check. The tools are the network's pages on this address;
+ * nothing here reads a site.
+ */
+import { dict } from "../i18n";
+import type { GuideSlug } from "../lib/guides";
+import { GUIDE_SLUGS, guideHref } from "../lib/guides";
+import { type Lang, LOCAL_GUIDES, pagePath, TOOL_IDS, toolEn, toolPath } from "../lib/i18n";
+import { headOf, rich } from "../lib/local";
+import CoverTools from "./CoverTools.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const d = dict(lang);
+const h = d.hub;
+const en = lang !== "en";
+/** French sets a colon apart with a space that never breaks. */
+const colon = lang === "fr" ? "\u00a0: " : ": ";
+const checklist: { slug: GuideSlug; name: string }[] = GUIDE_SLUGS.map((slug) => ({
+  slug,
+  name: h.checklist.names[slug],
+}));
+---
+
+<div class="lg-cover" data-idea={h.idea}>
+  <CoverTools site={h.cover.site} alt={h.coverAlt} />
+</div>
+
+<section class="lg-sec" aria-labelledby="lg-tools-h">
+  <h2 id="lg-tools-h">{h.toolsH}</h2>
+  <ul class="lg-rows">
+    {
+      TOOL_IDS.map((t) => (
+        <li>
+          <a href={toolPath(t, lang)} hreflang={toolEn(t, lang) ? "en" : undefined}>
+            <b>
+              {h.tools[t].name}
+              {toolEn(t, lang) && <i lang="en"> (EN)</i>}
+            </b>
+            <span>{h.tools[t].line}</span>
+          </a>
+        </li>
+      ))
+    }
+    <li>
+      <a href="/spec/check/" hreflang={en ? "en" : undefined}>
+        <b>{h.spec.name}{en && <i lang="en"> (EN)</i>}</b>
+        <span>{h.spec.line}</span>
+      </a>
+    </li>
+  </ul>
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-guides-h">
+  <h2 id="lg-guides-h">{h.guidesH}</h2>
+  <ul class="lg-rows">
+    {
+      LOCAL_GUIDES.map((g) => (
+        <li>
+          <a href={pagePath(g, lang)}>
+            <b>{headOf(d, g).h1}</b>
+            <span>{h.guides[g]}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p>
+    <a class="link" href={guideHref("")} hreflang={en ? "en" : undefined}>{h.checklist.name}</a>{
+      en && <span lang="en"> (EN)</span>
+    }{colon}{h.checklist.line}
+  </p>
+  <p class="lg-fine">
+    {
+      checklist.map((c, i) => (
+        <>
+          {i > 0 && <span aria-hidden="true"> · </span>}
+          <a class="link" href={guideHref(c.slug)} hreflang={en ? "en" : undefined}>
+            {c.name}
+          </a>
+        </>
+      ))
+    }
+  </p>
+</section>
+
+<p class="lg-next" set:html={rich(h.end, lang)} />

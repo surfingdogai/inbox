@@ -1,0 +1,295 @@
+---
+/**
+ * The cover for the free tools' hub: seven small tiles, one for each tool, and a light that visits
+ * each in turn, ticking it: the whole site, llms.txt, the llms.txt generator, robots.txt for AI
+ * crawlers, MCP, UCP and ACP, the agent inbox. The tiles' words are the files and protocols' own
+ * names, the same in every language, but for the whole site's.
+ *
+ * Built the way CoverReady.astro is: the markup is the composed frame at t = STILL (every tile
+ * ticked) and the clock starts there, reduced motion is that frame, and it stops when nobody is
+ * looking. Every selector starts with .ctl and every keyframe is ctl-*, so nothing leaks.
+ */
+interface Props {
+  /** The whole site's tile, in the page's language. */
+  site: string;
+  alt: string;
+}
+const { site, alt } = Astro.props;
+
+const W = 120;
+const H = 84;
+const tiles = [
+  {
+    x: 50,
+    y: 70,
+    label: site,
+    glyph: "M0,-9 a9,9 0 1 1 0,18 a9,9 0 1 1 0,-18 M-9,0 h18 M0,-9 c-5,4 -5,14 0,18 M0,-9 c5,4 5,14 0,18",
+  },
+  { x: 190, y: 70, label: "llms.txt", glyph: "M-7,-10 h10 l4,4 v16 h-14 z M-4,-3 h8 M-4,1 h8 M-4,5 h5" },
+  { x: 330, y: 70, label: "llms.txt +", glyph: "M-7,-10 h10 l4,4 v16 h-14 z M-4,-1 h6 M-1,-4 v6 M-4,6 h8" },
+  { x: 470, y: 70, label: "robots.txt", glyph: "M-8,-4 h16 v12 h-16 z M0,-4 v-5 M-3,1 h0.5 M2.5,1 h0.5 M-3,5 h6" },
+  { x: 120, y: 190, label: "MCP", glyph: "M-5,-10 v6 M5,-10 v6 M-8,-4 h16 v5 a8,8 0 0 1 -16,0 z M0,9 v4" },
+  { x: 260, y: 190, label: "UCP · ACP", glyph: "M-10,-7 h3 l3,11 h11 l2,-8 h-15 M-2,8 h0.5 M7,8 h0.5" },
+  { x: 400, y: 190, label: "agent inbox", glyph: "M-9,-1 l4,-7 h10 l4,7 v8 h-18 z M-9,-1 h5 a4,3 0 0 0 8,0 h5" },
+];
+---
+
+<figure class="ctl" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    {
+      tiles.map((t) => (
+        <g class="ctl-tile">
+          <rect x={t.x} y={t.y} width={W} height={H} rx="14" class="card" />
+          <rect x={t.x - 4} y={t.y - 4} width={W + 8} height={H + 8} rx="17" class="halo" />
+          <path d={t.glyph} transform={`translate(${t.x + 26} ${t.y + 30})`} class="glyph" />
+          <circle cx={t.x + W - 20} cy={t.y + 22} r="7" class="ring" />
+          <path
+            d={`M${t.x + W - 23.2},${t.y + 22.2} L${t.x + W - 20.8},${t.y + 24.6} L${t.x + W - 16.6},${t.y + 19.6}`}
+            class="tick"
+          />
+          <text x={t.x + 16} y={t.y + 68} class="lab">
+            {t.label}
+          </text>
+        </g>
+      ))
+    }
+  </svg>
+</figure>
+
+<style is:global>
+  .ctl {
+    --ctl-ink: var(--ink, light-dark(#14163c, #f2f1ff));
+    --ctl-ink2: var(--ink-2, light-dark(#3f4472, #b9bce0));
+    --ctl-glass: var(--glass-bg, light-dark(rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.07)));
+    --ctl-glassb: var(--glass-border, light-dark(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.14)));
+    --ctl-palm: var(--palm, #2fd3a5);
+    --ctl-palm-i: var(--palm-ink, light-dark(#147a5c, #72e6c3));
+    --ctl-violet: var(--violet, #8a6bff);
+    --ctl-violet-i: var(--violet-ink, light-dark(#5a3fd0, #ab95ff));
+    --ctl-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .ctl svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .ctl .lab {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    fill: var(--ctl-ink);
+  }
+  .ctl .card {
+    fill: var(--ctl-glass);
+    stroke: var(--ctl-glassb);
+    stroke-width: 1;
+  }
+  .ctl .halo {
+    fill: none;
+    stroke: var(--ctl-violet);
+    stroke-opacity: 0;
+    stroke-width: 1.3;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .ctl .ctl-tile.wake .halo {
+    animation: ctl-halo 0.7s var(--ctl-ease);
+  }
+  @keyframes ctl-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.96);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.08);
+    }
+  }
+  .ctl .glyph {
+    fill: none;
+    stroke: var(--ctl-violet-i);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .ctl .ring {
+    fill: none;
+    stroke: var(--ctl-palm);
+    stroke-opacity: 0.7;
+    stroke-width: 1.2;
+  }
+  .ctl .tick {
+    fill: none;
+    stroke: var(--ctl-palm-i);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  @container (max-width: 600px) {
+    .ctl .lab {
+      font-size: 14px;
+    }
+  }
+  @container (max-width: 400px) {
+    .ctl .lab {
+      font-size: 15px;
+    }
+  }
+  .ctl.ctl-still,
+  .ctl.ctl-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ctl.ctl-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ctl * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReady's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    /* Tile k is visited at START + k * STEP; all hold ticked, then fade before the next round. */
+    var START = 0.5,
+      STEP = 0.75,
+      EXIT = 9.4,
+      LOOP = 10.4,
+      STILL = 7.6;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-ctl") === "on") return;
+      var tiles = [].slice.call(fig.querySelectorAll(".ctl-tile"));
+      if (!tiles.length) throw new Error("CoverTools markup");
+      fig.setAttribute("data-ctl", "on");
+      var ticks = tiles.map(function (t) {
+          var p = t.querySelector(".tick");
+          p.style.strokeDasharray = p.getTotalLength();
+          return p;
+        }),
+        glyphs = tiles.map(function (t) {
+          return t.querySelector(".glyph");
+        });
+
+      function render(t) {
+        var g = 1 - ease((t - EXIT) / (LOOP - EXIT));
+        tiles.forEach(function (tile, k) {
+          var u = ease((t - START - k * STEP) / 0.35);
+          ticks[k].style.strokeDashoffset = ticks[k].getTotalLength() * (1 - u * g);
+          glyphs[k].style.opacity = 0.45 + 0.55 * u * g;
+        });
+      }
+
+      var timers = [],
+        fired = {};
+      function cue(t, live) {
+        tiles.forEach(function (tile, k) {
+          var when = START + k * STEP;
+          if (t < when || fired[k]) return;
+          fired[k] = true;
+          if (!live) return;
+          tile.classList.add("wake");
+          timers.push(
+            setTimeout(function () {
+              tile.classList.remove("wake");
+            }, 750),
+          );
+        });
+      }
+      function settle() {
+        timers.forEach(clearTimeout);
+        timers.length = 0;
+        tiles.forEach(function (t) {
+          t.classList.remove("wake");
+        });
+      }
+
+      render(STILL);
+      cue(STILL, false);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        wasP = STILL,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        var ph = clock % LOOP;
+        if (ph < wasP) fired = {};
+        wasP = ph;
+        render(ph);
+        cue(ph, true);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("ctl-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          fig.classList.remove("ctl-paused");
+          settle();
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else {
+          cancelAnimationFrame(raf);
+          fig.classList.add("ctl-paused");
+        }
+      }
+      function still() {
+        fig.classList.add("ctl-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        settle();
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("ctl-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".ctl").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover tools", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

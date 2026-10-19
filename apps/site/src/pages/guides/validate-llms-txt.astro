@@ -1,0 +1,13 @@
+---
+// A guide that goes with the free tools, in English (x-default), beside the checklist's guides and
+// outside their contract (src/lib/guides.ts). Its other languages are src/pages/[lang]/[...path].astro.
+import LocalBody from "../../components/LocalBody.astro";
+import Layout from "../../layouts/Layout.astro";
+import { localPage } from "../../lib/local";
+
+const page = localPage("validate-llms-txt", "en", Astro.site);
+---
+
+<Layout {...page.layout}>
+  <LocalBody id={page.id} lang={page.lang} />
+</Layout>

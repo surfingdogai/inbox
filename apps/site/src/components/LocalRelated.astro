@@ -1,0 +1,37 @@
+---
+/**
+ * The foot of a translated guide: the tools and guides beside it, in one quiet line, and when its
+ * words last changed. A page that is in English only says so after its name.
+ */
+import { dict } from "../i18n";
+import { type Lang, longDate } from "../lib/i18n";
+import { LOCAL_MODIFIED, type RelatedLink } from "../lib/local";
+
+interface Props {
+  lang: Lang;
+  links: readonly RelatedLink[];
+}
+const { lang, links } = Astro.props;
+const d = dict(lang);
+const [before = "", after = ""] = d.ui.updated.split("{date}");
+---
+
+<nav class="lg-related" aria-labelledby="lg-related-h">
+  <h2 id="lg-related-h">{d.ui.related}</h2>
+  <p>
+    {
+      links.map((l, i) => (
+        <>
+          {i > 0 && <span aria-hidden="true"> · </span>}
+          <a class="link" href={l.href} hreflang={l.en ? "en" : undefined}>
+            {l.label}
+          </a>
+          {l.en && <span lang="en"> (EN)</span>}
+        </>
+      ))
+    }
+  </p>
+  <p class="lg-fine">
+    {before}<time datetime={LOCAL_MODIFIED}>{longDate(LOCAL_MODIFIED, lang)}</time>{after}
+  </p>
+</nav>

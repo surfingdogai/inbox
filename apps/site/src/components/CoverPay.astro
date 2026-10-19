@@ -1,0 +1,495 @@
+---
+/**
+ * The cover for "What is AI agent-assisted payment?": the assistant prepares, the person approves,
+ * the business is paid.
+ *
+ *  1. A customer's assistant fills a basket: three items drop in.
+ *  2. It asks its person: a request runs to their phone, which asks "Approve?".
+ *  3. The person taps; the phone ticks. The approval leaves as a token limited to one shop and one
+ *     amount, and travels to the business.
+ *  4. The business lights, and is paid.
+ *
+ * Built the way CoverReady.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking. Every selector
+ * starts with .cpy and every keyframe is cpy-*, so nothing leaks.
+ */
+interface Props {
+  labels: { assistant: string; person: string; business: string; approve: string; token: string; paid: string };
+  alt: string;
+}
+const { labels, alt } = Astro.props;
+const up = (s: string) => s.toUpperCase();
+---
+
+<figure class="cpy" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    <text x="82" y="42" class="cpy-cap" text-anchor="middle">{up(labels.assistant)}</text>
+    <text x="320" y="42" class="cpy-cap" text-anchor="middle">{up(labels.person)}</text>
+    <text x="558" y="42" class="cpy-cap" text-anchor="middle">{up(labels.business)}</text>
+
+    <g class="cpy-mark cpy-ai">
+      <rect x="60" y="74" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="60" y="74" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="55" y="69" width="54" height="54" rx="15" class="halo"></rect>
+      <line x1="82" y1="74" x2="82" y2="64" class="edge"></line>
+      <circle cx="82" cy="61" r="2.8" class="dot"></circle>
+      <path d="M82,84 L84.8,92.2 L93,95 L84.8,97.8 L82,106 L79.2,97.8 L71,95 L79.2,92.2 Z" class="star"></path>
+    </g>
+    <path d="M62,236 H102 L97,262 H67 Z" class="cpy-basket"></path>
+    <path d="M70,236 L78,222 M94,236 L86,222" class="cpy-basket"></path>
+    <circle cx="74" cy="248" r="4.5" class="cpy-item"></circle>
+    <circle cx="84" cy="246" r="4.5" class="cpy-item"></circle>
+    <circle cx="93" cy="249" r="4.5" class="cpy-item"></circle>
+    <path d="M104,96 H268" class="cpy-rail"></path>
+
+    <rect x="268" y="60" width="104" height="204" rx="18" class="cpy-phone"></rect>
+    <line x1="306" y1="72" x2="334" y2="72" class="cpy-hair"></line>
+    <text x="320" y="128" class="cpy-ask" text-anchor="middle">{labels.approve}</text>
+    <circle cx="320" cy="188" r="20" class="cpy-btn"></circle>
+    <circle cx="320" cy="188" r="20" class="cpy-pulse"></circle>
+    <path d="M311.5,188.6 L317.5,194.4 L329,182" class="cpy-tick cpy-ok"></path>
+
+    <path d="M372,150 C430,150 480,96 536,96" class="cpy-rail"></path>
+    <g class="cpy-token" style="transform:translate(482px,230px)">
+      <rect x="-90" y="-15" width="180" height="30" rx="10" class="bg"></rect>
+      <rect x="-78" y="-4" width="10" height="9" rx="2" class="lock"></rect>
+      <path d="M-75.5,-4 v-2.5 a2.5,2.5 0 0 1 5,0 v2.5" class="lock-arc"></path>
+      <text x="-60" y="4.4" class="cpy-lab">{labels.token}</text>
+    </g>
+
+    <g class="cpy-mark cpy-biz">
+      <rect x="536" y="74" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="536" y="74" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="531" y="69" width="54" height="54" rx="15" class="halo"></rect>
+      <path d="M546,90 h24 l-2,-6 h-20 z M548,90 v16 h20 v-16 M554,106 v-8 h8 v8" class="glyph"></path>
+    </g>
+    <g class="cpy-run" style="opacity:0">
+      <circle cx="0" cy="0" r="11" class="glow"></circle>
+      <circle cx="0" cy="0" r="5.5" class="core"></circle>
+    </g>
+    <g class="cpy-paid">
+      <rect x="506" y="150" width="104" height="36" rx="12" class="bg"></rect>
+      <path d="M521,168.4 L524.2,171.6 L530.2,164.4" class="cpy-tick"></path>
+      <text x="538" y="172.4" class="cpy-lab cpy-strong">{labels.paid}</text>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .cpy {
+    --cpy-ink: var(--ink, light-dark(#14163c, #f2f1ff));
+    --cpy-ink2: var(--ink-2, light-dark(#3f4472, #b9bce0));
+    --cpy-ink3: var(--ink-3, light-dark(#565a86, #9a9dc4));
+    --cpy-hair: var(--hairline, light-dark(rgba(20, 22, 60, 0.08), rgba(255, 255, 255, 0.1)));
+    --cpy-glass: var(--glass-bg, light-dark(rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.07)));
+    --cpy-glassb: var(--glass-border, light-dark(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.14)));
+    --cpy-palm: var(--palm, #2fd3a5);
+    --cpy-palm-i: var(--palm-ink, light-dark(#147a5c, #72e6c3));
+    --cpy-violet: var(--violet, #8a6bff);
+    --cpy-violet-i: var(--violet-ink, light-dark(#5a3fd0, #ab95ff));
+    --cpy-flam: var(--flamingo, #ff6fa8);
+    --cpy-flam-i: var(--flamingo-ink, light-dark(#b02a6b, #ff8fbc));
+    --cpy-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cpy svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cpy text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--cpy-ink2);
+  }
+  .cpy .cpy-cap {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+  }
+  .cpy .cpy-lab {
+    font-size: 12px;
+  }
+  .cpy .cpy-strong {
+    font-weight: 600;
+    fill: var(--cpy-ink);
+  }
+  .cpy .cpy-ask {
+    font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--cpy-ink);
+  }
+  .cpy .cpy-ai {
+    --sc: var(--cpy-violet);
+    --si: var(--cpy-violet-i);
+  }
+  .cpy .cpy-biz {
+    --sc: var(--cpy-flam);
+    --si: var(--cpy-flam-i);
+  }
+  .cpy .cpy-mark .tint {
+    fill: var(--sc);
+    fill-opacity: 0.08;
+  }
+  .cpy .cpy-mark .edge {
+    fill: none;
+    stroke: var(--cpy-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.3;
+  }
+  .cpy .cpy-mark .halo {
+    fill: none;
+    stroke: var(--sc);
+    stroke-opacity: 0;
+    stroke-width: 1.3;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpy .cpy-mark .star,
+  .cpy .cpy-mark .dot {
+    fill: var(--sc);
+    fill-opacity: 0.85;
+  }
+  .cpy .cpy-mark .glyph {
+    fill: none;
+    stroke: var(--si);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .cpy .cpy-mark.wake .halo {
+    animation: cpy-halo 0.66s var(--cpy-ease);
+  }
+  @keyframes cpy-halo {
+    0% {
+      stroke-opacity: 0.5;
+      transform: scale(0.84);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.26);
+    }
+  }
+  .cpy .cpy-basket {
+    fill: none;
+    stroke: var(--cpy-ink2);
+    stroke-opacity: 0.6;
+    stroke-width: 1.3;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .cpy .cpy-item {
+    fill: var(--cpy-violet);
+    fill-opacity: 0.75;
+  }
+  .cpy .cpy-rail {
+    fill: none;
+    stroke: var(--cpy-violet);
+    stroke-opacity: 0.4;
+    stroke-width: 1.3;
+    stroke-dasharray: 1.5 6;
+    stroke-linecap: round;
+  }
+  .cpy .cpy-phone {
+    fill: var(--cpy-glass);
+    stroke: var(--cpy-glassb);
+    stroke-width: 1;
+  }
+  .cpy .cpy-hair {
+    stroke: var(--cpy-ink3);
+    stroke-opacity: 0.4;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .cpy .cpy-btn {
+    fill: var(--cpy-palm);
+    fill-opacity: 0.12;
+    stroke: var(--cpy-palm);
+    stroke-opacity: 0.7;
+    stroke-width: 1.2;
+  }
+  .cpy .cpy-pulse {
+    fill: none;
+    stroke: var(--cpy-palm);
+    stroke-opacity: 0;
+    stroke-width: 1.3;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpy .cpy-pulse.wake {
+    animation: cpy-pulse 0.8s var(--cpy-ease);
+  }
+  @keyframes cpy-pulse {
+    0% {
+      stroke-opacity: 0.6;
+      transform: scale(0.9);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.6);
+    }
+  }
+  .cpy .cpy-tick {
+    fill: none;
+    stroke: var(--cpy-palm-i);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cpy .cpy-ok {
+    stroke-width: 2.2;
+  }
+  .cpy .cpy-token .bg,
+  .cpy .cpy-paid .bg {
+    fill: var(--cpy-glass);
+    stroke: var(--cpy-violet);
+    stroke-opacity: 0.55;
+    stroke-width: 1.1;
+  }
+  .cpy .cpy-paid .bg {
+    stroke: var(--cpy-palm);
+    stroke-opacity: 0.6;
+  }
+  .cpy .cpy-run .core {
+    fill: var(--cpy-violet);
+  }
+  .cpy .cpy-run .glow {
+    fill: var(--cpy-violet);
+    fill-opacity: 0.16;
+  }
+  .cpy .cpy-token .lock {
+    fill: var(--cpy-violet);
+    fill-opacity: 0.8;
+  }
+  .cpy .cpy-token .lock-arc {
+    fill: none;
+    stroke: var(--cpy-violet);
+    stroke-opacity: 0.8;
+    stroke-width: 1.3;
+  }
+  @container (max-width: 600px) {
+    .cpy .cpy-cap {
+      font-size: 13px;
+    }
+    .cpy .cpy-lab {
+      font-size: 13.5px;
+    }
+    .cpy .cpy-ask {
+      font-size: 16px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cpy .cpy-cap {
+      font-size: 15px;
+      letter-spacing: 0.06em;
+    }
+    .cpy .cpy-lab {
+      font-size: 14.5px;
+    }
+    .cpy .cpy-ask {
+      font-size: 18px;
+    }
+  }
+  .cpy.cpy-still,
+  .cpy.cpy-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cpy.cpy-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cpy * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReady's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    function ramp(t, a, b) {
+      return ease((t - a) / (b - a));
+    }
+    /* A point on a cubic Bézier, for the runner's roads (the rails the markup draws). */
+    function bez3(a, b, c, d, u) {
+      var v = 1 - u;
+      return [
+        v * v * v * a[0] + 3 * v * v * u * b[0] + 3 * v * u * u * c[0] + u * u * u * d[0],
+        v * v * v * a[1] + 3 * v * v * u * b[1] + 3 * v * u * u * c[1] + u * u * u * d[1],
+      ];
+    }
+    var ASK = [[104, 96], [160, 96], [212, 96], [268, 96]],
+      PAY = [[372, 150], [430, 150], [480, 96], [536, 96]];
+    var T = { items: 0.4, run: 1.7, ask: 2.4, tap: 3.2, ok: 3.5, token: 4.2, travel: 4.5, arrive: 5.8, paid: 6.1, exit: 10.3 },
+      LOOP = 11.5,
+      STILL = 7.2;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cpy") === "on") return;
+      function q(s) {
+        var e = fig.querySelector(s);
+        if (!e) throw new Error("CoverPay " + s);
+        return e;
+      }
+      var items = [].slice.call(fig.querySelectorAll(".cpy-item")),
+        ask = q(".cpy-ask"),
+        pulse = q(".cpy-pulse"),
+        ok = q(".cpy-ok"),
+        token = q(".cpy-token"),
+        run = q(".cpy-run"),
+        paid = q(".cpy-paid"),
+        paidTick = paid.querySelector(".cpy-tick"),
+        ai = q(".cpy-ai"),
+        biz = q(".cpy-biz");
+      fig.setAttribute("data-cpy", "on");
+      var OL = ok.getTotalLength(),
+        PL = paidTick.getTotalLength();
+      ok.style.strokeDasharray = OL;
+      paidTick.style.strokeDasharray = PL;
+
+      function op(e, v) {
+        e.style.opacity = v;
+      }
+      function render(t) {
+        var g = 1 - ramp(t, T.exit, LOOP),
+          u,
+          p;
+        items.forEach(function (it, i) {
+          u = ramp(t, T.items + i * 0.4, T.items + i * 0.4 + 0.45);
+          op(it, g * Math.min(1, u * 3));
+          it.style.transform = "translateY(" + (1 - u) * -36 + "px)";
+        });
+        op(ask, g * ramp(t, T.ask, T.ask + 0.4));
+        ok.style.strokeDashoffset = OL * (1 - g * ramp(t, T.ok, T.ok + 0.4));
+        /* a runner carries the question to the phone, then the approval to the business */
+        if (t < T.tap) {
+          p = bez3(ASK[0], ASK[1], ASK[2], ASK[3], ramp(t, T.run, T.ask));
+          op(run, g * ramp(t, T.run, T.run + 0.2) * (1 - ramp(t, T.ask - 0.15, T.ask + 0.05)));
+        } else {
+          p = bez3(PAY[0], PAY[1], PAY[2], PAY[3], ramp(t, T.travel, T.arrive));
+          op(run, g * ramp(t, T.travel, T.travel + 0.2) * (1 - ramp(t, T.arrive - 0.15, T.arrive + 0.05)));
+        }
+        run.style.transform = "translate(" + p[0] + "px," + p[1] + "px)";
+        /* the approval, as what it is: a token limited to one shop and one amount */
+        u = ramp(t, T.token, T.token + 0.4);
+        op(token, g * u);
+        token.style.transform = "translate(482px," + (230 + (1 - u) * 6) + "px)";
+        u = ramp(t, T.paid, T.paid + 0.4);
+        op(paid, g * u);
+        paid.style.transform = "translateY(" + (1 - u) * 6 + "px)";
+        paidTick.style.strokeDashoffset = PL * (1 - ramp(t, T.paid + 0.25, T.paid + 0.6));
+      }
+
+      var timers = [],
+        fired = {};
+      function flash(el, ms) {
+        el.classList.add("wake");
+        timers.push(
+          setTimeout(function () {
+            el.classList.remove("wake");
+          }, ms),
+        );
+      }
+      function cue(t, live) {
+        function at(k, when, el, ms) {
+          if (t < when || fired[k]) return;
+          fired[k] = true;
+          if (live) flash(el, ms);
+        }
+        at("ai", T.run, ai, 700);
+        at("tap", T.tap, pulse, 900);
+        at("biz", T.arrive, biz, 700);
+      }
+      function settle() {
+        timers.forEach(clearTimeout);
+        timers.length = 0;
+        [ai, biz, pulse].forEach(function (m) {
+          m.classList.remove("wake");
+        });
+      }
+
+      render(STILL);
+      cue(STILL, false);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        wasP = STILL,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        var ph = clock % LOOP;
+        if (ph < wasP) fired = {};
+        wasP = ph;
+        render(ph);
+        cue(ph, true);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cpy-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          fig.classList.remove("cpy-paused");
+          settle();
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else {
+          cancelAnimationFrame(raf);
+          fig.classList.add("cpy-paused");
+        }
+      }
+      function still() {
+        fig.classList.add("cpy-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        settle();
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cpy-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cpy").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover pay", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

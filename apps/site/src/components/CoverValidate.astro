@@ -1,0 +1,422 @@
+---
+/**
+ * The cover for "How to validate your llms.txt": a file checked line by line.
+ *
+ *  1. A light passes down an llms.txt (the restaurant example of the page's language, its first
+ *     lines), and each line it passes ticks: the name on line 1, the summary on line 2.
+ *  2. On line 5 it stops: a bare address. The line is rewritten as a Markdown link, and ticks.
+ *  3. The findings gather beside the file, line by line, and the verdict comes last: it reads as an
+ *     llms.txt.
+ *
+ * Built the way CoverReady.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking. Every selector
+ * starts with .cvl and every keyframe is cvl-*, so nothing leaks.
+ */
+interface Props {
+  /** The llms.txt the drawing shows; its first lines are read, never invented. */
+  file: string;
+  labels: { line: string; name: string; summary: string; link: string; verdict: string };
+  alt: string;
+}
+const { file, labels, alt } = Astro.props;
+
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+const lines = file.split("\n");
+const h1 = lines.find((l) => l.startsWith("# ")) ?? "# Your Business";
+const summary = lines.find((l) => l.startsWith("> ")) ?? "> What you do, and where.";
+const sections = lines.filter((l) => l.startsWith("## "));
+const links = lines.filter((l) => l.startsWith("- [")).map((l) => /^- \[([^\]]+)\]/.exec(l)?.[1] ?? "");
+const first = cut(links[0] ?? "Menu", 15);
+const second = cut(links[1] ?? "Book", 14);
+/** The seven lines, as the file has them once fixed; line 5 is shown bare first. */
+const shown = [
+  cut(h1, 28),
+  cut(summary, 28),
+  "",
+  cut(sections[0] ?? "## Visit and book", 28),
+  `- [${first}](https://…)`,
+  `- [${second}](https://…)`,
+  cut(sections[1] ?? "## Policies", 28),
+];
+const bare = `- ${first}: https://…`;
+const Y = [92, 122, 152, 182, 212, 242, 272];
+/** Lines that tick: every one but the blank third. */
+const TICKED = [0, 1, 3, 4, 5, 6];
+const rows = [
+  `${labels.line} 1 · ${labels.name}`,
+  `${labels.line} 2 · ${labels.summary}`,
+  `${labels.line} 5 · ${labels.link}`,
+];
+---
+
+<figure class="cvl" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    <rect x="28" y="28" width="372" height="282" rx="14" class="cvl-card"></rect>
+    <text x="48" y="54" class="cvl-cap">llms.txt</text>
+    <line x1="48" y1="66" x2="380" y2="66" class="cvl-hair"></line>
+    <rect x="36" y="76" width="356" height="24" rx="6" class="cvl-scan" style="opacity:0"></rect>
+    {
+      Y.map((y, k) => (
+        <g class="cvl-ln" data-line={k}>
+          <text x="50" y={y + 4} class="cvl-no">
+            {k + 1}
+          </text>
+          {k === 4 ? (
+            <>
+              <text x="70" y={y + 4} class="cvl-code cvl-bare" style="opacity:0">
+                {bare}
+              </text>
+              <text x="70" y={y + 4} class="cvl-code cvl-fixed">
+                {shown[k]}
+              </text>
+              <line x1="70" y1={y + 9} x2="250" y2={y + 9} class="cvl-mark" style="opacity:0" />
+            </>
+          ) : (
+            <text x="70" y={y + 4} class={k === 0 ? "cvl-code cvl-h1" : "cvl-code"}>
+              {shown[k]}
+            </text>
+          )}
+          {TICKED.includes(k) && (
+            <>
+              <circle cx="380" cy={y} r="7" class="cvl-ring" />
+              <path d={`M376.8,${y + 0.2} L379.2,${y + 2.6} L383.4,${y - 2.4}`} class="cvl-tick" />
+            </>
+          )}
+        </g>
+      ))
+    }
+    {
+      rows.map((r, i) => (
+        <g class="cvl-row">
+          <rect x="424" y={86 + i * 36} width="192" height="28" rx="9" class="cvl-chip" />
+          <circle cx="440" cy={100 + i * 36} r="4" class={i === 2 ? "cvl-dot cvl-dot-fix" : "cvl-dot"} />
+          <text x="452" y={104.2 + i * 36} class="cvl-lab">
+            {r}
+          </text>
+        </g>
+      ))
+    }
+    <g class="cvl-verdict">
+      <rect x="424" y="222" width="192" height="40" rx="12" class="cvl-vbg"></rect>
+      <path d="M440,242.4 L443.2,245.6 L449.2,238.4" class="cvl-tick"></path>
+      <text x="458" y="246.2" class="cvl-lab cvl-strong">{labels.verdict}</text>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .cvl {
+    --cvl-ink: var(--ink, light-dark(#14163c, #f2f1ff));
+    --cvl-ink2: var(--ink-2, light-dark(#3f4472, #b9bce0));
+    --cvl-ink3: var(--ink-3, light-dark(#565a86, #9a9dc4));
+    --cvl-hair: var(--hairline, light-dark(rgba(20, 22, 60, 0.08), rgba(255, 255, 255, 0.1)));
+    --cvl-glass: var(--glass-bg, light-dark(rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.07)));
+    --cvl-glassb: var(--glass-border, light-dark(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.14)));
+    --cvl-palm: var(--palm, #2fd3a5);
+    --cvl-palm-i: var(--palm-ink, light-dark(#147a5c, #72e6c3));
+    --cvl-violet: var(--violet, #8a6bff);
+    --cvl-violet-i: var(--violet-ink, light-dark(#5a3fd0, #ab95ff));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cvl svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cvl text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    fill: var(--cvl-ink2);
+  }
+  .cvl .cvl-code,
+  .cvl .cvl-no,
+  .cvl .cvl-cap {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  .cvl .cvl-code {
+    font-size: 12.5px;
+    fill: var(--cvl-ink);
+  }
+  .cvl .cvl-h1 {
+    font-weight: 600;
+  }
+  .cvl .cvl-no {
+    font-size: 10.5px;
+    fill: var(--cvl-ink3);
+  }
+  .cvl .cvl-cap {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    fill: var(--cvl-ink3);
+  }
+  .cvl .cvl-lab {
+    font-size: 12px;
+  }
+  .cvl .cvl-strong {
+    font-weight: 600;
+    fill: var(--cvl-ink);
+  }
+  .cvl .cvl-card {
+    fill: var(--cvl-glass);
+    stroke: var(--cvl-glassb);
+    stroke-width: 1;
+  }
+  .cvl .cvl-hair {
+    stroke: var(--cvl-hair);
+    stroke-width: 1;
+  }
+  .cvl .cvl-scan {
+    fill: var(--cvl-violet);
+    fill-opacity: 0.1;
+  }
+  .cvl .cvl-mark {
+    stroke: var(--cvl-violet);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+  }
+  .cvl .cvl-ring {
+    fill: none;
+    stroke: var(--cvl-palm);
+    stroke-opacity: 0.7;
+    stroke-width: 1.2;
+  }
+  .cvl .cvl-tick {
+    fill: none;
+    stroke: var(--cvl-palm-i);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cvl .cvl-chip {
+    fill: var(--cvl-glass);
+    stroke: var(--cvl-hair);
+    stroke-width: 1;
+  }
+  .cvl .cvl-dot {
+    fill: var(--cvl-palm);
+  }
+  .cvl .cvl-dot-fix {
+    fill: var(--cvl-violet);
+  }
+  .cvl .cvl-vbg {
+    fill: var(--cvl-glass);
+    stroke: var(--cvl-palm);
+    stroke-opacity: 0.6;
+    stroke-width: 1.1;
+  }
+  @container (max-width: 600px) {
+    .cvl .cvl-code {
+      font-size: 14px;
+    }
+    .cvl .cvl-lab {
+      font-size: 13.5px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cvl .cvl-code {
+      font-size: 14.5px;
+    }
+    .cvl .cvl-no,
+    .cvl .cvl-cap {
+      font-size: 13px;
+    }
+    .cvl .cvl-lab {
+      font-size: 15px;
+    }
+  }
+  .cvl.cvl-still,
+  .cvl.cvl-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cvl * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReady's.
+  (function () {
+    "use strict";
+    function bez(x1, y1, x2, y2) {
+      var cx = 3 * x1,
+        bx = 3 * (x2 - x1) - cx,
+        ax = 1 - cx - bx,
+        cy = 3 * y1,
+        by = 3 * (y2 - y1) - cy,
+        ay = 1 - cy - by;
+      return function (x) {
+        var t = x,
+          i,
+          e,
+          d;
+        for (i = 0; i < 5; i++) {
+          e = ((ax * t + bx) * t + cx) * t - x;
+          if (e < 1e-4 && e > -1e-4) break;
+          d = (3 * ax * t + 2 * bx) * t + cx;
+          if (d < 1e-6 && d > -1e-6) break;
+          t -= e / d;
+        }
+        return ((ay * t + by) * t + cy) * t;
+      };
+    }
+    var eSoft = bez(0.2, 0.8, 0.2, 1),
+      cl = function (v) {
+        return v < 0 ? 0 : v > 1 ? 1 : v;
+      },
+      ramp = function (t, a, b) {
+        return eSoft(cl((t - a) / (b - a)));
+      };
+
+    /* The light reaches line k at PASS[k]; it waits on line 5 while the line is rewritten. */
+    var Y = [92, 122, 152, 182, 212, 242, 272],
+      PASS = [0.6, 1.2, 1.8, 2.4, 3.0, 4.5, 5.1],
+      FIX = 3.3,
+      ROWS = [0.85, 1.45, 4.1],
+      VERDICT = 5.8,
+      EXIT = 10.8,
+      LOOP = 12,
+      STILL = 7.2;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cvl") === "on") return;
+      function q(s) {
+        var e = fig.querySelector(s);
+        if (!e) throw new Error("CoverValidate " + s);
+        return e;
+      }
+      var lns = [].slice.call(fig.querySelectorAll(".cvl-ln")),
+        scan = q(".cvl-scan"),
+        bare = q(".cvl-bare"),
+        fixed = q(".cvl-fixed"),
+        mark = q(".cvl-mark"),
+        rows = [].slice.call(fig.querySelectorAll(".cvl-row")),
+        verdict = q(".cvl-verdict"),
+        vtick = verdict.querySelector(".cvl-tick");
+      fig.setAttribute("data-cvl", "on");
+      var ticks = lns.map(function (g) {
+        var p = g.querySelector(".cvl-tick");
+        if (p) p.style.strokeDasharray = p.getTotalLength();
+        return p;
+      });
+      var VL = vtick.getTotalLength();
+      vtick.style.strokeDasharray = VL;
+
+      function op(e, v) {
+        e.style.opacity = v;
+      }
+      function render(t) {
+        var g = 1 - ramp(t, EXIT, LOOP),
+          k,
+          y,
+          u;
+        /* the light: down the lines at an even pace, waiting on line 5 while it is rewritten */
+        y = Y[Y.length - 1];
+        if (t <= PASS[0]) y = Y[0];
+        else
+          for (k = 1; k < PASS.length; k++) {
+            if (t < PASS[k]) {
+              y = Y[k - 1] + (Y[k] - Y[k - 1]) * ramp(t, PASS[k] - 0.35, PASS[k]);
+              break;
+            }
+          }
+        scan.setAttribute("y", String(y - 12));
+        op(scan, g * ramp(t, 0.35, 0.6) * (1 - ramp(t, PASS[6] + 0.3, PASS[6] + 0.7)));
+
+        /* each line ticks once the light has passed it; line 5 only once it is a link */
+        lns.forEach(function (ln, i) {
+          var tk = ticks[i];
+          if (!tk) return;
+          var at = i === 4 ? FIX + 0.7 : PASS[i] + 0.15;
+          u = ramp(t, at, at + 0.3) * g;
+          tk.style.strokeDashoffset = tk.getTotalLength() * (1 - u);
+        });
+
+        /* line 5: the bare address, then the link it becomes */
+        u = ramp(t, FIX, FIX + 0.45);
+        op(bare, (1 - u) * g);
+        op(fixed, u * g);
+        op(mark, g * ramp(t, FIX + 0.2, FIX + 0.5) * (1 - ramp(t, FIX + 1.1, FIX + 1.6)));
+
+        /* the findings, then the verdict */
+        rows.forEach(function (r, i) {
+          u = ramp(t, ROWS[i], ROWS[i] + 0.35);
+          op(r, g * u);
+          r.style.transform = "translateY(" + (1 - u) * 6 + "px)";
+        });
+        u = ramp(t, VERDICT, VERDICT + 0.4);
+        op(verdict, g * u);
+        verdict.style.transform = "translateY(" + (1 - u) * 6 + "px)";
+        vtick.style.strokeDashoffset = VL * (1 - ramp(t, VERDICT + 0.25, VERDICT + 0.6));
+      }
+
+      render(STILL);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        render(clock % LOOP);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cvl-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else cancelAnimationFrame(raf);
+      }
+      function still() {
+        fig.classList.add("cvl-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cvl-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cvl").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover validate", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

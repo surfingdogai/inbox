@@ -1,0 +1,13 @@
+---
+// The free tools' hub, in English (x-default): every tool and guide, one line each. The same page in
+// the other languages is src/pages/[lang]/[...path].astro (src/lib/i18n.ts).
+import LocalBody from "../components/LocalBody.astro";
+import Layout from "../layouts/Layout.astro";
+import { localPage } from "../lib/local";
+
+const page = localPage("tools", "en", Astro.site);
+---
+
+<Layout {...page.layout}>
+  <LocalBody id={page.id} lang={page.lang} />
+</Layout>

@@ -3,6 +3,7 @@
  * selectable, so a button only appears where the clipboard is there to use. Each button keeps its
  * own resting label (read once, never at click time), a second click restarts its timer rather than
  * stacking another, and the result is spoken through one polite live region shared by the page.
+ * A translated page gives its own words for the result in data-copied and data-copy-failed.
  */
 const RESET_MS = 1600;
 
@@ -28,6 +29,8 @@ export function wireCopyButtons(selector = "[data-copy]"): void {
   if (!navigator.clipboard) return;
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>(selector))) {
     const label = button.textContent?.trim() || "Copy";
+    const copied = button.dataset.copied || "Copied";
+    const failed = button.dataset.copyFailed || "Select it instead";
     let timer = 0;
     button.hidden = false;
     button.addEventListener("click", async () => {
@@ -36,11 +39,11 @@ export function wireCopyButtons(selector = "[data-copy]"): void {
       window.clearTimeout(timer);
       try {
         await navigator.clipboard.writeText(value);
-        button.textContent = "Copied";
-        announce("Copied");
+        button.textContent = copied;
+        announce(copied);
       } catch {
-        button.textContent = "Select it instead";
-        announce("Could not copy. Select the text instead.");
+        button.textContent = failed;
+        announce(button.dataset.copyFailed ? failed : "Could not copy. Select the text instead.");
       }
       timer = window.setTimeout(() => {
         button.textContent = label;

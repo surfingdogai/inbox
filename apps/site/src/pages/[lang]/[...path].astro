@@ -1,0 +1,20 @@
+---
+// The translated pages outside English: the free tools' hub and its three guides in each language,
+// at the addresses src/lib/i18n.ts gives them (/es/herramientas/, /de/ratgeber/llms-txt-beispiele/…).
+// Only those addresses are built; every other path under a language is no page.
+import LocalBody from "../../components/LocalBody.astro";
+import Layout from "../../layouts/Layout.astro";
+import { localRoutes } from "../../lib/i18n";
+import { localPage } from "../../lib/local";
+
+export function getStaticPaths() {
+  return localRoutes().map((r) => ({ params: { lang: r.lang, path: r.rest }, props: { id: r.id, lang: r.lang } }));
+}
+
+const { id, lang } = Astro.props;
+const page = localPage(id, lang, Astro.site);
+---
+
+<Layout {...page.layout}>
+  <LocalBody id={page.id} lang={page.lang} />
+</Layout>

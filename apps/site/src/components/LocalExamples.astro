@@ -1,0 +1,91 @@
+---
+/**
+ * llms.txt examples for small businesses, in the page's language: a file for each kind of business,
+ * written in that language (not translated line by line), each one valid llms.txt on a reserved
+ * .example domain, then how to use one, the generator, and the "For AI agents" section, whose one
+ * quiet line names the agent inbox as a way to have a door. Every kind keeps its anchor (#salon…) in
+ * every language.
+ */
+import { dict } from "../i18n";
+import { type Lang, toolEn, toolPath } from "../lib/i18n";
+import { relatedOf, rich } from "../lib/local";
+import CoverExamples from "./CoverExamples.astro";
+import Faqs from "./Faqs.astro";
+import LocalRelated from "./LocalRelated.astro";
+
+interface Props {
+  lang: Lang;
+}
+const { lang } = Astro.props;
+const d = dict(lang);
+const x = d.examples;
+---
+
+<div class="lg-cover" data-idea={x.idea}>
+  <CoverExamples kinds={x.kinds} alt={x.coverAlt} />
+</div>
+
+<p class="lg-fine">{x.made}</p>
+
+<nav aria-label={x.jump}>
+  <ul class="lg-jump">
+    {
+      x.kinds.map((k) => (
+        <li>
+          <a href={`#${k.id}`}>{k.label}</a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+{
+  x.kinds.map((k) => (
+    <section class="lg-sec lg-kind" id={k.id} aria-labelledby={`${k.id}-h`}>
+      <h2 id={`${k.id}-h`}>{k.name}</h2>
+      <p>{k.note}</p>
+      <div class="lg-file">
+        <pre><code>{k.file}</code></pre>
+        <button
+          class="lg-copy"
+          type="button"
+          data-copy={k.file}
+          data-copied={d.ui.copied}
+          data-copy-failed={d.ui.copyFailed}
+          aria-label={`${d.ui.copy}: ${k.name}`}
+          hidden
+        >
+          {d.ui.copy}
+        </button>
+      </div>
+    </section>
+  ))
+}
+
+<section class="lg-sec" aria-labelledby="lg-how-h">
+  <h2 id="lg-how-h">{x.howH}</h2>
+  <ol class="lg-steps">
+    {x.how.map((h) => <li set:html={rich(h, lang)} />)}
+  </ol>
+  <p set:html={rich(x.generator, lang)} />
+</section>
+
+<section class="lg-sec" aria-labelledby="lg-doors-h">
+  <h2 id="lg-doors-h">{x.doorsH}</h2>
+  {x.doors.map((p) => <p set:html={rich(p, lang)} />)}
+</section>
+
+<Faqs faqs={x.faqs} title={d.ui.questions} id="lg-faq-h" />
+
+<p class="lg-next">
+  <a class="link" href={toolPath("check", lang)} hreflang={toolEn("check", lang) ? "en" : undefined}>{d.ui.wholeSite}</a
+  >{toolEn("check", lang) && <span lang="en"> (EN)</span>}: {d.ui.wholeSiteLine}
+</p>
+
+<LocalRelated lang={lang} links={relatedOf("llms-txt-examples", lang)} />
+
+<script>
+  import { wireCopyButtons } from "../lib/copy";
+
+  wireCopyButtons(".lg-copy");
+</script>

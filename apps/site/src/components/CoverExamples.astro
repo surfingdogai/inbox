@@ -1,0 +1,290 @@
+---
+/**
+ * The cover for "llms.txt examples for small businesses": one file, rewritten for each business.
+ *
+ *  1. Four small tiles, a restaurant, a salon, a trade and a shop, light up in turn.
+ *  2. Beside them an llms.txt rewrites itself for the lit one, line by line: its name, its summary,
+ *     its first section and links, then its next section. The words are the page's own examples, in
+ *     the page's language, read from them and never invented.
+ *
+ * Built the way CoverReady.astro is: the markup is the composed frame at t = STILL (the first kind,
+ * whole) and the clock starts there, reduced motion is that frame, and it stops when nobody is
+ * looking. Every selector starts with .cex, so nothing leaks.
+ */
+import type { ExampleKind } from "../i18n/types";
+
+interface Props {
+  kinds: readonly ExampleKind[];
+  alt: string;
+}
+const { kinds, alt } = Astro.props;
+
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+const SHOWN = ["restaurant", "salon", "trades", "shop"] as const;
+/** A kind's first lines, as its file has them. */
+const cards = SHOWN.map((id) => {
+  const lines = (kinds.find((k) => k.id === id)?.file ?? "").split("\n");
+  const sections = lines.filter((l) => l.startsWith("## "));
+  const label = (l: string | undefined) => /^- \[([^\]]+)\]/.exec(l ?? "")?.[1] ?? "";
+  const links = lines.filter((l) => l.startsWith("- [")).map(label);
+  const second = lines.indexOf(sections[1] ?? "");
+  const underSecond = second < 0 ? undefined : lines.slice(second).find((l) => l.startsWith("- ["));
+  const link = (s: string | undefined) => `- [${cut(s ?? "", 24)}](https://…)`;
+  return {
+    id,
+    lines: [
+      cut(lines.find((l) => l.startsWith("# ")) ?? "", 34),
+      cut(lines.find((l) => l.startsWith("> ")) ?? "", 46),
+      cut(sections[0] ?? "", 40),
+      link(links[0]),
+      link(links[1]),
+      cut(sections[1] ?? "", 40),
+      link(label(underSecond)),
+    ],
+  };
+});
+const Y = [80, 110, 150, 178, 204, 244, 272];
+const TILE_Y = [52, 116, 180, 244];
+/** Each kind's mark: a cup, scissors, a drop, a bag, centred on (0, 0). */
+const GLYPH: Record<(typeof SHOWN)[number], string> = {
+  restaurant: "M-8,-3 h12 v5 a6,6 0 0 1 -12,0 z M4,-1 a3,3 0 0 1 0,6 M-5,-10 v4 M-1,-10 v4",
+  salon:
+    "M-2.6,2.8 L5,-9 M2.6,2.8 L-5,-9 M-1.2,5 a2.8,2.8 0 1 1 -5.6,0 a2.8,2.8 0 1 1 5.6,0 M6.8,5 a2.8,2.8 0 1 1 -5.6,0 a2.8,2.8 0 1 1 5.6,0",
+  trades: "M0,-9 C5,-3 7,0 7,3 a7,7 0 0 1 -14,0 C-7,0 -5,-3 0,-9 z",
+  shop: "M-8,-3 h16 l-1.5,12 h-13 z M-4,-3 v-2 a4,4 0 0 1 8,0 v2",
+};
+---
+
+<figure class="cex" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    {
+      cards.map((c, i) => (
+        <g class="cex-tile" data-k={i} style={i === 0 ? undefined : "opacity:.55"}>
+          <rect x="40" y={TILE_Y[i]} width="44" height="44" rx="12" class="tint" style={i === 0 ? undefined : "opacity:0"} />
+          <rect x="40" y={TILE_Y[i]} width="44" height="44" rx="12" class="edge" />
+          <path d={GLYPH[c.id]} transform={`translate(62 ${(TILE_Y[i] ?? 0) + 22})`} class="glyph" />
+        </g>
+      ))
+    }
+    <path d="M84,74 C104,74 108,74 128,74" class="cex-link"></path>
+    <rect x="128" y="40" width="484" height="280" rx="14" class="cex-card"></rect>
+    {
+      cards.map((c, i) => (
+        <g class="cex-k" data-k={i} style={i === 0 ? undefined : "opacity:0"}>
+          {c.lines.map((l, j) => (
+            <text x="150" y={Y[j]} class={j === 0 ? "cex-code cex-h1" : j === 1 ? "cex-code cex-sum" : "cex-code"}>
+              {l}
+            </text>
+          ))}
+        </g>
+      ))
+    }
+  </svg>
+</figure>
+
+<style is:global>
+  .cex {
+    --cex-ink: var(--ink, light-dark(#14163c, #f2f1ff));
+    --cex-ink2: var(--ink-2, light-dark(#3f4472, #b9bce0));
+    --cex-glass: var(--glass-bg, light-dark(rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.07)));
+    --cex-glassb: var(--glass-border, light-dark(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.14)));
+    --cex-violet: var(--violet, #8a6bff);
+    --cex-violet-i: var(--violet-ink, light-dark(#5a3fd0, #ab95ff));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cex svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cex .cex-code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px;
+    fill: var(--cex-ink);
+  }
+  .cex .cex-h1 {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .cex .cex-sum {
+    fill: var(--cex-ink2);
+  }
+  .cex .cex-card {
+    fill: var(--cex-glass);
+    stroke: var(--cex-glassb);
+    stroke-width: 1;
+  }
+  .cex .cex-tile .tint {
+    fill: var(--cex-violet);
+    fill-opacity: 0.12;
+    stroke: var(--cex-violet);
+    stroke-opacity: 0.55;
+    stroke-width: 1.3;
+  }
+  .cex .cex-tile .edge {
+    fill: none;
+    stroke: var(--cex-ink2);
+    stroke-opacity: 0.4;
+    stroke-width: 1.2;
+  }
+  .cex .cex-tile .glyph {
+    fill: none;
+    stroke: var(--cex-violet-i);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cex .cex-link {
+    fill: none;
+    stroke: var(--cex-violet);
+    stroke-opacity: 0.6;
+    stroke-width: 1.3;
+    stroke-dasharray: 1.5 5;
+    stroke-linecap: round;
+  }
+  @container (max-width: 600px) {
+    .cex .cex-code {
+      font-size: 14px;
+    }
+    .cex .cex-h1 {
+      font-size: 17px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cex .cex-code {
+      font-size: 15.5px;
+    }
+    .cex .cex-h1 {
+      font-size: 18px;
+    }
+  }
+  .cex.cex-still,
+  .cex.cex-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cex * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverReady's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    /* Each kind holds the card for HOLD seconds: its lines arrive one after another, and leave the
+       same way before the next kind's arrive. */
+    var HOLD = 3.4,
+      IN = 0.4,
+      OUT = 0.3,
+      STAGGER = 0.06,
+      TILE_Y = [52, 116, 180, 244],
+      STILL = 1.6;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cex") === "on") return;
+      var tiles = [].slice.call(fig.querySelectorAll(".cex-tile")),
+        groups = [].slice.call(fig.querySelectorAll(".cex-k")),
+        link = fig.querySelector(".cex-link");
+      if (!tiles.length || tiles.length !== groups.length || !link) throw new Error("CoverExamples markup");
+      fig.setAttribute("data-cex", "on");
+      var N = groups.length,
+        LOOP = N * HOLD,
+        lines = groups.map(function (g) {
+          return [].slice.call(g.querySelectorAll("text"));
+        });
+
+      function render(t) {
+        var cur = Math.floor(t / HOLD) % N,
+          local = t - cur * HOLD,
+          ty = TILE_Y[cur] + 22;
+        groups.forEach(function (g, i) {
+          g.style.opacity = i === cur ? 1 : 0;
+          tiles[i].style.opacity = i === cur ? 1 : 0.55;
+          tiles[i].querySelector(".tint").style.opacity = i === cur ? ease(local / IN) : 0;
+        });
+        lines[cur].forEach(function (l, j) {
+          var a = ease((local - j * STAGGER) / IN),
+            b = ease((local - (HOLD - OUT - 0.4) - j * STAGGER) / OUT),
+            v = a * (1 - b);
+          l.style.opacity = v;
+          l.style.transform = "translateX(" + (1 - a) * 6 + "px)";
+        });
+        link.setAttribute("d", "M84," + ty + " C104," + ty + " 108,74 128,74");
+      }
+
+      render(STILL);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        render(clock % LOOP);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cex-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else cancelAnimationFrame(raf);
+      }
+      function still() {
+        fig.classList.add("cex-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cex-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cex").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover examples", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

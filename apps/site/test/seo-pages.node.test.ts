@@ -5,6 +5,7 @@ import scoreRulesV2 from "../../../packages/spec/vocab/score-rules-v2.json";
 import { ASSISTANTS, OWNER_AS_OF, OWNER_CHECKED } from "../src/lib/assistants";
 import { type Faq, faqPage } from "../src/lib/faq";
 import { GUIDES, HUB, PLATFORM_PAGES, wordCount } from "../src/lib/guides";
+import { LOCAL_GUIDES, PAGES as LOCAL_PAGES } from "../src/lib/i18n";
 import {
   SHOPIFY,
   SHOPIFY_AS_OF,
@@ -308,7 +309,8 @@ describe("the owners' pages", () => {
       if (guide) {
         return (
           GUIDES.some((g) => g.slug === guide) ||
-          (PLATFORM_PAGES.some((pp) => pp.slug === guide) && existsSync(site(`src/pages/guides/${guide}.astro`)))
+          ((PLATFORM_PAGES.some((pp) => pp.slug === guide) || LOCAL_GUIDES.some((g) => LOCAL_PAGES[g].en === p)) &&
+            existsSync(site(`src/pages/guides/${guide}.astro`)))
         );
       }
       if (p === "/guides/") return true;
@@ -360,7 +362,7 @@ describe("the owners' pages", () => {
     const config = read("astro.config.mjs");
     expect(config).toContain('import sitemap from "@astrojs/sitemap";');
     expect(config).toContain('const NETWORK_SITEMAP = "https://surfingdog.ai/sitemap-checks.xml";');
-    expect(config).toContain("sitemap({ customSitemaps: [NETWORK_SITEMAP] })");
+    expect(config).toMatch(/sitemap\(\{\s*customSitemaps: \[NETWORK_SITEMAP\],/);
     const pkg = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
     expect(pkg.dependencies["@astrojs/sitemap"]).toBeDefined();
     expect(read("public/robots.txt")).toContain("Sitemap: https://surfingdog.ai/sitemap-checks.xml");

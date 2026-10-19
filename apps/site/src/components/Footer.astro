@@ -1,4 +1,6 @@
 ---
+import { navWord } from "../i18n";
+import { type Lang, pagePath, toolPath } from "../lib/i18n";
 import Mark from "./Mark.astro";
 
 interface Group {
@@ -16,6 +18,7 @@ const groups: Group[] = [
       { href: "/search/", label: "Search" },
       { href: "/check", label: "Check a business" },
       { href: "/guides/", label: "Guides" },
+      { href: "/tools/", label: "Free tools" },
       { href: "/leaderboard", label: "Leaderboards" },
       { href: "/directory/", label: "Directory" },
       { href: "/search/#agents", label: "For agents" },
@@ -75,8 +78,15 @@ const groups: Group[] = [
 interface Props {
   /** One quiet line: the home page's footer. */
   minimal?: boolean;
+  /** The page's language: the footer's words in it, its links the same (src/i18n). */
+  lang?: Lang;
 }
-const { minimal = false } = Astro.props;
+const { minimal = false, lang = "en" } = Astro.props;
+/** A word of the footer in the page's language, by its English words. */
+const w = (english: string) => navWord(lang, english);
+/** A link's address in the page's language, where the page has one: the tools' hub and the check. */
+const at = (href: string) =>
+  href === "/tools/" ? pagePath("tools", lang) : href === "/check" ? toolPath("check", lang) : href;
 
 /** The home page's line: a few links, the rest of the map is one click away. */
 const short = [
@@ -97,12 +107,12 @@ const year = new Date().getFullYear();
   minimal ? (
     <footer class="footer footer-min">
       <div class="wrap min-row">
-        <nav aria-label="Footer">
+        <nav aria-label={w("Footer")}>
           <ul class="min-links">
             {short.map((l) => (
               <li>
-                <a href={l.href} rel={l.external ? "noopener" : undefined}>
-                  {l.label}
+                <a href={at(l.href)} rel={l.external ? "noopener" : undefined}>
+                  {w(l.label)}
                 </a>
               </li>
             ))}
@@ -124,21 +134,21 @@ const year = new Date().getFullYear();
           <Mark size={24} />
           <span>Surfing Dog</span>
         </a>
-        <p class="say">Open doors to the agentic internet.</p>
+        <p class="say">{w("Open doors to the agentic internet.")}</p>
       </div>
 
-      <nav class="groups" aria-label="Footer" data-reveal="stagger">
+      <nav class="groups" aria-label={w("Footer")} data-reveal="stagger">
         {
           groups.map((g) => (
             <div class="group">
               <p class="ghead" id={g.id}>
-                {g.title}
+                {w(g.title)}
               </p>
               <ul class="links" aria-labelledby={g.id}>
                 {g.links.map((l) => (
                   <li>
-                    <a href={l.href} rel={l.external ? "noopener" : undefined}>
-                      <span>{l.label}</span>
+                    <a href={at(l.href)} rel={l.external ? "noopener" : undefined}>
+                      <span>{w(l.label)}</span>
                     </a>
                   </li>
                 ))}
@@ -154,7 +164,7 @@ const year = new Date().getFullYear();
         <img src="/logo.png" alt="" width="460" height="461" loading="lazy" decoding="async" />
         <span>Surfing Dog · {year}</span>
       </p>
-      <p class="licence">Open source under the MIT licence.</p>
+      <p class="licence">{w("Open source under the MIT licence.")}</p>
     </div>
   </div>
 </footer>

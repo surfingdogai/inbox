@@ -1,8 +1,11 @@
 ---
 import "../styles/site.css";
 import Footer from "../components/Footer.astro";
+import LangRow from "../components/LangRow.astro";
 import Nav from "../components/Nav.astro";
+import { DICTS } from "../i18n";
 import { BEACON } from "../lib/analytics";
+import { type Alternate, isLang, type Lang, OG_LOCALE } from "../lib/i18n";
 import { fontFaceCss } from "../lib/shell";
 
 interface Props {
@@ -17,6 +20,13 @@ interface Props {
   ld?: Record<string, unknown> | readonly Record<string, unknown>[];
   /** The home page's one-line footer instead of the full map. */
   minimalFooter?: boolean;
+  /** The page's language, from its address (src/lib/i18n.ts); English when it has no prefix. */
+  lang?: Lang;
+  /**
+   * Every version of a translated page, x-default included (src/lib/i18n.ts alternates): written as
+   * hreflang links in the head, and as the quiet row of languages above the footer.
+   */
+  alternates?: readonly Alternate[];
 }
 
 const CARD_ALTS: Record<string, string> = {
@@ -30,8 +40,15 @@ const {
   type = "website",
   ld,
   minimalFooter = false,
+  lang = "en",
+  alternates = [],
 } = Astro.props;
 const imageAlt = Astro.props.imageAlt ?? CARD_ALTS[image] ?? title;
+// A translated page's social preview names its locale, and the others it is published in.
+const ogLocales = alternates
+  .map((a) => a.hreflang)
+  .filter((h): h is Lang => isLang(h) && h !== lang)
+  .map((h) => OG_LOCALE[h]);
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL(image, Astro.site);
 // Manrope and Plus Jakarta Sans at /fonts/, the files shell.css names too (src/lib/shell.ts): the
@@ -40,13 +57,14 @@ const fonts = fontFaceCss();
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <!-- The striped half sun, the same mark as the one in the bar. Browsers that
          understand SVG take this one; the rest fall back to the rasters. -->
@@ -66,6 +84,8 @@ const fonts = fontFaceCss();
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:alt" content={imageAlt} />
+    {alternates.length > 0 && <meta property="og:locale" content={OG_LOCALE[lang]} />}
+    {ogLocales.map((l) => <meta property="og:locale:alternate" content={l} />)}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
@@ -106,10 +126,11 @@ const fonts = fontFaceCss();
   </head>
   <body>
     <div class="sky sky-fixed" aria-hidden="true"><i class="f1"></i><i class="f2"></i><i class="f3"></i><i class="f4"></i></div>
-    <a class="skip" href="#main">Skip to content</a>
-    <Nav />
+    <a class="skip" href="#main">{DICTS[lang].ui.skip}</a>
+    <Nav lang={lang} />
     <main id="main"><slot /></main>
-    <Footer minimal={minimalFooter} />
+    {alternates.length > 0 && <LangRow lang={lang} alternates={alternates} />}
+    <Footer minimal={minimalFooter} lang={lang} />
     <!-- Motion: reveals, the brand line and the counters. Every resting state is the
          visible one, so a page without this script is simply a finished page. -->
     <script>

@@ -1,0 +1,72 @@
+---
+/**
+ * The quiet row of languages above the footer of a translated page: each language by its own name,
+ * linking the same page in it. The page's own language is marked, not linked. It never chooses for
+ * the visitor: the address says the language, and nothing redirects (src/lib/i18n.ts).
+ */
+import { DICTS } from "../i18n";
+import { type Alternate, isLang, LANG_NAMES, type Lang } from "../lib/i18n";
+
+interface Props {
+  lang: Lang;
+  alternates: readonly Alternate[];
+}
+const { lang, alternates } = Astro.props;
+const rows = alternates.flatMap((a) =>
+  isLang(a.hreflang) ? [{ lang: a.hreflang, href: new URL(a.href).pathname }] : [],
+);
+---
+
+<nav class="langrow wrap" aria-label={DICTS[lang].ui.langs}>
+  <ul>
+    {
+      rows.map((r) => (
+        <li>
+          {r.lang === lang ? (
+            <span aria-current="page" lang={r.lang}>
+              {LANG_NAMES[r.lang]}
+            </span>
+          ) : (
+            <a href={r.href} hreflang={r.lang} lang={r.lang}>
+              {LANG_NAMES[r.lang]}
+            </a>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+<style>
+  .langrow {
+    margin-top: var(--sp-8);
+  }
+  .langrow ul {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--sp-1) var(--sp-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .langrow a,
+  .langrow span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    font-size: var(--fs-fine);
+    letter-spacing: 0.01em;
+    color: var(--ink-3);
+    text-decoration: none;
+    transition: color var(--dur-fast) var(--ease);
+  }
+  .langrow a:hover,
+  .langrow a:focus-visible {
+    color: var(--ink);
+  }
+  .langrow span[aria-current] {
+    color: var(--ink);
+    font-weight: 600;
+  }
+</style>

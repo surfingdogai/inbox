@@ -1,0 +1,336 @@
+/*
+ * The translated pages (the free tools' hub and its guides, src/components/LocalBody.astro): the
+ * guides' quiet column, hairlines and the interface's sizes, nothing louder. Every rule sits under
+ * .lg, the page's article, so nothing here reaches another page and every selector weighs alike.
+ */
+.lg {
+  padding-bottom: var(--section-y);
+}
+.lg .eyebrow a {
+  color: inherit;
+  text-decoration: none;
+}
+.lg .eyebrow a:hover,
+.lg .eyebrow a:focus-visible {
+  text-decoration: underline;
+}
+.lg .lg-sec h2 {
+  margin: 0;
+  font-size: var(--fs-section);
+  line-height: var(--lh-heading);
+  letter-spacing: -0.016em;
+}
+.lg .lg-sec > * + * {
+  margin-top: var(--sp-3);
+}
+.lg .lg-sec p,
+.lg .lg-sec li {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.lg .lg-sec :not(pre) > code,
+.lg .lg-table td code {
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-code);
+  background: var(--row-bg);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.lg p.lg-fine {
+  font-size: var(--fs-fine);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* The cover: the page's one idea, drawn and moving, in the column's width. */
+.lg .lg-cover {
+  margin-top: var(--sp-7);
+}
+
+/* A form that asks the network's check: one field, one button. */
+.lg .lg-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.lg .lg-form label {
+  flex: 1 0 100%;
+}
+.lg .lg-form .input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.lg .lg-ask {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--row-bg);
+}
+.lg .lg-ask h2 {
+  font-size: var(--fs-h-sub);
+}
+
+/* The one quiet next step: a link and a few words. */
+.lg p.lg-next {
+  font-size: var(--fs-ui);
+  color: var(--ink-3);
+}
+.lg p.lg-next a {
+  font-weight: 600;
+}
+
+/* Live counts: a line that says counts will come, until they are read; never a number that wasn't. */
+.lg .lg-n {
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Numbered steps: the number small and faint, the step's name in ink. */
+.lg .lg-steps {
+  counter-reset: lg-step;
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lg .lg-steps > li {
+  counter-increment: lg-step;
+  position: relative;
+  padding-left: 30px;
+  scroll-margin-top: 88px;
+}
+.lg .lg-steps > li::before {
+  content: counter(lg-step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.lg .lg-steps > li b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* A plain list with soft markers. */
+.lg .lg-list {
+  margin: 0;
+  padding-left: 1.2em;
+  list-style: disc;
+}
+.lg .lg-list li + li {
+  margin-top: var(--sp-1);
+}
+.lg .lg-list li::marker {
+  color: var(--ink-3);
+}
+
+/* Tables: hairline rows, small caps heads, no boxes. */
+.lg .lg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-card);
+  line-height: var(--lh-ui);
+}
+.lg .lg-table th {
+  padding: 0 var(--sp-3) var(--sp-2) 0;
+  text-align: left;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.lg .lg-table td {
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+  border-top: 1px solid var(--hairline);
+  vertical-align: top;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.lg .lg-table td:first-child {
+  width: 38%;
+  color: var(--ink);
+}
+
+/* A file to copy: monospace, wrapped rather than scrolled, a copy button in its corner. */
+.lg .lg-file {
+  position: relative;
+}
+.lg .lg-file pre {
+  margin: 0;
+  padding: var(--sp-4);
+  padding-right: 72px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--row-bg);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-mono);
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.lg .lg-copy {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  padding: 3px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  background: var(--row-bg);
+  font: inherit;
+  font-size: var(--fs-fine);
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+.lg .lg-copy:hover,
+.lg .lg-copy:focus-visible {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+}
+
+/* The examples' kinds, as one quiet row of anchors. */
+.lg .lg-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lg .lg-jump li a {
+  font-size: var(--fs-ui);
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.lg .lg-jump li a:hover,
+.lg .lg-jump li a:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--violet) 45%, transparent);
+}
+.lg .lg-kind {
+  scroll-margin-top: 88px;
+}
+.lg .lg-kind > h2 {
+  font-size: var(--fs-h-sub);
+}
+
+/* The hub's rows: a name, one line under it, hairlines between. */
+.lg .lg-rows {
+  display: grid;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lg ul.lg-rows > li {
+  border-top: 1px solid var(--hairline);
+}
+.lg .lg-rows > li:last-child {
+  border-bottom: 1px solid var(--hairline);
+}
+.lg .lg-rows > li > a {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3) 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+.lg .lg-rows > li > a > b {
+  font-family: var(--font-display);
+  font-size: var(--fs-h-card);
+  font-weight: 600;
+  line-height: 1.35;
+  transition: color var(--dur-fast) ease;
+}
+.lg .lg-rows > li > a > span {
+  font-size: var(--fs-card);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.lg .lg-rows > li > a:hover > b,
+.lg .lg-rows > li > a:focus-visible > b {
+  color: var(--violet-ink);
+}
+.lg .lg-rows > li > a > b > i {
+  font-style: normal;
+  font-size: var(--fs-fine);
+  color: var(--ink-3);
+}
+
+/* Assisted or agentic: two short definitions side by side, one under the other on a phone. */
+.lg .lg-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin: 0;
+}
+.lg .lg-pair > div {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+}
+.lg .lg-pair dt {
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  color: var(--ink);
+}
+.lg .lg-pair dd {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-card);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+@media (max-width: 520px) {
+  .lg .lg-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The foot of a page: related pages in one quiet line, and when the words last changed. */
+.lg .lg-related {
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--hairline);
+}
+.lg .lg-related > h2 {
+  margin: 0;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.lg .lg-related > p {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-ui);
+  line-height: 1.7;
+  color: var(--ink-3);
+}
+.lg .lg-related > p.lg-fine {
+  font-size: var(--fs-fine);
+}
