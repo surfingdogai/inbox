@@ -180,6 +180,20 @@ describe("a conversation by email", () => {
   });
 });
 
+describe("the host's address for an inbox", () => {
+  it("is taken away when the host stops giving one: no email then names an address that no longer reaches it", async () => {
+    const t = await live();
+    const host = t.ownHost ?? "";
+    const cookie = await rt.signIn(t, host);
+    const read = async () =>
+      ((await rt.http(host, "GET", "/v1/owner/email", { headers: { cookie } })).json as { inbound: unknown }).inbound;
+    expect(await read()).toMatchObject({ address: inboundOf(t) });
+    t.noInbound = true;
+    await rt.setState(t, "live", { ownResolves: true });
+    expect(await read()).toBeNull();
+  });
+});
+
 describe("Settings → Email on a hosted inbox", () => {
   it("shows the host's address for the inbox, which nobody changes, and checks a forwarded address live", async () => {
     const t = await live();

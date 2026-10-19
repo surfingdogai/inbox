@@ -62,6 +62,8 @@ export interface FakeTenant {
   jwks: { keys: Record<string, unknown>[] } | null;
   /** The policy's `join_networks`, when the test names it; absent, the payload leaves it out. */
   joinNetworks?: string[] | undefined;
+  /** The control plane gives the inbox no address of its own (HOSTED_INBOUND_DOMAIN off). */
+  noInbound?: boolean;
   /** Sending from the business's own address, as the control plane says it stands (ADR-026 §3). */
   own?: PolicyPayload["mail"]["own"];
 }
@@ -97,7 +99,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
       reply_to: level === 2 ? OWNER : null,
       customer_mail: live,
       customer_daily_cap: live ? 200 : 0,
-      inbound: `${t.slugHost.split(".")[0]}@in.${PARENT}`,
+      ...(t.noInbound ? {} : { inbound: `${t.slugHost.split(".")[0]}@in.${PARENT}` }),
       ...(t.own !== undefined ? { own: t.own } : {}),
     },
     read_only: t.state === "closing" || t.state === "closed",
