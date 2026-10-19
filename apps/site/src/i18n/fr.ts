@@ -197,7 +197,7 @@ export const fr: Dict = {
       },
       {
         problem: "La ligne 1 n'est pas `# Votre nom`",
-        fix: "Mettez en ligne 1 le nom de votre entreprise après un # et une espace. Avant, seulement des lignes vides.",
+        fix: "À la ligne 1, écrivez le nom de votre entreprise après un # et une espace. Seules des lignes vides peuvent la précéder.",
       },
       {
         problem: "`- Carte : https://…`",
