@@ -110,7 +110,7 @@ describe("the capability vocabulary", () => {
       for (const t of c.doors?.inbox ?? []) expect(items.has(t), `${c.id}: ${t}`).toBe(true);
   });
 
-  it("keeps a changelog of one shape, oldest first, ending with this version's publication", () => {
+  it("keeps a changelog of one shape, oldest first, this version's publication and amendments last", () => {
     const log = v.changelog ?? [];
     expect(log.length).toBeGreaterThanOrEqual(3);
     for (let i = 1; i < log.length; i++) {
@@ -120,7 +120,11 @@ describe("the capability vocabulary", () => {
     for (const e of log) expect(Object.keys(e).sort()).toEqual(["change", "date", "summary", "version"]);
     const last = log[log.length - 1];
     expect(last?.version).toBe(v.version);
-    expect(last).toMatchObject({ change: "published", date: v.published });
+    // This version's publication, and after it only its amendments (version 1 was amended on 13
+    // October 2026 while it was the latest; version 2 on 18 October 2026).
+    const published = log.findLastIndex((e) => e.change === "published");
+    expect(log[published]).toMatchObject({ version: v.version, change: "published", date: v.published });
+    for (const e of log.slice(published + 1)) expect(e).toMatchObject({ version: v.version, change: "amended" });
     // Version 1 is archived as it was last served: as amended on 13 October 2026, producing tested.
     expect(old.produced).toEqual(["declared", "tested"]);
     expect(log.find((e) => e.version === 1 && e.change === "amended")?.date).toBe("2026-10-13");
