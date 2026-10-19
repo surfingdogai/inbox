@@ -293,6 +293,15 @@ export const manifestSchema = z.object({
    */
   directory: z.object({ listed: z.boolean() }).optional(),
   /**
+   * Whether a network may carry an assistant's request to this inbox (ADR-025; network.md §4.17): a
+   * question, a request for a quote or for a booking, sent through this inbox's own public API with the
+   * person's email address, given with their consent. An inbox with the owner's switch publishes it
+   * either way: `{"accepted": true}`, the default, says yes; `{"accepted": false}` says no to every
+   * network. Saying nothing is an inbox from before the switch, whose owner could not say no: a network
+   * carries nothing to it.
+   */
+  carried_requests: z.object({ accepted: z.boolean() }).optional(),
+  /**
    * Claim tokens, by network host (network.md §4.12): how a business proves to a network that its manifest is its own
    * when it registers or claims a listing there. Protocol 0.2.
    */

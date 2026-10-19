@@ -76,6 +76,12 @@ export const itemFlagsSchema = z.object({
   needsHuman: z.boolean().default(false),
   sandbox: z.boolean().default(false),
   priority: z.number().int().min(0).max(3).default(0),
+  /**
+   * A network carried it here for a person's AI assistant (ADR-025; `Surfing-Dog-Carried: 1`, network
+   * protocol §4.17). Said by whoever sent it, never proved: it only holds the acknowledgement email to
+   * one a day per address, so saying it falsely costs nobody anything. Absent on everything else.
+   */
+  carried: z.boolean().optional(),
 });
 export type ItemFlags = z.infer<typeof itemFlagsSchema>;
 

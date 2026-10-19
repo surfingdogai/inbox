@@ -380,6 +380,44 @@
         }
       },
       "required": ["as_of", "doors", "incidents", "trouble", "fixes"]
+    },
+    "carried": {
+      "description": "The requests this network carried to the inbox for assistants, and tried to, over the last 30 days (§4.17): counts only. Absent from a network that carries none.",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "description": "The start of the 30 days the counts cover."
+        },
+        "delivered": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Requests in the inbox."
+        },
+        "confirm": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Bookings shown to a person to confirm, not sent yet."
+        },
+        "not_delivered": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "description": "Requests assistants tried to send that did not arrive, by outcome: switched_off, failed, busy, refused…"
+        }
+      },
+      "required": ["since", "delivered", "confirm", "not_delivered"]
     }
   },
   "required": ["ok", "rules", "next_rules", "reports", "contests"]

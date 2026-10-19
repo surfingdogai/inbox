@@ -1,0 +1,107 @@
+---
+// For a business: every AI assistant its inbox works with, and what each needs (src/lib/assistants.ts),
+// one card each linking to the assistant's own page. A person adding Surfing Dog to their own
+// assistant reads /assistants/ instead.
+import Layout from "../../layouts/Layout.astro";
+import { ASSISTANTS, CHECKED } from "../../lib/assistants";
+import { MCP_URL } from "../../lib/gateway";
+import { HOSTED_CTA } from "../../lib/hosted";
+
+const url = new URL(Astro.url.pathname, Astro.site).toString();
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: "What each AI assistant can do with your inbox",
+  url,
+  hasPart: ASSISTANTS.map((a) => ({
+    "@type": "TechArticle",
+    headline: a.heading,
+    url: new URL(`/assistants/${a.slug}/`, Astro.site).toString(),
+  })),
+};
+---
+
+<Layout
+  title="What each AI assistant can do with your inbox · Surfing Dog"
+  description="ChatGPT, Claude, Gemini, Copilot, Grok and Meta Muse: what each can book or buy with a business as of October 2026, and how it connects to your own inbox."
+  image="/art/og-assistant-hub-v1.png"
+  ld={ld}
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="biz-h">
+    <p class="eyebrow">For businesses</p>
+    <h1 class="h-page" id="biz-h">Your inbox in every assistant</h1>
+    <p class="lede">
+      What each assistant can book or buy as of October 2026, and how it connects to your own inbox. To see which doors
+      your website offers, <a class="link" href="/check">check your website for AI agents</a>.
+    </p>
+    {
+      HOSTED_CTA && (
+        <div class="hero-actions head-cta">
+          <a class="btn btn-primary" href={HOSTED_CTA.href}>
+            {HOSTED_CTA.label}
+          </a>
+        </div>
+      )
+    }
+  </section>
+
+  <section class="section section-tight" aria-label="Assistants">
+    <div class="wrap">
+      <ul class="grid-cards" data-reveal="stagger">
+        {
+          ASSISTANTS.map((a) => (
+            <li class="glass card">
+              <h2 class="h-card">
+                <a class="link" href={`/assistants/${a.slug}/`}>
+                  {a.name}
+                </a>
+              </h2>
+              <p class="card-text">{a.lede}</p>
+              <p class="card-text muted">{a.plans}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="same-h">
+    <h2 class="h-section" id="same-h">What every assistant gets from your inbox</h2>
+    <ul class="gets">
+      <li>A customer's assistant: your public MCP server at <code>/mcp</code>, for your services, free times, bookings, quotes, orders and messages. No sign-in.</li>
+      <li>Your own AI: the owner server at <code>/mcp/owner</code>, with OAuth or an owner key.</li>
+      <li>The same rules for everyone: a priced booking or order binds nobody until the person confirmed it.</li>
+      <li>Every MCP revision from March 2025 to 2026-07-28.</li>
+      <li>
+        Found through Surfing Dog: assistants search <code>{MCP_URL}</code>, and can send your inbox a question, a quote
+        request or a booking request through it, unless you switch that off in Settings → Networks.
+      </li>
+    </ul>
+    <p class="muted fine">Checked {CHECKED} against each assistant's own documentation, linked on its page.</p>
+    <p class="fine">
+      New to this? Start with <a class="link" href="/blog/what-ai-assistants-need-from-your-business/">what a personal AI
+      assistant needs from your business</a>.
+    </p>
+    <p><a class={HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"} href="/try/">Try it with the demo shop</a></p>
+  </section>
+</Layout>
+
+<style>
+  .head-cta {
+    margin-top: var(--sp-5);
+  }
+  .muted {
+    color: var(--ink-2);
+  }
+  .gets {
+    display: grid;
+    gap: 6px;
+    padding-left: 1.1rem;
+    font-size: var(--fs-ui);
+    color: var(--ink-2);
+  }
+  .wrap-read.section p + p,
+  .wrap-read.section ul + p {
+    margin-top: var(--sp-3);
+  }
+</style>

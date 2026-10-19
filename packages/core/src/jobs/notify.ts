@@ -209,13 +209,16 @@ async function customerMail(
   }
   // Anyone can make a request with any address, and the acknowledgement goes out unasked, in the
   // business's name: a few a day to one address, so nobody can use the business to fill a stranger's
-  // mailbox. What the business itself does next is always sent. One held back shows on the item.
+  // mailbox. A request a network carried for someone's AI assistant (ADR-025) is acknowledged at
+  // most once a day per address: the address was typed by an assistant, for a person this inbox has
+  // never heard from. What the business itself does next is always sent. One held back shows on the item.
   const ackLimited =
     p.event === "create" &&
     item.type !== "refund" &&
     !item.flags.sandbox &&
     Boolean(o.contact?.email) &&
-    (await acksToday(db, o.contact?.email ?? "", o.now)) >= ACKS_PER_ADDRESS_PER_DAY;
+    (await acksToday(db, o.contact?.email ?? "", o.now)) >=
+      (item.flags.carried ? CARRIED_ACKS_PER_ADDRESS_PER_DAY : ACKS_PER_ADDRESS_PER_DAY);
   const facts = o.facts;
   const lang = customerLang(o.contact?.locale, facts.languages);
   const cause = await causeOf(db, p);
@@ -590,6 +593,9 @@ async function closedChangeOf(
 
 /** Acknowledgements one address gets in a day, at most. */
 export const ACKS_PER_ADDRESS_PER_DAY = 3;
+
+/** The same for a request a network carried (`flags.carried`): one a day to an address. */
+export const CARRIED_ACKS_PER_ADDRESS_PER_DAY = 1;
 
 /** The acknowledgements this address got in the last day, sent or on their way. */
 async function acksToday(db: Db, email: string, now: number): Promise<number> {

@@ -33,7 +33,9 @@ export const MCP_TOOL_NAMES = ["search_businesses", "get_business", "list_catego
  * which a business's own AI calls to register, claim, correct or remove its listing (§4.12); `check_business`, which
  * checks how far an agent can go with one business's website and gives its agentic score (§4.13); `report_door`, which
  * takes an agent's reports of how its uses of businesses' doors went, done or not (§4.15); `get_census`, read-only, the
- * monthly counts of what agents can do at the websites the network checked (§4.16).
+ * monthly counts of what agents can do at the websites the network checked (§4.16); `ask_business`, `request_quote`
+ * and `request_booking`, which carry a person's request to a business's own inbox when the inbox allows it (§4.17,
+ * `carry.ts`).
  */
 export const MCP_OPTIONAL_TOOL_NAMES = [
   "list_attributes",
@@ -42,6 +44,9 @@ export const MCP_OPTIONAL_TOOL_NAMES = [
   "check_business",
   "report_door",
   "get_census",
+  "ask_business",
+  "request_quote",
+  "request_booking",
 ] as const;
 
 /** `search_businesses`: `GET /v1/businesses` for an assistant, in the same order and with the same filters. */
@@ -198,7 +203,7 @@ export const businessCardSchema = z.object({
     })
     .optional()
     .describe(
-      "The business's own inbox, where it takes bookings, orders and questions; this server takes no bookings or orders. Present whenever has_inbox is true or absent.",
+      "The business's own inbox, where it takes bookings, orders and questions; this server takes no orders or payments and books nothing itself. Present whenever has_inbox is true or absent.",
     ),
   standing: z
     .object({

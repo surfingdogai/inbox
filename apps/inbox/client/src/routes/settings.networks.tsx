@@ -7,6 +7,7 @@ import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import {
+  carriedWords,
   type DoorPanel,
   doorPanel,
   emailWords,
@@ -77,6 +78,28 @@ function NetworksPage() {
       },
     );
   };
+  // One switch for every network at once: the manifest says it, so every network reads the same.
+  const carriedOn = settings.data ? settings.data.doc.carried.accepted : true;
+  const setCarried = (on: boolean) => {
+    if (!settings.data || save.isPending) return;
+    save.reset();
+    setNotice(null);
+    setActing("carried");
+    save.mutate(
+      { doc: { carried: { accepted: on } }, expected_version: settings.data.version },
+      {
+        onSuccess: () => {
+          setActing(null);
+          setNotice({
+            tone: "success",
+            text: on
+              ? "On. Within five minutes, assistants can reach you through networks."
+              : "Off. Within five minutes, networks stop bringing you assistants' requests; assistants can still write to your inbox directly.",
+          });
+        },
+      },
+    );
+  };
   const reload = () => {
     save.reset();
     void qc.invalidateQueries({ queryKey: qk.settings });
@@ -86,6 +109,20 @@ function NetworksPage() {
   return (
     <section className="card glass stack">
       <SectionHead title="Networks" />
+      <div className="net-carried">
+        <Switch checked={carriedOn} onChange={setCarried} disabled={save.isPending || !settings.data}>
+          Requests from AI assistants
+        </Switch>
+        <div className="hint">
+          Questions, quotes and booking requests that people's AI assistants send through Surfing Dog or another
+          network, with the email they agreed to share. Off, assistants can still write to your inbox directly.
+        </div>
+        {acting === "carried" && problem && !conflict && (
+          <div className="hint error" role="alert">
+            {problem.detail}
+          </div>
+        )}
+      </div>
       <p className="lede small">{NETWORKS_WHY}</p>
       <details className="net-sent">
         <summary className="hint">What a network is sent</summary>
@@ -251,9 +288,10 @@ function NetworkLine({
   const rules = n.enabled ? rulesWords(n.rules) : null;
   const standing = standingWords(n);
   const doors = doorPanel(n);
+  const carried = carriedWords(n);
   const emails = n.enabled ? emailWords(n) : null;
   return (
-    <div className={clsx("catalogue-row row-glass", !n.enabled && !n.held?.on_when_released && "is-archived")}>
+    <div className={clsx("catalogue-row row-glass net-row", !n.enabled && !n.held?.on_when_released && "is-archived")}>
       <div className="catalogue-main">
         <Switch checked={n.held ? n.held.on_when_released : n.enabled} onChange={onToggle} disabled={pending}>
           <b className="mono">{n.origin}</b>
@@ -270,6 +308,7 @@ function NetworkLine({
           </div>
         )}
         {doors && <AgentsGotOn panel={doors} />}
+        {carried && <div className="hint">{carried}</div>}
         {rules && <div className="hint">{rules}</div>}
         {n.enabled && n.level === "directory" && (
           <div className="hint">

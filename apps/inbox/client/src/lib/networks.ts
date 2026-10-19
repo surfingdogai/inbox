@@ -468,3 +468,35 @@ function shortUrl(url: string): string {
     return url;
   }
 }
+
+/** Why a carried request did not arrive, in the owner's words (ADR-025). */
+const CARRIED_WHY: Record<string, string> = {
+  switched_off: "you had them switched off",
+  failed: "your inbox could not be reached",
+  busy: "your inbox's limit was reached",
+  refused: "your inbox turned it down",
+  not_taken: "a kind of request you do not take",
+  elsewhere: "a kind you take somewhere else",
+  no_inbox: "your inbox could not be found",
+};
+
+/**
+ * What a network says assistants tried, through it, over its last 30 days: the requests it carried
+ * here, and the ones that did not arrive and why. A booking shown to the person to confirm its price
+ * is not counted: it reached nobody yet, and once the person says yes it is delivered. Only this
+ * inbox is told; null when the network said nothing, or nothing happened.
+ */
+export function carriedWords(n: Pick<NetworkView, "enabled" | "carried">): string | null {
+  const c = n.carried;
+  if (!n.enabled || !c) return null;
+  const missed = Object.entries(c.not_delivered).filter(([, k]) => k > 0);
+  const lost = missed.reduce((sum, [, k]) => sum + k, 0);
+  if (c.delivered + lost === 0) return null;
+  const parts: string[] = [];
+  if (c.delivered) parts.push(`${c.delivered} delivered`);
+  if (lost) {
+    const why = missed.map(([k]) => CARRIED_WHY[k] ?? k.replaceAll("_", " ")).join("; ");
+    parts.push(`${lost} not delivered (${why})`);
+  }
+  return `Assistants tried to reach you through this network, last 30 days: ${parts.join(", ")}.`;
+}

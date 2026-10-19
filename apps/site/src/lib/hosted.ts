@@ -97,7 +97,7 @@ export const hostedInboxPoints = (open: boolean) =>
         yours:
           "It runs on your own subdomain, hosted by us or on your own Cloudflare account or server. Customers and their agents write to you there. You can download everything it holds and leave whenever you like.",
         waysIn:
-          "Agents reach you through a REST API or MCP, and by email when you run it yourself. It all lands in one list. Your own AI connects over a separate owner MCP.",
+          "Agents reach you through a REST API or MCP, and by email when you run it yourself. It all lands in one list. Your own AI connects over a separate owner MCP. People who add Surfing Dog to their own AI can reach you too; you can switch that off.",
       }
     : null;
 export const HOSTED_INBOX_POINTS = hostedInboxPoints(HOSTED_PILOT_OPEN);
@@ -150,14 +150,16 @@ export const HOSTED_FAQ = hostedFaq(HOSTED_PILOT_OPEN);
 
 /**
  * Who is in the middle, where the inbox is said to be the business's own: the FAQ's answer and
- * llms.txt. Surfing Dog stays out of the middle only of an inbox the business runs itself; a hosted
- * one runs on our servers. Closed, today's sentences, word for word.
+ * llms.txt. Surfing Dog keeps nothing anyone writes only of an inbox the business runs itself; a
+ * hosted one runs on our servers. Open, the promise of carried requests (ADR-025, src/lib/gateway.ts)
+ * replaces "not in the middle", which a carried request would make untrue. Closed, the sentences of
+ * before, word for word.
  */
 export const hostedOwnership = (open: boolean) =>
   open
     ? {
-        faq: "When you run it yourself, Surfing Dog is not in the middle of a message, a booking, an order or a payment; when we host it, it runs on our servers. Either way you can take all your data and leave whenever you like.",
-        llms: "When the business runs it itself, Surfing Dog is not in the middle of a message, a booking, an order or a payment; when we host it, it runs on our servers. Either way the business can download all its data and leave any time.",
+        faq: "When you run it yourself, Surfing Dog never touches the money and never keeps what anyone writes; when we host it, it runs on our servers. Either way you can take all your data and leave whenever you like.",
+        llms: "When the business runs it itself, Surfing Dog never touches the money and never keeps what anyone writes; when we host it, it runs on our servers. When a business allows it, we carry an assistant's request to the business's own inbox and keep only a record that it was delivered. Either way the business can download all its data and leave any time.",
       }
     : {
         faq: "Surfing Dog is not in the middle of a message, a booking, an order or a payment, and your data is in your own database, so you can leave whenever you like.",

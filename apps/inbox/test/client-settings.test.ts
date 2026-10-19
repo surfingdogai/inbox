@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type NetworkView, parseStoredSettings 
 import { describe, expect, it } from "vitest";
 import {
   agoWords,
+  carriedWords,
   doorPanel,
   emailWords,
   networkStatus,
@@ -217,6 +218,7 @@ describe("Settings → Networks", () => {
     standing: null,
     ping_signature: null,
     doors: null,
+    carried: null,
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
@@ -235,6 +237,28 @@ describe("Settings → Networks", () => {
     ]) {
       expect(parseNetworkOrigin(bad), bad).toHaveProperty("problem");
     }
+  });
+
+  it("says what assistants tried through a network, for the owner alone", () => {
+    expect(carriedWords(base)).toBeNull();
+    const carried = {
+      since: "2026-09-18T10:00:00Z",
+      delivered: 3,
+      confirm: 1,
+      not_delivered: { switched_off: 2, failed: 1 },
+      at: "2026-10-18T10:00:00Z",
+    };
+    expect(carriedWords({ ...base, carried })).toBe(
+      "Assistants tried to reach you through this network, last 30 days: 3 delivered, 3 not delivered (you had them switched off; your inbox could not be reached).",
+    );
+    expect(
+      carriedWords({ ...base, carried: { ...carried, delivered: 1, confirm: 0, not_delivered: { busy: 1 } } }),
+    ).toBe(
+      "Assistants tried to reach you through this network, last 30 days: 1 delivered, 1 not delivered (your inbox's limit was reached).",
+    );
+    expect(carriedWords({ ...base, enabled: false, carried })).toBeNull();
+    // A booking only shown to the person to confirm reached nobody yet: not counted for the owner.
+    expect(carriedWords({ ...base, carried: { ...carried, delivered: 0, confirm: 2, not_delivered: {} } })).toBeNull();
   });
 
   it("says in one line how each network is doing", () => {

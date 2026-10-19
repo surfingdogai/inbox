@@ -93,7 +93,7 @@ import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { askedForAPrice, findSlots, quoteNotBookable, type Slot } from "./availability";
+import { askedForAPrice, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -576,13 +576,19 @@ export class Capabilities {
    * offered or given a time nobody opened. A booking of a service asked about for a price is refused
    * to every customer: they ask for a price instead.
    */
-  private async refuseUnbookable(caller: Caller | undefined, serviceId: string | undefined): Promise<void> {
+  private async refuseUnbookable(
+    caller: Caller | undefined,
+    serviceId: string | undefined,
+    opts: { readonly booking?: boolean } = {},
+  ): Promise<void> {
     if (!caller || !isCustomer(caller)) return;
     if (serviceId) {
       const [svc] = await this.db.orm
-        .select({ id: services.id, price: services.price })
+        .select({ id: services.id, price: services.price, active: services.active })
         .from(services)
         .where(eq(services.id, serviceId));
+      // A customer's booking names a service the business offers today, or none at all.
+      if (opts.booking && !svc?.active) throw unknownService(serviceId);
       if (svc && askedForAPrice(svc.price)) throw quoteNotBookable(svc.id);
     }
     if (caller.actor.kind !== "customer_agent") return;
@@ -722,7 +728,7 @@ export class Capabilities {
   async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
-    await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId);
+    await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId, { booking: true });
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).

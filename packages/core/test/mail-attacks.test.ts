@@ -262,6 +262,61 @@ describe("the acknowledgement", () => {
     expect(s.to("victim@example.com")).toHaveLength(ACKS_PER_ADDRESS_PER_DAY + 1);
   });
 
+  it("goes once a day at most to an address a network carried a request for (ADR-025)", async () => {
+    const s = await setup();
+    const carried = (t: number): Caller => ({
+      actor: { kind: "customer_agent", id: "network", channel: "rest" },
+      tier: "anonymous",
+      sandbox: false,
+      viaNetwork: true,
+      now: () => t,
+    });
+    const ask = (t: number, email: string) =>
+      s.caps.requestQuote(carried(t), {
+        payload: { itemOffered: { name: "Group lesson" }, description: `For six, asked at ${t}` },
+        contact: { email },
+      } as never);
+    const first = await ask(T0, "stranger@example.com");
+    await ask(T0 + MIN, "stranger@example.com");
+    await ask(T0 + 2 * MIN, "stranger@example.com");
+    await s.drain(T0 + 10 * MIN);
+    expect(s.to("stranger@example.com")).toHaveLength(1);
+    // Marked as carried, which the owner sees; a request nobody carried is not.
+    expect(
+      await rows(s.db, "SELECT json_extract(flags, '$.carried') FROM items WHERE id = ?", [first.view.item.id]),
+    ).toEqual([[1]]);
+    const own = await s.book(T0, { name: "Rita", email: "rita@example.com" });
+    expect(
+      await rows(s.db, "SELECT json_extract(flags, '$.carried') FROM items WHERE id = ?", [own.view.item.id]),
+    ).toEqual([[null]]);
+    // The rest are held, and say why.
+    expect(
+      await rows(s.db, "SELECT count(*) FROM outbound_mail WHERE status = 'skipped' AND skip_reason = 'ack_limit'"),
+    ).toEqual([[2]]);
+  });
+
+  it("is never for a booking of a service the business does not offer", async () => {
+    const s = await setup();
+    const start = new Date(T0 + 3 * DAY).toISOString();
+    const end = new Date(T0 + 3 * DAY + 90 * MIN).toISOString();
+    await expect(
+      s.caps.createBooking(customer(), {
+        payload: { reservationFor: { serviceId: "nope", name: "x" }, startTime: start, endTime: end },
+        contact: { email: "rita@example.com" },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input", details: { reason: "unknown_service" } });
+    await s.db.client.query({ sql: "UPDATE services SET active = 0 WHERE id = ?", params: [s.svc], method: "run" });
+    await expect(
+      s.caps.createBooking(customer(), {
+        payload: { reservationFor: { serviceId: s.svc, name: "Surf lesson" }, startTime: start, endTime: end },
+        contact: { email: "rita@example.com" },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input", details: { reason: "unknown_service" } });
+    expect(await rows(s.db, "SELECT count(*) FROM items")).toEqual([[0]]);
+    await s.drain(T0 + MIN);
+    expect(s.to("rita@example.com")).toHaveLength(0);
+  });
+
   it("keeps what a customer typed on one line: a name cannot add lines, a subject cannot add headers", async () => {
     const s = await setup();
     await s.caps.requestQuote(customer(), {

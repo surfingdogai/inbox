@@ -1,132 +1,201 @@
 ---
-// The assistants hub: every AI assistant a business's inbox works with, and what each needs.
+// The assistants hub, for a person: add Surfing Dog to your own AI assistant, one address, with each
+// assistant's steps as its maker documents them, and "not yet" where it cannot take a server of your
+// own (src/lib/gateway.ts). A business reads what each assistant does with its inbox at
+// /inbox/assistants/ and on each assistant's own page.
+import CopyBlock from "../../components/CopyBlock.astro";
+import StatusPill from "../../components/StatusPill.astro";
 import Layout from "../../layouts/Layout.astro";
-import { ASSISTANTS, CHECKED } from "../../lib/assistants";
-import { HOSTED_CTA } from "../../lib/hosted";
+import { ASSISTANT_STEPS, CARRY_PROMISE, MCP_URL, REACH_WORDS, type Reach, STEPS_CHECKED } from "../../lib/gateway";
 
 const url = new URL(Astro.url.pathname, Astro.site).toString();
 const ld = {
   "@context": "https://schema.org",
-  "@type": "CollectionPage",
-  name: "Your business in every AI assistant",
+  "@type": "HowTo",
+  name: "Surfing Dog in your AI assistant",
   url,
-  hasPart: ASSISTANTS.map((a) => ({
-    "@type": "TechArticle",
-    headline: a.heading,
-    url: new URL(`/assistants/${a.slug}/`, Astro.site).toString(),
+  step: ASSISTANT_STEPS.filter((a) => a.reach !== "not_yet").map((a) => ({
+    "@type": "HowToSection",
+    name: a.name,
+    url: `${url}#${a.slug}`,
+    itemListElement: a.steps.map((text) => ({ "@type": "HowToStep", text })),
   })),
+};
+const pill: Record<Reach, "live" | "building" | "coming"> = {
+  works: "live",
+  paid: "building",
+  region: "building",
+  unconfirmed: "coming",
+  not_yet: "coming",
 };
 ---
 
 <Layout
-  title="Your business in ChatGPT, Gemini, Claude and more · Surfing Dog"
-  description="What ChatGPT, Gemini, Claude, Copilot, Meta Muse and Grok can book or buy with a business as of October 2026, and how each one connects to your inbox."
+  title="Surfing Dog in ChatGPT, Claude, Gemini and more · Surfing Dog"
+  description="Add one address to ChatGPT, Claude, Gemini or Le Chat. It finds businesses and, where one has its own inbox, asks it or requests a quote or a booking."
   image="/art/og-assistant-hub-v1.png"
   ld={ld}
 >
   <section class="wrap wrap-read section is-head" aria-labelledby="hub-h">
     <p class="eyebrow">Assistants</p>
-    <h1 class="h-page" id="hub-h">Your business in every AI assistant</h1>
+    <h1 class="h-page" id="hub-h">Surfing Dog in your AI assistant</h1>
     <p class="lede">
-      People now ask Meta Muse, Grok, ChatGPT, Claude or Gemini to book the service, get the quote, place the order.
-      Each of them speaks MCP, and your inbox answers all of them the same way: in your name, by your rules, with a state
-      you can see.
+      Add one address to your AI assistant. It finds businesses for you and, where a business has its own inbox, asks it
+      a question, gets a quote or requests a time.
     </p>
-    <p class="lede">
-      Each page says what that assistant can book or buy as of October 2026, and where we read it. To see which doors
-      your own website offers, <a class="link" href="/check">check your website for AI agents</a>.
-    </p>
-    {
-      HOSTED_CTA && (
-        <div class="hero-actions head-cta">
-          <a class="btn btn-primary" href={HOSTED_CTA.href}>
-            {HOSTED_CTA.label}
-          </a>
-          <a class="btn btn-secondary" href="/try/">
-            Try it with the demo shop
-          </a>
-        </div>
-      )
-    }
   </section>
 
-  <section class="section section-tight" aria-label="Assistants">
-    <div class="wrap">
-      <ul class="grid-cards" data-reveal="stagger">
-        {
-          ASSISTANTS.map((a) => (
-            <li class="glass card">
-              <h2 class="h-card">
-                <a class="link" href={`/assistants/${a.slug}/`}>
-                  {a.name}
+  <section class="wrap wrap-read section section-tight" aria-label="The address">
+    <CopyBlock
+      title="The address"
+      what="A remote MCP server. No sign-in."
+      value={MCP_URL}
+      address
+      more={{ href: "/docs/mcp/", label: "How it works" }}
+    />
+    <p class="promise">{CARRY_PROMISE}</p>
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="steps-h">
+    <h2 class="h-section" id="steps-h">Step by step</h2>
+    <ul class="steps" data-reveal="stagger">
+      {
+        ASSISTANT_STEPS.map((a) => (
+          <li class="step-row" id={a.slug}>
+            <details>
+              <summary>
+                <span class="step-name">{a.name}</span>
+                <span class="step-maker">{a.maker}</span>
+                <StatusPill state={pill[a.reach]} text={REACH_WORDS[a.reach]} />
+              </summary>
+              <ol class="step-list">
+                {a.steps.map((s) => (
+                  <li>{s}</li>
+                ))}
+              </ol>
+              {a.note && <p class="step-note">{a.note}</p>}
+              <p class="step-note">
+                <a class="link" href={a.source.href} rel="noopener">
+                  {a.source.label}
                 </a>
-              </h2>
-              <p class="card-text">{a.lede}</p>
-              <p class="card-text muted">{a.plans}</p>
-            </li>
-          ))
-        }
-      </ul>
-    </div>
-  </section>
-
-  <section class="wrap wrap-read section" aria-labelledby="same-h">
-    <h2 class="h-section" id="same-h">What every assistant gets</h2>
-    <ul>
-      <li>
-        <strong>For a customer's assistant</strong>, your public MCP server at <code>/mcp</code>: your services and free
-        times, a booking, a quote request, an order, a message, and its answers to what you propose. No sign-in.
-      </li>
-      <li>
-        <strong>For your own AI</strong>, the owner MCP server at <code>/mcp/owner</code>, with OAuth 2.1 (the assistant
-        registers itself) or an owner API key in a header.
-      </li>
-      <li>
-        <strong>The same rules for everyone.</strong> A priced booking or order binds nobody until the person confirmed its
-        summary. Your rules decide what is confirmed without you.
-      </li>
-      <li>
-        <strong>Every MCP revision</strong> from March 2025 to 2026-07-28, so older and newer assistants both connect.
-      </li>
-      <li>
-        <strong>Found through the network.</strong> Assistants can search <code>https://surfingdog.ai/mcp</code> for
-        businesses and the links to their doors. The network finds and links; the booking itself happens at your
-        inbox. See <a class="link" href="/network/">the network</a>.
-      </li>
+              </p>
+            </details>
+          </li>
+        ))
+      }
     </ul>
-    <p class="muted">Checked {CHECKED} against each assistant's own documentation, linked on its page.</p>
-    <p>
-      New to this? Start with <a class="link" href="/blog/what-ai-assistants-need-from-your-business/">what a personal AI
-      assistant needs from your business</a>.
+    <p class="muted fine">
+      Read in each assistant's own help on {STEPS_CHECKED}. Menus move: if a step has changed, tell us at
+      <a class="link" href="/support/">support</a>.
     </p>
-    <p><a class={HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"} href="/try/">Try it with the demo shop</a></p>
+    <p class="for-business fine">
+      <a class="link" href="/inbox/assistants/">Run a business? See what each assistant can book with your inbox →</a>
+    </p>
   </section>
 </Layout>
 
+<script>
+  // A link to one assistant (/assistants/#claude) opens its steps.
+  const openFromHash = () => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    const row = id ? document.getElementById(id) : null;
+    const details = row?.querySelector("details");
+    if (details) details.open = true;
+  };
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
+</script>
+
 <style>
-  .head-cta {
-    margin-top: var(--sp-5);
-  }
-  .copy {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--sp-2);
-    margin: var(--sp-3) 0 0;
-    padding: var(--sp-2) var(--sp-3);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-control);
-    background: var(--row-bg);
-    font-size: var(--fs-mono);
-    overflow-wrap: anywhere;
-  }
   .muted {
     color: var(--ink-2);
   }
-  .prose-steps {
-    display: grid;
+  .promise {
+    margin-top: var(--sp-3);
+    color: var(--ink-2);
+    font-size: var(--fs-ui);
+    line-height: 1.6;
+  }
+  .steps {
+    list-style: none;
+    padding: 0;
+    margin: var(--sp-3) 0 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .step-row {
+    border-bottom: 1px solid var(--hairline);
+  }
+  .step-row summary {
+    display: flex;
+    align-items: center;
     gap: var(--sp-2);
+    padding: 12px 2px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .step-row summary::-webkit-details-marker {
+    display: none;
+  }
+  .step-row summary::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-left: 4px;
+    border-right: 1px solid var(--ink-3);
+    border-bottom: 1px solid var(--ink-3);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.2s ease;
+  }
+  .step-row details[open] summary::after {
+    transform: rotate(225deg) translateY(-1px);
+  }
+  .step-name {
+    font-weight: 500;
+  }
+  .step-maker {
+    flex: 1;
+    color: var(--ink-3);
+    font-size: var(--fs-fine);
+  }
+  .step-list {
+    list-style: decimal;
+    margin: 0 0 var(--sp-2);
     padding-left: 1.25rem;
+    display: grid;
+    gap: 6px;
+    font-size: var(--fs-ui);
+    overflow-wrap: anywhere;
+  }
+  .step-list ::marker {
+    color: var(--ink-3);
+    font-size: var(--fs-fine);
+  }
+  .step-note {
+    margin: 0 0 var(--sp-2);
+    padding-left: 1.25rem;
+    color: var(--ink-3);
+    font-size: var(--fs-fine);
+  }
+  .step-row details[open] {
+    animation: step-open 0.25s ease;
+  }
+  @keyframes step-open {
+    from {
+      opacity: 0.4;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .step-row details[open],
+    .step-row summary::after {
+      animation: none;
+      transition: none;
+    }
+  }
+  .for-business {
+    color: var(--ink-2);
   }
   .wrap-read.section p + p,
   .wrap-read.section ul + p {

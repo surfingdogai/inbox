@@ -1,12 +1,14 @@
 import type { Statement } from "@surfingdog/platform";
-import type { PingDoors } from "@surfingdog/spec";
+import type { PingCarried, PingDoors } from "@surfingdog/spec";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { DEFAULT_NETWORK, enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
 import { isPublicHost } from "../util/hosts";
 import { jobStatement } from "../write/common";
+import { readPingCarried } from "./carried";
 import { storedPingDoors } from "./doors";
 
+export { networkCarriedStatement, readPingCarried } from "./carried";
 export { networkDoorsStatement, readPingDoors, storedPingDoors } from "./doors";
 
 /**
@@ -731,6 +733,12 @@ export interface NetworkView {
    */
   readonly doors: (PingDoors & { readonly at: string }) | null;
   /**
+   * The requests it carried here for people's AI assistants over its last 30 days, and the ones that
+   * did not arrive and why (ADR-025, protocol §4.17), as its answer to a signed ping last said it,
+   * and when: null until one did, and three days after the last.
+   */
+  readonly carried: (PingCarried & { readonly at: string }) | null;
+  /**
    * What it has been sent. `held` are queued receipts waiting for the network to take the rules
    * that read them: acceptances and outcomes (claims v2, version 3), agreed changes and refunds
    * (version 6), and every receipt of a promise that moved (version 6 in force); `queued` counts
@@ -781,7 +789,7 @@ export async function networkViews(
   const origins = Object.keys(settings.networks);
   if (origins.length === 0) return [];
   const marks = origins.map(() => "?").join(", ");
-  const [status, counts] = await Promise.all([
+  const [status, counts, carriedRows] = await Promise.all([
     db.client.query({
       sql: `SELECT network, ${STATUS_COLUMNS} FROM network_status WHERE network IN (${marks})`,
       params: origins,
@@ -797,8 +805,24 @@ export async function networkViews(
       params: origins,
       method: "all",
     }),
+    db.client.query({
+      sql: `SELECT network, value, created_at FROM network_cache WHERE kind = 'carried' AND network IN (${marks})`,
+      params: origins,
+      method: "all",
+    }),
   ]);
   const byNetwork = new Map(status.rows.map((r) => [String(r[0]), statusOf(r.slice(1))]));
+  const carriedBy = new Map<string, PingCarried & { at: string }>();
+  for (const r of carriedRows.rows) {
+    let v: unknown = r[1];
+    try {
+      v = typeof v === "string" ? JSON.parse(v) : v;
+    } catch {
+      continue;
+    }
+    const c = readPingCarried(v);
+    if (c) carriedBy.set(String(r[0]), { ...c, at: new Date(Number(r[2])).toISOString() });
+  }
   const tally = new Map<
     string,
     { published: number; queued: number; refused: number; held: number; withheld: number }
@@ -847,6 +871,7 @@ export async function networkViews(
         s?.standing && s.standingAt !== null ? { ...s.standing, at: new Date(s.standingAt).toISOString() } : null,
       ping_signature: s?.pingSignature ?? null,
       doors: s?.doors && s.doorsAt !== null ? { ...s.doors, at: new Date(s.doorsAt).toISOString() } : null,
+      carried: carriedBy.get(origin) ?? null,
       receipts: tally.get(origin) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
     };
   });

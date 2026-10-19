@@ -1259,6 +1259,21 @@ textarea.sd-code {
   font-size: var(--fs-card);
   color: var(--ink-2);
 }
+/* Where a person stands with an assistant: Works, Paid plans, Some countries, Not yet. Quiet. */
+.sd-pill,
+.sd-hub a span.sd-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-body, inherit);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+  vertical-align: middle;
+}
 .sd-crumbs {
   display: flex;
   flex-wrap: wrap;

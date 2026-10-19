@@ -1211,7 +1211,7 @@ describe("protocol 0.2: cards, listings and the why line", () => {
     expect(whyOf({})).toBe("in the directory's published order");
   });
 
-  it("the tools: three, as before, and six more a network may offer", () => {
+  it("the tools: three, as before, and nine more a network may offer", () => {
     expect([...MCP_TOOL_NAMES]).toEqual(["search_businesses", "get_business", "list_categories"]);
     expect([...MCP_OPTIONAL_TOOL_NAMES]).toEqual([
       "list_attributes",
@@ -1220,6 +1220,9 @@ describe("protocol 0.2: cards, listings and the why line", () => {
       "check_business",
       "report_door",
       "get_census",
+      "ask_business",
+      "request_quote",
+      "request_booking",
     ]);
     const input = searchBusinessesInputSchema.parse({
       category: "hair_salon",

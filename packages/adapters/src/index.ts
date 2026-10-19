@@ -207,6 +207,14 @@ function serveMcp(
   return handler.fetch(again, { authInfo });
 }
 
+/**
+ * The headers a network sends with a request it carried for a person's AI assistant (ADR-025, network
+ * protocol §4.17): that it carried it, and an opaque code for its sender, the same for one sender at
+ * this inbox for a day, which a limit or a block can be keyed on without turning the network away.
+ */
+export const CARRIED_HEADER = "surfing-dog-carried";
+export const CARRIED_FOR_HEADER = "surfing-dog-carried-for";
+
 /** A caller as a signed agent's request makes it (ADR-017 §2.4): what the door verified, and `Sdi-Pass`. */
 function withAgent<C extends Caller>(caller: C, seen: Awaited<ReturnType<typeof agentFromRequest>>): C {
   const signed = seen.agent.level !== "none";
@@ -344,7 +352,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["platform"], `platform:${seen.agent.platform}`);
       if (refused) return refused;
     }
-    c.set("caller", withAgent(caller, seen));
+    // A network that carried the request for a person's AI assistant says so (network protocol §4.17).
+    const viaNetwork = c.req.header(CARRIED_HEADER) === "1";
+    c.set("caller", viaNetwork ? { ...withAgent(caller, seen), viaNetwork } : withAgent(caller, seen));
     await next();
   });
   // Sign-in emails go to the owner's mailbox; nobody gets to fill it, or to guess at its codes.

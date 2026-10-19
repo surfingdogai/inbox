@@ -34,7 +34,12 @@ const ld = [
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Assistants", item: new URL("/assistants/", Astro.site).toString() },
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Assistants",
+        item: new URL("/inbox/assistants/", Astro.site).toString(),
+      },
       { "@type": "ListItem", position: 2, name: a.name, item: url },
     ],
   },
@@ -44,7 +49,7 @@ const ld = [
 
 <Layout title={a.title} description={a.description} image={`/art/og-assistant-${a.slug}-v1.png`} type="article" ld={ld}>
   <section class="wrap wrap-read section is-head" aria-labelledby="as-h">
-    <p class="eyebrow"><a class="link" href="/assistants/">Assistants</a> · {a.maker}</p>
+    <p class="eyebrow"><a class="link" href="/inbox/assistants/">Assistants</a> · {a.maker}</p>
     <h1 class="h-page" id="as-h">{a.heading}</h1>
     <p class="lede">{a.lede}</p>
   </section>
@@ -120,7 +125,8 @@ const ld = [
       A customer's assistant has to know where you are. Put your inbox's address on your website and in your profiles,
       and join the <a class="link" href="/network/">Surfing Dog network</a>: a directory assistants can search through
       its MCP connector, <code>https://surfingdog.ai/mcp</code>. It finds businesses near a place or by what they do,
-      and links each one's own doors. The network finds and links; the booking itself happens at your inbox.
+      and links each one's own doors; it can also carry a customer's question, quote request or booking request to your
+      inbox, unless you switch that off. The booking itself happens at your inbox.
     </p>
     <p>
       People with no assistant get <a class="link" href="/docs/your-page/">your page</a> at the same address: book a

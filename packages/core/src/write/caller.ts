@@ -51,6 +51,12 @@ export interface Caller {
   readonly agent?: AgentSeen | undefined;
   /** The strings the agent carried in `Sdi-Pass` (passes, pass references), at most eight. */
   readonly carried?: readonly string[] | undefined;
+  /**
+   * A network carried this request for a person's AI assistant: it said so (`Surfing-Dog-Carried: 1`,
+   * network protocol §4.17). Never proved, and it grants nothing: what it creates is marked
+   * (`flags.carried`) and acknowledged by email at most once a day per address.
+   */
+  readonly viaNetwork?: boolean | undefined;
   readonly now?: () => number;
 }
 

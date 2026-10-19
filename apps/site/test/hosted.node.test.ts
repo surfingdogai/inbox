@@ -336,22 +336,23 @@ describe("hosted first, once the pilot is open", () => {
     expect(HOSTED_HOW_DATA).toEqual(hostedHowData(HOSTED_PILOT_OPEN));
   });
 
-  it("/hosted/, /try/ and /assistants/: the hosted inbox's start is their primary button while open", () => {
+  it("/hosted/, /try/ and /inbox/assistants/: the hosted inbox's start is their primary button while open", () => {
     expect(HOSTED_CTA).toEqual(hostedCta(HOSTED_PILOT_OPEN));
     expect(hostedCta(true)).toEqual({ label: "Get your agent inbox", href: START_URL });
     expect(hostedCta(false)).toBeNull();
     for (const page of [
       "src/pages/hosted/[...slug].astro",
       "src/pages/try.astro",
-      "src/pages/assistants/index.astro",
+      "src/pages/inbox/assistants.astro",
     ]) {
       const src = read(page);
       expect(src, page).toContain("import { HOSTED_CTA");
       expect(src, page).toMatch(/<a class="btn btn-primary" href=\{HOSTED_CTA\.href\}>/);
     }
-    // While open, /try/ and /assistants/ step their own buttons back.
+    // While open, /try/ and /inbox/assistants/ step their own buttons back; /assistants/ is a person's page, with none.
     expect(read("src/pages/try.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
-    expect(read("src/pages/assistants/index.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+    expect(read("src/pages/inbox/assistants.astro")).toContain('HOSTED_CTA ? "btn btn-secondary" : "btn btn-primary"');
+    expect(read("src/pages/assistants/index.astro")).not.toContain("HOSTED_CTA");
   });
 
   it("install.md starts with the hosted inbox, and an AI hands the email and the code to the person", () => {
@@ -532,7 +533,10 @@ describe("hosted first, once the pilot is open", () => {
       hostedLlms(true),
     ]);
     expect(open).not.toMatch(/does not put (a|the) business on Surfing Dog/);
-    const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /not in the middle/.test(t));
+    // Open, "not in the middle" gives way to the promise of carried requests (ADR-025); keeping
+    // nothing anyone writes is still said only of an inbox the business runs itself.
+    expect(open).not.toContain("not in the middle");
+    const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /never keeps what anyone writes/.test(t));
     expect(sentences.length).toBeGreaterThan(0);
     for (const t of sentences) expect(t, t).toMatch(/runs? it (yourself|itself)/);
     // The pages read these words rather than their own.
@@ -574,7 +578,10 @@ describe("hosted first, once the pilot is open", () => {
         hostedHowData(open),
         hostedLlms(open),
       ]);
-      expect(words).not.toMatch(/free forever|forever free|\b(first|only)\b|guarantee/i);
+      // The promise of carried requests (ADR-025) says "keep only a record": its words, not a claim.
+      expect(words.replace(/\bkeep only a record that it was delivered\b/g, "")).not.toMatch(
+        /free forever|forever free|\b(first|only)\b|guarantee/i,
+      );
       // Hosting is free during the pilot, and said so wherever a price is.
       if (open) expect(words.match(/free during the pilot/g)?.length).toBeGreaterThanOrEqual(7);
       else expect(words).not.toMatch(/free during the pilot|European Union|app\.surfingdog\.ai/);
@@ -663,8 +670,10 @@ describe("the docs, in both states", () => {
     );
     const open = version(SETUP, true);
     expect(open).toContain("at its own subdomain, hosted by us or on its own Cloudflare account or server.");
-    expect(open).toContain("When the business runs it itself, Surfing Dog is not in the middle");
-    expect(open).not.toMatch(/\. Surfing Dog is not in the middle/);
+    expect(open).toContain(
+      "When the business runs it itself, Surfing Dog never touches the money and never keeps what anyone writes",
+    );
+    expect(open).not.toContain("not in the middle");
   });
 });
 

@@ -46,6 +46,7 @@ function between(source: string, from: string, to: string): string {
 
 const ASSISTANT_PAGE = "src/pages/assistants/[slug].astro";
 const ASSISTANT_HUB = "src/pages/assistants/index.astro";
+const ASSISTANT_BIZ = "src/pages/inbox/assistants.astro";
 const SHOPIFY_PAGE = "src/pages/guides/shopify-ai-assistants.astro";
 const GUIDES_HUB = "src/pages/guides/index.astro";
 const DOCS_WITH_CHECK = ["index", "quickstart", "manifest"].map((d) => `src/content/docs/docs/${d}.md`);
@@ -59,6 +60,7 @@ const descriptionIn = (path: string) => read(path).match(/\n\s+description="([^"
 const PAGES: { name: string; title: string; description: string }[] = [
   ...ASSISTANTS.map((a) => ({ name: `/assistants/${a.slug}/`, title: a.title, description: a.description })),
   { name: "/assistants/", title: titleIn(ASSISTANT_HUB), description: descriptionIn(ASSISTANT_HUB) },
+  { name: "/inbox/assistants/", title: titleIn(ASSISTANT_BIZ), description: descriptionIn(ASSISTANT_BIZ) },
   { name: "/guides/", title: `${HUB.title}${SUFFIX}`, description: HUB.description },
   ...GUIDES.filter((g) => g.slug === "sell-through-ai-assistants").map((g) => ({
     name: `/guides/${g.slug}/`,
@@ -98,7 +100,8 @@ const SAID: [string, string][] = [
     `${ASSISTANT_PAGE} owner section`,
     between(read(ASSISTANT_PAGE), '<section class="wrap wrap-read section section-tight owner"', "</section>"),
   ],
-  [`${ASSISTANT_HUB} lede`, between(read(ASSISTANT_HUB), "Each page says what that assistant", "</p>")],
+  [`${ASSISTANT_HUB} lede`, between(read(ASSISTANT_HUB), '<p class="lede">', "</p>")],
+  [`${ASSISTANT_BIZ} lede`, between(read(ASSISTANT_BIZ), "What each assistant can book or buy", "</p>")],
   [
     `${GUIDES_HUB} checklist`,
     between(read(GUIDES_HUB), '<h2 id="guides-h">', '<section class="prose hub-body" aria-labelledby="score">'),
@@ -108,7 +111,7 @@ const SAID: [string, string][] = [
 
 describe("the owners' pages", () => {
   it("each has a title and a description that fit a search result, and no two pages share either", () => {
-    expect(PAGES.length).toBe(ASSISTANTS.length + 4);
+    expect(PAGES.length).toBe(ASSISTANTS.length + 5);
     for (const p of PAGES) {
       expect(p.title.endsWith(SUFFIX), `${p.name}: ${p.title}`).toBe(true);
       expect(p.title.length, `${p.name}: ${p.title}`).toBeLessThanOrEqual(70);
@@ -293,7 +296,7 @@ describe("the owners' pages", () => {
     expect(read(ASSISTANT_PAGE)).toMatch(
       /<GuideCheck examples=\{\[\]\} title=\{`Check what \$\{a\.short\} can do with you`\}/,
     );
-    expect(read(ASSISTANT_HUB)).toContain('<a class="link" href="/check">check your website for AI agents</a>');
+    expect(read(ASSISTANT_BIZ)).toContain('<a class="link" href="/check">check your website for AI agents</a>');
     expect(read(SHOPIFY_PAGE)).toMatch(/<GuideCheck[\s\S]*title="Check your store"/);
     for (const doc of DOCS_WITH_CHECK) expect(read(doc), doc).toContain("[check your website for AI agents](/check)");
 

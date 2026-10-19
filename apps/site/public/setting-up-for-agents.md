@@ -36,7 +36,7 @@ How it hands things over **today**: signed [webhooks](https://surfingdog.ai/docs
 
 ### Either way
 
-The inbox is the business's own software: open source (MIT), at its own subdomain, on its own Cloudflare account or its own server. Customers and their agents write to the business there. Surfing Dog is not in the middle of a message, a booking, an order or a payment. Joining a network is optional and separate: a network lists the business and records the receipts its inbox signs, and [install.md, Step 5](https://surfingdog.ai/install.md) lists everything a network receives.
+The inbox is the business's own software: open source (MIT), at its own subdomain, on its own Cloudflare account or its own server. Customers and their agents write to the business there. Surfing Dog never touches the money and never keeps what anyone writes; when a business allows it, we carry an assistant's request to the business's own inbox and keep only a record that it was delivered. Joining a network is optional and separate: a network lists the business and records the receipts its inbox signs, and [install.md, Step 5](https://surfingdog.ai/install.md) lists everything a network receives.
 
 ## Decide what handles each door
 

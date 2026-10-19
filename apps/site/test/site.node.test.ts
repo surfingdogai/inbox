@@ -67,10 +67,17 @@ const NEW_OR_CHANGED = [
   "src/lib/record.ts",
 ];
 
+/**
+ * The promise of carried requests (ADR-025, src/lib/gateway.ts) says "keep only a record": the words
+ * decided for it, and no claim of being alone, so the plain-words checks read the pages without it.
+ */
+const withoutPromise = (text: string) =>
+  text.replace(/\bkeeps? only a record that (it|a request) was delivered\b/gi, "");
+
 describe("the checker's pages and components", () => {
   it("say Agentic score, and make no claim of being first, alone, people free or verified", () => {
     for (const path of NEW_OR_CHANGED) {
-      const text = visible(read(path));
+      const text = withoutPromise(visible(read(path)));
       expect(text, path).not.toMatch(/Agent ?Readiness|AgentReady/i);
       expect(text, path).not.toMatch(/\b(first|only|verified|people free)\b/i);
       expect(text, path).not.toMatch(/\b\d{1,3}(\.\d{1,3}){3}\b/);
@@ -236,7 +243,7 @@ describe("the setup guidance", () => {
 
   it("makes no claim of being first or alone, names no real business, and dates what moves fast", () => {
     for (const path of [DOC, PLAIN]) {
-      const text = withoutUrls(read(path));
+      const text = withoutPromise(withoutUrls(read(path)));
       expect(text, path).not.toMatch(/\b(first|only|verified|people free)\b/i);
       expect(text, path).toContain("Written on 9 October 2026");
       expect(text, path).toContain("as of October 2026");
@@ -350,11 +357,21 @@ describe("the home page and the three products", () => {
     expect(faq).toContain('q: "Does my business move onto Surfing Dog?"');
     expect(faq).toMatch(/a:\s*["']No\. Surfing Dog Inbox is open-source software/);
     expect(faq).toContain("HOSTED_OWNERSHIP.faq +");
-    for (const open of [true, false]) {
-      expect(hostedOwnership(open).faq).toContain(
-        "Surfing Dog is not in the middle of a message, a booking, an order or a payment",
-      );
-    }
+    // Closed, the words of before; open, the promise of carried requests (ADR-025), which a carried
+    // request would otherwise make untrue.
+    expect(hostedOwnership(false).faq).toContain(
+      "Surfing Dog is not in the middle of a message, a booking, an order or a payment",
+    );
+    expect(hostedOwnership(true).faq).toContain(
+      "Surfing Dog never touches the money and never keeps what anyone writes",
+    );
+    // The carried requests have an answer of their own, where an owner looks for them.
+    expect(faq).toContain(`q: "Can people's AI assistants reach me through Surfing Dog?"`);
+    expect(faq).toContain(
+      "we carry an assistant's request to your own inbox and keep only a record that it was delivered",
+    );
+    expect(faq).toContain("Settings → Networks → Requests from AI assistants");
+    expect(read("public/install.md")).not.toContain("not in the middle");
     const opening = read("public/install.md").split("Read this whole file")[0] ?? "";
     expect(opening).toContain("**The inbox is the business's own.**");
     expect(opening).toContain("does not put the business on Surfing Dog");
@@ -1261,15 +1278,17 @@ describe("what the directory and the connector claim", () => {
     expect(page).toContain("else manifest.remove();");
   });
 
-  it("says the connector finds and links, and never that it books, orders or lists verified businesses", () => {
+  it("says the connector finds and links, carries a request only where a business has its own inbox, and never that it books or lists verified businesses", () => {
     for (const path of [
       "src/pages/assistants/index.astro",
       "src/pages/assistants/[slug].astro",
       "src/pages/index.astro",
     ]) {
       const text = visible(read(path));
-      expect(text, path).toMatch(/finds and links/);
+      expect(text, path).toMatch(/finds businesses/);
+      expect(text, path).toMatch(/own inbox|your inbox/);
       expect(text, path).not.toMatch(/verified businesses/);
+      expect(text, path).not.toMatch(/\bbooks (?:a time|at)\b|gets a quote or books/);
     }
   });
 });

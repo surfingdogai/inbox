@@ -21,6 +21,7 @@ import {
   NETWORK_RECEIPT_KIND,
   type NetworkJobPayload,
   type NetworkReceiptPayload,
+  networkCarriedStatement,
   networkDoorsStatement,
   networkFailureStatement,
   networkListedStatement,
@@ -46,6 +47,7 @@ import {
   type ReceiptStage,
   type Registration,
   readNetworkStatus,
+  readPingCarried,
   readPingDoors,
   readSettings,
   reportableDomain,
@@ -410,6 +412,8 @@ function pingAnswerStatements(network: string, now: number, ping: PingResult): S
     networkPingSignatureStatement(network, now, "verified", answer.standing),
     networkRulesStatement(network, now, answer.rules),
     ...(answer.doors ? [networkDoorsStatement(network, now, answer.doors)] : []),
+    // What it carried here for people's AI assistants (ADR-025): for the owner alone.
+    ...(answer.carried ? [networkCarriedStatement(network, now, answer.carried)] : []),
   ];
 }
 
@@ -435,12 +439,14 @@ const signedPingAnswerSchema = z.looseObject({
     })
     .optional(),
   doors: z.unknown().optional(),
+  carried: z.unknown().optional(),
 });
 
 function signedPingAnswer(text: string): {
   standing: { tier: "new" | "building" | "trusted"; score: number; ranked: boolean } | null;
   rules: { version: number; next: number | null; nextAt: number | null };
   doors: ReturnType<typeof readPingDoors>;
+  carried: ReturnType<typeof readPingCarried>;
 } | null {
   let parsed: unknown;
   try {
@@ -460,6 +466,7 @@ function signedPingAnswer(text: string): {
       nextAt: Number.isFinite(at) ? at : null,
     },
     doors: readPingDoors(doc.data.doors),
+    carried: readPingCarried(doc.data.carried),
   };
 }
 

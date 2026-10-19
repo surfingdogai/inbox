@@ -272,6 +272,44 @@ describe("the signed ping", () => {
     expect((await s.view())?.doors?.at).toBe(new Date(T0).toISOString());
   });
 
+  it("keeps what assistants tried through the network, for the owner alone, read leniently (ADR-025)", async () => {
+    let carried: unknown = {
+      since: "2026-08-23T10:00:00Z",
+      delivered: 3,
+      confirm: 1,
+      not_delivered: { switched_off: 2, failed: -4, "Not A Code": 1, busy: "x" },
+      surprise: true,
+    };
+    const s = await setup((verified) =>
+      verified
+        ? Response.json({
+            ok: true,
+            rules: { version: 9, effective_at: "2026-09-22T00:00:00Z" },
+            next_rules: null,
+            reports: [],
+            contests: [],
+            ...(carried ? { carried } : {}),
+          })
+        : new Response(null, { status: 204 }),
+    );
+    await s.ping(T0);
+    // A count that does not read is left out, the rest is kept, with when the network said it.
+    expect((await s.view())?.carried).toEqual({
+      since: "2026-08-23T10:00:00Z",
+      delivered: 3,
+      confirm: 1,
+      not_delivered: { switched_off: 2 },
+      at: new Date(T0).toISOString(),
+    });
+    // A ping that brings none keeps the last; one that does not read is none.
+    carried = undefined;
+    await s.ping(T0 + 3_600_000);
+    expect((await s.view())?.carried?.at).toBe(new Date(T0).toISOString());
+    carried = { delivered: 9 };
+    await s.ping(T0 + 7_200_000);
+    expect((await s.view())?.carried?.delivered).toBe(3);
+  });
+
   it("does not take a standing from an answer that does not parse", async () => {
     const s = await setup((verified) =>
       verified

@@ -200,3 +200,44 @@ describe("the manifest's directory flag", () => {
     expect((await s.manifest()).directory).toBeUndefined();
   });
 });
+
+describe("the manifest's carried_requests (ADR-025)", () => {
+  it("says yes while networks may carry assistants' requests, the default, and no once the owner says no", async () => {
+    const s = await setup();
+    expect((await s.manifest()).carried_requests).toEqual({ accepted: true });
+    await s.caps.updateSettings(owner, { doc: { carried: { accepted: false } } });
+    expect((await s.manifest()).carried_requests).toEqual({ accepted: false });
+    await s.caps.updateSettings(owner, { doc: { carried: { accepted: true } } });
+    expect((await s.manifest()).carried_requests).toEqual({ accepted: true });
+  });
+
+  it("is served for a minute, so the owner's switch reaches a network within its five", async () => {
+    const db = await freshDb();
+    const res = await createInbox({ db, now: () => NOW }).app.request(`${ORIGIN}${MANIFEST_PATH}`);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60");
+  });
+
+  it("a request a network says it carried is marked so, and grants nothing more", async () => {
+    const db = await freshDb();
+    const inbox = createInbox({ db, now: () => NOW });
+    const send = (headers: Record<string, string>, key: string) =>
+      inbox.app.request(`${ORIGIN}/v1/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": key, ...headers },
+        body: JSON.stringify({ body: "Are you open on Saturday?", contact: { email: "ana@example.com" } }),
+      });
+    const carried = await send(
+      { "Surfing-Dog-Carried": "1", "Surfing-Dog-Carried-For": "a1b2c3d4e5f6a7b8c9d0e1" },
+      "k1",
+    );
+    const direct = await send({}, "k2");
+    expect([carried.status, direct.status]).toEqual([201, 201]);
+    const flags = async (res: Response) => {
+      const id = ((await res.json()) as { view: { item: { id: string } } }).view.item.id;
+      const r = await db.client.query({ sql: "SELECT flags FROM items WHERE id = ?", params: [id], method: "all" });
+      return JSON.parse(String(r.rows[0]?.[0])) as Record<string, unknown>;
+    };
+    expect((await flags(carried)).carried).toBe(true);
+    expect((await flags(direct)).carried).toBeUndefined();
+  });
+});

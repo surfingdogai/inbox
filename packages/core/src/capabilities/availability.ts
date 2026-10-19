@@ -58,6 +58,18 @@ function safeJson(text: string): unknown {
   }
 }
 
+/** The refusal for a booking of a service this business does not offer, or no longer does. */
+export function unknownService(serviceId: string): WriteError {
+  return new WriteError(
+    "invalid_input",
+    "This business offers no service with that id: read its services and book one of them. Nothing was written.",
+    {
+      fields: [{ path: "payload.reservationFor.serviceId", problem: "invalid", message: "no such service here" }],
+      details: { reason: "unknown_service", service_id: serviceId },
+    },
+  );
+}
+
 /** The refusal for times or a booking of a service priced by quote: ask for a price instead. */
 export function quoteNotBookable(serviceId: string): WriteError {
   return new WriteError(
