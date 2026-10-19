@@ -1,7 +1,8 @@
 import clsx from "clsx";
-import { Bot, Send, StickyNote, User } from "lucide-react";
+import { Bot, Paperclip, Send, StickyNote, User } from "lucide-react";
 import { type FormEvent, type RefObject, useState } from "react";
-import type { ApiProblem } from "../lib/api";
+import { type ApiProblem, api } from "../lib/api";
+import { saveFile } from "../lib/download";
 import { actorWord, channelWord, deliveryWord, formatDateTime, initials, partyName } from "../lib/format";
 import type { Party, ThreadEntry } from "../lib/types";
 
@@ -126,6 +127,7 @@ function Entry({
       <div>
         <div className="who">{who}</div>
         <div className="b row-glass">{entry.body}</div>
+        {entry.attachments && entry.attachments.length > 0 && <Files files={entry.attachments} />}
         {entry.direction === "out" && <Delivery entry={entry} tz={tz} />}
       </div>
     </div>
@@ -143,4 +145,40 @@ function Delivery({ entry, tz }: { entry: ThreadEntry; tz: string | undefined })
       {deliveryWord(d, tz)}
     </div>
   );
+}
+
+/** What came attached to an email (ADR-026 §7): the kept files download; the others say why they were not kept. */
+function Files({ files }: { files: NonNullable<ThreadEntry["attachments"]> }) {
+  const why = {
+    too_large: "too large to keep",
+    refused: "a kind of file that runs: not kept",
+    full: "not kept: attachments are full",
+  };
+  return (
+    <div className="msg-files">
+      {files.map((f) =>
+        f.state === "kept" ? (
+          <button
+            key={f.id}
+            type="button"
+            className="btn btn-ghost btn-sm msg-file"
+            onClick={() => void api.attachment(f.id).then(({ blob, filename }) => saveFile(blob, filename))}
+          >
+            <Paperclip className="icon" aria-hidden="true" />
+            {f.filename} · {sizeWord(f.size)}
+          </button>
+        ) : (
+          <span key={f.id} className="msg-file is-off">
+            {f.filename} · {why[f.state]}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
+function sizeWord(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

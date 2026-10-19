@@ -10,6 +10,7 @@ import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item, ItemType } from "../domain/types";
+import type { AttachmentRef } from "../email/attachments";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
@@ -251,6 +252,8 @@ export interface ItemDetail extends ItemView {
     at: string;
     /** For a reply to the customer: what became of its email. Absent where no email carried it. */
     delivery?: EntryDelivery;
+    /** What came attached to the email (ADR-026 §7); the kept ones download for the owner. */
+    attachments?: readonly AttachmentRef[];
   }[];
   /** Every email about the item, to the customer and to the owner, and what became of each. */
   readonly mail: readonly MailView[];
@@ -1139,7 +1142,9 @@ export class Capabilities {
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
         // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
-        ...(Array.isArray(t.attachments) && t.attachments.length ? { attachments: t.attachments } : {}),
+        ...(Array.isArray(t.attachments) && t.attachments.length
+          ? { attachments: t.attachments as readonly AttachmentRef[] }
+          : {}),
       })),
       mail: mail.map((m) => ({
         id: m.id,

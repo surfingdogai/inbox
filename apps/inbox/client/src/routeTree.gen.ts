@@ -16,6 +16,7 @@ import { Route as SetupRouteImport } from "./routes/setup";
 import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
+import { Route as SettingsEmailRouteImport } from "./routes/settings.email";
 import { Route as SettingsFoundRouteImport } from "./routes/settings.found";
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsKeysRouteImport } from "./routes/settings.keys";
@@ -57,6 +58,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
 const SettingsAvailabilityRoute = SettingsAvailabilityRouteImport.update({
   id: "/availability",
   path: "/availability",
+  getParentRoute: () => SettingsRoute,
+} as any);
+const SettingsEmailRoute = SettingsEmailRouteImport.update({
+  id: "/email",
+  path: "/email",
   getParentRoute: () => SettingsRoute,
 } as any);
 const SettingsFoundRoute = SettingsFoundRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
+  "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/setup"
     | "/settings/availability"
+    | "/settings/email"
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/setup"
     | "/settings/availability"
+    | "/settings/email"
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/setup"
     | "/settings/availability"
+    | "/settings/email"
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
@@ -256,6 +268,13 @@ declare module "@tanstack/react-router" {
       path: "/availability";
       fullPath: "/settings/availability";
       preLoaderRoute: typeof SettingsAvailabilityRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
+    "/settings/email": {
+      id: "/settings/email";
+      path: "/email";
+      fullPath: "/settings/email";
+      preLoaderRoute: typeof SettingsEmailRouteImport;
       parentRoute: typeof SettingsRoute;
     };
     "/settings/found": {
@@ -331,6 +350,7 @@ const InboxRouteWithChildren = InboxRoute._addFileChildren(InboxRouteChildren);
 
 interface SettingsRouteChildren {
   SettingsAvailabilityRoute: typeof SettingsAvailabilityRoute;
+  SettingsEmailRoute: typeof SettingsEmailRoute;
   SettingsFoundRoute: typeof SettingsFoundRoute;
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsKeysRoute: typeof SettingsKeysRoute;
@@ -343,6 +363,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAvailabilityRoute: SettingsAvailabilityRoute,
+  SettingsEmailRoute: SettingsEmailRoute,
   SettingsFoundRoute: SettingsFoundRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeysRoute: SettingsKeysRoute,

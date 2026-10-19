@@ -2629,3 +2629,168 @@ pre.found-code {
   gap: 6px;
   justify-items: start;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Settings → Email (settings.email.tsx): addresses, thin and quiet   */
+/* ------------------------------------------------------------------ */
+.email-address,
+.email-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.email-grow {
+  flex: 1 1 220px;
+}
+.email-addr {
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.email-forwards {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.email-forward {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  animation: email-in 0.24s ease-out both;
+}
+.email-forward-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.email-state {
+  font-size: 12px;
+  color: var(--ink-3);
+  transition: color 0.3s ease;
+}
+.email-state::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+.email-state.is-ok {
+  color: var(--c-success);
+}
+.email-state.is-wait {
+  color: var(--c-warning-ink);
+}
+.email-state.is-wait::before {
+  animation: email-pulse 1.4s ease-in-out infinite;
+}
+.email-confirm,
+.email-steps,
+.email-own,
+.email-add {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.email-confirm {
+  padding: 10px 12px;
+  border-left: 2px solid var(--c-warning-ink);
+}
+.email-code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+.email-add {
+  justify-items: stretch;
+}
+.email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.email-from {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.email-records {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.email-record {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 4px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm, 8px);
+}
+.email-record .found-rec dd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.email-mark {
+  color: var(--ink-3);
+}
+.email-record.is-ok .email-mark {
+  color: var(--c-success);
+}
+.email-purpose {
+  grid-column: 2;
+}
+.btn.email-copy {
+  padding: 0 4px;
+  min-height: 0;
+}
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.msg-file {
+  font-size: 12px;
+}
+.msg-file.is-off {
+  color: var(--ink-3);
+}
+@keyframes email-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes email-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .email-forward,
+  .email-state.is-wait::before {
+    animation: none;
+  }
+}

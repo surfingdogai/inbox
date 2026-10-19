@@ -15,15 +15,19 @@ import type {
   DeliveryView,
   DiscoveryResult,
   DiscoveryView,
+  EmailChannelView,
   EraseResult,
   FeedConnector,
   Floor,
+  ForwardView,
+  HostSender,
   IntegrationsView,
   ItemDetail,
   ItemView,
   KeyList,
   KeyView,
   ListParams,
+  MailProvider,
   MailStatus,
   NetworkView,
   Page,
@@ -193,6 +197,30 @@ async function file(path: string, body: unknown): Promise<{ blob: Blob; filename
   throw new ApiProblem(problem);
 }
 
+/** A file the inbox gives as a download (GET): the file and its name, or the problem, as `call`. */
+async function download(path: string, fallbackName: string): Promise<{ blob: Blob; filename: string }> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(path, window.location.origin), {
+      headers: { accept: "application/octet-stream", ...authHeaders() },
+      credentials: "include",
+    });
+  } catch {
+    throw new ApiProblem({
+      type: "about:blank",
+      title: "Unreachable",
+      status: 0,
+      code: "network",
+      detail: "Could not reach the inbox. Check the server is running, then try again.",
+    });
+  }
+  if (res.ok)
+    return { blob: await res.blob(), filename: attachmentName(res.headers.get("content-disposition"), fallbackName) };
+  const problem = await problemFrom(res);
+  if (res.status === 401) unauthorizedHandler?.();
+  throw new ApiProblem(problem);
+}
+
 const item = (id: string) => `/v1/owner/items/${encodeURIComponent(id)}`;
 const customerPath = (partyId: string) => `/v1/owner/customers/${encodeURIComponent(partyId)}`;
 
@@ -249,6 +277,22 @@ export const api = {
   checkDiscovery: () => call<DiscoveryResult>("POST", "/v1/owner/discovery/check"),
   /** Whether email goes out at all, has an address to go from, and can carry answer links. */
   mailStatus: () => call<MailStatus>("GET", "/v1/owner/mail"),
+  // The email channel (ADR-026).
+  emailChannel: () => call<EmailChannelView>("GET", "/v1/owner/email"),
+  emailProvider: (address: string) =>
+    call<{ provider: MailProvider; name: string }>("GET", "/v1/owner/email/provider", { query: { address } }),
+  addForward: (body: { address: string; provider: MailProvider }) =>
+    call<ForwardView>("POST", "/v1/owner/email/forwards", { body }),
+  removeForward: (id: string) =>
+    call<{ removed: boolean }>("DELETE", `/v1/owner/email/forwards/${encodeURIComponent(id)}`),
+  checkForward: (id: string) =>
+    call<ForwardView>("POST", `/v1/owner/email/forwards/${encodeURIComponent(id)}/check`, { body: {} }),
+  confirmedForward: (id: string) =>
+    call<ForwardView>("POST", `/v1/owner/email/forwards/${encodeURIComponent(id)}/confirmed`, { body: {} }),
+  setSender: (address: string | null) => call<HostSender>("PUT", "/v1/owner/email/sender", { body: { address } }),
+  checkSender: () => call<HostSender>("POST", "/v1/owner/email/sender/check", { body: {} }),
+  /** One attached file, as a download. */
+  attachment: (id: string) => download(`/v1/owner/attachments/${encodeURIComponent(id)}`, "attachment"),
 
   // ---- one customer: their data, networks off, erasure ----
   customer: (partyId: string) => call<CustomerSummary>("GET", customerPath(partyId)),

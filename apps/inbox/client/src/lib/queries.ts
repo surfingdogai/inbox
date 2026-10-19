@@ -26,6 +26,7 @@ import type {
 
 /** Query keys and hooks. Writes invalidate the item, every list and the counts. */
 export const qk = {
+  email: ["email"] as const,
   business: ["business"] as const,
   settings: ["settings"] as const,
   networks: ["networks"] as const,
@@ -57,6 +58,26 @@ export function useSettings() {
 /** Each network and how it is doing; refreshed while the page is open, since a ping lands on its own. */
 export function useNetworks() {
   return useQuery({ queryKey: qk.networks, queryFn: api.networks, staleTime: 10_000, refetchInterval: 30_000 });
+}
+
+/**
+ * The email channel (ADR-026). Read again every few seconds while something is on its way: a check out,
+ * a forward being set up (its provider's confirmation arrives here), DNS being looked at.
+ */
+export function useEmailChannel() {
+  return useQuery({
+    queryKey: qk.email,
+    queryFn: api.emailChannel,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      if (!d) return false;
+      const busy =
+        d.forwards.some((f) => f.checking || f.state === "setup" || f.state === "confirm") ||
+        d.sending.own?.state === "dns" ||
+        d.sending.own?.state === "verifying";
+      return busy ? 4_000 : false;
+    },
+  });
 }
 
 export function useMailStatus() {

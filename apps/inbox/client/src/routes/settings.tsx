@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
 
-/** Settings: who the business is, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
+/** Settings: who the business is, how it is emailed, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ location }) => {
     if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
@@ -34,6 +34,9 @@ function SettingsLayout() {
       <nav ref={tabs} className="tabs subnav" aria-label="Settings sections">
         <Link to="/settings" className="tab" activeOptions={{ exact: true }}>
           General
+        </Link>
+        <Link to="/settings/email" className="tab">
+          Email
         </Link>
         <Link to="/settings/services" className="tab">
           Services
