@@ -1,5 +1,5 @@
 import type { MailOut } from "@surfingdog/platform";
-import { type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
+import { type DiscoveryAnswer, type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
@@ -97,6 +97,7 @@ import { askedForAPrice, findSlots, quoteNotBookable, type Slot } from "./availa
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
+import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { applySetupPlan, type SetupPlanInput, type SetupPlanResult } from "./plan";
@@ -327,6 +328,8 @@ export class Capabilities {
   readonly customers: CustomerData;
 
   private readonly baseUrl: string | undefined;
+  /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
+  private readonly discoveryFetch: typeof fetch | undefined;
   private mail: MailOut | null = null;
   private policy: HostPolicy | null = null;
 
@@ -422,6 +425,23 @@ export class Capabilities {
   }
 
   /**
+   * "Let agents find your inbox" (ADR-024): where the lines go (the business's own domain) and where
+   * they point (this inbox's own host), and the lines themselves.
+   */
+  async getDiscovery(caller: Caller): Promise<DiscoveryView> {
+    requireBusiness(caller);
+    const settings = await readSettings(this.db);
+    const facts = await this.getBusinessProfile();
+    const publicUrl = this.baseUrl ?? settings.notifications.appUrl ?? "";
+    return discoveryView(discoveryTarget(settings, publicUrl, this.policy?.home?.domain), facts.name);
+  }
+
+  /** The network's discovery check of those lines, when the owner asks: nothing is sent unasked. */
+  async checkDiscovery(caller: Caller): Promise<DiscoveryAnswer> {
+    return checkDiscovery(await this.getDiscovery(caller), this.discoveryFetch);
+  }
+
+  /**
    * Whether this inbox can email at all (`service`: a mail service that delivers, not a log), has an
    * address to send from (`sender`), and can put answer links in its emails (`links`: a secret to
    * sign them and a public address for them to open). Settings shows a banner when one is missing.
@@ -457,7 +477,12 @@ export class Capabilities {
      * event to a webhook): the host's outbound fetch, and the one for an endpoint the owner allowed
      * onto a private address. Absent, the runtime's own fetch.
      */
-    outbound?: { readonly fetch?: typeof fetch | undefined; readonly privateFetch?: typeof fetch | undefined },
+    outbound?: {
+      readonly fetch?: typeof fetch | undefined;
+      readonly privateFetch?: typeof fetch | undefined;
+      /** How the discovery check asks its network (ADR-024): absent, `fetch`. */
+      readonly discovery?: typeof fetch | undefined;
+    },
   ) {
     this.setup = new SetupCapabilities(db, () => this.policy);
     this.feeds = new FeedCapabilities(db);
@@ -475,6 +500,7 @@ export class Capabilities {
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);
     this.baseUrl = baseUrl;
+    this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
     this.customer = new CustomerDoors(db, {
       access: this.access,

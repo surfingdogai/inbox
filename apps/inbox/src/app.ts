@@ -184,7 +184,12 @@ export function createInbox(deps: AppDeps): Inbox {
     createSecretBox(parseSecretKeys(deps.secretKey)),
     deps.baseUrl,
     deps.eventSettleMs,
-    { fetch: deps.fetchImpl, privateFetch: deps.privateFetchImpl },
+    // A demo asks no network anything, the discovery check's included.
+    {
+      fetch: deps.fetchImpl,
+      privateFetch: deps.privateFetchImpl,
+      discovery: deps.demo ? noNetworkFetch : deps.fetchImpl,
+    },
   );
   const demo = deps.demo;
   const transport = deps.mailOut ?? logMailOut();

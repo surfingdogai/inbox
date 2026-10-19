@@ -25,6 +25,17 @@ jobs:
       - run: pnpm test:workers
       - run: pnpm kit
 
+  wordpress:
+    name: wordpress plugin · lint · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The runner's own PHP: every file parses, and the plugin's tests (WordPress stood in for)
+      # hold its lines to packages/spec/vectors/discovery.json.
+      - run: php --version
+      - run: for f in integrations/wordpress/surfingdog-inbox/*.php integrations/wordpress/surfingdog-inbox/tests/*.php; do php -l "$f"; done
+      - run: php integrations/wordpress/surfingdog-inbox/tests/run.php
+
   site:
     name: site · typecheck · build
     runs-on: ubuntu-latest

@@ -64,7 +64,10 @@ or network:
   move to 0.7: 0.6's metric pattern names its metrics one by one and refuses `pay_read`. From 0.7 the
   metric pattern is any lower-case name with at most one key after a colon, and `pay_with.via` any
   lower-case name, so a metric or a source of evidence added later validates: a reader skips one it
-  does not know.
+  does not know. With it, optional for a network ([ADR-024](../../docs/adr/024-owners-in-control.md)):
+  a business's inbox found from its domain (`discovery-result`, the MCP tools `check_dns` and
+  `start_inbox`, `vectors/discovery.json` and `vectors/discovery-words.json`; protocol §4.14a), and
+  the owner's page in a listing's `owner.manage`.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at

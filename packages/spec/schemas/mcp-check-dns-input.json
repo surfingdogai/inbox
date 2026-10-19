@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP check_dns: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's own domain, like salon.example (a URL is read as its domain)."
+    },
+    "host": {
+      "description": "Where the inbox answers, when not inbox.<domain>: the domain itself or a name under it.",
+      "type": "string",
+      "maxLength": 253
+    },
+    "target": {
+      "description": "The CNAME target the host must point to, when known (a hosted inbox's Connect page shows it).",
+      "type": "string",
+      "maxLength": 253
+    }
+  },
+  "required": ["domain"]
+}

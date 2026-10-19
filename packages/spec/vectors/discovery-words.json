@@ -1,0 +1,186 @@
+{
+  "about": "What every surface of \"Let agents find your inbox\" says (ADR-024): the owner app's Settings → Be found, a hosted inbox's Connect page and the WordPress plugin. The verdict for a discovery check's state ({ways}, {host} and {domain} filled in; an unknown state reads as not_ready), each item's name, the two groups the items are shown in, the robots.txt fix's lines around it, the steps where most small businesses' sites are, and how an item's detail is said in a row (short_details: the label it starts with taken off, a missing item said as not there yet). The steps were written from each platform's own help pages; they have not been walked through in the platforms' panels yet. A platform's blocks are the lines it shows: head (the link and the structured data), llms_line, llms_file and inbox_file. download is where the platform's plugin is downloaded; with none, no step may tell the owner to install it.",
+  "verdict": {
+    "ready": "Your website points agents to your inbox: {ways} of 5 ways in place.",
+    "dns_only": "Not on your website yet: the DNS record alone points to your inbox.",
+    "no_way": "Not yet: your website doesn't point to your inbox.",
+    "unreachable": "Not yet: the inbox doesn't answer at {host}.",
+    "blocked": "Not yet: robots.txt keeps AI assistants out.",
+    "robots_unreadable": "Not yet: robots.txt can't be read, so assistants read nothing.",
+    "not_ready": "Not yet: {ways} of 5 ways in place."
+  },
+  "items": {
+    "cname": "Inbox address",
+    "manifest": "Your inbox",
+    "robots": "robots.txt",
+    "well_known": "Inbox file on your site",
+    "llms_txt": "llms.txt",
+    "link": "Link in your pages",
+    "schema_org": "Structured data",
+    "dns_txt": "DNS pointer"
+  },
+  "groups": {
+    "inbox": "Your inbox",
+    "site": "From {domain}: {ways} of 5"
+  },
+  "group_of": {
+    "cname": "inbox",
+    "manifest": "inbox",
+    "robots": "inbox",
+    "well_known": "site",
+    "llms_txt": "site",
+    "link": "site",
+    "schema_org": "site",
+    "dns_txt": "site"
+  },
+  "robots_lead": "Add these lines at the top of robots.txt:",
+  "robots_note": "Blocking training crawlers is fine: it doesn't stop assistants.",
+  "dns_record": "Also, if you manage DNS: one record",
+  "dns_record_line": "A DNS record, next to the one for your inbox",
+  "platforms": [
+    {
+      "id": "wordpress",
+      "name": "WordPress",
+      "download": "",
+      "soon": "The Surfing Dog Inbox plugin is coming soon.",
+      "steps": [
+        "For now, paste the head lines in your site's header: with a header-code plugin you already use, or ask your web person."
+      ],
+      "note": "",
+      "blocks": ["head"]
+    },
+    {
+      "id": "shopify",
+      "name": "Shopify",
+      "download": "",
+      "soon": "",
+      "steps": [
+        "Online Store → Themes → Edit code, and open layout/theme.liquid.",
+        "Paste the head lines just before </head>, and save.",
+        "If robots.txt keeps assistants out: add the robots.txt template there, with the lines the check gives."
+      ],
+      "note": "The head lines are enough here: Shopify can't host the other files.",
+      "blocks": ["head"]
+    },
+    {
+      "id": "wix",
+      "name": "Wix",
+      "download": "",
+      "soon": "",
+      "steps": [
+        "Settings → Custom Code → Add Custom Code.",
+        "Paste the head lines, choose All pages and Head, and apply.",
+        "If robots.txt keeps assistants out: open the Robots.txt Editor in your SEO settings."
+      ],
+      "note": "Custom code needs a premium Wix site with a domain connected. The head lines are enough here: Wix can't host the other files.",
+      "blocks": ["head"]
+    },
+    {
+      "id": "squarespace",
+      "name": "Squarespace",
+      "download": "",
+      "soon": "",
+      "steps": [
+        "Open Code Injection (Website Tools, or Settings → Advanced).",
+        "Paste the head lines in Header, and save.",
+        "Squarespace writes robots.txt itself: if it keeps assistants out, look at Settings → Crawlers."
+      ],
+      "note": "Code Injection isn't on every Squarespace plan: check yours. The head lines are enough here: Squarespace can't host the other files.",
+      "blocks": ["head"]
+    },
+    {
+      "id": "other",
+      "name": "Another site",
+      "download": "",
+      "soon": "",
+      "steps": [
+        "Paste the head lines inside <head> on every page.",
+        "Add the llms.txt line to /llms.txt (create the file if there is none).",
+        "Serve the inbox file at /.well-known/agent-inbox.json: a copy of your inbox's, or a redirect to it."
+      ],
+      "note": "",
+      "blocks": ["head", "llms_line", "llms_file", "inbox_file"]
+    }
+  ],
+  "short_details": [
+    {
+      "domain": "salon.example",
+      "state": "ok",
+      "detail": "robots.txt lets AI assistants in.",
+      "short": "Lets AI assistants in."
+    },
+    {
+      "domain": "salon.example",
+      "state": "blocked",
+      "detail": "robots.txt keeps out AI assistants that people use: Claude-User.",
+      "short": "Keeps out assistants people use: Claude-User."
+    },
+    { "domain": "salon.example", "state": "ok", "detail": "llms.txt names the inbox.", "short": "Names the inbox." },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "llms.txt does not name the inbox.",
+      "short": "Not there yet."
+    },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "salon.example has no llms.txt.",
+      "short": "Not there yet."
+    },
+    {
+      "domain": "salon.example",
+      "state": "wrong",
+      "detail": "llms.txt links to inbox.salon.example, but not to its manifest, which is what agents read.",
+      "short": "Links to inbox.salon.example, but not to its manifest, which is what agents read."
+    },
+    {
+      "domain": "salon.example",
+      "state": "ok",
+      "detail": "_agent-inbox.salon.example names the inbox.",
+      "short": "Names the inbox."
+    },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "No _agent-inbox.salon.example record.",
+      "short": "Not there yet."
+    },
+    {
+      "domain": "salon.example",
+      "state": "ok",
+      "detail": "https://salon.example/.well-known/agent-inbox.json leads to the inbox.",
+      "short": "Leads to the inbox."
+    },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "https://salon.example/.well-known/agent-inbox.json could not be read: it redirects to another site.",
+      "short": "Could not be read: it redirects to another site."
+    },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "https://salon.example/.well-known/agent-inbox.json is not there.",
+      "short": "Not there yet."
+    },
+    {
+      "domain": "salon.example",
+      "state": "missing",
+      "detail": "The homepage has no link to the inbox.",
+      "short": "Not there yet."
+    },
+    {
+      "domain": "salon.example",
+      "state": "ok",
+      "detail": "The homepage links to the inbox.",
+      "short": "The homepage links to the inbox."
+    },
+    {
+      "domain": "salon.example",
+      "state": "ok",
+      "detail": "inbox.salon.example points to a Surfing Dog hosted inbox.",
+      "short": "inbox.salon.example points to a Surfing Dog hosted inbox."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP start_inbox: structuredContent",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["available", "has_inbox", "unavailable"],
+      "description": "available: start_url sets one up; has_inbox: the business already runs one; unavailable: not for this domain now, with why."
+    },
+    "start_url": {
+      "description": "The setup page, with the domain and nothing else in it. The owner opens it and types their own email; nothing is signed up by this call.",
+      "type": "string",
+      "format": "uri"
+    },
+    "host": {
+      "type": "string",
+      "description": "Where the inbox goes live once the owner adds one DNS record: inbox.<domain> unless they pick another."
+    },
+    "why": {
+      "description": "ours: an address of Surfing Dog's; hosting_suffix: an address at a hosting platform, where no DNS record can be added; health: health practices wait for now; off: not offered by this network now.",
+      "type": "string",
+      "enum": ["ours", "hosting_suffix", "health", "off"]
+    },
+    "platform": {
+      "description": "The hosting platform's suffix, for hosting_suffix.",
+      "type": "string"
+    },
+    "self_host": {
+      "type": "string",
+      "format": "uri",
+      "description": "The open-source inbox, to run on the business's own servers instead."
+    },
+    "detail": {
+      "type": "string",
+      "description": "What to tell the owner, in a few sentences."
+    }
+  },
+  "required": ["domain", "status", "host", "self_host", "detail"]
+}

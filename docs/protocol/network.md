@@ -13,7 +13,10 @@ network keep, and show, a door's history from its own reads (§4.8, [ADR-020](..
 optional for a network. Spec 0.6 adds, optional for a network, the census (§4.16): once a month, how
 many of the websites it checked an agent can do each thing with, as counts; and version 2 of the
 capability vocabulary, which says what each capability means, the evidence for it and how each kind
-of door carries it ([ADR-021](../adr/021-the-reference.md)).
+of door carries it ([ADR-021](../adr/021-the-reference.md)). Spec 0.7 adds how a business is paid: a
+profile's `payments` (§4.6), each listing's ways to pay with their evidence (`accepts.pay_with`, §4.10)
+and the census's payment metrics (§4.16); and, optional for a network, a business's inbox found from
+its domain (§4.14a, [ADR-024](../adr/024-owners-in-control.md)).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -1079,6 +1082,17 @@ A network counts challenges, checks and codes per caller as well as per domain, 
 never use up what the business needs to prove its domain, and it does not say whether an address was
 sent a code before.
 
+A network SHOULD offer the same to a business's owner with no AI and no account: the reference
+network's is `/b/<domain>/owner` (the result page's `owner.manage`), with the `dns` and `code`
+proofs. A code goes only to an address at the domain the owner picks, never one typed: a role
+address, or one the site itself publishes. The address that holds a listing's code claim is never
+locked out of a new code. A correction is kept field by field (what was declared or shown before,
+what it is now, the proof's label, who made it, and whether it came from the page or the tools), and
+every fact a listing shows that the business said itself, by registering or correcting, carries
+`via: "business"` in its `facts` (§4.10), so a reader tells the business's word from what was read.
+Nothing a person does on that page lifts a suppression the site asked for, unless they ask for it
+to be read again.
+
 `update_business` needs a claim token or a proof at least as strong as the listing's, **opt-out
 included**, for a listing that is claimed or registered. An opt-out without a proof, through the tool
 or at the network's page for businesses, stops the crawling and removes an unclaimed entry the network
@@ -1308,6 +1322,42 @@ So an agent or a model can find a network's doors without being told, a network 
 
 Tool descriptions say plainly what the directory is and when to use it. They never tell an agent to
 call the network every time.
+
+### 4.14a A business's inbox, found from its domain (spec 0.7, MAY)
+
+An inbox answers at its own host, often `inbox.<domain>`, with its manifest at
+`/.well-known/agent-inbox.json`. An agent that knows only the business's domain is led there by any of
+five ways, each a line the business adds where it already publishes things (ADR-002, ADR-024):
+
+| Way | What the domain publishes |
+|---|---|
+| `well_known` | its own `/.well-known/agent-inbox.json`: a copy of the inbox's manifest, or a redirect to it |
+| `llms_txt` | a line in `/llms.txt` linking the inbox's manifest: `- [Agent inbox](https://<host>/.well-known/agent-inbox.json): send us messages and requests` |
+| `link` | `<link rel="agent-inbox" type="application/json" href="https://<host>/.well-known/agent-inbox.json">` in its pages, or the same relation in an HTTP `Link` field |
+| `schema_org` | a schema.org `potentialAction` whose `target` (a URL, or an `EntryPoint`'s `urlTemplate`) is the inbox's manifest |
+| `dns_txt` | `_agent-inbox.<domain> TXT "v=sdi1; manifest=https://<host>/.well-known/agent-inbox.json"` |
+
+`vectors/discovery.json` holds the exact lines for given inputs; every builder of them gives those.
+
+A network MAY check them: `GET /v1/discovery/{domain}?host=&target=` (`schemas/discovery-result.json`),
+and the MCP tool `check_dns` with the same answer. It reads as a browser would and nothing the site's
+robots.txt keeps its reader off, follows redirects only within the domain, its `www.` and the inbox's
+host, and answers each item (`cname`, `manifest`, `robots`, and the five ways) with `ok`, `missing`,
+`wrong`, `blocked` or `unreadable`, a sentence, and when it is not `ok`, the exact fix (`fix_lines`:
+the text to paste alone). `robots` is `blocked` when robots.txt keeps out an AI assistant that fetches
+for a person (`ChatGPT-User`, `Claude-User`, `Perplexity-User`…); keeping out training crawlers is
+the owner's choice and never a finding. A robots.txt that answers 5xx or 429, or does not answer, is
+read as RFC 9309 says (nothing else of the site is read) and is `unreadable`; a 4xx is no rules.
+`ready` is the inbox answering, no assistant kept out, and at least one of the four ways **on the
+website** in place; `state` says which of these holds (`ready`, `unreachable`, `blocked`,
+`robots_unreadable`, `dns_only`, `no_way`), `site_ways` counts the website's ways, and `platform`
+names the site's platform when the check read one. The public answer never says whether a host is a
+hosted inbox's. An inbox reads the answer leniently (`readDiscoveryAnswer`): an item or a state it
+does not know is left out, so a network can add them. The words a surface shows for it are
+`vectors/discovery-words.json`.
+
+A network MAY also offer `start_inbox`, the link where an owner sets up a hosted inbox for the domain:
+the link carries the domain and nothing else, and the tool never signs anyone up or takes an email.
 
 ### 4.15 Door reports (spec 0.4, MAY)
 

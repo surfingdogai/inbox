@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP check_dns: structuredContent",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "The business's own domain (its registrable domain)."
+    },
+    "host": {
+      "type": "string",
+      "description": "Where the inbox answers: inbox.<domain> unless another was named."
+    },
+    "manifest": {
+      "type": "string",
+      "format": "uri",
+      "description": "The inbox's manifest: https://<host>/.well-known/agent-inbox.json."
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "ready": {
+      "type": "boolean",
+      "description": "The inbox answers at its host, robots.txt keeps no AI assistant out, and at least one way on the business's website leads to it (the DNS pointer alone does not)."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["ready", "unreachable", "blocked", "robots_unreadable", "dns_only", "no_way"],
+      "description": "What the check found, as a whole; ready is state ready."
+    },
+    "ways": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "How many of well_known, llms_txt, link, schema_org and dns_txt lead to it."
+    },
+    "site_ways": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "How many of those are on the website (all but dns_txt)."
+    },
+    "platform": {
+      "description": "The site's platform, when its homepage (or the network's last read of it) shows one of these.",
+      "type": "string",
+      "enum": ["wordpress", "shopify", "wix", "squarespace"]
+    },
+    "next": {
+      "type": "string",
+      "description": "The one step worth doing first."
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": ["cname", "manifest", "robots", "well_known", "llms_txt", "link", "schema_org", "dns_txt"]
+          },
+          "need": {
+            "type": "string",
+            "enum": ["required", "recommended", "optional"],
+            "description": "required: the inbox cannot be reached without it; recommended and optional: ways the domain leads to it."
+          },
+          "state": {
+            "type": "string",
+            "enum": ["ok", "missing", "wrong", "blocked", "unreadable"],
+            "description": "ok: found as it should be; missing; wrong: there, pointing elsewhere; blocked: robots.txt keeps AI assistants out; unreadable: could not be read, with why."
+          },
+          "detail": {
+            "type": "string",
+            "description": "One sentence: what was found."
+          },
+          "fix": {
+            "description": "The exact record, line or file to add, when it is not ok.",
+            "type": "string"
+          },
+          "fix_lines": {
+            "description": "The text to paste, alone, when the fix is one.",
+            "type": "string"
+          }
+        },
+        "required": ["id", "need", "state", "detail"]
+      }
+    }
+  },
+  "required": ["domain", "host", "manifest", "checked_at", "ready", "state", "ways", "site_ways", "next", "items"]
+}
