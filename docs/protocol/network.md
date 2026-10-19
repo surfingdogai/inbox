@@ -13,7 +13,10 @@ network keep, and show, a door's history from its own reads (§4.8, [ADR-020](..
 optional for a network. Spec 0.6 adds, optional for a network, the census (§4.16): once a month, how
 many of the websites it checked an agent can do each thing with, as counts; and version 2 of the
 capability vocabulary, which says what each capability means, the evidence for it and how each kind
-of door carries it ([ADR-021](../adr/021-the-reference.md)).
+of door carries it ([ADR-021](../adr/021-the-reference.md)). Spec 0.7 adds how a business is paid: a
+profile's `payments` (§4.6), each listing's ways to pay with their evidence (`accepts.pay_with`, §4.10)
+and the census's payment metrics (§4.16); and, optional for a network, a business's inbox found from
+its domain (§4.14a, [ADR-024](../adr/024-owners-in-control.md)).
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -1320,7 +1323,7 @@ So an agent or a model can find a network's doors without being told, a network 
 Tool descriptions say plainly what the directory is and when to use it. They never tell an agent to
 call the network every time.
 
-### 4.14a A business's inbox, found from its domain (spec 0.6, MAY)
+### 4.14a A business's inbox, found from its domain (spec 0.7, MAY)
 
 An inbox answers at its own host, often `inbox.<domain>`, with its manifest at
 `/.well-known/agent-inbox.json`. An agent that knows only the business's domain is led there by any of
