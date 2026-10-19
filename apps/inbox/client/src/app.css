@@ -2629,3 +2629,45 @@ pre.found-code {
   gap: 6px;
   justify-items: start;
 }
+
+/* Settings → Phone (ADR-026): the code a phone scans, ink on white in every theme. */
+.phone-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+}
+.phone-qr {
+  width: 200px;
+  height: 200px;
+  flex: none;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+  animation: phone-qr-in 240ms ease-out;
+}
+.phone-qr-gone {
+  display: grid;
+  place-items: center;
+  color: #474a75;
+  font-size: 13px;
+  text-align: center;
+}
+.phone-pair-text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.phone-pair-text p {
+  margin: 0;
+}
+@keyframes phone-qr-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-qr {
+    animation: none;
+  }
+}

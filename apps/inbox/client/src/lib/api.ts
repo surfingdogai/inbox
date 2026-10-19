@@ -29,6 +29,7 @@ import type {
   Page,
   PatchWebhookBody,
   PaymentView,
+  PhoneView,
   Preset,
   PresetKey,
   Problem,
@@ -350,6 +351,23 @@ export const api = {
   testWebhook: (id: string) => call<TestEventResult>("POST", `/v1/owner/webhooks/${encodeURIComponent(id)}/test`),
   deliveries: (id: string) =>
     call<{ items: DeliveryView[] }>("GET", `/v1/owner/webhooks/${encodeURIComponent(id)}/deliveries`),
+
+  // ---- phones (ADR-026): a QR code to connect one, the phones, a test, removing one ----
+  phones: () =>
+    call<{ phones: PhoneView[]; push: { available: boolean; reason: "no_relay" | "no_secret_key" | null } }>(
+      "GET",
+      "/v1/owner/phones",
+    ),
+  /** A one-time code for a phone to scan; it works once, for five minutes. */
+  createPairing: () => call<{ id: string; qr: string; expires_at: string }>("POST", "/v1/owner/phones/pairings"),
+  pairingStatus: (id: string) =>
+    call<{ state: "waiting" | "paired" | "expired"; phone?: PhoneView }>(
+      "GET",
+      `/v1/owner/phones/pairings/${encodeURIComponent(id)}`,
+    ),
+  testPhone: (id: string) =>
+    call<{ sent: boolean; note: string }>("POST", `/v1/owner/phones/${encodeURIComponent(id)}/test`),
+  removePhone: (id: string) => call<{ removed: true }>("DELETE", `/v1/owner/phones/${encodeURIComponent(id)}`),
 
   // ---- keys: one named, scoped, revocable key per system that connects ----
   keys: () => call<KeyList>("GET", "/v1/owner/api-keys"),
