@@ -469,7 +469,7 @@ function shortUrl(url: string): string {
   }
 }
 
-/** Why a carried request did not arrive, in the owner's words (ADR-020). */
+/** Why a carried request did not arrive, in the owner's words (ADR-025). */
 const CARRIED_WHY: Record<string, string> = {
   switched_off: "you had them switched off",
   failed: "your inbox could not be reached",

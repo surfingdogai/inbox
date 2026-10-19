@@ -151,7 +151,7 @@ export const HOSTED_FAQ = hostedFaq(HOSTED_PILOT_OPEN);
 /**
  * Who is in the middle, where the inbox is said to be the business's own: the FAQ's answer and
  * llms.txt. Surfing Dog keeps nothing anyone writes only of an inbox the business runs itself; a
- * hosted one runs on our servers. Open, the promise of carried requests (ADR-020, src/lib/gateway.ts)
+ * hosted one runs on our servers. Open, the promise of carried requests (ADR-025, src/lib/gateway.ts)
  * replaces "not in the middle", which a carried request would make untrue. Closed, the sentences of
  * before, word for word.
  */

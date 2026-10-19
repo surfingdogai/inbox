@@ -23,7 +23,7 @@ export function buildManifest(input: {
    */
   doorsElsewhere?: readonly DoorElsewhere[] | undefined;
   /**
-   * Whether a network may carry an assistant's request here (ADR-020, `settings.carried`): published
+   * Whether a network may carry an assistant's request here (ADR-025, `settings.carried`): published
    * either way, `{accepted: true}` (the default for every inbox) or `{accepted: false}`, so a network
    * can tell an inbox whose owner can switch them off from one from before the switch, which says
    * nothing and is carried nothing.

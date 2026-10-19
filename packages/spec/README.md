@@ -68,7 +68,7 @@ or network:
   a business's inbox found from its domain (`discovery-result`, the MCP tools `check_dns` and
   `start_inbox`, `vectors/discovery.json` and `vectors/discovery-words.json`; protocol §4.14a), and
   the owner's page in a listing's `owner.manage`.
-- 0.6 (optional for a network): carried requests (ADR-020): `ask_business`, `request_quote` and
+- 0.8 (optional for a network): carried requests ([ADR-025](../../docs/adr/025-carried-requests.md)): `ask_business`, `request_quote` and
   `request_booking` carry a person's request to a business's own inbox (`schemas/mcp-ask-business-*`,
   `mcp-request-quote-*`, `mcp-request-booking-*`); the manifest's `carried_requests`, which an inbox with
   the owner's switch publishes either way (a network carries nothing to a manifest without it); the

@@ -68,7 +68,7 @@ const NEW_OR_CHANGED = [
 ];
 
 /**
- * The promise of carried requests (ADR-020, src/lib/gateway.ts) says "keep only a record": the words
+ * The promise of carried requests (ADR-025, src/lib/gateway.ts) says "keep only a record": the words
  * decided for it, and no claim of being alone, so the plain-words checks read the pages without it.
  */
 const withoutPromise = (text: string) =>
@@ -357,7 +357,7 @@ describe("the home page and the three products", () => {
     expect(faq).toContain('q: "Does my business move onto Surfing Dog?"');
     expect(faq).toMatch(/a:\s*["']No\. Surfing Dog Inbox is open-source software/);
     expect(faq).toContain("HOSTED_OWNERSHIP.faq +");
-    // Closed, the words of before; open, the promise of carried requests (ADR-020), which a carried
+    // Closed, the words of before; open, the promise of carried requests (ADR-025), which a carried
     // request would otherwise make untrue.
     expect(hostedOwnership(false).faq).toContain(
       "Surfing Dog is not in the middle of a message, a booking, an order or a payment",

@@ -734,7 +734,7 @@ export interface NetworkView {
   readonly doors: (PingDoors & { readonly at: string }) | null;
   /**
    * The requests it carried here for people's AI assistants over its last 30 days, and the ones that
-   * did not arrive and why (ADR-020, protocol §4.16), as its answer to a signed ping last said it,
+   * did not arrive and why (ADR-025, protocol §4.17), as its answer to a signed ping last said it,
    * and when: null until one did, and three days after the last.
    */
   readonly carried: (PingCarried & { readonly at: string }) | null;

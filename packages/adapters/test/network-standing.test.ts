@@ -272,7 +272,7 @@ describe("the signed ping", () => {
     expect((await s.view())?.doors?.at).toBe(new Date(T0).toISOString());
   });
 
-  it("keeps what assistants tried through the network, for the owner alone, read leniently (ADR-020)", async () => {
+  it("keeps what assistants tried through the network, for the owner alone, read leniently (ADR-025)", async () => {
     let carried: unknown = {
       since: "2026-08-23T10:00:00Z",
       delivered: 3,

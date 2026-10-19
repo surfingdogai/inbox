@@ -209,7 +209,7 @@ async function customerMail(
   }
   // Anyone can make a request with any address, and the acknowledgement goes out unasked, in the
   // business's name: a few a day to one address, so nobody can use the business to fill a stranger's
-  // mailbox. A request a network carried for someone's AI assistant (ADR-020) is acknowledged at
+  // mailbox. A request a network carried for someone's AI assistant (ADR-025) is acknowledged at
   // most once a day per address: the address was typed by an assistant, for a person this inbox has
   // never heard from. What the business itself does next is always sent. One held back shows on the item.
   const ackLimited =

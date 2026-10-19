@@ -6,7 +6,7 @@ import { mergeSettings } from "../src/settings/merge";
 import { DEFAULT_SETTINGS, settingsSchema } from "../src/settings/schema";
 
 /**
- * Requests a network carries for people's AI assistants (ADR-020): on for every inbox unless the
+ * Requests a network carries for people's AI assistants (ADR-025): on for every inbox unless the
  * owner switches them off, and said in the manifest either way, so a network can tell an inbox that
  * has the switch from one from before it (which says nothing, and is carried nothing). Node and workerd.
  */

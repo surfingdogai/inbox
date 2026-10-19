@@ -201,7 +201,7 @@ describe("the manifest's directory flag", () => {
   });
 });
 
-describe("the manifest's carried_requests (ADR-020)", () => {
+describe("the manifest's carried_requests (ADR-025)", () => {
   it("says yes while networks may carry assistants' requests, the default, and no once the owner says no", async () => {
     const s = await setup();
     expect((await s.manifest()).carried_requests).toEqual({ accepted: true });

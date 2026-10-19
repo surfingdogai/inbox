@@ -2,7 +2,7 @@ import { z } from "zod";
 import { timestampSchema } from "./common";
 
 /**
- * Carried requests (ADR-020, `docs/protocol/network.md` §4.16): a network may carry an assistant's
+ * Carried requests (ADR-025, `docs/protocol/network.md` §4.17): a network may carry an assistant's
  * question, request for a quote or request for a booking to a business's own inbox, through the
  * inbox's public API, when the inbox allows it (its manifest's `carried_requests.accepted`, true
  * unless the owner switched it off; a manifest without it is carried nothing). The network keeps only a record that it was delivered: when, to which
@@ -106,7 +106,7 @@ export const requestBookingInputSchema = z.object({
 });
 export type RequestBookingInput = z.infer<typeof requestBookingInputSchema>;
 
-/** What became of one carried request (§4.16). */
+/** What became of one carried request (§4.17). */
 export const carryOutcomeSchema = z
   .enum([
     "delivered",
@@ -184,7 +184,7 @@ export type CarryOutput = z.infer<typeof carryOutputSchema>;
 
 /**
  * What a signed ping's `200` says of the requests the network carried to this inbox, and tried to
- * (§4.16): counts only, for the business itself, over the last 30 days.
+ * (§4.17): counts only, for the business itself, over the last 30 days.
  */
 export const pingCarriedSchema = z.object({
   since: timestampSchema.describe("The start of the 30 days the counts cover."),

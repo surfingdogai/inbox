@@ -182,7 +182,7 @@ export const signedPingResponseSchema = z.object({
   carried: pingCarriedSchema
     .optional()
     .describe(
-      "The requests this network carried to the inbox for assistants, and tried to, over the last 30 days (§4.16): counts only. Absent from a network that carries none.",
+      "The requests this network carried to the inbox for assistants, and tried to, over the last 30 days (§4.17): counts only. Absent from a network that carries none.",
     ),
 });
 

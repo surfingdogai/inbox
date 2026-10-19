@@ -16,8 +16,8 @@ capability vocabulary, which says what each capability means, the evidence for i
 of door carries it ([ADR-021](../adr/021-the-reference.md)). Spec 0.7 adds how a business is paid: a
 profile's `payments` (§4.6), each listing's ways to pay with their evidence (`accepts.pay_with`, §4.10)
 and the census's payment metrics (§4.16); and, optional for a network, a business's inbox found from
-its domain (§4.14a, [ADR-024](../adr/024-owners-in-control.md)).
-Spec 0.6 adds, optional for a network, carried requests (§4.16): a network may carry a person's
+its domain (§4.14a, [ADR-024](../adr/024-owners-in-control.md)). Spec 0.8 adds, optional for a network,
+carried requests (§4.17, [ADR-025](../adr/025-carried-requests.md)): a network may carry a person's
 request to a business's own inbox, which publishes whether it takes them in its manifest.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
@@ -677,11 +677,11 @@ that give the same answer: `GET /v1/businesses` (§4.3), an MCP server at `POST 
 documents, `GET /openapi.json` (OpenAPI 3.1 of every public read) and `GET /llms.txt` (the same in
 plain words, MCP first, in the llms.txt layout). Every answer is the same whoever asks, and none of it
 books or orders anything itself: a result names the business's own inbox, and the assistant goes there,
-or asks the network to carry its person's request there (§4.16).
+or asks the network to carry its person's request there (§4.17).
 
 **The MCP server** is stateless: it opens no stream and keeps nothing between two requests. It MAY
 answer `initialize` with an `Mcp-Session-Id` it signed, only to tell its callers apart for its limits
-(spec 0.6): it stores nothing for it, never requires it, and serves a request without it, or with one it
+(spec 0.8): it stores nothing for it, never requires it, and serves a request without it, or with one it
 did not sign, the same. It MAY answer the same at `POST /mcp/search`. It serves both eras of the
 protocol on the one endpoint. A request that carries the per-request envelope in `params._meta`
 (`io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`) is served
@@ -708,9 +708,9 @@ is open to every origin, without credentials.
 | `update_business` (0.2, optional) | a claim token or a proof, and what changes (§4.12) | the same |
 | `check_business` (0.3, optional) | `url`: a website or a bare domain; `fresh`: read it again | a check's result (§4.13) |
 | `report_door` (0.4, optional) | `POST /v1/door-reports`'s body (§4.15) | its `202` answer |
-| `ask_business` (0.6, optional) | `domain`, `message`, `subject?`, `contact {email, name?}`, `consent: true`, `language?` (§4.16) | what became of it, and the inbox's own answer |
-| `request_quote` (0.6, optional) | `domain`, `what`, `details`, `quantity?`, `needed_by?`, `contact`, `consent`, `language?` | the same |
-| `request_booking` (0.6, optional) | `domain`, `service`, `start?`, `from?`, `party_size?`, `notes?`, `terms_sha?`, `contact?`, `consent?`, `language?` | the same, or free times |
+| `ask_business` (0.8, optional) | `domain`, `message`, `subject?`, `contact {email, name?}`, `consent: true`, `language?` (§4.17) | what became of it, and the inbox's own answer |
+| `request_quote` (0.8, optional) | `domain`, `what`, `details`, `quantity?`, `needed_by?`, `contact`, `consent`, `language?` | the same |
+| `request_booking` (0.8, optional) | `domain`, `service`, `start?`, `from?`, `party_size?`, `notes?`, `terms_sha?`, `contact?`, `consent?`, `language?` | the same, or free times |
 
 Every tool says all four annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
 `openWorldHint`), and no tool's description or answer asks the model to call a tool its person did not
@@ -1514,7 +1514,7 @@ listing that is not a member is not emailed yet; an unclaimed one never is. `POS
 **Telling agents.** Every answer of a network that takes door reports carries `report: {tool, url,
 guide, reward}`: `GET /v1/businesses`, `GET /v1/businesses/{domain}`, `GET /b/{domain}.json` and the
 A2A door. Over MCP, `search_businesses`, `get_business` and `check_business` MAY leave it out, and ours
-do (spec 0.6): `report_door`'s own description says when it is for, and an answer that asks the model to
+do (spec 0.8): `report_door`'s own description says when it is for, and an answer that asks the model to
 make a call its person did not ask for is refused by the directories that list MCP servers. `guide` is `<network>/report.md`, an agent's guide
 like `llms.txt`, linked from `llms.txt` ("Report how it went"), the MCP server card and the A2A card.
 `reward` says what is true: reports may make the network read doors again (at most twice a day per
@@ -1564,10 +1564,10 @@ so in `method`.
   counts rest on Overture Maps places data; its directory stays under the ODbL 1.0. A CSV of the same
   rows, `edition,scope,key,metric,value`, is a network's to offer.
 
-### 4.16 Carried requests (spec 0.6, MAY)
+### 4.17 Carried requests (spec 0.8, MAY)
 
 A network MAY carry a person's request to a business's own inbox, when the person's assistant asks it
-to and the business allows it ([ADR-020](../adr/020-carried-requests.md)): a question (`ask_business`), a
+to and the business allows it ([ADR-025](../adr/025-carried-requests.md)): a question (`ask_business`), a
 request for a quote (`request_quote`) or a request for a booking (`request_booking`), over MCP (§4.7). It
 carries them only to an inbox that publishes a manifest (§4.1) on the business's own domain or one
 label under it, through the inbox's own public API (`protocols.rest`: `POST /messages`, `/quotes`,

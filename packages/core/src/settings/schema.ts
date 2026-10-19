@@ -740,7 +740,7 @@ const sections = {
     .prefault({})
     .describe("What agents can do here. Left out, a door follows what the inbox holds; false shuts it."),
   /**
-   * Requests a network carries to this inbox for someone's AI assistant (ADR-020): a question, a
+   * Requests a network carries to this inbox for someone's AI assistant (ADR-025): a question, a
    * request for a quote or for a booking, sent through the inbox's own public doors with the email
    * address the person agreed to give, never a phone number. On for every inbox unless the owner
    * switches it off; off, the manifest says `carried_requests: {"accepted": false}` and every

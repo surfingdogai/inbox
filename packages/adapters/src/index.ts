@@ -208,8 +208,8 @@ function serveMcp(
 }
 
 /**
- * The headers a network sends with a request it carried for a person's AI assistant (ADR-020, network
- * protocol §4.16): that it carried it, and an opaque code for its sender, the same for one sender at
+ * The headers a network sends with a request it carried for a person's AI assistant (ADR-025, network
+ * protocol §4.17): that it carried it, and an opaque code for its sender, the same for one sender at
  * this inbox for a day, which a limit or a block can be keyed on without turning the network away.
  */
 export const CARRIED_HEADER = "surfing-dog-carried";
@@ -352,7 +352,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["platform"], `platform:${seen.agent.platform}`);
       if (refused) return refused;
     }
-    // A network that carried the request for a person's AI assistant says so (network protocol §4.16).
+    // A network that carried the request for a person's AI assistant says so (network protocol §4.17).
     const viaNetwork = c.req.header(CARRIED_HEADER) === "1";
     c.set("caller", viaNetwork ? { ...withAgent(caller, seen), viaNetwork } : withAgent(caller, seen));
     await next();

@@ -10,7 +10,7 @@ import {
 } from "../src/index";
 
 /**
- * Carried requests (ADR-020, network.md §4.16): what the three tools take and answer, the manifest's
+ * Carried requests (ADR-025, network.md §4.17): what the three tools take and answer, the manifest's
  * switch, and the counts a signed ping's answer gives the business alone.
  */
 const contact = { email: "ana@example.com", name: "Ana" };

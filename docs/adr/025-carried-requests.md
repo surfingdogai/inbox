@@ -1,4 +1,4 @@
-# ADR-020 — Carried requests: a network carries a person's request to the business's own inbox
+# ADR-025 — Carried requests: a network carries a person's request to the business's own inbox
 
 **Status:** accepted, 15 October 2026; built 18 October 2026. Research, not legal advice: who is the
 controller of a carried request's personal data (the email address, while it is carried) is a
@@ -88,6 +88,6 @@ middle. A carried request has to keep the substance of that promise, and say pla
   sender's code (decision 12) lets it hold one sender apart, and a network that signs its requests
   (Web Bot Auth) could be told apart from a forger later.
 - The order of a release: inboxes first (so their manifests say `carried_requests`), then the network.
-- The protocol gains §4.16 (spec 0.6), the tools' schemas (`schemas/mcp-ask-business-*.json`,
+- The protocol gains §4.17 (spec 0.8), the tools' schemas (`schemas/mcp-ask-business-*.json`,
   `mcp-request-quote-*`, `mcp-request-booking-*`), the manifest's `carried_requests` and the signed
   ping's `carried`.

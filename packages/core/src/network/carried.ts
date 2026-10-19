@@ -2,8 +2,8 @@ import type { Statement } from "@surfingdog/platform";
 import { type PingCarried, pingCarriedSchema } from "@surfingdog/spec";
 
 /**
- * The requests a network carried to this inbox for people's AI assistants, and tried to (ADR-020,
- * network protocol §4.16): the `carried` block a network adds to its answer to a signed ping, counts
+ * The requests a network carried to this inbox for people's AI assistants, and tried to (ADR-025,
+ * network protocol §4.17): the `carried` block a network adds to its answer to a signed ping, counts
  * only over its last 30 days, kept per network for the owner alone. It lives in `network_cache`
  * (kind `carried`): what a network answered, kept for a while, three days past the ping that said
  * it, so a network that stops saying it stops being shown. Read leniently: a count that does not

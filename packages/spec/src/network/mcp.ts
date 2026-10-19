@@ -34,7 +34,7 @@ export const MCP_TOOL_NAMES = ["search_businesses", "get_business", "list_catego
  * checks how far an agent can go with one business's website and gives its agentic score (§4.13); `report_door`, which
  * takes an agent's reports of how its uses of businesses' doors went, done or not (§4.15); `get_census`, read-only, the
  * monthly counts of what agents can do at the websites the network checked (§4.16); `ask_business`, `request_quote`
- * and `request_booking`, which carry a person's request to a business's own inbox when the inbox allows it (§4.16,
+ * and `request_booking`, which carry a person's request to a business's own inbox when the inbox allows it (§4.17,
  * `carry.ts`).
  */
 export const MCP_OPTIONAL_TOOL_NAMES = [

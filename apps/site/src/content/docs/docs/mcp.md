@@ -54,5 +54,5 @@ Counted per person where we can tell people apart: by a directory key, else by t
 
 - In plain words, for an AI: [network.surfingdog.ai/llms.txt](https://network.surfingdog.ai/llms.txt).
 - The server card: [/.well-known/mcp/server-card.json](https://surfingdog.ai/.well-known/mcp/server-card.json).
-- The protocol, §4.7 and §4.16: [network.md](https://github.com/surfingdogai/inbox/blob/main/docs/protocol/network.md).
+- The protocol, §4.7 and §4.17: [network.md](https://github.com/surfingdogai/inbox/blob/main/docs/protocol/network.md).
 - [Privacy](/privacy/), [terms](/terms/), [support](/support/).

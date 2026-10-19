@@ -13,7 +13,7 @@ import {
 } from "../src/lib/gateway";
 
 /**
- * Surfing Dog in a person's own assistant (ADR-020): the promise, word for word wherever carried
+ * Surfing Dog in a person's own assistant (ADR-025): the promise, word for word wherever carried
  * requests are described; every assistant's steps with their source, and "not yet" where it cannot
  * take a server of one's own; the support page; the MCP docs naming every tool.
  */

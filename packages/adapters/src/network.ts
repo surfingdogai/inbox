@@ -412,7 +412,7 @@ function pingAnswerStatements(network: string, now: number, ping: PingResult): S
     networkPingSignatureStatement(network, now, "verified", answer.standing),
     networkRulesStatement(network, now, answer.rules),
     ...(answer.doors ? [networkDoorsStatement(network, now, answer.doors)] : []),
-    // What it carried here for people's AI assistants (ADR-020): for the owner alone.
+    // What it carried here for people's AI assistants (ADR-025): for the owner alone.
     ...(answer.carried ? [networkCarriedStatement(network, now, answer.carried)] : []),
   ];
 }

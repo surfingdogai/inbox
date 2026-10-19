@@ -533,7 +533,7 @@ describe("hosted first, once the pilot is open", () => {
       hostedLlms(true),
     ]);
     expect(open).not.toMatch(/does not put (a|the) business on Surfing Dog/);
-    // Open, "not in the middle" gives way to the promise of carried requests (ADR-020); keeping
+    // Open, "not in the middle" gives way to the promise of carried requests (ADR-025); keeping
     // nothing anyone writes is still said only of an inbox the business runs itself.
     expect(open).not.toContain("not in the middle");
     const sentences = open.split(/(?<=[.;])\s+/).filter((t) => /never keeps what anyone writes/.test(t));
@@ -578,7 +578,7 @@ describe("hosted first, once the pilot is open", () => {
         hostedHowData(open),
         hostedLlms(open),
       ]);
-      // The promise of carried requests (ADR-020) says "keep only a record": its words, not a claim.
+      // The promise of carried requests (ADR-025) says "keep only a record": its words, not a claim.
       expect(words.replace(/\bkeep only a record that it was delivered\b/g, "")).not.toMatch(
         /free forever|forever free|\b(first|only)\b|guarantee/i,
       );

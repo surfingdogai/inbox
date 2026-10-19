@@ -1,5 +1,5 @@
 /**
- * Surfing Dog in a person's own AI assistant (ADR-020): the one MCP address, the promise about
+ * Surfing Dog in a person's own AI assistant (ADR-025): the one MCP address, the promise about
  * requests we carry, and how each assistant adds it. Every step and every "not yet" was read in the
  * assistant's own help, or its maker's announcement, on the date below; each row links where. An
  * assistant that cannot add a server of one's own says "not yet", and nothing here says more than we
@@ -9,7 +9,7 @@
 /** The address a person adds: Search and the carried requests, one server. */
 export const MCP_URL = "https://surfingdog.ai/mcp";
 
-/** The promise decided on 15 October 2026 (ADR-020), word for word, wherever carried requests are described. */
+/** The promise decided on 15 October 2026 (ADR-025), word for word, wherever carried requests are described. */
 export const CARRY_PROMISE =
   "Surfing Dog never touches the money and never keeps what anyone writes. When a business allows it, we carry an assistant's request to the business's own inbox and keep only a record that it was delivered.";
 

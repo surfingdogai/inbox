@@ -262,7 +262,7 @@ describe("the acknowledgement", () => {
     expect(s.to("victim@example.com")).toHaveLength(ACKS_PER_ADDRESS_PER_DAY + 1);
   });
 
-  it("goes once a day at most to an address a network carried a request for (ADR-020)", async () => {
+  it("goes once a day at most to an address a network carried a request for (ADR-025)", async () => {
     const s = await setup();
     const carried = (t: number): Caller => ({
       actor: { kind: "customer_agent", id: "network", channel: "rest" },
