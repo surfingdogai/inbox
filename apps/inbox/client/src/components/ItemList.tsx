@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
 import { partyName, relativeTime, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
-import { useItemPages } from "../lib/queries";
+import { useEmailChannel, useItemPages } from "../lib/queries";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
 import { StatePill } from "./Pills";
@@ -55,6 +55,7 @@ export function ItemList({
           Test mode is on: customers get no emails and nothing reaches a network.
         </p>
       )}
+      <ForwardConfirm />
       <div className="search">
         <Search className="icon" aria-hidden="true" />
         <input
@@ -192,5 +193,21 @@ function Empty({ filter, q, label }: { filter: Filter; q: string | undefined; la
       <h3>No open {label.toLowerCase()}</h3>
       <p>New ones appear here as they arrive. Everything open is under All.</p>
     </div>
+  );
+}
+
+/**
+ * A mail provider's forwarding confirmation waiting for the owner (ADR-026 §2): one line, linking to
+ * Settings → Email, where its code and link are. Nothing is opened or typed for them.
+ */
+function ForwardConfirm() {
+  const email = useEmailChannel();
+  const waiting = email.data?.forwards.find((f) => f.confirmation);
+  if (!waiting) return null;
+  return (
+    <p className="test-banner" role="status">
+      {waiting.provider_name} asks you to confirm forwarding from {waiting.address}.{" "}
+      <Link to="/settings/email">Open it</Link>
+    </p>
   );
 }

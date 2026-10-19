@@ -135,7 +135,9 @@ describe("a conversation by email", () => {
     expect(back.status).toBe(200);
     expect(back.text).toBe("Taken.\n");
     await runJobs(t);
-    const alert = rt.mail.filter((m) => m.mail.to.includes(OWNER) && m.from.address === `${slug}@mail.${PARENT}`).at(-1);
+    const alert = rt.mail
+      .filter((m) => m.mail.to.includes(OWNER) && m.from.address === `${slug}@mail.${PARENT}`)
+      .at(-1);
     const answerAt = alert?.mail.replyTo ?? "";
     expect(answerAt).toMatch(new RegExp(`^${slug}\\+o[a-z2-7]{16}@in\\.example\\.net$`));
     expect(alert?.mail.text).toContain("> Thursday?");

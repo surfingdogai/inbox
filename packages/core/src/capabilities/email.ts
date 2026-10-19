@@ -84,6 +84,7 @@ export interface ForwardView {
   readonly check_sent_at: string | null;
   readonly check_seen_at: string | null;
   readonly last_seen_at: string | null;
+  readonly created_at: string;
 }
 
 export interface EmailChannelView {
@@ -133,6 +134,7 @@ function view(f: Forward, now: number): ForwardView {
     check_sent_at: iso(f.checkSentAt),
     check_seen_at: iso(f.checkSeenAt),
     last_seen_at: iso(f.lastSeenAt),
+    created_at: new Date(f.createdAt).toISOString(),
   };
 }
 

@@ -61,8 +61,8 @@ export function useNetworks() {
 }
 
 /**
- * The email channel (ADR-026). Read again every few seconds while something is on its way: a check out,
- * a forward being set up (its provider's confirmation arrives here), DNS being looked at.
+ * The email channel (ADR-026). Read again while something is on its way: a check out, a forward just
+ * added (its provider's confirmation arrives here), DNS being looked at.
  */
 export function useEmailChannel() {
   return useQuery({
@@ -71,11 +71,13 @@ export function useEmailChannel() {
     refetchInterval: (q) => {
       const d = q.state.data;
       if (!d) return false;
-      const busy =
-        d.forwards.some((f) => f.checking || f.state === "setup" || f.state === "confirm") ||
-        d.sending.own?.state === "dns" ||
-        d.sending.own?.state === "verifying";
-      return busy ? 4_000 : false;
+      // A check out, or an address added in the last half hour (its provider's confirmation is on its way).
+      const fresh = (f: (typeof d.forwards)[number]) =>
+        f.state === "setup" && Date.now() - Date.parse(f.created_at) < 30 * 60_000;
+      if (d.forwards.some((f) => f.checking || fresh(f))) return 4_000;
+      // DNS takes minutes to hours: the host looks every minute, so the page every half minute.
+      if (d.sending.own?.state === "dns" || d.sending.own?.state === "verifying") return 30_000;
+      return false;
     },
   });
 }
