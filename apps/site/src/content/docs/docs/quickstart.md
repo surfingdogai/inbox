@@ -42,7 +42,7 @@ Leave the build and deploy commands as they are. The build makes the owner app; 
 3. The setup wizard opens. Your first sign-in saves the address you signed in at as the Inbox address (Settings). Links in emails use it, and receipts name it as their issuer.
 4. Your own subdomain: Worker → Settings → Domains & Routes → Add → Custom domain. Then change the Inbox address in Settings, or add `INBOX_PUBLIC_URL` as a secret under Settings → Variables and Secrets.
 5. Email later: onboard the domain, then add `MAIL_FROM` as a secret there. Or add `RESEND_API_KEY` to send through Resend. Add these as secrets, not text: the next deploy from your repository removes a plain-text variable.
-6. Email in arrives through Email Routing once you route an address to the Worker ([ADR-005](https://github.com/surfingdogai/inbox/blob/main/docs/adr/005-email.md)).
+6. Email in arrives through Email Routing once you route an address to the Worker and write it in Settings → Email: then each conversation has its own reply address, and you can forward your existing address in ([Email](/docs/email/)).
 
 Every push to your copy of the repository deploys again. To update, pull this repository into your copy, and keep your own `database_id` in `wrangler.jsonc`.
 
