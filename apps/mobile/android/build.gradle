@@ -22,6 +22,16 @@ allprojects {
         google()
         mavenCentral()
     }
+    // Since Kotlin 1.8 the standard library holds what kotlin-stdlib-jdk7 and -jdk8 used to: an older
+    // copy of either beside it (pulled in by a test library) is a duplicate class. Align them.
+    configurations.configureEach {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'org.jetbrains.kotlin' &&
+                    (details.requested.name == 'kotlin-stdlib-jdk7' || details.requested.name == 'kotlin-stdlib-jdk8')) {
+                details.useVersion '1.8.22'
+            }
+        }
+    }
 }
 
 task clean(type: Delete) {

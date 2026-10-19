@@ -49,7 +49,7 @@ pnpm --filter @surfingdog/mobile build             # the screens, into apps/mobi
 pnpm --filter @surfingdog/mobile exec cap sync android
 cd apps/mobile/android
 ./gradlew testDebugUnitTest assembleDebug          # JVM tests, then app/build/outputs/apk/debug/app-debug.apk
-./gradlew connectedDebugAndroidTest                # Keystore tests, on a phone or an emulator
+./gradlew :app:connectedDebugAndroidTest           # Keystore tests, on a phone or an emulator
 ```
 
 Put your own `google-services.json` in `apps/mobile/android/app/` for notifications.
