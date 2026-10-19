@@ -150,28 +150,32 @@ export function App({ deps }: { deps: Deps }) {
   }, [ready, locked, active, refresh, deps.kv]);
 
   // ---- what was done offline goes when the inbox can be reached ----
-  const flush = useCallback(async () => {
-    if (!outbox) return;
-    const clients = new Map(inboxes.map((e) => [e.alias, new InboxClient(e, sessions, deps.fetch)]));
-    const r = await outbox.flush(async (a) => {
-      const c = clients.get(a.alias);
-      if (!c) return { ok: false, offline: false, reason: "That inbox is no longer on this phone." };
-      try {
-        if (a.kind === "reply") await c.reply(a.itemId, String(a.body.body ?? ""), a.key);
-        else await c.transition(a.itemId, a.body, a.key);
-        return { ok: true };
-      } catch (error) {
-        const e = error instanceof InboxError ? error : new InboxError(String(error), 500, "client");
-        return { ok: false, offline: e.offline, reason: e.message };
+  // `announce`: say so when something waiting from offline went. An action pressed online is not that.
+  const flush = useCallback(
+    async (announce = true) => {
+      if (!outbox) return;
+      const clients = new Map(inboxes.map((e) => [e.alias, new InboxClient(e, sessions, deps.fetch)]));
+      const r = await outbox.flush(async (a) => {
+        const c = clients.get(a.alias);
+        if (!c) return { ok: false, offline: false, reason: "That inbox is no longer on this phone." };
+        try {
+          if (a.kind === "reply") await c.reply(a.itemId, String(a.body.body ?? ""), a.key);
+          else await c.transition(a.itemId, a.body, a.key);
+          return { ok: true };
+        } catch (error) {
+          const e = error instanceof InboxError ? error : new InboxError(String(error), 500, "client");
+          return { ok: false, offline: e.offline, reason: e.message };
+        }
+      });
+      for (const f of r.refused) toast(`${f.action.label}: ${f.reason}`);
+      setQueued(await outbox.list());
+      if (r.sent > 0 && announce) {
+        toast(r.sent === 1 ? "Sent what you did offline." : `Sent the ${r.sent} things you did offline.`);
+        void refresh();
       }
-    });
-    for (const f of r.refused) toast(`${f.action.label}: ${f.reason}`);
-    setQueued(await outbox.list());
-    if (r.sent > 0) {
-      toast(r.sent === 1 ? "Sent what you did offline." : `Sent the ${r.sent} things you did offline.`);
-      void refresh();
-    }
-  }, [outbox, inboxes, sessions, deps.fetch, toast, refresh]);
+    },
+    [outbox, inboxes, sessions, deps.fetch, toast, refresh],
+  );
 
   useEffect(() => {
     if (!outbox) return;
@@ -186,7 +190,7 @@ export function App({ deps }: { deps: Deps }) {
       if (!outbox || !active) return;
       // Kept first, with the idempotency key it will carry on every try, then sent.
       await outbox.add({ alias: active.alias, itemId, kind, body, label });
-      await flush();
+      await flush(false);
       const left = await outbox.list();
       setQueued(left);
       if (left.some((a) => a.itemId === itemId)) toast("Saved. It goes when you're back online.");

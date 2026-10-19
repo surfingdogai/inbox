@@ -51,7 +51,13 @@ function ConnectCard({ onPaired }: { onPaired: (phone: PhoneView) => void }) {
   const qc = useQueryClient();
   const [code, setCode] = useState<{ id: string; qr: string; expires_at: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const create = useMutation({ mutationFn: api.createPairing, onSuccess: (c) => setCode(c) });
+  const create = useMutation({
+    mutationFn: api.createPairing,
+    onSuccess: (c) => {
+      setNow(Date.now());
+      setCode(c);
+    },
+  });
   const drawing = useMemo(() => (code ? qrDrawing(code.qr) : null), [code]);
   const left = code ? timeLeft(code.expires_at, now) : "";
 
