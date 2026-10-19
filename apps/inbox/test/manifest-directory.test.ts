@@ -143,6 +143,19 @@ describe("the profile the manifest carries", () => {
     expect(JSON.stringify(m)).not.toContain("Lda");
   });
 
+  it("says how the business is paid, as the owner ticked it in Settings → Payments", async () => {
+    const s = await setup();
+    await s.caps.updateSettings(owner, {
+      doc: { business: { name: "Oficina Maré" }, payments: { accepted: ["mb_way", "card", "apple_pay"] } },
+    });
+    expect((await s.manifest()).profile).toEqual({
+      name: "Oficina Maré",
+      languages: ["en"],
+      categories: [],
+      payments: ["card", "mb_way", "apple_pay"],
+    });
+  });
+
   it("leaves out the hours a booking falls back to when the owner set none", async () => {
     const s = await setup();
     await s.caps.updateSettings(owner, { doc: { business: { name: "Oficina Maré" } } });

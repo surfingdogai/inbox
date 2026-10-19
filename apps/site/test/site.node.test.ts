@@ -511,7 +511,48 @@ describe("the home page and the three products", () => {
         { text: "Bookable", on: false },
         { text: "MCP", on: false },
       ],
+      pays: null,
     });
+    // How it is paid: the network's names for each way, what the business declared first and what was only seen
+    // after, each card brand inside Card, never the UCP protocol, anything malformed left out, and how many more.
+    const paid = resultView({
+      domain: "wallets.example",
+      accepts: {
+        kinds: ["order", "pay"],
+        pay: ["card", "visa", "cash", "pix", "apple_pay"],
+        pay_with: [
+          { token: "card", label: "Card", src: "declared", via: "schema_org" },
+          { token: "visa", label: "Visa", src: "declared", via: "schema_org" },
+          { token: "cash", label: "Cash", src: "declared", via: "registration" },
+          { token: "apple_pay", label: "Apple Pay", src: "seen", via: "file", url: "https://wallets.example/f" },
+          { token: "shop_pay", label: "Shop Pay", src: "seen", via: "ucp" },
+          { token: "ucp_handlers", label: "UCP checkout", src: "seen", via: "ucp" },
+          { token: "x", label: "<b>bold</b>", src: "seen" },
+          { token: "y", label: "Odd", src: "rumour" },
+        ],
+      },
+    });
+    expect(paid?.pays).toEqual({ declared: ["Card (Visa)", "Cash"], seen: ["Apple Pay", "Shop Pay"], more: 0 });
+    // Payment is said once, by that line.
+    expect(paid?.takes).toBe("Takes orders");
+    const many = resultView({
+      domain: "many.example",
+      accepts: {
+        kinds: ["pay"],
+        pay_with: ["Cash", "Pix", "MB WAY", "PayPal", "Apple Pay", "Google Pay", "Klarna", "Twint"].map((label, i) => ({
+          token: `t${i}`,
+          label,
+          src: i < 3 ? "declared" : "seen",
+          via: "page",
+        })),
+      },
+    });
+    expect(many?.pays).toEqual({
+      declared: ["Cash", "Pix", "MB WAY"],
+      seen: ["PayPal", "Apple Pay", "Google Pay"],
+      more: 2,
+    });
+    expect(resultView({ domain: "none.example", accepts: { kinds: ["pay"] } })?.takes).toBe("Takes payment");
     const member = resultView({ domain: "inbox.example", name: "", answering: true, item_types: ["booking"] });
     expect(member?.name).toBe("inbox.example");
     expect(member?.tags[0]).toEqual({ text: "Answering", on: true });

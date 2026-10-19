@@ -4,7 +4,18 @@
  */
 
 export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
-export { MANIFEST_PATH, manifestSchema, readDoorsElsewhere } from "@surfingdog/spec";
+export {
+  CARD_BRANDS,
+  isPaymentToken,
+  MANIFEST_PATH,
+  manifestSchema,
+  PAYMENT_TOKENS,
+  PAYMENTS_VOCABULARY,
+  paymentLabel,
+  paymentToken,
+  publishedPayments,
+  readDoorsElsewhere,
+} from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
 export * from "./connectors/index";

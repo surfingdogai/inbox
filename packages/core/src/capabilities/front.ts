@@ -1,3 +1,4 @@
+import { CARD_BRANDS, PAYMENTS_VOCABULARY, paymentLabel } from "@surfingdog/spec";
 import { copyFor } from "../customer/copy";
 import { dayText, localDate, moneyIn, timeText, zoneName } from "../customer/format";
 import { frontCopy } from "../customer/front-copy";
@@ -57,6 +58,27 @@ function factsOf(s: Service, lang: CustomerLang): string {
   return [frontCopy(lang).minutes(s.durationMin), priceText(s, lang)].filter(Boolean).join(" · ");
 }
 
+/** The ways a person pays (methods and wallets): the ones the front page names. */
+const PERSON_PAYMENTS = new Set([...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOCABULARY.wallets]);
+
+/**
+ * How a visitor can pay, in the business's voice and the visitor's language (`settings.payments`, as published): the
+ * ways a person pays, each card brand inside card, general words in lower case. "" when the owner ticked none.
+ */
+export function payLine(payments: readonly string[] | undefined, lang: CustomerLang): string {
+  const f = frontCopy(lang);
+  const shown = (payments ?? []).filter((t) => PERSON_PAYMENTS.has(t));
+  const brands = shown.filter((t) => CARD_BRANDS.includes(t)).map(paymentLabel);
+  const card = shown.includes("card");
+  const names = shown
+    .filter((t) => !(card && CARD_BRANDS.includes(t)))
+    .map((t) => {
+      const name = f.payNames[t] ?? paymentLabel(t);
+      return t === "card" && brands.length ? `${name} (${brands.join(", ")})` : name;
+    });
+  return names.length ? f.payWith(names) : "";
+}
+
 /** The page every other one is built on: the business's name, its footer, the way back. */
 async function base(caps: Capabilities, lang: CustomerLang, status: CustomerPage["status"] = 200) {
   const business = (await caps.getBusinessProfile()).name;
@@ -70,7 +92,8 @@ async function base(caps: Capabilities, lang: CustomerLang, status: CustomerPage
  */
 export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise<CustomerPage> {
   const f = frontCopy(lang);
-  const away = (await caps.getBusinessProfile()).doors_elsewhere ?? [];
+  const profile = await caps.getBusinessProfile();
+  const away = profile.doors_elsewhere ?? [];
   const bookAway = away.find((d) => d.item_type === "booking");
   const orderAway = away.find((d) => d.item_type === "order");
   const bookable = bookAway ? [] : (await servicesOf(caps)).filter((s) => s.price?.model !== "quote");
@@ -115,6 +138,8 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
     sections,
     links: { lead: sections.length ? f.or : undefined, items: ask },
     nav: [{ label: f.signIn, href: "/login" }],
+    // How a visitor can pay, as the owner ticked it: one quiet line under the business's name.
+    help: payLine(profile.payments, lang),
   };
 }
 

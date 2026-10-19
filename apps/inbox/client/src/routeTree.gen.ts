@@ -19,6 +19,7 @@ import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.avai
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsKeysRouteImport } from "./routes/settings.keys";
 import { Route as SettingsNetworksRouteImport } from "./routes/settings.networks";
+import { Route as SettingsPaymentsRouteImport } from "./routes/settings.payments";
 import { Route as SettingsRulesRouteImport } from "./routes/settings.rules";
 import { Route as SettingsServicesRouteImport } from "./routes/settings.services";
 import { Route as InboxItemsIdRouteImport } from "./routes/_inbox.items.$id";
@@ -72,6 +73,11 @@ const SettingsNetworksRoute = SettingsNetworksRouteImport.update({
   path: "/networks",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsPaymentsRoute = SettingsPaymentsRouteImport.update({
+  id: "/payments",
+  path: "/payments",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsRulesRoute = SettingsRulesRouteImport.update({
   id: "/rules",
   path: "/rules",
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
+  "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
+  "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/": typeof InboxIndexRoute;
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
+  "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
   "/_inbox/": typeof InboxIndexRoute;
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
+    | "/settings/payments"
     | "/settings/rules"
     | "/settings/services"
     | "/settings/"
@@ -154,6 +164,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
+    | "/settings/payments"
     | "/settings/rules"
     | "/settings/services"
     | "/"
@@ -169,6 +180,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/networks"
+    | "/settings/payments"
     | "/settings/rules"
     | "/settings/services"
     | "/_inbox/"
@@ -255,6 +267,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsNetworksRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/payments": {
+      id: "/settings/payments";
+      path: "/payments";
+      fullPath: "/settings/payments";
+      preLoaderRoute: typeof SettingsPaymentsRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/rules": {
       id: "/settings/rules";
       path: "/rules";
@@ -296,6 +315,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsKeysRoute: typeof SettingsKeysRoute;
   SettingsNetworksRoute: typeof SettingsNetworksRoute;
+  SettingsPaymentsRoute: typeof SettingsPaymentsRoute;
   SettingsRulesRoute: typeof SettingsRulesRoute;
   SettingsServicesRoute: typeof SettingsServicesRoute;
   SettingsIndexRoute: typeof SettingsIndexRoute;
@@ -306,6 +326,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeysRoute: SettingsKeysRoute,
   SettingsNetworksRoute: SettingsNetworksRoute,
+  SettingsPaymentsRoute: SettingsPaymentsRoute,
   SettingsRulesRoute: SettingsRulesRoute,
   SettingsServicesRoute: SettingsServicesRoute,
   SettingsIndexRoute: SettingsIndexRoute,

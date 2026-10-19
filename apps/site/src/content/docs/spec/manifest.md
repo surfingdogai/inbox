@@ -28,7 +28,7 @@ An agent inbox publishes one JSON document that says what kinds of request it ta
 | `agent_policy.guide` | no | a URL: how an agent says who it is, and who its person is, here | 23 Sep 2026 |
 | `receipt_keys` | yes | a JWKS of the Ed25519 public keys it signs receipts with (below); `{"keys": []}` when it signs none | 21 Sep 2026 |
 | `review_services` | yes | the networks it sends receipts to, as https origins; `[]` for none | 21 Sep 2026 |
-| `profile` | no | public facts the business chose to share: name, description, categories, languages, address, coordinates, website, hours, services, place category, attributes, price band, currencies | 21 Sep 2026; hours and services 26 Sep; place category, attributes, price band and currencies 6 Oct; a day that closes at `24:00` 15 Oct |
+| `profile` | no | public facts the business chose to share: name, description, categories, languages, address, coordinates, website, hours, services, place category, attributes, price band, currencies, and how it is paid (`payments`: tokens of the [payments vocabulary](https://github.com/surfingdogai/inbox/blob/main/packages/spec/vocab/payments.json), such as `card`, `apple_pay` or `paypal`) | 21 Sep 2026; hours and services 26 Sep; place category, attributes, price band and currencies 6 Oct; a day that closes at `24:00` 15 Oct; payments 18 Oct |
 | `directory` | no | `{"listed": false}` keeps the business out of networks' directories | 26 Sep 2026 |
 | `claims` | no | network host → claim token: proof that a listing on that network is the business's own | 6 Oct 2026 |
 | `doors_elsewhere` | no | at most 5 `{"item_type", "url"}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host | 12 Oct 2026 |
@@ -56,6 +56,7 @@ New fields are added, and only as optional ones, so a reader of an older manifes
 
 ## Changelog
 
+- **18 October 2026**: in `profile`, `payments`: how customers and their agents can pay, at most 64 tokens of `vocab/payments.json`. A reader keeps the tokens it knows and drops the rest alone; a card brand says `card` too.
 - **15 October 2026**: in `profile.hours`, a day may close at `24:00`: open until midnight, or all the time from `00:00`. A reader written before this day (`@surfingdog/spec` before 0.5) refuses `24:00` in that one day's hours, and keeps the rest of the profile.
 - **12 October 2026**: `doors_elsewhere`, the kinds of request a business takes somewhere else, and where.
 - **6 October 2026**: `claims`; in `profile`, `place_category`, `attributes`, `price_band` and `currencies`.

@@ -11,6 +11,63 @@ export interface ResultView {
   takes: string;
   found: string;
   tags: { text: string; on: boolean }[];
+  /**
+   * How it is paid (accepts.pay_with): the ways the business declared, then the ones only seen (on its site, or in
+   * its shop platform's standard profile), each card brand inside Card ("Card (Visa)"), and how many more the line
+   * leaves out; null when it names none.
+   */
+  pays: PayView | null;
+}
+
+export interface PayView {
+  declared: string[];
+  seen: string[];
+  /** Ways left out of the line, which its listing holds. */
+  more: number;
+}
+
+/** The most ways to pay a result names; the rest are counted, and in its listing. */
+const PAYS_SHOWN = 6;
+
+/** The card brands: each shown inside Card when Card is in the same group. */
+const CARD_BRANDS = new Set(["visa", "mastercard", "amex"]);
+
+/** Never a way a person pays: the UCP protocol itself, whose handlers are listed apart. */
+const PAY_HIDDEN = new Set(["ucp_handlers"]);
+
+/** One group's ways as a line names them, each card brand inside Card when Card is in it. */
+function payNames(ways: { token: string; label: string }[]): string[] {
+  const card = ways.find((w) => w.token === "card");
+  const brands = ways.filter((w) => CARD_BRANDS.has(w.token)).map((w) => w.label);
+  return ways
+    .filter((w) => !(card && CARD_BRANDS.has(w.token)))
+    .map((w) => (w === card && brands.length ? `${w.label} (${brands.join(", ")})` : w.label));
+}
+
+/** accepts.pay_with as the line shows it; anything malformed is left out. */
+function payView(payWith: unknown): PayView | null {
+  const declared: { token: string; label: string }[] = [];
+  const seen: { token: string; label: string }[] = [];
+  for (const p of Array.isArray(payWith) ? (payWith as unknown[]) : []) {
+    const pay = obj(p);
+    const token = str(pay?.token);
+    const label = str(pay?.label);
+    const src = str(pay?.src);
+    if (PAY_HIDDEN.has(token) || !/^[\p{L}\p{N} .&'-]{1,40}$/u.test(label)) continue;
+    if (src === "declared") declared.push({ token, label });
+    else if (src === "seen") seen.push({ token, label });
+  }
+  const all = [
+    ...payNames(declared).map((n) => ({ n, seen: false })),
+    ...payNames(seen).map((n) => ({ n, seen: true })),
+  ];
+  if (!all.length) return null;
+  const shown = all.slice(0, PAYS_SHOWN);
+  return {
+    declared: shown.filter((x) => !x.seen).map((x) => x.n),
+    seen: shown.filter((x) => x.seen).map((x) => x.n),
+    more: all.length - shown.length,
+  };
 }
 
 /** What a member's inbox takes and what a door accepts, in plain words. */
@@ -96,10 +153,12 @@ export function resultView(raw: unknown): ResultView | null {
     .filter(Boolean)
     .join(" · ");
 
+  const pays = payView(obj(b.accepts)?.pay_with);
   const kinds = new Set<string>();
   for (const k of [...strs(b.item_types), ...strs(obj(b.accepts)?.kinds)]) {
     const w = TAKES[k];
-    if (w) kinds.add(w);
+    // Payment is said once: by the line of how it is paid, when there is one.
+    if (w && !(pays && w === "payment")) kinds.add(w);
   }
   const takes = kinds.size ? `Takes ${[...kinds].join(", ")}` : "";
 
@@ -126,5 +185,5 @@ export function resultView(raw: unknown): ResultView | null {
       : `, checked ${new Date(at).getUTCDate()} ${MONTHS[new Date(at).getUTCMonth()]} ${new Date(at).getUTCFullYear()}`;
     found = `Found on its own website${when}.`;
   }
-  return { name, href, where, takes, found, tags };
+  return { name, href, where, takes, found, tags, pays };
 }

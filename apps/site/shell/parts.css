@@ -835,6 +835,54 @@
   }
 }
 
+/* How the business is paid: quiet lines under the answers, the ways grouped by their evidence (declared by the
+   business, in its shop profile, seen on its site), each way linking to its evidence. */
+.sd-pay {
+  margin: var(--sp-3) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-fine);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.sd-pay-k {
+  margin: 0 0 2px;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sd-pay-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sd-pay-dot {
+  color: var(--ink-3);
+}
+.sd-pay-m a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--hairline);
+}
+.sd-pay-m a:hover {
+  border-bottom-color: var(--ink-3);
+}
+.sd-pay-src {
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+/* The card's width, not a paragraph's measure: the lines are rows of short names. */
+.sd-col .sd-pay,
+.sd-col .sd-pay-k,
+.sd-col .sd-pay-row {
+  max-width: none;
+}
+
 /* An answer: a pill with the state's tone; "not applicable" dashed and quiet. */
 .sd-ans {
   height: 22px;

@@ -175,6 +175,15 @@
       },
       "description": "The readiness levels counted, lowest first."
     },
+    "payments": {
+      "description": "The payment tokens counted (vocab/payments.json), for the whole, each country and each city; absent from an edition that counts none.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "description": "A name the vocabulary gives: lower case, never renamed. The list of this version is in the document."
+      }
+    },
     "left_out": {
       "type": "object",
       "propertyNames": {
@@ -231,8 +240,8 @@
           },
           "metric": {
             "type": "string",
-            "pattern": "^(checked|agent_ready|places|no_ai|can:[a-z][a-z0-9_]*|door:[a-z0-9_]+|level:[a-z]+)$",
-            "description": "checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, or for a city places."
+            "pattern": "^[a-z][a-z0-9_]*(:[a-z0-9_]+)?$",
+            "description": "A metric's name, or a family's with its key after a colon: checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, for a city places, and for the whole, a country and a city pay_read, pay:<payment token>, pay_declared:<payment token> today. Metrics are added, never renamed: a reader skips one it does not know."
           },
           "value": {
             "type": "integer",

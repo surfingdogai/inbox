@@ -50,6 +50,21 @@ or network:
   In the vocabulary's and the census's schemas a capability, a kind of door and a scope are any
   lower-case name, so a later version that adds one still validates. `verifyReceipt` in
   `@surfingdog/sdk` reads amendments and refunds, as the check does.
+- 0.7: how a business is paid. `vocab/payments.json` version 2 (every token with an English label,
+  a bank transfer apart from SEPA, ways people pay in every region (M-Pesa, Interac, Venmo, Cash App,
+  Zelle, Bizum, PayNow, PromptPay, GCash, PayPay, KakaoPay, Mercado Pago, OXXO), Afterpay, Affirm,
+  Tabby, Tamara, Stripe Link, Amazon Pay, Visa Intelligent Commerce and Mastercard Agent Pay, and the
+  UCP payment handler names a network reads, `handlers` and `handlers_last`); `PAYMENT_TOKENS`,
+  `MAX_PROFILE_PAYMENTS`, `paymentLabel`, `paymentToken`, `isPaymentToken` and `sortPaymentTokens`;
+  a profile's `payments`, at most 64 (`vectors/profile.json`); each payment of a listing with its
+  evidence, declared by the business or only seen (`accepts.pay_with`, also on a check result as
+  `pay_with`); and the census's payment metrics (`pay_read`, `pay:<token>`, `pay_declared:<token>`,
+  and an edition's `payments`). A 0.6 reader of manifests, profiles and listings ignores what it does
+  not know. A 0.6 reader that validates census editions against `schemas/census-edition.json` must
+  move to 0.7: 0.6's metric pattern names its metrics one by one and refuses `pay_read`. From 0.7 the
+  metric pattern is any lower-case name with at most one key after a colon, and `pay_with.via` any
+  lower-case name, so a metric or a source of evidence added later validates: a reader skips one it
+  does not know.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -87,6 +102,10 @@ rules, version 2, in force from 7 October 2026, as `GET /v1/score-rules` serves 
 `experimental` door types, which count toward the score and never toward a level.
 `vocab/door-report-classes.json` (0.4) lists the classes a door report may carry, by phase and
 result, with the JSON-RPC, MCP, A2A and HTTP codes each one stands for.
+`vocab/payments.json` (0.7) is the payments vocabulary, the network's own file byte for byte: the
+tokens a profile's `payments` and a search's `accepts` name, their labels, and how a network reads
+what a business writes (synonyms), what it sees on a site's pages (marks) and a UCP profile's payment
+handlers (handlers). A token is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by

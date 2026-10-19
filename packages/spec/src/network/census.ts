@@ -43,13 +43,17 @@ export const censusScopeSchema = vocabNameSchema.describe(
  * askable among all checked, askable and above among the agent-ready; `no_ai`, those whose doors reach askable or above
  * and whose site asks AI systems to stay away (never agent-ready); and for a city, `places`, how many places its list
  * holds, read or not, so a reader sees how much of the city the counts cover. The levels and `no_ai` add up to
- * `checked`.
+ * `checked`. For the whole, each country and each city (an edition that names `payments`): `pay_read`, the sites whose
+ * ways to pay were read; `pay:<token>`, those that show the payment token at all, and `pay_declared:<token>`, those of
+ * them that declared it themselves; `pay:<token>` minus `pay_declared:<token>` were only seen (a provider's code or
+ * file on their site, or their shop platform's standard profile). A share is of `pay_read`. The pattern is any
+ * lower-case name with at most one key after a colon, so an edition with a metric added later still validates.
  */
 export const censusMetricSchema = z
   .string()
-  .regex(/^(checked|agent_ready|places|no_ai|can:[a-z][a-z0-9_]*|door:[a-z0-9_]+|level:[a-z]+)$/)
+  .regex(/^[a-z][a-z0-9_]*(:[a-z0-9_]+)?$/)
   .describe(
-    "checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, or for a city places.",
+    "A metric's name, or a family's with its key after a colon: checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, for a city places, and for the whole, a country and a city pay_read, pay:<payment token>, pay_declared:<payment token> today. Metrics are added, never renamed: a reader skips one it does not know.",
   );
 
 export const censusRowSchema = z.object({
@@ -135,6 +139,12 @@ export const censusEditionSchema = z.object({
   capabilities: z.array(vocabNameSchema).describe("The capabilities counted, in vocabulary order."),
   doors: z.array(vocabNameSchema).describe("The door types counted."),
   levels: z.array(vocabNameSchema).describe("The readiness levels counted, lowest first."),
+  payments: z
+    .array(vocabNameSchema)
+    .optional()
+    .describe(
+      "The payment tokens counted (vocab/payments.json), for the whole, each country and each city; absent from an edition that counts none.",
+    ),
   left_out: z
     .record(censusScopeSchema, z.int().min(0))
     .describe("How many keys of each scope had fewer checked than min_sample, and are not in rows."),

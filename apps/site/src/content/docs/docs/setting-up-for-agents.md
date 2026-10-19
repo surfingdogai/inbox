@@ -131,7 +131,7 @@ This changes month by month. Check the sources at the end of this section before
 
 **Why an agent should not type a card number.** In many places, the EU (under PSD2), the UK and India among them, a card payment the customer starts needs strong authentication: a second step, such as a code, a passkey or the banking app. An agent filling in a card number at a checkout stalls at that step, or needs the person there anyway, and it holds a card number it should never see. What works is a credential made for agents: a token or a mandate the person approves once, usually with a passkey or their banking app, limited to a merchant, an amount or a period, which the agent presents and the payment provider checks.
 
-Whichever you choose, declare it where agents read it: a UCP profile lists it under its payment handlers, and a profile whose payment handlers are empty tells agents a person still pays.
+Whichever you choose, declare it where agents read it: a UCP profile lists it under its payment handlers, and a profile whose payment handlers are empty tells agents a person still pays. In the inbox, tick the ways customers pay you in Settings → Payments: they go into your manifest (`profile.payments`) and onto your inbox's own page, and the directory shows them as declared by you. An agent's own way to pay (x402, AP2 and the rest) is not ticked there: it is declared by the door that runs it. Your own structured data can say it too (schema.org `paymentAccepted`).
 
 Options, a line each:
 

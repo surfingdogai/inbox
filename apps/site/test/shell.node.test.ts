@@ -196,6 +196,13 @@ describe("shell.css", () => {
       // a member's track record
       "sd-record",
       "sd-record-meter",
+      // how a business is paid, under a result's answers
+      "sd-pay",
+      "sd-pay-k",
+      "sd-pay-row",
+      "sd-pay-dot",
+      "sd-pay-m",
+      "sd-pay-src",
       // a site's door history
       "sd-history",
       "sd-spark-row",

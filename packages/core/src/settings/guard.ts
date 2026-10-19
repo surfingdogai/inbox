@@ -59,6 +59,9 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // What agents can do here: a customer's message must never get the owner's AI to shut a door, or
   // to open one the owner shut.
   { path: ["doors"] },
+  // How the business is paid, as it tells every agent (`payments`): a customer's message must never get the owner's
+  // AI to declare a way to pay the business does not take.
+  { path: ["payments"] },
 ];
 
 function at(doc: unknown, path: readonly string[]): unknown {

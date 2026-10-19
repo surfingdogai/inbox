@@ -316,6 +316,28 @@ export const cardFoundSchema = z.object({
   about_url: z.url().describe("The network's page for businesses: why it is here, and how to correct it or opt out."),
 });
 
+/**
+ * One way to pay a business, with the strongest evidence a network has for it (§4.10): `declared` when the business
+ * said so itself (its registration, its inbox's manifest, its own structured data, its own UCP or ACP profile, an
+ * agent payment protocol its door's document declares in its structure); `seen` when it did not: a payment provider's
+ * own code, button, payment icon or file on its site, a door's document naming an agent payment protocol in passing,
+ * or its shop platform's standard UCP profile (`via: ucp`). A page's words are never evidence. A card brand says a
+ * card, with the brand's evidence. `via` says where; `url` is the evidence, absent for a registration.
+ */
+export const payWithSchema = z.object({
+  token: z.string().describe("A payment token of GET /v1/attributes."),
+  label: z.string().describe("Its English name: Apple Pay for apple_pay."),
+  src: z.enum(["declared", "seen"]),
+  via: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,31}$/)
+    .describe(
+      "Where the evidence is: registration, manifest, schema_org, ucp, acp, door, file or page today. A later network may add one: read a via you do not know as evidence of its src.",
+    ),
+  url: z.url().optional().describe("The page, file, profile, manifest or door the evidence is at."),
+});
+export type PayWith = z.infer<typeof payWithSchema>;
+
 /** A displayed value with where it came from and when (§4.10, §4.11). */
 export const listingFactSchema = z.object({
   field: z.string(),
@@ -353,6 +375,10 @@ export const listingAdditionsShape = {
     .object({
       kinds: z.array(doorKindSchema),
       pay: z.array(z.string()).optional().describe("Payment tokens of GET /v1/attributes' payments."),
+      pay_with: z
+        .array(payWithSchema)
+        .optional()
+        .describe("Each of pay with its evidence, in the vocabulary's order. Absent from a listing built before it."),
     })
     .optional(),
   category: cardCategorySchema.optional(),
@@ -617,7 +643,13 @@ export const attributesResponseSchema = z.object({
   payments: z.object({
     methods: z.array(z.string()),
     wallets: z.array(z.string()),
-    agent: z.array(z.string()).describe("Ways an agent itself pays: AP2, ACP delegated payment, x402, UCP handlers."),
+    agent: z
+      .array(z.string())
+      .describe(
+        "Ways an agent itself pays: AP2, ACP delegated payment, x402, UCP handlers, Visa Intelligent Commerce, Mastercard Agent Pay.",
+      ),
+    version: z.int().min(1).optional().describe("The version of vocab/payments.json."),
+    labels: z.record(z.string(), z.string()).optional().describe("Each token's English name."),
   }),
 });
 export type AttributesResponse = z.infer<typeof attributesResponseSchema>;

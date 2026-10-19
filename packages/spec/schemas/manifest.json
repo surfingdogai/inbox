@@ -339,6 +339,15 @@
             "type": "string",
             "pattern": "^[A-Z]{3}$"
           }
+        },
+        "payments": {
+          "description": "How a customer or their agent can pay: tokens of vocab/payments.json (card, apple_pay, paypal, pix…). A network keeps the tokens it knows and drops the rest alone; a card brand (visa) says card too.",
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]{2,40}$"
+          }
         }
       },
       "required": ["name"]

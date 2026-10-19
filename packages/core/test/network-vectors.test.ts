@@ -674,6 +674,9 @@ describe("profile.json and vocab/categories.json (the network's, read here as an
       for (const s of kept.categories as string[]) expect(slugs.has(s), `${c.name}: ${s}`).toBe(true);
       const listing = {
         ...kept,
+        // A profile's attributes are values; a listing's carry their source too (§4.10), and a member's card
+        // derives them: the profile's own shape is checked against profileSchema below.
+        attributes: undefined,
         name: kept.name || "A business",
         domain: "ana.example",
         geo: kept.geo ?? undefined,
@@ -695,6 +698,12 @@ describe("profile.json and vocab/categories.json (the network's, read here as an
 
   it("the contract's own example is a valid profile, and so is the inbox's hours shape", () => {
     expect(profileSchema.safeParse(profileVectors.cases[0]?.profile).success).toBe(true);
+    // What a network keeps of payments is what a profile may say.
+    for (const c of profileVectors.cases) {
+      const kept: { payments?: unknown } = c.kept;
+      if (kept.payments !== undefined)
+        expect(profileSchema.shape.payments.safeParse(kept.payments).success, c.name).toBe(true);
+    }
     const bad = { name: "x", hours: { timezone: "Europe/Lisbon", weekly: { mon: [["18:00", "09:00"]] } } };
     expect(profileSchema.safeParse(bad).success).toBe(false);
   });

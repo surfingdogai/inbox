@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { reportHintSchema, timestampSchema } from "./common";
-import { doorHistorySchema, doorTypeSchema, levelNameSchema, trackRecordSchema } from "./directory";
+import { doorHistorySchema, doorTypeSchema, levelNameSchema, payWithSchema, trackRecordSchema } from "./directory";
 
 /**
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
@@ -723,6 +723,12 @@ export const checkResultSchema = z.object({
   not_certification: z.string().optional(),
   badge: z.object({ svg: z.url(), snippet: z.string() }).optional(),
   owner: z.object({ claim: z.string(), hide: z.string(), opt_out: z.string() }).optional(),
+  pay_with: z
+    .array(payWithSchema)
+    .optional()
+    .describe(
+      "How the business is paid, each way with its evidence: declared by the business, or seen on its own pages and files.",
+    ),
   track_record: trackRecordSchema.optional(),
   door_history: doorHistorySchema
     .optional()
