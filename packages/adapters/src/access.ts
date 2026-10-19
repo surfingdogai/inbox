@@ -42,6 +42,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /email/sender/check": ["*"],
   "GET /items/:id/attachments": ["inbox:read"],
   "GET /attachments/:id": ["inbox:read"],
+  "DELETE /attachments/:id": ["inbox:write"],
   "GET /settings": [READ_SETUP],
   "PUT /settings": ["settings:write"],
   "GET /receipts": [READ_SETUP],

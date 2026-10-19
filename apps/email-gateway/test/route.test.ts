@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authSummary, deliveryTarget, routeFor, signDelivery, verdictOf } from "../route";
+import { authSummary, deliveryTarget, headerFields, routeFor, signDelivery, verdictOf } from "../route";
 
 /** The email gateway's decisions (ADR-026 §1), on both runtimes. */
 describe("where an address goes", () => {
@@ -16,10 +16,12 @@ describe("where an address goes", () => {
     expect(routeFor("hello@surfingdog.ai", undefined)).toEqual({ kind: "own" });
   });
 
-  it("refuses an address on the hosted domain that names no inbox", () => {
-    expect(routeFor("postmaster@in.surfingdog.ai", "in.surfingdog.ai").kind).toBe("refuse");
+  it("refuses an address on the hosted domain that names no inbox, and takes its postmaster's and abuse's mail itself", () => {
+    expect(routeFor("someone@in.surfingdog.ai", "in.surfingdog.ai").kind).toBe("refuse");
     expect(routeFor("../etc@in.surfingdog.ai", "in.surfingdog.ai").kind).toBe("refuse");
     expect(routeFor("not-an-address", "in.surfingdog.ai").kind).toBe("refuse");
+    expect(routeFor("postmaster@in.surfingdog.ai", "in.surfingdog.ai")).toEqual({ kind: "own" });
+    expect(routeFor("Abuse@in.surfingdog.ai", "in.surfingdog.ai")).toEqual({ kind: "own" });
   });
 });
 
@@ -34,22 +36,39 @@ describe("what the receiving server found", () => {
     expect(authSummary(headers, ["mx.cloudflare.net"])).toBe("spf=pass; dkim=pass:gmail.com; dmarc=pass");
   });
 
-  it("reads ARC's too, and nothing from a server it does not trust", () => {
+  it("never reads ARC's, nothing from a server it does not trust, and nothing when told to trust none", () => {
     expect(
       authSummary(
-        [
-          [
-            "ARC-Authentication-Results",
-            "i=1; mx.cloudflare.net; dkim=fail header.d=x.example; spf=softfail; dmarc=fail",
-          ],
-        ],
+        [["ARC-Authentication-Results", "i=1; mx.cloudflare.net; dkim=pass header.d=x.example; spf=pass; dmarc=pass"]],
         ["mx.cloudflare.net"],
       ),
-    ).toBe("spf=softfail; dkim=fail; dmarc=fail");
+    ).toBeUndefined();
     expect(
       authSummary([["Authentication-Results", "evil.example; dmarc=pass"]], ["mx.cloudflare.net"]),
     ).toBeUndefined();
     expect(authSummary([], ["mx.cloudflare.net"])).toBeUndefined();
+    expect(authSummary([["Authentication-Results", "mx.cloudflare.net; dmarc=pass"]], [])).toBeUndefined();
+  });
+
+  it("reads the raw message's fields in order: a sender's own field below, or two of the trusted id, say nothing", () => {
+    const raw = (fields: string) =>
+      new TextEncoder().encode(`${fields}From: a@shop.example\r\nSubject: hi\r\n\r\nbody`);
+    // A sender's ARC field sorts before the real one in a Headers object; in order, it is below and never read.
+    const real = raw(
+      "Authentication-Results: mx.cloudflare.net;\r\n dmarc=fail header.from=shop.example\r\nARC-Authentication-Results: i=1; mx.cloudflare.net; dmarc=pass\r\n",
+    );
+    expect(headerFields(real)[0]).toEqual([
+      "Authentication-Results",
+      "mx.cloudflare.net; dmarc=fail header.from=shop.example",
+    ]);
+    expect(authSummary(headerFields(real), ["mx.cloudflare.net"])).toBe("dmarc=fail");
+    // A second field claiming the trusted id: one is the sender's, so neither counts.
+    const two = raw(
+      "Authentication-Results: mx.cloudflare.net; dmarc=fail\r\nAuthentication-Results: mx.cloudflare.net; dmarc=pass\r\n",
+    );
+    expect(authSummary(headerFields(two), ["mx.cloudflare.net"])).toBeUndefined();
+    // Only the header block is read.
+    expect(headerFields(raw("")).map(([k]) => k)).toEqual(["From", "Subject"]);
   });
 });
 

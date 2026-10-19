@@ -7,6 +7,7 @@ import { ensureJob } from "../jobs/schedule";
 import { readSettings } from "../settings/schema";
 import { CHECK_HEADER, LOOP_HEADER, loopMark } from "./channel";
 import { CHECK_WAIT_MS, checkLapsed, startCheck } from "./forwards";
+import { plusAddress } from "./tokens";
 
 /**
  * The live "forwarding works" check (ADR-026 §2): the inbox emails the business's own address and
@@ -36,13 +37,7 @@ export async function queueForwardCheck(db: Db, forwardId: string, now: number):
 export function checkMailText(o: { address: string; token: string }): { subject: string; text: string } {
   return {
     subject: `Forwarding check ${o.token}`,
-    text: [
-      `This is a check from your inbox, sent to ${o.address}.`,
-      "",
-      "If forwarding works, it comes straight back and your inbox shows that forwarding works. If you can read this in your mailbox, your mail provider kept a copy, which is fine.",
-      "",
-      "You can delete this email.",
-    ].join("\n"),
+    text: `Checking that ${o.address} forwards to your agent inbox. Nothing to do; you can delete this email.`,
   };
 }
 
@@ -91,16 +86,16 @@ export function emailCheckHandler(mailOut: MailOut, opts: { baseUrl?: string | u
     } else {
       // A retry of the same check: the address and token are in what was stored.
       token = /\b(c[a-z2-7]{16})\b/.exec(logged.subject)?.[1] ?? null;
+      // Where that token went is the token's own (`sent_to`, `plain`), whatever the forward says now.
       const { rows } = await db.client.query({
-        sql: `SELECT f.address, f.check_plain FROM mail_tokens t JOIN email_forwards f ON f.id = t.forward_id
-               WHERE t.token = ?`,
+        sql: `SELECT t.sent_to, t.plain FROM mail_tokens t JOIN email_forwards f ON f.id = t.forward_id
+               WHERE t.token = ? AND t.kind = 'check'`,
         params: [token ?? ""],
         method: "all",
       });
       const r = rows[0];
-      if (r && token) {
-        const [local, domain] = String(r[0]).split("@");
-        to = Number(r[1]) === 1 ? String(r[0]) : `${local}+${token}@${domain}`;
+      if (r?.[0] && token) {
+        to = Number(r[1]) === 1 ? String(r[0]) : plusAddress(String(r[0]), token);
       }
     }
     if (logged.status === "skipped") return { note: `not sent: ${logged.skipReason ?? "skipped"}` };

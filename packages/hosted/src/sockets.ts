@@ -51,6 +51,22 @@ export async function readBody(req: IncomingMessage, max: number): Promise<Uint8
   return new Uint8Array(Buffer.concat(chunks));
 }
 
+/**
+ * A body of exactly `length` bytes, read into one buffer made for it (no copies of copies); null when
+ * the request sends more or less than it said.
+ */
+export async function readBodyExact(req: IncomingMessage, length: number): Promise<Uint8Array | null> {
+  const buf = Buffer.allocUnsafe(length);
+  let at = 0;
+  for await (const chunk of req) {
+    const c = chunk as Buffer;
+    if (at + c.length > length) return null;
+    c.copy(buf, at);
+    at += c.length;
+  }
+  return at === length ? new Uint8Array(buf.buffer, buf.byteOffset, at) : null;
+}
+
 export interface SocketResponse {
   readonly status: number;
   readonly headers: Record<string, string>;

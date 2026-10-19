@@ -18,12 +18,23 @@ import {
 import { validatePlan } from "./plan";
 import type { CachedResolver } from "./resolver";
 import { decide, REPORT_PATH, ROBOTS_PATH, SECURITY_TXT_PATH } from "./rules";
-import { MAX_SIGNED_BODY, NonceCache, signHeaders, verifySigned } from "./sign";
-import { jsonOf, readBody, socketRequest } from "./sockets";
+import {
+  MAX_SIGNED_BODY,
+  NONCE_HEADER,
+  NonceCache,
+  SIG_HEADER,
+  SKEW_SECONDS,
+  signHeaders,
+  TIME_HEADER,
+  verifySigned,
+} from "./sign";
+import { jsonOf, readBody, readBodyExact, socketRequest } from "./sockets";
 import { policyPayloadSchema } from "./types";
 
 /** Raw inbound email, as large as Email Routing accepts. */
 export const MAX_INBOUND_EMAIL = 25 * 1024 * 1024;
+/** Emails read at once: one process serves every inbox, and each is held in memory while it is read. */
+export const MAX_INBOUND_READS = 4;
 
 /**
  * The router: the one process every request for a hosted inbox reaches. It does no SQLite work. It
@@ -366,12 +377,42 @@ export function createRouter(o: RouterOptions): {
     res.end(`${detail}\n`);
   };
 
+  let reading = 0;
+
   const inbound = async (req: IncomingMessage, res: ServerResponse, method: string, url: URL): Promise<void> => {
     const m = /^\/v1\/inbound\/([a-z0-9-]{1,63})$/.exec(url.pathname);
     if (method !== "POST" || !m || !o.inboundKey) return mailAnswer(res, 404, "Not here.");
     const slug = m[1] ?? "";
-    const body = await readBody(req, MAX_INBOUND_EMAIL);
-    if (!body) return mailAnswer(res, 413, "Too large.");
+    // Nothing is read before the request looks like the gateway's: signed headers of the right shape,
+    // a time within the window, a length it says and that fits. An unsigned post of 25 MB costs nothing.
+    const head = (n: string) => (req.headers[n] as string | undefined) ?? "";
+    const time = head(TIME_HEADER);
+    if (
+      !/^\d{1,12}$/.test(time) ||
+      !/^[0-9a-f]{32}$/.test(head(NONCE_HEADER)) ||
+      !/^v1=[0-9a-f]{64}$/.test(head(SIG_HEADER))
+    ) {
+      return mailAnswer(res, 401, "Not signed (unsigned).", { connection: "close" });
+    }
+    if (Math.abs(Math.floor(now() / 1000) - Number(time)) > SKEW_SECONDS) {
+      return mailAnswer(res, 401, "Not signed (stale).", { connection: "close" });
+    }
+    const length = Number(head("content-length"));
+    if (!/^\d{1,9}$/.test(head("content-length")))
+      return mailAnswer(res, 411, "Length required.", { connection: "close" });
+    if (length > MAX_INBOUND_EMAIL) return mailAnswer(res, 413, "Too large.", { connection: "close" });
+    if (reading >= MAX_INBOUND_READS) {
+      return mailAnswer(res, 503, "Try again later.", { "retry-after": "30", connection: "close" });
+    }
+    reading++;
+    let body: Uint8Array | null;
+    try {
+      body = await readBodyExact(req, length);
+    } finally {
+      reading--;
+    }
+    // Cut short on the way: a fault of the line, never the sender's, so it is tried again.
+    if (!body) return mailAnswer(res, 503, "The body is not the length it said.");
     const target = `${url.pathname}${url.search}`;
     const checked = verifySigned(
       o.inboundKey,

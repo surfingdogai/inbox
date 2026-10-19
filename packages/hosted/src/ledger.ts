@@ -15,6 +15,13 @@ import type { MailAbout, MailHold, OutboundMail } from "@surfingdog/platform";
 /** At most this many emails to one recipient a day, from all the inboxes here together. */
 export const RECIPIENT_DAILY_CAP = 5;
 
+/**
+ * Forwarding checks one inbox may send in a day (ADR-026 §2): each goes to an address its owner typed,
+ * so it is counted here too, whatever the inbox counts, and each counts against its recipient's daily
+ * cap as an email to a customer does.
+ */
+export const CHECKS_DAILY_CAP = 12;
+
 /** Three stalls within an hour put an inbox in maintenance. */
 export const BLAMES_FOR_MAINTENANCE = 3;
 export const BLAME_WINDOW_MS = 3_600_000;
@@ -22,6 +29,7 @@ export const BLAME_WINDOW_MS = 3_600_000;
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recipient_day (day TEXT NOT NULL, rcpt TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, rcpt));
 CREATE TABLE IF NOT EXISTS tenant_day (day TEXT NOT NULL, tenant_id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, tenant_id));
+CREATE TABLE IF NOT EXISTS check_day (day TEXT NOT NULL, tenant_id TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, tenant_id));
 CREATE TABLE IF NOT EXISTS suppressed (rcpt TEXT PRIMARY KEY, reason TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS mail_paused (tenant_id TEXT PRIMARY KEY, reason TEXT NOT NULL, since INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS usage_month (month TEXT NOT NULL, tenant_id TEXT NOT NULL, mail_sent INTEGER NOT NULL, PRIMARY KEY (month, tenant_id));
@@ -35,6 +43,7 @@ CREATE INDEX IF NOT EXISTS events_due ON events (next_at);
 export const LEDGER_TABLES = [
   "recipient_day",
   "tenant_day",
+  "check_day",
   "suppressed",
   "mail_paused",
   "usage_month",
@@ -121,6 +130,32 @@ export class Ledger {
       if (this.db.prepare("SELECT 1 FROM mail_paused WHERE tenant_id = ?").get(tenantId)) return "paused";
       for (const r of recipients) {
         if (this.db.prepare("SELECT 1 FROM suppressed WHERE rcpt = ?").get(r)) return "suppressed";
+      }
+      // A forwarding check is an email to an address the owner typed: capped per inbox, and per
+      // recipient across every inbox here, as an email to a customer is.
+      if (about.template === "forward.check") {
+        const checks = this.db.prepare("SELECT n FROM check_day WHERE day = ? AND tenant_id = ?").get(day, tenantId) as
+          | { n: number }
+          | undefined;
+        if ((checks?.n ?? 0) >= CHECKS_DAILY_CAP) return "daily_limit";
+        for (const r of recipients) {
+          const had = this.db.prepare("SELECT n FROM recipient_day WHERE day = ? AND rcpt = ?").get(day, r) as
+            | { n: number }
+            | undefined;
+          if ((had?.n ?? 0) >= RECIPIENT_DAILY_CAP) return "recipient_limit";
+        }
+        this.db
+          .prepare(
+            "INSERT INTO check_day (day, tenant_id, n) VALUES (?, ?, 1) ON CONFLICT (day, tenant_id) DO UPDATE SET n = n + 1",
+          )
+          .run(day, tenantId);
+        for (const r of recipients) {
+          this.db
+            .prepare(
+              "INSERT INTO recipient_day (day, rcpt, n) VALUES (?, ?, 1) ON CONFLICT (day, rcpt) DO UPDATE SET n = n + 1",
+            )
+            .run(day, r);
+        }
       }
       if (about.recipient === "customer") {
         const sent = this.db.prepare("SELECT n FROM tenant_day WHERE day = ? AND tenant_id = ?").get(day, tenantId) as
@@ -291,6 +326,7 @@ export class Ledger {
     const before = dayOf(this.now() - 7 * 86_400_000);
     this.db.prepare("DELETE FROM recipient_day WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM tenant_day WHERE day < ?").run(before);
+    this.db.prepare("DELETE FROM check_day WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM blames WHERE at < ? AND reported = 1").run(this.now() - 7 * 86_400_000);
   }
 }

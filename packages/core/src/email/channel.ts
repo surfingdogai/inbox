@@ -46,27 +46,45 @@ export async function loopMark(db: Db, now: number = Date.now()): Promise<string
  * the conversation's address is that address's (`support+t…@shop.example`), so the customer only ever
  * sees the business's own domain; else the inbox's (`name+t…@domain`). Null when the inbox has no
  * address of its own: the email then says what it said before (Settings' Reply-To, or none).
+ *
+ * `replyDomains`: the only domains the transport lets a Reply-To be on (a hosted inbox's: its own
+ * inbound domain and the business's connected one). A forward on any other domain (a Gmail address,
+ * another domain of the business's) is then never used: its conversation address would be dropped on
+ * the way out and the customer's reply would reach nobody.
  */
 export async function customerReplyTo(
   db: Db,
   settings: Settings,
   itemId: string,
-  o: { now: number; from?: string | undefined },
+  o: { now: number; from?: string | undefined; replyDomains?: readonly string[] | undefined },
 ): Promise<string | null> {
   const inbound = inboundOf(settings);
   if (!inbound) return null;
   const token = await ensureItemToken(db, itemId, "thread", o.now);
-  const own = await businessReplyBase(db, o.from);
+  const own = await businessReplyBase(db, o.from, o.replyDomains);
   return plusAddress(own ?? inbound, token);
 }
 
 /**
  * The business's own forwarded address a conversation's address may be made from: one whose forward
- * works with plus addresses, the sender's own first, then one on the sender's domain, then the one
- * proven most recently.
+ * works with plus addresses, on a domain the transport allows, and never an address someone signs in
+ * with (ADR-026 §6) — the sender's own first, then one on the sender's domain, then the one proven
+ * most recently.
  */
-async function businessReplyBase(db: Db, from: string | undefined): Promise<string | null> {
-  const usable = (await listForwards(db)).filter((f) => f.state === "working" && f.plusOk);
+async function businessReplyBase(
+  db: Db,
+  from: string | undefined,
+  replyDomains: readonly string[] | undefined,
+): Promise<string | null> {
+  const allowed = replyDomains?.map((d) => d.trim().toLowerCase()).filter(Boolean);
+  const signIn = await signInAddresses(db);
+  const usable = (await listForwards(db)).filter(
+    (f) =>
+      f.state === "working" &&
+      f.plusOk &&
+      !signIn.has(f.address) &&
+      (allowed === undefined || allowed.includes(splitAddress(f.address)?.domain ?? "")),
+  );
   if (usable.length === 0) return null;
   const sender = from ? baseAddress(from) : null;
   const domain = from ? splitAddress(from)?.domain : undefined;
@@ -107,8 +125,9 @@ export async function ownerAddresses(db: Db, settings: Settings): Promise<Set<st
 
 /**
  * The addresses a customer must never see (ADR-026 §6): the ones the business's people sign in with.
- * A host's Reply-To, a sender, an address in Settings: none of them may be one of these, unless the
- * owner chose it as the business's own (`fromAddress`, `replyTo` in Settings on their own server).
+ * A conversation's address is never made from one (`businessReplyBase`), and an owner's answer by
+ * email that still quotes one is not sent (the email door). A hosted inbox's Reply-To is checked
+ * against the owner's address by its host (`normalizePolicy`).
  */
 export async function signInAddresses(db: Db): Promise<Set<string>> {
   const out = new Set<string>();

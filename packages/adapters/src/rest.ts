@@ -985,6 +985,18 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json({ attachments: await caps.email.attachments(c.get("caller"), String(c.req.param("id"))) }),
   );
 
+  app.delete(
+    "/attachments/:id",
+    owner({
+      tags: ["owner"],
+      summary:
+        "Delete one kept file (a person at the business): its bytes go, and the conversation says it was removed",
+      responses: json("Removed", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.removeAttachment(c.get("caller"), String(c.req.param("id")))),
+  );
+
   app.get(
     "/attachments/:id",
     owner({

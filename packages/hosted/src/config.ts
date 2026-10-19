@@ -6,6 +6,7 @@ import {
   consoleMailOut,
   type MailOut,
   resendMailOut,
+  SesSendError,
   sesMailOut,
 } from "@surfingdog/platform";
 import { normalizeHost } from "./host";
@@ -42,7 +43,9 @@ import { parseMasterKeys } from "./keys";
  * - `HOSTED_MAIL_DOMAIN` (shards): the domain inboxes send from in the business's name
  *   (`<slug>@<it>`), through that service. An inbox the control plane lets send from the business's
  *   own address (ADR-026 §3) sends through Amazon SES instead, when `AWS_SES_REGION`,
- *   `AWS_SES_ACCESS_KEY_ID` and `AWS_SES_SECRET_ACCESS_KEY` are set (all three, or none).
+ *   `AWS_SES_SEND_KEY_ID` and `AWS_SES_SEND_SECRET` are set (all three, or none): a key that may only
+ *   send. The key that adds and removes domains is the control plane's alone and never on a shard.
+ *   `AWS_SES_CONFIGURATION_SET` names the set whose events report what bounced.
  * - `HOSTED_INBOUND_HOST`, `HOSTED_INBOUND_KEY` (router, ADR-026 §1): the name the email gateway
  *   delivers to, and the key it signs each delivery with (its own: never another's). Both, or neither.
  */
@@ -157,11 +160,12 @@ export function readConfig(env: Record<string, string | undefined>, role: Role =
   if (inboundKey && Object.values(keys).includes(inboundKey)) {
     problems.push("HOSTED_INBOUND_KEY is another key: one key for each caller and direction");
   }
-  const ses = [env.AWS_SES_REGION, env.AWS_SES_ACCESS_KEY_ID, env.AWS_SES_SECRET_ACCESS_KEY].map(
-    (v) => v?.trim() ?? "",
-  );
+  const ses = [env.AWS_SES_REGION, env.AWS_SES_SEND_KEY_ID, env.AWS_SES_SEND_SECRET].map((v) => v?.trim() ?? "");
   if (shard && ses.some(Boolean) && !ses.every(Boolean)) {
-    problems.push("AWS_SES_REGION, AWS_SES_ACCESS_KEY_ID and AWS_SES_SECRET_ACCESS_KEY go together");
+    problems.push("AWS_SES_REGION, AWS_SES_SEND_KEY_ID and AWS_SES_SEND_SECRET go together");
+  }
+  if (shard && (env.AWS_SES_ADMIN_KEY_ID?.trim() || env.AWS_SES_ADMIN_SECRET?.trim())) {
+    problems.push("AWS_SES_ADMIN_KEY_ID is the control plane's: a shard never holds the key that adds domains");
   }
   const relayRaw = env.HOSTED_OAUTH_RELAY_HOST?.trim();
   const oauthRelayHost = relayRaw ? (normalizeHost(relayRaw) ?? undefined) : undefined;
@@ -211,18 +215,48 @@ export const ledgerPath = (c: HostedConfig): string => join(c.dataDir, "ledger.d
  */
 export function transportFrom(
   env: Record<string, string | undefined>,
-): (from: { address: string; name: string }) => MailOut {
+): (from: { address: string; name: string }, o?: SenderFallback) => MailOut {
   const ours = ourTransport(env);
   const domain = env.HOSTED_MAIL_DOMAIN?.trim().toLowerCase();
   const region = env.AWS_SES_REGION?.trim();
-  const accessKeyId = env.AWS_SES_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = env.AWS_SES_SECRET_ACCESS_KEY?.trim();
-  if (!domain || !region || !accessKeyId || !secretAccessKey) return ours;
+  const accessKeyId = env.AWS_SES_SEND_KEY_ID?.trim();
+  const secretAccessKey = env.AWS_SES_SEND_SECRET?.trim();
+  const configurationSet = env.AWS_SES_CONFIGURATION_SET?.trim() || undefined;
+  if (!domain || !region || !accessKeyId || !secretAccessKey) return (from) => ours(from);
   // The business's own address, which the control plane names only once SES verified its domain.
-  return (from) =>
-    from.address.toLowerCase().endsWith(`@${domain}`)
-      ? ours(from)
-      : sesMailOut({ region, credentials: { accessKeyId, secretAccessKey }, from });
+  return (from, o) => {
+    if (from.address.toLowerCase().endsWith(`@${domain}`)) return ours(from);
+    const ses = sesMailOut({ region, credentials: { accessKeyId, secretAccessKey }, from, configurationSet });
+    const slug = o?.slug && /^[a-z0-9-]{1,63}$/.test(o.slug) ? o.slug : null;
+    if (!slug) return ses;
+    // SES will not send from it any more (the account paused, the domain gone): this email, and
+    // every one after it, goes from our own address in the business's name, and the control plane is
+    // told so it moves the sender to failed and the policy back to ours.
+    const fallback = ours({ address: `${slug}@${domain}`, name: from.name });
+    let gone = false;
+    return {
+      sender: ses.sender,
+      async send(mail) {
+        if (!gone) {
+          try {
+            return await ses.send(mail);
+          } catch (error) {
+            if (!(error instanceof SesSendError) || !error.senderGone) throw error;
+            gone = true;
+            await o?.onFallback?.(error.message);
+          }
+        }
+        return fallback.send({ ...mail, from: { address: `${slug}@${domain}`, name: mail.from.name ?? from.name } });
+      },
+    };
+  };
+}
+
+/** What a sender of the business's own falls back to when SES stops sending for it. */
+export interface SenderFallback {
+  /** The inbox's slug: our own address for it is `<slug>@<HOSTED_MAIL_DOMAIN>`. */
+  readonly slug?: string | undefined;
+  readonly onFallback?: ((reason: string) => unknown) | undefined;
 }
 
 function ourTransport(env: Record<string, string | undefined>): (from: { address: string; name: string }) => MailOut {

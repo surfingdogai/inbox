@@ -1,4 +1,4 @@
-import { authFromResults, ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
+import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
 import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
 import {
   cloudflareEmailMailOut,
@@ -16,6 +16,12 @@ type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
   RESEND_API_KEY?: string;
   INBOX_OWNER_EMAIL?: string;
+  /**
+   * The receiving server's own Authentication-Results id (e.g. mx.cloudflare.net), set only once a
+   * real delivery showed Email Routing puts its results on top of every message. Unset: no verdict is
+   * read from a message (a sender can write such a field itself).
+   */
+  EMAIL_AUTHSERV_ID?: string;
   INBOX_SECRET_KEY?: string;
   /** The https URL this instance is reached at. Receipts name it as their issuer (ADR-016). */
   INBOX_PUBLIC_URL?: string;
@@ -109,8 +115,9 @@ export default {
       envelopeTo: message.to,
       envelopeFrom: message.from,
       authenticated: false,
-      // What Email Routing found about the sender, when it says: a second signal only (ADR-026 §7).
-      auth: authFromResults(message.headers, ["mx.cloudflare.net"]),
+      // What Email Routing found about the sender, read from the message's topmost results and only
+      // once the operator confirmed whose they are: a second signal only (ADR-026 §7).
+      ...(env.EMAIL_AUTHSERV_ID ? { authResultsFrom: env.EMAIL_AUTHSERV_ID.split(",") } : {}),
     });
     // Too many right now: a temporary failure, which the sending server retries, never a bounce.
     if (result.outcome === "limited") throw new Error(`inbound email limited: retry in ${result.retryAfterSec}s`);

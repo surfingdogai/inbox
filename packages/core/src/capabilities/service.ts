@@ -887,7 +887,11 @@ export class Capabilities {
   async sendMessage(
     caller: Caller,
     input: T.SendMessageInput,
-    opts: { readonly automatic?: boolean } = {},
+    opts: {
+      readonly automatic?: boolean;
+      /** A new message the email door puts aside as spam as it arrives, with why (ADR-026 §7). */
+      readonly spam?: string | undefined;
+    } = {},
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
@@ -900,6 +904,7 @@ export class Capabilities {
           contact: input.contact,
           message: input.body,
           messageId: input.message_id,
+          ...(opts.spam ? { spam: opts.spam } : {}),
         },
         input,
       );

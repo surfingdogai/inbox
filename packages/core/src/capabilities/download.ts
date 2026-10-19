@@ -82,6 +82,10 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     leftOut: "Confirmation links and codes a mail provider sent for forwarding: they answered only once.",
     strip: () => ["UPDATE email_forwards SET confirm_code = NULL, confirm_url = NULL"],
   },
+  email_confirmations_held: {
+    leftOut: "Forwarding confirmations a mail provider sent before their address was added: they answered only once.",
+    strip: () => ["DELETE FROM email_confirmations_held"],
+  },
   // The networks this inbox reports to.
   network_status: {},
   network_publications: {},

@@ -12,7 +12,7 @@
  *   envelope and what the receiving server found about the sender in the signed query;
  * - any other address routed here: our own inbox (`INBOX_INBOUND_URL`), with its inbound secret.
  */
-import { authSummary, deliveryTarget, routeFor, signDelivery, verdictOf } from "./route";
+import { authSummary, deliveryTarget, headerFields, routeFor, signDelivery, verdictOf } from "./route";
 
 interface Env {
   /** Our own inbox, e.g. https://inbox.surfingdog.ai/v1/email/inbound */
@@ -25,7 +25,11 @@ interface Env {
   readonly HOSTED_INBOUND_URL?: string;
   /** The key deliveries are signed with: the router's HOSTED_INBOUND_KEY, set with `wrangler secret put`. */
   readonly HOSTED_INBOUND_KEY?: string;
-  /** The receiving server's Authentication-Results ids to read (comma-separated; default mx.cloudflare.net). */
+  /**
+   * The receiving server's own Authentication-Results ids, comma-separated (e.g. mx.cloudflare.net),
+   * set only once a real delivery showed Email Routing puts its results on top of every message.
+   * Unset (the default): no verdict is passed on, and the inboxes judge nothing by one.
+   */
   readonly TRUSTED_AUTHSERV?: string;
 }
 
@@ -53,7 +57,7 @@ export default {
       return;
     }
     const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
-    const auth = authSummary(message.headers, (env.TRUSTED_AUTHSERV ?? "mx.cloudflare.net").split(","));
+    const auth = env.TRUSTED_AUTHSERV ? authSummary(headerFields(raw), env.TRUSTED_AUTHSERV.split(",")) : undefined;
     let res: Response;
     try {
       if (route.kind === "hosted") {

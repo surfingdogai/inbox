@@ -291,6 +291,9 @@ export const api = {
     call<ForwardView>("POST", `/v1/owner/email/forwards/${encodeURIComponent(id)}/confirmed`, { body: {} }),
   setSender: (address: string | null) => call<HostSender>("PUT", "/v1/owner/email/sender", { body: { address } }),
   checkSender: () => call<HostSender>("POST", "/v1/owner/email/sender/check", { body: {} }),
+  /** A person at the business deletes one kept file. */
+  removeAttachment: (id: string) =>
+    call<{ removed: true; item_id: string }>("DELETE", `/v1/owner/attachments/${encodeURIComponent(id)}`),
   /** One attached file, as a download. */
   attachment: (id: string) => download(`/v1/owner/attachments/${encodeURIComponent(id)}`, "attachment"),
 

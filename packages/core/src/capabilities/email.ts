@@ -1,7 +1,7 @@
 import type { MailOut } from "@surfingdog/platform";
 import { businessFacts } from "../customer/audience";
 import type { Db } from "../db";
-import { type AttachmentRef, attachmentsOf, readAttachment } from "../email/attachments";
+import { type AttachmentRef, attachmentsOf, readAttachment, removeAttachment } from "../email/attachments";
 import { inboundOf } from "../email/channel";
 import { queueForwardCheck } from "../email/check";
 import {
@@ -20,7 +20,7 @@ import {
 import { plusAddress, splitAddress } from "../email/tokens";
 import { senderOf } from "../jobs/mail-log";
 import { readSettings } from "../settings/schema";
-import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, nowOf } from "../write/caller";
+import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, isPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
 
 /**
@@ -56,6 +56,11 @@ export interface HostSender {
   readonly checkedAt: string | null;
   /** Why it stands where it does, in the owner's words, when something is wrong. */
   readonly problem?: string | null | undefined;
+  /**
+   * Where the business's DNS is run, as its name servers tell, and that provider's steps for adding
+   * the rows: shown with them. Absent when the host could not tell.
+   */
+  readonly dnsProvider?: { readonly name: string; readonly steps: readonly string[] } | null | undefined;
 }
 
 /**
@@ -80,7 +85,14 @@ export interface ForwardView {
   /** A check is out and has not come back yet. */
   readonly checking: boolean;
   readonly plus_ok: boolean;
-  readonly confirmation: { from: string; code: string | null; url: string | null; at: string } | null;
+  /** What the provider sent, named by its own proven sender (`provider`), never by what the owner picked. */
+  readonly confirmation: {
+    from: string;
+    provider: string;
+    code: string | null;
+    url: string | null;
+    at: string;
+  } | null;
   readonly check_sent_at: string | null;
   readonly check_seen_at: string | null;
   readonly last_seen_at: string | null;
@@ -126,6 +138,7 @@ function view(f: Forward, now: number): ForwardView {
     confirmation: f.confirmation
       ? {
           from: f.confirmation.from,
+          provider: f.confirmation.provider || MAIL_PROVIDER_NAMES[f.provider],
           code: f.confirmation.code,
           url: f.confirmation.url,
           at: new Date(f.confirmation.at).toISOString(),
@@ -189,6 +202,17 @@ export class EmailChannelCapabilities {
     };
   }
 
+  /** The addresses this inbox's email goes out from: what an owner's answer quotes as the alert's sender. */
+  async sendingAddresses(): Promise<string[]> {
+    const settings = await readSettings(this.db);
+    const transport = this.mail();
+    const publicUrl = this.baseUrl ?? settings.notifications.appUrl ?? "";
+    const sender = senderOf(settings, { transport, publicUrl });
+    return [sender?.from.address, transport?.sender?.address, settings.email.fromAddress].filter(
+      (a): a is string => typeof a === "string" && a.includes("@"),
+    );
+  }
+
   /** Adds an address the business forwards here (or changes its provider). The owner checks it once it is set up. */
   async addForward(caller: Caller, input: { address: string; provider: string }): Promise<ForwardView> {
     requireOwnerInPerson(caller, "Only the owner can choose which addresses forward to this inbox.");
@@ -213,7 +237,10 @@ export class EmailChannelCapabilities {
     return { removed: await removeForward(this.db, id) };
   }
 
-  /** Sends a check to the business's own address now; it comes back if the forward works. */
+  /**
+   * Sends a check to the business's own address now; it comes back if the forward works. A
+   * confirmation shown for the address has been dealt with by then: it goes in the same step.
+   */
   async checkForward(caller: Caller, id: string): Promise<ForwardView> {
     requireOwnerInPerson(caller, "Only the owner can send a forwarding check.");
     const now = nowOf(caller);
@@ -229,8 +256,10 @@ export class EmailChannelCapabilities {
         },
       );
     }
+    if (f.confirmation) await clearConfirmation(this.db, id, now);
     await queueForwardCheck(this.db, id, now);
-    return view({ ...f, checkSentAt: now, checkSeenAt: null }, now);
+    const after = (await forwardById(this.db, id)) ?? f;
+    return view({ ...after, checkSentAt: now, checkSeenAt: null }, now);
   }
 
   /** The owner dealt with the provider's confirmation: it is no longer shown. */
@@ -257,7 +286,8 @@ export class EmailChannelCapabilities {
     if (address !== null) {
       const a = splitAddress(address);
       const forwarded = (await listForwards(this.db)).find((f) => f.address === address.trim().toLowerCase());
-      if (!a || !forwarded || forwarded.state !== "working") {
+      // Proven only by a check that came back through the forward (its secret token), never by headers.
+      if (!a || !forwarded || forwarded.state !== "working" || forwarded.checkSeenAt === null) {
         throw new WriteError(
           "invalid_input",
           "Send from an address that forwards here and passed its check: it shows the address is the business's.",
@@ -279,6 +309,19 @@ export class EmailChannelCapabilities {
   async attachments(caller: Caller, itemId: string): Promise<AttachmentRef[]> {
     requireBusiness(caller);
     return attachmentsOf(this.db, itemId);
+  }
+
+  /** A person at the business deletes one kept file: its bytes go, the conversation says so. */
+  async removeAttachment(caller: Caller, id: string): Promise<{ removed: true; item_id: string }> {
+    requireBusiness(caller);
+    if (!isPerson(caller)) {
+      throw new WriteError("not_allowed", "Only a person at the business can delete a customer's file.", {
+        details: { reason: "person_only" },
+      });
+    }
+    const done = await removeAttachment(this.db, id);
+    if (!done) throw new WriteError("not_found", "no such attachment, or it was not kept");
+    return { removed: true, item_id: done.itemId };
   }
 
   /** One kept attachment, for the owner's download. */

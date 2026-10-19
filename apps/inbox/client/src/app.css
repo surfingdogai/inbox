@@ -2686,7 +2686,10 @@ pre.found-code {
   vertical-align: 1px;
 }
 .email-state.is-ok {
-  color: var(--c-success);
+  color: var(--c-success-ink);
+}
+.email-state.is-ok::before {
+  background: var(--c-success);
 }
 .email-state.is-wait {
   color: var(--c-warning-ink);
@@ -2708,10 +2711,10 @@ pre.found-code {
 }
 .email-code {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 400;
-  letter-spacing: 0.12em;
-  color: var(--ink);
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
 }
 .email-add {
   justify-items: stretch;
@@ -2761,6 +2764,124 @@ pre.found-code {
   padding: 0 4px;
   min-height: 0;
 }
+.email-to {
+  margin: 0;
+}
+.email-steps-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.email-ask {
+  display: grid;
+  gap: 6px;
+  animation: email-in 0.2s ease-out both;
+}
+.email-ask-text {
+  margin: 0;
+}
+.email-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.email-detected {
+  margin: 0;
+}
+/* The DNS rows: one quiet table, Type · Name · Value · found, that folds to two lines on a phone. */
+.email-dns {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+}
+.email-dns th {
+  padding: 6px 8px 6px 2px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.email-dns th:nth-child(1) {
+  width: 64px;
+}
+.email-dns th:nth-child(2) {
+  width: 32%;
+}
+.email-dns th:nth-child(4) {
+  width: 22px;
+}
+.email-dns td {
+  padding: 8px 8px 8px 2px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+.email-dns-row {
+  animation: email-in 0.24s ease-out both;
+}
+.email-dns-val {
+  min-width: 0;
+  line-height: 1.5;
+}
+.email-dns .btn.email-copy {
+  height: 18px;
+  padding: 0 3px;
+  vertical-align: -3px;
+}
+.email-dns .btn.email-copy .icon {
+  width: 13px;
+  height: 13px;
+}
+.email-dotted {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.email-dns-row.is-ok .email-mark {
+  color: var(--c-success);
+}
+.email-dns-row .email-purpose {
+  display: block;
+  margin: 2px 0 0;
+}
+@media (max-width: 600px) {
+  .email-dns,
+  .email-dns tbody,
+  .email-dns tr,
+  .email-dns td {
+    display: block;
+    width: 100%;
+  }
+  .email-dns thead {
+    display: none;
+  }
+  .email-dns-row {
+    position: relative;
+    padding: 8px 24px 8px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .email-dns td {
+    padding: 2px 0;
+    border: 0;
+  }
+  .email-dns-type {
+    color: var(--ink-3);
+  }
+  .email-dns td.email-mark {
+    position: absolute;
+    top: 8px;
+    right: 0;
+    width: auto;
+  }
+}
 .msg-files {
   display: flex;
   flex-wrap: wrap;
@@ -2773,6 +2894,26 @@ pre.found-code {
 .msg-file.is-off {
   color: var(--ink-3);
 }
+.msg-file-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.btn.msg-file-x {
+  padding: 0 4px;
+  min-height: 0;
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+.btn.msg-file-x:hover,
+.btn.msg-file-x:focus-visible {
+  opacity: 1;
+}
+.msg-file-ask {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 @keyframes email-in {
   from {
     opacity: 0;

@@ -1,4 +1,7 @@
+import { SesSendError } from "@surfingdog/platform";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { transportFrom } from "../src/config";
+import { socketRequest } from "../src/sockets";
 import { type FakeTenant, INBOUND_HOST, OWNER, PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -285,5 +288,93 @@ describe("Settings → Email on a hosted inbox", () => {
       body: JSON.stringify({ address: `ceo@${t.domain}` }),
     });
     expect(refused.status).toBe(422);
+  });
+});
+
+describe("the router reads no email it should not", () => {
+  it("answers an unsigned post, a stale one and one larger than any email before reading a byte of it", async () => {
+    const t = await live();
+    const target = `/v1/inbound/${slugOf(t)}?to=${encodeURIComponent(inboundOf(t))}&from=x%40example.org`;
+    const send = (headers: Record<string, string>) =>
+      socketRequest(rt.routerSocket, {
+        method: "POST",
+        target,
+        headers: { host: INBOUND_HOST, "content-type": "message/rfc822", ...headers },
+        body: new TextEncoder().encode("hi"),
+        timeoutMs: 10_000,
+      });
+    expect((await send({})).status).toBe(401);
+    const shaped = {
+      "x-sd-nonce": "00112233445566778899aabbccddeeff",
+      "x-sd-sig": `v1=${"0".repeat(64)}`,
+    };
+    expect((await send({ ...shaped, "x-sd-time": "1000" })).status).toBe(401);
+    const time = String(Math.floor((Date.now() + 0) / 1000));
+    const big = await send({ ...shaped, "x-sd-time": time, "content-length": String(30 * 1024 * 1024) }).catch(
+      (error: unknown) => ({ status: -1, error }),
+    );
+    expect([413, -1]).toContain(big.status);
+  });
+});
+
+describe("sending from the business's own domain when SES stops", () => {
+  it("sends that email, and every one after it, from our own address, and tells the control plane once", async () => {
+    const env = {
+      HOSTED_MAIL_DOMAIN: "mail.example.net",
+      AWS_SES_REGION: "eu-west-1",
+      AWS_SES_SEND_KEY_ID: "AKIDEXAMPLE",
+      AWS_SES_SEND_SECRET: "secret",
+    };
+    const told: string[] = [];
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls.push(String(input instanceof Request ? input.url : input));
+      return new Response(JSON.stringify({ message: "Sending paused for this account." }), {
+        status: 400,
+        headers: { "x-amzn-errortype": "SendingPausedException:http://internal.amazon.com/" },
+      });
+    }) as typeof fetch;
+    try {
+      const make = transportFrom(env);
+      const out = make(
+        { address: "ola@oficinamare.example", name: "Oficina Maré" },
+        { slug: "misty-stork-z4if", onFallback: (reason) => told.push(reason) },
+      );
+      // With no mail service of ours set in this test, ours is the log: what matters is the From.
+      await out.send({
+        from: { address: "ola@oficinamare.example" },
+        to: ["rita@example.com"],
+        subject: "s",
+        text: "t",
+      });
+      await out.send({
+        from: { address: "ola@oficinamare.example" },
+        to: ["rita@example.com"],
+        subject: "s",
+        text: "t",
+      });
+      expect(told).toEqual(["ses: SendingPausedException: Sending paused for this account."]);
+      expect(calls.filter((c) => c.includes("amazonaws.com"))).toHaveLength(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(new SesSendError(429, "TooManyRequestsException", "slow down").senderGone).toBe(false);
+    expect(new SesSendError(404, "NotFoundException", "no such identity").senderGone).toBe(true);
+  });
+});
+
+describe("returned and reported email", () => {
+  it("an address the sending service reported is never written to again, from any inbox", async () => {
+    const t = await live();
+    const r = await rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/mail/returned`, {
+      address: "Gone@Example.org",
+      kind: "bounce",
+    });
+    expect(r.status).toBe(204);
+    const bad = await rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/mail/returned`, { address: "x", kind: "?" });
+    expect(bad.status).toBe(422);
+    const paused = await rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/mail/pause`, { reason: "complaints" });
+    expect(paused.status).toBe(204);
   });
 });

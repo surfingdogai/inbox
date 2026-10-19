@@ -18,8 +18,14 @@ export const MAIL_PROVIDERS = [
   "outlook",
   "microsoft_365",
   "icloud",
-  "ionos",
+  "yahoo",
+  "proton",
+  "fastmail",
   "zoho",
+  "ionos",
+  "godaddy",
+  "hostinger",
+  "ovh",
   "cpanel",
   "other",
 ] as const;
@@ -31,8 +37,14 @@ export const MAIL_PROVIDER_NAMES: Readonly<Record<MailProvider, string>> = {
   outlook: "Outlook.com",
   microsoft_365: "Microsoft 365",
   icloud: "iCloud Mail",
-  ionos: "IONOS",
+  yahoo: "Yahoo Mail",
+  proton: "Proton Mail",
+  fastmail: "Fastmail",
   zoho: "Zoho Mail",
+  ionos: "IONOS",
+  godaddy: "GoDaddy",
+  hostinger: "Hostinger",
+  ovh: "OVH",
   cpanel: "cPanel",
   other: "Another provider",
 };
@@ -45,6 +57,9 @@ const PERSONAL: readonly (readonly [RegExp, MailProvider])[] = [
   [/^(gmail|googlemail)\.com$/, "gmail"],
   [/^(outlook|hotmail|live|msn)\.[a-z.]+$/, "outlook"],
   [/^(icloud|me|mac)\.com$/, "icloud"],
+  [/^(yahoo|ymail|rocketmail)\.[a-z.]+$/, "yahoo"],
+  [/^(proton\.me|pm\.me|protonmail\.(com|ch))$/, "proton"],
+  [/^fastmail\.(com|fm)$/, "fastmail"],
   [/^zoho(mail)?\.[a-z.]+$/, "zoho"],
 ];
 
@@ -55,6 +70,12 @@ const BY_MX: readonly (readonly [RegExp, MailProvider])[] = [
   [/(^|\.)icloud\.com$/, "icloud"],
   [/(^|\.)(ionos\.[a-z.]+|1and1\.[a-z.]+|kundenserver\.de|perfora\.net)$/, "ionos"],
   [/(^|\.)zoho(mail)?\.[a-z.]+$/, "zoho"],
+  [/(^|\.)protonmail\.ch$/, "proton"],
+  [/(^|\.)messagingengine\.com$/, "fastmail"],
+  [/(^|\.)yahoodns\.net$/, "yahoo"],
+  [/(^|\.)secureserver\.net$/, "godaddy"],
+  [/(^|\.)hostinger\.[a-z.]+$/, "hostinger"],
+  [/(^|\.)ovh\.net$/, "ovh"],
 ];
 
 /**
@@ -78,13 +99,21 @@ export interface Forward {
   readonly id: string;
   readonly address: string;
   readonly provider: MailProvider;
+  /**
+   * `working` only once a check came back through the forward (its secret token): an address named in
+   * an email's headers proves nothing, since whoever writes the email writes those too.
+   */
   readonly state: ForwardState;
   /** A check sent to the address's plus form came back: a conversation's address can be the business's own. */
   readonly plusOk: boolean;
   /** What the provider sent to be confirmed, shown to the owner as it came; never acted on. */
   readonly confirmation: {
+    /** The provider's own sender, as it was proven (`recogniseConfirmation`). */
     readonly from: string;
+    /** The provider, named by that sender, never by what the owner picked. */
+    readonly provider: string;
     readonly code: string | null;
+    /** Only ever on the provider's own confirmation host (Gmail's `mail-settings.google.com`). */
     readonly url: string | null;
     readonly at: number;
   } | null;
@@ -98,8 +127,16 @@ export interface Forward {
 export const MAX_FORWARDS = 10;
 /** A check is waited for this long before the plain address is tried, and as long again before "not yet". */
 export const CHECK_WAIT_MS = 3 * 60_000;
-/** Checks a forward may be sent in a day: each is an email to the business's own address. */
+/**
+ * Check emails one inbox may send in a day, all its addresses together, and checks one address may
+ * be sent (its plain retry rides with the check it follows). Each is an email to an address the owner
+ * typed: it must never be a way to write to someone else's mailbox. Counted from what was sent, so
+ * removing an address and adding it again starts nothing afresh.
+ */
 export const CHECKS_PER_DAY = 12;
+export const CHECKS_PER_ADDRESS_PER_DAY = 3;
+/** A provider's confirmation that came before its address was added waits this long for it. */
+export const HELD_CONFIRMATION_MS = 24 * 60 * 60_000;
 
 const COLUMNS =
   "id, address, provider, state, plus_ok, confirm_from, confirm_code, confirm_url, confirm_at, check_sent_at, check_seen_at, last_seen_at, created_at";
@@ -108,13 +145,15 @@ function toForward(r: readonly unknown[]): Forward {
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
   const at = n(r[8]);
+  const from = s(r[5]) ?? "";
   return {
     id: String(r[0]),
     address: String(r[1]),
     provider: isMailProvider(r[2]) ? r[2] : "other",
     state: (["setup", "confirm", "working", "not_yet"].includes(String(r[3])) ? String(r[3]) : "setup") as ForwardState,
     plusOk: Number(r[4]) === 1,
-    confirmation: at === null ? null : { from: s(r[5]) ?? "", code: s(r[6]), url: s(r[7]), at },
+    confirmation:
+      at === null ? null : { from, provider: confirmationSender(from)?.name ?? "", code: s(r[6]), url: s(r[7]), at },
     checkSentAt: n(r[9]),
     checkSeenAt: n(r[10]),
     lastSeenAt: n(r[11]),
@@ -146,7 +185,8 @@ const invalid = (message: string) =>
 /**
  * Adds an address the business forwards here, or changes the provider of one it has. Refused: what
  * is not an address, the inbox's own address (it would forward to itself), and more than
- * `MAX_FORWARDS`.
+ * `MAX_FORWARDS`. A provider's confirmation that came for the address before it was added (Gmail
+ * sends it the moment the owner adds the forward there) is put on it.
  */
 export async function addForward(
   db: Db,
@@ -169,15 +209,33 @@ export async function addForward(
   });
   const [made] = (await listForwards(db)).filter((f) => f.address === address);
   if (!made) throw new Error("the address was not kept");
+  const { rows: held } = await db.client.query({
+    sql: "SELECT from_address, code, url, at FROM email_confirmations_held WHERE forwarding = ? AND at >= ?",
+    params: [address, o.now - HELD_CONFIRMATION_MS],
+    method: "all",
+  });
+  await db.client.query({
+    sql: "DELETE FROM email_confirmations_held WHERE forwarding = ? OR at < ?",
+    params: [address, o.now - HELD_CONFIRMATION_MS],
+    method: "run",
+  });
+  const h = held[0];
+  if (h && !made.confirmation && made.checkSeenAt === null) {
+    await putConfirmation(db, made.id, {
+      from: String(h[0]),
+      code: h[1] === null ? null : String(h[1]),
+      url: h[2] === null ? null : String(h[2]),
+      at: Number(h[3]),
+    });
+    return (await forwardById(db, made.id)) ?? made;
+  }
   return made;
 }
 
+/** Stops expecting mail from an address. Its checks stay counted for the day (`CHECKS_PER_DAY`). */
 export async function removeForward(db: Db, id: string): Promise<boolean> {
-  const [done] = await db.batch([
-    { sql: "DELETE FROM email_forwards WHERE id = ?", params: [id], method: "run" },
-    { sql: "DELETE FROM mail_tokens WHERE kind = 'check' AND forward_id = ?", params: [id], method: "run" },
-  ]);
-  return (done?.changes ?? 0) > 0;
+  const done = await db.client.query({ sql: "DELETE FROM email_forwards WHERE id = ?", params: [id], method: "run" });
+  return (done.changes ?? 0) > 0;
 }
 
 /** The owner saw the confirmation and dealt with it in their provider: it is no longer shown. */
@@ -193,7 +251,8 @@ export async function clearConfirmation(db: Db, id: string, now: number): Promis
 /**
  * A check: a token, and the address to send it to. The first goes to the address's plus form
  * (`support+c…@shop.example`): back through the forward, it proves plus addresses arrive too. With
- * `plain`, to the address itself. Null when the forward is gone or had its checks for the day.
+ * `plain`, to the address itself. Null when the forward is gone, or the inbox or the address had their
+ * checks for the day. Each token keeps where it went, so what comes back says what it proves.
  */
 export async function startCheck(
   db: Db,
@@ -202,19 +261,30 @@ export async function startCheck(
 ): Promise<{ token: string; to: string; forward: Forward } | null> {
   const forward = await forwardById(db, id);
   if (!forward) return null;
+  const since = o.now - 86_400_000;
+  // Checks older than a week say nothing any more: they go, the day's stay counted.
+  await db.client.query({
+    sql: "DELETE FROM mail_tokens WHERE kind = 'check' AND created_at < ?",
+    params: [o.now - 7 * 86_400_000],
+    method: "run",
+  });
   const { rows } = await db.client.query({
-    sql: "SELECT count(*) FROM mail_tokens WHERE kind = 'check' AND forward_id = ? AND created_at >= ?",
-    params: [id, o.now - 86_400_000],
+    sql: `SELECT count(*), COALESCE(SUM(CASE WHEN sent_to = ? AND plain = 0 THEN 1 ELSE 0 END), 0)
+            FROM mail_tokens WHERE kind = 'check' AND created_at >= ?`,
+    params: [forward.address, since],
     method: "all",
   });
   if (Number(rows[0]?.[0] ?? 0) >= CHECKS_PER_DAY) return null;
+  // A plain check follows the plus one it retries; only a new check counts against the address.
+  if (!o.plain && Number(rows[0]?.[1] ?? 0) >= CHECKS_PER_ADDRESS_PER_DAY) return null;
   const token = newMailToken("check");
   const to = o.plain ? forward.address : plusAddress(forward.address, token);
   if (!to) return null;
   await db.batch([
     {
-      sql: "INSERT INTO mail_tokens (token, kind, item_id, forward_id, created_at) VALUES (?, 'check', NULL, ?, ?)",
-      params: [token, id, o.now],
+      sql: `INSERT INTO mail_tokens (token, kind, item_id, forward_id, sent_to, plain, created_at)
+            VALUES (?, 'check', NULL, ?, ?, ?, ?)`,
+      params: [token, id, forward.address, o.plain ? 1 : 0, o.now],
       method: "run",
     },
     {
@@ -228,30 +298,31 @@ export async function startCheck(
 }
 
 /**
- * A check came back. Through the plus address: the forward works and plus addresses arrive. Through
- * the plain one: the forward works. A token from an earlier check counts the same: the forward
- * carried it.
+ * A check came back: the forward works. It proves plus addresses arrive only when that token went
+ * to the plus address and the email came for it (`recipients` names `support+c…@shop.example`): what
+ * the forward does today is read from the token that came back, never from a later check's. The
+ * provider's confirmation, if one was shown, has done its work and goes.
  */
-export async function checkArrived(db: Db, o: { token: string; forwardId: string; now: number }): Promise<void> {
+export async function checkArrived(
+  db: Db,
+  o: { token: string; forwardId: string; recipients: readonly string[]; now: number },
+): Promise<void> {
   const { rows } = await db.client.query({
-    sql: "SELECT created_at FROM mail_tokens WHERE token = ? AND kind = 'check' AND forward_id = ?",
+    sql: "SELECT plain, sent_to FROM mail_tokens WHERE token = ? AND kind = 'check' AND forward_id = ?",
     params: [o.token, o.forwardId],
     method: "all",
   });
-  if (!rows[0]) return;
+  const row = rows[0];
+  if (!row) return;
   const forward = await forwardById(db, o.forwardId);
   if (!forward) return;
-  // Which address the check went to is the forward's at the time; a plain check never says plus works.
-  const { rows: plainRows } = await db.client.query({
-    sql: "SELECT check_plain FROM email_forwards WHERE id = ?",
-    params: [o.forwardId],
-    method: "all",
-  });
-  const plus = Number(plainRows[0]?.[0] ?? 1) === 0;
+  const plusTo = plusAddress(String(row[1] ?? forward.address), o.token);
+  const plus = Number(row[0]) === 0 && plusTo !== null && o.recipients.some((r) => r.trim().toLowerCase() === plusTo);
   await db.batch([
     {
       sql: `UPDATE email_forwards SET state = 'working', check_seen_at = ?, last_seen_at = ?, updated_at = ?,
-              plus_ok = CASE WHEN ? = 1 THEN 1 ELSE plus_ok END WHERE id = ?`,
+              plus_ok = CASE WHEN ? = 1 THEN 1 ELSE plus_ok END,
+              confirm_from = NULL, confirm_code = NULL, confirm_url = NULL, confirm_at = NULL WHERE id = ?`,
       params: [o.now, o.now, o.now, plus ? 1 : 0, o.forwardId],
       method: "run",
     },
@@ -279,8 +350,9 @@ export async function checkLapsed(db: Db, o: { forwardId: string; now: number })
 }
 
 /**
- * Mail arrived that names a forwarded address among its recipients: the forward works. Returns the
- * forwards it named. Plus addresses count as their address.
+ * Mail arrived that names a forwarded address among its recipients: when it was last seen, nothing
+ * more (the sender writes those headers; only a check says the forward works). Returns the forwards
+ * it named. Plus addresses count as their address.
  */
 export async function forwardsSeen(db: Db, recipients: readonly string[], now: number): Promise<Forward[]> {
   const bases = [...new Set(recipients.map((r) => baseAddress(r)).filter((r): r is string => r !== null))];
@@ -289,8 +361,7 @@ export async function forwardsSeen(db: Db, recipients: readonly string[], now: n
   const hit = all.filter((f) => bases.includes(f.address));
   for (const f of hit) {
     await db.client.query({
-      sql: `UPDATE email_forwards SET last_seen_at = ?, updated_at = ?,
-              state = CASE WHEN state = 'confirm' THEN state ELSE 'working' END WHERE id = ?`,
+      sql: "UPDATE email_forwards SET last_seen_at = ?, updated_at = ? WHERE id = ?",
       params: [now, now, f.id],
       method: "run",
     });
@@ -300,23 +371,76 @@ export async function forwardsSeen(db: Db, recipients: readonly string[], now: n
 
 // ---- the provider's confirmation ---------------------------------------------------------------------
 
-/** The domains a provider's confirmation links may be on: a link anywhere else is not shown. */
-const LINK_HOSTS: readonly (readonly [RegExp, RegExp])[] = [
-  // [sender, link host]
-  [/@google\.com$/, /(^|\.)google\.com$/],
-  [/@(.+\.)?zoho(mail)?\.[a-z.]+$/, /(^|\.)zoho(mail)?\.[a-z.]+$/],
-  [/@(.+\.)?yahoo(inc)?\.[a-z.]+$/, /(^|\.)yahoo\.[a-z.]+$/],
-  [/@(.+\.)?(proton\.me|protonmail\.com)$/, /(^|\.)(proton\.me|protonmail\.com)$/],
-  [/@(.+\.)?fastmail\.[a-z.]+$/, /(^|\.)fastmail\.[a-z.]+$/],
+/**
+ * The providers whose forwarding confirmations the inbox shows, by their own sender: Google's exact
+ * address, and the domains the others send from. Only Gmail's carries a link worth showing, and only
+ * on its own confirmation host; for every other provider the code is shown, never a link, so nothing
+ * written to the inbox can put a page in front of the owner.
+ */
+const CONFIRMATION_SENDERS: readonly {
+  readonly name: string;
+  readonly test: (from: string) => boolean;
+  /** The sender's own domain, which a receiving server's DKIM or DMARC pass must be for. */
+  readonly domains: readonly string[];
+  readonly linkHost?: string;
+}[] = [
+  {
+    name: "Gmail",
+    test: (f) => f === "forwarding-noreply@google.com",
+    domains: ["google.com"],
+    linkHost: "mail-settings.google.com",
+  },
+  {
+    name: "Zoho Mail",
+    test: (f) => /@(zoho\.(com|eu|in|com\.au|jp|com\.cn)|zohomail\.(com|eu|in))$/.test(f),
+    domains: [
+      "zoho.com",
+      "zoho.eu",
+      "zoho.in",
+      "zoho.com.au",
+      "zoho.jp",
+      "zoho.com.cn",
+      "zohomail.com",
+      "zohomail.eu",
+      "zohomail.in",
+    ],
+  },
+  {
+    name: "Yahoo Mail",
+    test: (f) => /@(yahoo\.com|yahoo-inc\.com|cc\.yahoo-inc\.com|yahoomail\.com)$/.test(f),
+    domains: ["yahoo.com", "yahoo-inc.com", "yahoomail.com"],
+  },
+  {
+    name: "Proton Mail",
+    test: (f) => /@(proton\.me|protonmail\.com)$/.test(f),
+    domains: ["proton.me", "protonmail.com"],
+  },
+  { name: "Fastmail", test: (f) => /@fastmail\.(com|fm)$/.test(f), domains: ["fastmail.com", "fastmail.fm"] },
 ];
+
+/** The provider a confirmation's sender is, or null for any other sender. */
+export function confirmationSender(
+  from: string,
+): { name: string; domains: readonly string[]; linkHost?: string } | null {
+  const f = from.trim().toLowerCase();
+  return CONFIRMATION_SENDERS.find((s) => s.test(f)) ?? null;
+}
 
 export interface Confirmation {
   /** Who sent it (the provider's address). */
   readonly from: string;
+  /** The provider, as its sender names it. */
+  readonly provider: string;
   /** The address it asks to forward, when it names one. */
   readonly forwarding: string | null;
   readonly code: string | null;
   readonly url: string | null;
+}
+
+/** What the receiving server found, as the email door passes it on (`MailAuth` in the adapters). */
+export interface ConfirmationAuth {
+  readonly dkim?: readonly string[] | undefined;
+  readonly dmarc?: string | undefined;
 }
 
 const FORWARD_WORDS =
@@ -325,9 +449,11 @@ const CONFIRM_WORDS = /(confirm|verif|best[aä]tig|confirma|v[ée]rif|conferma|b
 
 /**
  * Whether an email is a mail provider asking to confirm forwarding to this inbox, and what it says:
- * the code to type, the link to open, the address being forwarded. Gmail's (from
- * forwarding-noreply@google.com) is known by its sender; others by their words. Nothing here opens
- * a link or types a code: the owner does, in their provider.
+ * the code to type, the link to open (Gmail's only, on `mail-settings.google.com`), the address being
+ * forwarded. Only a known provider's own sender counts (`CONFIRMATION_SENDERS`), and when the
+ * receiving server said what it found, only one it found to be from that provider's domain (DMARC
+ * pass, or a DKIM signature of it). Anything else is not a confirmation and is taken in as an
+ * ordinary email. Nothing here opens a link or types a code: the owner does, in their provider.
  */
 export function recogniseConfirmation(
   mail: {
@@ -337,11 +463,18 @@ export function recogniseConfirmation(
   },
   /** The inbox's own addresses, which a confirmation names too (it is sent to them): never the forwarded one. */
   own: readonly string[] = [],
+  auth?: ConfirmationAuth | undefined,
 ): Confirmation | null {
   const from = mail.from.trim().toLowerCase();
+  const sender = confirmationSender(from);
+  if (!sender) return null;
+  if (auth && (auth.dkim !== undefined || auth.dmarc !== undefined)) {
+    const signed = (auth.dkim ?? []).some((d) => sender.domains.some((s) => d === s || d.endsWith(`.${s}`)));
+    if (auth.dmarc !== "pass" && !signed) return null;
+  }
   const subject = mail.subject.trim();
   const text = mail.text.slice(0, 20_000);
-  const google = from === "forwarding-noreply@google.com";
+  const google = sender.linkHost !== undefined;
   if (!google && !(FORWARD_WORDS.test(subject) && CONFIRM_WORDS.test(`${subject}\n${text.slice(0, 2_000)}`))) {
     return null;
   }
@@ -351,54 +484,73 @@ export function recogniseConfirmation(
       text,
     )?.[1] ??
     null;
-  const hostRule = LINK_HOSTS.find(([sender]) => sender.test(from))?.[1];
-  const senderDomain = splitAddress(from)?.domain ?? "";
   let url: string | null = null;
-  for (const m of text.matchAll(/https:\/\/[^\s<>"')\]]+/g)) {
-    try {
-      const u = new URL(m[0]);
-      const host = u.hostname.toLowerCase();
-      const ok = hostRule
-        ? hostRule.test(host)
-        : senderDomain !== "" && (host === senderDomain || host.endsWith(`.${senderDomain}`));
-      if (ok && u.protocol === "https:") {
-        url = u.toString();
-        break;
+  if (sender.linkHost) {
+    for (const m of text.matchAll(/https:\/\/[^\s<>"')\]]+/g)) {
+      try {
+        const u = new URL(m[0]);
+        if (u.protocol === "https:" && u.hostname.toLowerCase() === sender.linkHost && !u.username && !u.port) {
+          url = u.toString();
+          break;
+        }
+      } catch {
+        // not a link
       }
-    } catch {
-      // not a link
     }
   }
   if (!code && !url) return null;
   const addresses =
     `${subject}\n${text.slice(0, 4_000)}`.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [];
   const mine = new Set(own.map((a) => baseAddress(a)).filter((a): a is string => a !== null));
+  const senderDomain = splitAddress(from)?.domain ?? "";
   const forwarding =
     addresses
       .map((a) => a.toLowerCase())
-      .find((a) => a !== from && !a.endsWith("@google.com") && !mine.has(baseAddress(a) ?? a)) ?? null;
-  return { from, forwarding: forwarding ? baseAddress(forwarding) : null, code, url };
+      .find((a) => a !== from && !a.endsWith(`@${senderDomain}`) && !mine.has(baseAddress(a) ?? a)) ?? null;
+  return { from, provider: sender.name, forwarding: forwarding ? baseAddress(forwarding) : null, code, url };
 }
 
 /**
  * Keeps a provider's confirmation on the forward it is for: the one it names, else the only forward
- * waiting to be set up. Only a forward the owner is setting up takes one, so nobody can put a link in
- * front of the owner by writing to the inbox: there must be a forward waiting, and the email must name
- * it, or be the only one it can be for. Returns the forward it was kept on.
+ * still to be proven. Only an address whose check never came back takes one, and one already shown
+ * is never written over (the owner clears it by checking forwarding). One for an address not added
+ * yet is held for a day and put on it when the owner adds it. Returns the forward it was kept on, or
+ * `held`.
  */
-export async function keepConfirmation(db: Db, c: Confirmation, now: number): Promise<Forward | null> {
-  const waiting = (await listForwards(db)).filter((f) => f.state !== "working");
+export async function keepConfirmation(db: Db, c: Confirmation, now: number): Promise<Forward | "held" | null> {
+  const waiting = (await listForwards(db)).filter((f) => f.checkSeenAt === null);
   const forward = c.forwarding
     ? waiting.find((f) => f.address === c.forwarding)
     : waiting.length === 1
       ? waiting[0]
       : undefined;
-  if (!forward) return null;
+  if (!forward) {
+    if (!c.forwarding) return null;
+    const all = await listForwards(db);
+    // A forward that was proven needs no confirmation: nothing to hold.
+    if (all.some((f) => f.address === c.forwarding)) return null;
+    await db.client.query({
+      sql: `INSERT INTO email_confirmations_held (forwarding, from_address, code, url, at) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (forwarding) DO NOTHING`,
+      params: [c.forwarding, c.from, c.code, c.url, now],
+      method: "run",
+    });
+    return "held";
+  }
+  if (forward.confirmation) return forward;
+  await putConfirmation(db, forward.id, { from: c.from, code: c.code, url: c.url, at: now });
+  return forwardById(db, forward.id);
+}
+
+async function putConfirmation(
+  db: Db,
+  id: string,
+  c: { from: string; code: string | null; url: string | null; at: number },
+): Promise<void> {
   await db.client.query({
-    sql: `UPDATE email_forwards SET state = 'confirm', confirm_from = ?, confirm_code = ?, confirm_url = ?, confirm_at = ?,
-            updated_at = ? WHERE id = ?`,
-    params: [c.from, c.code, c.url, now, now, forward.id],
+    sql: `UPDATE email_forwards SET state = CASE WHEN state = 'working' THEN state ELSE 'confirm' END, confirm_from = ?,
+            confirm_code = ?, confirm_url = ?, confirm_at = ?, updated_at = ? WHERE id = ?`,
+    params: [c.from, c.code, c.url, c.at, c.at, id],
     method: "run",
   });
-  return forwardById(db, forward.id);
 }

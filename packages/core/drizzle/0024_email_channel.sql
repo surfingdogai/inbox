@@ -1,25 +1,32 @@
--- The email channel (ADR-026). Four new tables; nothing that exists changes.
+-- The email channel (ADR-026). Five new tables; nothing that exists changes.
 --
 -- `mail_tokens`: the secret part of a conversation's own address (`name+t…@domain`), of the address
 -- the owner answers an alert at (`name+o…`), and of a forwarding check (`name+c…`). One token per
 -- item and kind, made the first time an email about the item goes out, and kept: a reply can come
 -- weeks later. A token is never the item's id, so knowing an item's id writes into nobody's thread.
+-- A check's token keeps the address it went to (`sent_to`) and whether it was the plain one (`plain`):
+-- what comes back proves only what that token was sent to test, and the day's checks are counted
+-- from these rows, which stay when an address is removed.
 CREATE TABLE IF NOT EXISTS `mail_tokens` (
 	`token` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
 	`item_id` text,
 	`forward_id` text,
+	`sent_to` text,
+	`plain` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`used_at` integer
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `mail_tokens_item_kind` ON `mail_tokens` (`item_id`, `kind`) WHERE `item_id` IS NOT NULL;
 --> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `mail_tokens_kind_created` ON `mail_tokens` (`kind`, `created_at`);
+--> statement-breakpoint
 -- `email_forwards`: an address the business already has (support@its-domain), forwarded to the
 -- inbox's own address. Where it stands: `setup` (the owner is setting it up), `confirm` (the provider
--- sent a confirmation, shown to the owner, never acted on), `working` (a check came back through it,
--- or mail to it arrived), `not_yet` (a check did not come back in time). `plus_ok`: a check sent to its
--- plus address came back too, so a conversation's address can be the business's own.
+-- sent a confirmation, shown to the owner, never acted on), `working` (a check came back through it:
+-- only its secret token says so), `not_yet` (a check did not come back in time). `plus_ok`: a check sent
+-- to its plus address came back through it, so a conversation's address can be the business's own.
 CREATE TABLE IF NOT EXISTS `email_forwards` (
 	`id` text PRIMARY KEY NOT NULL,
 	`address` text NOT NULL,
@@ -40,10 +47,23 @@ CREATE TABLE IF NOT EXISTS `email_forwards` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `email_forwards_address` ON `email_forwards` (`address`);
 --> statement-breakpoint
+-- `email_confirmations_held`: a provider's forwarding confirmation (Gmail's, from its own sender) for
+-- an address the owner has not added here yet: Gmail sends it the moment the forward is added there.
+-- Held a day, and put on the address when the owner adds it.
+CREATE TABLE IF NOT EXISTS `email_confirmations_held` (
+	`forwarding` text PRIMARY KEY NOT NULL,
+	`from_address` text NOT NULL,
+	`code` text,
+	`url` text,
+	`at` integer NOT NULL
+);
+--> statement-breakpoint
 -- `mail_attachments`: what came attached to an email, with what became of it: `kept` (its bytes are in
 -- `mail_attachment_chunks`, 256 KiB a row, so no row is near any database's limit), `too_large`,
--- `refused` (a kind of file that runs, which nobody needs from a customer) or `full` (the inbox holds
--- all the attachments it keeps). Only the owner reads them.
+-- `refused` (a kind of file that runs, which nobody needs from a customer), `full` (the inbox, or what
+-- one sender may leave in a day, holds all it keeps) or `removed` (the owner deleted it). Only the
+-- owner reads them. `sender` is a hash of who sent it and `sender_domain` their domain: what one sender
+-- leaves in a day is counted from them. Both go with the item when its customer is erased.
 CREATE TABLE IF NOT EXISTS `mail_attachments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`item_id` text NOT NULL,
@@ -54,10 +74,14 @@ CREATE TABLE IF NOT EXISTS `mail_attachments` (
 	`sha256` text,
 	`state` text NOT NULL,
 	`chunks` integer DEFAULT 0 NOT NULL,
+	`sender` text,
+	`sender_domain` text,
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `mail_attachments_item` ON `mail_attachments` (`item_id`, `created_at`);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `mail_attachments_created` ON `mail_attachments` (`created_at`);
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `mail_attachment_chunks` (
 	`attachment_id` text NOT NULL,

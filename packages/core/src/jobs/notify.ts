@@ -128,13 +128,22 @@ export function notifyHandler(
     };
     // Where an answer to this email goes (ADR-026 §4, §5): the conversation's own address for the
     // customer, the alert's own for the owner; else what the sender said before.
+    // The transport's say over which domains a Reply-To may be on (a hosted inbox's) is kept, so a
+    // conversation's address is never one it would drop.
     const replyTo =
       logged.recipient === "customer"
-        ? await customerReplyTo(db, settings, item.id, { now, from: sender.from.address })
+        ? await customerReplyTo(db, settings, item.id, {
+            now,
+            from: sender.from.address,
+            replyDomains: mailOut.replyDomains,
+          })
         : await ownerReplyTo(db, settings, item.id, now);
+    // The business's name with the conversation's address, so the customer's reply shows who it goes to.
+    const replyName = logged.recipient === "customer" && replyTo ? sender.from.name?.trim() : undefined;
     const mail: OutboundMail = {
       ...sender,
       ...(replyTo ? { replyTo } : {}),
+      ...(replyName ? { replyToName: replyName } : {}),
       to: [address],
       subject: logged.subject,
       // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
@@ -438,7 +447,7 @@ function ownerMail(
   // A customer who wrote is quoted, so the owner can answer from their mailbox; a few lines at most.
   const said = o.words ? quoteFor(o.words) : [];
   const answer = o.byEmail
-    ? `Reply to this email to answer ${firstName(who)}: your reply goes to them${o.business ? ` from ${oneLine(o.business)}` : ""}.`
+    ? `Reply to this email to answer ${firstName(who)}.${o.business ? ` It is sent as ${oneLine(o.business)}.` : ""}`
     : "Reply in your inbox to answer.";
   return {
     itemId: item.id,

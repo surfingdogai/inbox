@@ -147,7 +147,7 @@ export function buildMime(mail: OutboundMail, o: { readonly now: number }): stri
   const lines = [
     `From: ${mailbox(mail.from.address, mail.from.name)}`,
     `To: ${mail.to.map((t) => `<${oneLine(t)}>`).join(", ")}`,
-    ...(mail.replyTo ? [`Reply-To: <${oneLine(mail.replyTo)}>`] : []),
+    ...(mail.replyTo ? [`Reply-To: ${mailbox(oneLine(mail.replyTo).trim(), mail.replyToName)}`] : []),
     `Subject: ${encodeWord(mail.subject)}`,
     `Date: ${new Date(o.now).toUTCString().replace("GMT", "+0000")}`,
     "MIME-Version: 1.0",
@@ -161,6 +161,30 @@ export function buildMime(mail: OutboundMail, o: { readonly now: number }): stri
     "",
   ];
   return lines.join("\r\n");
+}
+
+/** What SES answered when it did not send: its HTTP status and its error type (`SendingPausedException`, …). */
+export class SesSendError extends Error {
+  constructor(
+    readonly status: number,
+    readonly type: string,
+    detail: string,
+  ) {
+    super(`ses: ${type ? `${type}: ` : ""}${detail}`);
+    this.name = "SesSendError";
+  }
+
+  /**
+   * Whether SES will not send from this sender at all now: the account or its sending is paused, the
+   * domain is no longer verified or no longer there. A busy moment (throttling, a 5xx) is not: it is
+   * tried again as any other send.
+   */
+  get senderGone(): boolean {
+    if (/^(AccountSuspended|SendingPaused|MailFromDomainNotVerified|NotFound)(Exception)?$/.test(this.type))
+      return true;
+    if (this.type === "MessageRejected" && /not verified|identit/i.test(this.message)) return true;
+    return this.status === 403 && !/Throttl|TooMany/i.test(this.type);
+  }
 }
 
 /**
@@ -205,8 +229,18 @@ export function sesMailOut(
         now: at,
       });
       const res = await fetchImpl(url, { method: "POST", headers: { ...headers, ...signed }, body });
-      const answer = (await res.json().catch(() => ({}))) as { MessageId?: string; message?: string; Message?: string };
-      if (!res.ok) throw new Error(`ses: ${answer.message ?? answer.Message ?? `HTTP ${res.status}`}`);
+      const answer = (await res.json().catch(() => ({}))) as {
+        MessageId?: string;
+        message?: string;
+        Message?: string;
+        __type?: string;
+      };
+      if (!res.ok) {
+        // `SendingPausedException:http://…` in the header, `com.amazonaws…#SendingPausedException` in the body.
+        const header = res.headers.get("x-amzn-errortype")?.split(":")[0]?.trim();
+        const type = header || (answer.__type ?? "").split("#").pop()?.trim() || "";
+        throw new SesSendError(res.status, type, answer.message ?? answer.Message ?? `HTTP ${res.status}`);
+      }
       return { messageId: answer.MessageId ?? "" };
     },
   };

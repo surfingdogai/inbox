@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { logMailOut } from "@surfingdog/platform";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type BuildDeps, tenantMailOut } from "../src/build";
-import { Ledger, RECIPIENT_DAILY_CAP } from "../src/ledger";
+import { CHECKS_DAILY_CAP, Ledger, RECIPIENT_DAILY_CAP } from "../src/ledger";
 import { redact } from "../src/redact";
 import { normalizePolicy, type PolicyPayload } from "../src/types";
 import { OWNER, PARENT, type Runtime, startRuntime } from "./harness";
@@ -206,6 +206,29 @@ describe("the ledger", () => {
         rcpt: string;
       }[];
       expect(JSON.stringify(rows)).not.toContain("@");
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts forwarding checks per inbox and against the recipient's day, as email to a customer is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-"));
+    const ledger = new Ledger(join(dir, "ledger.db"), { hashKey: "k" });
+    const check = { recipient: "owner" as const, template: "forward.check" };
+    try {
+      // One outside address: its day's cap across every inbox here, whichever inbox asks.
+      for (let i = 0; i < RECIPIENT_DAILY_CAP; i++) {
+        expect(ledger.hold(i % 2 ? "tn_a" : "tn_b", mail("victim@target.example"), check, 100)).toBeNull();
+      }
+      expect(ledger.hold("tn_c", mail("victim@target.example"), check, 100)).toBe("recipient_limit");
+      // One inbox: its own cap of checks, wherever they go.
+      let held: string | null = null;
+      for (let i = 0; i < CHECKS_DAILY_CAP + 1; i++)
+        held = ledger.hold("tn_d", mail(`a${i}@other.example`), check, 100);
+      expect(held).toBe("daily_limit");
+      // An alert to the owner is still counted, not capped.
+      expect(ledger.hold("tn_d", mail(OWNER), owner, 0)).toBeNull();
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });

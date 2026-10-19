@@ -1227,25 +1227,24 @@ function AdvancedSections({
                 onChange={(e) => set("fromName", e.target.value)}
               />
             </Field>
-            <Field
-              id="s-reply"
-              label="Customers reply to"
-              optional
-              error={field("email.replyTo")}
-              hint={
-                conversations
-                  ? "Not used: each conversation has its own address (Email)."
-                  : "Usually the business mailbox."
-              }
-            >
-              <input
+            {/* With an address of its own, every email carries its conversation's: nothing to set here. */}
+            {!conversations && (
+              <Field
                 id="s-reply"
-                className="input"
-                type="email"
-                value={form.replyTo}
-                onChange={(e) => set("replyTo", e.target.value)}
-              />
-            </Field>
+                label="Customers reply to"
+                optional
+                error={field("email.replyTo")}
+                hint="Usually the business mailbox."
+              >
+                <input
+                  id="s-reply"
+                  className="input"
+                  type="email"
+                  value={form.replyTo}
+                  onChange={(e) => set("replyTo", e.target.value)}
+                />
+              </Field>
+            )}
             <Field
               id="s-inbound"
               label="Inbound email secret"

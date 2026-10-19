@@ -36,6 +36,8 @@ export const EVENT_TYPES = [
   // look at its DNS again (ADR-026 §3).
   "mail_sender",
   "mail_sender_check",
+  // SES stopped sending from the business's own address (`data.reason`): its mail went from ours.
+  "mail_sender_failed",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

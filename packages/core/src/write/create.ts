@@ -47,6 +47,11 @@ export interface CreateInput {
   readonly message?: string | undefined;
   /** Dedupe key for the first message, e.g. an email Message-ID. */
   readonly messageId?: string | undefined;
+  /**
+   * A message that arrives already put aside as spam (ADR-026 §7), with why: it is made in the spam
+   * state, closed, and tells nobody — no alert, no rule, no webhook. Only for a message.
+   */
+  readonly spam?: string | undefined;
   readonly flags?: Partial<ItemFlags> | undefined;
   /**
    * Who is asking, beyond the caller (ADR-017 §8.1): the signed agent, what the networks presented,
@@ -184,6 +189,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     stopped && input.identity ? { ...input.identity, presentations: [], issueAt: [], rulesDelayMs: 0 } : input.identity;
   const who = identityColumns(match, identity);
   const machine = machines[input.type];
+  const spam = input.type === "message" && input.spam ? input.spam : null;
+  const initial = spam ? "spam" : machine.initial;
   const id = ulid();
   const flags = itemFlagsSchema.parse({
     ...input.flags,
@@ -197,7 +204,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const item = {
     id,
     type: input.type,
-    state: machine.initial,
+    state: initial,
     version: 1,
     partyId: party.partyId,
     locationId: input.locationId ?? null,
@@ -238,11 +245,11 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
             agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at)
-          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${spam ? "?" : "NULL"}, ?)`,
     params: [
       id,
       input.type,
-      machine.initial,
+      initial,
       party.partyId,
       input.locationId ?? null,
       caller.actor.channel,
@@ -257,6 +264,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       who.possiblePartyId,
       now,
       now,
+      ...(spam ? [now] : []),
       requestExpiresAt,
     ],
     method: "run",
@@ -298,7 +306,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       seq: 1,
       event: "create",
       fromState: null,
-      toState: machine.initial,
+      toState: initial,
       actorKind: caller.actor.kind,
       actorId: caller.actor.id,
       meta: {
@@ -309,6 +317,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         ...(priced.unpriced ? { unpriced: true } : {}),
         // A price the owner's reward gave this customer (ADR-018 §4): for the owner's history.
         ...(payload.personalised ? { personalised: true } : {}),
+        // Put aside as it arrived (ADR-026 §7): why, for the owner who looks under Spam.
+        ...(spam ? { spam } : {}),
         ...actorMeta(caller),
       },
       now,
@@ -330,6 +340,17 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         now,
       }),
     );
+  }
+  // A message put aside as spam as it arrived tells nobody and moves nothing: no alert, no rule, no
+  // webhook. It waits under Spam for the owner.
+  if (spam) {
+    try {
+      await db.batch(statements);
+    } catch (error) {
+      const hit = await diagnoseFailure(db, error, { idem, requestHash });
+      return replay(db, caller, hit, requestHash);
+    }
+    return { view, accessToken, replayed: false };
   }
   statements.push(
     jobStatement("notify", { to: "owner", itemId: id, event: "create", eventId }, now, {

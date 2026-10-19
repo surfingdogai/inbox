@@ -1,10 +1,11 @@
 import type { ItemType, ItemView, ListParams, Page } from "./types";
 
 /**
- * The rail: what the owner should look at, everything open, one type, what is done, and items with
- * an email to the customer that could not be sent.
+ * The rail: what the owner should look at, everything open, one type, what is done, items with an
+ * email to the customer that could not be sent, and messages put aside as spam (by the owner, or as
+ * they arrived: ADR-026 §7).
  */
-export type Filter = "needs" | "all" | "done" | "unsent" | ItemType;
+export type Filter = "needs" | "all" | "done" | "unsent" | "spam" | ItemType;
 
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
@@ -16,6 +17,7 @@ export const FILTERS: readonly { readonly key: Filter; readonly label: string; r
   { key: "refund", label: "Refunds", type: "refund" },
   { key: "done", label: "Done" },
   { key: "unsent", label: "Email not sent" },
+  { key: "spam", label: "Spam" },
 ];
 
 export function parseFilter(value: unknown): Filter | undefined {
@@ -38,6 +40,8 @@ export function paramsFor(filter: Filter, q: string | undefined, sandbox: boolea
       return { ...base, open_only: false, limit: 50 };
     case "unsent":
       return { ...base, mail_failed: true, open_only: false };
+    case "spam":
+      return { ...base, state: "spam", open_only: false };
     default:
       return { ...base, type: filter, open_only: true };
   }
@@ -99,6 +103,7 @@ export function countFor(counts: Counts | undefined, filter: Filter): string {
     case "done":
       return suffix(counts.done, counts.doneMore);
     case "unsent":
+    case "spam":
       // Not counted: the rail's counts come from the open items.
       return "";
     default:

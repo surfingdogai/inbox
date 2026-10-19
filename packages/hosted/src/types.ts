@@ -131,6 +131,11 @@ export const policyPayloadSchema = z.looseObject({
           .max(12),
         checked_at: z.string().max(40).nullable().optional(),
         problem: z.string().max(500).nullable().optional(),
+        /** Where the business's DNS is run, and its steps for adding the rows (the control plane's providers). */
+        dns_provider: z
+          .looseObject({ name: z.string().min(1).max(80), steps: z.array(z.string().max(400)).max(10) })
+          .nullable()
+          .optional(),
       })
       .nullable()
       .optional(),

@@ -180,6 +180,13 @@ function Empty({ filter, q, label }: { filter: Filter; q: string | undefined; la
       </div>
     );
   }
+  if (filter === "spam") {
+    return (
+      <div className="state">
+        <h3>Nothing put aside.</h3>
+      </div>
+    );
+  }
   if (filter === "done") {
     return (
       <div className="state">
@@ -206,7 +213,7 @@ function ForwardConfirm() {
   if (!waiting) return null;
   return (
     <p className="test-banner" role="status">
-      {waiting.provider_name} asks you to confirm forwarding from {waiting.address}.{" "}
+      {waiting.confirmation?.provider || waiting.provider_name} asks you to confirm forwarding from {waiting.address}.{" "}
       <Link to="/settings/email">Open it</Link>
     </p>
   );
