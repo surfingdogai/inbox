@@ -108,6 +108,7 @@ describe("the fee at a moment", () => {
   });
   it("is the first step still ahead, else the fee after the last", () => {
     expect(feeAt(dated, Date.parse("2026-12-09T14:59:58Z"))).toEqual(JPY(0));
+    expect(feeAt(dated, Date.parse("2026-12-09T14:59:59Z"))).toEqual(JPY(0));
     expect(feeAt(dated, Date.parse("2026-12-09T15:00:00Z"))).toEqual(JPY(25_800));
     expect(feeAt(dated, Date.parse("2026-12-12T05:00:00Z"))).toEqual(JPY(25_800));
   });

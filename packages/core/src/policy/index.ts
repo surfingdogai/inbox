@@ -100,7 +100,8 @@ export function feeAt(
   at: number,
   opts: { readonly total?: Money | undefined; readonly keep?: Money | undefined } = {},
 ): Money {
-  const step = dated.steps.find((s) => Date.parse(s.until) > at);
+  // A step's `until` is its last moment: "free until 9 Dec, 23:59:59" is free at 23:59:59 too.
+  const step = dated.steps.find((s) => Date.parse(s.until) >= at);
   const fee = step ? step.fee : dated.after;
   const kept = opts.keep && opts.keep.currency === fee.currency ? opts.keep.value : 0;
   const cap = opts.total && opts.total.currency === fee.currency ? opts.total.value : Number.POSITIVE_INFINITY;
