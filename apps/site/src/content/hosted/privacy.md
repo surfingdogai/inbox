@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted pilot
-updated: 18 October 2026
+updated: 20 October 2026
 order: 3
 ---
 
@@ -16,6 +16,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
 - **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you (the pilot is free; the counts are what a future price would follow).
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
+- **Google Calendar, if you connect it**: what your inbox reads from Google (which account it is, when you are busy, the events it adds for the bookings you confirm) is kept in your inbox with the rest of its data, which we process for you under the [processing agreement](/hosted/processing/). Google's access is kept encrypted; a disconnect asks Google to take it back and deletes it. What the inbox asks Google for, and why, is on our [privacy page](/privacy/#google-h). Basis: our contract with you; you ask for it by connecting.
 - **Your listing on network.surfingdog.ai**: from the day your inbox goes live, your business is listed in its directory, where AI agents search, and the receipts your inbox signs are kept there ([what it gets](/privacy/#network-h)). Basis: our contract with you. Switch it off in Settings → Networks.
 - **Reports and our decisions about them**, if anyone reports your inbox. Basis: our legal duties under the Digital Services Act.
 
@@ -28,7 +29,9 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 
 ## Who else sees it
 
-Our edge network carries every request to the service and the codes and notices we send you, runs the bot check on the sign-up form, and holds your hostname so that it can route your inbox's traffic. It can do this from its locations outside the European Union. It also keeps its own records, which can be kept outside the European Union: of requests (addresses, times and the pages asked for), to run and protect its network, and of the email it delivers (sender, recipient, subject and whether it arrived) for about a month, with a list of addresses that bounced or reported mail as spam.
+Our edge network carries every request to the service and the codes and notices we send you, runs the bot check on the forms to sign up, sign in, send feedback and report an inbox, and holds your hostname so that it can route your inbox's traffic. It can do this from its locations outside the European Union. It also keeps its own records, which can be kept outside the European Union: of requests (addresses, times and the pages asked for), to run and protect its network, and of the email it delivers (sender, recipient, subject and whether it arrived) for about a month, with a list of addresses that bounced or reported mail as spam.
+
+That check runs out of sight. What it reads, and the addendum that describes it, are on our [privacy page](/privacy/#bot-check).
 
 The company that rents us our servers holds the database, in the European Union, and our backups of it are stored in the European Union. The [processing agreement](/hosted/processing/) describes both companies.
 
