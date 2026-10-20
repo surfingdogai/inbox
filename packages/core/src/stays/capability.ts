@@ -30,6 +30,7 @@ import {
   confirmationSentence,
   ESTIMATE_WORDS,
   judgeStay,
+  lodgingJsonLd,
   type OfferMaker,
   offerMaker,
   propertyPublic,
@@ -754,6 +755,13 @@ export class StayCapabilities {
   async closeNights(caller: Caller, raw: unknown): Promise<{ saved: true }> {
     await Setup.closeNights(this.db, caller, parse(I.closeNightsInput, raw));
     return { saved: true };
+  }
+
+  /** The place to stay as schema.org reads it, for the business's own page (`lodgingJsonLd`); null when none. */
+  async frontJsonLd(url: string | null, now: number = Date.now()): Promise<Record<string, unknown> | null> {
+    const p = (await listProperties(this.db)).find((x) => x.active);
+    const setup = p ? await readSetup(this.db, p.id) : null;
+    return setup ? lodgingJsonLd(setup, { url, today: dateIn(now, setup.property.timezone) }) : null;
   }
 
   /** A calendar link as the nights another channel took for one room type (or none). */

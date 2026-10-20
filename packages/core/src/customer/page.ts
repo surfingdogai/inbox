@@ -30,6 +30,11 @@ export interface CustomerPage {
   readonly nav?: readonly PageLink[] | undefined;
   readonly footer: string;
   readonly help: string;
+  /**
+   * What the page is, as schema.org reads it (a place to stay's LodgingBusiness, ADR-033 §6.4):
+   * written as a JSON-LD data block, which nothing runs.
+   */
+  readonly jsonLd?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export interface PageSection {

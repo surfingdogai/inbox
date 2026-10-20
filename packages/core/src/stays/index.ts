@@ -35,6 +35,7 @@ export {
   confirmationSentence,
   ESTIMATE_WORDS,
   judgeStay,
+  lodgingJsonLd,
   lodgingProfile,
   OFFER_VALID_MS,
   offerMaker,

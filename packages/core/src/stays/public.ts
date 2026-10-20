@@ -1,4 +1,4 @@
-import type { PropertyPublic, StayAvailability, StayQuote } from "@surfingdog/spec";
+import { decimalOf, type PropertyPublic, type StayAvailability, type StayQuote } from "@surfingdog/spec";
 import { base64Url } from "../customer/offer";
 import type { Db } from "../db";
 import { policySentence } from "../policy/index";
@@ -512,3 +512,121 @@ export function lodgingProfile(setup: PropertySetup): {
 }
 
 export { stayLang };
+
+const LODGING_TYPE: Readonly<Record<string, string>> = {
+  hotel: "Hotel",
+  hostel: "Hostel",
+  bnb: "BedAndBreakfast",
+  campsite: "Campground",
+  rental: "VacationRental",
+  apartment: "VacationRental",
+};
+const ROOM_TYPE: Readonly<Record<string, string>> = { rental: "Accommodation", apartment: "Apartment" };
+const BED_WORDS: Readonly<Record<string, string>> = {
+  double: "Double",
+  single: "Single",
+  queen: "Queen",
+  king: "King",
+  bunk: "Bunk bed",
+  sofa_bed: "Sofa bed",
+  futon: "Futon",
+  cot: "Cot",
+};
+const AMENITY_WORDS: Readonly<Record<string, string>> = {
+  private_bathroom: "Private bathroom",
+  air_conditioning: "Air conditioning",
+  heating: "Heating",
+  kitchen: "Kitchen",
+  balcony: "Balcony",
+  sea_view: "Sea view",
+  desk: "Desk",
+  wifi: "Wi-Fi",
+  washer: "Washer",
+  parking: "Parking",
+  step_free: "Step-free access",
+  onsen: "Onsen",
+};
+
+/**
+ * The place to stay as schema.org reads it, for the business's own page (ADR-033 §6.4): a
+ * LodgingBusiness of its kind with its check-in and check-out times and each room offered as a
+ * HotelRoom (an Apartment or an Accommodation for a rental), with its beds, occupancy and amenities.
+ * An Offer with a price only where a stay is booked at once — rooms kept for direct guests, or a
+ * connected system confirming on its own — since anywhere else the price is the property's answer to
+ * a request, not an offer anyone can take. Its price is the lowest a night on a plan guests are
+ * offered; the quote at booking adds every tax and fee. Null with no room to offer.
+ */
+export function lodgingJsonLd(
+  setup: PropertySetup,
+  opts: { readonly url?: string | null | undefined; readonly today?: string | undefined } = {},
+): Record<string, unknown> | null {
+  const p = setup.property;
+  const rooms = setup.rooms.filter((r) => r.active && r.offered);
+  if (!p.active || rooms.length === 0) return null;
+  const plans = new Set(setup.plans.filter((x) => x.active && x.offered).map((x) => x.id));
+  const kind = confirmationKind(setup);
+  const today = opts.today ?? "";
+  const kept = (roomId: string) =>
+    kind === "instant" ||
+    (kind === "instant_some" &&
+      setup.allotments.some((a) => a.roomTypeId === roomId && a.units > 0 && (!today || a.toDate >= today)));
+  const roomLd = (r: RoomTypeRow) => ({
+    "@type": ROOM_TYPE[p.kind] ?? "HotelRoom",
+    name: r.name,
+    ...(r.description ? { description: r.description } : {}),
+    occupancy: { "@type": "QuantitativeValue", maxValue: r.capacity.total },
+    ...(r.beds.length
+      ? {
+          bed: r.beds.map((b) => ({
+            "@type": "BedDetails",
+            numberOfBeds: b.count,
+            typeOfBed: BED_WORDS[b.type] ?? b.type,
+          })),
+        }
+      : {}),
+    ...(r.sizeM2 ? { floorSize: { "@type": "QuantitativeValue", value: r.sizeM2, unitCode: "MTK" } } : {}),
+    ...(r.amenities.length || r.accessible
+      ? {
+          amenityFeature: [...r.amenities, ...(r.accessible && !r.amenities.includes("step_free") ? ["step_free"] : [])]
+            .filter((a) => AMENITY_WORDS[a])
+            .map((a) => ({ "@type": "LocationFeatureSpecification", name: AMENITY_WORDS[a], value: true })),
+        }
+      : {}),
+  });
+  const offers = rooms.flatMap((r) => {
+    if (!kept(r.id)) return [];
+    const nightly = setup.rates
+      .filter((x) => x.roomTypeId === r.id && plans.has(x.ratePlanId) && x.fromDate === "")
+      .map((x) => x.nightly);
+    if (nightly.length === 0) return [];
+    const price = decimalOf(Math.min(...nightly), p.currency);
+    if (price === null) return [];
+    return [
+      {
+        "@type": "Offer",
+        itemOffered: roomLd(r),
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          minPrice: price,
+          priceCurrency: p.currency,
+          unitText: "night",
+          valueAddedTaxIncluded: p.pricesInclude !== null,
+        },
+        description: "From, a night; the quote at booking includes every tax and fee.",
+      },
+    ];
+  });
+  return {
+    "@context": "https://schema.org",
+    "@type": LODGING_TYPE[p.kind] ?? "LodgingBusiness",
+    name: p.name,
+    ...(opts.url ? { url: opts.url } : {}),
+    ...(p.locality ? { address: { "@type": "PostalAddress", addressLocality: p.locality } } : {}),
+    checkinTime: p.checkInFrom,
+    checkoutTime: p.checkOutUntil,
+    currenciesAccepted: p.currency,
+    petsAllowed: p.pets.allowed === "yes",
+    containsPlace: rooms.map(roomLd),
+    ...(offers.length ? { makesOffer: offers } : {}),
+  };
+}
