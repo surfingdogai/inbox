@@ -6,7 +6,7 @@
  * button, so the three buttons line up.
  */
 import { DEPLOY_URL, HOSTED_PILOT_OPEN, HOSTED_RUN, START_URL } from "../lib/hosted";
-import { INSTALL_COMMAND } from "../lib/self-host";
+import { INSTALL_COMMAND, SERVER_WHAT } from "../lib/self-host";
 
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
@@ -61,8 +61,7 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
       <article class="glass card lift way">
         <h3 class="h-card">Your own server</h3>
         <p class="card-text">
-          One command on Ubuntu or Debian: HTTPS, a backup every night, updates that roll back. Or the Docker image, on a
-          platform you use.
+          {SERVER_WHAT} Or the <a class="link" href="/docs/run-it-yourself/#docker-or-a-platform-you-use">Docker image</a>.
         </p>
         <pre class="cmd mono"><code>{INSTALL_COMMAND}</code></pre>
         <div class="foot">

@@ -25,8 +25,7 @@ reads any website the way a customer's assistant would and shows what it can do 
 **We host it for you**, free during the pilot, at an address on your own domain:
 [get your agent inbox](https://app.surfingdog.ai/start). Or run it yourself, three ways:
 
-**On your own server** (Ubuntu or Debian): one command. It asks for your address and your email, then
-sets up HTTPS, a backup every night, and updates that roll back on their own.
+**On your own server**: Point a subdomain, such as inbox.yourbusiness.com, at an Ubuntu or Debian server, then run one command. HTTPS, a backup every night, and updates that undo themselves if they fail.
 
 ```bash
 curl -fsSL https://surfingdog.ai/install.sh | sudo sh
@@ -34,10 +33,15 @@ curl -fsSL https://surfingdog.ai/install.sh | sudo sh
 
 **Docker, or a platform you use**: the image `ghcr.io/surfingdogai/inbox`, for amd64 and arm64. The data
 lives in the volume. [deploy/](deploy/) has the Compose file with HTTPS, and templates for Coolify,
-Fly.io, Render, Railway and a DigitalOcean Droplet.
+Fly.io, Render, Railway and a DigitalOcean Droplet. By hand, it answers on the server itself only,
+behind a proxy with TLS that drops a `CF-Connecting-IP` the caller sent:
 
 ```bash
-docker run -d -p 8787:8787 -v inbox-data:/opt/inbox/data -e INBOX_OWNER_EMAIL=you@yourbusiness.com ghcr.io/surfingdogai/inbox
+(umask 077; echo "INBOX_SECRET_KEY=$(openssl rand -base64 32)" > inbox.env)   # keep a copy somewhere safe
+docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
+  -v inbox-data:/opt/inbox/data --env-file inbox.env \
+  -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
+  ghcr.io/surfingdogai/inbox:0.1.0
 ```
 
 **Cloudflare Workers**, with D1, a queue and a cron. Press

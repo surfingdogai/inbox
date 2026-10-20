@@ -50,7 +50,8 @@ hands itself to the pnpm 11.3.0 that `packageManager` names; the root `build` sc
 
 - **It builds and bundles.** The install and the build pass, and the dry run reads the owner app's
   61 files and binds `DB` (D1), `JOBS` (the queue), `EMAIL` (send_email) and `ASSETS`. The Worker is
-  3.85 MB, 836 KB gzipped, under the free plan's 3 MB; `wrangler check startup` measures about 70 ms.
+  3,851 KiB (836 KiB gzipped), under the free plan's 3 MB limit, which counts the compressed size;
+  `wrangler check startup` measures about 70 ms.
 - **What the button provisions** is what the file names: the D1 database (the zeros are the
   placeholder ID the documentation asks for) and the queue, both free-plan resources since Queues
   joined the free plan (Feb 2026). Migrations run on the first request, so no deploy step is needed.
@@ -61,7 +62,7 @@ hands itself to the pnpm 11.3.0 that `packageManager` names; the root `build` sc
   addresses is free on every plan, which suggests it does. The first person to press it on a new
   free account settles it; if it refuses, the fix is to move the binding out of the template and
   have the email step add it.
-- **Cosmetic:** `vars.INBOX_ENV = "development"` shows in every deployed Worker's bindings, and
-  nothing reads it.
+- **Cosmetic, removed:** `vars.INBOX_ENV = "development"` showed in every deployed Worker's settings,
+  and nothing read it; it is gone from `wrangler.jsonc`.
 
-Nothing in the root `wrangler.jsonc` or the build needed changing.
+Nothing else in the root `wrangler.jsonc` or the build needed changing.

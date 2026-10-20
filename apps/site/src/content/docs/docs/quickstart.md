@@ -48,7 +48,7 @@ Every push to your copy of the repository deploys again. To update, pull this re
 
 ## Your own server
 
-On a fresh Ubuntu or Debian server, one command installs it with HTTPS, a nightly backup and updates that roll back on their own:
+On a fresh Ubuntu or Debian server, one command installs it with HTTPS, a nightly backup, and updates that undo themselves if they fail:
 
 ```bash
 curl -fsSL https://surfingdog.ai/install.sh | sudo sh
@@ -101,19 +101,18 @@ Open `/login`: enter an address from `INBOX_OWNER_EMAIL`, then open the link you
 The image is `ghcr.io/surfingdogai/inbox`, for amd64 and arm64, published on every release. It does the same build and runs the one file as an unprivileged user (uid 10001):
 
 ```bash
-docker run -d --name inbox -p 8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox:latest
+docker run -d --name inbox -p 127.0.0.1:8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox:0.1.0
 curl -s localhost:8787/healthz
 ```
 
-The SQLite file lives in the `inbox-data` volume, so the container can be replaced without losing anything. With no variables at all it answers the public API and the MCP server at `/mcp`. Pass the variables from the table above with `-e`, for a real instance at least these:
+The SQLite file lives in the `inbox-data` volume, so the container can be replaced without losing anything. With no variables at all it answers the public API and the MCP server at `/mcp`. It answers on the server itself only (`127.0.0.1`), over plain HTTP: put a proxy with TLS in front, one that drops a `CF-Connecting-IP` the caller sent, as the inbox limits callers by it. Pass the variables from the table above with `-e` or a file, for a real instance at least these:
 
 ```bash
-openssl rand -base64 32        # the secret key: store it somewhere safe, the database needs it
-docker run -d --name inbox -p 8787:8787 -v inbox-data:/opt/inbox/data \
-  -e INBOX_PUBLIC_URL=https://inbox.yourdomain.com \
-  -e INBOX_OWNER_EMAIL=you@yourdomain.com \
-  -e INBOX_SECRET_KEY='<the key>' \
-  ghcr.io/surfingdogai/inbox:latest
+(umask 077; echo "INBOX_SECRET_KEY=$(openssl rand -base64 32)" > inbox.env)   # keep a copy somewhere safe
+docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
+  -v inbox-data:/opt/inbox/data --env-file inbox.env \
+  -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
+  ghcr.io/surfingdogai/inbox:0.1.0
 ```
 
 The commands above run inside the container, for example `docker exec inbox node /opt/inbox/server.mjs create-owner-key laptop`, and two more for backups: `backup <file>` and `check-db <file>` ([Backups](/docs/backups/)). A folder of the host mounted as the data folder must belong to uid 10001 (`sudo chown 10001:10001 <folder>`); started with `--user 0`, the image gives it to that user itself, then runs as it. [deploy/docker-compose.yml](https://github.com/surfingdogai/inbox/blob/main/deploy/docker-compose.yml) adds Caddy with HTTPS in front. `docker build -t surfingdog-inbox .` builds the same image from the repository.

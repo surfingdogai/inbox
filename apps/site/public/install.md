@@ -236,7 +236,7 @@ Three ways, the same inbox. Take B1 unless the person says otherwise.
 - **B1. One command**, on a fresh Ubuntu (22.04 or newer) or Debian (12 or newer) server, amd64 or
   arm64, that nothing else serves websites from. It installs Docker if it is missing, writes
   `/opt/inbox`, and starts the inbox behind Caddy, which gets the HTTPS certificate on its own. Then
-  updates roll back on their own, and a backup is made every night.
+  updates undo themselves if they fail, and a backup is made every night.
 - **B2. The Docker image** on a server or a platform the person already uses (Coolify, Fly.io,
   Render, Railway): https://surfingdog.ai/docs/platforms/ has each one's steps. Not DigitalOcean App
   Platform, which keeps no disk between deploys; a Droplet takes B1.
@@ -255,18 +255,21 @@ getent ahosts inbox.theirdomain.com    # on the server: the server's own address
 ```
 
 **Then the installer**, as root, with the address and the owner's email the person gave you in the
-preflight. Check its checksum first:
+preflight. Take it from the newest release on GitHub and check it against that release's checksums
+(the `install.sh.sha256` beside surfingdog.ai's copy only shows a download was not cut short):
 
 ```bash
-curl -fsSLO https://surfingdog.ai/install.sh
-curl -fsSL https://surfingdog.ai/install.sh.sha256 | sha256sum -c      # expect: install.sh: OK
+curl -fsSLO https://github.com/surfingdogai/inbox/releases/latest/download/install.sh
+curl -fsSL https://github.com/surfingdogai/inbox/releases/latest/download/SHA256SUMS | grep ' install.sh$' | sha256sum -c      # expect: install.sh: OK
 sudo sh install.sh --domain inbox.theirdomain.com --email them@theirdomain.com --yes
 ```
 
-It stops, and changes nothing, when the server is not Ubuntu or Debian, when something else holds
-ports 80 or 443 (it names it: take B3 then), or when the address does not point at the server (it
-says where it points, and what to set). Report what it says to the person; never add
-`--skip-dns-check` to get past a record that is wrong. It sends nothing about the person anywhere.
+It stops before it installs Docker or writes anything when the server is not Ubuntu or Debian, when
+something else holds ports 80 or 443 (it names it: take B3 then), or when the address has no DNS
+record. If the record points elsewhere, or through Cloudflare's proxy, it may already have installed
+Docker; it never writes /opt/inbox. It says where the record points, and what to set. Report what it
+says to the person; never add `--skip-dns-check` to get past a record that is wrong. It sends nothing
+about the person anywhere.
 
 Verify, from outside the server:
 
@@ -275,7 +278,9 @@ curl -s https://inbox.theirdomain.com/healthz
 ```
 
 Expect `{"ok":true,…}`. The certificate can take a minute after the first start;
-`sudo inbox logs caddy` says why when it does not come.
+`sudo inbox logs caddy` says why when it does not come. Its last lines hold the owner's first
+sign-in (a link, and a code), good once, for 15 minutes: give them to the person, and do not use
+them yourself.
 
 What it wrote: `/opt/inbox/.env` (the settings, readable by root only, with an `INBOX_SECRET_KEY`
 it generated), `/opt/inbox/docker-compose.yml` and `Caddyfile`, the data in `/opt/inbox/data`, the
@@ -411,8 +416,8 @@ written to the server's log instead. Read it from there and give it to them. It 
 minutes. If sending failed, the log says why and holds no link: fix the mail setup, and ask again.
 If the log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo: set it again.
 
-- Installed with the one command (B1): `sudo inbox sign-in` shows the last sign-in email's code and
-  link.
+- Installed with the one command (B1): `sudo inbox sign-in` asks the inbox for a new sign-in email
+  and shows its code and link.
 - On their own server otherwise: `journalctl -u inbox` (or the container's log).
 - On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask again, or open the
   Worker in the dashboard, go to Logs, and search for `sign-in email`.

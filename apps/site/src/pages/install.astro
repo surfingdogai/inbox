@@ -4,8 +4,9 @@
 // for a person, a file is what an agent can fetch and follow. Once the hosted pilot opens
 // (src/lib/hosted.ts), the page's head offers the hosted inbox and its button, and the line for
 // your AI follows as the other way. The closed lede keeps its line breaks as they were, so the
-// closed page is built exactly as before. After the head come the three ways to run it yourself
-// (SELF_HOST): one command on a server, the Docker image on a platform, Cloudflare Workers.
+// closed page is built exactly as before. After the line for your AI and what it does come the three
+// ways to run it by hand (SELF_HOST): one command on a server, the Docker image on a platform,
+// Cloudflare Workers.
 import Layout from "../layouts/Layout.astro";
 import { DEPLOY_URL, HOSTED_INSTALL } from "../lib/hosted";
 import { SELF_HOST } from "../lib/self-host";
@@ -43,11 +44,51 @@ const CONNECT_PROMPT =
     }
   </section>
 
+  <section class="section" aria-labelledby="prompt-h">
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">{HOSTED_INSTALL?.promptEyebrow ?? "Step one, and often the only step"}</p>
+          <h2 class="h-section" id="prompt-h">Paste this to your AI</h2>
+        </div>
+      </div>
+      <pre class="glass panel prompt"><code>{PROMPT}</code></pre>
+      <p class="hint">
+        It will ask you a few things it cannot know: where you want it to run, which subdomain, which address signs in
+        as the owner. It is told to ask before anything that costs money or touches your DNS, and to check its work
+        after every step rather than assume.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="what-h" data-reveal>
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What it does</p>
+          <h2 class="h-section" id="what-h">The same five things, either way</h2>
+        </div>
+      </div>
+      <ul class="checks">
+        <li><b>Puts it somewhere.</b> Your Cloudflare account, free to start, or your own server.</li>
+        <li><b>Gives it your subdomain.</b> Usually <code>inbox.yourdomain.com</code>, with a certificate.</li>
+        <li><b>Turns on email in,</b> so a customer can simply write to it, and proves it with a test message.</li>
+        <li><b>Signs you in</b> and hands you the key, once.</li>
+        <li><b>Sets your business up:</b> hours, services, products, and the rules that answer for you.</li>
+      </ul>
+      <p class="hint">
+        The instructions it follows are at <a class="link" href="/install.md">/install.md</a>. They are written for a
+        machine: every secret is generated rather than guessed, every step has a command that proves it worked, and it
+        is told to stop and tell you rather than carry on when a check fails. Read them yourself if you like.
+      </p>
+    </div>
+  </section>
+
   <section class="section" id="yourself" aria-labelledby="yourself-h">
     <div class="wrap wrap-read">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">Or run it yourself</p>
+          <p class="eyebrow">Or by hand</p>
           <h2 class="h-section" id="yourself-h">Three ways</h2>
         </div>
       </div>
@@ -85,46 +126,6 @@ const CONNECT_PROMPT =
           ))
         }
       </ol>
-    </div>
-  </section>
-
-  <section class="section" aria-labelledby="prompt-h">
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">{HOSTED_INSTALL?.promptEyebrow ?? "Step one, and often the only step"}</p>
-          <h2 class="h-section" id="prompt-h">Paste this to your AI</h2>
-        </div>
-      </div>
-      <pre class="glass panel prompt"><code>{PROMPT}</code></pre>
-      <p class="hint">
-        It will ask you a few things it cannot know: where you want it to run, which subdomain, which address signs in
-        as the owner. It is told to ask before anything that costs money or touches your DNS, and to check its work
-        after every step rather than assume.
-      </p>
-    </div>
-  </section>
-
-  <section class="section" aria-labelledby="what-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">What it does</p>
-          <h2 class="h-section" id="what-h">The same five things, either way</h2>
-        </div>
-      </div>
-      <ul class="checks">
-        <li><b>Puts it somewhere.</b> Cloudflare, about five dollars a month, or your own server.</li>
-        <li><b>Gives it your subdomain.</b> Usually <code>inbox.yourdomain.com</code>, with a certificate.</li>
-        <li><b>Turns on email in,</b> so a customer can simply write to it, and proves it with a test message.</li>
-        <li><b>Signs you in</b> and hands you the key, once.</li>
-        <li><b>Sets your business up:</b> hours, services, products, and the rules that answer for you.</li>
-      </ul>
-      <p class="hint">
-        The instructions it follows are at <a class="link" href="/install.md">/install.md</a>. They are written for a
-        machine: every secret is generated rather than guessed, every step has a command that proves it worked, and it
-        is told to stop and tell you rather than carry on when a check fails. Read them yourself if you like.
-      </p>
     </div>
   </section>
 

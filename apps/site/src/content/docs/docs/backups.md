@@ -33,9 +33,9 @@ To copy them off the server, any tool that copies files will do. For example, ev
 sudo inbox restore /opt/inbox/data/backups/inbox-20261020T033012Z.db
 ```
 
-It looks at the file first (that it is an inbox's database, sound, and from this version or an older one), says what it holds, and asks. Then it makes a backup of the inbox as it is now, stops it, puts the backup in its place and starts it. If the inbox does not start on it, it puts back what was there. A backup from an older version is brought up to date when the inbox starts; one from a newer version is refused until you update.
+It looks at the file first (that it is an inbox's database, sound, and from this version or an older one), says what it holds, and asks. Then it makes a backup of the inbox as it is now, copies the backup into place, stops the inbox only for the swap, and starts it. If the inbox does not start on it, it puts back what was there. The last five backups made before a restore are kept. A backup from an older version is brought up to date when the inbox starts; one from a newer version is refused until you update.
 
-On a new server: run the installer with the same address, put your `INBOX_SECRET_KEY` in `/opt/inbox/.env` in place of the one it generated, `sudo inbox restart`, then restore.
+On a new server: run the installer with the same address, then put your `INBOX_SECRET_KEY` in `/opt/inbox/.env` in place of the one it generated (`sudo nano /opt/inbox/.env`), `sudo inbox restart`, and restore.
 
 ### With Docker or Compose of your own
 
@@ -43,6 +43,8 @@ On a new server: run the installer with the same address, put your `INBOX_SECRET
 docker exec inbox node /opt/inbox/server.mjs backup /opt/inbox/data/backups/inbox-$(date -u +%Y%m%dT%H%M%SZ).db
 docker exec inbox node /opt/inbox/server.mjs check-db /opt/inbox/data/backups/<file>   # before a restore
 ```
+
+The backup command makes the `backups` folder when it is not there yet.
 
 To restore by hand: stop the container, replace `inbox.db` in the data folder with the backup (and delete `inbox.db-wal` and `inbox.db-shm` beside it), give it to uid 10001, and start the container.
 
@@ -52,14 +54,14 @@ To restore by hand: stop the container, replace `inbox.db` in the data folder wi
 
 ```bash
 cd /opt/inbox
-curl -fsSLO https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/docker-compose.litestream.yml
-curl -fsSLO https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/litestream.yml
-curl -fsSL https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/litestream.env.example -o litestream.env
-sudo chmod 600 litestream.env      # then fill it in: the bucket, its endpoint, and a key for that bucket only
-sudo docker compose -f docker-compose.yml -f docker-compose.litestream.yml up -d
+sudo curl -fsSLO https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/docker-compose.litestream.yml
+sudo curl -fsSLO https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/litestream.yml
+sudo curl -fsSL https://raw.githubusercontent.com/surfingdogai/inbox/main/deploy/litestream/litestream.env.example -o litestream.env
+sudo chmod 600 litestream.env && sudo nano litestream.env   # the bucket, its endpoint, and a key for that bucket only
+sudo inbox start
 ```
 
-Its keys stay in `litestream.env`, apart from the inbox's own settings. To restore from it, into a file the inbox then restores from:
+Its keys stay in `litestream.env`, apart from the inbox's own settings. With the file there, the `inbox` command runs Litestream beside the inbox from then on, and stops it while a restore, a rollback or an update swaps the database. To restore from it, into a file the inbox then restores from:
 
 ```bash
 sudo docker compose -f docker-compose.yml -f docker-compose.litestream.yml run --rm litestream \
@@ -83,4 +85,4 @@ npx wrangler d1 export surfingdog-inbox --remote --output=inbox.sql     # a copy
 
 ## Taking your data with you
 
-Apart from backups, the owner can download everything the inbox holds from the owner app, wherever it runs: a copy without who is signed in or any secret, to take to another inbox.
+Apart from backups, the owner app downloads everything the inbox holds, without sign-ins or secrets, ready to bring into another inbox.
