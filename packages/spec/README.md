@@ -86,6 +86,13 @@ or network:
   dated policy, `datedPolicySchema`), and payment schedules in UCP's `payment.terms` shape
   (`paymentScheduleSchema`: `immediate`, `deferred` or `at_property`; `scheduleProblem`, the invariant
   that the schedules add up to the total).
+- 0.11 ([ADR-035](../../docs/adr/035-salons-and-staff.md)), optional for a network: salons and staff. A
+  member of staff as the public sees them (`staffMemberSchema`: a first name, a photo, the services they
+  give), an add-on (`serviceAddOnSchema`: the minutes and price it adds), a deposit rule
+  (`depositRuleSchema`: a share of the price or an amount) and the deposit one booking asks
+  (`bookingDepositSchema`), with `depositFor`, which rounds a share half up to the currency's own minor
+  unit. An inbox that lists staff offers `list_staff`, and takes `staff_id` and `add_ons` on
+  `check_availability` and `create_booking`; a 0.10 reader ignores what it does not know.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
