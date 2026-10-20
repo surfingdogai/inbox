@@ -44,6 +44,12 @@ jobs:
           [ "$TAG" = "$PKG" ] || { echo "::error::tag sdk-v$TAG does not match package.json $PKG"; exit 1; }
           [ "$SRC" = "$PKG" ] || { echo "::error::SDK_VERSION $SRC does not match package.json $PKG"; exit 1; }
 
+      - name: the README's Changes date this release
+        run: |
+          if grep -n "not yet published" packages/sdk/README.md; then
+            echo "::error::packages/sdk/README.md still says 'not yet published': give the release its date in Changes"; exit 1
+          fi
+
       # The same gate the local script applies. A release is a release only if everything is green.
       - run: pnpm typecheck
       - run: pnpm test:node

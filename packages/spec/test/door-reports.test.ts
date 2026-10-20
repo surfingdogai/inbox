@@ -7,7 +7,9 @@ import {
   type DoorReadObservation,
   type DoorReportSource,
   doorReportClassesVocabSchema,
+  doorReportEarns,
   doorReportEffect,
+  doorReportsMeSchema,
   doorReportsRequestSchema,
   doorReportsResponseSchema,
   doorStatusAfter,
@@ -15,7 +17,10 @@ import {
   NETWORK_ONLY_DOOR_CLASSES,
   parseStrictJson,
   pingDoorsSchema,
+  READ_ALLOWANCE,
+  REPORTER_CREDIT_RULE,
   readDoorReports,
+  reporterCreditOf,
   signedPingResponseSchema,
 } from "../src/index";
 import vectors from "../vectors/door-reports.json";
@@ -242,5 +247,65 @@ describe("the ping's doors block", () => {
       }).success,
     ).toBe(true);
     expect(pingDoorsSchema.safeParse({ as_of: "2026-10-12T00:00:00Z" }).success).toBe(false);
+  });
+});
+
+describe("the reporters' reading allowance, as vectors/door-reports.json's contributors pin it", () => {
+  const v = vectors.contributors;
+
+  it("publishes the reference network's rule, which this code applies by default", () => {
+    expect(v.rule).toEqual(REPORTER_CREDIT_RULE);
+    expect(v.cases.length).toBeGreaterThanOrEqual(8);
+    expect(v.earning.length).toBeGreaterThanOrEqual(7);
+  });
+
+  for (const c of v.cases) {
+    it(c.name, () => {
+      expect(reporterCreditOf(c.days, v.rule)).toEqual(c.expect);
+      expect(reporterCreditOf(c.days)).toEqual(c.expect);
+    });
+  }
+
+  it("applies a network's own rule when given one", () => {
+    const days = [0, 1, 2].map((ago) => ({ ago, businesses: 4 }));
+    const rule = { window_days: 7, min_days: 3, min_points: 12, per_day_at_most: 4 };
+    expect(reporterCreditOf(days, rule)).toEqual({ points: 12, days: 3, contributor: true });
+    expect(reporterCreditOf(days)).toEqual({ points: 12, days: 3, contributor: false });
+    expect(reporterCreditOf([{ ago: 7, businesses: 4 }], rule)).toEqual({ points: 0, days: 0, contributor: false });
+  });
+
+  for (const c of v.earning) {
+    it(c.name, () => {
+      expect(doorReportEarns(c.report as Parameters<typeof doorReportEarns>[0])).toBe(c.expect.earns);
+    });
+  }
+
+  it("answers GET /v1/door-reports/me as its schema says, for a key and a platform", () => {
+    const base = {
+      credit: { points: 31, days: 7 },
+      contributor: true,
+      threshold: REPORTER_CREDIT_RULE,
+      reads: { ...READ_ALLOWANCE.key, per: "key" },
+      contributor_reads: { ...READ_ALLOWANCE.key, per: "key" },
+      guide: "https://network.example/report.md",
+      as_of: "2026-10-15T12:00:00Z",
+    };
+    const key = { ...base, reporter: { type: "key", keyid: "U1FnFeccbN76Yku-3J2NFbaHkQUK6EUvTBDDdGI27xI" } };
+    expect(doorReportsMeSchema.safeParse(key).success).toBe(true);
+    const platform = {
+      ...base,
+      reporter: { type: "platform", origin: "https://agents.example.com", platform: "example.com" },
+      reads: { ...READ_ALLOWANCE.address, per: "address" },
+    };
+    expect(doorReportsMeSchema.safeParse(platform).success).toBe(true);
+    expect(doorReportsMeSchema.safeParse({ ...key, reporter: { type: "key", keyid: "short" } }).success).toBe(false);
+    expect(
+      doorReportsMeSchema.safeParse({ ...key, reads: { per_minute: 600, burst: 200, per: "person" } }).success,
+    ).toBe(false);
+    expect(doorReportsMeSchema.safeParse({ ...key, as_of: "yesterday" }).success).toBe(false);
+    expect(
+      doorReportsMeSchema.safeParse({ ...key, guide: undefined, rule: "https://network.example/report.md" }).success,
+    ).toBe(false);
+    expect(jsonSchemaOf("door-reports-me")).toMatchObject({ title: expect.stringContaining("/v1/door-reports/me") });
   });
 });

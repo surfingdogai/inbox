@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/door-reports-me.json",
+  "title": "GET /v1/door-reports/me: the signer's own reporting credit and reading allowance (§4.15)",
+  "type": "object",
+  "properties": {
+    "reporter": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "key"
+            },
+            "keyid": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$"
+            }
+          },
+          "required": ["type", "keyid"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "platform"
+            },
+            "origin": {
+              "type": "string",
+              "pattern": "^https:\\/\\/[a-z0-9.-]+$"
+            },
+            "platform": {
+              "type": "string",
+              "pattern": "^[a-z0-9.-]+$"
+            }
+          },
+          "required": ["type", "origin", "platform"]
+        }
+      ]
+    },
+    "credit": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["points", "days"]
+    },
+    "contributor": {
+      "type": "boolean"
+    },
+    "threshold": {
+      "type": "object",
+      "properties": {
+        "window_days": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "min_days": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "min_points": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "per_day_at_most": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["window_days", "min_days", "min_points", "per_day_at_most"]
+    },
+    "reads": {
+      "type": "object",
+      "properties": {
+        "per_minute": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "burst": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "per": {
+          "type": "string",
+          "enum": ["address", "key", "platform"]
+        },
+        "per_address": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["per_minute", "burst", "per"]
+    },
+    "contributor_reads": {
+      "type": "object",
+      "properties": {
+        "per_minute": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "burst": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "per": {
+          "type": "string",
+          "enum": ["address", "key", "platform"]
+        },
+        "per_address": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["per_minute", "burst", "per"]
+    },
+    "guide": {
+      "type": "string",
+      "format": "uri"
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
+  "required": ["reporter", "credit", "contributor", "threshold", "reads", "contributor_reads", "guide", "as_of"]
+}

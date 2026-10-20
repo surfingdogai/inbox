@@ -2378,5 +2378,550 @@
         "result": "fail"
       }
     ]
+  },
+  "contributors": {
+    "description": "The reporters' reading allowance (§4.15, ADR-019 Amendment 1). A report earns its signer 1 point when the network took it (accepted), a verified signature carried its call (sdi-agent/1 with a self-held key, or Web Bot Auth: one platform is every origin of its registrable domain), the same signer's own signed reads returned its business at the network today or yesterday (UTC) (seen_in_reads), and, for a platform, its business is not on the platform's own registrable domain; whatever the report said. A point is one business (a report's domain) on one UTC day the network received reports at it, however many: the day received, never the report's at. cases give, for each day a reporter earned any, how many days ago it was (0 is today) and at how many businesses; the credit is the days in the window (today and the 29 before) with at least one, and their points, each day counted at most per_day_at_most. A contributor has at least min_points points on at least min_days days. rule is the reference network's; a network publishes its own as GET /v1/door-reports/me's threshold. A contributor reads on an allowance of its own as well as an address's (§4.15); nothing else about it changes.",
+    "rule": {
+      "window_days": 30,
+      "min_days": 7,
+      "min_points": 30,
+      "per_day_at_most": 10
+    },
+    "earning": [
+      {
+        "name": "a report a key signed earns a point for its business",
+        "report": {
+          "signature": "key",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": true
+        },
+        "expect": {
+          "earns": true
+        }
+      },
+      {
+        "name": "a report a platform signed earns a point for its business",
+        "report": {
+          "signature": "platform",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": true
+        },
+        "expect": {
+          "earns": true
+        }
+      },
+      {
+        "name": "a business the signer's own signed reads did not return earns nothing",
+        "report": {
+          "signature": "key",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": false
+        },
+        "expect": {
+          "earns": false
+        }
+      },
+      {
+        "name": "for a platform too: its reads, by any of its origins, must have returned the business",
+        "report": {
+          "signature": "platform",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": false
+        },
+        "expect": {
+          "earns": false
+        }
+      },
+      {
+        "name": "an unsigned report earns nothing",
+        "report": {
+          "signature": "none",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": true
+        },
+        "expect": {
+          "earns": false
+        }
+      },
+      {
+        "name": "a report not taken earns nothing",
+        "report": {
+          "signature": "key",
+          "accepted": false,
+          "own_domain": false,
+          "seen_in_reads": true
+        },
+        "expect": {
+          "earns": false
+        }
+      },
+      {
+        "name": "a platform earns nothing at a business on its own registrable domain",
+        "report": {
+          "signature": "platform",
+          "accepted": true,
+          "own_domain": true,
+          "seen_in_reads": true
+        },
+        "expect": {
+          "earns": false
+        }
+      },
+      {
+        "name": "a door that failed earns what a door that worked does",
+        "report": {
+          "signature": "key",
+          "accepted": true,
+          "own_domain": false,
+          "seen_in_reads": true,
+          "result": "fail"
+        },
+        "expect": {
+          "earns": true
+        }
+      }
+    ],
+    "cases": [
+      {
+        "name": "no credit",
+        "days": [],
+        "expect": {
+          "points": 0,
+          "days": 0,
+          "contributor": false
+        }
+      },
+      {
+        "name": "a week of one business a day is not enough points",
+        "days": [
+          {
+            "ago": 0,
+            "businesses": 1
+          },
+          {
+            "ago": 1,
+            "businesses": 1
+          },
+          {
+            "ago": 2,
+            "businesses": 1
+          },
+          {
+            "ago": 3,
+            "businesses": 1
+          },
+          {
+            "ago": 4,
+            "businesses": 1
+          },
+          {
+            "ago": 5,
+            "businesses": 1
+          },
+          {
+            "ago": 6,
+            "businesses": 1
+          }
+        ],
+        "expect": {
+          "points": 7,
+          "days": 7,
+          "contributor": false
+        }
+      },
+      {
+        "name": "seven days and thirty points make a contributor",
+        "days": [
+          {
+            "ago": 0,
+            "businesses": 5
+          },
+          {
+            "ago": 1,
+            "businesses": 5
+          },
+          {
+            "ago": 2,
+            "businesses": 5
+          },
+          {
+            "ago": 3,
+            "businesses": 5
+          },
+          {
+            "ago": 4,
+            "businesses": 5
+          },
+          {
+            "ago": 5,
+            "businesses": 3
+          },
+          {
+            "ago": 6,
+            "businesses": 2
+          }
+        ],
+        "expect": {
+          "points": 30,
+          "days": 7,
+          "contributor": true
+        }
+      },
+      {
+        "name": "six busy days are not seven days",
+        "days": [
+          {
+            "ago": 0,
+            "businesses": 10
+          },
+          {
+            "ago": 1,
+            "businesses": 10
+          },
+          {
+            "ago": 2,
+            "businesses": 10
+          },
+          {
+            "ago": 3,
+            "businesses": 10
+          },
+          {
+            "ago": 4,
+            "businesses": 10
+          },
+          {
+            "ago": 5,
+            "businesses": 10
+          }
+        ],
+        "expect": {
+          "points": 60,
+          "days": 6,
+          "contributor": false
+        }
+      },
+      {
+        "name": "a day counts at most ten points",
+        "days": [
+          {
+            "ago": 0,
+            "businesses": 400
+          },
+          {
+            "ago": 1,
+            "businesses": 1
+          },
+          {
+            "ago": 2,
+            "businesses": 1
+          },
+          {
+            "ago": 3,
+            "businesses": 1
+          },
+          {
+            "ago": 4,
+            "businesses": 1
+          },
+          {
+            "ago": 5,
+            "businesses": 1
+          },
+          {
+            "ago": 6,
+            "businesses": 1
+          }
+        ],
+        "expect": {
+          "points": 16,
+          "days": 7,
+          "contributor": false
+        }
+      },
+      {
+        "name": "one business every day for thirty days",
+        "days": [
+          {
+            "ago": 0,
+            "businesses": 1
+          },
+          {
+            "ago": 1,
+            "businesses": 1
+          },
+          {
+            "ago": 2,
+            "businesses": 1
+          },
+          {
+            "ago": 3,
+            "businesses": 1
+          },
+          {
+            "ago": 4,
+            "businesses": 1
+          },
+          {
+            "ago": 5,
+            "businesses": 1
+          },
+          {
+            "ago": 6,
+            "businesses": 1
+          },
+          {
+            "ago": 7,
+            "businesses": 1
+          },
+          {
+            "ago": 8,
+            "businesses": 1
+          },
+          {
+            "ago": 9,
+            "businesses": 1
+          },
+          {
+            "ago": 10,
+            "businesses": 1
+          },
+          {
+            "ago": 11,
+            "businesses": 1
+          },
+          {
+            "ago": 12,
+            "businesses": 1
+          },
+          {
+            "ago": 13,
+            "businesses": 1
+          },
+          {
+            "ago": 14,
+            "businesses": 1
+          },
+          {
+            "ago": 15,
+            "businesses": 1
+          },
+          {
+            "ago": 16,
+            "businesses": 1
+          },
+          {
+            "ago": 17,
+            "businesses": 1
+          },
+          {
+            "ago": 18,
+            "businesses": 1
+          },
+          {
+            "ago": 19,
+            "businesses": 1
+          },
+          {
+            "ago": 20,
+            "businesses": 1
+          },
+          {
+            "ago": 21,
+            "businesses": 1
+          },
+          {
+            "ago": 22,
+            "businesses": 1
+          },
+          {
+            "ago": 23,
+            "businesses": 1
+          },
+          {
+            "ago": 24,
+            "businesses": 1
+          },
+          {
+            "ago": 25,
+            "businesses": 1
+          },
+          {
+            "ago": 26,
+            "businesses": 1
+          },
+          {
+            "ago": 27,
+            "businesses": 1
+          },
+          {
+            "ago": 28,
+            "businesses": 1
+          },
+          {
+            "ago": 29,
+            "businesses": 1
+          }
+        ],
+        "expect": {
+          "points": 30,
+          "days": 30,
+          "contributor": true
+        }
+      },
+      {
+        "name": "the window is today and the 29 days before: day 30 is out",
+        "days": [
+          {
+            "ago": 30,
+            "businesses": 10
+          },
+          {
+            "ago": 0,
+            "businesses": 5
+          },
+          {
+            "ago": 1,
+            "businesses": 5
+          },
+          {
+            "ago": 2,
+            "businesses": 5
+          },
+          {
+            "ago": 3,
+            "businesses": 5
+          },
+          {
+            "ago": 4,
+            "businesses": 5
+          },
+          {
+            "ago": 5,
+            "businesses": 4
+          }
+        ],
+        "expect": {
+          "points": 29,
+          "days": 6,
+          "contributor": false
+        }
+      },
+      {
+        "name": "the oldest day in the window still counts",
+        "days": [
+          {
+            "ago": 29,
+            "businesses": 10
+          },
+          {
+            "ago": 0,
+            "businesses": 5
+          },
+          {
+            "ago": 1,
+            "businesses": 5
+          },
+          {
+            "ago": 2,
+            "businesses": 5
+          },
+          {
+            "ago": 3,
+            "businesses": 5
+          },
+          {
+            "ago": 4,
+            "businesses": 5
+          }
+        ],
+        "expect": {
+          "points": 35,
+          "days": 6,
+          "contributor": false
+        }
+      },
+      {
+        "name": "a contributor on the window's last day",
+        "days": [
+          {
+            "ago": 29,
+            "businesses": 2
+          },
+          {
+            "ago": 25,
+            "businesses": 6
+          },
+          {
+            "ago": 20,
+            "businesses": 6
+          },
+          {
+            "ago": 15,
+            "businesses": 6
+          },
+          {
+            "ago": 10,
+            "businesses": 6
+          },
+          {
+            "ago": 5,
+            "businesses": 2
+          },
+          {
+            "ago": 0,
+            "businesses": 2
+          }
+        ],
+        "expect": {
+          "points": 30,
+          "days": 7,
+          "contributor": true
+        }
+      },
+      {
+        "name": "the same thirty a day later, its first day gone",
+        "days": [
+          {
+            "ago": 30,
+            "businesses": 2
+          },
+          {
+            "ago": 26,
+            "businesses": 6
+          },
+          {
+            "ago": 21,
+            "businesses": 6
+          },
+          {
+            "ago": 16,
+            "businesses": 6
+          },
+          {
+            "ago": 11,
+            "businesses": 6
+          },
+          {
+            "ago": 6,
+            "businesses": 2
+          },
+          {
+            "ago": 1,
+            "businesses": 2
+          }
+        ],
+        "expect": {
+          "points": 28,
+          "days": 6,
+          "contributor": false
+        }
+      }
+    ]
   }
 }

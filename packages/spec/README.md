@@ -75,6 +75,15 @@ or network:
   `Surfing-Dog-Carried` and `Surfing-Dog-Carried-For` headers a carried request comes with; and the
   `carried` counts a signed ping's answer gives the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
   signed session id used only for its limits.
+- 0.8.1 (optional for a network): the reporters' reading allowance (protocol §4.15,
+  [ADR-019](../../docs/adr/019-door-reports.md) Amendment 1, accepted 19 October 2026), a larger
+  reading allowance for agents whose signed door reports, about businesses their own signed reads
+  found, earn the points: the reference network's rule (`REPORTER_CREDIT_RULE`, `READ_ALLOWANCE`),
+  `ReporterCreditRule`, `reporterCreditOf(days, rule?)` and `doorReportEarns`, the answer of
+  `GET /v1/door-reports/me` (`doorReportsMeSchema`, `DoorReportsMe`, `schemas/door-reports-me.json`;
+  `401 signature_required` unsigned) and the vectors that pin it (`vectors/door-reports.json`'s
+  `contributors`); and a published limit of 600 requests a minute on `GET /v1/businesses` and
+  `GET /v1/businesses/{domain}` (§4.7). Nothing earlier changes.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -98,7 +107,7 @@ implementations:
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
-| `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
+| `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, how the network's own reads move a door (§4.8), and what earns a reporter points and who is a contributor (`contributors`, §4.15) |
 | `door-history.json` | a door's history (§4.8): the days seen answering, days checked, answered and refused, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown; `summary` is informative |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
