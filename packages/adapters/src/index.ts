@@ -533,8 +533,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.route("/v1/phone", phoneRoutes(phoneDeps));
   app.route("/v1", publicRest(deps.caps));
   // What a QR code or a sign-in link opens in a browser; the secret stays in the fragment.
-  app.get("/phone", async (c) =>
-    c.html(phonePage(await deps.businessName()), 200, {
+  app.get("/phone", (c) =>
+    c.html(phonePage(), 200, {
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
     }),

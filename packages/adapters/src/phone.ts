@@ -309,9 +309,6 @@ export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   return app;
 }
 
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch);
-
 /**
  * `/phone`: what a QR code or a sign-in link opens in a browser. On an Android phone it offers "Open in
  * the app": an `intent://` link pinned to the app's package, so the secret goes to the Surfing Dog
@@ -319,8 +316,9 @@ const esc = (s: string) =>
  * is not installed. Anywhere else it says to scan the code from the app. The secret is in the fragment,
  * read by this page alone, and never sent anywhere: not to this server, not in a Referer.
  */
-export function phonePage(business: string): string {
-  const title = business ? esc(business) : "Your inbox";
+export function phonePage(): string {
+  // The page names nobody: on an inbox not yet open to anyone, it says no more than its front page.
+  const title = "Connect this phone";
   const get = ANDROID_APP_URL ? JSON.stringify(ANDROID_APP_URL) : "null";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>${title}</title>
 <style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font:400 15px/1.5 Manrope,ui-sans-serif,system-ui,sans-serif;background:#f6f5ff;color:#14163c}@media(prefers-color-scheme:dark){body{background:#0d0e26;color:#f2f1ff}}

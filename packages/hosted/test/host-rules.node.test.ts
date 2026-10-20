@@ -75,7 +75,9 @@ describe("the owner allowlist (C1.4)", () => {
       for (const path of [prefix, `${prefix}/a-door-added-later`]) {
         for (const method of ["GET", "POST"]) {
           const verdict = ownerVerdict({ method, path, cookie });
-          const allowed = path.startsWith("/auth/");
+          // Sign-in, and the owner's phone: its page and an item's link to read, nothing else there.
+          const allowed =
+            path.startsWith("/auth/") || (method === "GET" && (path === "/phone" || path.startsWith("/i/")));
           expect(verdict, `${method} ${path}`).toBe(allowed ? "allow" : "refuse");
         }
       }
@@ -104,6 +106,25 @@ describe("the owner allowlist (C1.4)", () => {
     ]) {
       for (const method of ["GET", "POST"]) expect(ownerVerdict({ method, path, cookie }), path).toBe("refuse");
     }
+  });
+
+  it("takes the owner's phone: its own API, its page, an item's link, and its token on the owner's API only", () => {
+    const phone = "Bearer sdi_pa_0123456789abcdefABCDEF_-";
+    expect(ownerVerdict({ method: "GET", path: "/v1/owner/items", authorization: phone })).toBe("allow");
+    expect(ownerVerdict({ method: "POST", path: "/v1/owner/items/x/transitions", authorization: phone })).toBe("allow");
+    for (const path of ["/v1/phone/pair", "/v1/phone/link", "/v1/phone/link/redeem", "/v1/phone/token"])
+      expect(ownerVerdict({ method: "POST", path }), path).toBe("allow");
+    expect(ownerVerdict({ method: "GET", path: "/v1/phone/me", authorization: phone })).toBe("allow");
+    expect(ownerVerdict({ method: "DELETE", path: "/v1/phone", authorization: phone })).toBe("allow");
+    // Any other bearer, there or anywhere else, is refused as before.
+    expect(ownerVerdict({ method: "GET", path: "/v1/phone/me", authorization: "Bearer sdi_own_x" })).toBe("refuse");
+    expect(ownerVerdict({ method: "GET", path: "/v1/items/x", authorization: phone })).toBe("refuse");
+    expect(ownerVerdict({ method: "POST", path: "/mcp", authorization: phone })).toBe("refuse");
+    expect(ownerVerdict({ method: "GET", path: "/phone" })).toBe("allow");
+    expect(ownerVerdict({ method: "POST", path: "/phone" })).toBe("refuse");
+    expect(ownerVerdict({ method: "GET", path: "/i/01ABC" })).toBe("allow");
+    expect(ownerVerdict({ method: "GET", path: "/i/" })).toBe("refuse");
+    expect(ownerVerdict({ method: "GET", path: "/v1/phonebook" })).toBe("refuse");
   });
 
   it("takes the owner's API with a session cookie and no Authorization header only", () => {
