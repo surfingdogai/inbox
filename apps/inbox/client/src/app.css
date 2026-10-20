@@ -2660,6 +2660,14 @@ pre.found-code {
 .phone-pair-text p {
   margin: 0;
 }
+/* A phone that used the code, waiting for the owner's Confirm: its name and the two digits it shows. */
+.phone-confirm p {
+  margin: 0;
+}
+.phone-match {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
 @keyframes phone-qr-in {
   from {
     opacity: 0;

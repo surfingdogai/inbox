@@ -352,19 +352,27 @@ export const api = {
   deliveries: (id: string) =>
     call<{ items: DeliveryView[] }>("GET", `/v1/owner/webhooks/${encodeURIComponent(id)}/deliveries`),
 
-  // ---- phones (ADR-026): a QR code to connect one, the phones, a test, removing one ----
+  // ---- phones (ADR-026): a QR code to connect one, Confirm, the phones, a test, removing one ----
   phones: () =>
-    call<{ phones: PhoneView[]; push: { available: boolean; reason: "no_relay" | "no_secret_key" | null } }>(
-      "GET",
-      "/v1/owner/phones",
-    ),
+    call<{
+      phones: PhoneView[];
+      push: { available: boolean; reason: "no_relay" | "no_secret_key" | null; hosted: boolean };
+      /** Where the Android app is got, once there is a place: null until then. */
+      get_app: string | null;
+    }>("GET", "/v1/owner/phones"),
   /** A one-time code for a phone to scan; it works once, for five minutes. */
   createPairing: () => call<{ id: string; qr: string; expires_at: string }>("POST", "/v1/owner/phones/pairings"),
+  /** Waiting; a phone waiting for Confirm, with the two digits it shows; connected; or run out. */
   pairingStatus: (id: string) =>
-    call<{ state: "waiting" | "paired" | "expired"; phone?: PhoneView }>(
-      "GET",
-      `/v1/owner/phones/pairings/${encodeURIComponent(id)}`,
-    ),
+    call<
+      | { state: "waiting" | "expired" }
+      | { state: "confirm"; phone: PhoneView; match: string }
+      | { state: "paired"; phone?: PhoneView }
+    >("GET", `/v1/owner/phones/pairings/${encodeURIComponent(id)}`),
+  confirmPairing: (id: string) =>
+    call<{ state: "paired"; phone: PhoneView }>("POST", `/v1/owner/phones/pairings/${encodeURIComponent(id)}/confirm`),
+  refusePairing: (id: string) =>
+    call<{ removed: boolean }>("POST", `/v1/owner/phones/pairings/${encodeURIComponent(id)}/refuse`),
   testPhone: (id: string) =>
     call<{ sent: boolean; note: string }>("POST", `/v1/owner/phones/${encodeURIComponent(id)}/test`),
   removePhone: (id: string) => call<{ removed: true }>("DELETE", `/v1/owner/phones/${encodeURIComponent(id)}`),
