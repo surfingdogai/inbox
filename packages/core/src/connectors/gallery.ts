@@ -215,7 +215,6 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Bookings, catalogue and payments",
     group: "shops",
     industries: ["salons", "cafes", "restaurants", "trades", "gyms", "shops"],
-    building: true,
     ways: [
       { kind: "square", preset: null, label: "Access token" },
       { kind: "square", preset: "oauth", label: "Sign in with Square" },
