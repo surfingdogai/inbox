@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import lodging from "../../../packages/spec/vocab/lodging.json";
 import {
   AMENITY_WORDS,
   addDays,
@@ -26,10 +26,11 @@ import { stayDates } from "../client/src/lib/stays";
  * Nights grid's cells, the sheet that keeps rooms only once they are closed elsewhere, a quote's sums,
  * and the wizard's "A place to stay".
  */
-/** The spec's lodging vocabulary, read as it is published. */
-const VOCAB = JSON.parse(
-  readFileSync(new URL("../../../packages/spec/vocab/lodging.json", import.meta.url), "utf8"),
-) as Record<"kinds" | "beds" | "amenities" | "meals" | "house_rules" | "extras", Record<string, unknown>>;
+/** The spec's lodging vocabulary, as it is published. */
+const VOCAB = lodging as unknown as Record<
+  "kinds" | "beds" | "amenities" | "meals" | "house_rules" | "extras",
+  Record<string, unknown>
+>;
 
 describe("the owner app for a place to stay", () => {
   it("has a word for every token of the lodging vocabulary", () => {
