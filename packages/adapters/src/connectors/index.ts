@@ -1,4 +1,6 @@
 import type { ConnectorDefinition, OAuthClient } from "@surfingdog/core";
+import { mindbodyConnector } from "./booking/mindbody";
+import { phorestConnector } from "./booking/phorest";
 import { calcomConnector } from "./calcom";
 import { caldavConnector } from "./caldav/index";
 import { googleCalendarConnector } from "./google";
@@ -6,6 +8,17 @@ import { icsConnector } from "./ics";
 import { mollieConnector } from "./mollie";
 import { stripeConnector } from "./stripe";
 
+export { MINDBODY_DOCS, MINDBODY_READY, mindbodyConnector, mindbodyForm } from "./booking/mindbody";
+export {
+  localOf as phorestLocalOf,
+  PHOREST_DOCS,
+  PHOREST_READY,
+  PHOREST_SERVERS,
+  phorestConnector,
+  phorestForm,
+  phorestUsername,
+  weeklyFromRoster,
+} from "./booking/phorest";
 export { AUTO as CALCOM_AUTO, CALCOM_API, calcomConnector, calcomForm } from "./calcom";
 export { DISCOVERY_BUDGET_MS } from "./caldav/client";
 export { buildEvent as buildICalEvent, busyFromICal, parseICal } from "./caldav/ical";
@@ -72,6 +85,11 @@ export interface ConnectorHostOptions {
    * can sign in, so Google says "Soon" rather than a button that fails for everyone else.
    */
   readonly googleTesting?: boolean | undefined;
+  /**
+   * Phorest switched on (ADR-035): off until the company confirms Phorest lets a salon's own API access
+   * be used by a tool like this one (`PHOREST_READY`). Tests switch it on.
+   */
+  readonly phorestReady?: boolean | undefined;
 }
 
 /**
@@ -92,5 +110,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    phorestConnector({ ready: opts.phorestReady }),
+    mindbodyConnector(),
   ];
 }
