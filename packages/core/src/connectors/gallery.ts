@@ -114,6 +114,11 @@ export const GROUP_LABELS: Readonly<Record<ConnectorGroup, string>> = {
   calendars: "Calendars",
   payments: "Payments",
   shops: "Shops and tills",
+  // The industry tracks' groups (ADR-032).
+  lodging: "Property systems",
+  work: "Job tools",
+  pos: "Point of sale and ordering",
+  booking: "Booking systems",
 };
 
 const APPOINTMENTS: readonly Industry[] = ["salons", "clinics", "gyms", "trades"];

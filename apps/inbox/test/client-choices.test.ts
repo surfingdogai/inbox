@@ -436,9 +436,18 @@ describe("the setup wizard's doors", () => {
 
   it("show the systems a kind runs its days in first, and say plainly which need setup", () => {
     const way = (status: "ready" | "soon" | "setup", hint?: string) =>
-      ({ kind: "x", preset: null, label: "x", status, auth: "form", form: [], ...(hint ? { hint } : {}) }) as const;
+      ({
+        kind: "x",
+        preset: null,
+        label: "x",
+        status,
+        auth: "form",
+        form: [],
+        action: "Connect",
+        ...(hint ? { hint } : {}),
+      }) as const;
     const card = (id: string, group: GalleryCard["group"], status: "ready" | "soon", ways: GalleryCard["ways"]) =>
-      ({ id, title: id, line: `${id} line`, group, status, ways }) as GalleryCard;
+      ({ id, title: id, line: `${id} line`, group, industries: [], status, ways }) as GalleryCard;
     const cards = [
       card("stripe", "payments", "ready", [way("ready")]),
       card("calendar", "calendars", "ready", [way("ready")]),

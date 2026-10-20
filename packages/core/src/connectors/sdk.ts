@@ -64,17 +64,6 @@ export type ConnectorCapability =
  */
 export type ConnectorGroup = "calendars" | "payments" | "shops" | "lodging" | "work" | "pos" | "booking";
 
-/** Each group's heading, as the owner app shows it. */
-export const CONNECTOR_GROUP_LABELS: Readonly<Record<ConnectorGroup, string>> = {
-  calendars: "Calendars",
-  payments: "Payments",
-  shops: "Shops",
-  lodging: "Property systems",
-  work: "Job tools",
-  pos: "Point of sale and ordering",
-  booking: "Booking systems",
-};
-
 /**
  * How the owner connects (ADR-026 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
  * they approve a page on the platform, or on their own store (`OAuthFlow.delivery`); `link`, nothing

@@ -100,7 +100,6 @@ export {
   type WantedLink,
 } from "./schedules";
 export * from "./sdk";
-export { shopOrderOf } from "./shop";
 export type {
   SetupSnapshot,
   SnapshotMenuSection,
@@ -108,6 +107,7 @@ export type {
   SnapshotSource,
   SnapshotStaff,
 } from "./setup-snapshot";
+export { shopOrderOf } from "./shop";
 export {
   BUSY_HORIZON_MS,
   type BusyDetail,
