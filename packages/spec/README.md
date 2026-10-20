@@ -75,6 +75,16 @@ or network:
   `Surfing-Dog-Carried` and `Surfing-Dog-Carried-For` headers a carried request comes with; and the
   `carried` counts a signed ping's answer gives the business. Over MCP a network may leave out the `report` hint, and may answer `initialize` with a
   signed session id used only for its limits.
+- 0.9 ([ADR-031](../../docs/adr/031-doors-elsewhere-platforms.md)): a door elsewhere may name its platform. A
+  `doors_elsewhere` entry's optional `platform` is a token of `vocab/door-platforms.json` (Fresha, OpenTable,
+  TableCheck, Toast, Shopify, Cloudbeds and others: each with its hosts, the kinds of request it takes and how a
+  business's own page there is told apart from the platform's own pages), so an agent can say "Book at Fresha"
+  rather than a host. `readDoorsElsewhere` keeps it only when the vocabulary knows it, the platform takes that kind
+  and the URL is the business's own page there (or on the business's own domain, for a platform that serves pages
+  there); otherwise it drops the platform alone and keeps the door. `doorPlatformOf`, `doorPlatformFit`,
+  `doorPlace`, `doorTrackingParams` and `cleanDoorUrl` say the same for anyone else, and a door carries no tracking
+  or affiliate parameter (`tracking_params`). A 0.8 reader ignores `platform`; a 0.8 manifest reads as before. The
+  spec's own examples (a time zone, an amount) no longer name one country.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -95,7 +105,7 @@ implementations:
 | `scoring.json` | the network's scores (ADR-017 §5): every worked example, the R5 grid, ageing, hold and release |
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
 | `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags |
-| `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone |
+| `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone, and since 0.9 the platform each names; `detect` and `clean`, the platform a URL is on and the tracking it carries |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, and how the network's own reads move a door (§4.8) |
@@ -116,6 +126,10 @@ result, with the JSON-RPC, MCP, A2A and HTTP codes each one stands for.
 tokens a profile's `payments` and a search's `accepts` name, their labels, and how a network reads
 what a business writes (synonyms), what it sees on a site's pages (marks) and a UCP profile's payment
 handlers (handlers). A token is never removed or renamed.
+`vocab/door-platforms.json` (0.9) lists the platforms a door elsewhere may name: for each its token, name,
+group, the kinds of request it takes, its hosts, how a business's own page there is told apart, whether it also
+serves pages on the business's own domain, and the platform's public page its hosts were read from. Delivery and
+booking marketplaces that take a share of each sale are not in it. A token is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by

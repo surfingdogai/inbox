@@ -1,4 +1,15 @@
-import { isPaymentToken, MAX_PROFILE_PAYMENTS, readDoorsElsewhere } from "@surfingdog/spec";
+import {
+  DOOR_PLATFORM_ID,
+  type DoorElsewhere,
+  doorPlatform,
+  doorPlatformFit,
+  doorPlatformOf,
+  doorTrackingParams,
+  hostIsOn,
+  isPaymentToken,
+  MAX_PROFILE_PAYMENTS,
+  readDoorsElsewhere,
+} from "@surfingdog/spec";
 import { z } from "zod";
 import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
@@ -706,16 +717,7 @@ const sections = {
    * change it (`guard.ts`).
    */
   doorsElsewhere: z
-    .array(
-      z.object({
-        itemType: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in your own checkout."),
-        url: z
-          .url({ protocol: /^https$/ })
-          .max(2048)
-          .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
-          .describe("Where customers go for it: an https address."),
-      }),
-    )
+    .array(doorElsewhereSettingSchema())
     .max(2)
     .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
     .default([])
@@ -796,6 +798,98 @@ const sections = {
 export function isDoorElsewhereUrl(url: string): boolean {
   if (readDoorsElsewhere({ doors_elsewhere: [{ item_type: "booking", url }] }).length !== 1) return false;
   return isPublicHost(new URL(url).hostname);
+}
+
+/**
+ * One door elsewhere as the settings keep it (ADR-031): the kind, the page, and the platform the owner picked it on
+ * from `vocab/door-platforms.json`, if any. A page is the business's own: on the platform it names, past the
+ * platform's own pages, and with no tracking or affiliate parameter in it. A platform that also serves the
+ * business's own domain (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the
+ * business's domain (`doorElsewhereDomainProblems`).
+ */
+export function doorElsewhereSettingSchema() {
+  return z
+    .object({
+      itemType: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in your own checkout."),
+      url: z
+        .url({ protocol: /^https$/ })
+        .max(2048)
+        .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
+        .refine((url) => doorTrackingParams(url).length === 0, {
+          message: "the link carries tracking (like utm_source or ref): send people to the page itself",
+        })
+        .describe("Where customers go for it: an https address."),
+      platform: z
+        .string()
+        .regex(DOOR_PLATFORM_ID)
+        .refine((id) => doorPlatform(id) !== undefined, "a platform of vocab/door-platforms.json, like fresha or toast")
+        .optional()
+        .describe(
+          "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, toast, shopify…). Left out for any other page.",
+        ),
+    })
+    .superRefine((d, ctx) => {
+      const p = doorPlatform(d.platform);
+      if (!p) return;
+      const fit = doorPlatformFit(d.url, p, d.itemType);
+      const kinds = p.item_types.map((t) => (t === "booking" ? "bookings" : "orders")).join(" and ");
+      if (fit === "kind")
+        ctx.addIssue({ code: "custom", path: ["platform"], message: `${p.name} takes ${kinds} only` });
+      else if (fit === "not_on_platform")
+        ctx.addIssue({
+          code: "custom",
+          path: ["url"],
+          message: `that link is not on ${p.name}: paste the link to your page there, or pick Another page`,
+        });
+      else if (fit === "platform_page")
+        ctx.addIssue({
+          code: "custom",
+          path: ["url"],
+          message: `that is ${p.name}'s own page: paste the link to your business's page on ${p.name}`,
+        });
+    });
+}
+
+/**
+ * The business's own: a page on a platform that also serves the business's domain (`own_site`) and is not on the
+ * platform's own hosts must be on that domain or a name under it, so a door never names a stranger's shop as the
+ * business's checkout. Nothing to check while the business has no domain. Paths are the write's (`doc.…`).
+ */
+export function doorElsewhereDomainProblems(
+  entries: readonly Settings["doorsElsewhere"][number][],
+  domain: string | null | undefined,
+): { path: string; problem: "invalid"; message: string }[] {
+  const own = domain
+    ?.trim()
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .replace(/\.$/, "");
+  if (!own) return [];
+  return entries.flatMap((d, i) => {
+    const p = doorPlatform(d.platform);
+    if (!p?.own_site || doorPlatformFit(d.url, p, d.itemType) !== "own_site") return [];
+    if (hostIsOn(new URL(d.url).hostname, own)) return [];
+    const where = p.hosts.length ? `on your website (${own}) or on ${p.name}` : `on your website (${own})`;
+    return [
+      {
+        path: `doc.doorsElsewhere.${i}.url`,
+        problem: "invalid" as const,
+        message: `that link is not ${where}: paste your own page's link`,
+      },
+    ];
+  });
+}
+
+/**
+ * The doors elsewhere as the manifest, the business's profile and its page name them: each with its platform, the
+ * one the owner picked, or else the one the page is plainly on (a Fresha page pasted as "Another page" still says
+ * Fresha). Never a platform for a page on the business's own website that the owner did not name.
+ */
+export function publishedDoorsElsewhere(entries: Settings["doorsElsewhere"]): DoorElsewhere[] {
+  return entries.map((d) => {
+    const platform = d.platform ?? doorPlatformOf(d.url, d.itemType)?.id;
+    return { item_type: d.itemType, url: d.url, ...(platform ? { platform } : {}) };
+  });
 }
 
 /** Settings paths that hold a secret: never returned by a read, only ever written. */

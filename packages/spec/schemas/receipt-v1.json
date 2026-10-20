@@ -43,7 +43,7 @@
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991,
-          "description": "Minor units: 4500 is €45.00."
+          "description": "Minor units: 4500 is 45.00 of the currency (CA$45.00, R45.00, ₹45.00)."
         },
         "currency": {
           "type": "string",

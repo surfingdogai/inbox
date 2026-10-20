@@ -18,8 +18,9 @@ export function buildManifest(input: {
    */
   directory?: { readonly listed: boolean } | undefined;
   /**
-   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`). A
-   * kind named here is left out of `item_types`, so the document never says both.
+   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`), each with
+   * the platform it is on when there is one (spec 0.9.0, ADR-031). A kind named here is left out of
+   * `item_types`, so the document never says both.
    */
   doorsElsewhere?: readonly DoorElsewhere[] | undefined;
   /**
@@ -57,6 +58,14 @@ export function buildManifest(input: {
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
     ...(input.carried ? { carried_requests: { accepted: input.carried.accepted } } : {}),
-    ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
+    ...(elsewhere.length
+      ? {
+          doors_elsewhere: elsewhere.map((d) => ({
+            item_type: d.item_type,
+            url: d.url,
+            ...(d.platform ? { platform: d.platform } : {}),
+          })),
+        }
+      : {}),
   });
 }

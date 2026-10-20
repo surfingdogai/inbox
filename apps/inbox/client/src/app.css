@@ -1725,6 +1725,101 @@ fieldset.chips,
   color: var(--ink-3);
 }
 
+/* Booked or ordered elsewhere: one quiet line per kind, and a small editor that slides open. */
+.elsewhere {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.else-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.else-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.else-what strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.else-link {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.else-acts {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.else-acts .linkish,
+.else-add {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration-thickness: 1px;
+}
+.else-edit {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  animation: else-in 0.28s ease-out both;
+}
+.else-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 8px 12px;
+}
+.else-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.else-fields .hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.else-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@keyframes else-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .else-edit {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .else-acts {
+    margin-left: 0;
+  }
+  .else-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* The rest of a service, folded. */
 .details.more {
   margin-top: 0;

@@ -1,0 +1,417 @@
+{
+  "version": 1,
+  "description": "The platforms a business takes bookings or orders at instead of its inbox (doors_elsewhere, spec 0.9.0, ADR-031). id is the token a manifest's doors_elsewhere entry names as platform, and the name a network gives such a door as its type platform:<id>. A URL is on a platform when its host is one of hosts or a name under one, and it is the business's own page there: page path, a path other than /; page subdomain, a name under the host other than www; page any, either. own_site: the platform also serves the business's pages on the business's own domain, and a page there is named by its host, not by the platform. hosts were read from each platform's own public pages and help (source), without signing in. Delivery and booking marketplaces that take a share of each sale are not listed: a business may still name any https page of its own choosing, with no platform. tracking_params are the query parameters a door may not carry: a name ending in * is a prefix.",
+  "groups": [
+    { "id": "beauty", "label": "Salons and wellness" },
+    { "id": "appointments", "label": "Appointments" },
+    { "id": "restaurants", "label": "Restaurant tables" },
+    { "id": "ordering", "label": "Food ordering" },
+    { "id": "shops", "label": "Shops and websites" },
+    { "id": "trades", "label": "Trades" },
+    { "id": "stays", "label": "Booking engines" }
+  ],
+  "tracking_params": [
+    "utm_*",
+    "gclid",
+    "gbraid",
+    "wbraid",
+    "dclid",
+    "fbclid",
+    "msclkid",
+    "yclid",
+    "ttclid",
+    "twclid",
+    "li_fat_id",
+    "igshid",
+    "mc_cid",
+    "mc_eid",
+    "_ga",
+    "_gl",
+    "srsltid",
+    "ref",
+    "referrer",
+    "aff",
+    "aff_id",
+    "affid",
+    "affiliate",
+    "affiliate_id",
+    "irclickid",
+    "clickid",
+    "partner",
+    "partner_id"
+  ],
+  "platforms": [
+    {
+      "id": "fresha",
+      "name": "Fresha",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["fresha.com"],
+      "page": "path",
+      "source": "https://www.fresha.com/"
+    },
+    {
+      "id": "booksy",
+      "name": "Booksy",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["booksy.com"],
+      "page": "path",
+      "source": "https://booksy.com/"
+    },
+    {
+      "id": "planity",
+      "name": "Planity",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["planity.com"],
+      "page": "path",
+      "source": "https://www.planity.com/"
+    },
+    {
+      "id": "treatwell",
+      "name": "Treatwell",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": [
+        "treatwell.co.uk",
+        "treatwell.ie",
+        "treatwell.nl",
+        "treatwell.be",
+        "treatwell.de",
+        "treatwell.at",
+        "treatwell.ch",
+        "treatwell.fr",
+        "treatwell.it",
+        "treatwell.es",
+        "treatwell.pt",
+        "treatwell.lt",
+        "treatwell.gr"
+      ],
+      "page": "path",
+      "source": "https://www.treatwell.co.uk/"
+    },
+    {
+      "id": "timely",
+      "name": "Timely",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["bookings.gettimely.com"],
+      "page": "path",
+      "source": "https://help.gettimely.com/hc/en-gb/articles/1500002156921"
+    },
+    {
+      "id": "phorest",
+      "name": "Phorest",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["phorest.com"],
+      "page": "path",
+      "source": "https://phorest.helpjuice.com/44083-online-booking-GB/370324-where-can-i-get-my-online-bookings-link-url"
+    },
+    {
+      "id": "vagaro",
+      "name": "Vagaro",
+      "group": "beauty",
+      "item_types": ["booking"],
+      "hosts": ["vagaro.com"],
+      "page": "path",
+      "source": "https://www.vagaro.com/"
+    },
+    {
+      "id": "calendly",
+      "name": "Calendly",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["calendly.com"],
+      "page": "path",
+      "source": "https://calendly.com/"
+    },
+    {
+      "id": "calcom",
+      "name": "Cal.com",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["cal.com"],
+      "page": "path",
+      "source": "https://cal.com/"
+    },
+    {
+      "id": "simplybook",
+      "name": "SimplyBook.me",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["simplybook.me", "simplybook.it"],
+      "page": "subdomain",
+      "own_site": true,
+      "source": "https://help.simplybook.me/wiki/Custom_Domain_custom_feature"
+    },
+    {
+      "id": "setmore",
+      "name": "Setmore",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["setmore.com"],
+      "page": "any",
+      "source": "https://intercom.help/setmorehelp/en/articles/491016-add-the-book-now-button-to-your-website"
+    },
+    {
+      "id": "acuity",
+      "name": "Acuity Scheduling",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["as.me", "acuityscheduling.com"],
+      "page": "any",
+      "source": "https://acuityscheduling.com/"
+    },
+    {
+      "id": "square-appointments",
+      "name": "Square Appointments",
+      "group": "appointments",
+      "item_types": ["booking"],
+      "hosts": ["squareup.com", "square.site"],
+      "page": "any",
+      "source": "https://squareup.com/appointments"
+    },
+    {
+      "id": "opentable",
+      "name": "OpenTable",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": [
+        "opentable.com",
+        "opentable.co.uk",
+        "opentable.ca",
+        "opentable.ie",
+        "opentable.de",
+        "opentable.nl",
+        "opentable.com.au",
+        "opentable.com.mx",
+        "opentable.jp",
+        "opentable.hk",
+        "opentable.sg",
+        "opentable.ae"
+      ],
+      "page": "path",
+      "source": "https://www.opentable.com/"
+    },
+    {
+      "id": "resy",
+      "name": "Resy",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["resy.com"],
+      "page": "path",
+      "source": "https://resy.com/"
+    },
+    {
+      "id": "sevenrooms",
+      "name": "SevenRooms",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["sevenrooms.com"],
+      "page": "path",
+      "source": "https://sevenrooms.com/"
+    },
+    {
+      "id": "thefork",
+      "name": "TheFork",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": [
+        "thefork.com",
+        "thefork.co.uk",
+        "thefork.fr",
+        "thefork.it",
+        "thefork.es",
+        "thefork.pt",
+        "thefork.nl",
+        "thefork.be",
+        "thefork.ch",
+        "thefork.se",
+        "thefork.dk"
+      ],
+      "page": "path",
+      "source": "https://www.thefork.com/"
+    },
+    {
+      "id": "covermanager",
+      "name": "CoverManager",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["covermanager.com"],
+      "page": "path",
+      "source": "https://www.covermanager.com/"
+    },
+    {
+      "id": "tock",
+      "name": "Tock",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["exploretock.com"],
+      "page": "path",
+      "source": "https://www.exploretock.com/"
+    },
+    {
+      "id": "tablecheck",
+      "name": "TableCheck",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["tablecheck.com"],
+      "page": "path",
+      "source": "https://www.tablecheck.com/"
+    },
+    {
+      "id": "chope",
+      "name": "Chope",
+      "group": "restaurants",
+      "item_types": ["booking"],
+      "hosts": ["chope.co"],
+      "page": "path",
+      "source": "https://www.chope.co/"
+    },
+    {
+      "id": "toast",
+      "name": "Toast",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": ["toasttab.com"],
+      "page": "path",
+      "source": "https://support.toasttab.com/en/article/How-do-my-customers-order-online-through-Toast-1493067051465"
+    },
+    {
+      "id": "chownow",
+      "name": "ChowNow",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": ["ordering.chownow.com"],
+      "page": "path",
+      "source": "https://get.chownow.com/blog/how-chownow-works/"
+    },
+    {
+      "id": "slice",
+      "name": "Slice",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": ["slicelife.com"],
+      "page": "path",
+      "source": "https://slicelife.com/"
+    },
+    {
+      "id": "flipdish",
+      "name": "Flipdish",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": [],
+      "page": "any",
+      "own_site": true,
+      "source": "https://www.flipdish.com/online-ordering"
+    },
+    {
+      "id": "gloriafood",
+      "name": "GloriaFood",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": [],
+      "page": "any",
+      "own_site": true,
+      "source": "https://www.gloriafood.com/"
+    },
+    {
+      "id": "square-online",
+      "name": "Square Online",
+      "group": "ordering",
+      "item_types": ["order"],
+      "hosts": ["square.site"],
+      "page": "subdomain",
+      "own_site": true,
+      "source": "https://squareup.com/online-store"
+    },
+    {
+      "id": "shopify",
+      "name": "Shopify",
+      "group": "shops",
+      "item_types": ["order"],
+      "hosts": ["myshopify.com"],
+      "page": "subdomain",
+      "own_site": true,
+      "source": "https://help.shopify.com/en/manual/domains"
+    },
+    {
+      "id": "woocommerce",
+      "name": "WooCommerce",
+      "group": "shops",
+      "item_types": ["order"],
+      "hosts": [],
+      "page": "any",
+      "own_site": true,
+      "source": "https://woocommerce.com/document/woocommerce-pages/"
+    },
+    {
+      "id": "wix",
+      "name": "Wix",
+      "group": "shops",
+      "item_types": ["booking", "order"],
+      "hosts": ["wixsite.com"],
+      "page": "subdomain",
+      "own_site": true,
+      "source": "https://support.wix.com/en/article/adi-accessing-your-wix-bookings-pages"
+    },
+    {
+      "id": "tradify",
+      "name": "Tradify",
+      "group": "trades",
+      "item_types": ["booking"],
+      "hosts": [],
+      "page": "any",
+      "own_site": true,
+      "source": "https://www.tradifyhq.com/features/mobile-job-management-software"
+    },
+    {
+      "id": "siteminder",
+      "name": "SiteMinder",
+      "group": "stays",
+      "item_types": ["booking"],
+      "hosts": ["direct-book.com", "book-directonline.com"],
+      "page": "path",
+      "source": "https://help-classic.siteminder.com/en/articles/8673807-booking-engine-integrate-the-booking-engine-with-your-website-using-links-and-widgets"
+    },
+    {
+      "id": "cloudbeds",
+      "name": "Cloudbeds",
+      "group": "stays",
+      "item_types": ["booking"],
+      "hosts": ["hotels.cloudbeds.com"],
+      "page": "path",
+      "source": "https://www.cloudbeds.com/"
+    },
+    {
+      "id": "mews",
+      "name": "Mews",
+      "group": "stays",
+      "item_types": ["booking"],
+      "hosts": ["app.mews.com"],
+      "page": "path",
+      "source": "https://www.mews.com/"
+    },
+    {
+      "id": "beds24",
+      "name": "Beds24",
+      "group": "stays",
+      "item_types": ["booking"],
+      "hosts": ["beds24.com"],
+      "page": "path",
+      "source": "https://beds24.com/"
+    },
+    {
+      "id": "lodgify",
+      "name": "Lodgify",
+      "group": "stays",
+      "item_types": ["booking"],
+      "hosts": ["lodgify.com"],
+      "page": "any",
+      "own_site": true,
+      "source": "https://www.lodgify.com/"
+    }
+  ]
+}

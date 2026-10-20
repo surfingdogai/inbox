@@ -183,6 +183,28 @@ describe("the manifest", () => {
       expect(readDoorsElsewhere(m), c.name).toEqual(c.kept);
     }
   });
+
+  it("warns of a platform a reader drops, and of a door that carries tracking (0.9.0)", async () => {
+    const fresha = "https://www.fresha.com/a/studio-lumiere-toronto-k3f8q2";
+    const named = await broken((m) => {
+      m.item_types = ["message", "quote_request"];
+      m.doors_elsewhere = [{ item_type: "booking", url: fresha, platform: "fresha" }];
+    });
+    expect(named.ok).toBe(true);
+    expect(named.warnings).toEqual([]);
+    const off = await broken((m) => {
+      m.item_types = ["message", "quote_request"];
+      m.doors_elsewhere = [
+        { item_type: "booking", url: "https://studiolumiere.ca/book", platform: "fresha" },
+        { item_type: "order", url: "https://shop.studiolumiere.ca/?utm_source=bio&ref=7", platform: "shopify" },
+      ];
+    });
+    expect(off.ok).toBe(true);
+    expect(off.warnings.map((w) => [w.path, w.code])).toEqual([
+      ["$.doors_elsewhere[0].platform", "platform_dropped"],
+      ["$.doors_elsewhere[1].url", "tracking"],
+    ]);
+  });
 });
 
 describe("checkDocument: what was pasted, read as what it is", () => {

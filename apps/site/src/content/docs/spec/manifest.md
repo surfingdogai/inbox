@@ -31,7 +31,7 @@ An agent inbox publishes one JSON document that says what kinds of request it ta
 | `profile` | no | public facts the business chose to share: name, description, categories, languages, address, coordinates, website, hours, services, place category, attributes, price band, currencies, and how it is paid (`payments`: tokens of the [payments vocabulary](https://github.com/surfingdogai/inbox/blob/main/packages/spec/vocab/payments.json), such as `card`, `apple_pay` or `paypal`) | 21 Sep 2026; hours and services 26 Sep; place category, attributes, price band and currencies 6 Oct; a day that closes at `24:00` 15 Oct; payments 18 Oct |
 | `directory` | no | `{"listed": false}` keeps the business out of networks' directories | 26 Sep 2026 |
 | `claims` | no | network host → claim token: proof that a listing on that network is the business's own | 6 Oct 2026 |
-| `doors_elsewhere` | no | at most 5 `{"item_type", "url"}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host | 12 Oct 2026 |
+| `doors_elsewhere` | no | at most 5 `{"item_type", "url", "platform"?}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host; `platform`, a token of the [door platforms](https://github.com/surfingdogai/inbox/blob/main/packages/spec/vocab/door-platforms.json) (`fresha`, `opentable`, `toast`…), names the platform the page is on | 12 Oct 2026; `platform` 20 Oct |
 
 The JSON Schema has every bound: lengths, counts and formats.
 
@@ -56,6 +56,7 @@ New fields are added, and only as optional ones, so a reader of an older manifes
 
 ## Changelog
 
+- **20 October 2026** (`@surfingdog/spec` 0.9): in `doors_elsewhere`, `platform`: the platform a door's page is on, a token of `vocab/door-platforms.json`, so an agent says "Book at Fresha". A reader keeps it only when it knows the token, the platform takes that kind of request and the page is the business's own there; otherwise it drops the platform alone and keeps the door. A reader before 0.9 ignores it.
 - **18 October 2026**: in `profile`, `payments`: how customers and their agents can pay, at most 64 tokens of `vocab/payments.json`. A reader keeps the tokens it knows and drops the rest alone; a card brand says `card` too.
 - **15 October 2026**: in `profile.hours`, a day may close at `24:00`: open until midnight, or all the time from `00:00`. A reader written before this day (`@surfingdog/spec` before 0.5) refuses `24:00` in that one day's hours, and keeps the rest of the profile.
 - **12 October 2026**: `doors_elsewhere`, the kinds of request a business takes somewhere else, and where.

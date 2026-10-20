@@ -1,4 +1,4 @@
-import { CARD_BRANDS, PAYMENTS_VOCABULARY, paymentLabel } from "@surfingdog/spec";
+import { CARD_BRANDS, doorPlace, PAYMENTS_VOCABULARY, paymentLabel } from "@surfingdog/spec";
 import { copyFor } from "../customer/copy";
 import { dayText, localDate, moneyIn, timeText, zoneName } from "../customer/format";
 import { frontCopy } from "../customer/front-copy";
@@ -87,8 +87,9 @@ async function base(caps: Capabilities, lang: CustomerLang, status: CustomerPage
 
 /**
  * The front page: what can be booked, and the other ways to ask. A kind the business takes
- * somewhere else (`settings.doorsElsewhere`) is a link there instead, named by its host: bookings at
- * a booking platform, orders in the business's own checkout. Quotes and messages stay here.
+ * somewhere else (`settings.doorsElsewhere`) is a link there instead, named by its platform ("Book at
+ * Fresha") or else by its host, exactly as the address names it (`doorPlace`): bookings at a booking
+ * platform, orders in the business's own checkout. Quotes and messages stay here.
  */
 export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise<CustomerPage> {
   const f = frontCopy(lang);
@@ -107,7 +108,7 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
           {
             heading: f.bookHeading,
             paragraphs: [],
-            links: [{ label: f.bookAt(placeOf(bookAway.url)), href: bookAway.url }],
+            links: [{ label: f.bookAt(doorPlace(bookAway)), href: bookAway.url }],
           },
         ]
       : bookable.length
@@ -127,7 +128,7 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
           {
             heading: f.orderHeading,
             paragraphs: [],
-            links: [{ label: f.orderAt(placeOf(orderAway.url)), href: orderAway.url }],
+            links: [{ label: f.orderAt(doorPlace(orderAway)), href: orderAway.url }],
           },
         ]
       : []),
@@ -141,11 +142,6 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
     // How a visitor can pay, as the owner ticked it: one quiet line under the business's name.
     help: payLine(profile.payments, lang),
   };
-}
-
-/** A place elsewhere as a visitor reads it: its host, exactly as the address names it. */
-function placeOf(url: string): string {
-  return new URL(url).host;
 }
 
 /** What a form sent, as the adapter read it: every value a string, trimmed. */

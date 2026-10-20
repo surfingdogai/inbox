@@ -294,7 +294,7 @@ describe("what agents can do", () => {
     expect(doorViews({ ...facts, doors: { booking: false } })[0]).toMatchObject({ on: false, needs: null });
     expect(
       doorViews({ ...facts, doorsElsewhere: [{ itemType: "booking", url: "https://www.fresha.com/a/ana" }] })[0],
-    ).toMatchObject({ on: false, needs: null, elsewhere: "fresha.com" });
+    ).toMatchObject({ on: false, needs: null, elsewhere: "Fresha" });
     expect(doorSwitchDoc("quoteRequest", true)).toEqual({ doors: { quoteRequest: true } });
     expect(doorSwitchDoc("booking", false)).toEqual({ doors: { booking: false } });
   });

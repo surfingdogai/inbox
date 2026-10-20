@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformFit } from "./door-platforms";
 import { MAX_PROFILE_PAYMENTS } from "./payments";
 
 /**
@@ -51,7 +52,13 @@ export const closureDaysSchema = z
  * closures that have not ended.
  */
 export const profileHoursSchema = z.object({
-  timezone: z.string().min(1).max(64).describe("IANA zone, e.g. Europe/Lisbon: every time and date in hours is in it."),
+  timezone: z
+    .string()
+    .min(1)
+    .max(64)
+    .describe(
+      "IANA zone, e.g. America/Toronto, Africa/Nairobi or Asia/Kolkata: every time and date in hours is in it.",
+    ),
   weekly: weeklyHoursSchema,
   closures: z.array(closureDaysSchema).max(100).default([]),
 });
@@ -141,7 +148,7 @@ export const receiptKindSchema = z.enum(["confirmed", "paid", "accepted", "outco
 export type ReceiptKind = z.infer<typeof receiptKindSchema>;
 
 export const moneySchema = z.object({
-  value: z.number().int().describe("Minor units: 4500 is €45.00."),
+  value: z.number().int().describe("Minor units: 4500 is 45.00 of the currency (CA$45.00, R45.00, ₹45.00)."),
   currency: z.string().length(3),
 });
 
@@ -216,6 +223,9 @@ export type ReceiptPublishResult = z.infer<typeof receiptPublishResultSchema>;
  * orders in its own shop's checkout. An agent goes there for that kind, and to the inbox for the rest.
  * A writer names a kind once, and never a kind it lists in `item_types`; a reader holds every
  * manifest to that with `readDoorsElsewhere` (`vectors/doors-elsewhere.json`).
+ *
+ * `platform` (0.9.0, ADR-031) names the platform the page is on, from `vocab/door-platforms.json`, so an
+ * agent can say "Book at Fresha". A reader that does not know it, or the token it names, goes by the URL.
  */
 export const doorElsewhereSchema = z.object({
   item_type: itemTypeSchema,
@@ -223,6 +233,13 @@ export const doorElsewhereSchema = z.object({
     .url({ protocol: /^https$/ })
     .max(2048)
     .describe("Where to go for it: an https page on a named host, with no user or password in it."),
+  platform: z
+    .string()
+    .regex(DOOR_PLATFORM_ID)
+    .optional()
+    .describe(
+      "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, shopify…), only when the page is the business's own page there. Absent for any other page.",
+    ),
 });
 export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
 
@@ -233,6 +250,11 @@ export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
  * at most 2048 characters, with no user or password, on a host name of two labels or more whose
  * last label starts with a letter, so never an IP address. Anything else about the manifest is
  * not this function's to judge.
+ *
+ * Since 0.9.0 an entry's `platform` is kept with it when the vocabulary knows the token, the platform takes
+ * that kind of request, and the URL is the business's own page there, or the platform serves pages on the
+ * business's own domain (`own_site`). Otherwise the platform alone is dropped and the entry is kept: a door
+ * is never lost for its name.
  */
 export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
   const m = (typeof manifest === "object" && manifest !== null ? manifest : {}) as Record<string, unknown>;
@@ -244,9 +266,19 @@ export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
     const type = itemTypeSchema.safeParse(e.item_type);
     if (!type.success || here.has(type.data) || kept.some((k) => k.item_type === type.data)) continue;
     const url = elsewhereUrl(e.url);
-    if (url) kept.push({ item_type: type.data, url });
+    if (!url) continue;
+    const platform = elsewherePlatform(e.platform, url, type.data);
+    kept.push({ item_type: type.data, url, ...(platform ? { platform } : {}) });
   }
   return kept;
+}
+
+function elsewherePlatform(value: unknown, url: string, kind: string): string | null {
+  if (typeof value !== "string" || !DOOR_PLATFORM_ID.test(value)) return null;
+  const platform = doorPlatform(value);
+  if (!platform) return null;
+  const fit = doorPlatformFit(url, platform, kind);
+  return fit === "on_platform" || fit === "own_site" ? platform.id : null;
 }
 
 function elsewhereUrl(value: unknown): string | null {
@@ -263,6 +295,40 @@ function elsewhereUrl(value: unknown): string | null {
   if (labels.length < 2 || !/^[a-z]/i.test(labels[labels.length - 1] ?? "")) return null;
   return value;
 }
+
+/** `vocab/door-platforms.json` (0.9.0): the platforms a door elsewhere may name, as a JSON Schema checks it. */
+export const doorPlatformsVocabSchema = z.object({
+  version: z.int().min(1),
+  description: z.string(),
+  groups: z.array(z.object({ id: z.string().regex(DOOR_PLATFORM_ID), label: z.string().min(1).max(60) })).min(1),
+  tracking_params: z.array(z.string().regex(/^[a-z0-9_]+\*?$/)),
+  platforms: z.array(
+    z.object({
+      id: z
+        .string()
+        .regex(DOOR_PLATFORM_ID)
+        .describe("The token a doors_elsewhere entry names, and a door type platform:<id>."),
+      name: z.string().min(1).max(60),
+      group: z.string().regex(DOOR_PLATFORM_ID),
+      item_types: z.array(z.enum(["booking", "order"])).min(1),
+      hosts: z
+        .array(z.string().regex(/^([a-z0-9-]+\.)+[a-z][a-z0-9-]*$/))
+        .describe("Registrable names: a host is on the platform when it is one of these or a name under one."),
+      page: z
+        .enum(["path", "subdomain", "any"])
+        .describe(
+          "How the business's own page is told apart: a path other than /, a name under the host other than www, or either.",
+        ),
+      own_site: z
+        .boolean()
+        .optional()
+        .describe(
+          "The platform also serves the business's pages on the business's own domain, named there by their host.",
+        ),
+      source: z.url().describe("The platform's own public page or help the hosts were read from."),
+    }),
+  ),
+});
 
 export const manifestSchema = z.object({
   spec: z.literal("surfingdog-inbox/0"),
@@ -308,7 +374,7 @@ export const manifestSchema = z.object({
   claims: z.record(z.string().max(253), z.string().max(200)).optional(),
   /**
    * Kinds of request the business takes somewhere else, and where: `[{"item_type": "booking", "url":
-   * "https://…"}]`. Absent or empty, the inbox's own doors are all there is.
+   * "https://…", "platform": "fresha"}]`. Absent or empty, the inbox's own doors are all there is.
    */
   doors_elsewhere: z.array(doorElsewhereSchema).max(5).optional(),
 });

@@ -798,7 +798,7 @@ order or pay. The types are in [`vocab/doors.json`](../../packages/spec/vocab/do
 | `nlweb` | a declared NLWeb `/ask` endpoint |
 | `webhook` | in the vocabulary; no network delivers to one yet |
 | `other` | any other protocol, named in `protocol` (like `beckn` or `graphql`) |
-| `platform:<name>` | a commerce or booking platform's door for this business |
+| `platform:<name>` | a commerce or booking platform's door for this business; a platform a business takes bookings or orders at instead (below) has the name its token has in [`vocab/door-platforms.json`](../../packages/spec/vocab/door-platforms.json) |
 
 **Experimental door types** (`vocab/doors.json` version 2, `experimental`) are read by a network but
 cannot be declared, and they never raise a level, make a listing or move anyone in the order. Today
@@ -1582,6 +1582,17 @@ MUST NOT carry to a manifest that says nothing: that is an inbox from before the
 could not say no (outcome `no_inbox`). A network reads the manifest at most five minutes before it
 carries, and an inbox serves it for a minute at most, so an owner's switch holds within minutes. A kind the inbox does not list in
 `item_types`, or lists in `doors_elsewhere`, is not carried: the answer says where the business takes it.
+
+**Doors elsewhere** (spec 0.9.0, [ADR-031](../adr/031-doors-elsewhere-platforms.md)). A manifest's `doors_elsewhere`
+names the kinds of request a business takes somewhere else and the page for each, read entry by entry with
+`readDoorsElsewhere`. An entry may name its `platform`, a token of `vocab/door-platforms.json`, kept only when the
+page is the business's own page on that platform (or, for a platform that serves pages on the business's own domain,
+`own_site`). A network that answers `elsewhere` gives that page as it is, and the platform's name when it kept one, so
+an assistant can say "Book at Fresha"; a page on the business's own domain is named by its host. A network never
+adds tracking or an affiliate parameter to the page, never sends a person through a page of its own on the way, and
+treats a door elsewhere as the business's word: a door the business published for people, not a machine door, and
+never a reason to raise a level. A platform's own door type `platform:<id>` uses the same id, so a network can match a
+door it read on the business's site to the one the business declares.
 
 **The person.** A request carries the person's email address and, if they give one, a name: never a
 phone number. `consent: true` says the person agreed to give the business that address for its answer,
