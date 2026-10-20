@@ -20,10 +20,10 @@ export function Lock({ insecure, onUnlock }: { insecure: boolean; onUnlock: () =
     setTried(true);
     if (ok) await onUnlock();
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asked once, when the app opens
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked when the app opens, and once a screen lock is set
   useEffect(() => {
     if (!insecure) void unlock();
-  }, []);
+  }, [insecure]);
   if (insecure)
     return (
       <div className="lock screen">

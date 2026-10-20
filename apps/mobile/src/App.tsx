@@ -473,6 +473,11 @@ export function App({ deps }: { deps: Deps }) {
               if (insecure) {
                 if (!(await native.deviceSecure().catch(() => false))) return false;
                 setInsecure(false);
+                // A screen lock now: the app opens as any locked app does, with the fingerprint or face.
+                if (await native.canAuthenticate().catch(() => false)) {
+                  setLocked(true);
+                  return true;
+                }
               }
               unlockedAt.current = Date.now();
               setLocked(false);
