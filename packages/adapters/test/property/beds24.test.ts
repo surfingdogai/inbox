@@ -13,6 +13,8 @@ import {
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
+  BEDS24_CHOOSE,
+  BEDS24_INFO_CODE,
   BEDS24_REFRESH_EVERY_MS,
   BEDS24_WAITING_FLAG,
   beds24Amount,
@@ -30,10 +32,12 @@ import { type FakeBeds24, fakeBeds24 } from "../fakes/property/beds24";
 import { INVITE_CODE } from "../fixtures/property/beds24/auth";
 import { cancelExample, NEVER_SENT, newBookingExample } from "../fixtures/property/beds24/bookings";
 import {
+  BEIT_AMMAN,
   CASA_VENTANA,
   calendarExample,
   INTI_WASI,
   PROPERTIES,
+  RIAD_ZITOUN,
   RYOKAN_HOSHI,
 } from "../fixtures/property/beds24/properties";
 import { bookingWebhook, usageLimitAnswer, wikiHeaders, yamlHeaders } from "../fixtures/property/beds24/webhook";
@@ -81,7 +85,12 @@ const DOCUMENTED = new Set([
   "allowWebhooks",
   "checkAvailability",
   "makeGroup",
+  // Schema `newBooking`'s `infoItems` (code, text), changed by `id` (its examples newInfoItem, modifyInfoItem).
+  "infoItems",
+  "code",
+  "text",
 ]);
+const ALL_IDS = ["241501", "241502", "241503", "241504", "241505"];
 
 /** A run against the fake, on its clock, holding a granted refresh token: what a connection is. */
 function run(fake: FakeBeds24, secret?: Record<string, string>, extra: Record<string, unknown> = {}): RunContext {
@@ -138,16 +147,18 @@ propertyContract("Beds24, against its local fake", () => {
 });
 
 describe("Beds24: the form and the gallery", () => {
-  it("asks for one invite code, sealed, with Beds24's own steps, and says a scope change needs a new code", () => {
+  it("asks for one invite code, sealed, in three steps named as Beds24 names its choices", () => {
     const [field, ...rest] = describeForm(beds24Form);
     expect(rest).toEqual([]);
     expect(field).toMatchObject({ key: "invite_code", label: "Invite code", secret: true, input: "password" });
     expect(field?.steps).toEqual([
-      "In Beds24, open Settings, then Marketplace, then API.",
-      "Create an invite code with bookings and inventory: read inventory, read properties, all bookings and read bookings personal.",
-      "Paste it here. It works for 24 hours.",
+      "In Beds24, open Settings → Marketplace → API and press Generate invite code.",
+      "Choose Bookings: Read and Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read · Properties: Read. Leave the IP address empty.",
+      "Paste the code here. It works for 24 hours.",
     ]);
-    expect(field?.help).toMatch(/cannot be changed later.*new code/);
+    expect(field?.help).toBeUndefined();
+    // Never "all", which would also let a leaked token delete the owner's bookings.
+    expect(BEDS24_CHOOSE).not.toMatch(/All/);
   });
 
   it("is the lodging card's Beds24 way, ready, once it is among the built-in connectors", () => {
@@ -174,7 +185,8 @@ describe("Beds24: the invite code and its tokens", () => {
       fake.mode.setup = style;
       fake.invite(INVITE_CODE);
       const made = await def.connect?.(connectCtx(fake), { invite_code: ` ${INVITE_CODE} ` });
-      expect(made).toMatchObject({ account: "Ryokan Hoshi and 2 more", externalId: "880214" });
+      // Several properties: counted, never named after whichever Beds24 lists first.
+      expect(made).toMatchObject({ account: "5 properties", externalId: "880214" });
       expect(Object.keys(made?.secret ?? {}).sort()).toEqual([
         "refresh_token",
         "refresh_used_at",
@@ -182,8 +194,8 @@ describe("Beds24: the invite code and its tokens", () => {
         "token_expires_at",
       ]);
       expect(made?.extra).toMatchObject({
-        property_ids: ["241501", "241502", "241503"],
-        currencies: { "241501": "JPY", "241502": "MXN", "241503": "PEN" },
+        property_ids: ALL_IDS,
+        currencies: { "241501": "JPY", "241502": "MXN", "241503": "PEN", "241504": "MAD", "241505": "JOD" },
       });
       const setups = fake.platform.seen.filter((r) => r.url.pathname === "/api/v2/authentication/setup");
       expect(setups.map((r) => r.method)).toEqual(style === "get" ? ["GET"] : ["GET", "POST"]);
@@ -193,7 +205,7 @@ describe("Beds24: the invite code and its tokens", () => {
     }
   });
 
-  it("says a code is expired in Beds24's own words, and asks for one made again", async () => {
+  it("says plainly when Beds24 did not take a code: copy it again, or make a new one", async () => {
     const fake = fakeBeds24({ properties: PROPERTIES });
     fake.invite(INVITE_CODE);
     fake.clock.now += DAY + 60_000;
@@ -202,11 +214,11 @@ describe("Beds24: the invite code and its tokens", () => {
     expect(error).toMatchObject({
       code: "auth",
       field: "invite_code",
-      message: "That code has expired. Make a new one in Beds24.",
+      message: "Beds24 didn't take that code. Copy it again, or make a new one: a code lasts 24 hours.",
     });
   });
 
-  it("refuses a code without the scopes, names them, says a code cannot change, and gives its token back", async () => {
+  it("refuses a code without the scopes, names them as Beds24 does, and gives its token back", async () => {
     const fake = fakeBeds24({ properties: PROPERTIES });
     fake.invite(INVITE_CODE, ["read:properties", "read:bookings"]);
     const error = (await def
@@ -214,9 +226,49 @@ describe("Beds24: the invite code and its tokens", () => {
       .catch((e: unknown) => e)) as ConnectorError;
     expect(error.code).toBe("config");
     expect(error.field).toBe("invite_code");
-    expect(error.message).toMatch(/missing read inventory, all bookings, read bookings personal/);
-    expect(error.message).toMatch(/cannot be changed later/);
+    expect(error.message).toBe(
+      "That code is missing Bookings: Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read. Make a new code with those too.",
+    );
     expect(fake.refreshTokens.size).toBe(0);
+  });
+
+  it("refuses a code without Bookings financial: without it, Beds24 would keep no price on a stay", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    fake.invite(INVITE_CODE, [
+      "read:bookings",
+      "write:bookings",
+      "read:bookings-personal",
+      "read:inventory",
+      "read:properties",
+    ]);
+    const error = await def.connect?.(connectCtx(fake), { invite_code: INVITE_CODE }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "config",
+      field: "invite_code",
+      message: "That code is missing Bookings financial: Read and Write. Make a new code with those too.",
+    });
+    // What such a token would do: a stay written with its price, kept at none, read back without one.
+    const ctx = run(fake, {
+      refresh_token: fake.grant(["read:bookings", "write:bookings", "read:inventory", "read:properties"]),
+      refresh_used_at: String(fake.clock.now),
+    });
+    const stay = stayOf({ key: "sd-01JAHOSHI000000000000NOFIN" });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    expect(fake.bookings.get(Number(link.externalId))?.price).toBe(0);
+    await expect(writer.oversold?.(ctx, stay, link)).rejects.toThrow(/as written/);
+  });
+
+  it("connects with read and write on bookings, and with a code made with All before", async () => {
+    for (const scopes of [
+      undefined,
+      ["all:bookings", "read:bookings-personal", "all:bookings-financial", "read:inventory", "read:properties"],
+    ]) {
+      const fake = fakeBeds24({ properties: PROPERTIES });
+      fake.invite(INVITE_CODE, scopes);
+      expect(await def.connect?.(connectCtx(fake), { invite_code: INVITE_CODE })).toMatchObject({
+        externalId: "880214",
+      });
+    }
   });
 
   it("makes a token from the refresh token when the one held has ended, and keeps it sealed for next time", async () => {
@@ -227,7 +279,7 @@ describe("Beds24: the invite code and its tokens", () => {
       token_expires_at: String(fake.clock.now - 1),
     };
     const ctx = run(fake, secret);
-    expect((await stays.properties(ctx)).map((p) => p.id)).toEqual(["241501", "241502", "241503"]);
+    expect((await stays.properties(ctx)).map((p) => p.id)).toEqual(ALL_IDS);
     expect(secret.token).toMatch(/^tok-/);
     expect(secret.token).not.toBe("tok-old");
     expect(Number(secret.token_expires_at)).toBe(fake.clock.now + DAY);
@@ -235,7 +287,7 @@ describe("Beds24: the invite code and its tokens", () => {
     // A token Beds24 no longer takes is made again once, then the call goes through.
     secret.token = "tok-revoked";
     secret.token_expires_at = String(fake.clock.now + DAY);
-    expect(await stays.properties(run(fake, secret))).toHaveLength(3);
+    expect(await stays.properties(run(fake, secret))).toHaveLength(5);
   });
 
   it("uses the refresh token at least weekly, so a quiet property never reaches Beds24's 30 days unused", async () => {
@@ -574,7 +626,7 @@ describe("Beds24: stays written first", () => {
     await expect(writer.oversold?.(ctx, other, written)).rejects.toThrow(/as written/);
   });
 
-  it("writes a stay waiting for its deposit as confirmed, flagged, and clears the flag once it is paid", async () => {
+  it("writes a stay waiting for its deposit as confirmed, flagged, and says what was paid once it is", async () => {
     const fake = fakeBeds24({ properties: PROPERTIES });
     const ctx = run(fake);
     const stay = stayOf({
@@ -585,16 +637,26 @@ describe("Beds24: stays written first", () => {
     const link = await writer.put(ctx, stay, null, "provisional");
     const b = fake.bookings.get(Number(link.externalId));
     expect(b).toMatchObject({ status: "confirmed", flagText: BEDS24_WAITING_FLAG, price: 5_801 });
-    expect(b?.notes).toMatch(/deposit due: cancelled from your inbox if it is not paid/);
+    expect(b?.notes).toBe("Written by your inbox · 4F2K9Q");
+    expect(b?.infoItems).toEqual([
+      {
+        id: expect.any(Number),
+        code: BEDS24_INFO_CODE,
+        text: "Deposit due: your inbox cancels this stay if it is not paid in time.",
+      },
+    ]);
     expect(b?.lastName).toBeUndefined();
-    // Paid: confirmed again with its guest, the flag taken off, the owner's own notes left as they are.
+    // Paid: confirmed again with its guest, the flag taken off, the same info item now saying what was
+    // paid and what is left at the desk; the owner's own notes left as they are.
     if (b) b.notes = "Late check-in agreed by phone";
+    const item = b?.infoItems?.[0]?.id;
     await writer.put(
       ctx,
       {
         ...stay,
         key: "sd-01JACASAVENTANA00000000001-confirm-e1",
-        guest: { name: "Mariana Sánchez Ruiz", email: "mariana@example.mx" },
+        guest: { name: "  Mariana Sánchez Ruiz ", email: "mariana@example.mx" },
+        amounts: { paid: { value: 174_030, currency: "MXN" }, atProperty: { value: 406_070, currency: "MXN" } },
       },
       link,
       "confirmed",
@@ -605,8 +667,56 @@ describe("Beds24: stays written first", () => {
       lastName: "Mariana Sánchez Ruiz",
       email: "mariana@example.mx",
       notes: "Late check-in agreed by phone",
+      infoItems: [
+        {
+          id: item,
+          code: BEDS24_INFO_CODE,
+          text: "Paid in your inbox: MXN 1740.30. Due at the property: MXN 4060.70.",
+        },
+      ],
     });
     clean(fake);
+  });
+
+  it("takes no stay in a currency of three decimals, nor a total above what Beds24 holds, before writing", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    // The money itself goes both ways in JOD; Beds24's two-decimal maximum is what keeps it out.
+    expect(fromBeds24Amount(45.125, "JOD")).toBe(45_125);
+    expect(beds24Amount({ value: 45_125, currency: "JOD" })).toBe(45.125);
+    expect(fromBeds24Amount(1_640.5, "MAD")).toBe(164_050);
+    const amman = stayOf({
+      key: "sd-01JABEITAMMAN000000000001",
+      propertyId: String(BEIT_AMMAN.id),
+      rooms: [{ roomId: "512041", adults: 2, childrenAges: [], price: { value: 90_250, currency: "JOD" } }],
+    });
+    await expect(writer.put(ctx, amman, null, "confirmed")).rejects.toMatchObject({
+      code: "refused",
+      message: "Stays in JOD are not written to Beds24 yet: confirm this one there yourself.",
+    });
+    const huge = stayOf({
+      key: "sd-01JAHOSHI00000000000HUGE",
+      rooms: [{ roomId: GARDEN, adults: 2, childrenAges: [], price: { value: 100_000_000, currency: "JPY" } }],
+    });
+    await expect(writer.put(ctx, huge, null, "confirmed")).rejects.toMatchObject({
+      code: "refused",
+      message: "That total is more than Beds24 takes for one booking.",
+    });
+    expect(fake.platform.seen.some((r) => r.method === "POST")).toBe(false);
+  });
+
+  it("does not take a booking back over the guest's name: Beds24 may trim or escape it", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    // Written composed and cut by character: an emoji at the edge is never split in two.
+    const name = `Zoë O'Brien-${"🌊".repeat(120)}`;
+    const stay = stayOf({ key: "sd-01JAHOSHI0000000000000NAME", guest: { name } });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const written = fake.bookings.get(Number(link.externalId)) as { lastName: string };
+    expect([...written.lastName]).toHaveLength(100);
+    expect(written.lastName.endsWith("🌊")).toBe(true);
+    written.lastName = "Zo&euml; O&#39;Brien";
+    expect(await writer.oversold?.(ctx, stay, link)).toBe(false);
   });
 
   it("holds nothing in Beds24: no status there is known to keep a room off sale", async () => {
@@ -683,6 +793,242 @@ describe("Beds24: stays written first", () => {
       message: expect.stringMatching(/give it a price in Beds24/),
     });
     expect(fake.platform.seen.some((r) => r.method === "POST")).toBe(false);
+  });
+});
+
+describe("Beds24: a write that goes through only in part", () => {
+  const room = (roomId: string, value: number) => ({
+    roomId,
+    adults: 2,
+    childrenAges: [],
+    price: { value, currency: "PEN" },
+  });
+  const twoRooms = (key: string) =>
+    stayOf({
+      key,
+      propertyId: String(INTI_WASI.id),
+      checkIn: "2027-07-28",
+      checkOut: "2027-07-31",
+      rooms: [room("512021", 54_000), room("512022", 79_770)],
+    });
+  const where = (fake: FakeBeds24, ids: readonly number[]) =>
+    ids.map((id) => {
+      const b = fake.bookings.get(id);
+      return `${b?.status} ${b?.arrival}..${b?.departure}`;
+    });
+
+  it("adds a room before it moves any, and a room another channel takes then moves nothing", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    const stay = twoRooms("sd-01JAINTIWASI0000000000011");
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const ids = [...(fake.bookings.get(Number(link.externalId))?.group ?? [])];
+    const before = where(fake, ids);
+    // The change: other dates, and a third room. Another channel takes the last Matrimonial meanwhile.
+    fake.beforeWrite = () => {
+      fake.beforeWrite = null;
+      fake.book({ roomId: 512_021, arrival: "2027-08-10", departure: "2027-08-12", channel: "airbnb" });
+      fake.book({ roomId: 512_021, arrival: "2027-08-10", departure: "2027-08-12", channel: "booking" });
+    };
+    const changed = {
+      ...stay,
+      key: `${stay.key}-change-e1`,
+      checkIn: "2027-08-10",
+      checkOut: "2027-08-12",
+      rooms: [room("512021", 36_000), room("512022", 53_180), room("512021", 36_000)],
+    };
+    await expect(writer.put(ctx, changed, link, "confirmed")).rejects.toMatchObject({ code: "refused" });
+    // Beds24 still has the stay on its own nights, and the nights it held are still taken.
+    expect(where(fake, ids)).toEqual(before);
+    expect(fake.numAvail(512_021, "2027-07-28")).toBe(1);
+    expect(fake.numAvail(512_022, "2027-07-28")).toBe(0);
+    expect([...fake.bookings.values()].filter((b) => b.apiReference === `${stay.key}~3`)).toEqual([]);
+    clean(fake);
+  });
+
+  it("puts every room back when Beds24 refuses one of them mid-change, and cancels the room it made", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    const stay = twoRooms("sd-01JAINTIWASI0000000000012");
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const ids = [...(fake.bookings.get(Number(link.externalId))?.group ?? [])];
+    const before = where(fake, ids);
+    // Beds24 will not change the second room (locked): the first moves, the third is made, then both undone.
+    fake.mode.refuseModify.add(ids[1] as number);
+    const changed = {
+      ...stay,
+      key: `${stay.key}-change-e2`,
+      checkIn: "2027-08-10",
+      checkOut: "2027-08-12",
+      rooms: [room("512021", 36_000), room("512022", 53_180), room("512021", 36_000)],
+    };
+    await expect(writer.put(ctx, changed, link, "confirmed")).rejects.toMatchObject({
+      code: "refused",
+      message: "Booking is locked",
+    });
+    expect(where(fake, ids)).toEqual(before);
+    expect(fake.bookings.get(ids[0] as number)?.price).toBe(540);
+    const third = [...fake.bookings.values()].filter((b) => b.apiReference === `${stay.key}~3`);
+    expect(third.map((b) => b.status)).toEqual(["cancelled"]);
+    expect(fake.numAvail(512_021, "2027-08-10")).toBe(2);
+    clean(fake);
+  });
+
+  it("never calls a change refused when putting it back did not go through: it may stand there", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    const stay = twoRooms("sd-01JAINTIWASI0000000000013");
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const ids = [...(fake.bookings.get(Number(link.externalId))?.group ?? [])];
+    fake.mode.refuseModify.add(ids[1] as number);
+    // The change's write spends the last credits: putting it back is answered "Usage limit exceeded".
+    fake.beforeWrite = () => {
+      fake.credits.remaining = 0;
+    };
+    const changed = { ...stay, key: `${stay.key}-change-e3`, checkIn: "2027-08-10", checkOut: "2027-08-13" };
+    await expect(writer.put(ctx, changed, link, "confirmed")).rejects.toMatchObject({
+      code: "bad_response",
+      message: `Beds24 took part of this and did not take all of it back: check booking ${ids[0]} there.`,
+    });
+    clean(fake);
+  });
+
+  it("restores a stay whose change oversold to the nights it held, even with one of them taken since", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    fake.mode.checkAvailability = "ignore";
+    const ctx = run(fake);
+    const stay = twoRooms("sd-01JAINTIWASI0000000000014");
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const ids = [...(fake.bookings.get(Number(link.externalId))?.group ?? [])];
+    fake.beforeWrite = () => {
+      fake.beforeWrite = null;
+      fake.book({ roomId: 512_022, arrival: "2027-08-10", departure: "2027-08-12", channel: "expedia" });
+    };
+    const changed = {
+      ...stay,
+      key: `${stay.key}-change-e4`,
+      checkIn: "2027-08-10",
+      checkOut: "2027-08-12",
+      rooms: [...stay.rooms, room("512021", 54_000)],
+    };
+    await writer.put(ctx, changed, link, "confirmed");
+    expect(await writer.oversold?.(ctx, changed, link)).toBe(true);
+    // Meanwhile another channel takes the Familiar's old last night, freed by the move.
+    fake.book({ roomId: 512_022, arrival: "2027-07-30", departure: "2027-07-31", channel: "booking" });
+    // A plain move back is refused: the night is not free. The restore puts it back all the same, and says so.
+    await expect(writer.put(ctx, { ...stay, key: changed.key }, link, "confirmed")).rejects.toMatchObject({
+      code: "refused",
+    });
+    await writer.restore?.(ctx, { ...stay, key: changed.key }, link);
+    expect(where(fake, ids)).toEqual(["confirmed 2027-07-28..2027-07-31", "confirmed 2027-07-28..2027-07-31"]);
+    const third = [...fake.bookings.values()].filter((b) => b.apiReference === `${stay.key}~3`);
+    expect(third.map((b) => b.status)).toEqual(["cancelled"]);
+    expect(await writer.oversold?.(ctx, { ...stay, key: changed.key }, link)).toBe(true);
+    clean(fake);
+  });
+
+  it("never calls a group refused when cancelling what it made did not go through, and still finds it", async () => {
+    for (const lost of ["last", "first"] as const) {
+      const fake = fakeBeds24({ properties: PROPERTIES });
+      const ctx = run(fake);
+      const key = `sd-01JAINTIWASI00000000002${lost === "first" ? "1" : "2"}`;
+      // Three rooms; the Familiar (one unit) is taken in the moment, and the credits run out with it.
+      const rooms =
+        lost === "last"
+          ? [room("512021", 54_000), room("512021", 54_000), room("512022", 79_770)]
+          : [room("512022", 79_770), room("512021", 54_000), room("512021", 54_000)];
+      fake.beforeWrite = () => {
+        fake.beforeWrite = null;
+        fake.book({ roomId: 512_022, arrival: "2027-07-28", departure: "2027-07-31", channel: "booking" });
+        fake.credits.remaining = 0;
+      };
+      const stay = stayOf({
+        key,
+        propertyId: String(INTI_WASI.id),
+        checkIn: "2027-07-28",
+        checkOut: "2027-07-31",
+        rooms,
+      });
+      const error = (await writer.put(ctx, stay, null, "confirmed").catch((e: unknown) => e)) as ConnectorError;
+      const made = [...fake.bookings.values()].filter((b) => (b.apiReference ?? "").startsWith(key));
+      expect(made.map((b) => b.status)).toEqual(["confirmed", "confirmed"]);
+      expect(error).toMatchObject({ code: "bad_response" });
+      expect(error.message).toBe(
+        `Beds24 took part of this and did not take all of it back: check bookings ${made.map((b) => b.id).join(", ")} there.`,
+      );
+      // Once Beds24 answers again, the stay is found by its key even with its first room missing, and
+      // taken back whole.
+      fake.clock.now += 5 * 60_000 + 1_000;
+      const found = await writer.find(ctx, stay);
+      expect(found?.externalId).toBe(String(made[0]?.id));
+      await writer.cancel(ctx, found as NonNullable<typeof found>);
+      expect(made.map((b) => fake.bookings.get(b.id)?.status)).toEqual(["cancelled", "cancelled"]);
+      clean(fake);
+    }
+  });
+});
+
+describe("Beds24: what is undocumented, either way", () => {
+  it("counts bookings at the stay's edges whether Beds24's date bounds count the day itself or not", async () => {
+    for (const bounds of ["inclusive", "exclusive"] as const) {
+      const fake = fakeBeds24({ properties: PROPERTIES });
+      // The calendar stops at none: Beds24's count of bookings against units is what tells.
+      fake.mode.clampAvail = true;
+      fake.mode.bounds = bounds;
+      fake.mode.checkAvailability = "ignore";
+      const ctx = run(fake);
+      const stay = stayOf({ key: `sd-01JAHOSHI0000000000EDGE${bounds === "inclusive" ? "1" : "2"}` });
+      const link = await writer.put(ctx, stay, null, "confirmed");
+      expect(await writer.oversold?.(ctx, stay, link)).toBe(false);
+      // Another channel's guest arriving on the stay's last night: one unit, two bookings.
+      fake.book({ roomId: 512_001, arrival: "2027-04-11", departure: "2027-04-14", channel: "airbnb" });
+      expect(fake.numAvail(512_001, "2027-04-11")).toBe(-1);
+      expect(await writer.oversold?.(ctx, stay, link)).toBe(true);
+      const asked = fake.platform.seen.filter((r) => r.url.searchParams.has("arrivalTo")).at(-1)?.url.searchParams;
+      expect([asked?.get("arrivalTo"), asked?.get("departureFrom")]).toEqual(["2027-04-12", "2027-04-10"]);
+    }
+  });
+
+  it("finds a stay already past, whether or not Beds24 keeps a lookup by id to upcoming stays", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES, now: Date.parse("2026-10-20T08:00:00Z") });
+    fake.mode.upcoming = "always";
+    const ctx = run(fake);
+    const stay = stayOf({ key: "sd-01JAHOSHI0000000000000PAST", checkIn: "2026-10-25", checkOut: "2026-10-28" });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    fake.clock.now = Date.parse("2026-11-06T00:00:00Z");
+    const later = run(fake, { ...ctx.secret });
+    expect((await writer.find(later, stay))?.externalId).toBe(link.externalId);
+    // A no-show's nights after the first go: the booking is found and moved.
+    await writer.put(later, { ...stay, key: `${stay.key}-release-e1`, checkOut: "2026-10-26" }, link, "confirmed");
+    expect(fake.bookings.get(Number(link.externalId))?.departure).toBe("2026-10-26");
+    await writer.cancel(later, link);
+    expect(fake.bookings.get(Number(link.externalId))?.status).toBe("cancelled");
+  });
+
+  it("never calls a booking Beds24 does not have cancelled: the owner is asked to look", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    const gone = { externalId: "90009999", etag: null, calendar: null };
+    await expect(writer.cancel(ctx, gone)).rejects.toMatchObject({
+      code: "refused",
+      message: "That booking was not found in Beds24: check it there.",
+    });
+    await expect(
+      writer.put(ctx, stayOf({ key: "sd-01JAHOSHI0000000000000GONE-confirm-e1" }), gone, "confirmed"),
+    ).rejects.toMatchObject({ code: "refused", message: "That booking was not found in Beds24: check it there." });
+  });
+
+  it("tells of the charges Beds24 adds to a room besides its price: its fees, taxes and obligatory extras", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const rooms = await stays.rooms(run(fake), String(RIAD_ZITOUN.id));
+    expect(rooms.map((r) => [r.name, r.charges])).toEqual([
+      ["Chambre patio", ["cleaning", "tax"]],
+      ["Suite terrasse", ["tax"]],
+    ]);
+    const asked = fake.platform.seen.find((r) => r.url.pathname === "/api/v2/properties")?.url.searchParams;
+    expect(asked?.get("includeUpsellItems")).toBe("true");
+    // A property with none says none.
+    expect((await stays.rooms(run(fake), HOSHI)).every((r) => r.charges === undefined)).toBe(true);
   });
 });
 
@@ -774,14 +1120,14 @@ describe("Beds24: its booking webhook", () => {
     expect(fake.platform.seen.length).toBe(before);
   });
 
-  it("reads the booking back with the key: its nights as Beds24 has them, and the body's only to look at again", async () => {
+  it("reads again the nights a webhook names without spending a credit, and asks Beds24 only when it names none", async () => {
     const { fake, conn } = await connected();
     const b = fake.book({ roomId: 512_002, arrival: "2027-09-01", departure: "2027-09-04", channel: "expedia" });
     if (!conn || !def.hooks) throw new Error("not connected");
-    // The body says other dates than Beds24 holds: both are read again, and only Beds24's are its own.
-    const event = await def.hooks.verify(conn.ctx, {
-      headers: new Headers(),
-      body: JSON.stringify(
+    const body = (x: unknown) => ({ headers: new Headers(), body: JSON.stringify(x), query: new URLSearchParams() });
+    const event = await def.hooks.verify(
+      conn.ctx,
+      body(
         bookingWebhook({
           id: b.id,
           propertyId: RYOKAN_HOSHI.id,
@@ -790,17 +1136,39 @@ describe("Beds24: its booking webhook", () => {
           departure: "2027-12-26",
         }),
       ),
-      query: new URLSearchParams(),
-    });
+    );
     expect(event?.eventId).toBe(`booking:${b.id}:2026-10-20T09:14:03Z`);
-    const facts = await def.hooks.read(conn.ctx, event as NonNullable<typeof event>);
-    expect(facts).toEqual([
-      { kind: "stay_nights", roomIds: ["512002"], from: "2027-09-01", to: "2027-09-04" },
+    const before = fake.platform.seen.length;
+    // The nights named are only read again, never believed: nothing is asked of Beds24 for them.
+    expect(await def.hooks.read(conn.ctx, event as NonNullable<typeof event>)).toEqual([
       { kind: "stay_nights", roomIds: ["512002"], from: "2027-12-24", to: "2027-12-26" },
+    ]);
+    expect(fake.platform.seen.length).toBe(before);
+    // A webhook naming no nights: the booking is read back with the token, for the nights Beds24 holds.
+    const bare = await def.hooks.verify(conn.ctx, body({ timeStamp: "2026-10-20T10:00:00Z", booking: { id: b.id } }));
+    expect(await def.hooks.read(conn.ctx, bare as NonNullable<typeof bare>)).toEqual([
+      { kind: "stay_nights", roomIds: ["512002"], from: "2027-09-01", to: "2027-09-04" },
     ]);
     const asked = fake.platform.seen.filter((r) => r.url.pathname === "/api/v2/bookings" && r.method === "GET").at(-1);
     expect(asked?.url.searchParams.getAll("id")).toEqual([String(b.id)]);
     expect(asked?.headers.get("token")).toBeTruthy();
+  });
+
+  it("refuses a webhook that carries card details, keeping nothing of it", async () => {
+    const { token, events, receive } = await connected();
+    const base = bookingWebhook({
+      id: 90_001_780,
+      propertyId: RYOKAN_HOSHI.id,
+      roomId: 512_001,
+      arrival: "2027-04-10",
+      departure: "2027-04-12",
+    });
+    for (const extra of [{ cvc: "123" }, { cardToken: "tok_x" }]) {
+      expect(await receive(token, { ...base, booking: { ...base.booking, ...extra } })).toMatchObject({
+        status: 400,
+      });
+    }
+    expect(await events()).toEqual([]);
   });
 });
 
@@ -843,7 +1211,7 @@ describe("Beds24: only Beds24's own address", () => {
       const fake = fakeBeds24({ properties: PROPERTIES });
       fake.mode.pageSize = 1;
       fake.mode.nextPage = style;
-      expect(await stays.properties(run(fake))).toHaveLength(3);
+      expect(await stays.properties(run(fake))).toHaveLength(5);
     }
     const fake = fakeBeds24({ properties: PROPERTIES });
     fake.mode.pageSize = 1;

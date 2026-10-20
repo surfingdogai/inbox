@@ -16,10 +16,19 @@ import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
  *   OpenAPI file: `numAvail` "may be negative … if a room is overbooked");
  * - `apiReference` kept or dropped on a new booking;
  * - next-page links on Beds24, without a scheme, or to another host;
- * - a write that lands but whose answer is lost.
+ * - a write that lands but whose answer is lost;
+ * - whether "only upcoming bookings" (the OpenAPI file's default for GET /bookings) holds for a lookup
+ *   by id or by `apiReference` too, unless a date is named;
+ * - whether `arrivalTo` ("arrival date before this") and `departureFrom` ("departure date after this")
+ *   count the day itself;
+ * - whether the calendar's `numAvail` goes below none on an overbooked night, or stops at none.
+ *
+ * Scopes are held as the wiki gives them: a `read:` or `write:` method on each, `all:` for every
+ * method; `bookings-financial` is what shows and takes a booking's price, deposit and tax.
  *
  * Its own rules, which are not Beds24's documented behaviour and are said here so no test leans on
- * them as such: an offer's total is the sum of the room's daily price with the offer's number.
+ * them as such: an offer's total is the sum of the room's daily price with the offer's number; a
+ * booking in `refuseModify` is one Beds24 will not change (a locked booking).
  */
 
 export const API = "https://beds24.com/api/v2";
@@ -27,7 +36,15 @@ const WINDOW_MS = 5 * 60_000;
 const DAY = 86_400_000;
 const DEFAULT_STATUSES = ["confirmed", "request", "new", "black", "inquiry"];
 const TAKES_ROOM = new Set(["confirmed", "request", "new", "black"]);
-const FULL = ["read:inventory", "read:properties", "all:bookings", "read:bookings-personal"];
+const FULL = [
+  "read:bookings",
+  "write:bookings",
+  "read:bookings-personal",
+  "read:bookings-financial",
+  "write:bookings-financial",
+  "read:inventory",
+  "read:properties",
+];
 
 export interface FakeBooking {
   id: number;
@@ -51,6 +68,7 @@ export interface FakeBooking {
   comments?: string;
   flagText?: string;
   flagColor?: string;
+  infoItems?: { id: number; code: string; text: string }[];
   channel?: string;
   modifiedTime: string;
 }
@@ -69,6 +87,14 @@ export interface FakeBeds24 {
     nextPage: "beds24" | "schemeless" | "foreign";
     /** A POST /bookings that lands and whose answer never comes back (502). */
     lostAnswer: boolean;
+    /** Whether "only upcoming bookings" applies to lookups by id or key too, unless a date is named. */
+    upcoming: "unless-id" | "always";
+    /** Whether `arrivalTo` and `departureFrom` count the day itself. */
+    bounds: "inclusive" | "exclusive";
+    /** Whether the calendar's `numAvail` stops at none instead of going below. */
+    clampAvail: boolean;
+    /** Bookings Beds24 will not change: each change to one is answered as an error. */
+    refuseModify: Set<number>;
   };
   credits: { limit: number; remaining: number; windowStart: number };
   /** What each call costs, by method and path. */
@@ -135,7 +161,12 @@ export function fakeBeds24(opts: {
     pageSize: 100,
     nextPage: "beds24",
     lostAnswer: false,
+    upcoming: "unless-id",
+    bounds: "inclusive",
+    clampAvail: false,
+    refuseModify: new Set(),
   };
+  let nextInfo = 70_000;
 
   const roomOf = (roomId: number) => {
     for (const p of opts.properties) {
@@ -251,18 +282,19 @@ export function fakeBeds24(opts: {
     return { headers: creditHeaders(cost) };
   };
 
+  /** Whether scopes grant one: the scope itself, or `all:` on the same thing. */
+  const holds = (scopes: readonly string[], need: string) => {
+    const [, what] = need.split(":");
+    return scopes.includes(need) || scopes.includes(`all:${what}`);
+  };
+
   /** The token's scopes, or the answer that it was not taken. */
   const authorise = (req: FakeRequest, need: string): readonly string[] | Response => {
     const t = req.headers.get("token");
     if (!t) return json(401, failure(401, "Token is missing"));
     const held = tokens.get(t);
     if (!held || held.expiresAt <= clock.now) return json(401, failure(401, "Token is invalid"));
-    const [, what] = need.split(":");
-    const ok =
-      held.scopes.includes(need) ||
-      held.scopes.includes(`all:${what}`) ||
-      (need.startsWith("read:") && held.scopes.includes(`write:${what}`));
-    if (!ok) return json(403, failure(403, "Token does not have the required scope"));
+    if (!holds(held.scopes, need)) return json(403, failure(403, "Token does not have the required scope"));
     return held.scopes;
   };
 
@@ -276,16 +308,22 @@ export function fakeBeds24(opts: {
     method: string,
     path: string,
     need: string | null,
-    handle: (req: FakeRequest, headers: Record<string, string>) => Response | Promise<Response>,
+    handle: (
+      req: FakeRequest,
+      headers: Record<string, string>,
+      scopes: readonly string[],
+    ) => Response | Promise<Response>,
   ) => {
     platform.on(method, `${API}${path}`, async (req) => {
       const spent = spend(req);
       if (spent instanceof Response) return spent;
+      let scopes: readonly string[] = [];
       if (need) {
         const ok = authorise(req, need);
         if (ok instanceof Response) return ok;
+        scopes = ok;
       }
-      return handle(req, spent.headers);
+      return handle(req, spent.headers, scopes);
     });
   };
 
@@ -377,7 +415,13 @@ export function fakeBeds24(opts: {
     return paged(
       req,
       "property",
-      props.map((p) => propertyAnswer(p, { rooms: flag(req, "includeAllRooms"), offers: flag(req, "includeOffers") })),
+      props.map((p) =>
+        propertyAnswer(p, {
+          rooms: flag(req, "includeAllRooms"),
+          offers: flag(req, "includeOffers"),
+          upsells: flag(req, "includeUpsellItems"),
+        }),
+      ),
       headers,
     );
   });
@@ -401,7 +445,9 @@ export function fakeBeds24(opts: {
         return {
           from: night,
           to: night,
-          ...(flag(req, "includeNumAvail") ? { numAvail: numAvail(r.id, night) } : {}),
+          ...(flag(req, "includeNumAvail")
+            ? { numAvail: mode.clampAvail ? Math.max(0, numAvail(r.id, night)) : numAvail(r.id, night) }
+            : {}),
           ...(flag(req, "includeMinStay") ? { minStay: 1 } : {}),
           ...(flag(req, "includeOverride") && override ? { override } : {}),
           ...(flag(req, "includeMultiplier") && m !== undefined ? { multiplier: m } : {}),
@@ -456,7 +502,7 @@ export function fakeBeds24(opts: {
 
   /* --- bookings ---------------------------------------------------------------- */
 
-  const view = (b: FakeBooking, group: boolean) => ({
+  const view = (b: FakeBooking, o: { group: boolean; info: boolean; financial: boolean }) => ({
     id: b.id,
     propertyId: b.propertyId,
     roomId: b.roomId,
@@ -466,10 +512,12 @@ export function fakeBeds24(opts: {
     departure: b.departure,
     numAdult: b.numAdult,
     numChild: b.numChild,
-    price: b.price,
+    // Money only to a token with the financial scope (the wiki: it "provides access to financial information").
+    ...(o.financial ? { price: b.price, deposit: 0, tax: 0 } : {}),
     ...(b.apiReference !== undefined ? { apiReference: b.apiReference } : {}),
     masterId: b.masterId ?? null,
-    ...(group ? { bookingGroup: b.group ? { master: b.group[0], ids: b.group } : null } : {}),
+    ...(o.group ? { bookingGroup: b.group ? { master: b.group[0], ids: b.group } : null } : {}),
+    ...(o.info ? { infoItems: (b.infoItems ?? []).map((x) => ({ ...x, bookingId: b.id })) } : {}),
     ...(b.lastName !== undefined ? { lastName: b.lastName } : {}),
     ...(b.firstName !== undefined ? { firstName: b.firstName } : {}),
     flagText: b.flagText ?? "",
@@ -480,36 +528,66 @@ export function fakeBeds24(opts: {
     modifiedTime: b.modifiedTime,
   });
 
-  route("GET", "/bookings", "read:bookings", (req, headers) => {
+  route("GET", "/bookings", "read:bookings", (req, headers, scopes) => {
     const ids = list(req, "id").map(Number);
     const refs = list(req, "apiReference");
     const rooms = list(req, "roomId").map(Number);
     const statuses = list(req, "status");
     const wanted = statuses.length ? statuses : DEFAULT_STATUSES;
+    const arrivalFrom = req.url.searchParams.get("arrivalFrom");
     const arrivalTo = req.url.searchParams.get("arrivalTo");
     const departureFrom = req.url.searchParams.get("departureFrom");
     const today = new Date(clock.now).toISOString().slice(0, 10);
+    const exclusive = mode.bounds === "exclusive";
+    const dated = Boolean(arrivalFrom || arrivalTo || departureFrom);
+    const byIdOrKey = ids.length > 0 || refs.length > 0;
     const found = [...bookings.values()].filter((b) => {
       if (ids.length && !ids.includes(b.id)) return false;
       if (refs.length && !refs.includes(b.apiReference ?? "\u0000")) return false;
       if (rooms.length && !rooms.includes(b.roomId)) return false;
       if (!wanted.includes(b.status)) return false;
-      if (arrivalTo && b.arrival > arrivalTo) return false;
-      if (departureFrom && b.departure < departureFrom) return false;
+      if (arrivalFrom && (exclusive ? b.arrival <= arrivalFrom : b.arrival < arrivalFrom)) return false;
+      if (arrivalTo && (exclusive ? b.arrival >= arrivalTo : b.arrival > arrivalTo)) return false;
+      if (departureFrom && (exclusive ? b.departure <= departureFrom : b.departure < departureFrom)) return false;
       // "By default only upcoming bookings will be returned."
-      if (!ids.length && !refs.length && !arrivalTo && !departureFrom && b.departure < today) return false;
+      if (!dated && (!byIdOrKey || mode.upcoming === "always") && b.departure < today) return false;
       return true;
     });
+    const o = {
+      group: flag(req, "includeBookingGroup"),
+      info: flag(req, "includeInfoItems"),
+      financial: holds(scopes, "read:bookings-financial"),
+    };
     return paged(
       req,
       "booking",
-      found.sort((a, b) => a.id - b.id).map((b) => view(b, flag(req, "includeBookingGroup"))),
+      found.sort((a, b) => a.id - b.id).map((b) => view(b, o)),
       headers,
     );
   });
 
-  route("POST", "/bookings", "all:bookings", (req, headers) => {
+  /** Info items written with a booking: added without an id, changed by id with text, taken off by id alone. */
+  const applyInfo = (b: FakeBooking, raw: unknown) => {
+    if (!Array.isArray(raw)) return;
+    const items = [...(b.infoItems ?? [])];
+    for (const x of raw as { id?: unknown; code?: unknown; text?: unknown }[]) {
+      if (typeof x.id === "number") {
+        const at = items.findIndex((i) => i.id === x.id);
+        if (at < 0) continue;
+        if (typeof x.text === "string")
+          items[at] = { ...(items[at] as { id: number; code: string; text: string }), text: x.text };
+        else items.splice(at, 1);
+      } else if (typeof x.text === "string") {
+        items.push({ id: ++nextInfo, code: typeof x.code === "string" ? x.code : "", text: x.text });
+      }
+    }
+    b.infoItems = items;
+  };
+
+  route("POST", "/bookings", "write:bookings", (req, headers, scopes) => {
     fake.beforeWrite?.();
+    // A price, deposit or tax is taken only from a token with the financial scope; otherwise left out.
+    const money = holds(scopes, "write:bookings-financial");
     let items: Record<string, unknown>[];
     try {
       items = JSON.parse(req.body) as Record<string, unknown>[];
@@ -523,6 +601,9 @@ export function fakeBeds24(opts: {
       if (typeof it.id === "number") {
         const b = bookings.get(it.id);
         if (!b) return { success: false, errors: [{ action: "modify", field: "id", message: "Booking not found" }] };
+        if (mode.refuseModify.has(b.id)) {
+          return { success: false, errors: [{ action: "modify", field: "id", message: "Booking is locked" }] };
+        }
         // An update is not checked against availability: it can take the room below none.
         for (const k of [
           "status",
@@ -538,8 +619,10 @@ export function fakeBeds24(opts: {
           "flagText",
           "flagColor",
         ] as const) {
+          if (k === "price" && !money) continue;
           if (it[k] !== undefined) (b as unknown as Record<string, unknown>)[k] = it[k];
         }
+        applyInfo(b, it.infoItems);
         b.modifiedTime = new Date(clock.now).toISOString();
         return { success: true, modified: { id: b.id } };
       }
@@ -566,7 +649,7 @@ export function fakeBeds24(opts: {
         status: typeof it.status === "string" ? it.status : "new",
         numAdult: Number(it.numAdult ?? 1),
         numChild: Number(it.numChild ?? 0),
-        price: Number(it.price ?? 0),
+        price: money ? Number(it.price ?? 0) : 0,
         channel: "direct",
         ...(mode.apiReference === "kept" && typeof it.apiReference === "string"
           ? { apiReference: it.apiReference }
@@ -580,6 +663,7 @@ export function fakeBeds24(opts: {
         ...(typeof it.flagText === "string" ? { flagText: it.flagText } : {}),
         ...(typeof it.flagColor === "string" ? { flagColor: it.flagColor } : {}),
       });
+      applyInfo(b, it.infoItems);
       if (actions.makeGroup === true) group.push(b.id);
       if (typeof it.masterId === "number") {
         const master = bookings.get(it.masterId);
@@ -597,7 +681,7 @@ export function fakeBeds24(opts: {
     return json(201, answers, headers);
   });
 
-  route("DELETE", "/bookings", "all:bookings", (req, headers) => {
+  route("DELETE", "/bookings", "write:bookings", (req, headers) => {
     for (const id of list(req, "id").map(Number)) bookings.delete(id);
     return json(201, [{ success: true }], headers);
   });

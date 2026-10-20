@@ -5,7 +5,9 @@
  *   `refreshToken`: token, expiresIn, refreshToken), `/authentication/token` (GET with header
  *   `refreshToken`, answer schema `token`; DELETE gives the refresh token back) and
  *   `/authentication/details` (answer schema `tokenDetails`: validToken, token.ownerId, token.scopes…).
- * - https://wiki.beds24.com/index.php/API_V2.0: "Invite codes expire after 24 hours", "Tokens generated
+ * - https://wiki.beds24.com/index.php/API_V2.0: scopes as `read:`, `write:` or `all:` (every method,
+ *   deleting too) on bookings, bookings-personal, bookings-financial, inventory, properties;
+ *   "Invite codes expire after 24 hours", "Tokens generated
  *   from refresh tokens expire after 24 hours", "Unused refresh tokens expire after 30 days"; its FAQ
  *   names POST /authentication/setup, which the OpenAPI file does not.
  * Values are made up for these tests; the shapes are the documented ones. Error texts are not given by
@@ -33,7 +35,15 @@ export const detailsAnswer = {
     ownerId: OWNER_ID,
     expiresIn: 86_400,
     created: "2026-10-20T08:00:00Z",
-    scopes: ["read:inventory", "read:properties", "all:bookings", "read:bookings-personal"],
+    scopes: [
+      "read:bookings",
+      "write:bookings",
+      "read:bookings-personal",
+      "read:bookings-financial",
+      "write:bookings-financial",
+      "read:inventory",
+      "read:properties",
+    ],
     deviceName: "Inbox",
     linkedProperties: false,
     onlyPropertyId: null,
