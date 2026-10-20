@@ -56,7 +56,23 @@ export const propertyApi = {
 export interface SystemProperty {
   readonly id: string;
   readonly name: string;
-  readonly rooms: readonly { id: string; name: string; units: number }[];
+  readonly rooms: readonly {
+    id: string;
+    name: string;
+    units: number;
+    /** The system holds no price for it: never offered from here until it has one. */
+    unpriced?: boolean;
+    /** What the system adds to its price: the owner checks the prices here cover them. */
+    charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
+  }[];
+}
+
+const CHARGE_WORDS = { cleaning: "a cleaning fee", tax: "tax", deposit: "a security deposit", extra: "an extra" };
+
+/** "a cleaning fee and tax": the charges a system adds to a room, in a few words. */
+export function chargeWords(charges: readonly (keyof typeof CHARGE_WORDS)[]): string {
+  const words = charges.map((c) => CHARGE_WORDS[c]);
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : (words[0] ?? "");
 }
 
 export const pk = {
@@ -67,8 +83,8 @@ export const pk = {
 };
 
 /** The property as set up, or null when there is none yet (an inbox that is not a place to stay). */
-export function useProperty() {
-  return useQuery({ queryKey: pk.setup, queryFn: () => propertyApi.setup(), staleTime: 30_000 });
+export function useProperty(enabled = true) {
+  return useQuery({ queryKey: pk.setup, queryFn: () => propertyApi.setup(), staleTime: 30_000, enabled });
 }
 
 export function useNights(from: string | undefined, days: number, enabled = true) {

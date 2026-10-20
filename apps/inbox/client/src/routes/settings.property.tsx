@@ -17,6 +17,7 @@ import {
 import { Sheet } from "../components/Sheet";
 import { ownerCall, problemOf } from "../lib/api";
 import {
+  chargeWords,
   KIND_WORDS,
   type OwnerSetup,
   type PropertyView,
@@ -106,7 +107,7 @@ function PropertyPage() {
 const MODES = [
   { value: "request", label: "I confirm each one" },
   { value: "allotment", label: "At once, in rooms I keep for direct guests" },
-  { value: "connected", label: "At once, by my property system" },
+  { value: "connected", label: "From my property system" },
 ] as const;
 
 /** S1: how a stay confirms here, said as the guests' assistants are told it, and the owner's to change. */
@@ -178,7 +179,7 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
         <>
           <SectionHead title="Your system" />
           {systems.map((c) => (
-            <div key={c.id} className="catalogue-row row-glass">
+            <div key={c.id} className="catalogue-row row-glass system-row">
               <div className="catalogue-main">
                 <div className="t">
                   <b>{c.title}</b> · {c.account}
@@ -255,7 +256,14 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
       {(sync.isError || calendar.isError) && (
         <p className="hint error">{problemOf(sync.error ?? calendar.error).detail}</p>
       )}
-      {mapping && <SystemSheet setup={setup} connection={mapping} onClose={() => setMapping(null)} />}
+      {mapping && (
+        <SystemSheet
+          setup={setup}
+          connection={mapping}
+          mapped={setup.property.connectorId === mapping.id}
+          onClose={() => setMapping(null)}
+        />
+      )}
     </section>
   );
 }
@@ -333,16 +341,22 @@ function CalendarLinkSheet({ rooms, onClose }: { rooms: PropertyView["rooms"]; o
 function SystemSheet({
   setup,
   connection,
+  mapped,
   onClose,
 }: {
   setup: PropertyView;
   connection: { id: string; title: string };
+  /** Matched already: the sheet is its rooms, saved again. */
+  mapped: boolean;
   onClose: () => void;
 }) {
   const props = useSystemProperties(connection.id);
   const list = props.data?.properties ?? [];
   const [chosen, setChosen] = useState<string | null>(setup.property.externalId);
-  const ext = list.find((p) => p.id === chosen) ?? (list.length === 1 ? list[0] : undefined);
+  // The property of the same name as this one is the likely one: chosen until the owner picks another.
+  const sameName = list.find((p) => p.name.trim().toLowerCase() === setup.property.name.trim().toLowerCase());
+  const ext =
+    list.find((p) => p.id === chosen) ?? (list.length === 1 ? list[0] : chosen === null ? sameName : undefined);
   const ours = setup.rooms.filter((r) => r.active);
   const guess = (name: string, id: string) =>
     ours.find((r) => r.externalId === id)?.id ??
@@ -353,7 +367,7 @@ function SystemSheet({
   const save = usePropertyWrite(propertyApi.mapSystem);
   const made = ext ? ext.rooms.filter((r) => pick(r.id, r.name) === "new").length : 0;
   return (
-    <Sheet title={`Connect ${connection.title}`} onClose={onClose}>
+    <Sheet title={mapped ? `${connection.title} rooms` : `Connect ${connection.title}`} onClose={onClose}>
       <div className="stack">
         {props.isPending && <div className="skeleton sk-line" />}
         {props.isError && <p className="hint error">{problemOf(props.error).detail}</p>}
@@ -364,7 +378,7 @@ function SystemSheet({
               <button
                 key={p.id}
                 type="button"
-                className={chosen === p.id ? "pick is-picked" : "pick"}
+                className={ext?.id === p.id ? "pick is-picked" : "pick"}
                 onClick={() => setChosen(p.id)}
               >
                 <b>{p.name}</b>
@@ -377,29 +391,48 @@ function SystemSheet({
         )}
         {ext && (
           <>
-            <div className="label">Its rooms</div>
-            {ext.rooms.map((r) => (
-              <Field key={r.id} id={`m-${r.id}`} label={`${r.name} · ${r.units}`}>
-                <select
-                  id={`m-${r.id}`}
-                  className="input"
-                  value={pick(r.id, r.name)}
-                  onChange={(e) => setRooms({ ...rooms, [r.id]: e.target.value })}
-                >
-                  <option value="new">A new room type, as your system has it</option>
-                  {ours.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ))}
+            <div className="label">Match its rooms</div>
+            {ext.rooms.map((r) => {
+              const here = ours.find((o) => o.id === pick(r.id, r.name));
+              return (
+                <div key={r.id} className="stack-xs">
+                  <Field id={`m-${r.id}`} label={`${r.name} · ${r.units} ${r.units === 1 ? "room" : "rooms"}`}>
+                    <select
+                      id={`m-${r.id}`}
+                      className="input"
+                      value={pick(r.id, r.name)}
+                      onChange={(e) => setRooms({ ...rooms, [r.id]: e.target.value })}
+                    >
+                      <option value="new">A new room type, as your system has it</option>
+                      {ours.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {r.unpriced && (
+                    <p className="hint">No price in {connection.title} yet: guests won't see it until it has one.</p>
+                  )}
+                  {r.charges && r.charges.length > 0 && (
+                    <p className="hint">
+                      {connection.title} has {chargeWords(r.charges)} set for this room: check the prices here include{" "}
+                      {r.charges.length === 1 ? "it" : "them"}.
+                    </p>
+                  )}
+                  {here && here.units !== r.units && (
+                    <p className="hint">
+                      {connection.title} has {r.units}, here {here.units}: what is free comes from {connection.title}.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
             <p className="reads-as">
-              This inbox is {ext.name} in {connection.title}, with {ext.rooms.length} room type
-              {ext.rooms.length === 1 ? "" : "s"}
-              {made ? `, ${made} of them new here` : ""}. Stays are written there first. Nothing confirms on its own
-              until you say so, after a first stay is written and read back.
+              This inbox is {ext.name} in {connection.title}
+              {made ? `, with ${made} room type${made === 1 ? "" : "s"} new here` : ""}. Each stay goes into{" "}
+              {connection.title} first, and you confirm each one until you choose otherwise, once a first stay has gone
+              through.
             </p>
           </>
         )}
@@ -425,7 +458,7 @@ function SystemSheet({
               )
             }
           >
-            Connect
+            {mapped ? "Save" : "Connect"}
           </button>
         </FormActions>
       </div>
