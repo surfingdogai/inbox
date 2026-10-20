@@ -2,6 +2,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  linkSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -175,16 +176,18 @@ export function nodeSnapshot(client: NodeSqliteClient, dir: string = tmpdir()): 
 /**
  * A backup of a `node:sqlite` database: everything it holds, the sealed secrets and the receipt
  * signing keys included, unlike `nodeSnapshot`'s copy for the owner to take away. `VACUUM INTO`
- * writes it while the inbox keeps serving, beside `target` under a `.partial` name, so a backup that
- * stopped halfway is never taken for one that finished. The copy is put in the rollback journal so it
- * is one file, checked, readable by this user only (it holds every customer's details), and only then
- * renamed to `target`. It never overwrites a file, and it never migrates anything: a backup taken
- * before an update is the database exactly as the running version left it.
+ * writes it while the inbox keeps serving, beside `target` under a `.partial` name of this process's
+ * own, so a backup that stopped halfway is never taken for one that finished, and two backups at once
+ * never share one. The copy is put in the rollback journal so it is one file, checked, readable by
+ * this user only (it holds every customer's details), and only then linked to `target`, which fails
+ * when a file is there already: it never overwrites one, even one that appeared meanwhile. And it
+ * never migrates anything: a backup taken before an update is the database exactly as the running
+ * version left it.
  */
 export function backupDatabase(client: NodeSqliteClient, target: string): DatabaseReport {
-  if (existsSync(target)) throw new Error(`${target} exists already, and a backup never overwrites a file`);
-  const partial = `${target}.partial`;
-  rmSync(partial, { force: true });
+  const exists = () => new Error(`${target} exists already, and a backup never overwrites a file`);
+  if (existsSync(target)) throw exists();
+  const partial = `${target}.${process.pid}.${Date.now()}.partial`;
   try {
     client.raw.prepare("VACUUM INTO ?").run(partial);
     chmodSync(partial, 0o600);
@@ -196,7 +199,17 @@ export function backupDatabase(client: NodeSqliteClient, target: string): Databa
     }
     const report = inspectDatabase(partial);
     if (!report.ok) throw new Error(`the copy failed its check: ${report.problem}`);
-    renameSync(partial, target);
+    try {
+      linkSync(partial, target);
+      rmSync(partial, { force: true });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") throw exists();
+      // A file system without hard links: a rename, after one more look.
+      if (code !== "EPERM" && code !== "ENOTSUP" && code !== "EOPNOTSUPP" && code !== "EXDEV") throw error;
+      if (existsSync(target)) throw exists();
+      renameSync(partial, target);
+    }
     return report;
   } catch (error) {
     rmSync(partial, { force: true });

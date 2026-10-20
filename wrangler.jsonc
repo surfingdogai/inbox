@@ -42,6 +42,5 @@
     "producers": [{ "binding": "JOBS", "queue": "surfingdog-inbox-jobs" }],
     "consumers": [{ "queue": "surfingdog-inbox-jobs", "max_batch_size": 10, "max_retries": 3 }]
   },
-  "triggers": { "crons": ["*/5 * * * *"] },
-  "vars": { "INBOX_ENV": "development" }
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

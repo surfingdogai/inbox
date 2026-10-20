@@ -7,28 +7,39 @@
 // becomes that user before anything else runs, so the server itself never runs as root.
 //
 // Commands pass through: `node start.mjs create-owner-key laptop` is `node server.mjs create-owner-key
-// laptop`, as the right user. TERM and INT end the process at once: the database is in the
-// write-ahead log, so a stop between two writes loses neither.
-import { accessSync, chownSync, constants, lstatSync, mkdirSync, readdirSync } from "node:fs";
+// laptop`, as the right user. The server ends itself on TERM and INT: it stops taking requests, lets
+// the job it is running finish, and closes the database.
+import { accessSync, constants, lchownSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const UID = 10001;
 const GID = 10001;
-const data = path.dirname(process.env.INBOX_DB ?? "/opt/inbox/data/inbox.db");
+/** The only folder root ever gives away: the image's data folder, or a folder inside it. */
+const ROOT = "/opt/inbox/data";
+const data = path.resolve(path.dirname(process.env.INBOX_DB ?? `${ROOT}/inbox.db`));
 
-/** Gives `dir` and everything under it to the inbox user; links are changed, never followed. */
+/**
+ * Gives `dir` and everything under it to the inbox user. A link is given itself (lchown), never what
+ * it points at, and never walked into, so nothing the inbox user put in the folder can lead root out
+ * of it.
+ */
 function own(dir) {
   const walk = (p) => {
     const st = lstatSync(p);
-    if (st.uid !== UID || st.gid !== GID) chownSync(p, UID, GID);
-    if (st.isDirectory() && !st.isSymbolicLink()) for (const name of readdirSync(p)) walk(path.join(p, name));
+    if (st.uid !== UID || st.gid !== GID) lchownSync(p, UID, GID);
+    if (st.isDirectory()) for (const name of readdirSync(p)) walk(path.join(p, name));
   };
   walk(dir);
 }
 
 if (typeof process.getuid === "function" && process.getuid() === 0) {
   mkdirSync(data, { recursive: true });
-  own(data);
+  if (data === ROOT || data.startsWith(`${ROOT}/`)) {
+    own(data);
+  } else {
+    // INBOX_DB set elsewhere, such as beside the server itself: root gives nothing away there.
+    console.error(`${data} is not in ${ROOT}, so it is left as it is: give it to uid ${UID} yourself.`);
+  }
   process.setgroups([GID]);
   process.setgid(GID);
   process.setuid(UID);
@@ -48,7 +59,5 @@ try {
   );
   process.exit(1);
 }
-
-for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => process.exit(0));
 
 await import("./server.mjs");

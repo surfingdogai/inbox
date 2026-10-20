@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createDb, MIGRATIONS } from "@surfingdog/core";
@@ -105,6 +105,11 @@ describe("backup and check-db", () => {
       expect(JSON.parse(refused.out)).toMatchObject({ ok: false, problem: "it is not an SQLite database" });
       // check-db opens no instance database: none is made where it runs.
       expect(existsSync(path.join(dir, "data"))).toBe(false);
+
+      // Into a folder that is not there yet, as on a fresh volume: it makes it, for its user only.
+      const nested = path.join(dir, "backups", "first.db");
+      expect((await run(["backup", nested], dir, { INBOX_DB: file })).code).toBe(0);
+      expect(statSync(path.dirname(nested)).mode & 0o777).toBe(0o700);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

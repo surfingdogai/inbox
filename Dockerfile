@@ -1,6 +1,12 @@
 # Surfing Dog Inbox, the Node build, as one small image: ghcr.io/surfingdogai/inbox.
 #
-#   docker run -d -p 8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox
+#   (umask 077; echo "INBOX_SECRET_KEY=$(openssl rand -base64 32)" > inbox.env)   # keep a copy somewhere safe
+#   docker run -d --name inbox -p 127.0.0.1:8787:8787 -v inbox-data:/opt/inbox/data --env-file inbox.env \
+#     -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
+#     ghcr.io/surfingdogai/inbox:0.1.0
+#
+# It answers on the server itself only, over plain HTTP: put a proxy with TLS in front (one that drops
+# a CF-Connecting-IP the caller sent), or use deploy/docker-compose.yml, which has Caddy.
 #
 # Or build it from this repository: `docker build -t surfingdog-inbox .`. The release workflow builds
 # it for amd64 and arm64 on every version tag. The same steps as the Node install guide
@@ -11,7 +17,8 @@
 
 # The build is JavaScript, the same on every machine, so it runs once on the builder's own platform,
 # and only the small last stage is made for each architecture.
-FROM --platform=$BUILDPLATFORM node:24-slim AS build
+# Both bases are pinned by digest; Dependabot proposes each new one.
+FROM --platform=$BUILDPLATFORM node:24.22.0-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /src
@@ -19,7 +26,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @surfingdog/inbox build
 
-FROM node:24-alpine
+FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="Surfing Dog Inbox" \
