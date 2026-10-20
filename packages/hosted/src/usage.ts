@@ -2,10 +2,14 @@ import { existsSync, statSync } from "node:fs";
 import { type Db, PROMISE_STATES } from "@surfingdog/core";
 
 /**
- * What an inbox did in a month, as counts: what it is counted by (confirmed items) and what the
- * control plane watches. Test items are never counted.
+ * What an inbox did in a month, as counts: what it is counted by and what the control plane
+ * watches. Test items are never counted.
  *
- * - `items`: requests made in the month;
+ * - `items`: requests made in the month: what customers and their AIs sent through the inbox's
+ *   own doors (its API, MCP, the agent protocols, email, its form, the links in its emails). Never
+ *   what the owner marked as spam, nor what the business made itself (in the app, through its
+ *   own MCP, its connectors or the inbox's own jobs). A month is recounted every time it is
+ *   asked, so a request marked as spam leaves the count with the next reading;
  * - `agent_items`: those that came through a door for agents (the API, MCP and the agent protocols);
  * - `confirmed_items`: bookings and orders that first reached a promise in the month (a booking
  *   confirmed, an order accepted);
@@ -21,6 +25,12 @@ export interface Usage {
 }
 
 export const AGENT_CHANNELS = ["rest", "mcp_public", "a2a", "ucp", "acp", "arp"] as const;
+
+/** The doors a request comes through from outside: the agents' doors and the people's. */
+export const REQUEST_CHANNELS = [...AGENT_CHANNELS, "email", "form", "action_link"] as const;
+
+/** A request as `items` counts it: real, sent through a customer's door, and not spam. */
+const REQUEST = `COALESCE(sandbox, 0) = 0 AND state <> 'spam' AND channel IN (${REQUEST_CHANNELS.map(() => "?").join(", ")})`;
 
 /** `YYYY-MM` as the first millisecond of the month and of the next, in UTC; null for anything else. */
 export function monthRange(month: string): { from: number; to: number } | null {
@@ -51,14 +61,15 @@ export async function usageOf(
     const { rows } = await db.client.query({ sql, params: params as never, method: "all" });
     return Number(rows[0]?.[0] ?? 0);
   };
-  const items = await one(
-    "SELECT count(*) FROM items WHERE COALESCE(sandbox, 0) = 0 AND created_at >= ? AND created_at < ?",
-    [range.from, range.to],
-  );
+  const items = await one(`SELECT count(*) FROM items WHERE ${REQUEST} AND created_at >= ? AND created_at < ?`, [
+    ...REQUEST_CHANNELS,
+    range.from,
+    range.to,
+  ]);
   const agentItems = await one(
-    `SELECT count(*) FROM items WHERE COALESCE(sandbox, 0) = 0 AND created_at >= ? AND created_at < ?
+    `SELECT count(*) FROM items WHERE ${REQUEST} AND created_at >= ? AND created_at < ?
        AND channel IN (${AGENT_CHANNELS.map(() => "?").join(", ")})`,
-    [range.from, range.to, ...AGENT_CHANNELS],
+    [...REQUEST_CHANNELS, range.from, range.to, ...AGENT_CHANNELS],
   );
   const confirmed = await one(
     `SELECT count(*) FROM (
