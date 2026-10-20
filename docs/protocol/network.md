@@ -1637,11 +1637,12 @@ manifest's `profile` MAY carry `lodging` (`schemas/profile-lodging.json`):
 
 `kind` is a token of [`vocab/lodging.json`](../../packages/spec/vocab/lodging.json); `confirmation` is
 `request` (every stay answered by the property), `instant_some` (rooms kept for direct guests confirm at
-once inside their nights) or `instant` (the property's own system, written to first). A network keeps
-each field alone and drops a bad one alone, as for every profile field (§4.6): a kind it does not know,
-a time not in `HH:MM`, `rooms` outside 1 to 5,000, `answer_hours` outside 1 to 168, a registration
-longer than 60 characters. It MAY show `lodging` on a listing and filter by `takes=stay`; it MUST NOT
-read `confirmation` as a promise that a given night is free.
+once inside their nights) or `instant` (the property's own system, written to first). A network drops
+`lodging` alone, never the profile (§4.6): whole when its kind is not one it knows (read in any
+capitals), a time is not `HH:MM`, `confirmation` is none of the three or `answer_hours` is outside 1 to
+168; and within it, `rooms` outside 1 to 5,000 and a registration longer than 60 characters once
+cleaned, each alone (`vectors/profile.json` holds the cases). It MAY show `lodging` on a listing; it
+MUST NOT read `confirmation` as a promise that a given night is free.
 
 A stay door elsewhere is `{"item_type": "stay", "url": …, "url_template": …}`: the property's own
 booking engine, and its deep link with `{check_in}`, `{check_out}`, `{adults}`, `{children}` and
