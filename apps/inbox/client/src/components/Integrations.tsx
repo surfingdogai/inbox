@@ -359,7 +359,7 @@ function ConnectPanel({
   if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
-      {main.length > 1 && !way.advanced && (
+      {main.filter((w) => w.status === "ready").length > 1 && !way.advanced && (
         <fieldset className="seg">
           <legend className="sr-only">Which {card.title.toLowerCase()}</legend>
           {main.map((w) => (
@@ -809,7 +809,10 @@ function ConnectionLine({
     c.busy_on
       ? c.status === "configured"
         ? "reading busy times"
-        : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
+        : pays
+          ? // A till reads busy times from when it would book: a count of them is no count of appointments.
+            `busy times from ${c.title}`
+          : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
       : "busy times off",
     writes
       ? c.bookings_on
@@ -841,7 +844,7 @@ function ConnectionLine({
               : several
                 ? "sends your links"
                 : null,
-          pays.open > 0 ? `${pays.open} waiting` : null,
+          pays.open > 0 ? `${pays.open} ${pays.open === 1 ? "link" : "links"} waiting` : null,
           pays.held && pays.held > 0 ? `${pays.held} not sent: the shop counts another total` : null,
           pays.paid > 0 ? `${pays.paid} paid` : null,
           c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
@@ -883,6 +886,7 @@ function ConnectionLine({
             {c.last_error}
           </div>
         )}
+        {books && c.withheld.write_bookings && <div className="hint">{c.withheld.write_bookings}</div>}
         {c.busy_on && c.busy_partial && c.busy_until && (
           <div className="hint">
             Read to {dayOf(c.busy_until)}: this calendar has more ahead than is read, so later times stay closed.
@@ -1009,11 +1013,24 @@ function ConnectionLine({
           <NewLink connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
         ) : pays ? (
           <>
-            <PayChoices connection={c} onNewKey={() => setPanel("again")} onNotice={onNotice} choices={!books} />
-            {books && <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />}
+            <PayChoices
+              connection={c}
+              way={way}
+              onNewKey={() => setPanel("again")}
+              onNotice={onNotice}
+              choices={books ? c.choices.filter((x) => !x.bookings) : c.choices}
+            />
+            {books && (
+              <Choices
+                connection={c}
+                choices={c.choices.filter((x) => x.bookings)}
+                onDone={() => setPanel(null)}
+                onNotice={onNotice}
+              />
+            )}
           </>
         ) : (
-          <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
+          <Choices connection={c} choices={c.choices} onDone={() => setPanel(null)} onNotice={onNotice} />
         ))}
       {confirming && (
         <div className="confirm row-glass wide">
@@ -1068,19 +1085,25 @@ function ConnectionLine({
  */
 function PayChoices({
   connection: c,
+  way,
   onNewKey,
   onNotice,
-  choices = true,
+  choices,
 }: {
   connection: ConnectionView;
+  way: GalleryWay | undefined;
   onNewKey: () => void;
   onNotice: (n: Notice) => void;
-  /** Its choosers here; a till that also books shows them once, with its booking choices. */
-  choices?: boolean;
+  /** Its choosers here, saved as each changes: a till's location (its booking choices go with its bookings). */
+  choices: ConnectionView["choices"];
 }) {
   const write = useIntegrationWrite();
+  // "New access token" where the way asks for one credential; "New key" for a key and its webhook secret.
+  const secrets = way?.form.filter((f) => f.secret) ?? [];
+  const credential = secrets.length === 1 && secrets[0] ? secrets[0].label.toLowerCase() : "key";
   return (
     <div className="confirm row-glass wide stack">
+      <ChoiceFields connection={c} choices={choices} onNotice={onNotice} />
       <Switch
         checked={c.pay_on}
         onChange={(on) =>
@@ -1095,11 +1118,10 @@ function PayChoices({
       >
         Send a link to pay when you accept an order
       </Switch>
-      {choices && <ChoiceFields connection={c} onNotice={onNotice} />}
       <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
       <div className="rowx">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
-          New key
+          New {credential}
         </button>
       </div>
       {write.error && (
@@ -1230,15 +1252,24 @@ function PayKeyPanel({
 
 function Choices({
   connection: c,
+  choices,
   onDone,
   onNotice,
 }: {
   connection: ConnectionView;
+  /** Its choosers in this card (a till's team member), saved with the rest on Save. */
+  choices: ConnectionView["choices"];
   onDone: () => void;
   onNotice: (n: Notice) => void;
 }) {
   const write = useIntegrationWrite();
   const services = useServices();
+  const [picked, setPicked] = useState<Record<string, string | null>>(
+    Object.fromEntries(choices.map((x) => [x.key, x.value])),
+  );
+  const changed = Object.fromEntries(
+    choices.filter((x) => (picked[x.key] ?? null) !== x.value).map((x) => [x.key, picked[x.key] ?? null]),
+  );
   const [busy, setBusy] = useState<string[]>([...c.busy_calendars]);
   const [destination, setDestination] = useState<string | null>(c.destination);
   const [only, setOnly] = useState<string[] | null>(c.services ? [...c.services] : null);
@@ -1299,12 +1330,22 @@ function Choices({
           </div>
         </fieldset>
       )}
-      {c.capabilities.includes("write_bookings") && (
+      {c.capabilities.includes("write_bookings") ? (
         <Switch checked={bookingsOn} onChange={setBookingsOn}>
           Add confirmed bookings
         </Switch>
+      ) : (
+        c.withheld.write_bookings && <p className="hint">{c.withheld.write_bookings}</p>
       )}
-      <ChoiceFields connection={c} onNotice={onNotice} />
+      {c.capabilities.includes("write_bookings") && bookingsOn && c.bookings_note && (
+        <p className="hint">{c.bookings_note}</p>
+      )}
+      <ChoiceFields
+        connection={c}
+        choices={choices}
+        values={picked}
+        onChange={(key, value) => setPicked({ ...picked, [key]: value })}
+      />
       {bookingsOn && writable.length > 1 && (
         <Field id={`dest-${c.id}`} label={c.kind === "calcom" ? "Event type" : c.payments ? "Service" : "To"}>
           <select
@@ -1336,12 +1377,13 @@ function Choices({
                   ...(c.calendars.length > 0 ? { busy_calendars: busy } : {}),
                   ...(writable.length > 0 ? { destination } : {}),
                   services: only,
+                  ...(Object.keys(changed).length > 0 ? { choices: changed } : {}),
                 },
               },
               {
                 onSuccess: () => {
                   onDone();
-                  onNotice({ tone: "success", text: "Saved. Reading your calendar again." });
+                  onNotice({ tone: "success", text: `Saved. Reading ${c.title} again.` });
                 },
               },
             )
@@ -1364,36 +1406,56 @@ function Choices({
 
 /**
  * What else a connection lets the owner choose (a till's location, a team member), drawn from what the
- * server says: a chooser each, saved as soon as it changes. Never a typed id.
+ * server says, never a typed id: a chooser each, saved with the card's Save when the card has one
+ * (`onChange`), or as soon as it changes in a card that applies at once.
  */
-function ChoiceFields({ connection: c, onNotice }: { connection: ConnectionView; onNotice: (n: Notice) => void }) {
+function ChoiceFields({
+  connection: c,
+  choices,
+  values,
+  onChange,
+  onNotice,
+}: {
+  connection: ConnectionView;
+  choices: ConnectionView["choices"];
+  values?: Readonly<Record<string, string | null>>;
+  onChange?: (key: string, value: string | null) => void;
+  onNotice?: (n: Notice) => void;
+}) {
   const write = useIntegrationWrite();
-  if (!c.choices || c.choices.length === 0) return null;
+  if (choices.length === 0) return null;
   return (
     <>
-      {c.choices.map((choice) => (
-        <Field key={choice.key} id={`choice-${c.id}-${choice.key}`} label={choice.label}>
-          <select
-            id={`choice-${c.id}-${choice.key}`}
-            className="input"
-            value={choice.value ?? ""}
-            disabled={write.isPending}
-            onChange={(e) =>
-              write.mutate(
-                { id: c.id, patch: { choices: { [choice.key]: e.target.value || null } } },
-                { onSuccess: () => onNotice({ tone: "success", text: "Saved." }) },
-              )
-            }
-          >
-            <option value="">None</option>
-            {choice.options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-      ))}
+      {choices.map((choice) => {
+        const value = values ? (values[choice.key] ?? null) : choice.value;
+        return (
+          <Field key={choice.key} id={`choice-${c.id}-${choice.key}`} label={choice.label}>
+            <select
+              id={`choice-${c.id}-${choice.key}`}
+              className="input"
+              value={value ?? ""}
+              disabled={write.isPending}
+              onChange={(e) => {
+                const next = e.target.value || null;
+                if (onChange) onChange(choice.key, next);
+                else
+                  write.mutate(
+                    { id: c.id, patch: { choices: { [choice.key]: next } } },
+                    { onSuccess: () => onNotice?.({ tone: "success", text: "Saved." }) },
+                  );
+              }}
+            >
+              {/* Nothing to go back to once something is chosen: "None" is there only while nothing is. */}
+              {value === null && <option value="">None</option>}
+              {choice.options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        );
+      })}
     </>
   );
 }

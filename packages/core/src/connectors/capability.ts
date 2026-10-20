@@ -51,6 +51,7 @@ import {
   type OutboundBooking,
   type RunContext,
   secretKeys,
+  type Withheld,
 } from "./sdk";
 import {
   BUSY_HORIZON_MS,
@@ -183,7 +184,12 @@ export interface ConnectionView {
   readonly account: string;
   /** `configured` (not synced yet), `active`, `error` or `disabled` (paused). */
   readonly status: string;
+  /** What it does for this account now: its kind's capabilities, less what is withheld. */
   readonly capabilities: readonly string[];
+  /** What it cannot do for this account now, a line each saying why (`ConnectorDefinition.withheld`). */
+  readonly withheld: Withheld;
+  /** A line under "Add confirmed bookings": what the platform does with them (`ConnectorDefinition.bookingsNote`). */
+  readonly bookings_note: string | null;
   readonly busy_on: boolean;
   readonly bookings_on: boolean;
   readonly calendars: readonly CalendarChoice[];
@@ -1184,7 +1190,14 @@ export class ConnectorCapabilities {
     }
 
     let push = { written: 0, removed: 0, failed: 0, more: false };
-    if (row.config.bookingsOn && def.bookings && def.capabilities.includes("write_bookings")) {
+    // What this account cannot do now is never run: a plan that takes no bookings from this way in.
+    const withheld = withheldOf(def, row.config.extra);
+    if (
+      row.config.bookingsOn &&
+      def.bookings &&
+      def.capabilities.includes("write_bookings") &&
+      !withheld.write_bookings
+    ) {
       push = await this.pushBookings(row, def, ctx, now);
     }
     if (mode === "push") {
@@ -1227,7 +1240,7 @@ export class ConnectorCapabilities {
           method: "run",
         });
       }
-      if (row.config.busyOn && def.busy && def.capabilities.includes("busy_times")) {
+      if (row.config.busyOn && def.busy && def.capabilities.includes("busy_times") && !withheld.busy_times) {
         // Every booking any connection wrote is left out, the ones written since this run began too.
         const own = await this.ownEvents();
         const window = { start: now - 3_600_000, end: now + BUSY_HORIZON_MS };
@@ -1237,8 +1250,8 @@ export class ConnectorCapabilities {
         const written = await writeBusy(this.db, row.id, intervals, now, until);
         busy = written.rows;
         truncated = written.truncated || written.until < window.end;
-      } else if (!row.config.busyOn && row.busyGen !== null) {
-        // Switched off while a sync was reading: whatever it left is taken away again.
+      } else if ((!row.config.busyOn || withheld.busy_times) && row.busyGen !== null) {
+        // Switched off (or withheld) while a sync was reading: whatever it left is taken away again.
         await this.db.batch(clearBusyStatements(row.id));
       }
       // A shop's products (ADR-026 §3): a full pass now and then, what changed on every sync.
@@ -2128,6 +2141,7 @@ export class ConnectorCapabilities {
     const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
     const pays = def?.payments && def.capabilities.includes("pay_links") ? await this.payments.counts(row.id) : null;
     const hook = row.config.extra?.webhook;
+    const withheld = def ? withheldOf(def, row.config.extra) : {};
     return {
       id: row.id,
       kind: row.kind,
@@ -2136,7 +2150,9 @@ export class ConnectorCapabilities {
       name: row.name,
       account: row.config.account ?? "",
       status: row.status,
-      capabilities: def?.capabilities ?? [],
+      capabilities: (def?.capabilities ?? []).filter((c) => !withheld[c as keyof Withheld]),
+      withheld,
+      bookings_note: def?.bookingsNote ?? null,
       busy_on: row.config.busyOn !== false,
       bookings_on: row.config.bookingsOn !== false,
       calendars: row.config.calendars ?? [],
@@ -2455,8 +2471,21 @@ function mergeChoices(old: readonly ConnectionChoice[], fresh: readonly Connecti
   return fresh.map((c) => {
     const before = old.find((o) => o.key === c.key);
     const kept = before?.value && c.options.some((o) => o.id === before.value) ? before.value : null;
-    return { key: c.key, label: c.label, options: c.options, value: kept ?? c.value };
+    return { ...c, value: kept ?? c.value };
   });
+}
+
+/** What a connection cannot do for its account now; nothing when its kind does not say, or says it badly. */
+function withheldOf(def: ConnectorDefinition, extra: Readonly<Record<string, unknown>> | undefined): Withheld {
+  try {
+    const w = def.withheld?.({ extra: extra ?? {} }) ?? {};
+    return {
+      ...(w.busy_times ? { busy_times: w.busy_times } : {}),
+      ...(w.write_bookings ? { write_bookings: w.write_bookings } : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 /** What a sign-in asked first, as `connector_auth.input` keeps it: the way, and the values. */
