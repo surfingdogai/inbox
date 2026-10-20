@@ -5,6 +5,7 @@
  */
 export * from "./base";
 export * from "./conformance";
+export * from "./door-platforms";
 export * from "./network/index";
 export * from "./payments";
 export { JSON_SCHEMAS, jsonSchemaOf, SCHEMA_BASE } from "./schemas";

@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import {
   CalendarDays,
@@ -175,6 +176,15 @@ export function IntegrationsCard() {
                     />
                   ))}
                 </div>
+                {cards.some((c) => c.status === "soon") && (
+                  <p className="int-soon-line">
+                    Soon:{" "}
+                    {cards
+                      .filter((c) => c.status === "soon")
+                      .map((c) => c.title)
+                      .join(" · ")}
+                  </p>
+                )}
                 {here && keyPanel && data.can_connect && (
                   <PayKeyPanel
                     key={here.id}
@@ -215,7 +225,16 @@ export function IntegrationsCard() {
           })}
         </div>
       )}
-      {soon.length > 0 && <p className="int-soon-line">Soon: {soon.map((c) => c.title).join(" · ")}</p>}
+      {data && (
+        <p className="int-elsewhere">
+          {soon.some((c) => c.group === "shops" || c.group === "calendars")
+            ? "Already take bookings or orders on one of these?"
+            : "Take bookings or orders on another site?"}{" "}
+          <Link to="/settings" hash="elsewhere" className="int-elsewhere-link">
+            Send agents there →
+          </Link>
+        </p>
+      )}
     </section>
   );
 }

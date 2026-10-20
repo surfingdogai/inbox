@@ -6,7 +6,11 @@
 export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
 export {
   CARD_BRANDS,
+  DOOR_PLATFORM_GROUPS,
+  DOOR_PLATFORMS,
   discoverySnippets,
+  doorPlace,
+  doorPlatform,
   isPaymentToken,
   MANIFEST_PATH,
   manifestSchema,

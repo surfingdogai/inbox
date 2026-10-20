@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
   CountrySelect,
   CurrencySelect,
@@ -18,7 +18,30 @@ import { Field, Switch } from "../components/Form";
 import { problemOf } from "../lib/api";
 import { session } from "../lib/auth";
 import { currencyNote } from "../lib/currencies";
-import { doorSwitchDoc, doorViews, waitWords } from "../lib/doors";
+import {
+  choiceForLink,
+  cleanDoorUrl,
+  detectedDoors,
+  doorPlatform,
+  doorPlatformFit,
+  doorPlatformOf,
+  doorSwitchDoc,
+  doorViews,
+  ELSEWHERE_KINDS,
+  type ElsewhereEntry,
+  type ElsewhereKind,
+  elsewhereDoc,
+  linkProblem,
+  noWebsiteWords,
+  ownDomains,
+  pickedPlatformNote,
+  placeOf,
+  platformChoices,
+  prefillFrom,
+  shortLink,
+  stillHereWords,
+  waitWords,
+} from "../lib/doors";
 import { DURATION_PRESETS } from "../lib/durations";
 import { emailLangOf, mailBannerLines } from "../lib/format";
 import { countryOfZone } from "../lib/geo";
@@ -27,6 +50,7 @@ import {
   qk,
   useAvailability,
   useMailStatus,
+  useNetworks,
   useProducts,
   useProfile,
   useReceiptStatus,
@@ -161,14 +185,20 @@ function Loading() {
 
 /**
  * Three switches, one line each, saved as they are pressed. A booking switched on that cannot open
- * yet shows as waiting, says for what, and links the way there; bookings taken at another site say
- * where, and can come back here.
+ * yet shows as waiting, says for what, and links the way there. Bookings taken at another site
+ * (ADR-031) take the booking switch's row: no switch, where agents send them, Change and Take
+ * bookings here. Orders, which have no switch, get their own line under the switches.
  */
 function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending: boolean; onPatch: PatchSettings }) {
   // The owner's own read of the doors: the public one answers no agent until the inbox is connected.
   const profile = useProfile();
   const services = useServices();
   const availability = useAvailability();
+  // The Integrations gallery's "Send agents there" lands here with the editor open (`#elsewhere`).
+  const [editing, setEditing] = useState<ElsewhereKind | null>(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#elsewhere") return null;
+    return ELSEWHERE_KINDS.find((k) => !doc.doorsElsewhere.some((d) => d.itemType === k)) ?? null;
+  });
   if (!profile.data) return null;
   const a = availability.data;
   const windows = (w: object | undefined) => Object.values(w ?? {}).some((d) => Array.isArray(d) && d.length > 0);
@@ -179,6 +209,13 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
     hasHours: Boolean(a && ((a.weekly_set && windows(a.weekly)) || a.overrides.some((o) => windows(o.weekly)))),
     doorsElsewhere: doc.doorsElsewhere,
   });
+  const entries = doc.doorsElsewhere;
+  const away = entries.find((d) => d.itemType === "booking");
+  const domains = ownDomains(profile.data.domain, doc.directory.url);
+  const still = stillHereWords({
+    message: profile.data.item_types.includes("message"),
+    quoteRequest: profile.data.item_types.includes("quote_request"),
+  });
   return (
     <section className="card glass doors" aria-labelledby="doors-title">
       <h3 className="sec" id="doors-title">
@@ -186,6 +223,40 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
       </h3>
       <ul className="door-list">
         {views.map((v) => {
+          if (v.key === "booking" && away) {
+            return (
+              <li key={v.key} className="door-row door-away">
+                <span className="door-away-mark" aria-hidden="true">
+                  →
+                </span>
+                <span className="door-away-text">
+                  Agents send bookings to <strong>{placeOf(away)}</strong>
+                </span>
+                <a className="else-link" href={away.url} target="_blank" rel="noopener noreferrer">
+                  {shortLink(away.url)}
+                </a>
+                <span className="else-acts">
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={pending || editing === "booking"}
+                    onClick={() => setEditing("booking")}
+                  >
+                    Change
+                  </button>
+                  <span aria-hidden="true"> · </span>
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={pending}
+                    onClick={() => onPatch(elsewhereDoc(entries, "booking", null))}
+                  >
+                    Take bookings here
+                  </button>
+                </span>
+              </li>
+            );
+          }
           const why = v.needs ? `door-${v.key}-why` : undefined;
           return (
             <li key={v.key} className="door-row">
@@ -193,7 +264,7 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
                 checked={v.on}
                 pending={Boolean(v.needs)}
                 describedBy={why}
-                disabled={pending || Boolean(v.elsewhere)}
+                disabled={pending}
                 onChange={(on) => onPatch(doorSwitchDoc(v.key, on))}
               >
                 <span>
@@ -208,28 +279,338 @@ function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending
                   {v.needs !== "service" && <Link to="/settings/availability">Set hours</Link>}
                 </span>
               )}
-              {v.elsewhere && (
-                <span className="door-note">
-                  Booked at {v.elsewhere}.{" "}
-                  <button
-                    type="button"
-                    className="linkish"
-                    disabled={pending}
-                    onClick={() =>
-                      onPatch({ doorsElsewhere: doc.doorsElsewhere.filter((d) => d.itemType !== "booking") })
-                    }
-                  >
-                    Take bookings here
-                  </button>
-                </span>
-              )}
               {v.key === "message" && !v.on && <span className="door-note">Email still reaches you.</span>}
             </li>
           );
         })}
       </ul>
-      {views.every((v) => !v.open) && <p className="hint">Agents can't reach you at all.</p>}
+      {views.every((v) => !v.open) && entries.length === 0 && <p className="hint">Agents can't reach you at all.</p>}
+      <Elsewhere
+        entries={entries}
+        domains={domains}
+        still={still}
+        editing={editing}
+        pending={pending}
+        onEdit={setEditing}
+        onPatch={onPatch}
+      />
     </section>
+  );
+}
+
+// ---- bookings or orders on another site --------------------------------------------------------
+
+const KIND_WORDS: Record<
+  ElsewhereKind,
+  { readonly plural: string; readonly lower: string; readonly add: string; readonly paste: string }
+> = {
+  booking: {
+    plural: "Bookings",
+    lower: "bookings",
+    add: "Take bookings on another site?",
+    paste: "Paste the link to your booking page",
+  },
+  order: {
+    plural: "Orders",
+    lower: "orders",
+    add: "Take orders on another site?",
+    paste: "Paste the link to your shop",
+  },
+};
+
+/** The chooser's value for a page on no platform of the list. */
+const ANOTHER = "other";
+
+/** What a network already found for this business on a platform that takes this kind, for the owner to check. */
+function foundPlatform(detected: readonly { type: string; url: string }[], kind: ElsewhereKind): string {
+  for (const d of detected) {
+    const p = d.type.startsWith("platform:") ? doorPlatform(d.type.slice(9)) : doorPlatformOf(d.url, kind);
+    if (p?.item_types.includes(kind)) return p.id;
+  }
+  return "";
+}
+
+/**
+ * Orders taken on another site, on their own line (bookings sit in the booking switch's row): the place by name, the
+ * platform the owner picked when agents name it by its address, its link, Change and Remove. A quiet link opens the
+ * editor for a kind not sent anywhere yet.
+ */
+function Elsewhere({
+  entries,
+  domains,
+  still,
+  editing,
+  pending,
+  onEdit,
+  onPatch,
+}: {
+  entries: readonly ElsewhereEntry[];
+  domains: readonly string[];
+  still: string;
+  editing: ElsewhereKind | null;
+  pending: boolean;
+  onEdit: (kind: ElsewhereKind | null) => void;
+  onPatch: PatchSettings;
+}) {
+  const free = ELSEWHERE_KINDS.filter((k) => !entries.some((d) => d.itemType === k));
+  const orders = entries.filter((d) => d.itemType === "order");
+  return (
+    <div className="elsewhere" id="elsewhere">
+      {orders.length > 0 && (
+        <ul className="else-list">
+          {orders.map((d) => {
+            if (editing === d.itemType) return null;
+            const picked = pickedPlatformNote(d);
+            return (
+              <li key={d.itemType} className="else-row">
+                <span className="else-what">
+                  {KIND_WORDS[d.itemType].plural} at <strong>{placeOf(d)}</strong>
+                  {picked && <span className="else-picked"> · {picked}</span>}
+                </span>
+                <a className="else-link" href={d.url} target="_blank" rel="noopener noreferrer">
+                  {shortLink(d.url)}
+                </a>
+                <span className="else-acts">
+                  <button type="button" className="linkish" disabled={pending} onClick={() => onEdit(d.itemType)}>
+                    Change
+                  </button>
+                  <span aria-hidden="true"> · </span>
+                  <button
+                    type="button"
+                    className="linkish"
+                    disabled={pending}
+                    onClick={() => onPatch(elsewhereDoc(entries, d.itemType, null))}
+                  >
+                    Remove
+                  </button>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {editing ? (
+        <ElsewhereEditor
+          key={editing}
+          kind={editing}
+          kinds={entries.some((d) => d.itemType === editing) ? [editing] : free}
+          entries={entries}
+          domains={domains}
+          still={still}
+          pending={pending}
+          onKind={onEdit}
+          onCancel={() => onEdit(null)}
+          onSave={(kind, next) => onPatch(elsewhereDoc(entries, kind, next), () => onEdit(null))}
+        />
+      ) : (
+        free.length > 0 && (
+          <button type="button" className="linkish else-add" disabled={pending} onClick={() => onEdit(free[0] ?? null)}>
+            {free.length === 2 ? "Take bookings or orders on another site?" : KIND_WORDS[free[0] as ElsewhereKind].add}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+/**
+ * Paste the link, or pick where first. The link field is open from the start: a link pasted from a listed platform
+ * picks it, and one on no listed platform goes as Another page, so the chooser is only needed for a shop on the
+ * business's own website. The link starts from what is already known: the one saved, the page a network found for
+ * this business on that platform (with a word to use the platform's direct link if it has one), or the business's own
+ * website for a shop there. Tracking is taken off as it is pasted.
+ */
+function ElsewhereEditor({
+  kind,
+  kinds,
+  entries,
+  domains,
+  still,
+  pending,
+  onKind,
+  onCancel,
+  onSave,
+}: {
+  kind: ElsewhereKind;
+  kinds: readonly ElsewhereKind[];
+  entries: readonly ElsewhereEntry[];
+  domains: readonly string[];
+  still: string;
+  pending: boolean;
+  onKind: (kind: ElsewhereKind) => void;
+  onCancel: () => void;
+  onSave: (kind: ElsewhereKind, next: { url: string; platform?: string | undefined }) => void;
+}) {
+  const ids = useId();
+  const networks = useNetworks();
+  const detected = detectedDoors(networks.data?.networks);
+  const current = entries.find((d) => d.itemType === kind);
+  const domain = domains[0] ?? null;
+  const [choice, setChoice] = useState<string>(() =>
+    current ? (current.platform ?? doorPlatformOf(current.url, kind)?.id ?? ANOTHER) : foundPlatform(detected, kind),
+  );
+  const [start] = useState(() =>
+    choice ? prefillFrom(choice === ANOTHER ? "" : choice, kind, { current, detected, domain }) : null,
+  );
+  const [url, setUrl] = useState(start?.url ?? "");
+  const [from, setFrom] = useState(start?.from ?? "none");
+  const [touched, setTouched] = useState(false);
+  const [cleaned, setCleaned] = useState(false);
+  const [moved, setMoved] = useState(false);
+  const platform = choice && choice !== ANOTHER ? choice : "";
+  const named = doorPlatform(platform);
+  const problem = choice ? linkProblem(url, platform, kind, domains) : url.trim() ? "Choose where." : "Paste the link.";
+  // A shop on the business's own website waits for the website: said at once, and Save waits with it. A page on the
+  // platform's own host for the business (a name on myshopify.com) needs no website to check it against.
+  const waiting =
+    Boolean(named?.own_site) &&
+    domains.length === 0 &&
+    (!url.trim() || (named !== undefined && doorPlatformFit(url.trim(), named, kind) === "own_site"));
+  const pick = (next: string) => {
+    setChoice(next);
+    setTouched(false);
+    setMoved(false);
+    const p = doorPlatform(next === ANOTHER ? "" : next);
+    // A link the owner already gave that fits the new place is kept, never thrown away.
+    const fit = p && url.trim() ? doorPlatformFit(url.trim(), p, kind) : null;
+    if (url.trim() && (!p || fit === "on_platform" || fit === "own_site")) return;
+    const prefill = prefillFrom(next === ANOTHER ? "" : next, kind, { current, detected, domain });
+    if (prefill.url) {
+      setUrl(prefill.url);
+      setFrom(prefill.from);
+    }
+  };
+  // The networks' answer can land after the editor opens: what they found is picked then, once, if nothing is yet.
+  const found = foundPlatform(detected, kind);
+  const [offered, setOffered] = useState(Boolean(choice));
+  useEffect(() => {
+    if (offered || !found || choice || url.trim()) return;
+    setOffered(true);
+    pick(found);
+  });
+  const take = (raw: string) => {
+    const clean = cleanDoorUrl(raw.trim());
+    setCleaned(clean !== raw.trim());
+    setUrl(clean);
+    setFrom("none");
+    // A link from a listed platform picks it; one on none goes as Another page.
+    const next = choiceForLink(clean, choice, kind, ANOTHER);
+    if (next.choice !== choice) setChoice(next.choice);
+    setMoved(next.moved);
+  };
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    setTouched(true);
+    if (problem || pending) return;
+    onSave(kind, { url, platform: platform || undefined });
+  };
+  const direct =
+    from === "found" && named && !named.own_site
+      ? `Found on ${named.name}. If ${named.name} gives you a direct booking link, paste that one.`
+      : "";
+  const hint = waiting
+    ? noWebsiteWords(kind)
+    : touched && problem
+      ? problem
+      : cleaned
+        ? "Tracking taken off the link."
+        : moved
+          ? "Saved as a page of yours, named by its address."
+          : direct || `Agents send people there for ${KIND_WORDS[kind].lower}.${still ? ` ${still}` : ""}`;
+  // Before the owner has given a link, the website it waits for is a quiet hint; after, it is what is wrong.
+  const isError = Boolean(touched && problem);
+  return (
+    <form className="else-edit" onSubmit={save} aria-label={`Where ${KIND_WORDS[kind].lower} are taken`}>
+      {kinds.length > 1 && (
+        <fieldset className="seg">
+          <legend className="sr-only">What</legend>
+          {kinds.map((k) => (
+            <button key={k} type="button" aria-pressed={k === kind} onClick={() => onKind(k)}>
+              {KIND_WORDS[k].plural}
+            </button>
+          ))}
+        </fieldset>
+      )}
+      <div className="else-fields">
+        <div className="else-field else-where">
+          <label className="label" htmlFor={`${ids}-where`}>
+            {KIND_WORDS[kind].plural} at
+          </label>
+          <select id={`${ids}-where`} className="input" value={choice} onChange={(e) => pick(e.target.value)}>
+            <option value="" disabled>
+              Choose…
+            </option>
+            {platformChoices(kind).map(({ group, platforms }) => (
+              <optgroup key={group.id} label={group.label}>
+                {platforms.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+            <option value={ANOTHER}>Another page</option>
+          </select>
+        </div>
+        <div className="else-field">
+          <label className="label" htmlFor={`${ids}-link`}>
+            Link
+          </label>
+          <input
+            id={`${ids}-link`}
+            className="input"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={
+              named
+                ? named.hosts.length
+                  ? `Your page on ${named.name}`
+                  : `A page on your website${domain ? ` (${domain})` : ""}`
+                : choice === ANOTHER
+                  ? "https://"
+                  : KIND_WORDS[kind].paste
+            }
+            value={url}
+            onChange={(e) => {
+              setCleaned(false);
+              setMoved(false);
+              setFrom("none");
+              setUrl(e.target.value);
+            }}
+            onPaste={(e) => {
+              e.preventDefault();
+              take(e.clipboardData.getData("text"));
+              setTouched(true);
+            }}
+            onBlur={() => {
+              if (url.trim()) {
+                take(url);
+                setTouched(true);
+              }
+            }}
+            aria-invalid={isError}
+            aria-describedby={`${ids}-hint`}
+          />
+        </div>
+        <p className={isError ? "hint error" : "hint"} id={`${ids}-hint`} role={isError ? "alert" : undefined}>
+          {hint}
+        </p>
+      </div>
+      <div className="else-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="btn btn-primary btn-sm"
+          disabled={pending || waiting || Boolean(problem && touched)}
+        >
+          Save
+        </button>
+      </div>
+    </form>
   );
 }
 

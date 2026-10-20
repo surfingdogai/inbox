@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { MANIFEST_PATH, manifestSchema, readDoorsElsewhere, receiptPayloadSchema } from "./base";
+import { doorTrackingParams } from "./door-platforms";
 import { parseReceiptClaims, RULES_V6, receiptAckPayloadV2Schema, receiptPayloadV2Schema } from "./network/receipts";
 
 /**
@@ -257,11 +258,28 @@ export async function checkManifest(input: unknown): Promise<ConformanceReport> 
     const kept = readDoorsElsewhere(input);
     input.doors_elsewhere.forEach((e, i) => {
       const entry = isObject(e) ? e : {};
-      if (!kept.some((k) => k.item_type === entry.item_type && k.url === entry.url)) {
+      const k = kept.find((k) => k.item_type === entry.item_type && k.url === entry.url);
+      if (!k) {
         f.error(
           `$.doors_elsewhere[${i}]`,
           "dropped",
           "A reader drops this entry: one of the five item types, once, not one in item_types, at an https address on a named host.",
+        );
+        return;
+      }
+      if (entry.platform !== undefined && k.platform === undefined) {
+        f.warn(
+          `$.doors_elsewhere[${i}].platform`,
+          "platform_dropped",
+          "A reader keeps this door without its platform: a token of vocab/door-platforms.json that takes this kind of request, with the URL the business's own page there, or, for a platform that serves the business's own domain, on the website profile.url names.",
+        );
+      }
+      const tracking = doorTrackingParams(k.url);
+      if (tracking.length) {
+        f.warn(
+          `$.doors_elsewhere[${i}].url`,
+          "tracking",
+          `The address carries tracking or affiliate parameters (${tracking.join(", ")}): send people to the page itself.`,
         );
       }
     });
