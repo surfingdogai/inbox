@@ -48,7 +48,15 @@ Every push to your copy of the repository deploys again. To update, pull this re
 
 ## Your own server
 
-Node 22.16, 24 or 26 (`node:sqlite` with FTS5), one process, one SQLite file. A single `npx` command is coming with 0.1; until then, build the owner app and the server bundle from the repository:
+On a fresh Ubuntu or Debian server, one command installs it with HTTPS, a nightly backup and updates that roll back on their own:
+
+```bash
+curl -fsSL https://surfingdog.ai/install.sh | sudo sh
+```
+
+[Run it yourself](/docs/run-it-yourself/) has what it does, the `inbox` command it leaves behind, and the other ways: the Docker image on a platform you use, or Compose by hand.
+
+The rest of this section is the server itself, for running it without the installer. Node 22.16, 24 or 26 (`node:sqlite` with FTS5), one process, one SQLite file. Every release has the built server as `inbox-server.tar.gz`, with `SHA256SUMS`; or build the owner app and the server bundle from the repository:
 
 ```bash
 git clone https://github.com/surfingdogai/inbox && cd inbox
@@ -82,18 +90,18 @@ node apps/inbox/dist/server.mjs seed-demo                 # adds a demo bike sho
 node apps/inbox/dist/server.mjs seed-showcase             # the same shop with a week of items, rules and hours
 node apps/inbox/dist/server.mjs network-ping              # reports to every network that is on now, not at the next hour
 node apps/inbox/dist/server.mjs apply-plan plan.json      # applies a setup plan (see the API); --dry-run says what it would do
+node apps/inbox/dist/server.mjs backup backup.db          # a full copy of the database while it serves; never over a file
+node apps/inbox/dist/server.mjs check-db backup.db        # whether a file is a sound inbox database, before a restore
 ```
 
 Open `/login`: enter an address from `INBOX_OWNER_EMAIL`, then open the link you receive and press Sign in, or type its code; or paste an owner key. Put Caddy or nginx in front for TLS. Jobs run on a one-second loop inside the process. Email in arrives at `POST /v1/email/inbound` as raw MIME, with the shared secret from settings (`email.inboundSecret`) in the `X-Inbox-Email-Secret` header; point a Mailgun route, a Postmark or SES inbound webhook, or a forwarder at it. The machine-readable install guide at [/install.md](/install.md) has a systemd unit and a Caddy site block to copy.
 
 ### With Docker
 
-The repository has a `Dockerfile` that does the same build and runs the one file as an unprivileged user. There is no published image yet, so build it from the repository:
+The image is `ghcr.io/surfingdogai/inbox`, for amd64 and arm64, published on every release. It does the same build and runs the one file as an unprivileged user (uid 10001):
 
 ```bash
-git clone https://github.com/surfingdogai/inbox && cd inbox
-docker build -t surfingdog-inbox .
-docker run -d --name inbox -p 8787:8787 -v inbox-data:/opt/inbox/data surfingdog-inbox
+docker run -d --name inbox -p 8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox:latest
 curl -s localhost:8787/healthz
 ```
 
@@ -105,10 +113,10 @@ docker run -d --name inbox -p 8787:8787 -v inbox-data:/opt/inbox/data \
   -e INBOX_PUBLIC_URL=https://inbox.yourdomain.com \
   -e INBOX_OWNER_EMAIL=you@yourdomain.com \
   -e INBOX_SECRET_KEY='<the key>' \
-  surfingdog-inbox
+  ghcr.io/surfingdogai/inbox:latest
 ```
 
-The commands above run inside the container, for example `docker exec inbox node /opt/inbox/server.mjs create-owner-key laptop`.
+The commands above run inside the container, for example `docker exec inbox node /opt/inbox/server.mjs create-owner-key laptop`, and two more for backups: `backup <file>` and `check-db <file>` ([Backups](/docs/backups/)). A folder of the host mounted as the data folder must belong to uid 10001 (`sudo chown 10001:10001 <folder>`); started with `--user 0`, the image gives it to that user itself, then runs as it. [deploy/docker-compose.yml](https://github.com/surfingdogai/inbox/blob/main/deploy/docker-compose.yml) adds Caddy with HTTPS in front. `docker build -t surfingdog-inbox .` builds the same image from the repository.
 
 ### A public demo
 

@@ -6,6 +6,7 @@
  * button, so the three buttons line up.
  */
 import { DEPLOY_URL, HOSTED_PILOT_OPEN, HOSTED_RUN, START_URL } from "../lib/hosted";
+import { INSTALL_COMMAND } from "../lib/self-host";
 
 const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 ---
@@ -59,10 +60,13 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
 
       <article class="glass card lift way">
         <h3 class="h-card">Your own server</h3>
-        <p class="card-text">One process and one SQLite file, on Node 22.16 or newer. A one-line install is coming.</p>
-        <pre class="cmd mono"><code>npx surfingdog-inbox</code><span class="pill">Coming</span></pre>
+        <p class="card-text">
+          One command on Ubuntu or Debian: HTTPS, a backup every night, updates that roll back. Or the Docker image, on a
+          platform you use.
+        </p>
+        <pre class="cmd mono"><code>{INSTALL_COMMAND}</code></pre>
         <div class="foot">
-          <a class="btn btn-secondary" href="/docs/quickstart/#your-own-server">Build it from the repo today</a>
+          <a class="btn btn-secondary" href="/docs/run-it-yourself/">How it works</a>
         </div>
       </article>
 

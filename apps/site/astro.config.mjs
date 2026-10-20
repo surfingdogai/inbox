@@ -87,6 +87,10 @@ export default defineConfig({
           items: ["docs", "docs/get-your-agent-inbox", "docs/quickstart", "docs/setting-up-for-agents"],
         },
         {
+          label: "Run it yourself",
+          items: ["docs/run-it-yourself", "docs/platforms", "docs/backups"],
+        },
+        {
           label: "Understand",
           items: ["docs/concepts", "docs/your-page", "docs/manifest", "docs/self-hosted-vs-hosted"],
         },

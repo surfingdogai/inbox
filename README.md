@@ -22,20 +22,22 @@ reads any website the way a customer's assistant would and shows what it can do 
 
 ## Install
 
-**Node** 22.16+, 24 or 26. One process and one SQLite file.
+**We host it for you**, free during the pilot, at an address on your own domain:
+[get your agent inbox](https://app.surfingdog.ai/start). Or run it yourself, three ways:
+
+**On your own server** (Ubuntu or Debian): one command. It asks for your address and your email, then
+sets up HTTPS, a backup every night, and updates that roll back on their own.
 
 ```bash
-git clone https://github.com/surfingdogai/inbox && cd inbox
-pnpm install
-pnpm --filter @surfingdog/inbox build
-node apps/inbox/dist/server.mjs        # http://localhost:8787
+curl -fsSL https://surfingdog.ai/install.sh | sudo sh
 ```
 
-**Docker**, built from this repository. The database lives in the volume.
+**Docker, or a platform you use**: the image `ghcr.io/surfingdogai/inbox`, for amd64 and arm64. The data
+lives in the volume. [deploy/](deploy/) has the Compose file with HTTPS, and templates for Coolify,
+Fly.io, Render, Railway and a DigitalOcean Droplet.
 
 ```bash
-docker build -t surfingdog-inbox .
-docker run -p 8787:8787 -v inbox-data:/opt/inbox/data surfingdog-inbox
+docker run -d -p 8787:8787 -v inbox-data:/opt/inbox/data -e INBOX_OWNER_EMAIL=you@yourbusiness.com ghcr.io/surfingdogai/inbox
 ```
 
 **Cloudflare Workers**, with D1, a queue and a cron. Press
@@ -44,8 +46,18 @@ What to have ready, and what to do after, is in the
 [quickstart](https://surfingdog.ai/docs/quickstart/#deploy-to-cloudflare). By hand, it's path A of
 the [install guide](https://surfingdog.ai/install.md).
 
+From source, on **Node** 22.16+, 24 or 26 (one process and one SQLite file):
+
+```bash
+git clone https://github.com/surfingdogai/inbox && cd inbox
+pnpm install
+pnpm --filter @surfingdog/inbox build
+node apps/inbox/dist/server.mjs        # http://localhost:8787
+```
+
 Or give your AI the install guide and let it do the work: it is written for that, with a check
-after every step.
+after every step. The whole guide to running it yourself, with updates and backups:
+[surfingdog.ai/docs/run-it-yourself](https://surfingdog.ai/docs/run-it-yourself/).
 
 ## Docs
 
@@ -64,6 +76,7 @@ pnpm test              # every test, on Node and on Workers
 ```
 
 - `apps/inbox`: the server and the owner app, one codebase for Workers and Node
+- `deploy`: the self-host kit: the one-command installer, the Compose file, the `inbox` command, platform templates
 - `apps/site`: surfingdog.ai, with the docs. It counts visits with Cloudflare Web Analytics only when built with
   `WEB_ANALYTICS_TOKEN` set, as our deploy does; any other build sends nothing anywhere
 - `packages/core`: items, their states, rules and receipts
