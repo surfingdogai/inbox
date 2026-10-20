@@ -329,22 +329,6 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
     return out;
   }
 
-  async function oversoldNights(ctx: RunContext, stay: OutboundStay): Promise<boolean> {
-    const zone = await zoneOf(ctx, stay.propertyId);
-    const nights = daysBetween(stay.checkIn, stay.checkOut);
-    if (nights < 1) return false;
-    const avail = await availability(ctx, stay.propertyId, zone, stay.checkIn, nights);
-    for (const room of stay.rooms) {
-      for (let i = 0; i < nights; i++) {
-        const v = avail.get(room.roomId)?.get(addLocalDays(stay.checkIn, i));
-        if (v === undefined)
-          throw new ConnectorError("bad_response", "apaleo did not say what is free on those nights.");
-        if (v < 0) return true;
-      }
-    }
-    return false;
-  }
-
   function codeOf(stay: OutboundStay, index: number): string {
     return stay.rooms.length > 1 ? `${stay.key}-${index + 1}` : stay.key;
   }
@@ -735,9 +719,8 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
         return booking ? { externalId: booking, etag: null, calendar: null } : null;
       },
 
-      async oversold(ctx, stay) {
-        return oversoldNights(ctx, stay);
-      },
+      // No `oversold`: apaleo refuses a night it cannot sell, both on a booking and on an amend, unless
+      // forced, which this inbox never does.
     },
 
     hooks: {

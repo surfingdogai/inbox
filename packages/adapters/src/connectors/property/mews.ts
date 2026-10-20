@@ -682,10 +682,8 @@ export function mewsConnector(
       },
 
       find,
-
-      async oversold(ctx, stay) {
-        return oversoldNights(ctx, stay);
-      },
+      // No `oversold`: Mews refuses a new stay on a night it has no room for (`CheckOverbooking`), and a
+      // move, which it does not promise to check, is read again and put back inside `put` itself.
     },
 
     hooks: {

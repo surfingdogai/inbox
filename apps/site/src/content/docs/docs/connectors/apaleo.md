@@ -33,7 +33,6 @@ Rate plans whose least guarantee in apaleo is a card or a prepayment are left ou
 - **Written first, once.** Each booking is sent with a key of its own; apaleo answers the same request with the same booking for 24 hours, so a request sent again never books twice. After that, the booking is found by its reference.
 - **Refused when full.** apaleo refuses a night it cannot sell. The booking is never forced.
 - **Changed room by room.** For a stay of several rooms, if apaleo refuses the second, the first is put back, so the stay keeps its dates.
-- **Read back.** After a write, the nights are read again; if one shows more bookings than rooms, your Inbox takes its own booking back.
 - **Your own date.** Every time apaleo gives is read in your property's time zone: a lodge east of the date line keeps its own dates.
 
 apaleo has no holding state for a reservation, so a stay held for a few minutes, or waiting for its deposit, is a reservation your Inbox cancels if it is not paid in time.
