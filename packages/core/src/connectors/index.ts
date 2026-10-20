@@ -114,3 +114,19 @@ export {
   readLink,
   writeBusy,
 } from "./store";
+export {
+  CONNECTOR_WRITE_RESOLVE_KIND,
+  dueWrites,
+  RESOLVE_WITHIN_MS,
+  registerWriteResolver,
+  resolveWrite,
+  type WriteFirstCall,
+  type WriteFirstResult,
+  type WriteOp,
+  type WriteOutcome,
+  type WriteResolver,
+  type WriteRow,
+  type WrittenRef,
+  writeFirst,
+  writeResolveHandler,
+} from "./write-first";

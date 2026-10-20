@@ -37,6 +37,7 @@ import {
   CONNECTOR_NOTICE_KIND,
   CONNECTOR_PUSH_KIND,
   CONNECTOR_SYNC_KIND,
+  CONNECTOR_WRITE_RESOLVE_KIND,
   type ConnectorDefinition,
   connectorCatalogueHandler,
   connectorHookHandler,
@@ -66,6 +67,7 @@ import {
   payNoticeHandler,
   readSettings,
   VERSION,
+  writeResolveHandler,
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
 import { type Context, Hono } from "hono";
@@ -285,7 +287,10 @@ export function createInbox(deps: AppDeps): Inbox {
     // no payment platform connected enqueues none of them.
     .register(PAY_LINK_KIND, payLinkHandler(caps.connectors), { lane: payLane })
     .register(PAY_NOTICE_KIND, payNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
-    .register(PAY_CLOSE_KIND, payCloseHandler(caps.connectors), { lane: connectorLane });
+    .register(PAY_CLOSE_KIND, payCloseHandler(caps.connectors), { lane: connectorLane })
+    // Write first (ADR-032): a write to a business's own system whose answer never came is looked for
+    // again until it is found or its few minutes are up. An inbox with no such system enqueues none.
+    .register(CONNECTOR_WRITE_RESOLVE_KIND, writeResolveHandler());
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -308,6 +313,7 @@ export function createInbox(deps: AppDeps): Inbox {
       PAY_LINK_KIND,
       PAY_NOTICE_KIND,
       PAY_CLOSE_KIND,
+      CONNECTOR_WRITE_RESOLVE_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(

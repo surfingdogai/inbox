@@ -924,6 +924,38 @@ export const connectorPayments = sqliteTable(
   ],
 );
 
+/**
+ * Every attempt at writing to a business's own system before anything is promised (0025, ADR-032):
+ * what was tried, under which key, and what came of it. Never the request itself: it may name the guest.
+ */
+export const connectorWrites = sqliteTable(
+  "connector_writes",
+  {
+    id: id(),
+    connectorId: text("connector_id").notNull(),
+    itemId: text("item_id").notNull(),
+    /** `reserve` | `modify` | `cancel` | `release`. */
+    op: text("op").notNull(),
+    /** Who settles one left unknown: `stays`, `bookings`. */
+    owner: text("owner").notNull(),
+    attempt: integer("attempt").notNull(),
+    /** Sent as the system's idempotency key, and the marker the write is found by. */
+    idemKey: text("idem_key").notNull(),
+    requestSha: text("request_sha").notNull(),
+    /** `pending` | `written` | `refused` | `unknown` | `rolled_back`. */
+    outcome: text("outcome").notNull().default("pending"),
+    externalId: text("external_id"),
+    detail: text("detail"),
+    resolveAfter: integer("resolve_after"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique("connector_writes_attempt").on(t.connectorId, t.itemId, t.attempt),
+    index("connector_writes_key").on(t.connectorId, t.itemId, t.op, t.idemKey),
+  ],
+);
+
 /** Facts about this inbox itself (0022): `instance_id`, made once at random, which its calendar entries carry. */
 export const instanceMeta = sqliteTable("instance_meta", {
   key: text("key").primaryKey(),
