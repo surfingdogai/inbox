@@ -76,6 +76,37 @@ export function isHundredthsCurrency(code: string): boolean {
   return KNOWN === null || KNOWN.has(code);
 }
 
+/**
+ * ISO 4217 currencies with no minor unit at all (yen, won, dong, Chilean pesos…). Kept in hundredths
+ * here like every other amount (¥1,500 is 150000), which is exact, and written out as a decimal a
+ * shop takes in its own currency ("1500.00"). Only a shop that takes such a decimal makes links in
+ * them (ADR-027); a payment platform that counts in minor units does not.
+ */
+const NO_MINOR_UNIT: ReadonlySet<string> = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "ISK",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+
+/** Whether `code` is a currency with no minor unit (JPY, KRW, VND…), which a shop prices in whole units. */
+export function isWholeUnitCurrency(code: string): boolean {
+  if (!NO_MINOR_UNIT.has(code)) return false;
+  return KNOWN === null || KNOWN.has(code);
+}
+
 /** Why a currency is refused, for the field that named it. */
 export function currencyProblem(code: string): string | null {
   if (!/^[A-Z]{3}$/.test(code)) return "a three-letter ISO 4217 code, like EUR";

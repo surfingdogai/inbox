@@ -9,7 +9,7 @@ import {
   RefreshCw,
   ShoppingBag,
 } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
@@ -19,7 +19,7 @@ import { Field, SectionHead, Switch } from "./Form";
 
 /**
  * Settings → Integrations, the gallery (ADR-022, ADR-026): what is connected first, then the cards in
- * their groups (Calendars, Payments, Shops and tills), each one thing an owner recognises, with its
+ * their groups (Calendars, Payments, Shops and checkouts), each one thing an owner recognises, with its
  * ways in. Everything here is drawn from what the server says: the form from the connector's own
  * schema, a sign-in's words and what it asks first, a link to make, the choosers once connected, so a
  * connector added later needs no screen of its own and no change to this file. A card being built says
@@ -57,6 +57,10 @@ export function IntegrationsCard() {
   const email = useOwnerEmail();
   const [open, setOpen] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Back from a platform: which connection was made, said once the connections are in.
+  const [back, setBack] = useState<string | null>(null);
+  // A drawer opened by the address, brought into view once it is drawn.
+  const reveal = useRef(false);
   const data = integrations.data;
 
   // Back from signing in on a platform: what happened is in the address, said once, then cleared.
@@ -65,13 +69,57 @@ export function IntegrationsCard() {
     const connected = url.searchParams.get("connected");
     const failed = url.searchParams.get("connect_error");
     if (!connected && !failed) return;
-    setNotice(
-      failed ? { tone: "danger", text: failed } : { tone: "success", text: "Connected. Reading your calendar now." },
-    );
+    if (failed) setNotice({ tone: "danger", text: failed });
+    else setBack(connected);
     url.searchParams.delete("connected");
     url.searchParams.delete("connect_error");
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }, []);
+
+  // Said in the words of what was connected (a shop reads its catalogue; a calendar its busy times).
+  useEffect(() => {
+    if (!back || !data) return;
+    const c = data.connections.find((x) => x.id === back) ?? data.connections.find((x) => x.kind === back);
+    const card = c ? data.cards.find((x) => x.id === cardOf(c)) : undefined;
+    const way = c
+      ? (card?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null)) ??
+        card?.ways.find((w) => w.kind === c.kind))
+      : undefined;
+    setNotice({ tone: "success", text: card && way ? connectedText(card, way) : "Connected." });
+    setBack(null);
+  }, [back, data]);
+
+  // Sent here to connect one card (`?connect=woocommerce`, the WordPress plugin's Connect WooCommerce):
+  // its drawer opens once, when the card can be connected here; the owner still presses its one button.
+  useEffect(() => {
+    if (!data) return;
+    const url = new URL(window.location.href);
+    const want = url.searchParams.get("connect");
+    if (!want) return;
+    url.searchParams.delete("connect");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    if (data.can_connect && data.cards.some((c) => c.id === want && c.status === "ready")) {
+      reveal.current = true;
+      setOpen(want);
+    }
+  }, [data]);
+
+  // On a phone the drawer opens below the fold: brought to the middle of the screen, and what to press
+  // next focused (its button, or the first field still empty when there is one to fill first).
+  useEffect(() => {
+    if (!reveal.current || !open) return;
+    reveal.current = false;
+    const frame = requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLElement>(".int-panel");
+      if (!panel) return;
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+      const button = panel.querySelector<HTMLButtonElement>("button.btn-primary");
+      const empty = [...panel.querySelectorAll<HTMLInputElement>("input")].find((i) => !i.value);
+      (button && !button.disabled ? button : (empty ?? button))?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
 
   const connections = data?.connections ?? [];
   const byCard = new Map<string, ConnectionView[]>();
@@ -91,7 +139,7 @@ export function IntegrationsCard() {
     : [
         { id: "calendars" as const, label: "Calendars" },
         { id: "payments" as const, label: "Payments" },
-        { id: "shops" as const, label: "Shops and tills" },
+        { id: "shops" as const, label: "Shops and checkouts" },
       ];
   // Cal.com adds the bookings it is given to the calendar it checks, so with both adding them each
   // booking would show twice there.
@@ -247,7 +295,7 @@ function Tile({
 }: {
   card: GalleryCard;
   connections: readonly ConnectionView[];
-  /** A payment platform not connected while another sends the links: "Instead of Mollie". */
+  /** A payment platform not connected while another takes the payments: "WooCommerce takes payment now". */
   instead?: string | null;
   open: boolean;
   disabled: boolean;
@@ -261,7 +309,9 @@ function Tile({
       <Icon className="icon int-icon" aria-hidden="true" />
       <span className="int-text">
         <span className="int-name">{card.title}</span>
-        <span className="int-line">{instead && card.status === "ready" ? `Instead of ${instead}` : card.line}</span>
+        <span className="int-line">
+          {instead && card.status === "ready" && card.group === "payments" ? `${instead} takes payment now` : card.line}
+        </span>
       </span>
       {soon ? (
         <span className="int-tag">Soon</span>
@@ -379,17 +429,23 @@ function ConnectPanel({
         </fieldset>
       )}
       {picked === null && preferred.hint && <p className="hint">{preferred.hint}</p>}
-      {setup.map((w) => (
-        <p key={keyOf(w)} className="hint">
-          {w.label}: {w.hint ?? "needs setting up on the server."}{" "}
-          {w.href && (
-            <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
-              How
-              <ExternalLink className="icon-xs" aria-hidden="true" />
-            </a>
-          )}
-        </p>
-      ))}
+      {setup.map((w) =>
+        w.untilLive ? (
+          <p key={keyOf(w)} className="hint">
+            {w.untilLive}
+          </p>
+        ) : (
+          <p key={keyOf(w)} className="hint">
+            {w.label}: {w.hint ?? "needs setting up on the server."}{" "}
+            {w.href && (
+              <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
+                How
+                <ExternalLink className="icon-xs" aria-hidden="true" />
+              </a>
+            )}
+          </p>
+        ),
+      )}
       {way.needs ? (
         <>
           <p className="hint">{way.needs.text}</p>
@@ -436,7 +492,7 @@ function ConnectPanel({
           onSubmit={(values) => onConnect(body(way, values), way)}
         />
       )}
-      {(others.length > 0 || way.advanced) && (
+      {(others.length > 0 || (way.advanced && preferred.way && keyOf(preferred.way) !== keyOf(way))) && (
         <details className="advanced">
           <summary className="disclosure">
             <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
@@ -444,9 +500,9 @@ function ConnectPanel({
             <span className="disclosure-closed">More options</span>
           </summary>
           <div className="advanced-body stack-xs">
-            {way.advanced && preferred.way && (
+            {way.advanced && preferred.way && keyOf(preferred.way) !== keyOf(way) && (
               <button type="button" className="int-inline" onClick={() => setPicked(null)}>
-                Back to {preferred.way.label}
+                {preferred.way.label} instead
               </button>
             )}
             {others.map((w) => (
@@ -572,7 +628,7 @@ function SignIn({
             }
           }}
         >
-          {going ? "Opening…" : again ? `Connect again with ${way.label}` : way.action}
+          {going ? "Opening…" : again ? (way.again ?? `Connect again with ${way.label}`) : way.action}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
@@ -627,6 +683,8 @@ function WayForm({
     // The owner's own address, editable: the calendar's account is most often it.
     if (email && account === undefined)
       for (const f of fields) if (f.input === "email" && !f.secret) first[f.key] = email;
+    // What the inbox read already (a shop's address, from the business's website), to keep or change.
+    if (account === undefined) for (const f of fields) if (f.value && !f.secret) first[f.key] ??= f.value;
     return first;
   });
   const main = fields.filter((f) => !f.advanced);
@@ -788,15 +846,17 @@ function ConnectionLine({
   const [confirming, setConfirming] = useState(false);
   const destination = c.destinations.find((d) => d.id === c.destination);
   const writes = c.capabilities.includes("write_bookings");
-  const way = cards
-    .find((card) => card.id === cardOf(c))
-    ?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
+  const card = cards.find((x) => x.id === cardOf(c));
+  const way = card?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
+  // A shop that takes its own orders: it is spoken of in orders, not links or a payment account.
+  const shop = card?.group === "shops";
   const pays = c.payments;
   const disconnecting = pays?.disconnecting === true;
   // A connection that is a link the inbox serves (a calendar to import elsewhere): nothing to sync.
   const serves = c.capabilities.length === 0;
+  // What is on sale from it: a product in two sizes is two things to sell.
   const products = c.catalogue
-    ? `${c.catalogue.products} ${c.catalogue.products === 1 ? "product" : "products"}${c.catalogue.truncated ? " (the first ones)" : ""}`
+    ? `${c.catalogue.products} for sale${c.catalogue.truncated ? " (the first ones)" : ""}`
     : null;
   // Which platform sends an order's links, said only where there is a choice: the default is not news.
   const sender = connections.find(
@@ -825,7 +885,7 @@ function ConnectionLine({
                 ? "sends your links"
                 : null,
           pays.open > 0 ? `${pays.open} waiting` : null,
-          pays.held && pays.held > 0 ? `${pays.held} not sent: the shop counts another total` : null,
+          pays.held && pays.held > 0 ? `${pays.held} waiting for you: your shop's total is higher` : null,
           pays.paid > 0 ? `${pays.paid} paid` : null,
           c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
         ].filter(Boolean)
@@ -871,10 +931,22 @@ function ConnectionLine({
         </div>
         {serves && c.link && <LinkLine link={c.link} />}
         {pays?.webhook === "pending" && !disconnecting && (
-          <div className="hint">
-            {c.title} tells this inbox of payments once it is live; until then the inbox asks {c.title} on each sync.
-          </div>
+          <div className="hint">Payments show here on each sync, and at once when this inbox is live.</div>
         )}
+        {c.notes?.map((n) => (
+          <div key={n.text} className="hint">
+            {n.text}
+            {n.href && (
+              <>
+                {" "}
+                <a className="int-link" href={n.href} target="_blank" rel="noopener noreferrer">
+                  {n.link ?? "Open"}
+                  <ExternalLink className="icon-xs" aria-hidden="true" />
+                </a>
+              </>
+            )}
+          </div>
+        ))}
         {failing && c.last_error && (
           <div className="hint error" role="alert">
             {c.last_error}
@@ -959,8 +1031,23 @@ function ConnectionLine({
       {panel === "again" && way && (
         <div className="confirm row-glass wide stack int-panel">
           {pays && <h3>New key for {c.title}</h3>}
-          {pays && <p className="hint">Paste the new key. Your orders and their links stay as they are.</p>}
-          {way.auth === "oauth" ? (
+          {pays && (
+            <p className="hint">
+              {way.auth === "oauth"
+                ? `${c.title} makes a new key when you approve again. Your orders stay as they are.`
+                : "Paste the new key. Your orders and their links stay as they are."}
+            </p>
+          )}
+          {way.auth === "oauth" && way.untilLive ? (
+            <div className="stack">
+              <p className="hint">{way.untilLive}</p>
+              <div className="rowx">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPanel(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : way.auth === "oauth" ? (
             <SignIn
               way={way}
               again
@@ -1005,7 +1092,13 @@ function ConnectionLine({
         (serves ? (
           <NewLink connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
         ) : pays ? (
-          <PayChoices connection={c} onNewKey={() => setPanel("again")} onNotice={onNotice} />
+          <PayChoices
+            connection={c}
+            shop={shop}
+            again={way?.auth === "oauth" ? (way.again ?? null) : null}
+            onNewKey={() => setPanel("again")}
+            onNotice={onNotice}
+          />
         ) : (
           <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
         ))}
@@ -1015,9 +1108,11 @@ function ConnectionLine({
           <p className="hint">
             {serves
               ? "The link stops working at once, wherever it was pasted."
-              : pays
-                ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.${c.catalogue ? " Its products go off sale here." : ""}`
-                : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
+              : pays && (shop || c.catalogue)
+                ? `Unpaid orders this inbox made are cancelled in ${c.title}. Paid orders stay there. Your products leave this inbox.`
+                : pays
+                  ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.`
+                  : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
           </p>
           {c.disconnect_note && <p className="hint">{c.disconnect_note}</p>}
           <div className="rowx">
@@ -1062,10 +1157,16 @@ function ConnectionLine({
  */
 function PayChoices({
   connection: c,
+  shop,
+  again,
   onNewKey,
   onNotice,
 }: {
   connection: ConnectionView;
+  /** A shop that takes its own orders: spoken of in orders, refunded on the order's page. */
+  shop: boolean;
+  /** For a key the platform makes on its own page: the words that go there again ("Approve again"). */
+  again: string | null;
   onNewKey: () => void;
   onNotice: (n: Notice) => void;
 }) {
@@ -1084,13 +1185,19 @@ function PayChoices({
           )
         }
       >
-        Send a link to pay when you accept an order
+        {shop
+          ? `Put the orders you accept into ${c.title}, paid at its checkout`
+          : "Send a link to pay when you accept an order"}
       </Switch>
       <ChoiceFields connection={c} onNotice={onNotice} />
-      <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
+      <p className="hint">
+        {shop
+          ? `Refunds are made in ${c.title}, on the order's page.`
+          : `Refunds are made in ${c.title}, from the payment's own page.`}
+      </p>
       <div className="rowx">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
-          New key
+          {again ?? "New key"}
         </button>
       </div>
       {write.error && (

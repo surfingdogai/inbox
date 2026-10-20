@@ -51,7 +51,11 @@ function get_option( $k, $d = false ) {
 	return array_key_exists( $k, $GLOBALS['sdi_t']['options'] ) ? $GLOBALS['sdi_t']['options'][ $k ] : $d;
 }
 function add_action() {}
-function add_filter() {}
+/** The filters the plugin adds, by hook name: what WordPress would run. */
+$GLOBALS['sdi_filters'] = array();
+function add_filter( $hook = '' ) {
+	$GLOBALS['sdi_filters'][] = $hook;
+}
 function register_activation_hook() {}
 function register_deactivation_hook() {}
 function update_option( $k, $v ) {
@@ -145,6 +149,25 @@ function wp_remote_retrieve_response_code( $r ) {
 }
 function wp_remote_retrieve_body( $r ) {
 	return $r['body'];
+}
+function current_user_can( $cap ) {
+	return true;
+}
+function settings_fields( $group ) {}
+function submit_button() {
+	echo '<button type="submit">Save</button>';
+}
+function wp_nonce_field( $action ) {}
+
+/** An order, as WooCommerce hands one to an email: only its meta is read. */
+class SDI_Test_Order {
+	private $meta;
+	public function __construct( $meta ) {
+		$this->meta = $meta;
+	}
+	public function get_meta( $key ) {
+		return isset( $this->meta[ $key ] ) ? $this->meta[ $key ] : '';
+	}
 }
 
 require __DIR__ . '/../surfingdog-inbox.php';
@@ -352,6 +375,91 @@ $GLOBALS['sdi_t']['remote'][ $check ] = array( 'code' => 503, 'body' => '{}' );
 check( 'a checker too busy to read, said so', is_wp_error( sdi_check() ) );
 $GLOBALS['sdi_t']['remote'][ $check ] = array( 'code' => 200, 'body' => '<html>' );
 check( 'not a check, refused', is_wp_error( sdi_check() ) );
+
+// ---- WooCommerce ----------------------------------------------------------------------------------------------
+
+published_site();
+check( 'without WooCommerce: no shop line, nothing quieted', '' === sdi_shop_line() && true === sdi_quiet_store_email( true, new SDI_Test_Order( array( '_sdi_ref' => '01JB7Z8K3M' ) ) ) );
+ob_start();
+sdi_settings_page();
+$page = ob_get_clean();
+check( 'without WooCommerce: no Connect WooCommerce', false === strpos( $page, 'Connect WooCommerce' ) );
+
+// WooCommerce, active from here on: declared when this line runs (a class or function written at the
+// top level would exist from the start, PHP binding it before anything runs).
+if ( ! class_exists( 'WooCommerce' ) ) {
+	class WooCommerce {}
+	class WC_Data_Store {
+		public static function load( $type ) {
+			return new self();
+		}
+		public function search_webhooks( $args ) {
+			$GLOBALS['sdi_t']['webhook_search'] = $args;
+			return array_keys( $GLOBALS['sdi_t']['webhooks'] );
+		}
+	}
+	class SDI_Test_Webhook {
+		private $url;
+		public function __construct( $url ) {
+			$this->url = $url;
+		}
+		public function get_delivery_url() {
+			return $this->url;
+		}
+	}
+	function wc_get_webhook( $id ) {
+		return isset( $GLOBALS['sdi_t']['webhooks'][ $id ] ) ? new SDI_Test_Webhook( $GLOBALS['sdi_t']['webhooks'][ $id ] ) : null;
+	}
+	function wc_get_page_permalink( $page ) {
+		return 'shop' === $page ? 'https://www.example.com/shop/' : '';
+	}
+}
+$GLOBALS['sdi_t']['webhooks'] = array();
+
+published_site();
+check( 'the connect address is the inbox\'s own Settings, the WooCommerce drawer open', 'https://inbox.example.com/settings/integrations?connect=woocommerce' === sdi_connect_url( 'inbox.example.com' ) );
+ob_start();
+sdi_settings_page();
+$page = ob_get_clean();
+check( 'with WooCommerce: Connect WooCommerce, to the inbox, in a new tab', false !== strpos( $page, '<a class="button button-primary" href="https://inbox.example.com/settings/integrations?connect=woocommerce" target="_blank" rel="noopener noreferrer">Connect WooCommerce</a>' ), $page );
+$a = sdi_llms_answer();
+check( 'llms.txt: the inbox\'s line as the vectors say, then the shop\'s', "# Example Bakery\n\n> Bread, every morning.\n\n## Agents\n\n- [Agent inbox](https://inbox.example.com/.well-known/agent-inbox.json): send us messages and requests\n- [Shop](https://www.example.com/shop/): orders at this shop's own checkout; questions, quotes and bookings to the agent inbox\n" === $a['body'], var_export( $a['body'], true ) );
+reset_site();
+ob_start();
+sdi_settings_page();
+$page = ob_get_clean();
+check( 'no address saved: asked for first, no button', false !== strpos( $page, 'Save your inbox&#039;s address first.' ) && false === strpos( $page, 'Connect WooCommerce</a>' ), $page );
+
+// The store's own emails: quiet only for orders the inbox made, while the inbox is connected to the shop.
+published_site();
+$ours   = new SDI_Test_Order( array( '_sdi_ref' => '01JB7Z8K3M4N5P6Q7R8S9T0V1W' ) );
+$theirs = new SDI_Test_Order( array() );
+sdi_store_connected( true );
+check( 'not connected yet: every email goes', true === sdi_quiet_store_email( true, $ours ) );
+$GLOBALS['sdi_t']['webhooks'] = array( 77 => 'https://hooks.elsewhere.example/v1/hooks/woocommerce/abc' );
+sdi_store_connected( true );
+check( 'another service\'s webhook is not the inbox', true === sdi_quiet_store_email( true, $ours ) );
+$GLOBALS['sdi_t']['webhooks'][78] = 'https://inbox.example.com/v1/hooks/woocommerce/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7cDe0fGh2';
+sdi_store_connected( true );
+check( 'connected, an order the inbox made: quiet', false === sdi_quiet_store_email( true, $ours ) );
+$a = sdi_llms_answer();
+check( 'connected: llms.txt sends agents to order through the inbox, paid at the shop\'s own checkout', false !== strpos( $a['body'], "- [Shop](https://www.example.com/shop/): products and stock; agents order through the agent inbox, paid at this shop's own checkout\n" ) && false === strpos( $a['body'], 'orders at this shop' ), var_export( $a['body'], true ) );
+ob_start();
+sdi_settings_page();
+$page = ob_get_clean();
+check( 'connected: said so, no button', false !== strpos( $page, 'Connected. Orders your inbox accepts go into WooCommerce' ) && false === strpos( $page, 'Connect WooCommerce</a>' ), $page );
+check( 'an order the shop took itself: as WooCommerce has it', true === sdi_quiet_store_email( true, $theirs ) );
+check( 'an email the store had off stays off', false === sdi_quiet_store_email( false, $theirs ) );
+check( 'not an order: as it was', true === sdi_quiet_store_email( true, null ) && true === sdi_quiet_store_email( true, 'x' ) );
+check( 'the inbox\'s webhooks are looked for by name, active only', 'active' === $GLOBALS['sdi_t']['webhook_search']['status'] && 'Agent inbox' === $GLOBALS['sdi_t']['webhook_search']['search'] );
+check( 'quiet: only the receipt and the order on its way, which the inbox sends itself', array( 'customer_processing_order', 'customer_completed_order' ) === sdi_quiet_emails() );
+check( 'the store\'s processing and completed emails are filtered', in_array( 'woocommerce_email_enabled_customer_processing_order', $GLOBALS['sdi_filters'], true ) && in_array( 'woocommerce_email_enabled_customer_completed_order', $GLOBALS['sdi_filters'], true ) );
+// A refund or a cancellation made in the shop is not the inbox's to tell: WooCommerce's own email always goes.
+$refund_quieted = false;
+foreach ( array( 'customer_refunded_order', 'customer_partially_refunded_order', 'customer_cancelled_order', 'customer_on_hold_order', 'customer_invoice', 'customer_note' ) as $sdi_email ) {
+	$refund_quieted = $refund_quieted || in_array( 'woocommerce_email_enabled_' . $sdi_email, $GLOBALS['sdi_filters'], true );
+}
+check( 'a refund or cancellation the shop makes, on-hold, invoices and notes: WooCommerce\'s own emails go', false === $refund_quieted );
 
 echo "$count checks, $failures failed\n";
 exit( $failures > 0 ? 1 : 0 );

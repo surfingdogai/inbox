@@ -22,7 +22,8 @@ import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
  * test against the SDK: a link the inbox makes and serves (a B&B in Oaxaca sharing its bookings), a
  * key a store hands over itself after the owner approves it there (a café in Melbourne), choosers once
  * connected (a salon in Toronto with two locations), a catalogue past the limit one connection takes,
- * and an order in a currency not counted in hundredths (a shop in Osaka), which no shop is asked for.
+ * an order in yen (a shop in Osaka), exact in hundredths and written into the shop, and an order in a
+ * currency counted in thousandths (a shop in Kuwait City), which no shop is asked for.
  */
 
 async function inboxWith(opts: {
@@ -507,16 +508,18 @@ describe("a catalogue past what one connection takes", () => {
 
 /* --- money counted otherwise --------------------------------------------------------------------------- */
 
-describe("an order in a currency not counted in hundredths", () => {
-  it("asks no shop for it, and says why on the order", async () => {
-    const shop = fakeShop({ host: "osaka-zakka.example.com", currency: "JPY", key: "oz_live_4c1d" });
-    const base = "https://inbox.osaka-zakka.example.com";
-    const s = await inboxWith({
-      base,
-      connectors: [fakeShopConnector()],
-      fetch: shop.platform.fetch,
-      business: { name: "Zakka Osaka", currency: "USD", timezone: "Asia/Tokyo", languages: ["ja", "en"] },
-    });
+describe("an order in a currency with no minor unit, or one counted in thousandths", () => {
+  async function accepted(
+    host: string,
+    currency: string,
+    value: number,
+    business: Record<string, unknown>,
+    contact: { name: string; email: string; locale: string },
+    item: string,
+  ) {
+    const shop = fakeShop({ host, currency, key: "oz_live_4c1d" });
+    const base = `https://inbox.${host}`;
+    const s = await inboxWith({ base, connectors: [fakeShopConnector()], fetch: shop.platform.fetch, business });
     const made = await s.call(
       "POST",
       "/v1/owner/integrations",
@@ -531,10 +534,10 @@ describe("an order in a currency not counted in hundredths", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           payload: {
-            orderedItem: [{ name: "Furoshiki", quantity: 1, price: { value: 280_000, currency: "JPY" } }],
-            totalPrice: { value: 280_000, currency: "JPY" },
+            orderedItem: [{ name: item, quantity: 1, price: { value, currency } }],
+            totalPrice: { value, currency },
           },
-          contact: { name: "Haruto Sato", email: "haruto@example.com", locale: "ja" },
+          contact,
         }),
       }),
     );
@@ -544,12 +547,47 @@ describe("an order in a currency not counted in hundredths", () => {
       200,
     );
     await s.drain(60_000);
-    expect(shop.orders.size).toBe(0);
-    expect(shop.platform.requests("POST", `https://${shop.host}/api/orders`)).toHaveLength(0);
     const pays = (await (await s.call("GET", `/v1/owner/items/${itemId}/payments`, undefined, s.owner)).json()) as {
       payments: { state: string; error: string | null }[];
     };
-    expect(pays.payments[0]).toMatchObject({
+    return { shop, pays: pays.payments };
+  }
+
+  it("writes yen into the shop, exact in hundredths: a shop takes a decimal in its own currency", async () => {
+    const { shop, pays } = await accepted(
+      "osaka-zakka.example.com",
+      "JPY",
+      280_000,
+      {
+        name: "Zakka Osaka",
+        currency: "USD",
+        timezone: "Asia/Tokyo",
+        languages: ["ja", "en"],
+      },
+      { name: "Haruto Sato", email: "haruto@example.com", locale: "ja" },
+      "Furoshiki",
+    );
+    expect([...shop.orders.values()].map((o) => [o.total, o.currency])).toEqual([[280_000, "JPY"]]);
+    expect(pays[0]).toMatchObject({ state: "open", error: null });
+  });
+
+  it("asks no shop for a currency counted in thousandths, and says why on the order", async () => {
+    const { shop, pays } = await accepted(
+      "souq-mubarakiya.example.com",
+      "KWD",
+      1_250,
+      {
+        name: "Souq Mubarakiya Spices",
+        currency: "USD",
+        timezone: "Asia/Kuwait",
+        languages: ["ar", "en"],
+      },
+      { name: "Fatima Al-Sabah", email: "fatima@example.com", locale: "ar" },
+      "Saffron, 10 g",
+    );
+    expect(shop.orders.size).toBe(0);
+    expect(shop.platform.requests("POST", `https://${shop.host}/api/orders`)).toHaveLength(0);
+    expect(pays[0]).toMatchObject({
       state: "error",
       error: "This currency is not counted in hundredths here, so no link was made.",
     });

@@ -183,13 +183,13 @@ describe("the gallery says only what is true", () => {
   it("lists no card for a connector nobody is building, and says soon only for what is", () => {
     const cards = gallery(new Map());
     // Nothing registered: only the cards being built show, each soon, with nothing to press.
-    expect(cards.map((c) => c.id)).toEqual(["calendly", "ics_feed", "woocommerce", "shopify", "square"]);
+    expect(cards.map((c) => c.id)).toEqual(["calendly", "ics_feed", "shopify", "square"]);
     expect(
       cards.every((c) => c.status === "soon" && c.ways.every((w) => w.status === "soon" && w.form.length === 0)),
     ).toBe(true);
     // Every card being built belongs to a track of this workflow; every other one has a connector today.
     const building = GALLERY.filter((c) => c.building).map((c) => c.id);
-    expect(building).toEqual(["calendly", "ics_feed", "woocommerce", "shopify", "square"]);
+    expect(building).toEqual(["calendly", "ics_feed", "shopify", "square"]);
   });
 
   it("turns a card from soon to ready the moment its connector registers, a way at a time", () => {
@@ -212,7 +212,7 @@ describe("the gallery says only what is true", () => {
     const card = cards.find((c) => c.id === "woocommerce");
     expect(card?.status).toBe("ready");
     expect(card?.ways.map((w) => [w.label, w.status, w.auth, w.advanced ?? false])).toEqual([
-      ["WooCommerce", "ready", "oauth", false],
+      ["Connect with one press", "ready", "oauth", false],
       ["Paste the keys instead", "ready", "form", true],
     ]);
     // What the sign-in asks first is filled in from the business's own website, to keep or change.
@@ -222,6 +222,50 @@ describe("the gallery says only what is true", () => {
     });
     // Shopify, not registered, still says soon.
     expect(cards.find((c) => c.id === "shopify")?.status).toBe("soon");
+  });
+
+  it("offers a store that POSTs its key only once it can reach this inbox, the keys meanwhile", () => {
+    const woo = def("woocommerce", {
+      title: "WooCommerce",
+      auth: "oauth",
+      action: "Connect your shop",
+      again: "Approve again",
+      oauth: {
+        delivery: "post",
+        authorizeUrl: () => "https://shop.example.com/wc-auth/v1/authorize",
+        exchange: async () => {
+          throw new Error("not here");
+        },
+      },
+      presets: [{ id: "keys", label: "WooCommerce", values: {}, auth: "form" }],
+    });
+    const defs = new Map([["woocommerce", woo]]);
+    const ways = (opts: Parameters<typeof gallery>[1]) =>
+      gallery(defs, opts)
+        .find((c) => c.id === "woocommerce")
+        ?.ways.map((w) => [w.preset, w.status, w.untilLive ?? null]);
+    const wait =
+      "Your shop can send this inbox its key once the inbox is live at its own address. Until then, paste the keys.";
+    // No https address of its own: the store could not POST here.
+    expect(ways({})).toEqual([
+      [null, "setup", wait],
+      ["keys", "ready", null],
+    ]);
+    // A hosted inbox before it is live answers only its owner.
+    expect(ways({ hookBase: "https://inbox.chai-pune.example.com/v1/hooks/", hooksLive: false })).toEqual([
+      [null, "setup", wait],
+      ["keys", "ready", null],
+    ]);
+    // Live at its own address: one press.
+    expect(ways({ hookBase: "https://inbox.chai-pune.example.com/v1/hooks/", hooksLive: true })).toEqual([
+      [null, "ready", null],
+      ["keys", "ready", null],
+    ]);
+    const card = gallery(defs, { hookBase: "https://inbox.chai-pune.example.com/v1/hooks/" }).find(
+      (c) => c.id === "woocommerce",
+    );
+    expect(card?.status).toBe("ready");
+    expect(card?.ways[0]?.again).toBe("Approve again");
   });
 
   it("keeps a one-click sign-in soon until the server has its app, while the key way works", () => {
@@ -251,12 +295,12 @@ describe("the gallery says only what is true", () => {
     expect(leanOf({ services: 0, products: 0 })).toBeNull();
     expect(leanOf({ services: 4, products: 1 })).toBe("appointments");
     expect(leanOf({ services: 1, products: 30 })).toBe("shop");
-    expect(galleryGroups("shop").map((g) => g.label)).toEqual(["Shops and tills", "Payments", "Calendars"]);
-    expect(galleryGroups(null).map((g) => g.label)).toEqual(["Calendars", "Payments", "Shops and tills"]);
+    expect(galleryGroups("shop").map((g) => g.label)).toEqual(["Shops and checkouts", "Payments", "Calendars"]);
+    expect(galleryGroups(null).map((g) => g.label)).toEqual(["Calendars", "Payments", "Shops and checkouts"]);
     const forSalon = gallery(new Map(), { lean: "appointments" }).filter((c) => c.group === "shops");
-    expect(forSalon.map((c) => c.id)).toEqual(["square", "woocommerce", "shopify"]);
+    expect(forSalon.map((c) => c.id)).toEqual(["square", "shopify"]);
     const forBakery = gallery(new Map(), { lean: "shop" }).filter((c) => c.group === "shops");
-    expect(forBakery.map((c) => c.id)).toEqual(["woocommerce", "shopify", "square"]);
+    expect(forBakery.map((c) => c.id)).toEqual(["shopify", "square"]);
   });
 
   it("knows the card of every way, Outlook's calendar link included", () => {

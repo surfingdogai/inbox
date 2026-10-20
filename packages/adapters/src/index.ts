@@ -413,7 +413,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
           kind,
           state,
           code: c.req.query("code"),
-          error: c.req.query("error"),
+          // WooCommerce says the owner declined with `success=0` and no error of its own.
+          error: c.req.query("error") ?? (c.req.query("success") === "0" ? "access_denied" : undefined),
           now: clock(),
         })
       : { returnTo: "/settings/integrations", ok: false, message: "That sign-in came back without its state." };

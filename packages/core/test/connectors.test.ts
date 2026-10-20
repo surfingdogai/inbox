@@ -415,7 +415,8 @@ describe("connecting", () => {
     const byId = Object.fromEntries(cards.map((c) => [c.id, c]));
     // Being built now: on its way, and nothing to press.
     expect(byId.shopify).toMatchObject({ status: "soon", ways: [{ status: "soon", form: [] }, { status: "soon" }] });
-    expect(byId.woocommerce?.status).toBe("soon");
+    // WooCommerce has its connector now: a release without it registered shows no card for it.
+    expect(byId.woocommerce).toBeUndefined();
     // This test registers no Stripe, Cal.com, CalDAV or Google, and nobody is building them here: no card.
     expect(byId.stripe).toBeUndefined();
     expect(byId.calcom).toBeUndefined();
@@ -1295,7 +1296,7 @@ describe("the gallery", () => {
     // What is registered here, and what is being built; Cal.com, Stripe and Mollie are not registered in
     // this test, and nobody is building them here, so they have no card. An inbox with services to book
     // sees the till that takes bookings first among the shops.
-    expect(cards.map((c) => c.id)).toEqual(["calendar", "calendly", "ics_feed", "square", "woocommerce", "shopify"]);
+    expect(cards.map((c) => c.id)).toEqual(["calendar", "calendly", "ics_feed", "square", "shopify"]);
     const calendar = cards[0];
     expect(calendar?.line).toBe("iCloud, Fastmail, Nextcloud and more");
     // The calendar link is not registered in this test: its ways (and Outlook's) are not shown.

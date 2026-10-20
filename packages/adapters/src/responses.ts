@@ -816,6 +816,10 @@ export const connectionSchema = z.looseObject({
     .optional()
     .describe("A link the connection serves (a calendar to import elsewhere), to the owner in person only"),
   disconnect_note: z.string().nullable().optional().describe("What the owner removes by hand once it is disconnected"),
+  notes: z
+    .array(z.looseObject({ text: z.string(), href: z.string().optional(), link: z.string().optional() }))
+    .optional()
+    .describe("What the owner should know about it now: a shop that adds tax at checkout, an earlier key to remove"),
 });
 
 const paymentSchema = z.looseObject({
@@ -893,6 +897,13 @@ export const integrationsSchema = z.object({
           before: z.array(formFieldSchema).optional().describe("What a sign-in asks first: a store's address"),
           advanced: z.boolean().optional().describe("A way most people never need, under More options"),
           action: z.string().optional().describe("The words on its button"),
+          again: z.string().optional().describe("The words on the button that connects it again: Approve again"),
+          untilLive: z
+            .string()
+            .optional()
+            .describe(
+              "A store that sends its key here can do so only once this inbox is live at its own https address: why, said above the way that works meanwhile",
+            ),
           consent: z.string().optional().describe("What the platform will ask"),
           steps: z.array(z.string()).optional(),
           note: z.string().optional(),
