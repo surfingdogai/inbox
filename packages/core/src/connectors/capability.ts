@@ -50,8 +50,10 @@ import {
   type LinkState,
   type OutboundBooking,
   type RunContext,
+  type SystemSlot,
   secretKeys,
 } from "./sdk";
+import type { SetupSnapshot } from "./setup-snapshot";
 import {
   BUSY_HORIZON_MS,
   claimLink,
@@ -66,6 +68,7 @@ import {
   settleLink,
   writeBusy,
 } from "./store";
+import { type WriteFirstResult, type WrittenRef, writeFirst } from "./write-first";
 
 /**
  * Connected platforms (ADR-014, ADR-015, ADR-022): the owner connects, chooses, syncs and
@@ -248,6 +251,8 @@ export interface ConnectionView {
   readonly link: string | null;
   /** What the owner removes by hand once it is disconnected, when the platform does not let the inbox. */
   readonly disconnect_note: string | null;
+  /** The member of staff this calendar is theirs (ADR-035); null: the whole business's. */
+  readonly resource_id: string | null;
 }
 
 export interface IntegrationsView {
@@ -284,6 +289,11 @@ export const updateConnectionInput = z.object({
   pay_on: z.boolean().optional(),
   /** What the owner chose of the connection's choosers, by key: an option's id, or null for none. */
   choices: z.record(z.string().max(40), z.string().max(200).nullable()).optional(),
+  /**
+   * A calendar that is one member of staff's own (ADR-035): its busy times take only their times off,
+   * and only their bookings are written to it. Null: the whole business's again.
+   */
+  resource_id: z.string().min(1).max(64).nullable().optional(),
 });
 export type UpdateConnectionInput = z.input<typeof updateConnectionInput>;
 
@@ -320,6 +330,8 @@ interface ConnectorRow {
   readonly notifiedAt: number | null;
   /** The connection's own address segment, sealed (ADR-026 §4): null for one that has none. */
   readonly inboundEnc: string | null;
+  /** The member of staff a calendar is theirs (ADR-035); null: the whole business's. */
+  readonly resourceId: string | null;
 }
 
 export interface RunReport {
@@ -399,13 +411,14 @@ export class ConnectorCapabilities {
     requireOwnerSide(caller);
     const settings = await readSettings(this.db);
     const lean = leanOf(await this.holdings());
+    const cards = gallery(this.definitions, {
+      hookBase: await this.hookBase(),
+      prefill: { website: settings.directory.url || undefined },
+      lean,
+    });
     return {
-      groups: galleryGroups(lean),
-      cards: gallery(this.definitions, {
-        hookBase: await this.hookBase(),
-        prefill: { website: settings.directory.url || undefined },
-        lean,
-      }),
+      groups: galleryGroups(lean, cards),
+      cards,
       connections: await this.list(caller),
       can_connect: this.secrets !== null,
     };
@@ -995,6 +1008,32 @@ export class ConnectorCapabilities {
           )
         : [];
     if (input.bookings_on !== undefined) json.push(["$.bookingsOn", input.bookings_on]);
+    let rebound = false;
+    if (input.resource_id !== undefined && input.resource_id !== row.resourceId) {
+      const def = this.definitions.get(row.kind);
+      if (!def?.perResource) {
+        throw new WriteError("invalid_input", "Only a calendar can be one person's own.", {
+          fields: [{ path: "resource_id", problem: "invalid", message: "not a calendar" }],
+        });
+      }
+      if (input.resource_id !== null) {
+        const { rows } = await this.db.client.query({
+          sql: "SELECT 1 FROM resources WHERE id = ? AND kind = 'staff'",
+          params: [input.resource_id],
+          method: "all",
+        });
+        if (rows.length === 0) {
+          throw new WriteError("invalid_input", "That is not one of your staff.", {
+            fields: [{ path: "resource_id", problem: "invalid", message: "unknown member of staff" }],
+          });
+        }
+      }
+      sets.push("resource_id = ?");
+      params.push(input.resource_id);
+      // Every booking is looked at again: theirs written, anyone else's taken off it.
+      sets.push("cursor = NULL");
+      rebound = true;
+    }
     if (input.name !== undefined) {
       sets.push("name = ?");
       params.push(input.name);
@@ -1026,7 +1065,7 @@ export class ConnectorCapabilities {
     }
     if (input.busy_on === false || input.paused === true) statements.push(...clearBusyStatements(id));
     // What changed shows at once: busy times are read again, bookings written out.
-    if (input.paused !== true && (json.length > 0 || input.paused === false)) {
+    if (input.paused !== true && (json.length > 0 || input.paused === false || rebound)) {
       statements.push(
         jobStatement(CONNECTOR_SYNC_KIND, { connectorId: id }, now, { dedupeKey: `csync:${id}:u${now}` }),
       );
@@ -1574,8 +1613,10 @@ export class ConnectorCapabilities {
     itemId: string,
     now: number,
   ): Promise<"none" | "held" | "lost" | "written" | "removed" | "failed"> {
-    const wanted = await this.outbound(itemId, ctx.inbox.origin);
+    const wanted = await this.outbound(itemId, ctx.inbox.origin, row);
     const link = await readLink(this.db, row.id, itemId);
+    // A booking system took this booking first and it is being confirmed now (ADR-035): it stays.
+    if (!wanted && link?.externalId && (await this.writtenFirst(row.id, itemId))) return "none";
     if (wanted) {
       const { booking, past } = wanted;
       // A booking that ended before it was ever written is history, not something to add now, nor a
@@ -1630,7 +1671,7 @@ export class ConnectorCapabilities {
     try {
       let current = stateOf(claim.link);
       if (!current && writer.find) {
-        const gone = await this.outboundForFind(itemId, ctx.inbox.origin);
+        const gone = await this.outboundForFind(itemId, ctx.inbox.origin, row);
         if (gone) current = await writer.find(ctx, gone);
       }
       if (current) await writer.remove(ctx, current);
@@ -1674,36 +1715,240 @@ export class ConnectorCapabilities {
   private async outbound(
     itemId: string,
     origin: string,
+    row?: ConnectorRow,
   ): Promise<{ readonly booking: OutboundBooking; readonly past: boolean } | null> {
-    const { rows } = await this.db.client.query({
-      sql: `SELECT i.state, i.payload, i.sandbox, p.display_name, p.erased_at, s.name, s.duration_min
-              FROM items i LEFT JOIN parties p ON p.id = i.party_id
-              LEFT JOIN services s ON s.id = json_extract(i.payload, '$.reservationFor.serviceId')
-             WHERE i.id = ? AND i.type = 'booking'`,
-      params: [itemId],
-      method: "all",
-    });
-    const r = rows[0];
+    const r = await this.outboundRow(itemId, true);
     if (!r) return null;
     const state = String(r[0]);
     if (Number(r[2] ?? 0) === 1) return null;
     const past = state === "completed" || state === "no_show";
     if (state !== "confirmed" && !past) return null;
-    const booking = bookingOf(itemId, r, origin);
+    const booking = this.withWhom(bookingOf(itemId, r, origin), r, row);
     return booking ? { booking, past } : null;
   }
 
   /** The booking's last words, to find it on a platform after it was cancelled here. */
-  private async outboundForFind(itemId: string, origin: string): Promise<OutboundBooking | null> {
+  private async outboundForFind(itemId: string, origin: string, row?: ConnectorRow): Promise<OutboundBooking | null> {
+    const r = await this.outboundRow(itemId, false);
+    return r ? this.withWhom(bookingOf(itemId, r, origin), r, row) : null;
+  }
+
+  /**
+   * A booking's row as connectors are given it: the item, its customer, its service, and (ADR-035) the
+   * member of staff it is with, with the ids a booking system sent them in under.
+   */
+  private async outboundRow(itemId: string, onlyBookings: boolean): Promise<readonly unknown[] | null> {
     const { rows } = await this.db.client.query({
-      sql: `SELECT i.state, i.payload, i.sandbox, p.display_name, p.erased_at, s.name, s.duration_min
+      sql: `SELECT i.state, i.payload, i.sandbox, p.display_name, p.erased_at, s.name, s.duration_min,
+                   json_extract(i.payload, '$.resourceId'), s.external_id, s.source, r.external_id, r.source,
+                   p.contact, i.party_id
               FROM items i LEFT JOIN parties p ON p.id = i.party_id
               LEFT JOIN services s ON s.id = json_extract(i.payload, '$.reservationFor.serviceId')
-             WHERE i.id = ?`,
+              LEFT JOIN resources r ON r.id = json_extract(i.payload, '$.resourceId')
+             WHERE i.id = ?${onlyBookings ? " AND i.type = 'booking'" : ""}`,
       params: [itemId],
       method: "all",
     });
-    return rows[0] ? bookingOf(itemId, rows[0], origin) : null;
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Who the booking is with, as one connection is given it (ADR-035). A calendar tied to one member of
+   * staff is given only their bookings (null for anyone else's, which takes it off that calendar). A
+   * booking system is given its own ids for the service and the member of staff, and the customer,
+   * since it books them as its client; a calendar is never given who the customer is beyond the title.
+   */
+  private withWhom(booking: OutboundBooking | null, r: readonly unknown[], row?: ConnectorRow): OutboundBooking | null {
+    if (!booking) return null;
+    const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
+    const resourceId = str(r[7]);
+    if (row?.resourceId && resourceId !== row.resourceId) return null;
+    const def = row ? this.definitions.get(row.kind) : undefined;
+    const out: OutboundBooking = { ...booking, ...(resourceId ? { resourceId } : {}) };
+    if (!row || def?.group !== "booking") return out;
+    let contact: { name?: unknown; email?: unknown; phone?: unknown } = {};
+    try {
+      const raw = r[12];
+      contact = (typeof raw === "string" ? JSON.parse(raw) : (raw ?? {})) as typeof contact;
+    } catch {
+      contact = {};
+    }
+    const erased = r[4] !== null && r[4] !== undefined;
+    let payload: { addOns?: { name?: unknown }[] } = {};
+    try {
+      payload = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as typeof payload;
+    } catch {
+      payload = {};
+    }
+    const added = (payload.addOns ?? []).map((a) => String(a.name ?? "")).filter(Boolean);
+    return {
+      ...out,
+      ...(str(r[9]) === row.kind && str(r[8]) ? { serviceExternalId: String(r[8]) } : {}),
+      ...(str(r[11]) === row.kind && str(r[10]) ? { staffExternalId: String(r[10]) } : {}),
+      ...(added.length > 0 ? { note: `+ ${added.join(", ")}`.slice(0, 500) } : {}),
+      customer: {
+        ref: `sd-${str(r[13]) ?? booking.itemId}`,
+        name: erased ? null : (str(r[3]) ?? (typeof contact.name === "string" ? contact.name : null)),
+        email: erased || typeof contact.email !== "string" ? null : contact.email,
+        phone: erased || typeof contact.phone !== "string" ? null : contact.phone,
+      },
+    };
+  }
+
+  /** Whether a booking system took this booking first, and it has not been taken back since. */
+  private async writtenFirst(connectorId: string, itemId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT 1 FROM connector_writes w JOIN items i ON i.id = w.item_id
+             WHERE w.connector_id = ? AND w.item_id = ? AND w.op = 'reserve' AND w.outcome = 'written'
+               AND i.state = 'requested' LIMIT 1`,
+      params: [connectorId, itemId],
+      method: "all",
+    });
+    return rows.length > 0;
+  }
+
+  /* --- booking systems: written first (ADR-035, ADR-032 §4) --------------------- */
+
+  /**
+   * The booking system a service is booked through: the one it was brought in from (its `source`), when
+   * that system is connected here, ready, not paused and writing bookings. Null otherwise: the inbox
+   * books it itself, as always.
+   */
+  private async bookingSystemFor(serviceId: string): Promise<{ row: ConnectorRow; def: ConnectorDefinition } | null> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT source FROM services WHERE id = ?",
+      params: [serviceId],
+      method: "all",
+    });
+    const source = rows[0] ? String(rows[0][0] ?? "") : "";
+    if (!source || source === "builtin") return null;
+    const def = this.definitions.get(source);
+    if (def?.group !== "booking" || !def.bookings || readiness(def) !== true || !this.http) return null;
+    const row = (await this.rows()).find(
+      (r) => r.kind === source && r.status !== "disabled" && r.config.disconnectingAt === null && r.config.bookingsOn,
+    );
+    return row ? { row, def } : null;
+  }
+
+  /**
+   * Free times as the booking system a service is booked through says them, with the system's id for
+   * each member of staff; null when the service is not booked through one, or it could not say now (the
+   * inbox's own times are offered then, and the write first still decides).
+   */
+  async systemSlots(
+    q: {
+      readonly serviceId: string;
+      readonly staffExternalId?: string | undefined;
+      readonly from: number;
+      readonly to: number;
+    },
+    now: number,
+  ): Promise<{ readonly slots: readonly SystemSlot[]; readonly kind: string } | null> {
+    const system = await this.bookingSystemFor(q.serviceId);
+    if (!system?.def.availability || !system.def.capabilities.includes("availability_in")) return null;
+    const { rows } = await this.db.client.query({
+      sql: "SELECT external_id FROM services WHERE id = ?",
+      params: [q.serviceId],
+      method: "all",
+    });
+    const serviceExternalId = rows[0]?.[0];
+    if (serviceExternalId === null || serviceExternalId === undefined) return null;
+    try {
+      const ctx = await this.runContext(system.row, now);
+      const slots = await system.def.availability.slots(ctx, {
+        serviceExternalId: String(serviceExternalId),
+        ...(q.staffExternalId ? { staffExternalId: q.staffExternalId } : {}),
+        from: q.from,
+        to: q.to,
+      });
+      return { slots, kind: system.row.kind };
+    } catch (error) {
+      if (error instanceof ConnectorError) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * A booking written to the business's own booking system before anything is promised: journalled,
+   * under the item's claim, sent once under its key and looked for by it when no answer came. Null
+   * when its service is not booked through a system, or the system cannot be given it (a member of
+   * staff or a service it does not know): the booking is then the inbox's own request, as always.
+   */
+  async writeFirstBooking(itemId: string, now: number): Promise<WriteFirstResult | null> {
+    const r = await this.outboundRow(itemId, true);
+    if (!r || String(r[0]) !== "requested" || Number(r[2] ?? 0) === 1) return null;
+    let payload: { reservationFor?: { serviceId?: unknown } } = {};
+    try {
+      payload = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as typeof payload;
+    } catch {
+      return null;
+    }
+    const serviceId = typeof payload.reservationFor?.serviceId === "string" ? payload.reservationFor.serviceId : null;
+    if (!serviceId) return null;
+    const system = await this.bookingSystemFor(serviceId);
+    if (!system) return null;
+    const ctx = await this.runContext(system.row, now);
+    const booking = this.withWhom(bookingOf(itemId, r, ctx.inbox.origin), r, system.row);
+    if (!booking?.serviceExternalId || !booking.staffExternalId) return null;
+    const writer = system.def.bookings;
+    if (!writer) return null;
+    return writeFirst(this.db, {
+      connectorId: system.row.id,
+      itemId,
+      op: "reserve",
+      owner: "bookings",
+      key: `sd-${itemId}`,
+      request: {
+        service: booking.serviceExternalId,
+        staff: booking.staffExternalId,
+        start: booking.start,
+        end: booking.end,
+        client: booking.customer?.ref ?? null,
+      },
+      now,
+      write: async () => ({ externalId: (await writer.put(ctx, booking, null)).externalId ?? "" }),
+      find: async () => {
+        const found = writer.find ? await writer.find(ctx, booking) : null;
+        return found?.externalId ? { externalId: found.externalId } : null;
+      },
+    });
+  }
+
+  /** For the resolver: a booking written first whose answer never came, looked for again by the system. */
+  async findFirstWrite(connectorId: string, itemId: string, now: number): Promise<WrittenRef | null> {
+    const row = await this.rowOrNull(connectorId);
+    const def = row ? this.definitions.get(row.kind) : undefined;
+    if (!row || !def?.bookings?.find) return null;
+    const ctx = await this.runContext(row, now);
+    const booking = await this.outboundForFind(itemId, ctx.inbox.origin, row);
+    if (!booking) return null;
+    const found = await def.bookings.find(ctx, booking);
+    return found?.externalId ? { externalId: found.externalId } : null;
+  }
+
+  /**
+   * What a connected tool says about the business, to start from (capability `setup_in`): its services,
+   * staff and hours, read now. For the owner; nothing is kept or published by reading it.
+   */
+  async setupSnapshot(caller: Caller, id: string): Promise<SetupSnapshot> {
+    requireOwnerSide(caller);
+    const row = await this.row(id);
+    const def = this.definitions.get(row.kind);
+    if (!def?.setup || !def.capabilities.includes("setup_in")) {
+      throw new WriteError("invalid_input", `${def?.title ?? row.kind} has nothing to start from.`, {
+        details: { reason: "no_setup", kind: row.kind },
+      });
+    }
+    if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
+    const now = nowOf(caller);
+    try {
+      return await def.setup.read(await this.runContext(row, now));
+    } catch (error) {
+      if (error instanceof ConnectorError) {
+        throw new WriteError("wrong_state", error.message, { details: { reason: error.code, kind: row.kind } });
+      }
+      throw error;
+    }
   }
 
   /* --- rows and contexts ----------------------------------------------------- */
@@ -2187,6 +2432,7 @@ export class ConnectorCapabilities {
           : null,
       link: person && def?.feed ? await this.linkOf(row, def.feed.extension) : null,
       disconnect_note: def?.disconnectNote ?? null,
+      resource_id: row.resourceId,
     };
   }
 
@@ -2349,7 +2595,7 @@ export function connectorLane(payload: unknown): string | undefined {
 }
 
 const ROW_COLUMNS =
-  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at, inbound_enc";
+  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at, inbound_enc, resource_id";
 
 function rowOf(r: readonly unknown[]): ConnectorRow {
   let config: unknown = r[5];
@@ -2382,6 +2628,7 @@ function rowOf(r: readonly unknown[]): ConnectorRow {
     failures: Number(r[17] ?? 0),
     notifiedAt: n(r[18]),
     inboundEnc: r[19] === null || r[19] === undefined ? null : String(r[19]),
+    resourceId: r[20] === null || r[20] === undefined ? null : String(r[20]),
   };
 }
 

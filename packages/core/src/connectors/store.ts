@@ -112,16 +112,17 @@ export interface BusyDetail extends Interval {
  * What connected calendars take off [from, to) for a resource: every connector's current generation,
  * and everything past how far ahead it was read, from connectors that are not paused and whose busy
  * times are on and apply to the service (all services unless the owner chose some). A resource that
- * is not a service is covered by connectors that apply to all.
+ * is not a service is covered by connectors that apply to all. A calendar tied to one member of staff
+ * (ADR-035) takes only their times off: it applies to their resource and to nothing else.
  */
 export async function busyDetails(db: Db, from: number, to: number, resourceKey: string): Promise<BusyDetail[]> {
   const { rows } = await db.client.query({
-    sql: `SELECT b.start_ms, b.end_ms, c.id, c.name, c.config_public, 0 FROM connector_busy b
+    sql: `SELECT b.start_ms, b.end_ms, c.id, c.name, c.config_public, 0, c.resource_id FROM connector_busy b
             JOIN connectors c ON c.id = b.connector_id AND b.gen = c.busy_gen
            WHERE c.status <> 'disabled' AND ${BUSY_ON.replace("config_public", "c.config_public")}
              AND b.end_ms > ? AND b.start_ms < ?
           UNION ALL
-          SELECT MAX(c.busy_until, ?), ?, c.id, c.name, c.config_public, 1 FROM connectors c
+          SELECT MAX(c.busy_until, ?), ?, c.id, c.name, c.config_public, 1, c.resource_id FROM connectors c
            WHERE c.kind <> 'feed' AND c.status <> 'disabled' AND c.busy_gen IS NOT NULL
              AND c.busy_until IS NOT NULL AND c.busy_until < ? AND ${BUSY_ON.replace("config_public", "c.config_public")}`,
     params: [from, to, from, to, to],
@@ -131,12 +132,15 @@ export async function busyDetails(db: Db, from: number, to: number, resourceKey:
   const serviceId = resourceKey.startsWith("service:") ? resourceKey.slice("service:".length) : null;
   const out: BusyDetail[] = [];
   const applies = new Map<string, boolean>();
-  for (const [start, end, id, name, configPublic, beyond] of rows) {
+  for (const [start, end, id, name, configPublic, beyond, resourceId] of rows) {
     const key = String(id);
     let ok = applies.get(key);
     if (ok === undefined) {
       const services = servicesOf(configPublic);
-      ok = services === null || (serviceId !== null && services.includes(serviceId));
+      ok =
+        resourceId !== null && resourceId !== undefined
+          ? resourceKey === `resource:${String(resourceId)}`
+          : services === null || (serviceId !== null && services.includes(serviceId));
       applies.set(key, ok);
     }
     if (!ok) continue;

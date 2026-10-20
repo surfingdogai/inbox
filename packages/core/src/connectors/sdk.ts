@@ -1,5 +1,6 @@
 import { minorUnits } from "@surfingdog/spec";
 import { z } from "zod";
+import type { SetupSnapshot } from "./setup-snapshot";
 
 /**
  * The connector SDK (ADR-014, ADR-015, ADR-022).
@@ -452,6 +453,24 @@ export interface OutboundBooking {
   readonly durationMin: number;
   /** The resource it is with (a member of staff), for a system that books per person (ADR-032). */
   readonly resourceId?: string | undefined;
+  /**
+   * For a booking system (group `booking`, ADR-035): the system's own ids for the service and the
+   * member of staff, when they came from it, and who the customer is, since the system books them as
+   * its client. The same business's own system, so the same controller; no calendar is ever given these.
+   */
+  readonly serviceExternalId?: string | undefined;
+  readonly staffExternalId?: string | undefined;
+  readonly customer?:
+    | {
+        /** The inbox's own stable id for the customer, for the system to find them by again. */
+        readonly ref: string;
+        readonly name: string | null;
+        readonly email: string | null;
+        readonly phone: string | null;
+      }
+    | undefined;
+  /** The add-ons, by name, for a system that keeps a note with the booking. */
+  readonly note?: string | undefined;
 }
 
 /** What a connector keeps about one booking it wrote. */
@@ -478,6 +497,39 @@ export interface BookingWriter {
    * id. A connector whose ids are its own to choose finds it by that id in `put` instead.
    */
   find?(ctx: RunContext, booking: OutboundBooking): Promise<LinkState | null>;
+}
+
+/* --- a booking system's own times and setup (ADR-035) ------------------------ */
+
+/** A free time a booking system offers, with the member of staff it is with (the system's id). */
+export interface SystemSlot {
+  readonly start: number;
+  readonly end: number;
+  readonly staffExternalId: string;
+}
+
+/**
+ * A booking system's free times (capability `availability_in`): what it would book now for a service,
+ * with one member of staff or anyone. Advisory: what binds is the write the system takes first.
+ */
+export interface AvailabilityReader {
+  slots(
+    ctx: RunContext,
+    query: {
+      readonly serviceExternalId: string;
+      readonly staffExternalId?: string | undefined;
+      readonly from: number;
+      readonly to: number;
+    },
+  ): Promise<readonly SystemSlot[]>;
+}
+
+/**
+ * What a business's own tool says about it, read once to start from (capability `setup_in`): its
+ * services, staff and hours. The owner keeps what they want; nothing is published until they do.
+ */
+export interface SetupReader {
+  read(ctx: RunContext): Promise<SetupSnapshot>;
 }
 
 /* --- getting paid (ADR-023) ------------------------------------------------ */
@@ -1010,6 +1062,16 @@ export interface ConnectorDefinition {
   readonly hooks?: HooksHandler | undefined;
   /** A link the inbox serves for the connection (`auth: "link"`, ADR-026 §5). */
   readonly feed?: FeedServer | undefined;
+  /**
+   * A connection may be one member of staff's own calendar (ADR-035): its busy times then take only
+   * their times off, and only their bookings are written to it. The inbox keeps which; the connector
+   * reads and writes as always.
+   */
+  readonly perResource?: boolean | undefined;
+  /** A booking system's free times (`availability_in`, ADR-035). */
+  readonly availability?: AvailabilityReader | undefined;
+  /** Services, staff and hours to start from (`setup_in`, ADR-035). */
+  readonly setup?: SetupReader | undefined;
 }
 
 /** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */
