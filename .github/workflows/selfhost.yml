@@ -1,0 +1,120 @@
+name: self-host
+# The self-host kit, on every change to it or to what goes in the image: the installer and the
+# `inbox` command (lint, the stand-in tests), the image (built on amd64 and arm64 machines, smoke
+# tested on each), and the installer for real on fresh Ubuntu and Debian servers.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - deploy/**
+      - render.yaml
+      - scripts/build-install.mjs
+      - apps/site/public/install.sh
+      - apps/site/public/install.sh.sha256
+      - apps/inbox/**
+      - packages/**
+      - pnpm-lock.yaml
+      - .github/workflows/selfhost.yml
+      - .github/workflows/release.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - deploy/**
+      - render.yaml
+      - scripts/build-install.mjs
+      - apps/site/public/install.sh
+      - apps/site/public/install.sh.sha256
+      - apps/inbox/**
+      - packages/**
+      - pnpm-lock.yaml
+      - .github/workflows/selfhost.yml
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+jobs:
+  kit:
+    name: kit · shellcheck · installer and inbox command · compose · caddy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: shellcheck --version && shellcheck -s sh deploy/inbox apps/site/public/install.sh deploy/test/*.sh deploy/test/stubs/docker
+      # The installer served at /install.sh is what deploy/ builds, and its checksum is right.
+      - run: node scripts/build-install.mjs --check
+      - run: cd apps/site/public && sha256sum -c install.sh.sha256
+      - run: |
+          cp deploy/.env.example deploy/.env
+          sed -i 's/^INBOX_DOMAIN=$/INBOX_DOMAIN=inbox.example.com/' deploy/.env
+          docker compose -f deploy/docker-compose.yml config -q
+          # Coolify asks for INBOX_OWNER_EMAIL (required, ${VAR:?}) and generates the rest.
+          INBOX_OWNER_EMAIL=owner@example.com docker compose -f deploy/coolify/docker-compose.yml config -q
+          cp deploy/litestream/litestream.env.example deploy/litestream.env
+          docker compose -f deploy/docker-compose.yml -f deploy/litestream/docker-compose.litestream.yml config -q
+          rm deploy/.env deploy/litestream.env
+      - name: caddy validate, both certificates
+        run: |
+          for tls in acme internal; do
+            docker run --rm -e INBOX_DOMAIN=inbox.example.com -e INBOX_TLS=$tls \
+              -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" "$(sed -n 's/^    image: \(caddy:.*\)$/\1/p' deploy/docker-compose.yml)" \
+              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm vitest run --project node deploy/test packages/platform/test/backup.node.test.ts apps/inbox/test/cli-database.node.test.ts
+
+  image:
+    name: image · ${{ matrix.arch }} · build · smoke test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          load: true
+          tags: ghcr.io/surfingdogai/inbox:ci
+          build-args: |
+            VERSION=ci
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+      - run: deploy/test/smoke-image.sh ghcr.io/surfingdogai/inbox:ci
+      - if: matrix.arch == 'amd64'
+        run: docker save ghcr.io/surfingdogai/inbox:ci -o inbox-image.tar
+      - if: matrix.arch == 'amd64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: inbox-image-amd64
+          path: inbox-image.tar
+          retention-days: 1
+
+  installer:
+    name: installer · ${{ matrix.base }} · in a systemd container
+    needs: image
+    strategy:
+      fail-fast: false
+      matrix:
+        base: ["ubuntu:24.04", "debian:12"]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: inbox-image-amd64
+      - run: deploy/test/installer-vm.sh "${{ matrix.base }}" "$PWD/inbox-image.tar"

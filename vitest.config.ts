@@ -7,7 +7,13 @@ import { defineConfig } from "vitest/config";
  * `.workers.test.ts` only inside workerd (with the bindings from wrangler.jsonc); everything else
  * runs on both. Storage is isolated per test file on the Workers side.
  */
-const include = ["apps/*/test/**/*.test.ts", "packages/*/test/**/*.test.ts", "examples/*/test/**/*.test.ts"];
+const include = [
+  "apps/*/test/**/*.test.ts",
+  "packages/*/test/**/*.test.ts",
+  "examples/*/test/**/*.test.ts",
+  // The self-host kit: the installer and the `inbox` command, run against stand-ins (Node only).
+  "deploy/test/**/*.node.test.ts",
+];
 
 /**
  * The packages that build on the SDK (the network checker, the example network) are tested

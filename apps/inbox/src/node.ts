@@ -21,12 +21,24 @@ import {
   type MailOut,
   resendMailOut,
 } from "@surfingdog/platform";
-import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platform/node";
+import {
+  backupDatabase,
+  inspectDatabase,
+  nodeSnapshot,
+  nodeSqliteClient,
+  pinnedFetch,
+} from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
 import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
-import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
+import {
+  clientAddressFrom,
+  commandDatabaseRefusal,
+  DEFAULT_HOST,
+  NODE_SERVER_OPTIONS,
+  withClientAddress,
+} from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
@@ -44,7 +56,9 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  * resolves the name first and connects only to a public address it checked; INBOX_OUTBOUND_DENY
  * (comma-separated addresses and ranges) closes more, such as the server's own public address.
  * INBOX_DEMO=1 makes it a public demo shop (demo.ts): it seeds itself, emails nobody but the owner,
- * calls no network, and wipes itself every night.
+ * calls no network, and wipes itself every night. INBOX_CLIENT_ADDRESS_HEADER names where each
+ * caller's address comes from, behind a platform's proxy (node-server.ts). TERM and INT end it
+ * cleanly: no new requests, the job it is running finished, the database closed.
  *
  *   node server.mjs                    serve
  *
@@ -64,9 +78,25 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs import-receipt-keys <file>
  *                                      take in the receipt-keys.json of a download, sealed with this
  *                                      instance's INBOX_SECRET_KEY, so receipts are signed as before
+ *   node server.mjs backup <file>      a full copy of the database as it is now, while it serves;
+ *                                      never migrated first, and never over a file that exists
+ *   node server.mjs check-db <file>    whether a file is a sound inbox database, before a restore;
+ *                                      it opens no instance database at all
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 const command = process.argv[2];
+if (command === "check-db") {
+  // A file to restore from, looked at before anything is done with it: it is not the instance's
+  // database, so none is opened, created or migrated here.
+  const target = process.argv[3];
+  if (!target) {
+    console.error("usage: check-db <file>");
+    process.exit(2);
+  }
+  const report = inspectDatabase(path.resolve(target));
+  console.log(JSON.stringify(report));
+  process.exit(report.ok ? 0 : 1);
+}
 if (command) {
   const refusal = commandDatabaseRefusal(file, process.env.INBOX_DB, command);
   if (refusal) {
@@ -81,6 +111,25 @@ const db = createDb(client);
 const publicUrl = publicUrlFrom(process.env.INBOX_PUBLIC_URL);
 const from = senderFrom(process.env.MAIL_FROM, process.env.MAIL_FROM_NAME);
 
+if (command === "backup") {
+  // Before the migrations, on purpose: a backup taken by a newer version before an update must be
+  // the database exactly as the running version left it, or rolling back would restore the new one.
+  const target = process.argv[3];
+  if (!target) {
+    console.error("usage: backup <file>");
+    process.exit(2);
+  }
+  try {
+    // The folder too, readable by this user only, as a backup holds every customer's details.
+    mkdirSync(path.dirname(path.resolve(target)), { recursive: true, mode: 0o700 });
+    const report = backupDatabase(client, path.resolve(target));
+    console.log(JSON.stringify({ file: path.resolve(target), ...report }));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  process.exit(0);
+}
 if (command) {
   await ensureMigrated(db.client, MIGRATIONS);
   // Seeds confirm items, and a confirmed item earns a receipt when the host can sign one.
@@ -176,7 +225,7 @@ if (command) {
     }
   } else {
     console.error(
-      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping, apply-plan or import-receipt-keys`,
+      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping, apply-plan, import-receipt-keys, backup or check-db`,
     );
     process.exit(2);
   }
@@ -206,6 +255,13 @@ const deny = outboundDenyFrom(process.env.INBOX_OUTBOUND_DENY);
 if (deny.bad.length > 0) {
   console.error(
     `INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range (like 203.0.114.7 or 2a01:4f8::/32); fix it to start`,
+  );
+  process.exit(1);
+}
+const clientAddress = clientAddressFrom(process.env.INBOX_CLIENT_ADDRESS_HEADER);
+if (clientAddress.bad !== null) {
+  console.error(
+    `INBOX_CLIENT_ADDRESS_HEADER: ${clientAddress.bad} is neither a header's name (like fly-client-ip) nor socket; fix it to start`,
   );
   process.exit(1);
 }
@@ -251,17 +307,54 @@ if (existsSync(clientDir)) {
   console.warn(`No client build at ${clientDir}. Run "pnpm build:client", or "pnpm dev:client" for the dev server.`);
 }
 
-const loop = setInterval(() => {
-  runner.runDue(db, { workerId: `node:${process.pid}` }).catch((error) => console.error("jobs:", error));
-}, 1_000);
-loop.unref();
+// The job loop starts once the server listens, so a version that cannot even serve sends nothing.
+// A tick still running when the next is due is not run twice.
+let loop: ReturnType<typeof setInterval> | undefined;
+let tick: Promise<unknown> = Promise.resolve();
+let ticking = false;
+const startJobs = () => {
+  loop = setInterval(() => {
+    if (ticking) return;
+    ticking = true;
+    tick = runner
+      .runDue(db, { workerId: `node:${process.pid}` })
+      .catch((error) => console.error("jobs:", error))
+      .finally(() => {
+        ticking = false;
+      });
+  }, 1_000);
+  loop.unref();
+};
+
+const handle = withClientAddress(app.fetch, clientAddress.source);
 
 const port = Number(process.env.PORT ?? 8787);
 // Timeouts a client that trickles its request cannot outlast (node-server.ts). Loopback unless HOST
 // says otherwise: a server reachable around its proxy would take a client's own CF-Connecting-IP.
-serve(
-  { fetch: app.fetch, port, hostname: process.env.HOST || DEFAULT_HOST, serverOptions: NODE_SERVER_OPTIONS },
+const server = serve(
+  { fetch: handle, port, hostname: process.env.HOST || DEFAULT_HOST, serverOptions: NODE_SERVER_OPTIONS },
   (info) => {
     console.log(`Surfing Dog Inbox listening on http://${info.address}:${info.port} (database ${file})`);
+    startJobs();
   },
 );
+
+// A clean end, well inside the ten seconds Docker waits: no new requests or jobs, the job running
+// now finished (for four seconds at most), the database closed, so a message a job was sending is
+// marked sent once it went, rather than cut off between the two.
+let ending = false;
+const end = () => {
+  if (ending) return;
+  ending = true;
+  if (loop) clearInterval(loop);
+  server.close();
+  const waited = new Promise((resolve) => setTimeout(resolve, 4_000).unref());
+  void Promise.race([tick, waited]).finally(() => {
+    try {
+      client.close();
+    } finally {
+      process.exit(0);
+    }
+  });
+};
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, end);

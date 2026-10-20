@@ -4,15 +4,17 @@
 // for a person, a file is what an agent can fetch and follow. Once the hosted pilot opens
 // (src/lib/hosted.ts), the page's head offers the hosted inbox and its button, and the line for
 // your AI follows as the other way. The closed lede keeps its line breaks as they were, so the
-// closed page is built exactly as before.
+// closed page is built exactly as before. After the line for your AI and what it does come the three
+// ways to run it by hand (SELF_HOST): one command on a server, the Docker image on a platform,
+// Cloudflare Workers.
 import Layout from "../layouts/Layout.astro";
-import { HOSTED_INSTALL } from "../lib/hosted";
+import { DEPLOY_URL, HOSTED_INSTALL } from "../lib/hosted";
+import { SELF_HOST } from "../lib/self-host";
 
 const PROMPT =
   "Install Surfing Dog Inbox for my business. Follow the instructions at https://surfingdog.ai/install.md exactly, ask me before anything that costs money or changes DNS, and verify each step before moving on.";
 const CONNECT_PROMPT =
   "Connect my Surfing Dog Inbox to the software I already use. Follow https://surfingdog.ai/connect.md exactly, ask me which tools I use, ask before changing a setting in another system or sending an email for me, and test every connection before telling me it works.";
-const REPO = "https://github.com/surfingdogai/inbox";
 ---
 
 <Layout
@@ -68,7 +70,7 @@ const REPO = "https://github.com/surfingdogai/inbox";
         </div>
       </div>
       <ul class="checks">
-        <li><b>Puts it somewhere.</b> Cloudflare, about five dollars a month, or your own server.</li>
+        <li><b>Puts it somewhere.</b> Your Cloudflare account, free to start, or your own server.</li>
         <li><b>Gives it your subdomain.</b> Usually <code>inbox.yourdomain.com</code>, with a certificate.</li>
         <li><b>Turns on email in,</b> so a customer can simply write to it, and proves it with a test message.</li>
         <li><b>Signs you in</b> and hands you the key, once.</li>
@@ -79,6 +81,51 @@ const REPO = "https://github.com/surfingdogai/inbox";
         machine: every secret is generated rather than guessed, every step has a command that proves it worked, and it
         is told to stop and tell you rather than carry on when a check fails. Read them yourself if you like.
       </p>
+    </div>
+  </section>
+
+  <section class="section" id="yourself" aria-labelledby="yourself-h">
+    <div class="wrap wrap-read">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Or by hand</p>
+          <h2 class="h-section" id="yourself-h">Three ways</h2>
+        </div>
+      </div>
+      <ol class="run-ways" data-reveal="stagger">
+        {
+          SELF_HOST.map((way) => (
+            <li class="run-way" id={way.id}>
+              <h3 class="way-name">{way.name}</h3>
+              <p class="way-what">{way.what}</p>
+              {way.command ? (
+                <div class="way-cmd">
+                  <code>{way.command}</code>
+                  <button class="way-copy" type="button" data-copy={way.command} aria-label={`Copy: ${way.name}`} hidden>
+                    Copy
+                  </button>
+                </div>
+              ) : (
+                <p>
+                  <a class="btn btn-secondary btn-sm" href={DEPLOY_URL} rel="noopener">
+                    Deploy to Cloudflare
+                  </a>
+                </p>
+              )}
+              <p class="way-links">
+                {way.links.map((link, i) => (
+                  <>
+                    {i > 0 && <span aria-hidden="true"> · </span>}
+                    <a class="link" href={link.href}>
+                      {link.label}
+                    </a>
+                  </>
+                ))}
+              </p>
+            </li>
+          ))
+        }
+      </ol>
     </div>
   </section>
 
@@ -105,27 +152,79 @@ const REPO = "https://github.com/surfingdogai/inbox";
     </div>
   </section>
 
-  <section class="section" aria-labelledby="hands-h" data-reveal>
-    <div class="wrap wrap-read">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">Or do it yourself</p>
-          <h2 class="h-section" id="hands-h">It is four commands</h2>
-        </div>
-      </div>
-      <pre class="glass panel"><code>git clone {REPO} && cd inbox
-pnpm install
-pnpm --filter @surfingdog/inbox build
-node apps/inbox/dist/server.mjs</code></pre>
-      <p class="hint">
-        That is a working inbox on <code>localhost:8787</code> with its database in a file beside it. The
-        <a class="link" href="/docs/quickstart/">Quickstart</a> takes it from there to a real domain.
-      </p>
-    </div>
-  </section>
 </Layout>
 
+<script>
+  import { wireCopyButtons } from "../lib/copy";
+  wireCopyButtons(".run-way [data-copy]");
+</script>
+
 <style>
+  .run-ways {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--hairline);
+  }
+  .run-way {
+    display: grid;
+    gap: var(--sp-2);
+    padding: var(--sp-5) 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .way-name {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .way-what,
+  .way-links {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.55;
+    color: var(--ink-3);
+  }
+  .way-cmd {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: 8px 8px 8px 12px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--ground) 40%, transparent);
+  }
+  .way-cmd code {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-top: 3px;
+    font-size: var(--fs-mono);
+    line-height: 1.55;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+  .way-copy {
+    flex: none;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    font: inherit;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .way-copy:hover,
+  .way-copy:focus-visible {
+    background: var(--pill-bg-hover);
+    color: var(--ink);
+  }
   .prompt {
     padding: var(--sp-5);
     white-space: pre-wrap;

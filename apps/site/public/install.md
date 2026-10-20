@@ -111,7 +111,7 @@ Ask the person which they want. Both are fully supported; the software is identi
 |---|---|---|
 | Good when | They have no server and want it managed | They have a VPS, or want the data on their own machine |
 | Cost | The free plan runs it. Sending email needs Workers Paid, about $5/month | Whatever the server costs |
-| Needs | A Cloudflare account; for email and their own subdomain, the domain on Cloudflare | A Linux box, Node 22.16+, 24 or 26, and a domain |
+| Needs | A Cloudflare account; for email and their own subdomain, the domain on Cloudflare | Ubuntu or Debian for the one-command installer (B1); otherwise any Linux with Docker, or Node 22.16+, 24 or 26; and a domain |
 | Database | D1 | One SQLite file |
 
 If they have no preference and no server, take Cloudflare.
@@ -231,13 +231,85 @@ dashboard is removed by the next deploy.
 
 ## Path B — Their own server
 
-### B1. Prerequisites
+Three ways, the same inbox. Take B1 unless the person says otherwise.
+
+- **B1. One command**, on a fresh Ubuntu (22.04 or newer) or Debian (12 or newer) server, amd64 or
+  arm64, that nothing else serves websites from. It installs Docker if it is missing, writes
+  `/opt/inbox`, and starts the inbox behind Caddy, which gets the HTTPS certificate on its own. Then
+  updates undo themselves if they fail, and a backup is made every night.
+- **B2. The Docker image** on a server or a platform the person already uses (Coolify, Fly.io,
+  Render, Railway): https://surfingdog.ai/docs/platforms/ has each one's steps. Not DigitalOcean App
+  Platform, which keeps no disk between deploys; a Droplet takes B1.
+- **B3. Node and systemd**, without Docker, behind a proxy they already run.
+
+### B1. One command
+
+**First, the DNS record.** The installer checks that the inbox's address points at this server
+before it writes anything. Ask which address (`inbox.theirdomain.com` is the convention), then ask
+the person to add an **A record** for it, pointing at the server's public IP address, where their
+domain's DNS is (a DNS change: ask first, and wait). At Cloudflare, the record must be **DNS only**
+(grey cloud) so the server can get its certificate. Check it before going on:
+
+```bash
+getent ahosts inbox.theirdomain.com    # on the server: the server's own address
+```
+
+**Then the installer**, as root, with the address and the owner's email the person gave you in the
+preflight. Take it from the newest release on GitHub and check it against that release's checksums
+(the `install.sh.sha256` beside surfingdog.ai's copy only shows a download was not cut short):
+
+```bash
+curl -fsSLO https://github.com/surfingdogai/inbox/releases/latest/download/install.sh
+curl -fsSL https://github.com/surfingdogai/inbox/releases/latest/download/SHA256SUMS | grep ' install.sh$' | sha256sum -c      # expect: install.sh: OK
+sudo sh install.sh --domain inbox.theirdomain.com --email them@theirdomain.com --yes
+```
+
+It stops before it installs Docker or writes anything when the server is not Ubuntu or Debian, when
+something else holds ports 80 or 443 (it names it: take B3 then), or when the address has no DNS
+record. If the record points elsewhere, or through Cloudflare's proxy, it may already have installed
+Docker; it never writes /opt/inbox. It says where the record points, and what to set. Report what it
+says to the person; never add `--skip-dns-check` to get past a record that is wrong. It sends nothing
+about the person anywhere.
+
+Verify, from outside the server:
+
+```bash
+curl -s https://inbox.theirdomain.com/healthz
+```
+
+Expect `{"ok":true,…}`. The certificate can take a minute after the first start;
+`sudo inbox logs caddy` says why when it does not come. Its last lines hold the owner's first
+sign-in (a link, and a code), good once, for 15 minutes: give them to the person, and do not use
+them yourself.
+
+What it wrote: `/opt/inbox/.env` (the settings, readable by root only, with an `INBOX_SECRET_KEY`
+it generated), `/opt/inbox/docker-compose.yml` and `Caddyfile`, the data in `/opt/inbox/data`, the
+`inbox` command in `/usr/local/bin`, and a nightly backup (a systemd timer). Tell the person to keep a
+copy of `/opt/inbox/.env` somewhere safe, apart from the server: its key opens what the database
+keeps sealed. Never print the key itself in your answer.
+
+`sudo inbox status` says what runs. `sudo inbox update` moves to a new release and rolls back if it
+does not start; `sudo inbox backup` and `sudo inbox restore <file>` are the rest
+(https://surfingdog.ai/docs/backups/). Running the installer again is safe: it keeps the data, the
+key and the version. Then go to Step 1.
+
+### B2. The Docker image
+
+`ghcr.io/surfingdogai/inbox` (amd64 and arm64). Its data folder is `/opt/inbox/data`, on a disk that
+lasts, and it runs as uid 10001. Follow the person's platform's steps at
+https://surfingdog.ai/docs/platforms/, or on a server of theirs with a proxy already running:
+https://surfingdog.ai/docs/run-it-yourself/#behind-a-proxy-you-already-run. Set `INBOX_OWNER_EMAIL`,
+a generated `INBOX_SECRET_KEY` (`openssl rand -base64 32`) and, once it answers at their own
+address, `INBOX_PUBLIC_URL`. Commands run inside the container:
+`docker exec <container> node /opt/inbox/server.mjs create-owner-key laptop`. Then go to Step 1.
+
+### B3. Node and systemd
 
 ```bash
 node --version    # must be 22.16+, 24 or 26
 ```
 
-### B2. Build a single file
+#### Build a single file
 
 ```bash
 git clone https://github.com/surfingdogai/inbox && cd inbox && pnpm install
@@ -257,7 +329,11 @@ chown -R inbox:inbox /opt/inbox/data
 
 The repository's `Dockerfile` does these same steps, if they would rather run a container.
 
-### B3. Configuration
+Or skip the build: every release has it as `inbox-server.tar.gz`, with `SHA256SUMS`
+(https://github.com/surfingdogai/inbox/releases/latest). Check the checksum, then copy `server.mjs`
+and `client` from it.
+
+#### Configuration
 
 Generate the sealing key:
 
@@ -277,10 +353,10 @@ HOST=127.0.0.1
 PORT=8787
 ```
 
-`HOST=127.0.0.1` keeps the inbox reachable only through the proxy in B5 (it is also the default).
+`HOST=127.0.0.1` keeps the inbox reachable only through the proxy below (it is also the default).
 Reachable around the proxy, a caller could set its own `CF-Connecting-IP` and pass for anyone.
 
-### B4. Run it under systemd
+#### Run it under systemd
 
 ```ini
 [Unit]
@@ -302,7 +378,7 @@ WantedBy=multi-user.target
 systemctl daemon-reload && systemctl enable --now inbox && curl -s 127.0.0.1:8787/healthz
 ```
 
-### B5. Subdomain and TLS
+#### Subdomain and TLS
 
 Point an A record for `inbox.theirdomain.com` at the server, then put a reverse proxy in front.
 Caddy gets a certificate on its own:
@@ -340,19 +416,27 @@ written to the server's log instead. Read it from there and give it to them. It 
 minutes. If sending failed, the log says why and holds no link: fix the mail setup, and ask again.
 If the log says the address is not in `INBOX_OWNER_EMAIL`, that value has a typo: set it again.
 
-- On their own server: `journalctl -u inbox` (or the container's log).
+- Installed with the one command (B1): `sudo inbox sign-in` asks the inbox for a new sign-in email
+  and shows its code and link.
+- On their own server otherwise: `journalctl -u inbox` (or the container's log).
 - On Cloudflare: run `npx wrangler tail surfingdog-inbox` and have them ask again, or open the
   Worker in the dashboard, go to Logs, and search for `sign-in email`.
 
-Alternatively mint a key. On their own server, as the service user and with the instance's settings,
-so the key goes into the instance's database:
+Alternatively mint a key. Installed with the one command (B1):
+
+```bash
+sudo inbox owner-key laptop
+```
+
+On their own server with Node (B3), as the service user and with the instance's settings, so the key
+goes into the instance's database:
 
 ```bash
 sudo -u inbox node --env-file=/opt/inbox/.env /opt/inbox/server.mjs create-owner-key laptop
 ```
 
-It prints `sdi_own_…` once, and on the line before it the database it used, which must be
-`/opt/inbox/data/inbox.db`. Give the key to the person and tell them to store it; it is not shown
+It prints `sdi_own_…` once (with Node, on the line before it the database it used, which must be
+`/opt/inbox/data/inbox.db`). Give the key to the person and tell them to store it; it is not shown
 again. Without the instance's settings the command refuses to run rather than make a new, empty
 database, where a key would open nothing.
 
@@ -423,6 +507,9 @@ Without it, sign-in emails are written to the log and other email is not sent. T
   and `MAIL_FROM=inbox@theirdomain.com`.
 - **Either, through Resend:** `RESEND_API_KEY`, with `MAIL_FROM` on a domain verified at Resend.
   On Workers it is used instead of the binding when it is set.
+- **Installed with the one command (B1):** the person runs `sudo inbox email` themselves. It asks
+  for the provider, the address and the API key without showing the key, writes them to
+  `/opt/inbox/.env` and restarts the inbox. Don't ask for the key yourself.
 
 ---
 
@@ -583,7 +670,9 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
 
 ## If something breaks
 
-- `/healthz` fails → the process is not running, or the proxy is not reaching it.
+- `/healthz` fails → the process is not running, or the proxy is not reaching it. Installed with
+  the one command: `sudo inbox status`, then `sudo inbox logs` (the inbox) or `sudo inbox logs caddy`
+  (the certificate: most often the A record does not point at the server yet, or is proxied).
 - The manifest shows the wrong `instance` → set `INBOX_PUBLIC_URL` and redeploy.
 - `401` on the inbound email door → the secret in settings and the secret on the gateway differ.
 - `401` writing settings → the owner key is wrong or revoked, or it was made in another database:
@@ -611,10 +700,16 @@ call `check_business` with `fresh` set to true. Show the person what changed. An
 
 - **Again**: every step can be run a second time. A database or a queue that already exists is kept
   (take the database's id from `npx wrangler d1 list`); `secret put` replaces a secret's value; a
-  settings write is a merge, so send only what changes.
+  settings write is a merge, so send only what changes. The one-command installer (B1) keeps the
+  data, the secret key and the version when it runs again.
+- **Updating**: installed with the one command, `sudo inbox update`; it backs up first, and rolls
+  back to the version and data of before if the new one does not start. On Cloudflare, pull the
+  repository into their copy and keep their own `database_id`.
 - **Taking it down**, only when the person asks, since deleting the database deletes every item and
   receipt: on Cloudflare, `npx wrangler delete`, then `npx wrangler d1 delete surfingdog-inbox` and
-  `npx wrangler queues delete surfingdog-inbox-jobs`; on their own server, `systemctl disable --now
-  inbox` and remove `/opt/inbox`. Remove the inbox's line from their `llms.txt` too.
+  `npx wrangler queues delete surfingdog-inbox-jobs`; installed with the one command, `cd /opt/inbox
+  && docker compose down`, `systemctl disable --now inbox-backup.timer`, then remove `/opt/inbox` and
+  `/usr/local/bin/inbox`; with Node, `systemctl disable --now inbox` and remove `/opt/inbox`. Remove
+  the inbox's line from their `llms.txt` too.
 
 Documentation: https://surfingdog.ai/docs/ · Source: https://github.com/surfingdogai/inbox

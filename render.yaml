@@ -1,0 +1,33 @@
+# Surfing Dog Inbox on Render, as a Blueprint: the "Deploy to Render" button reads this file.
+# https://render.com/deploy?repo=https://github.com/surfingdogai/inbox
+#
+# A disk is what keeps the database between deploys, and Render gives disks only to paid instances,
+# so this is the Starter plan, not the free one. A service with a disk runs one instance, and each
+# deploy stops the old one before the new one starts: a few seconds offline. Render snapshots the
+# disk every day. Steps: https://surfingdog.ai/docs/platforms/#render
+services:
+  - type: web
+    name: surfingdog-inbox
+    runtime: docker
+    dockerfilePath: ./deploy/render/Dockerfile
+    dockerContext: ./deploy/render
+    plan: starter
+    # Deploys only when you press it: each one builds the version deploy/render/Dockerfile pins, and
+    # a new version brings its database up to date. Back up first (docs/backups).
+    autoDeployTrigger: "off"
+    healthCheckPath: /healthz
+    disk:
+      name: inbox-data
+      mountPath: /opt/inbox/data
+      sizeGB: 1
+    envVars:
+      # Asked for when the Blueprint is created: only this address can sign in the first time.
+      - key: INBOX_OWNER_EMAIL
+        sync: false
+      # Generated once, and kept. Copy it somewhere safe: it opens what the database keeps sealed.
+      - key: INBOX_SECRET_KEY
+        generateValue: true
+      - key: PORT
+        value: "8787"
+      # Once your own domain is added (Settings → Custom Domains), set INBOX_PUBLIC_URL to it, such
+      # as https://inbox.yourbusiness.com. Until then the owner's first sign-in saves the address.

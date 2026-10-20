@@ -1,4 +1,16 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
@@ -159,4 +171,114 @@ export function nodeSnapshot(client: NodeSqliteClient, dir: string = tmpdir()): 
       rmSync(own, { recursive: true, force: true });
     }
   };
+}
+
+/**
+ * A backup of a `node:sqlite` database: everything it holds, the sealed secrets and the receipt
+ * signing keys included, unlike `nodeSnapshot`'s copy for the owner to take away. `VACUUM INTO`
+ * writes it while the inbox keeps serving, beside `target` under a `.partial` name of this process's
+ * own, so a backup that stopped halfway is never taken for one that finished, and two backups at once
+ * never share one. The copy is put in the rollback journal so it is one file, checked, readable by
+ * this user only (it holds every customer's details), and only then linked to `target`, which fails
+ * when a file is there already: it never overwrites one, even one that appeared meanwhile. And it
+ * never migrates anything: a backup taken before an update is the database exactly as the running
+ * version left it.
+ */
+export function backupDatabase(client: NodeSqliteClient, target: string): DatabaseReport {
+  const exists = () => new Error(`${target} exists already, and a backup never overwrites a file`);
+  if (existsSync(target)) throw exists();
+  const partial = `${target}.${process.pid}.${Date.now()}.partial`;
+  try {
+    client.raw.prepare("VACUUM INTO ?").run(partial);
+    chmodSync(partial, 0o600);
+    const copy = new DatabaseSync(partial);
+    try {
+      copy.exec("PRAGMA journal_mode = DELETE");
+    } finally {
+      copy.close();
+    }
+    const report = inspectDatabase(partial);
+    if (!report.ok) throw new Error(`the copy failed its check: ${report.problem}`);
+    try {
+      linkSync(partial, target);
+      rmSync(partial, { force: true });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") throw exists();
+      // A file system without hard links: a rename, after one more look.
+      if (code !== "EPERM" && code !== "ENOTSUP" && code !== "EOPNOTSUPP" && code !== "EXDEV") throw error;
+      if (existsSync(target)) throw exists();
+      renameSync(partial, target);
+    }
+    return report;
+  } catch (error) {
+    rmSync(partial, { force: true });
+    throw error;
+  }
+}
+
+/** What a database file is: an inbox's, sound, and how far it was migrated. */
+export interface DatabaseReport {
+  /** True when the file is a sound SQLite database that an inbox made. */
+  readonly ok: boolean;
+  /** Why it is not, in a few words; null when it is. */
+  readonly problem: string | null;
+  readonly bytes: number;
+  /** The newest migration applied to it, or null when it has none. */
+  readonly migration: number | null;
+  /** How many requests it holds, and whether anyone has signed in to it. */
+  readonly items: number | null;
+  readonly owner: boolean | null;
+}
+
+/**
+ * Looks at a database file before anything is restored from it: that it is SQLite at all (its first
+ * sixteen bytes), sound (`PRAGMA quick_check`), and an inbox's (its `migrations` table). The file is
+ * opened, so a database in the write-ahead log may gain and then lose its `-wal` and `-shm` files
+ * beside it; nothing in it is changed.
+ */
+export function inspectDatabase(file: string): DatabaseReport {
+  const none = { migration: null, items: null, owner: null } as const;
+  if (!existsSync(file)) return { ok: false, problem: "there is no such file", bytes: 0, ...none };
+  const bytes = statSync(file).size;
+  const head = Buffer.alloc(16);
+  const fd = openSync(file, "r");
+  try {
+    readSync(fd, head, 0, 16, 0);
+  } finally {
+    closeSync(fd);
+  }
+  if (head.toString("latin1") !== "SQLite format 3\u0000") {
+    return { ok: false, problem: "it is not an SQLite database", bytes, ...none };
+  }
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(file);
+  } catch (error) {
+    return { ok: false, problem: error instanceof Error ? error.message : String(error), bytes, ...none };
+  }
+  try {
+    const check = db.prepare("PRAGMA quick_check").all() as { quick_check: string }[];
+    const problems = check.map((r) => r.quick_check).filter((r) => r !== "ok");
+    if (problems.length > 0) return { ok: false, problem: `it is damaged: ${problems[0]}`, bytes, ...none };
+    const has = (name: string) =>
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+    if (!has("migrations")) return { ok: false, problem: "it is not an inbox's database", bytes, ...none };
+    const top = db.prepare("SELECT max(version) AS v FROM migrations").get() as { v: number | null } | undefined;
+    const count = (name: string) =>
+      has(name) ? Number((db.prepare(`SELECT count(*) AS n FROM "${name}"`).get() as { n: number }).n) : null;
+    const users = count("users");
+    return {
+      ok: true,
+      problem: null,
+      bytes,
+      migration: top?.v ?? null,
+      items: count("items"),
+      owner: users === null ? null : users > 0,
+    };
+  } catch (error) {
+    return { ok: false, problem: error instanceof Error ? error.message : String(error), bytes, ...none };
+  } finally {
+    db.close();
+  }
 }

@@ -1,0 +1,192 @@
+#!/bin/sh
+# A stand-in for docker, for the installer's and the `inbox` command's tests: it keeps what a test
+# needs in $STUB_STATE (images, whether the inbox runs, which version is broken) and logs each call.
+#   $STUB_STATE/broken     versions whose inbox never becomes healthy (one per line)
+#   $STUB_STATE/no-pull    when present, every pull fails
+#   $STUB_STATE/no-backup  when present, the inbox's backup command fails
+#   $STUB_STATE/logs       what `compose logs` prints; a sign-in email asked for is added to it
+#   $STUB_STATE/migrates   when present, a version starting writes "migrated-by-<version>" into the database
+#   $STUB_STATE/next-code  the code in the next sign-in email asked for (777777 when absent)
+#   $STUB_STATE/no-magic   when present, asking for a sign-in email fails
+# A shell script run in a one-off container (`run --entrypoint sh inbox -c …`) runs here, with
+# /opt/inbox/data in it standing for the data folder; Node (`-e`) is $STUB_NODE.
+set -eu
+printf 'docker %s\n' "$*" >>"$STUB_STATE/calls"
+
+if [ "${1:-}" != compose ]; then
+  case "${1:-}" in
+    info) exit 0 ;;
+    version) echo 27.3.1 ;;
+    image)
+      # image inspect NAME:TAG
+      grep -qxF "$3" "$STUB_STATE/images" 2>/dev/null
+      ;;
+    inspect)
+      case "$*" in
+        *RestartCount*) cat "$STUB_STATE/restarts" 2>/dev/null || echo 0 ;;
+        *State.Running*) if [ -f "$STUB_STATE/running" ]; then echo true; else echo false; fi ;;
+        *) echo '{}' ;;
+      esac
+      ;;
+    run)
+      # The address check's throwaway Caddy: its token kept, for the stand-in curl to answer with
+      # from the addresses a test says lead here ($STUB_STATE/probe-answers).
+      while [ $# -gt 0 ]; do
+        [ "$1" = --body ] && printf '%s' "$2" >"$STUB_STATE/probe-body"
+        shift
+      done
+      ;;
+    rm | load) exit 0 ;;
+    *) exit 0 ;;
+  esac
+  exit $?
+fi
+
+shift
+DIR=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --project-directory)
+      DIR="$2"
+      shift 2
+      ;;
+    -f)
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
+sub="${1:-}"
+[ $# -gt 0 ] && shift
+
+version() {
+  if [ -n "${INBOX_VERSION:-}" ]; then
+    echo "$INBOX_VERSION"
+  else
+    sed -n 's/^INBOX_VERSION=//p' "$DIR/.env" | tail -n 1
+  fi
+}
+image_name() {
+  name=$(sed -n 's/^INBOX_IMAGE=//p' "$DIR/.env" | tail -n 1)
+  echo "${name:-ghcr.io/surfingdogai/inbox}:$(version)"
+}
+broken() { grep -qxF "$(version)" "$STUB_STATE/broken" 2>/dev/null; }
+inside() { printf '%s' "$1" | sed "s#/opt/inbox/data#$DIR/data#g"; }
+# The service named in what is left of the arguments: the inbox when none is.
+only_inbox() { case " $* " in *" caddy "* | *" litestream "*) return 1 ;; *) return 0 ;; esac }
+
+# node /opt/inbox/server.mjs <command> <file>, as the inbox's image would run it.
+server() {
+  case "$1" in
+    backup)
+      [ -f "$STUB_STATE/no-backup" ] && {
+        echo "database or disk is full" >&2
+        exit 1
+      }
+      out=$(inside "$2")
+      [ -e "$out" ] && {
+        echo "exists already" >&2
+        exit 1
+      }
+      mkdir -p "$(dirname "$out")"
+      chmod 700 "$(dirname "$out")"
+      cp "$DIR/data/inbox.db" "$out"
+      echo "{\"file\":\"$2\",\"ok\":true,\"problem\":null,\"migration\":24}"
+      ;;
+    check-db)
+      file=$(inside "$2")
+      if head -c 15 "$file" 2>/dev/null | grep -q 'SQLite format 3'; then
+        migration=$(sed -n 's/^migration=//p' "$file" | tail -n 1)
+        echo "{\"ok\":true,\"problem\":null,\"bytes\":10,\"migration\":${migration:-24},\"items\":3,\"owner\":true}"
+      else
+        echo '{"ok":false,"problem":"it is not an SQLite database","bytes":10,"migration":null,"items":null,"owner":null}'
+        exit 1
+      fi
+      ;;
+    create-owner-key)
+      echo "database: /opt/inbox/data/inbox.db" >&2
+      echo "sdi_own_stub_key_for_$2"
+      ;;
+  esac
+}
+
+# node -e SCRIPT [ARG]: the health check, a sign-in email asked for, or a script of the command's own.
+node_e() {
+  case "$1" in
+    *magic-link*)
+      [ -f "$STUB_STATE/no-magic" ] && exit 1
+      code=$(cat "$STUB_STATE/next-code" 2>/dev/null || echo 777777)
+      printf 'mail to %s: Sign in to Oficina Maré\n    Your sign-in code: %s\n    \n    https://inbox.example.com/auth/verify?token=fresh%s\n    \n    The code and the link work once, for 15 minutes.\n' \
+        "$2" "$code" "$code" >>"$STUB_STATE/logs"
+      ;;
+    *healthz*)
+      broken && exit 1
+      echo '{"ok":true,"version":"0.1.0","db":"ok"}'
+      ;;
+    *) exec "$STUB_NODE" -e "$1" ;;
+  esac
+}
+
+case "$sub" in
+  version)
+    case "$*" in *--short*) echo 2.29.7 ;; *) echo "Docker Compose version v2.29.7" ;; esac
+    ;;
+  pull)
+    [ -f "$STUB_STATE/no-pull" ] && exit 1
+    case "$*" in *caddy*) ;; *) image_name >>"$STUB_STATE/images" ;; esac
+    ;;
+  up)
+    only_inbox "$@" || exit 0
+    touch "$STUB_STATE/running"
+    if broken; then echo 5 >"$STUB_STATE/restarts"; else echo 0 >"$STUB_STATE/restarts"; fi
+    if [ -f "$STUB_STATE/migrates" ] && [ -f "$DIR/data/inbox.db" ]; then
+      printf 'migrated-by-%s\n' "$(version)" >>"$DIR/data/inbox.db"
+    fi
+    ;;
+  stop)
+    only_inbox "$@" || exit 0
+    rm -f "$STUB_STATE/running"
+    ;;
+  restart) touch "$STUB_STATE/running" ;;
+  ps) [ -f "$STUB_STATE/running" ] && echo c0ffee ;;
+  logs) cat "$STUB_STATE/logs" 2>/dev/null || true ;;
+  exec)
+    [ -f "$STUB_STATE/running" ] || exit 1
+    [ "${1:-}" = -T ] && shift
+    shift # the service
+    if [ "${1:-}" = node ] && [ "${2:-}" = -e ]; then
+      shift 2
+      node_e "$@"
+      exit $?
+    fi
+    shift 2 # node /opt/inbox/server.mjs
+    server "$@"
+    ;;
+  run)
+    entry=""
+    while [ $# -gt 0 ] && [ "$1" != inbox ]; do
+      [ "$1" = --entrypoint ] && entry="$2" && shift
+      shift
+    done
+    shift
+    case "$entry" in
+      sh)
+        # sh -c SCRIPT sh ARG…: the script and its arguments, the container's data folder standing
+        # for the test's.
+        script=$(inside "$2")
+        shift 3
+        n=$#
+        for a in "$@"; do set -- "$@" "$(inside "$a")"; done
+        shift "$n"
+        exec /bin/sh -c "$script" sh "$@"
+        ;;
+      node)
+        shift # -e
+        exec "$STUB_NODE" -e "$1"
+        ;;
+    esac
+    shift 2 # node /opt/inbox/server.mjs
+    server "$@"
+    ;;
+  *) exit 0 ;;
+esac
