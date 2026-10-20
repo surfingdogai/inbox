@@ -409,6 +409,7 @@ function GeneralForm({
           timezone={draft.timezone}
           sources={sources}
           home={profile.home}
+          conversations={Boolean(initial.doc.email.inboundAddress)}
         />
       </Advanced>
       {dirty && (
@@ -759,6 +760,7 @@ function AdvancedSections({
   timezone,
   sources,
   home,
+  conversations,
 }: {
   form: SettingsFormState;
   set: SetForm;
@@ -770,6 +772,8 @@ function AdvancedSections({
   timezone: string;
   sources: SettingsDoc["doc"]["setup"]["sources"];
   home: Profile["home"];
+  /** The inbox has an address of its own: every email carries its conversation's (ADR-026 §4). */
+  conversations: boolean;
 }) {
   const [email, setEmail] = useState<string | null>(null);
   useEffect(() => {
@@ -1223,21 +1227,24 @@ function AdvancedSections({
                 onChange={(e) => set("fromName", e.target.value)}
               />
             </Field>
-            <Field
-              id="s-reply"
-              label="Customers reply to"
-              optional
-              error={field("email.replyTo")}
-              hint="Usually the business mailbox."
-            >
-              <input
+            {/* With an address of its own, every email carries its conversation's: nothing to set here. */}
+            {!conversations && (
+              <Field
                 id="s-reply"
-                className="input"
-                type="email"
-                value={form.replyTo}
-                onChange={(e) => set("replyTo", e.target.value)}
-              />
-            </Field>
+                label="Customers reply to"
+                optional
+                error={field("email.replyTo")}
+                hint="Usually the business mailbox."
+              >
+                <input
+                  id="s-reply"
+                  className="input"
+                  type="email"
+                  value={form.replyTo}
+                  onChange={(e) => set("replyTo", e.target.value)}
+                />
+              </Field>
+            )}
             <Field
               id="s-inbound"
               label="Inbound email secret"

@@ -1,5 +1,6 @@
 import type { CustomerMailKind, MailAbout, MailHold, MailOut, OutboundMail, Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
+import { LOOP_HEADER, loopMark } from "../email/channel";
 import { ulid } from "../ids";
 import { shortError } from "../network/index";
 import type { Settings } from "../settings/schema";
@@ -272,7 +273,11 @@ export async function sendLogged(
       });
       return null;
     }
-    const { messageId } = await mailOut.send(mail);
+    // Every email carries this inbox's mark, so one that comes back is known for its own (ADR-026 §7).
+    const { messageId } = await mailOut.send({
+      ...mail,
+      headers: { ...mail.headers, [LOOP_HEADER]: await loopMark(db, now) },
+    });
     if (mailOut.delivers === false) {
       // A log took it, not a mail service: nobody got it, and the item must never say it was sent.
       await db.client.query({
@@ -328,6 +333,29 @@ export async function mailHeldBack(mailOut: MailOut, mail: OutboundMail, about: 
   if (kind && mailOut.allowCustomerMail && !(await mailOut.allowCustomerMail(kind))) return "host_policy";
   if (!mailOut.beforeSend) return null;
   return (await mailOut.beforeSend(mail, { ...about, ...(kind ? { kind } : {}) })) ?? null;
+}
+
+/**
+ * The customer's mail server returned an email about this item as not delivered (a delivery report,
+ * ADR-026 §7): the latest email the item sent them is marked failed, with why, and the item asks for
+ * a person, as one that failed to go does. Nothing when no email to the customer was sent.
+ */
+export async function mailReturned(db: Db, itemId: string, reason: string, now: number): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT id FROM outbound_mail WHERE item_id = ? AND recipient = 'customer' AND status = 'sent'
+           ORDER BY sent_at DESC, id DESC LIMIT 1`,
+    params: [itemId],
+    method: "all",
+  });
+  const id = rows[0]?.[0];
+  if (id === undefined || id === null) return false;
+  await db.client.query({
+    sql: "UPDATE outbound_mail SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?",
+    params: [shortError(reason), now, String(id)],
+    method: "run",
+  });
+  await raiseNotSent(db, itemId, now);
+  return true;
 }
 
 /** A customer email that will not go out: the item asks for a person, as the system. */

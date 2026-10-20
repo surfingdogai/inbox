@@ -6,4 +6,6 @@
   "observability": { "enabled": true },
   "vars": { "INBOX_INBOUND_URL": "https://inbox.surfingdog.ai/v1/email/inbound" }
   // INBOX_EMAIL_SECRET is a secret: `wrangler secret put INBOX_EMAIL_SECRET --config apps/email-gateway/wrangler.jsonc`
+  // Hosted inboxes (README, "Hosted inboxes"): add HOSTED_INBOUND_DOMAIN and HOSTED_INBOUND_URL to vars, and
+  // HOSTED_INBOUND_KEY as a secret. Unset, an address on no hosted domain goes where it always went.
 }

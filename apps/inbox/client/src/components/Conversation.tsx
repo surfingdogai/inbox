@@ -1,7 +1,9 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Bot, Send, StickyNote, User } from "lucide-react";
+import { Bot, Paperclip, Send, StickyNote, Trash2, User } from "lucide-react";
 import { type FormEvent, type RefObject, useState } from "react";
-import type { ApiProblem } from "../lib/api";
+import { type ApiProblem, api } from "../lib/api";
+import { saveFile } from "../lib/download";
 import { actorWord, channelWord, deliveryWord, formatDateTime, initials, partyName } from "../lib/format";
 import type { Party, ThreadEntry } from "../lib/types";
 
@@ -126,6 +128,7 @@ function Entry({
       <div>
         <div className="who">{who}</div>
         <div className="b row-glass">{entry.body}</div>
+        {entry.attachments && entry.attachments.length > 0 && <Files files={entry.attachments} />}
         {entry.direction === "out" && <Delivery entry={entry} tz={tz} />}
       </div>
     </div>
@@ -143,4 +146,78 @@ function Delivery({ entry, tz }: { entry: ThreadEntry; tz: string | undefined })
       {deliveryWord(d, tz)}
     </div>
   );
+}
+
+/** What came attached to an email (ADR-026 §7): the kept files download; the others say why they were not kept. */
+function Files({ files }: { files: NonNullable<ThreadEntry["attachments"]> }) {
+  const why = {
+    too_large: "not kept: too large",
+    refused: "not kept: a program file",
+    full: "not kept: no room left for files",
+    removed: "removed",
+  };
+  return (
+    <div className="msg-files">
+      {files.map((f) =>
+        f.state === "kept" ? (
+          <KeptFile key={f.id} f={f} />
+        ) : (
+          <span key={f.id} className="msg-file is-off">
+            {f.filename} · {why[f.state]}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** A kept file: it downloads, and a person at the business can delete it (asked once, inline). */
+function KeptFile({ f }: { f: NonNullable<ThreadEntry["attachments"]>[number] }) {
+  const qc = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => api.removeAttachment(f.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["item"] }),
+  });
+  if (remove.isSuccess) {
+    return <span className="msg-file is-off">{f.filename} · removed</span>;
+  }
+  return (
+    <span className="msg-file-row">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm msg-file"
+        onClick={() => void api.attachment(f.id).then(({ blob, filename }) => saveFile(blob, filename))}
+      >
+        <Paperclip className="icon" aria-hidden="true" />
+        {f.filename} · {sizeWord(f.size)}
+      </button>
+      {asking ? (
+        <span className="msg-file-ask">
+          Delete it?{" "}
+          <button type="button" className="email-link" disabled={remove.isPending} onClick={() => remove.mutate()}>
+            Delete
+          </button>{" "}
+          <button type="button" className="email-link" onClick={() => setAsking(false)}>
+            Keep
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm msg-file-x"
+          aria-label={`Delete ${f.filename}`}
+          onClick={() => setAsking(true)}
+        >
+          <Trash2 className="icon" aria-hidden="true" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+function sizeWord(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

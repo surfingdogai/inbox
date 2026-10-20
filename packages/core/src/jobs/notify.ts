@@ -8,6 +8,7 @@ import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../custome
 import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
+import { customerReplyTo, inboundOf, ownerReplyTo } from "../email/channel";
 import { machines } from "../machine/tables";
 import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
@@ -63,6 +64,8 @@ export function notifyHandler(
     const [row] = await db.orm.select().from(items).where(eq(items.id, p.itemId));
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
+    // A message put aside as spam (by the owner, or as it arrived: ADR-026 §7) tells nobody.
+    if (row.state === "spam") return { note: "not sent: spam" };
     const settings = await readSettings(db);
     const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
     // The owner is told at the address they gave, else at the one they sign in with: an owner who
@@ -78,7 +81,11 @@ export function notifyHandler(
         p.to === "owner"
           ? await capOwnerAlerts(
               db,
-              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null),
+              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null, {
+                words: await lastWordsOf(db, item.id),
+                byEmail: inboundOf(settings) !== null,
+                business: facts.name,
+              }),
               now,
             )
           : await customerMail(db, item, p, {
@@ -119,8 +126,24 @@ export function notifyHandler(
         template: logged.template,
       }),
     };
+    // Where an answer to this email goes (ADR-026 §4, §5): the conversation's own address for the
+    // customer, the alert's own for the owner; else what the sender said before.
+    // The transport's say over which domains a Reply-To may be on (a hosted inbox's) is kept, so a
+    // conversation's address is never one it would drop.
+    const replyTo =
+      logged.recipient === "customer"
+        ? await customerReplyTo(db, settings, item.id, {
+            now,
+            from: sender.from.address,
+            replyDomains: mailOut.replyDomains,
+          })
+        : await ownerReplyTo(db, settings, item.id, now);
+    // The business's name with the conversation's address, so the customer's reply shows who it goes to.
+    const replyName = logged.recipient === "customer" && replyTo ? sender.from.name?.trim() : undefined;
     const mail: OutboundMail = {
       ...sender,
+      ...(replyTo ? { replyTo } : {}),
+      ...(replyName ? { replyToName: replyName } : {}),
       to: [address],
       subject: logged.subject,
       // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
@@ -287,7 +310,7 @@ async function customerMail(
     links,
     // A reply reaches the business unless the transport says it reaches nobody (a hosted inbox's
     // pinned sender with no Reply-To): then the email asks for none.
-    replies: o.mailOut.replies !== false,
+    replies: o.mailOut.replies !== false || inboundOf(o.settings) !== null,
     linked: linkedRow ? rowToItem(linkedRow) : null,
     unpriced: (p.event === "create" || item.state === "proposed") && (await createdUnpriced(db, item.id)),
     cancellationWindowMin: o.settings.booking.cancellationWindowMin,
@@ -412,8 +435,20 @@ function ownerMail(
   who: string,
   jobKey: string,
   canSend: boolean,
+  o: {
+    /** The customer's latest words on the item, when they wrote any. */
+    readonly words: string | null;
+    /** The owner can answer this email, and the answer goes to the customer (ADR-026 §5). */
+    readonly byEmail: boolean;
+    readonly business: string;
+  } = { words: null, byEmail: false, business: "" },
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
+  // A customer who wrote is quoted, so the owner can answer from their mailbox; a few lines at most.
+  const said = o.words ? quoteFor(o.words) : [];
+  const answer = o.byEmail
+    ? `Reply to this email to answer ${firstName(who)}.${o.business ? ` It is sent as ${oneLine(o.business)}.` : ""}`
+    : "Reply in your inbox to answer.";
   return {
     itemId: item.id,
     jobKey,
@@ -428,12 +463,40 @@ function ownerMail(
       describe(item),
       "",
       `From: ${who}`,
-      ...(appUrl ? [`Open: ${appUrl}/items/${item.id}`] : []),
+      ...(said.length ? ["", ...said] : []),
+      ...(appUrl ? ["", `Open: ${appUrl}/items/${item.id}`] : []),
       "",
-      "Reply in your inbox to answer.",
+      answer,
     ].join("\n"),
     ...(item.flags.sandbox ? { skip: "test_item" as const } : canSend ? {} : { skip: "no_sender" as const }),
   };
+}
+
+/** The customer's latest words on the item, or null: what an alert quotes. */
+async function lastWordsOf(db: Db, itemId: string): Promise<string | null> {
+  const { rows } = await db.client.query({
+    sql: `SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'in'
+           ORDER BY created_at DESC, id DESC LIMIT 1`,
+    params: [itemId],
+    method: "all",
+  });
+  const text = rows[0]?.[0];
+  return typeof text === "string" && text.trim() ? text.trim() : null;
+}
+
+/** Words quoted in an alert: at most twelve lines and 1,200 characters, each line marked as quoted. */
+function quoteFor(words: string): string[] {
+  const lines = words.replace(/\r\n/g, "\n").split("\n");
+  let kept = lines.slice(0, 12).join("\n");
+  const cut = kept.length > 1_200 || lines.length > 12;
+  if (kept.length > 1_200) kept = kept.slice(0, 1_200);
+  return [...kept.split("\n").map((l) => `> ${l}`.trimEnd()), ...(cut ? ["> …"] : [])];
+}
+
+/** How an alert names the customer in "answer …": their first name, else as named. */
+function firstName(who: string): string {
+  const first = oneLine(who).trim().split(/\s+/)[0] ?? "";
+  return first.length >= 2 && !first.includes("@") ? first : oneLine(who);
 }
 
 /**

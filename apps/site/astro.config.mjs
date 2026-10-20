@@ -95,6 +95,7 @@ export default defineConfig({
           items: [
             "docs/mcp",
             "docs/connect-your-ai",
+            "docs/email",
             "docs/api",
             "docs/calendars",
             "docs/payments",

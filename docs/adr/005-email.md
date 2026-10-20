@@ -22,3 +22,10 @@ Cloudflare Email Sending is public beta, Paid-only, 3,000 messages a month inclu
 thousand, any recipient after domain onboarding, DKIM automatic; we already use it. Resend
 runs on Workers and has inbound on all plans but stores all data in the US even on its EU region.
 Postmark has no EU option; Mailgun has an EU region; SES is cheapest.
+
+## Amendment (19 October 2026)
+
+ADR-026 replaces the hosted sender's "Reply-To the business": every email carries its conversation's own
+address (`<inbox>+t…@<inbound domain>`, or the business's own when its forward carries plus addresses), and
+a business's own domain is sent through a service that signs for any domain its owner authorises, since
+Cloudflare Email Sending signs only for domains onboarded on its own account.

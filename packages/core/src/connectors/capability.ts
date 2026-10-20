@@ -298,6 +298,11 @@ export class ConnectorCapabilities {
     return this.definitions.get(kind);
   }
 
+  /** How this inbox reaches the world (the host's outbound fetch), for a DNS look-up of its own; null when it cannot. */
+  dnsHttp(): ConnectorHttp | null {
+    return this.http;
+  }
+
   /**
    * A connect request as the idempotency layer may keep it: its secret fields left out, so no hash of
    * a password or an API key is ever stored beside the answer.

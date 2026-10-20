@@ -487,8 +487,18 @@ const sections = {
     .object({
       fromAddress: z.email().optional(),
       fromName: z.string().max(100).optional(),
-      /** Customers reply here; usually the business mailbox. */
+      /**
+       * Customers reply here when the inbox has no address of its own (`inboundAddress`). With one,
+       * every email carries the address of its own conversation instead (ADR-026 §4).
+       */
       replyTo: z.email().optional(),
+      /**
+       * The inbox's own email address: mail sent to it, or forwarded to it, reaches this inbox (its
+       * host's routing, the operator's own, or a provider's inbound webhook). Each conversation is
+       * one of its plus addresses (`name+t…@domain`), and the owner's alerts can be answered at
+       * another (ADR-026). Set by the host on a hosted inbox.
+       */
+      inboundAddress: z.email().optional(),
       /** Shared secret for the raw-MIME inbound webhook (Mailgun routes, forwarders). */
       inboundSecret: z.string().min(16).max(200).optional(),
     })

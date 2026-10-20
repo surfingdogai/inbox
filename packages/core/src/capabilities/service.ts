@@ -10,6 +10,7 @@ import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item, ItemType } from "../domain/types";
+import type { AttachmentRef } from "../email/attachments";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
@@ -98,6 +99,7 @@ import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
 import { checkDiscovery, type DiscoveryView, discoveryTarget, discoveryView } from "./discovery";
+import { EmailChannelCapabilities } from "./email";
 import { FeedCapabilities } from "./feeds";
 import { type CustomerView, IdentityCapabilities } from "./identity";
 import { applySetupPlan, type SetupPlanInput, type SetupPlanResult } from "./plan";
@@ -250,6 +252,8 @@ export interface ItemDetail extends ItemView {
     at: string;
     /** For a reply to the customer: what became of its email. Absent where no email carried it. */
     delivery?: EntryDelivery;
+    /** What came attached to the email (ADR-026 §7); the kept ones download for the owner. */
+    attachments?: readonly AttachmentRef[];
   }[];
   /** Every email about the item, to the customer and to the owner, and what became of each. */
   readonly mail: readonly MailView[];
@@ -326,6 +330,13 @@ export class Capabilities {
    * off for them, and erasing them — the owner's alone.
    */
   readonly customers: CustomerData;
+
+  /**
+   * The email channel (ADR-026): the inbox's own address, the business's addresses forwarded to it,
+   * and who customers' emails are from. A host that sends the inbox's mail attaches its say
+   * (`email.attachHost`).
+   */
+  readonly email: EmailChannelCapabilities;
 
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
@@ -502,6 +513,7 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.email = new EmailChannelCapabilities(db, () => this.mail, baseUrl);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -875,7 +887,11 @@ export class Capabilities {
   async sendMessage(
     caller: Caller,
     input: T.SendMessageInput,
-    opts: { readonly automatic?: boolean } = {},
+    opts: {
+      readonly automatic?: boolean;
+      /** A new message the email door puts aside as spam as it arrives, with why (ADR-026 §7). */
+      readonly spam?: string | undefined;
+    } = {},
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
     if (!input.item_id) {
@@ -888,6 +904,7 @@ export class Capabilities {
           contact: input.contact,
           message: input.body,
           messageId: input.message_id,
+          ...(opts.spam ? { spam: opts.spam } : {}),
         },
         input,
       );
@@ -1129,6 +1146,10 @@ export class Capabilities {
         body: t.bodyText,
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
+        // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
+        ...(Array.isArray(t.attachments) && t.attachments.length
+          ? { attachments: t.attachments as readonly AttachmentRef[] }
+          : {}),
       })),
       mail: mail.map((m) => ({
         id: m.id,

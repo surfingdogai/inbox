@@ -15,6 +15,7 @@ import {
   createWebhookInput,
   declineOfferInput,
   deliveryIdInput,
+  detectMailProvider,
   eraseCustomerInput,
   eventPatternSchema,
   fromZod,
@@ -24,6 +25,7 @@ import {
   listItemsInput,
   listProductsInput,
   listServicesInput,
+  MAIL_PROVIDER_NAMES,
   makeBusinessOfferInput,
   makeOfferInput,
   type OnceOptions,
@@ -44,6 +46,7 @@ import {
   setFloorsInput,
   setupPlanSchema,
   setWeeklyInput,
+  splitAddress,
   suggestTimeInput,
   testRuleInput,
   transitionItemInput,
@@ -61,6 +64,7 @@ import { type Context, Hono } from "hono";
 import { type DescribeRouteOptions, describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { ownerOperation, routeScopes } from "./access";
+import { lookupMx } from "./connectors/dns";
 import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
@@ -867,6 +871,159 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       responses: json("Mail", R.mailServiceSchema),
     }),
     async (c) => c.json(await caps.getMailStatus(c.get("caller"))),
+  );
+
+  // ---- the email channel (ADR-026) -----------------------------------------------------------
+
+  app.get(
+    "/email",
+    owner({
+      tags: ["owner"],
+      summary: "The email channel: this inbox's own address, the addresses forwarded to it, and who emails are from",
+      description:
+        "inbound: the inbox's own address (each conversation is one of its plus addresses); forwards: the business's existing addresses forwarded here, each with its state (setup, confirm: the provider sent a confirmation, shown as it came, working, not_yet) and the last check; sending: who customers' emails are from, and sending from the business's own address where the host offers it, with the DNS rows to add; replies: where customers' replies go; owner_replies: alerts can be answered by email.",
+      responses: json("Email channel", R.looseSchema),
+    }),
+    async (c) => c.json(await caps.email.status(c.get("caller"))),
+  );
+
+  app.get(
+    "/email/provider",
+    owner({
+      tags: ["owner"],
+      summary: "Which mail provider an address most likely lives at, from its domain and MX records",
+      responses: json("Provider", R.looseSchema),
+    }),
+    validator("query", z.object({ address: z.string().max(320) }), hook),
+    async (c) => {
+      const address = c.req.valid("query").address.trim();
+      const domain = splitAddress(address)?.domain ?? "";
+      const http = caps.connectors.dnsHttp();
+      const mx = domain && http && /^[a-z0-9.-]{1,253}\.[a-z]{2,}$/.test(domain) ? await lookupMx(http, domain) : [];
+      const provider = detectMailProvider(address, mx);
+      return c.json({ provider, name: MAIL_PROVIDER_NAMES[provider] });
+    },
+  );
+
+  app.post(
+    "/email/forwards",
+    owner({
+      tags: ["owner"],
+      summary: "Add an address the business forwards to this inbox (the owner in person)",
+      responses: json("Forward", R.looseSchema),
+      write: true,
+    }),
+    validator("json", z.object({ address: z.string().max(320), provider: z.string().max(40) }), hook),
+    async (c) => c.json(await caps.email.addForward(c.get("caller"), c.req.valid("json")), 201),
+  );
+
+  app.delete(
+    "/email/forwards/:id",
+    owner({
+      tags: ["owner"],
+      summary: "Stop expecting mail forwarded from an address",
+      responses: json("Removed", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.removeForward(c.get("caller"), String(c.req.param("id")))),
+  );
+
+  app.post(
+    "/email/forwards/:id/check",
+    owner({
+      tags: ["owner"],
+      summary: "Send a check to the business's own address: it comes back here if the forward works",
+      responses: json("Forward", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.checkForward(c.get("caller"), String(c.req.param("id"))), 202),
+  );
+
+  app.post(
+    "/email/forwards/:id/confirmed",
+    owner({
+      tags: ["owner"],
+      summary: "The owner dealt with the provider's forwarding confirmation: stop showing it",
+      responses: json("Forward", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.dismissConfirmation(c.get("caller"), String(c.req.param("id")))),
+  );
+
+  app.put(
+    "/email/sender",
+    owner({
+      tags: ["owner"],
+      summary: "Send customers' emails from the business's own address, through the host (null: stop)",
+      description:
+        "Only where the host sends this inbox's mail and offers it, and only for an address that forwards here and passed its check. The answer has the DNS rows to add; email goes from the address once they check out.",
+      responses: json("Sender", R.looseSchema),
+      write: true,
+    }),
+    validator("json", z.object({ address: z.string().max(320).nullable() }), hook),
+    async (c) => c.json(await caps.email.requestSender(c.get("caller"), c.req.valid("json").address)),
+  );
+
+  app.post(
+    "/email/sender/check",
+    owner({
+      tags: ["owner"],
+      summary: "Look at the business's DNS rows for sending again now",
+      responses: json("Sender", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.checkSender(c.get("caller"))),
+  );
+
+  app.get(
+    "/items/:id/attachments",
+    owner({
+      tags: ["owner"],
+      summary: "What came attached to the item's emails, and what became of each file",
+      responses: json("Attachments", R.looseSchema),
+    }),
+    async (c) => c.json({ attachments: await caps.email.attachments(c.get("caller"), String(c.req.param("id"))) }),
+  );
+
+  app.delete(
+    "/attachments/:id",
+    owner({
+      tags: ["owner"],
+      summary:
+        "Delete one kept file (a person at the business): its bytes go, and the conversation says it was removed",
+      responses: json("Removed", R.looseSchema),
+      write: true,
+    }),
+    async (c) => c.json(await caps.email.removeAttachment(c.get("caller"), String(c.req.param("id")))),
+  );
+
+  app.get(
+    "/attachments/:id",
+    owner({
+      tags: ["owner"],
+      summary: "One attached file, to download (never shown in the page)",
+      responses: {
+        200: {
+          description: "The file, always as a download.",
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        },
+      },
+    }),
+    async (c) => {
+      const a = await caps.email.attachment(c.get("caller"), String(c.req.param("id")));
+      // Always a download, never rendered here: a customer's file is not this app's page.
+      const name = a.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+      return new Response(a.bytes as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-disposition": `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(a.filename)}`,
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "sandbox; default-src 'none'",
+          "cache-control": "private, no-store",
+        },
+      });
+    },
   );
 
   app.get(

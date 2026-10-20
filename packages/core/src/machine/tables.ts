@@ -1331,7 +1331,8 @@ export const messageMachine: Machine<MessageState> = {
       label: "Mark as spam",
       from: ["open", "answered"],
       to: "spam",
-      by: owners,
+      // The system too: the email door puts aside what arrives marked as spam (ADR-026 §7).
+      by: ownersAndSystem,
       effects: ["close"],
     },
     { event: "unspam", label: "Not spam", from: ["spam"], to: "open", by: ["owner", "staff"], effects: [] },

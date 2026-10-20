@@ -11,6 +11,7 @@ export * from "./addresses";
 export * from "./db";
 export * from "./mail";
 export * from "./migrate";
+export * from "./ses";
 
 export interface Blob {
   put(key: string, body: ReadableStream | ArrayBuffer | string, meta?: { contentType?: string }): Promise<void>;
@@ -32,6 +33,8 @@ export interface OutboundMail {
   from: { address: string; name?: string };
   to: string[];
   replyTo?: string;
+  /** The name shown with `replyTo` (the business's), where the transport can write one. */
+  replyToName?: string;
   subject: string;
   text: string;
   html?: string;
@@ -66,6 +69,11 @@ export interface MailOut {
    * for no reply. Absent, a reply is taken to reach the business.
    */
   readonly replies?: boolean | undefined;
+  /**
+   * The only domains a message's own Reply-To may be on, when this transport restricts it (a hosted
+   * inbox's pinned sender: its inbound domain and the business's connected one). Absent, any.
+   */
+  readonly replyDomains?: readonly string[] | undefined;
   /**
    * Whether this kind of email to a customer may go at all. Asked before each one is written and
    * again before it is sent; one that may not is kept on its item as not sent (`host_policy`).

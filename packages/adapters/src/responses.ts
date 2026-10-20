@@ -248,6 +248,18 @@ export const itemDetailSchema = itemViewSchema.extend({
       delivery: mailDeliverySchema
         .optional()
         .describe("On a reply to the customer: what became of the email it went out in."),
+      attachments: z
+        .array(
+          z.object({
+            id: z.string(),
+            filename: z.string(),
+            contentType: z.string(),
+            size: z.number().int(),
+            state: z.enum(["kept", "too_large", "refused", "full", "removed"]),
+          }),
+        )
+        .optional()
+        .describe("What came attached to the email: kept ones download from GET /v1/owner/attachments/{id}."),
     }),
   ),
   mail: z

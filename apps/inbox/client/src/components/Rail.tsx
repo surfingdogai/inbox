@@ -1,6 +1,16 @@
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarX, CheckCheck, CircleAlert, Inbox, LogOut, type LucideIcon, MailX, Settings } from "lucide-react";
+import {
+  CalendarX,
+  CheckCheck,
+  CircleAlert,
+  Inbox,
+  LogOut,
+  type LucideIcon,
+  MailX,
+  Settings,
+  ShieldOff,
+} from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { signOut } from "../lib/auth";
 import { type Counts, countFor, FILTERS, type Filter } from "../lib/filters";
@@ -13,6 +23,7 @@ const ICONS: Partial<Record<Filter, LucideIcon>> = {
   all: Inbox,
   done: CheckCheck,
   unsent: MailX,
+  spam: ShieldOff,
 };
 
 /** The filters rail: what needs you, everything, each type with its count, and what is done. */

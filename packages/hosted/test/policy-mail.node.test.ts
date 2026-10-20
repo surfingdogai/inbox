@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { logMailOut } from "@surfingdog/platform";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type BuildDeps, tenantMailOut } from "../src/build";
-import { Ledger, RECIPIENT_DAILY_CAP } from "../src/ledger";
+import { CHECKS_DAILY_CAP, Ledger, RECIPIENT_DAILY_CAP } from "../src/ledger";
 import { redact } from "../src/redact";
-import type { PolicyPayload } from "../src/types";
+import { normalizePolicy, type PolicyPayload } from "../src/types";
 import { OWNER, PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -110,8 +110,10 @@ describe("mail", () => {
     const ack = rt.mail.find((m) => m.mail.to.includes("rita@example.org"));
     expect(ack?.from).toEqual({ address: `${slug}@mail.${PARENT}`, name: "Salão Rosa" });
     expect(ack?.mail.subject).not.toContain("curly");
-    // The pinned sender takes no mail: a customer's reply goes to the business's own address.
-    expect(ack?.mail.replyTo).toBe(OWNER);
+    // The pinned sender takes no mail: a customer's reply goes to the conversation's own address,
+    // never to the owner's (ADR-026 §4, §6).
+    expect(ack?.mail.replyTo).toMatch(new RegExp(`^${slug}\\+t[a-z2-7]{16}@in\\.example\\.net$`));
+    expect(JSON.stringify(ack)).not.toContain(OWNER);
     expect(ack?.mail.text).toContain("Responda a este email para falar connosco."); // the business's language
   });
 
@@ -141,7 +143,12 @@ describe("mail", () => {
       const deps = (p: PolicyPayload) =>
         ({ tenantId: "tn_a", policy: p, ledger, transport: () => logMailOut() }) as unknown as BuildDeps;
       expect(tenantMailOut(deps(policy(null))).replies).toBe(false);
-      expect(tenantMailOut(deps(policy(OWNER))).replies).toBe(true);
+      // The owner's sign-in address is never a Reply-To (ADR-026 §6): the policy as applied drops it.
+      expect(normalizePolicy(policy(OWNER)).mail.reply_to).toBeNull();
+      expect(tenantMailOut(deps(normalizePolicy(policy(OWNER)))).replies).toBe(false);
+      // With an address of its own, every conversation has one: a reply always reaches the inbox.
+      const withInbound = { ...policy(null), mail: { ...policy(null).mail, inbound: "bike-workshop@in.example.net" } };
+      expect(tenantMailOut(deps(withInbound)).replies).toBe(true);
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });
@@ -199,6 +206,29 @@ describe("the ledger", () => {
         rcpt: string;
       }[];
       expect(JSON.stringify(rows)).not.toContain("@");
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("counts forwarding checks per inbox and against the recipient's day, as email to a customer is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-"));
+    const ledger = new Ledger(join(dir, "ledger.db"), { hashKey: "k" });
+    const check = { recipient: "owner" as const, template: "forward.check" };
+    try {
+      // One outside address: its day's cap across every inbox here, whichever inbox asks.
+      for (let i = 0; i < RECIPIENT_DAILY_CAP; i++) {
+        expect(ledger.hold(i % 2 ? "tn_a" : "tn_b", mail("victim@target.example"), check, 100)).toBeNull();
+      }
+      expect(ledger.hold("tn_c", mail("victim@target.example"), check, 100)).toBe("recipient_limit");
+      // One inbox: its own cap of checks, wherever they go.
+      let held: string | null = null;
+      for (let i = 0; i < CHECKS_DAILY_CAP + 1; i++)
+        held = ledger.hold("tn_d", mail(`a${i}@other.example`), check, 100);
+      expect(held).toBe("daily_limit");
+      // An alert to the owner is still counted, not capped.
+      expect(ledger.hold("tn_d", mail(OWNER), owner, 0)).toBeNull();
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });

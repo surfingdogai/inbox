@@ -66,6 +66,8 @@ async function runRouter(c: HostedConfig): Promise<void> {
     adminKey: c.adminKey,
     shardKey: c.shardKey,
     oauthRelayHost: c.oauthRelayHost,
+    inboundHost: c.inboundHost,
+    inboundKey: c.inboundKey,
     socket: c.routerSocket,
     adminSocket: c.adminSocket,
   });

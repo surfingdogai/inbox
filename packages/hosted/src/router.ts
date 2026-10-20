@@ -18,9 +18,23 @@ import {
 import { validatePlan } from "./plan";
 import type { CachedResolver } from "./resolver";
 import { decide, REPORT_PATH, ROBOTS_PATH, SECURITY_TXT_PATH } from "./rules";
-import { MAX_SIGNED_BODY, NonceCache, signHeaders, verifySigned } from "./sign";
-import { jsonOf, readBody, socketRequest } from "./sockets";
+import {
+  MAX_SIGNED_BODY,
+  NONCE_HEADER,
+  NonceCache,
+  SIG_HEADER,
+  SKEW_SECONDS,
+  signHeaders,
+  TIME_HEADER,
+  verifySigned,
+} from "./sign";
+import { jsonOf, readBody, readBodyExact, socketRequest } from "./sockets";
 import { policyPayloadSchema } from "./types";
+
+/** Raw inbound email, as large as Email Routing accepts. */
+export const MAX_INBOUND_EMAIL = 25 * 1024 * 1024;
+/** Emails read at once: one process serves every inbox, and each is held in memory while it is read. */
+export const MAX_INBOUND_READS = 4;
 
 /**
  * The router: the one process every request for a hosted inbox reaches. It does no SQLite work. It
@@ -68,6 +82,15 @@ export interface RouterOptions {
    * name is treated so.
    */
   readonly oauthRelayHost?: string | undefined;
+  /**
+   * The name the email gateway delivers to (`HOSTED_INBOUND_HOST`, ADR-026 §1): `POST
+   * /v1/inbound/<slug>` with the raw email, signed with `inboundKey` as the control plane signs its
+   * calls (sign.ts), the envelope and what the receiving server found in the signed query. Nothing
+   * else is served under it. Absent, no name is treated so.
+   */
+  readonly inboundHost?: string | undefined;
+  /** The key the email gateway signs with (`HOSTED_INBOUND_KEY`); never sent on. */
+  readonly inboundKey?: string | undefined;
   /** How long a shard may take to start answering (default 65 s, past the inbox's own minute). */
   readonly shardTimeoutMs?: number | undefined;
   readonly now?: (() => number) | undefined;
@@ -130,6 +153,8 @@ export function createRouter(o: RouterOptions): {
     const url = new URL(rawTarget, "http://router.invalid");
     const path = url.pathname;
     const target = `${path}${url.search}`;
+    // The email gateway (ADR-026 §1): a signed delivery for one inbox, nothing else.
+    if (o.inboundHost && host === o.inboundHost) return inbound(req, res, method, url);
     // The one address Google sends every owner back to: on to the inbox the state names, if it is one.
     if (o.oauthRelayHost && host === o.oauthRelayHost) {
       const hsts = { "strict-transport-security": HSTS };
@@ -340,6 +365,112 @@ export function createRouter(o: RouterOptions): {
       if (!res.writableFinished) upstream.destroy();
     });
     req.pipe(upstream);
+  };
+
+  // ---- email in (ADR-026 §1) ----------------------------------------------------------------------
+
+  const mailNonces = new NonceCache();
+
+  /** A plain answer the gateway reads by its status: 2xx taken, 4xx refused for good, 5xx and 429 later. */
+  const mailAnswer = (res: ServerResponse, status: number, detail: string, extra: Record<string, string> = {}) => {
+    res.writeHead(status, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", ...extra });
+    res.end(`${detail}\n`);
+  };
+
+  let reading = 0;
+
+  const inbound = async (req: IncomingMessage, res: ServerResponse, method: string, url: URL): Promise<void> => {
+    const m = /^\/v1\/inbound\/([a-z0-9-]{1,63})$/.exec(url.pathname);
+    if (method !== "POST" || !m || !o.inboundKey) return mailAnswer(res, 404, "Not here.");
+    const slug = m[1] ?? "";
+    // Nothing is read before the request looks like the gateway's: signed headers of the right shape,
+    // a time within the window, a length it says and that fits. An unsigned post of 25 MB costs nothing.
+    const head = (n: string) => (req.headers[n] as string | undefined) ?? "";
+    const time = head(TIME_HEADER);
+    if (
+      !/^\d{1,12}$/.test(time) ||
+      !/^[0-9a-f]{32}$/.test(head(NONCE_HEADER)) ||
+      !/^v1=[0-9a-f]{64}$/.test(head(SIG_HEADER))
+    ) {
+      return mailAnswer(res, 401, "Not signed (unsigned).", { connection: "close" });
+    }
+    if (Math.abs(Math.floor(now() / 1000) - Number(time)) > SKEW_SECONDS) {
+      return mailAnswer(res, 401, "Not signed (stale).", { connection: "close" });
+    }
+    const length = Number(head("content-length"));
+    if (!/^\d{1,9}$/.test(head("content-length")))
+      return mailAnswer(res, 411, "Length required.", { connection: "close" });
+    if (length > MAX_INBOUND_EMAIL) return mailAnswer(res, 413, "Too large.", { connection: "close" });
+    if (reading >= MAX_INBOUND_READS) {
+      return mailAnswer(res, 503, "Try again later.", { "retry-after": "30", connection: "close" });
+    }
+    reading++;
+    let body: Uint8Array | null;
+    try {
+      body = await readBodyExact(req, length);
+    } finally {
+      reading--;
+    }
+    // Cut short on the way: a fault of the line, never the sender's, so it is tried again.
+    if (!body) return mailAnswer(res, 503, "The body is not the length it said.");
+    const target = `${url.pathname}${url.search}`;
+    const checked = verifySigned(
+      o.inboundKey,
+      mailNonces,
+      { method, target, headers: { get: (n) => (req.headers[n] as string | undefined) ?? null }, body },
+      now(),
+    );
+    if (!checked.ok) return mailAnswer(res, 401, `Not signed (${checked.why}).`);
+    const to = url.searchParams.get("to") ?? "";
+    // The address the email was for names the inbox, with or without a conversation's plus part.
+    const local = to.toLowerCase().split("@")[0]?.split("+")[0] ?? "";
+    if (!SLUG_LABEL.test(slug) || local !== slug || body.byteLength === 0) {
+      return mailAnswer(res, 422, "No such address.");
+    }
+    let found: Awaited<ReturnType<CachedResolver["lookup"]>>;
+    try {
+      found = await o.resolver.lookup(`${slug}.${o.parent}`);
+    } catch (error) {
+      log(`router: inbound resolve failed (${error instanceof Error ? error.message : error})`);
+      return mailAnswer(res, 503, "Try again later.");
+    }
+    // No inbox by that name, or one that closed: refused for good, so the sender is told.
+    if (!found || found.resolved.state === "closed" || found.resolved.state === "closing") {
+      return mailAnswer(res, 422, "No such address.");
+    }
+    // Suspended: held back, never bounced, until it is let out again (the sender retries for days).
+    if (found.resolved.state === "suspended") return mailAnswer(res, 503, "Not taking email right now.");
+    const r = found.resolved;
+    const auth = url.searchParams.get("auth");
+    try {
+      const up = await socketRequest(o.shardSocket(r.shard), {
+        method: "POST",
+        target: "/v1/email/inbound",
+        headers: {
+          "content-type": "message/rfc822",
+          "x-sd-tenant": r.tenantId,
+          "x-sd-host-kind": "slug",
+          "x-sd-policy-version": String(r.policyVersion),
+          "x-sd-mail-in": "1",
+          "x-envelope-to": to,
+          "x-envelope-from": url.searchParams.get("from") ?? "",
+          ...(auth ? { "x-inbox-email-auth": auth } : {}),
+        },
+        body,
+        timeoutMs: o.shardTimeoutMs ?? 65_000,
+        maxResponse: 64 * 1024,
+      });
+      const retry = up.headers["retry-after"];
+      return mailAnswer(
+        res,
+        up.status,
+        up.status < 300 ? "Taken." : "Not taken.",
+        retry ? { "retry-after": retry } : {},
+      );
+    } catch (error) {
+      log(`router: inbound email for ${r.tenantId}: ${error instanceof Error ? error.message : error}`);
+      return mailAnswer(res, 503, "Try again later.");
+    }
   };
 
   // ---- admin -------------------------------------------------------------------------------------

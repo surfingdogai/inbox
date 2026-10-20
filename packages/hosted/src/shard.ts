@@ -4,7 +4,9 @@ import {
   createHandoff,
   ensureNetworkPing,
   HANDOFF_TTL_MS,
+  ingestEmail,
   type OwnerEmailChange,
+  parseMailAuth,
   userFromCookie,
 } from "@surfingdog/adapters";
 import {
@@ -21,6 +23,7 @@ import type { MailOut } from "@surfingdog/platform";
 import { type NodeSqliteClient, nodeSqliteClient } from "@surfingdog/platform/node";
 import { ownerVerdict, readOnlyAllows } from "./allowlist";
 import { type BuildDeps, buildInbox } from "./build";
+import type { SenderFallback } from "./config";
 import type { ControlPlane, EventType } from "./control-plane";
 import { isTenantId, normalizeHost, SLUG_LABEL, shardOf } from "./host";
 import { tenantSecretKey } from "./keys";
@@ -77,7 +80,7 @@ export interface ShardOptions {
   readonly masterKeys: readonly string[];
   readonly controlPlane: ControlPlane;
   readonly ledger: Ledger;
-  readonly transport: (from: { address: string; name: string }) => MailOut;
+  readonly transport: (from: { address: string; name: string }, o?: SenderFallback) => MailOut;
   readonly fetchImpl?: typeof fetch | undefined;
   readonly clientDir?: string | undefined;
   /** The OAuth clients every inbox signs owners in to platforms with, and the one address they come back to. */
@@ -94,6 +97,8 @@ export interface ShardOptions {
 
 export const DEFAULT_MAX_OPEN = 64;
 export const DEFAULT_MAX_TENANT_BYTES = 200 * 1024 * 1024;
+/** All the attachments one hosted inbox keeps (ADR-026 §7): a quarter of its room, never all of it. */
+export const HOSTED_ATTACHMENTS_MAX_BYTES = 50 * 1024 * 1024;
 
 const SYSTEM: Caller = {
   actor: { kind: "system", id: "hosted-setup", channel: "system" },
@@ -240,6 +245,7 @@ export class Shard {
         oauthRedirect: this.o.oauthRedirect,
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
+        onMailSender: (type, data) => this.event(id, type, data),
         now: this.o.now,
       });
       // Migrated and set as the policy says before anything is served or run.
@@ -351,6 +357,10 @@ export class Shard {
       const path = url.pathname;
       const method = request.method.toUpperCase();
       const p = entry.policy;
+      // Email the router took from the gateway (ADR-026 §1): its header is the router's own, never a visitor's.
+      if (request.headers.get("x-sd-mail-in") === "1" && path === "/v1/email/inbound" && method === "POST") {
+        return await this.mailIn(entry, request);
+      }
       if (slug || p.agents === "closed") {
         const verdict = ownerVerdict({
           method,
@@ -370,7 +380,7 @@ export class Shard {
       if (
         writes &&
         !readOnlyAllows(method, path) &&
-        fileBytes(this.dbPath(id)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)
+        (await this.usedBytes(entry)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)
       ) {
         return Response.json(
           {
@@ -390,6 +400,57 @@ export class Shard {
     } finally {
       this.o.watchdog?.setCurrent(null);
       if (!handedOn) this.release(entry);
+    }
+  }
+
+  /**
+   * One email for this inbox, from the gateway through the router: taken in as the inbox's own email
+   * door takes it, at every level (an owner sets forwarding up before the inbox is live). Answered by
+   * status for the gateway: 200 taken, 422 refused for good, 429 and 5xx later.
+   */
+  private async mailIn(entry: Entry, request: Request): Promise<Response> {
+    const p = entry.policy;
+    const plain = (status: number, text: string, headers: Record<string, string> = {}) =>
+      new Response(`${text}\n`, { status, headers: { "content-type": "text/plain; charset=utf-8", ...headers } });
+    if (p.read_only) return plain(422, "This inbox takes no email.");
+    if ((await this.usedBytes(entry)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)) {
+      return plain(507, "This inbox is full.");
+    }
+    const raw = new Uint8Array(await request.arrayBuffer());
+    if (raw.byteLength === 0) return plain(422, "Empty.");
+    const result = await ingestEmail(
+      entry.db,
+      entry.inbox.caps,
+      {
+        raw,
+        envelopeTo: request.headers.get("x-envelope-to") ?? undefined,
+        envelopeFrom: request.headers.get("x-envelope-from") ?? undefined,
+        auth: parseMailAuth(request.headers.get("x-inbox-email-auth")),
+      },
+      // A hosted inbox keeps at most a quarter of its room in attachments.
+      { now: () => this.now(), attachmentsMaxBytes: HOSTED_ATTACHMENTS_MAX_BYTES },
+    );
+    await this.refreshDue(entry);
+    if (result.outcome === "limited") {
+      return plain(429, "Too many right now.", { "retry-after": String(result.retryAfterSec) });
+    }
+    if (result.outcome === "rejected") return plain(422, result.reason);
+    return Response.json({ outcome: result.outcome }, { status: 200 });
+  }
+
+  /**
+   * What an inbox's database holds, in bytes: its pages less the free ones. A file does not shrink
+   * when rows go (an erased customer, a deleted file), so its size on disk would keep an inbox "full"
+   * after the owner made room; this is what counts against its room.
+   */
+  private async usedBytes(entry: Entry): Promise<number> {
+    try {
+      const one = async (pragma: string) =>
+        Number((await entry.db.client.query({ sql: `PRAGMA ${pragma}`, params: [], method: "all" })).rows[0]?.[0] ?? 0);
+      const used = ((await one("page_count")) - (await one("freelist_count"))) * (await one("page_size"));
+      return Number.isFinite(used) && used > 0 ? used : fileBytes(this.dbPath(entry.tenantId));
+    } catch {
+      return fileBytes(this.dbPath(entry.tenantId));
     }
   }
 
@@ -602,7 +663,35 @@ export class Shard {
     if (action === "networks/join" && method === "POST") return await this.joinNetworks(id);
     if (action === "jwks" && method === "GET")
       return await this.withEntry(id, async (e) => ({ status: 200, body: await e.inbox.caps.receipts.jwks() }));
+    if (action === "mail/returned" && method === "POST") return this.mailReturned(body);
+    if (action === "mail/pause" && method === "POST") return this.mailPause(id, body);
     return problem(404, "not_found", "No such call.");
+  }
+
+  /**
+   * The sending service reported that an email from this inbox bounced for good or was marked as
+   * spam by its recipient (ADR-026 §3): the address gets no more email from any inbox here.
+   */
+  private mailReturned(body: unknown): AdminAnswer {
+    const b = (body ?? {}) as { address?: unknown; kind?: unknown };
+    const address = typeof b.address === "string" ? b.address.trim().toLowerCase() : "";
+    const kind = b.kind === "complaint" ? "complaint" : b.kind === "bounce" ? "bounce" : null;
+    if (!/^[^@\s]{1,64}@[^@\s]{1,253}$/.test(address) || !kind) {
+      return problem(422, "invalid_input", "Send {address, kind: bounce|complaint}.");
+    }
+    this.o.ledger.suppress(address, kind);
+    return { status: 204 };
+  }
+
+  /** The control plane pauses this inbox's email (too many returned or reported as spam). */
+  private mailPause(id: string, body: unknown): AdminAnswer {
+    const reason =
+      typeof (body as { reason?: unknown } | null)?.reason === "string"
+        ? String((body as { reason: string }).reason).slice(0, 200)
+        : "";
+    if (!reason) return problem(422, "invalid_input", "Send {reason}.");
+    this.o.ledger.pauseMail(id, reason);
+    return { status: 204 };
   }
 
   private async withEntry(id: string, work: (entry: Entry) => Promise<AdminAnswer>): Promise<AdminAnswer> {

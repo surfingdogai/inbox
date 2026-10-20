@@ -68,7 +68,7 @@ export interface CloudflareEmailBinding {
   send(message: {
     from: { email: string; name: string } | string;
     to: string | string[];
-    replyTo?: string;
+    replyTo?: { email: string; name: string } | string;
     subject: string;
     text?: string;
     html?: string;
@@ -124,7 +124,15 @@ export function cloudflareEmailMailOut(
       const r = await binding.send({
         from: mail.from.name ? { email: mail.from.address, name: mail.from.name } : mail.from.address,
         to: [...mail.to],
-        ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+        // A name with the Reply-To, as the binding takes it (`{ email, name }`), so the customer's
+        // reply window shows the business rather than an address made of a token.
+        ...(mail.replyTo
+          ? {
+              replyTo: mail.replyToName?.trim()
+                ? { email: mail.replyTo, name: oneLine(mail.replyToName).trim() }
+                : mail.replyTo,
+            }
+          : {}),
         subject: mail.subject,
         text: mail.text,
         ...(mail.html ? { html: mail.html } : {}),
@@ -291,13 +299,23 @@ export function pinnedMailOut(
     readonly replyTo?: string | undefined;
     /** The pinned address takes mail: a reply to it, with no Reply-To, reaches someone. */
     readonly fromTakesReplies?: boolean | undefined;
+    /**
+     * The domains a message's own Reply-To may be on when it is a conversation's address (ADR-026 §4):
+     * `name+t…@domain`, a secret token after the plus. The inbox's own domain, and the business's.
+     * Any other Reply-To a message names is left out, as before.
+     */
+    readonly replyDomains?: readonly string[] | undefined;
+    /** The inbox's own address: a conversation's address on a domain not allowed is moved onto it. */
+    readonly inbound?: string | undefined;
   },
 ): MailOut {
   const sender = pin.from.name ? { address: pin.from.address, name: pin.from.name } : { address: pin.from.address };
+  const domains = (pin.replyDomains ?? []).map((d) => d.trim().toLowerCase()).filter(Boolean);
   return {
     sender,
     pinned: true,
-    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true,
+    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true || domains.length > 0,
+    ...(domains.length ? { replyDomains: domains } : {}),
     ...(inner.delivers === false ? { delivers: false } : {}),
     ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
     ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),
@@ -311,10 +329,19 @@ export function pinnedMailOut(
           Object.entries(mail.headers ?? {}).filter(([header]) => !ADDRESS_HEADERS.test(header.trim())),
         ),
       );
+      const conversation =
+        conversationAddress(mail.replyTo, domains) ?? movedConversation(mail.replyTo, pin.inbound, domains);
+      const replyTo = conversation ?? pin.replyTo;
+      const replyName = conversation
+        ? oneLine(mail.replyToName ?? "")
+            .replace(/[<>]/g, " ")
+            .trim()
+        : "";
       return inner.send({
         from: name ? { address: pin.from.address, name } : { address: pin.from.address },
         to: mail.to,
-        ...(pin.replyTo ? { replyTo: pin.replyTo } : {}),
+        ...(replyTo ? { replyTo } : {}),
+        ...(replyName ? { replyToName: replyName } : {}),
         subject: mail.subject,
         text: mail.text,
         ...(mail.html ? { html: mail.html } : {}),
@@ -322,6 +349,34 @@ export function pinnedMailOut(
       });
     },
   };
+}
+
+/**
+ * `address` when it is a conversation's own address on one of `domains` (`name+t…@domain`, ADR-026
+ * §4), else undefined. One address, on one line, with nothing around it.
+ */
+export function conversationAddress(address: string | undefined, domains: readonly string[]): string | undefined {
+  if (!address || domains.length === 0) return undefined;
+  const m = /^([a-z0-9._-]{1,64})\+[toc][a-z2-7]{16}@([a-z0-9.-]{1,253})$/.exec(address.trim().toLowerCase());
+  if (!m || !domains.includes(m[2] ?? "")) return undefined;
+  return address.trim().toLowerCase();
+}
+
+/**
+ * A conversation's address on a domain the transport does not allow (`support+t…@gmail.com`), moved
+ * onto the inbox's own address with the same token (`slug+t…@in.example`): the token, not the domain,
+ * names the conversation. Undefined when it is not one, or the inbox's own address is not allowed.
+ */
+function movedConversation(
+  address: string | undefined,
+  inbound: string | undefined,
+  domains: readonly string[],
+): string | undefined {
+  if (!address || !inbound) return undefined;
+  const token = /^[^@\s+]{1,64}\+([toc][a-z2-7]{16})@[^@\s]{1,253}$/.exec(address.trim().toLowerCase())?.[1];
+  const own = /^([a-z0-9._-]{1,64})@([a-z0-9.-]{1,253})$/.exec(inbound.trim().toLowerCase());
+  if (!token || !own) return undefined;
+  return conversationAddress(`${own[1]}+${token}@${own[2]}`, domains);
 }
 
 function headersOf(mail: OutboundMail): { headers?: Record<string, string> } {

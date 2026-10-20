@@ -26,6 +26,7 @@ import type {
 
 /** Query keys and hooks. Writes invalidate the item, every list and the counts. */
 export const qk = {
+  email: ["email"] as const,
   business: ["business"] as const,
   settings: ["settings"] as const,
   networks: ["networks"] as const,
@@ -57,6 +58,28 @@ export function useSettings() {
 /** Each network and how it is doing; refreshed while the page is open, since a ping lands on its own. */
 export function useNetworks() {
   return useQuery({ queryKey: qk.networks, queryFn: api.networks, staleTime: 10_000, refetchInterval: 30_000 });
+}
+
+/**
+ * The email channel (ADR-026). Read again while something is on its way: a check out, a forward just
+ * added (its provider's confirmation arrives here), DNS being looked at.
+ */
+export function useEmailChannel() {
+  return useQuery({
+    queryKey: qk.email,
+    queryFn: api.emailChannel,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      if (!d) return false;
+      // A check out, or an address added in the last half hour (its provider's confirmation is on its way).
+      const fresh = (f: (typeof d.forwards)[number]) =>
+        f.state === "setup" && Date.now() - Date.parse(f.created_at) < 30 * 60_000;
+      if (d.forwards.some((f) => f.checking || fresh(f))) return 4_000;
+      // DNS takes minutes to hours: the host looks every minute, so the page every half minute.
+      if (d.sending.own?.state === "dns" || d.sending.own?.state === "verifying") return 30_000;
+      return false;
+    },
+  });
 }
 
 export function useMailStatus() {
