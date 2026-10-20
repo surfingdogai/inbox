@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { fixesOf, scoreOf, scoreRulesSchema } from "../../../packages/spec/src/index";
+import {
+  fixesOf,
+  READ_ALLOWANCE,
+  REPORTER_CREDIT_RULE,
+  scoreOf,
+  scoreRulesSchema,
+} from "../../../packages/spec/src/index";
 import scoreVectors from "../../../packages/spec/vectors/score.json";
 import scoreRulesV1 from "../../../packages/spec/vocab/score-rules-v1.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
@@ -1290,5 +1296,34 @@ describe("what the directory and the connector claim", () => {
       expect(text, path).not.toMatch(/verified businesses/);
       expect(text, path).not.toMatch(/\bbooks (?:a time|at)\b|gets a quote or books/);
     }
+  });
+});
+
+describe("the reporters' reading allowance, as the site says it", () => {
+  // The site states the reference network's numbers; the spec's constants are where they live, so a
+  // change there that the site does not follow fails here.
+  const n = (v: number) => v.toLocaleString("en-US");
+  const about = visible(read("src/pages/about.astro")).replace(/\s+/g, " ");
+  const agents = read("public/for-agents.md").replace(/\s+/g, " ");
+
+  it("gives the allowance in the spec's numbers", () => {
+    expect(about).toContain(
+      `${n(READ_ALLOWANCE.key.per_minute)} a minute for its key, ${n(READ_ALLOWANCE.platform.per_minute)} for a platform`,
+    );
+    expect(about).toContain(`on ${REPORTER_CREDIT_RULE.min_days} days of a month`);
+    expect(agents).toContain(
+      `${n(READ_ALLOWANCE.key.per_minute)} a minute for a key, ${n(READ_ALLOWANCE.platform.per_minute)} for a platform, on top of the ${n(READ_ALLOWANCE.address.per_minute)} a minute every address has`,
+    );
+    expect(agents).toContain(
+      `With ${REPORTER_CREDIT_RULE.min_points} points in the last ${REPORTER_CREDIT_RULE.window_days} days, on at least ${REPORTER_CREDIT_RULE.min_days} different days`,
+    );
+    expect(agents).toContain(`at most ${REPORTER_CREDIT_RULE.per_day_at_most} a day`);
+  });
+
+  it("says a point needs the signer's own signed reads, and what is kept of them", () => {
+    expect(about).toContain("signs its searches and its door reports");
+    expect(agents).toContain("sign the searches that found the businesses with the same key");
+    expect(agents).toContain("nothing is written with your key, neither the query nor the answer");
+    expect(about).not.toContain("More for reporters");
   });
 });

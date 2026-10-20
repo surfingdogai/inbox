@@ -547,6 +547,138 @@ export function countedIntents<T extends { readonly source: string; readonly int
   return [...last.values()];
 }
 
+/* --- the reporters' reading allowance (§4.15, ADR-019 Amendment 1) ----------------------------------------------- */
+
+/**
+ * The reference network's values; a network publishes its own in `GET /v1/door-reports/me` (`threshold`).
+ *
+ * Limits only: a network MAY give the agents that sign their door reports a larger reading allowance. A
+ * report earns its signer 1 point when the network took it, a verified signature carried its call
+ * (sdi-agent/1 with a self-held key, or Web Bot Auth: a platform is every origin of its registrable
+ * domain), the same signer's own signed reads returned its business at that network today or yesterday
+ * (UTC), and, for a platform, its business is not on the platform's own registrable domain; whatever the
+ * report said. A point is one business (a report's `domain`) on one UTC day the network received reports
+ * at it: the day received, never the report's `at`. A contributor has, in the window (today and the
+ * `window_days` - 1 days before), points on at least `min_days` days and `min_points` points in all, each
+ * day counting at most `per_day_at_most`. A contributor reads on its own allowance (`READ_ALLOWANCE`) as
+ * well as an address's; nothing else about it changes: the same answers, the same order, no weight in
+ * any ranking, score or track record.
+ */
+export const REPORTER_CREDIT_RULE = {
+  window_days: 30,
+  min_days: 7,
+  min_points: 30,
+  per_day_at_most: 10,
+} as const;
+
+/** A network's rule for its contributors, as `GET /v1/door-reports/me` answers it (`threshold`). */
+export interface ReporterCreditRule {
+  readonly window_days: number;
+  readonly min_days: number;
+  readonly min_points: number;
+  readonly per_day_at_most: number;
+}
+
+/**
+ * The reference network's values; a network publishes its own in `GET /v1/door-reports/me`
+ * (`contributor_reads`, and `reads` for an address's).
+ *
+ * The reading allowance, requests a minute and the burst: an address's (an IPv6 address's /64), which
+ * applies to everyone and still applies once a contributor's own is spent; a contributor key's own; a
+ * contributor platform's own (all its origins together). `per_address` is the most of contributors' reads
+ * of that kind from one address.
+ */
+export const READ_ALLOWANCE = {
+  address: { per_minute: 600, burst: 200 },
+  key: { per_minute: 1800, burst: 600, per_address: 1800 },
+  platform: { per_minute: 6000, burst: 2000, per_address: 6000 },
+} as const;
+
+/** One UTC day a reporter earned points on: how many days ago (0 is today), at how many businesses. */
+export interface ReporterDay {
+  readonly ago: number;
+  readonly businesses: number;
+}
+
+export interface ReporterCredit {
+  readonly points: number;
+  readonly days: number;
+  readonly contributor: boolean;
+}
+
+/**
+ * A reporter's credit from the days it earned any on (`vectors/door-reports.json`, `contributors.cases`),
+ * under `rule`: the reference network's unless you pass a network's own (its `threshold`).
+ */
+export function reporterCreditOf(
+  days: readonly ReporterDay[],
+  rule: ReporterCreditRule = REPORTER_CREDIT_RULE,
+): ReporterCredit {
+  let points = 0;
+  let n = 0;
+  for (const d of days) {
+    if (d.ago < 0 || d.ago >= rule.window_days || d.businesses <= 0) continue;
+    n++;
+    points += Math.min(d.businesses, rule.per_day_at_most);
+  }
+  return { points, days: n, contributor: n >= rule.min_days && points >= rule.min_points };
+}
+
+/** Whether one report earns its signer a point (`contributors.earning`): never what it said. */
+export function doorReportEarns(report: {
+  readonly signature: "none" | "key" | "platform";
+  readonly accepted: boolean;
+  /** The business is on the signing platform's own registrable domain. */
+  readonly own_domain: boolean;
+  /** The same signer's own signed reads returned the business at the network today or yesterday (UTC). */
+  readonly seen_in_reads: boolean;
+}): boolean {
+  if (!report.accepted || report.signature === "none" || !report.seen_in_reads) return false;
+  return !(report.signature === "platform" && report.own_domain);
+}
+
+const readAllowanceSchema = z.object({
+  per_minute: z.number().int().positive(),
+  burst: z.number().int().positive(),
+  /** What the allowance is counted per: an address, the key, or the platform. */
+  per: z.enum(["address", "key", "platform"]),
+  /** For a contributor: the most of its kind's reads from one address. */
+  per_address: z.number().int().positive().optional(),
+});
+
+/**
+ * `GET /v1/door-reports/me`, signed sdi-agent/1 or Web Bot Auth: the signer's own credit, whether it is
+ * a contributor, the network's rule (`threshold`, the reference network's being `REPORTER_CREDIT_RULE`),
+ * and what it reads with. The network checks the signature before it looks anything up, so there is no
+ * way to ask about another reporter. Unsigned, it is `401 signature_required`.
+ */
+export const doorReportsMeSchema = z.object({
+  reporter: z.union([
+    z.object({ type: z.literal("key"), keyid: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }),
+    z.object({
+      type: z.literal("platform"),
+      origin: z.string().regex(/^https:\/\/[a-z0-9.-]+$/),
+      platform: z.string().regex(/^[a-z0-9.-]+$/),
+    }),
+  ]),
+  credit: z.object({ points: z.number().int().nonnegative(), days: z.number().int().nonnegative() }),
+  contributor: z.boolean(),
+  threshold: z.object({
+    window_days: z.number().int().positive(),
+    min_days: z.number().int().positive(),
+    min_points: z.number().int().positive(),
+    per_day_at_most: z.number().int().positive(),
+  }),
+  /** What the signer reads with now. */
+  reads: readAllowanceSchema,
+  /** What a contributor of its kind reads with. */
+  contributor_reads: readAllowanceSchema,
+  /** The network's guide for agents, `<network>/report.md`, which publishes the rule. */
+  guide: z.string().url(),
+  as_of: timestampSchema,
+});
+export type DoorReportsMe = z.infer<typeof doorReportsMeSchema>;
+
 /* --- the network's own reads (§4.8) ------------------------------------------------------------------------------- */
 
 /** What one read of a door met. */
