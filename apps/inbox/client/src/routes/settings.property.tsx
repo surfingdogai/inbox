@@ -15,7 +15,7 @@ import {
   RulesTab,
 } from "../components/Property";
 import { Sheet } from "../components/Sheet";
-import { problemOf } from "../lib/api";
+import { ownerCall, problemOf } from "../lib/api";
 import {
   KIND_WORDS,
   type OwnerSetup,
@@ -28,12 +28,17 @@ import {
 import { useBusiness, useIntegrations, useProfile } from "../lib/queries";
 import "../property.css";
 
-export const Route = createFileRoute("/settings/property")({
-  component: PropertyPage,
-});
-
 const TABS = ["Property", "Rooms", "Rates", "Policies", "Taxes & fees", "House rules & arrival"] as const;
 type Tab = (typeof TABS)[number];
+
+export const Route = createFileRoute("/settings/property")({
+  // Which tab to open on: the wizard's "Add your prices" opens Rates.
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab } =>
+    typeof search.tab === "string" && (TABS as readonly string[]).includes(search.tab)
+      ? { tab: search.tab as Tab }
+      : {},
+  component: PropertyPage,
+});
 
 /**
  * A place to stay (ADR-033 §11, S1–S9): how it confirms, in one sentence; its own system, connected
@@ -44,7 +49,8 @@ function PropertyPage() {
   const property = useProperty();
   const profile = useProfile();
   const business = useBusiness();
-  const [tab, setTab] = useState<Tab>("Property");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<Tab>(search.tab ?? "Property");
   if (property.isError) {
     return (
       <div className="card glass">
@@ -81,19 +87,26 @@ function PropertyPage() {
         </fieldset>
         {tab === "Property" && <PropertyTab key={setup.property.id} setup={setup} />}
         {tab === "Rooms" && <RoomsTab setup={setup} />}
-        {tab === "Rates" && <RatesTab setup={setup} onPlans={() => setTab("Policies")} />}
-        {tab === "Policies" && <PoliciesTab setup={setup} />}
+        {tab === "Rates" && <RatesTab setup={setup} />}
+        {tab === "Policies" && <PoliciesTab setup={setup} collect={property.data.collect} />}
         {tab === "Taxes & fees" && <FeesTab key={setup.fees.length} setup={setup} />}
-        {tab === "House rules & arrival" && <RulesTab key={setup.property.id} setup={setup} />}
+        {tab === "House rules & arrival" && (
+          <RulesTab
+            key={setup.property.id}
+            setup={setup}
+            arrivalHours={property.data.stays.arrivalDetailsHours}
+            canSeal={property.data.can_seal}
+          />
+        )}
       </section>
     </>
   );
 }
 
 const MODES = [
-  { value: "request", label: "I answer each request" },
-  { value: "allotment", label: "Rooms I keep for direct guests" },
-  { value: "connected", label: "My property system" },
+  { value: "request", label: "I confirm each one" },
+  { value: "allotment", label: "At once, in rooms I keep for direct guests" },
+  { value: "connected", label: "At once, by my property system" },
 ] as const;
 
 /** S1: how a stay confirms here, said as the guests' assistants are told it, and the owner's to change. */
@@ -108,7 +121,7 @@ function HowItConfirms({ setup }: { setup: PropertyView }) {
       </SectionHead>
       <p className="reads-as">{setup.sentence}</p>
       <Chips
-        legend="A stay is confirmed"
+        legend="How a stay is confirmed"
         value={p.mode}
         options={MODES.filter((m) => m.value !== "connected" || connected)}
         onChange={(mode) => save.mutate({ id: p.id, mode })}
@@ -155,6 +168,7 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
   const systems = (integrations.data?.connections ?? []).filter((c) => c.capabilities.includes("stay_inventory"));
   const [mapping, setMapping] = useState<{ id: string; title: string } | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [linking, setLinking] = useState(false);
   const sync = usePropertyWrite(propertyApi.sync);
   const calendar = usePropertyWrite(propertyApi.calendar);
   const rooms = setup.rooms.filter((r) => r.active);
@@ -202,11 +216,14 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
       {systems.length === 0 && !hidden && (
         <ConnectYourSystem
           groups={["lodging", "calendars"]}
-          skip={["calcom", "calendly"]}
-          lede="Where your rooms already live. With it connected, a stay is written there first, so a room is never sold twice."
+          skip={["calcom", "calendly", "ics_feed"]}
+          lodging
+          lede="Calendar links from your other channels show the nights that are likely taken. A property system, once connected, takes each stay first."
+          onOpen={(card) => (card.id === "calendar" ? setLinking(true) : undefined)}
           onSkip={() => setHidden(true)}
         />
       )}
+      {linking && <CalendarLinkSheet rooms={rooms} onClose={() => setLinking(false)} />}
       {data.calendars.length > 0 && rooms.length > 0 && (
         <>
           <SectionHead title="Calendars from other channels" />
@@ -240,6 +257,72 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
       )}
       {mapping && <SystemSheet setup={setup} connection={mapping} onClose={() => setMapping(null)} />}
     </section>
+  );
+}
+
+/**
+ * A calendar link from another channel (Airbnb, Booking.com, Vrbo), added here in one sheet: the link,
+ * and which room its nights are. Its nights are hints for you, never a reason to say no on their own.
+ */
+function CalendarLinkSheet({ rooms, onClose }: { rooms: PropertyView["rooms"]; onClose: () => void }) {
+  const [url, setUrl] = useState("");
+  const [room, setRoom] = useState(rooms[0]?.id ?? "");
+  const map = usePropertyWrite(propertyApi.calendar);
+  const add = usePropertyWrite((link: string) =>
+    ownerCall<{ id: string }>("POST", "/v1/owner/integrations", { body: { kind: "ics", values: { url: link } } }),
+  );
+  const busy = add.isPending || map.isPending;
+  const error = add.error ?? map.error;
+  return (
+    <Sheet title="Calendar link" onClose={onClose}>
+      <div className="stack">
+        <p className="lede small">
+          The private link a channel gives for its calendar of a room: it ends in .ics. One link for each room.
+        </p>
+        <Field id="cl-url" label="Calendar link">
+          <input
+            id="cl-url"
+            className="input"
+            type="url"
+            inputMode="url"
+            placeholder="https://…/calendar.ics"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+        </Field>
+        <Field id="cl-room" label="Which room">
+          <select id="cl-room" className="input" value={room} onChange={(e) => setRoom(e.target.value)}>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {error && <p className="hint error">{problemOf(error).detail}</p>}
+        <FormActions>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={url.trim().length < 8 || !room || busy}
+            onClick={() =>
+              add.mutate(url.trim(), {
+                onSuccess: (made) =>
+                  map.mutate(
+                    { connector_id: (made as { id: string }).id, room_type_id: room, units: 1 },
+                    { onSuccess: onClose },
+                  ),
+              })
+            }
+          >
+            Add it
+          </button>
+        </FormActions>
+      </div>
+    </Sheet>
   );
 }
 

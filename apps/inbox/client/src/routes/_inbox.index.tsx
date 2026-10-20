@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { StatePill } from "../components/Pills";
 import { api, problemOf } from "../lib/api";
+import { ownerLocale } from "../lib/geo";
 import "../property.css";
 import {
   formatClock,
@@ -16,7 +17,7 @@ import {
   TYPE_WORD,
 } from "../lib/format";
 import { type TodayView, useProperty, useToday } from "../lib/property";
-import { useBusiness, useCounts, useProducts, useServices, useSettings } from "../lib/queries";
+import { useBusiness, useCounts, useOwnerLocale, useProducts, useServices, useSettings } from "../lib/queries";
 import type { ItemType, ItemView } from "../lib/types";
 import { looksUnconfigured, setupSkipped } from "./setup";
 
@@ -81,7 +82,7 @@ function TodayPane() {
     <div className="today">
       <div className="today-head">
         <div className="eyebrow">Today</div>
-        <h2 className="today-date">{formatDay(new Date(now).toISOString(), tz)}</h2>
+        <h2 className="today-date">{formatDay(new Date(now).toISOString(), tz, ownerLocale(tz))}</h2>
       </div>
 
       {stays && <StaysToday />}
@@ -167,6 +168,7 @@ function Line({ view, when, children }: { view: ItemView; when: string; children
 /** Today at the property (S14): who arrives, who leaves, who is in, and what is still to pay there. */
 function StaysToday() {
   const today = useToday(true);
+  const locale = useOwnerLocale();
   const groups: readonly { key: keyof Omit<TodayView, "date">; title: string; none: string }[] = [
     { key: "arriving", title: "Arriving", none: "Nobody arrives today." },
     { key: "leaving", title: "Leaving", none: "Nobody leaves today." },
@@ -198,7 +200,9 @@ function StaysToday() {
                         <span className="what">
                           <b>{r.guest ?? "Guest"}</b> <span>{r.rooms.join(", ")}</span>
                         </span>
-                        <span className="when">{r.to_pay.value > 0 ? `${formatMoney(r.to_pay)} to pay` : ""}</span>
+                        <span className="when">
+                          {r.to_pay.value > 0 ? `${formatMoney(r.to_pay, locale)} to pay` : ""}
+                        </span>
                       </Link>
                     </li>
                   ))}

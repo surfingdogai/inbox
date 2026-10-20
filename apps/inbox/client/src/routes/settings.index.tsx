@@ -15,6 +15,7 @@ import {
 import { DownloadInbox } from "../components/DownloadInbox";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
+import { WhatYouRun } from "../components/WhatYouRun";
 import { problemOf } from "../lib/api";
 import { session } from "../lib/auth";
 import { currencyNote } from "../lib/currencies";
@@ -102,6 +103,7 @@ function GeneralPage() {
         />
       )}
       <MailBanner />
+      <WhatYouRun />
       {settings.data && <DoorsCard doc={settings.data.doc} pending={patch.isPending} onPatch={patchSettings} />}
       {(profile.isPending || settings.isPending) && <Loading />}
       {failed && (

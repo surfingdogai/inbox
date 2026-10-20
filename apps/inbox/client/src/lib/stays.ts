@@ -33,12 +33,17 @@ export function guestWords(p: Pick<StayPayload, "rooms">): string {
   return words.join(" · ");
 }
 
-/** A stay's list row line (S11): "12–15 Dec · 3 nights · 2 adults · Japanese room · ¥90,540". */
-export function staySnippet(p: StayPayload, locale?: string): string {
+/** A stay's title (S11), from what it is, never a stored string: "Japanese room · 12–15 Dec · 3 nights". */
+export function stayTitle(p: StayPayload, locale?: string): string {
   const nights = nightsOf(p.checkIn, p.checkOut);
-  const parts = [stayDates(p.checkIn, p.checkOut, locale), `${nights} night${nights === 1 ? "" : "s"}`, guestWords(p)];
   const rooms = p.rooms.map((r) => r.roomTypeName).filter(Boolean);
-  if (rooms.length) parts.push(rooms.length > 1 ? `${rooms[0]} and ${rooms.length - 1} more` : (rooms[0] ?? ""));
+  const room = rooms.length > 1 ? `${rooms[0]} and ${rooms.length - 1} more` : (rooms[0] ?? "A room");
+  return [room, stayDates(p.checkIn, p.checkOut, locale), `${nights} night${nights === 1 ? "" : "s"}`].join(" · ");
+}
+
+/** A stay's list row line (S11), under its title: who for, and what it comes to — "2 adults · ¥90,540". */
+export function staySnippet(p: StayPayload, locale?: string): string {
+  const parts = [guestWords(p)];
   if (p.totalPrice) parts.push(formatMoney(p.totalPrice, locale));
   return parts.join(" · ");
 }

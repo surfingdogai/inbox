@@ -119,15 +119,15 @@ export interface SetupKind {
 export const KINDS: readonly SetupKind[] = [
   {
     key: "appointments",
-    label: "Appointments",
-    line: "A salon, a clinic, a studio, classes.",
+    label: "A salon, clinic or studio",
+    line: "Booked at a time: treatments, consultations, classes.",
     preset: "appointments",
     doors: { booking: true, quoteRequest: true, message: true },
     connect: ["booking", "calendars"],
   },
   {
     key: "trades",
-    label: "Trades and quotes",
+    label: "A trade",
     line: "Jobs you quote for and visits you arrange.",
     preset: "trades",
     doors: { booking: false, quoteRequest: true, message: true },
@@ -135,7 +135,7 @@ export const KINDS: readonly SetupKind[] = [
   },
   {
     key: "shop",
-    label: "A shop",
+    label: "A shop, bakery or kitchen",
     line: "Things people order, to collect or to deliver.",
     preset: "shop",
     doors: { booking: false, quoteRequest: false, message: true },
@@ -155,21 +155,41 @@ export const KINDS: readonly SetupKind[] = [
   },
 ];
 
-/** A room as the setup wizard first asks for it: what it is called, how many, how many sleep in it. */
+/**
+ * A room as the setup wizard first asks for it: what it is called, how many, how many sleep in it, and
+ * what a night costs (optional: without one, each request waits for a price of the owner's own).
+ */
 export interface WizardRoom {
   readonly id: number;
   name: string;
   units: string;
   sleeps: string;
+  price?: string;
 }
 
-/** The rooms to make, or what is missing: a name each, at least one, numbers that are numbers. */
+/**
+ * The rooms to make, with each one's price a night in minor units (null where none was typed), or what
+ * is missing: a name each, at least one, numbers that are numbers, prices that are amounts.
+ */
 export function wizardRoomBodies(
   rooms: readonly WizardRoom[],
   propertyId: string,
-): { bodies: Record<string, unknown>[] } | { problem: string } {
+  currency = "EUR",
+): { bodies: Record<string, unknown>[]; prices: (number | null)[] } | { problem: string } {
   const named = rooms.filter((r) => r.name.trim());
   if (named.length === 0) return { problem: "Name at least one kind of room." };
+  const prices: (number | null)[] = [];
+  for (const r of named) {
+    const typed = r.price?.trim() ?? "";
+    if (!typed) {
+      prices.push(null);
+      continue;
+    }
+    const value = parseMajor(typed, minorUnitsOf(currency));
+    if (value === undefined || value <= 0)
+      return { problem: `"${typed}" is not a price a night for ${r.name.trim()}.` };
+    prices.push(value);
+  }
   const bodies = named.map((r, i) => {
     const sleeps = Math.max(1, Math.min(20, Number(r.sleeps) || 1));
     return {
@@ -180,7 +200,7 @@ export function wizardRoomBodies(
       sort: i,
     };
   });
-  return { bodies };
+  return { bodies, prices };
 }
 
 /** The kind of a key, if it is one. */

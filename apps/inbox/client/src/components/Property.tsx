@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Plus } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
@@ -25,10 +26,12 @@ import {
   policyWords,
   propertyApi,
   RULE_WORDS,
+  STANDARD_PLAN,
+  seasonWords,
   usePropertyWrite,
   WEEKDAYS,
-  weekdayWords,
 } from "../lib/property";
+import { useOwnerLocale } from "../lib/queries";
 import { CurrencySelect, MoneyInput, Stepper } from "./Choosers";
 import { Toast } from "./Feedback";
 import { Field, FormActions, SectionHead, Switch } from "./Form";
@@ -142,6 +145,7 @@ export function NewProperty({ currency, name: suggested }: { currency: string; n
   const [cur, setCur] = useState(currency);
   const [checkIn, setCheckIn] = useState("15:00");
   const [checkOut, setCheckOut] = useState("11:00");
+  const [town, setTown] = useState("");
   const save = usePropertyWrite(propertyApi.save);
   return (
     <section className="card glass stack">
@@ -166,6 +170,7 @@ export function NewProperty({ currency, name: suggested }: { currency: string; n
         <TimeField id="p-in" label="Check-in from" value={checkIn} onChange={setCheckIn} />
         <TimeField id="p-out" label="Check-out until" value={checkOut} onChange={setCheckOut} />
       </div>
+      <TownField id="p-town" value={town} onChange={setTown} />
       <Problem error={save.error} />
       <FormActions>
         <button
@@ -173,7 +178,14 @@ export function NewProperty({ currency, name: suggested }: { currency: string; n
           className="btn btn-primary"
           disabled={!name.trim() || save.isPending}
           onClick={() =>
-            save.mutate({ name: name.trim(), kind, currency: cur, check_in_from: checkIn, check_out_until: checkOut })
+            save.mutate({
+              name: name.trim(),
+              kind,
+              currency: cur,
+              check_in_from: checkIn,
+              check_out_until: checkOut,
+              ...(town.trim() ? { town: town.trim() } : {}),
+            })
           }
         >
           Save
@@ -183,9 +195,32 @@ export function NewProperty({ currency, name: suggested }: { currency: string; n
   );
 }
 
+/** The town the place is in: how its guests read a time ("23:59 Oaxaca time") and its address. */
+export function TownField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <Field id={id} label="Town" optional hint="Guests read your times by it: “until 23:59, Oaxaca time”.">
+      <input
+        id={id}
+        className="input"
+        autoComplete="address-level2"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Field>
+  );
+}
+
+/** Whether any plan guests are offered takes money or a card before arrival. */
+function takesMoneyNow(setup: PropertyView): boolean {
+  return setup.plans.some(
+    (x) => x.active && (x.deposit.kind !== "none" || x.balance.when === "days_before" || x.guarantee === "card"),
+  );
+}
+
 export function PropertyTab({ setup }: { setup: PropertyView }) {
   const p = setup.property;
   const [d, setD] = useState(() => ({
+    town: p.locality ?? "",
     name: p.name,
     kind: p.kind,
     currency: p.currency,
@@ -247,6 +282,7 @@ export function PropertyTab({ setup }: { setup: PropertyView }) {
           onChange={(v) => set({ sameDayUntil: v })}
         />
       </div>
+      <TownField id="pt-town" value={d.town} onChange={(town) => set({ town })} />
       <Chips
         legend="You answer a request within"
         value={d.answerHours}
@@ -259,18 +295,24 @@ export function PropertyTab({ setup }: { setup: PropertyView }) {
         options={HOURS([2, 12, 24, 48])}
         onChange={(quoteValidHours) => set({ quoteValidHours })}
       />
-      <Chips
-        legend="What is due now is paid within"
-        value={d.payWithinHours}
-        options={HOURS([1, 6, 24, 48])}
-        onChange={(payWithinHours) => set({ payWithinHours })}
-      />
-      <Chips
-        legend="A guest's assistant may hold a room for"
-        value={d.holdMinutes}
-        options={HOURS([10, 20, 30, 60], "min")}
-        onChange={(holdMinutes) => set({ holdMinutes })}
-      />
+      {/* Timers that matter only where they apply: a payment window where a plan takes money now, a
+          hold where a room confirms at once. */}
+      {takesMoneyNow(setup) && (
+        <Chips
+          legend="What is due now is paid within"
+          value={d.payWithinHours}
+          options={HOURS([1, 6, 24, 48])}
+          onChange={(payWithinHours) => set({ payWithinHours })}
+        />
+      )}
+      {p.mode !== "request" && (
+        <Chips
+          legend="A guest's assistant may hold a room for"
+          value={d.holdMinutes}
+          options={HOURS([10, 20, 30, 60], "min")}
+          onChange={(holdMinutes) => set({ holdMinutes })}
+        />
+      )}
       <Stepper
         id="pt-max"
         label="Longest stay"
@@ -322,6 +364,7 @@ export function PropertyTab({ setup }: { setup: PropertyView }) {
                 hold_minutes: d.holdMinutes,
                 max_nights: Number(d.maxNights),
                 prices_include: d.vat ? { name: d.vatName.trim() || "VAT", rate_bp: vatBp } : null,
+                town: d.town.trim() || null,
               },
               { onSuccess: () => setSaved(true) },
             )
@@ -495,21 +538,35 @@ function RoomEditor({ propertyId, room, onDone }: { propertyId: string; room?: R
 
 // ——— Rates ———————————————————————————————————————————————————————————————————————————————————
 
-export function RatesTab({ setup, onPlans }: { setup: PropertyView; onPlans: () => void }) {
+export function RatesTab({ setup }: { setup: PropertyView }) {
   const plans = setup.plans.filter((p) => p.active);
   const rooms = setup.rooms.filter((r) => r.active);
-  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
+  const [chosen, setPlanId] = useState(plans[0]?.id ?? "");
+  const planId = chosen || plans[0]?.id || "";
   const currency = setup.property.currency;
+  const locale = useOwnerLocale();
+  const start = usePropertyWrite(propertyApi.plan);
   if (rooms.length === 0) return <p className="hint">Add your rooms first, then their prices.</p>;
   if (plans.length === 0) {
     return (
       <div className="state state-left">
-        <p>Prices belong to a plan: what is included, and what cancelling costs.</p>
+        <p>Set a price a night for each room. Breakfast or non-refundable plans can come later, in Policies.</p>
         <div>
-          <button type="button" className="btn btn-primary" onClick={onPlans}>
-            Add a plan
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={start.isPending}
+            onClick={() =>
+              start.mutate(
+                { property_id: setup.property.id, ...STANDARD_PLAN },
+                { onSuccess: (r) => setPlanId((r as { id: string }).id) },
+              )
+            }
+          >
+            Add your prices
           </button>
         </div>
+        <Problem error={start.error} />
       </div>
     );
   }
@@ -527,7 +584,7 @@ export function RatesTab({ setup, onPlans }: { setup: PropertyView; onPlans: () 
       {rooms.map((r) => (
         <BaseRate key={`${planId}:${r.id}`} setup={setup} planId={planId} room={r} currency={currency} />
       ))}
-      <Seasons key={planId} setup={setup} planId={planId} currency={currency} />
+      <Seasons key={planId} setup={setup} planId={planId} currency={currency} locale={locale} />
     </div>
   );
 }
@@ -604,7 +661,17 @@ function BaseRate({
   );
 }
 
-function Seasons({ setup, planId, currency }: { setup: PropertyView; planId: string; currency: string }) {
+function Seasons({
+  setup,
+  planId,
+  currency,
+  locale,
+}: {
+  setup: PropertyView;
+  planId: string;
+  currency: string;
+  locale: string | undefined;
+}) {
   const rooms = setup.rooms.filter((r) => r.active);
   const seasons = setup.rates.filter((x) => x.ratePlanId === planId && x.fromDate !== "");
   const [adding, setAdding] = useState(false);
@@ -627,12 +694,7 @@ function Seasons({ setup, planId, currency }: { setup: PropertyView; planId: str
       {seasons.map((s) => (
         <div key={`${s.roomTypeId}:${s.fromDate}:${s.weekdays}`} className="catalogue-row row-glass">
           <div className="catalogue-main">
-            <div className="t">
-              <b>{roomName(s.roomTypeId)}</b> · {formatMoney({ value: s.nightly, currency })} a night
-            </div>
-            <div className="s">
-              {s.fromDate} – {s.toDate} · {weekdayWords(s.weekdays)}
-            </div>
+            <div className="t">{seasonWords(s, roomName(s.roomTypeId), currency, locale)}</div>
           </div>
           <div className="rowx">
             <button
@@ -758,7 +820,7 @@ export function WeekdayChips({ value, onChange }: { value: number; onChange: (ma
 
 // ——— Policies (rate plans) ————————————————————————————————————————————————————————————————————
 
-export function PoliciesTab({ setup }: { setup: PropertyView }) {
+export function PoliciesTab({ setup, collect }: { setup: PropertyView; collect: { links: boolean; cards: boolean } }) {
   const plans = setup.plans.filter((p) => p.active);
   const [editing, setEditing] = useState<string | null>(plans.length === 0 ? "new" : null);
   return (
@@ -773,10 +835,18 @@ export function PoliciesTab({ setup }: { setup: PropertyView }) {
         )}
       </SectionHead>
       <p className="lede small">What a stay includes, what cancelling costs, and when it is paid.</p>
-      {editing === "new" && <PlanEditor propertyId={setup.property.id} onDone={() => setEditing(null)} />}
+      {editing === "new" && (
+        <PlanEditor propertyId={setup.property.id} collect={collect} onDone={() => setEditing(null)} />
+      )}
       {plans.map((p) =>
         editing === p.id ? (
-          <PlanEditor key={p.id} propertyId={setup.property.id} plan={p} onDone={() => setEditing(null)} />
+          <PlanEditor
+            key={p.id}
+            propertyId={setup.property.id}
+            plan={p}
+            collect={collect}
+            onDone={() => setEditing(null)}
+          />
         ) : (
           <div key={p.id} className="catalogue-row row-glass">
             <div className="catalogue-main">
@@ -817,7 +887,17 @@ const BALANCES: readonly { value: string; label: string; choice: BalanceChoice }
 ];
 const balanceKey = (b: BalanceChoice) => (b.when === "days_before" ? `d${b.days ?? 7}` : "at_property");
 
-function PlanEditor({ propertyId, plan, onDone }: { propertyId: string; plan?: Plan; onDone: () => void }) {
+function PlanEditor({
+  propertyId,
+  plan,
+  collect,
+  onDone,
+}: {
+  propertyId: string;
+  plan?: Plan;
+  collect: { links: boolean; cards: boolean };
+  onDone: () => void;
+}) {
   const initial = plan ? policyChoiceOf(plan.policyPreset) : null;
   const [name, setName] = useState(plan?.name ?? "Flexible");
   const [meal, setMeal] = useState(plan?.meal ?? "room_only");
@@ -826,7 +906,8 @@ function PlanEditor({ propertyId, plan, onDone }: { propertyId: string; plan?: P
       ? initial
       : { preset: "free_until", days: 7, after: "first_night", no_show: "full" },
   );
-  const [deposit, setDeposit] = useState(depositKey(plan?.deposit ?? { kind: "first_night" }));
+  // Nothing now unless a payment account can take it: a deposit nobody can pay holds every stay up.
+  const [deposit, setDeposit] = useState(depositKey(plan?.deposit ?? { kind: "none" }));
   const [balance, setBalance] = useState(balanceKey(plan?.balance ?? { when: "at_property" }));
   const [card, setCard] = useState(plan?.guarantee === "card");
   const save = usePropertyWrite(propertyApi.plan);
@@ -868,9 +949,9 @@ function PlanEditor({ propertyId, plan, onDone }: { propertyId: string; plan?: P
       {policy.preset === "free_until" && (
         <>
           <Chips
-            legend="Free until, before arrival"
+            legend="Free to cancel until"
             value={policy.days ?? 7}
-            options={FREE_DAYS.map((n) => ({ value: n, label: `${n} day${n === 1 ? "" : "s"}` }))}
+            options={FREE_DAYS.map((n) => ({ value: n, label: `${n} day${n === 1 ? "" : "s"} before` }))}
             onChange={(days) => setPolicy({ ...policy, days })}
           />
           <Chips<AfterFee>
@@ -884,7 +965,7 @@ function PlanEditor({ propertyId, plan, onDone }: { propertyId: string; plan?: P
             onChange={(after) => setPolicy({ ...policy, after })}
           />
           <Chips<NoShowFee>
-            legend="Not coming costs"
+            legend="A no-show costs"
             value={policy.no_show ?? "full"}
             options={[
               { value: "first_night", label: "The first night" },
@@ -894,9 +975,26 @@ function PlanEditor({ propertyId, plan, onDone }: { propertyId: string; plan?: P
           />
         </>
       )}
-      <Chips legend="Paid when the guest accepts" value={deposit} options={DEPOSITS} onChange={setDeposit} />
-      {dep.kind !== "full" && <Chips legend="The rest" value={balance} options={BALANCES} onChange={setBalance} />}
-      {dep.kind === "none" && (
+      <Chips
+        legend="Paid when the guest accepts"
+        value={deposit}
+        options={collect.links ? DEPOSITS : DEPOSITS.filter((x) => x.value === "none" || x.value === deposit)}
+        onChange={setDeposit}
+      />
+      {dep.kind !== "full" && (
+        <Chips
+          legend="The rest is paid"
+          value={balance}
+          options={collect.links ? BALANCES : BALANCES.filter((x) => x.value === "at_property" || x.value === balance)}
+          onChange={setBalance}
+        />
+      )}
+      {!collect.links && (
+        <p className="hint">
+          To take a deposit, connect Stripe or Mollie in <Link to="/settings/payments">Payments</Link>.
+        </p>
+      )}
+      {dep.kind === "none" && collect.cards && (
         <Switch checked={card} onChange={setCard}>
           Ask for a card to hold the stay, on your own payment account
         </Switch>
@@ -1004,7 +1102,7 @@ export function FeesTab({ setup }: { setup: PropertyView }) {
         amount: amount ?? null,
         rate_bp: rate,
         collected: f.collected,
-        child_exempt_under: f.childUnder === "" ? null : Number(f.childUnder),
+        child_exempt_under: f.basis !== "per_person_night" || f.childUnder === "" ? null : Number(f.childUnder),
       },
     };
   });
@@ -1040,7 +1138,16 @@ export function FeesTab({ setup }: { setup: PropertyView }) {
       <p className="lede small">Every one is in the quote's total, whoever collects it: guests see the whole price.</p>
       {fees.length === 0 && <p className="hint">None. A city or tourist tax goes here, or a cleaning fee.</p>}
       {fees.map((f, i) => (
-        <div key={f.key} className="card stack">
+        <div key={f.key} className="row-glass fee-row stack">
+          <Chips
+            legend="It is"
+            value={f.kind}
+            options={[
+              { value: "tax", label: "A tax" },
+              { value: "fee", label: "A fee" },
+            ]}
+            onChange={(kind) => change(i, { kind })}
+          />
           <div className="grid2">
             <Field id={`f-name-${f.key}`} label="Name">
               <input
@@ -1085,25 +1192,19 @@ export function FeesTab({ setup }: { setup: PropertyView }) {
                 />
               </Field>
             )}
-            <Stepper
-              id={`f-child-${f.key}`}
-              label="Children free under"
-              value={f.childUnder || "0"}
-              onChange={(v) => change(i, { childUnder: v === "0" ? "" : v })}
-              min={0}
-              max={17}
-              suffix="years"
-            />
+            {/* Only a charge per guest can leave children out. */}
+            {f.basis === "per_person_night" && (
+              <Stepper
+                id={`f-child-${f.key}`}
+                label="Children free under"
+                value={f.childUnder || "0"}
+                onChange={(v) => change(i, { childUnder: v === "0" ? "" : v })}
+                min={0}
+                max={17}
+                suffix="years"
+              />
+            )}
           </div>
-          <Chips
-            legend="It is"
-            value={f.kind}
-            options={[
-              { value: "tax", label: "A tax" },
-              { value: "fee", label: "A fee" },
-            ]}
-            onChange={(kind) => change(i, { kind })}
-          />
           <Chips
             legend="Collected"
             value={f.collected}
@@ -1277,7 +1378,27 @@ function Extras({ setup }: { setup: PropertyView }) {
 
 // ——— House rules and arrival ——————————————————————————————————————————————————————————————————
 
-export function RulesTab({ setup }: { setup: PropertyView }) {
+/** When the private arrival details go, from the settings: "two days before arrival". */
+export function arrivalWhen(hours: number): string {
+  if (hours <= 0) return "never on their own";
+  if (hours % 24 === 0) {
+    const days = hours / 24;
+    return days === 1
+      ? "the day before arrival"
+      : `${["", "one", "two", "three", "four", "five", "six", "seven"][days] ?? days} days before arrival`;
+  }
+  return `${hours} hours before arrival`;
+}
+
+export function RulesTab({
+  setup,
+  arrivalHours,
+  canSeal,
+}: {
+  setup: PropertyView;
+  arrivalHours: number;
+  canSeal: boolean;
+}) {
   const p = setup.property;
   const [d, setD] = useState(() => ({
     chips: [...p.houseRules.chips],
@@ -1360,9 +1481,11 @@ export function RulesTab({ setup }: { setup: PropertyView }) {
         id="h-priv"
         label="Door codes, key box, Wi-Fi"
         hint={
-          p.hasArrivalPrivate
-            ? "Saved and sealed. Sent only to confirmed guests, the day before. Write here to replace it."
-            : "Sealed when saved, and sent only to confirmed guests, the day before."
+          !canSeal
+            ? "Door codes need a secret key on your server (INBOX_SECRET_KEY). See the docs."
+            : p.hasArrivalPrivate
+              ? `Saved and sealed. Sent only to confirmed guests, ${arrivalWhen(arrivalHours)}. Write here to replace it.`
+              : `Sealed when saved, and sent only to confirmed guests, ${arrivalWhen(arrivalHours)}.`
         }
       >
         <textarea
@@ -1371,6 +1494,7 @@ export function RulesTab({ setup }: { setup: PropertyView }) {
           rows={2}
           maxLength={2_000}
           autoComplete="off"
+          disabled={!canSeal}
           value={d.arrivalPrivate}
           onChange={(e) => set({ arrivalPrivate: e.target.value })}
         />
@@ -1419,7 +1543,7 @@ export function RulesTab({ setup }: { setup: PropertyView }) {
                 },
                 pets: { allowed: d.pets },
                 arrival_public: d.arrivalPublic.trim() || null,
-                ...(d.arrivalPrivate.trim() ? { arrival_private: d.arrivalPrivate.trim() } : {}),
+                ...(canSeal && d.arrivalPrivate.trim() ? { arrival_private: d.arrivalPrivate.trim() } : {}),
                 pre_arrival_text: d.preArrival.trim() || null,
                 registration: d.registration
                   ? { required: true, ...(d.registrationNumber.trim() ? { number: d.registrationNumber.trim() } : {}) }

@@ -1,5 +1,5 @@
 import { minorUnitsOf } from "./currencies";
-import { staySnippet } from "./stays";
+import { staySnippet, stayTitle } from "./stays";
 import type { Customer, Item, ItemType, ItemView, Money, Party, Receipt } from "./types";
 
 /**
@@ -268,7 +268,9 @@ export function initials(name: string): string {
   return (parts.length > 1 ? `${parts[0]}${parts[parts.length - 1]}` : (parts[0] ?? "?")).toUpperCase();
 }
 
-export function titleFor(item: Item): string {
+export function titleFor(item: Item, locale?: string): string {
+  // A stay's title says its room, dates and nights as the owner app writes dates.
+  if (item.type === "stay") return stayTitle(item.payload, locale);
   return item.subject?.trim() || TYPE_WORD[item.type];
 }
 

@@ -12,6 +12,7 @@ import {
   useNights,
   usePropertyWrite,
 } from "../lib/property";
+import { useOwnerLocale } from "../lib/queries";
 import { Stepper } from "./Choosers";
 import { Field, FormActions, SectionHead } from "./Form";
 import { WeekdayChips } from "./Property";
@@ -19,10 +20,11 @@ import { Sheet } from "./Sheet";
 
 const DAYS = 14;
 
-function dayLabel(date: string): { wd: string; d: string } {
+/** A day's column head, in the owner app's one locale: its weekday and its date. */
+function dayLabel(date: string, locale: string | undefined): { wd: string; d: string } {
   const at = new Date(`${date}T12:00:00Z`);
   return {
-    wd: new Intl.DateTimeFormat(undefined, { weekday: "short", timeZone: "UTC" }).format(at),
+    wd: new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(at),
     d: String(at.getUTCDate()),
   };
 }
@@ -33,6 +35,7 @@ function dayLabel(date: string): { wd: string; d: string } {
  * guests is a sheet that saves only once the owner says they are closed on every other channel.
  */
 export function NightsCard({ setup }: { setup: PropertyView }) {
+  const locale = useOwnerLocale();
   const [from, setFrom] = useState<string | undefined>(undefined);
   const grid = useNights(from, DAYS);
   const [sheet, setSheet] = useState<"keep" | "close" | null>(null);
@@ -73,7 +76,7 @@ export function NightsCard({ setup }: { setup: PropertyView }) {
                   <span className="sr-only">Room</span>
                 </th>
                 {days.map((day) => {
-                  const l = dayLabel(day);
+                  const l = dayLabel(day, locale);
                   return (
                     <th key={day} scope="col">
                       <span className="nights-wd">{l.wd}</span>
@@ -88,12 +91,15 @@ export function NightsCard({ setup }: { setup: PropertyView }) {
                 <tr key={room.id}>
                   <th scope="row" className="nights-room">
                     {room.name}
-                    <span className="nights-units">{room.units}</span>
+                    <span className="nights-units" title={`${room.units} room${room.units === 1 ? "" : "s"}`}>
+                      {room.units}
+                      <span className="sr-only"> room{room.units === 1 ? "" : "s"}</span>
+                    </span>
                   </th>
                   {room.cells.map((cell) => {
                     const c = cellOf(cell, room.units);
                     const stay = cell.stays[0] ?? cell.holds[0];
-                    const mark = c.tone === "closed" ? "×" : cell.kept ? String(cell.kept) : "";
+                    const mark = c.mark;
                     return (
                       <td
                         key={cell.night}
@@ -121,11 +127,23 @@ export function NightsCard({ setup }: { setup: PropertyView }) {
           </table>
         </div>
       )}
-      <p className="hint nights-key">
-        <i className="night-dot is-full" /> booked <i className="night-dot is-held" /> held{" "}
-        <i className="night-dot has-hint" /> another calendar shows it taken · a number: rooms kept for direct guests ·
-        × closed
-      </p>
+      <ul className="hint nights-key" aria-label="What the cells show">
+        <li>
+          <i className="night-dot is-full" /> Booked
+        </li>
+        <li>
+          <i className="night-dot is-held" /> Held
+        </li>
+        <li>
+          <i className="night-dot has-hint" /> Taken on another calendar
+        </li>
+        <li>
+          <b className="night-num">2</b> Free for direct guests
+        </li>
+        <li>
+          <b className="night-num">×</b> Closed
+        </li>
+      </ul>
       <FormActions>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSheet("close")}>
           Close nights

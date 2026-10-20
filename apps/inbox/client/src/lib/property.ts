@@ -41,10 +41,16 @@ export const propertyApi = {
       body,
       idempotent: true,
     }),
-  draftQuote: (itemId: string, rooms?: readonly { index: number; room_type_id: string; rate_plan_id?: string }[]) =>
-    ownerCall<{ quote: StayQuoteView | null; reason?: string }>("POST", `/v1/owner/stays/${enc(itemId)}/draft-quote`, {
-      body: rooms ? { rooms } : {},
-    }),
+  draftQuote: (
+    itemId: string,
+    rooms?: readonly { index: number; room_type_id: string; rate_plan_id?: string }[],
+    price?: { value: number; currency: string },
+  ) =>
+    ownerCall<{ quote: StayQuoteView | null; reason?: string; lang?: string }>(
+      "POST",
+      `/v1/owner/stays/${enc(itemId)}/draft-quote`,
+      { body: { ...(rooms ? { rooms } : {}), ...(price ? { price } : {}) } },
+    ),
 };
 
 export interface SystemProperty {
@@ -99,6 +105,19 @@ export function usePropertyWrite<A>(fn: (arg: A) => Promise<unknown>) {
     },
   });
 }
+
+/**
+ * The plan a first price goes on, from the wizard or an empty Rates tab: room only, free to cancel until
+ * 7 days before arrival, nothing now, the rest at the property.
+ */
+export const STANDARD_PLAN = {
+  name: "Standard",
+  meal: "room_only",
+  policy: { preset: "free_until", days: 7, after: "first_night", no_show: "full" },
+  deposit: { kind: "none" },
+  balance: { when: "at_property" },
+  guarantee: "none",
+} as const;
 
 // ——— Words ————————————————————————————————————————————————————————————————————————————————
 
@@ -216,7 +235,7 @@ export function policyWords(choice: PolicyChoice): string {
   const days = choice.days ?? 7;
   const after = AFTER_WORDS[choice.after ?? "first_night"];
   const noShow = choice.no_show === "first_night" ? "the first night" : "the whole stay";
-  return `Free to cancel until ${days} day${days === 1 ? "" : "s"} before arrival; after that, ${after}. Not coming costs ${noShow}.`;
+  return `Free to cancel until ${days} day${days === 1 ? "" : "s"} before arrival; after that, ${after}. A no-show costs ${noShow}.`;
 }
 
 export interface DepositChoice {
@@ -270,29 +289,57 @@ export function weekdayWords(mask: number): string {
 }
 
 /**
- * What one cell of the Nights grid is, for its tone and its words: a closure first; then stays and
- * holds against the rooms there are; another calendar's hint never fills a room, it only says so.
+ * What one cell of the Nights grid is, for its tone, its mark and its words: a closure first; then stays
+ * and holds against the rooms there are; the rooms still free for direct guests (those kept, less those
+ * taken), which is the number the cell shows; another calendar's hint never fills a room, it only says so.
  */
 export type CellTone = "closed" | "full" | "some" | "held" | "free";
 
 export function cellOf(
   cell: NightsGrid["rooms"][number]["cells"][number],
   units: number,
-): { tone: CellTone; words: string } {
-  if (cell.closed) return { tone: "closed", words: "Closed" };
+): { tone: CellTone; words: string; mark: string } {
+  if (cell.closed) return { tone: "closed", words: "Closed", mark: "×" };
   const taken = cell.stays.length;
   const held = cell.holds.length;
   const left = Math.max(0, units - taken - held);
+  const direct = cell.kept ? Math.max(0, cell.kept - taken - held) : null;
   const parts: string[] = [];
   if (taken) parts.push(`${taken} booked`);
   if (held) parts.push(`${held} held`);
-  if (cell.kept) parts.push(`${cell.kept} kept for direct guests`);
+  if (direct !== null) parts.push(`${direct} of ${cell.kept} kept still free for direct guests`);
   if (cell.hint) parts.push(`${cell.hint} shows it taken`);
   const words = parts.length ? parts.join(" · ") : `${units} free`;
-  if (left === 0 && taken > 0 && held === 0) return { tone: "full", words };
-  if (left === 0) return { tone: "held", words };
-  if (taken || held) return { tone: "some", words: `${words} · ${left} free` };
-  return { tone: "free", words };
+  const mark = direct !== null ? String(direct) : "";
+  if (left === 0 && taken > 0 && held === 0) return { tone: "full", words, mark };
+  if (left === 0) return { tone: "held", words, mark };
+  if (taken || held) return { tone: "some", words: `${words} · ${left} free`, mark };
+  return { tone: "free", words, mark };
+}
+
+/** A season's row, as the owner reads it: "Chambre Jasmin · 19 Nov – 4 Dec · Friday and Saturday nights · 1,100.00 MAD a night". */
+export function seasonWords(
+  s: { readonly fromDate: string; readonly toDate: string; readonly weekdays: number; readonly nightly: number },
+  room: string,
+  currency: string,
+  locale?: string,
+): string {
+  const range = (() => {
+    const a = new Date(`${s.fromDate}T12:00:00Z`);
+    const b = new Date(`${s.toDate || s.fromDate}T12:00:00Z`);
+    try {
+      return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).formatRange(a, b);
+    } catch {
+      return `${s.fromDate} – ${s.toDate}`;
+    }
+  })();
+  const nights = weekdayWords(s.weekdays);
+  return [
+    room,
+    range,
+    nights.charAt(0).toUpperCase() + nights.slice(1),
+    `${formatMoney({ value: s.nightly, currency }, locale)} a night`,
+  ].join(" · ");
 }
 
 /**

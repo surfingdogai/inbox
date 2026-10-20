@@ -9,7 +9,9 @@
   white-space: nowrap;
 }
 
+/* Positioned, so what it holds for screen readers stays inside its scroll and the page never scrolls sideways. */
 .nights-scroll {
+  position: relative;
   overflow-x: auto;
   margin: 0 -4px;
   padding: 0 4px 4px;
@@ -94,8 +96,21 @@
 .nights-key {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: 4px 14px;
   align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nights-key li {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.night-num {
+  font-weight: 500;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
 }
 .night-dot {
   display: inline-block;
@@ -117,4 +132,10 @@
 
 .stay-today .today-line {
   grid-template-columns: 74px minmax(0, 1fr) auto;
+}
+
+/* A tax or a fee: a row of its own, thin-lined. */
+.fee-row {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
 }

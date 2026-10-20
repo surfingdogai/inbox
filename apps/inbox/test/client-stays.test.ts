@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import lodging from "../../../packages/spec/vocab/lodging.json";
+import { stayActions } from "../client/src/lib/actions";
+import { ownerLocale } from "../client/src/lib/geo";
 import {
   AMENITY_WORDS,
   addDays,
@@ -15,10 +17,11 @@ import {
   quoteSums,
   RULE_WORDS,
   type StayQuoteView,
+  seasonWords,
   weekdayWords,
 } from "../client/src/lib/property";
 import { KINDS, kindOf, wizardPreset, wizardRoomBodies } from "../client/src/lib/setup";
-import { stayDates } from "../client/src/lib/stays";
+import { stayDates, stayTitle } from "../client/src/lib/stays";
 
 /**
  * The owner app's words and sums for a place to stay (S1–S16): every choice a chooser, each word for
@@ -48,7 +51,7 @@ describe("the owner app for a place to stay", () => {
     const flexible = policyChoiceOf("free_until:7:first_night:full");
     expect(flexible).toEqual({ preset: "free_until", days: 7, after: "first_night", no_show: "full" });
     expect(policyWords(flexible)).toBe(
-      "Free to cancel until 7 days before arrival; after that, the first night. Not coming costs the whole stay.",
+      "Free to cancel until 7 days before arrival; after that, the first night. A no-show costs the whole stay.",
     );
     expect(policyWords(policyChoiceOf("non_refundable"))).toBe("Non-refundable: cancelling costs the whole stay.");
     expect(policyChoiceOf("custom")).toEqual({ preset: "custom" });
@@ -72,13 +75,27 @@ describe("the owner app for a place to stay", () => {
       ...o,
     });
     expect(cellOf(cell({ closed: true, stays: [{ item_id: "a", reference: "A" }] }), 2).tone).toBe("closed");
-    expect(cellOf(cell({ hint: "Airbnb" }), 1)).toEqual({ tone: "free", words: "Airbnb shows it taken" });
+    expect(cellOf(cell({ hint: "Airbnb" }), 1)).toEqual({ tone: "free", words: "Airbnb shows it taken", mark: "" });
     expect(cellOf(cell({ stays: [{ item_id: "a", reference: "A" }] }), 1).tone).toBe("full");
     expect(cellOf(cell({ holds: [{ item_id: "b", minutes_left: 12 }] }), 1).tone).toBe("held");
-    expect(cellOf(cell({ stays: [{ item_id: "a", reference: "A" }], kept: 1 }), 3)).toEqual({
+    // The number a cell shows is the rooms still free for direct guests: those kept, less those taken.
+    expect(cellOf(cell({ stays: [{ item_id: "a", reference: "A" }], kept: 2 }), 3)).toEqual({
       tone: "some",
-      words: "1 booked · 1 kept for direct guests · 2 free",
+      words: "1 booked · 1 of 2 kept still free for direct guests · 2 free",
+      mark: "1",
     });
+    expect(cellOf(cell({ kept: 2 }), 3).mark).toBe("2");
+    expect(cellOf(cell({ closed: true }), 3).mark).toBe("×");
+    expect(
+      seasonWords(
+        { fromDate: "2026-11-19", toDate: "2026-12-04", weekdays: 48, nightly: 110_000 },
+        "Chambre Jasmin",
+        "MAD",
+        "en-MA",
+      ).replace(/\s/g, " "),
+    ).toMatch(
+      /^Chambre Jasmin · (19 Nov – 4 Dec|Nov 19 – Dec 4) · Friday and Saturday nights · .*1,100\.00.* a night$/,
+    );
     expect(weekdayWords(127)).toBe("every night");
     expect(weekdayWords(48)).toBe("Friday and Saturday nights");
     expect(weekdayWords(1 | 4)).toBe("Mon, Wed");
@@ -86,6 +103,35 @@ describe("the owner app for a place to stay", () => {
     // A stay's dates as the reader's locale writes a range, never shifted by a zone.
     expect(stayDates("2026-12-12", "2026-12-15", "es")).toBe("12–15 dic");
     expect(stayDates("2026-11-03", "2026-11-06", "en-US").replace(/\s/g, " ")).toBe("Nov 3 – 6");
+  });
+
+  it("offers a stay's owner only what fits where it stands, in the business's own way of writing", () => {
+    const t = (...events: string[]) => events.map((event) => ({ event, label: event }));
+    // A request: quoted from the composer, asked about or declined; nothing booked to cancel.
+    expect(
+      stayActions("requested", t("quote", "request_info", "decline", "record_cancel", "cancel_by_property")).map(
+        (x) => x.event,
+      ),
+    ).toEqual(["request_info", "decline"]);
+    // Agreed: cancellations, never the generic quote form.
+    expect(
+      stayActions("confirmed", t("quote", "propose_change", "record_cancel", "cancel_by_property")).map((x) => x.event),
+    ).toEqual(["propose_change", "record_cancel", "cancel_by_property"]);
+    // One locale for the owner app: English as the business's country writes it.
+    expect(ownerLocale("America/Mexico_City")).toBe("en-MX");
+    expect(ownerLocale("Asia/Tokyo")).toBe("en-JP");
+    expect(ownerLocale("UTC")).toBeUndefined();
+    // A stay's title from what it is, never a stored string with ISO dates.
+    const title = stayTitle(
+      {
+        propertyId: "p",
+        checkIn: "2026-11-03",
+        checkOut: "2026-11-06",
+        rooms: [{ roomTypeName: "Suite Atlas", adults: 2, childrenAges: [], extras: [] }],
+      } as never,
+      "en-GB",
+    ).replace(/\s/g, " ");
+    expect(title).toMatch(/^Suite Atlas · 3 ?– ?6 Nov · 3 nights$/);
   });
 
   it("keeps rooms for direct guests only once they are closed on the other channels", () => {
@@ -144,6 +190,21 @@ describe("the owner app for a place to stay", () => {
         { property_id: "p1", name: "Garden room", units: 3, capacity: { adults: 2, children: 0, total: 2 }, sort: 0 },
         { property_id: "p1", name: "Family room", units: 1, capacity: { adults: 4, children: 0, total: 4 }, sort: 1 },
       ],
+      prices: [null, null],
     });
+    // A price a night on a room, in its currency's own unit: the first request is quoted in one press.
+    expect(
+      wizardRoomBodies(
+        [
+          { id: 1, name: "Washitsu, garden side", units: "2", sleeps: "2", price: "18,500" },
+          { id: 2, name: "Hanare", units: "1", sleeps: "3", price: "" },
+        ],
+        "p1",
+        "JPY",
+      ),
+    ).toMatchObject({ prices: [18_500, null] });
+    expect(
+      wizardRoomBodies([{ id: 1, name: "Riad room", units: "1", sleeps: "2", price: "abc" }], "p1", "MAD"),
+    ).toEqual({ problem: '"abc" is not a price a night for Riad room.' });
   });
 });

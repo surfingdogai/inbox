@@ -26,7 +26,11 @@ export const Route = createFileRoute("/settings/availability")({
   component: AvailabilityPage,
 });
 
-/** When the business takes bookings: its time zone, the weekly hours, a service's own hours, and closed days. */
+/**
+ * When the business takes bookings: its time zone, the weekly hours, a service's own hours, and closed
+ * days. A place to stay takes nights, not hours: it sees its Nights and its time zone, and the hours only
+ * once it has a service booked by the hour (a spa, a table).
+ */
 function AvailabilityPage() {
   const availability = useAvailability();
   const services = useServices();
@@ -69,6 +73,24 @@ function AvailabilityPage() {
   const editorKey = `${scope}:${unset}:${JSON.stringify(weekly)}`;
   const sources = settings.data?.doc.setup.sources;
   const hoursNote = scope ? null : sourceNote(sources, "hours");
+
+  if (stays && active.length === 0) {
+    return (
+      <>
+        {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
+        <NightsCard setup={stays} />
+        <section className="card glass stack">
+          <ZoneChoice
+            key={a.timezone}
+            saved={a.timezone}
+            hours={null}
+            onSaved={(zone) => setNotice(`Time zone saved: ${cityOf(zone)}.`)}
+          />
+          <p className="hint">A place to stay takes nights, not hours. Close nights above.</p>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>

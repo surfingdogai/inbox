@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { countsFrom } from "./filters";
+import { ownerLocale } from "./geo";
 import type {
   AddFeedBody,
   Closure,
@@ -174,6 +175,11 @@ export function useSaveSettings() {
 
 export function useProfile() {
   return useQuery({ queryKey: qk.profile, queryFn: api.profile, staleTime: 60_000 });
+}
+
+/** The owner app's locale: English as it is written where the business is (`ownerLocale`). */
+export function useOwnerLocale(): string | undefined {
+  return ownerLocale(useProfile().data?.timezone);
 }
 
 export function useSaveProfile() {
