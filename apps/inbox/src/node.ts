@@ -21,7 +21,13 @@ import {
   type MailOut,
   resendMailOut,
 } from "@surfingdog/platform";
-import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platform/node";
+import {
+  backupDatabase,
+  inspectDatabase,
+  nodeSnapshot,
+  nodeSqliteClient,
+  pinnedFetch,
+} from "@surfingdog/platform/node";
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
@@ -64,9 +70,25 @@ import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
  *   node server.mjs import-receipt-keys <file>
  *                                      take in the receipt-keys.json of a download, sealed with this
  *                                      instance's INBOX_SECRET_KEY, so receipts are signed as before
+ *   node server.mjs backup <file>      a full copy of the database as it is now, while it serves;
+ *                                      never migrated first, and never over a file that exists
+ *   node server.mjs check-db <file>    whether a file is a sound inbox database, before a restore;
+ *                                      it opens no instance database at all
  */
 const file = process.env.INBOX_DB ?? path.join(process.cwd(), "data", "inbox.db");
 const command = process.argv[2];
+if (command === "check-db") {
+  // A file to restore from, looked at before anything is done with it: it is not the instance's
+  // database, so none is opened, created or migrated here.
+  const target = process.argv[3];
+  if (!target) {
+    console.error("usage: check-db <file>");
+    process.exit(2);
+  }
+  const report = inspectDatabase(path.resolve(target));
+  console.log(JSON.stringify(report));
+  process.exit(report.ok ? 0 : 1);
+}
 if (command) {
   const refusal = commandDatabaseRefusal(file, process.env.INBOX_DB, command);
   if (refusal) {
@@ -81,6 +103,23 @@ const db = createDb(client);
 const publicUrl = publicUrlFrom(process.env.INBOX_PUBLIC_URL);
 const from = senderFrom(process.env.MAIL_FROM, process.env.MAIL_FROM_NAME);
 
+if (command === "backup") {
+  // Before the migrations, on purpose: a backup taken by a newer version before an update must be
+  // the database exactly as the running version left it, or rolling back would restore the new one.
+  const target = process.argv[3];
+  if (!target) {
+    console.error("usage: backup <file>");
+    process.exit(2);
+  }
+  try {
+    const report = backupDatabase(client, path.resolve(target));
+    console.log(JSON.stringify({ file: path.resolve(target), ...report }));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  process.exit(0);
+}
 if (command) {
   await ensureMigrated(db.client, MIGRATIONS);
   // Seeds confirm items, and a confirmed item earns a receipt when the host can sign one.
@@ -176,7 +215,7 @@ if (command) {
     }
   } else {
     console.error(
-      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping, apply-plan or import-receipt-keys`,
+      `unknown command ${command}; use create-owner-key, set-owner-email, seed-demo, seed-showcase, seed-surfingdog, network-ping, apply-plan, import-receipt-keys, backup or check-db`,
     );
     process.exit(2);
   }

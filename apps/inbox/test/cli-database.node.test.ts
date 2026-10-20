@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createDb, MIGRATIONS } from "@surfingdog/core";
@@ -64,6 +64,47 @@ describe("a command's database", () => {
       expect(named.code).toBe(0);
       expect(named.err).toContain(`database: ${file}`);
       expect(named.out.trim()).toMatch(/^sdi_own_/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("backup and check-db", () => {
+  it("back up the database as it is, migrating nothing, and look at a file before a restore", {
+    timeout: 120_000,
+  }, async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "inbox-backup-"));
+    try {
+      const file = path.join(dir, "inbox.db");
+      const client = nodeSqliteClient(file);
+      await runMigrations(createDb(client).client, MIGRATIONS);
+      // As an older version would have left it: the newest migration not applied yet.
+      const newest = Math.max(...MIGRATIONS.map((m) => m.version));
+      await client.query({ sql: "DELETE FROM migrations WHERE version = ?", params: [newest], method: "run" });
+      client.close();
+
+      const target = path.join(dir, "backup.db");
+      const backup = await run(["backup", target], dir, { INBOX_DB: file });
+      expect(backup.code).toBe(0);
+      expect(JSON.parse(backup.out)).toMatchObject({ file: target, ok: true, migration: newest - 1, owner: false });
+      // Neither the database nor its copy was migrated by the command.
+      const check = await run(["check-db", target], dir, { INBOX_DB: undefined });
+      expect(check.code).toBe(0);
+      expect(JSON.parse(check.out)).toMatchObject({ ok: true, migration: newest - 1 });
+      expect((await run(["check-db", file], dir, {})).out).toContain(`"migration":${newest - 1}`);
+
+      // A second backup to the same file is refused; a file that is no database is named as such.
+      const again = await run(["backup", target], dir, { INBOX_DB: file });
+      expect(again.code).toBe(1);
+      expect(again.err).toContain("exists already");
+      const bogus = path.join(dir, "bogus.db");
+      writeFileSync(bogus, "not a database, only words");
+      const refused = await run(["check-db", bogus], dir, {});
+      expect(refused.code).toBe(1);
+      expect(JSON.parse(refused.out)).toMatchObject({ ok: false, problem: "it is not an SQLite database" });
+      // check-db opens no instance database: none is made where it runs.
+      expect(existsSync(path.join(dir, "data"))).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
