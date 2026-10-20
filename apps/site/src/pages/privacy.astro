@@ -14,6 +14,16 @@
 // check against /phone/latest.json, and what stays on the phone.
 import Layout from "../layouts/Layout.astro";
 import { COMPANY_LINE } from "../lib/company";
+import {
+  GOOGLE_LIMITED_USE_AROUND,
+  GOOGLE_PERMISSIONS_URL,
+  GOOGLE_POLICY_NAME,
+  GOOGLE_POLICY_URL,
+  TURNSTILE_ADDENDUM_NAME,
+  TURNSTILE_ADDENDUM_URL,
+  TURNSTILE_FORMS,
+  TURNSTILE_NOTE_AROUND,
+} from "../lib/disclosures";
 import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
@@ -134,6 +144,57 @@ const UPDATED = "27 October 2026";
         )
       }
 
+      <h2 class="h-section" id="google-h">Google Calendar in your inbox</h2>
+      <p>
+        You can connect your Google Calendar in Settings → Integrations → Calendar. This section is about inboxes we
+        host, and our own, which connect through Surfing Dog Inbox's Google sign-in. An inbox you run yourself uses a
+        Google sign-in you set up.
+      </p>
+      <ul>
+        <li>
+          <b>What the inbox asks Google for.</b> Which Google account it is (Google's own id for it, and its email
+          address); when you are busy on your main calendar, as start and end times only, never what an event is
+          called, who is in it or where; and permission to see and change events on calendars you own, as Google's
+          screen puts it. The inbox uses that permission only to add, move and remove the events it made, and to read
+          your main calendar's name and time zone, to show you which calendar is connected. Nothing else: not your
+          other events, your contacts or your mail.
+        </li>
+        <li>
+          <b>What it does with it.</b> Your inbox never offers customers or their assistants a time you are busy. When
+          you confirm a booking, your inbox adds it to your calendar (the service, the customer's name, the time, and a
+          link to the booking in your inbox), and moves or removes it when the booking changes or is cancelled. It only
+          ever changes events it added itself.
+        </li>
+        <li>
+          <b>What it keeps, and where.</b> In your inbox's own database: the account's id and address, the calendar's
+          name, your busy times for about the next three months (replaced each time it reads them), and the id of each
+          event it added. Google's access is kept encrypted with your inbox's own key, never shown to anyone and never
+          sent anywhere but Google. On an inbox we host, this database and its backups are in the European Union.
+        </li>
+        <li>
+          <b>Who sees it.</b> You, in Settings, and an AI you connect to your own inbox, which sees what you see there.
+          Your busy times, the account and the events' ids stay in your inbox: none of it goes to our network, and no
+          other company gets it, except the companies that host an inbox for us, as the
+          <a class="link" href="/hosted/processing/">processing agreement</a> says. Nobody at Surfing Dog reads it,
+          unless you ask us to for help, to keep the service secure, or because the law requires it. We never sell it,
+          use it for advertising, or use it to train AI models. The times your inbox still offers, which leave out when
+          you are busy, are public: anyone, their assistants, and our Search when it carries a booking request can read
+          them, so the gaps show when you are not free during your bookable hours. Search passes them on and keeps none.
+        </li>
+        <li>
+          <b>Taking it back.</b> Disconnect in Settings → Integrations: your inbox asks Google to take the access back
+          at once, and deletes the account, the busy times and the events' ids; the bookings it already added stay in
+          your calendar, as your own entries. If Google does not answer just then, the inbox still deletes its copy of
+          the access, but Google may go on listing it: you can remove it there at any time, at
+          <a class="link" href={GOOGLE_PERMISSIONS_URL} rel="noopener">your Google Account's permissions</a>. When an
+          inbox we host is closed, it is deleted with the rest of the inbox, as the
+          <a class="link" href="/hosted/processing/">processing agreement</a> says.
+        </li>
+      </ul>
+      <p>
+        {GOOGLE_LIMITED_USE_AROUND.before}<a class="link" href={GOOGLE_POLICY_URL} rel="noopener">{GOOGLE_POLICY_NAME}</a>{GOOGLE_LIMITED_USE_AROUND.after}
+      </p>
+
       <h2 class="h-section">This website</h2>
       <p>
         No advertising or tracking pixels, and no cookie banner, because there is nothing to consent to. We count visits
@@ -142,6 +203,10 @@ const UPDATED = "27 October 2026";
         Our servers keep technical logs to keep the site up and stop abuse; what they hold, and when an IP address is
         among it, is under <a class="link" href="#search-h">Search</a> below. Cloudflare sits in front of the site and
         keeps its own logs for the same reason.
+      </p>
+      <p id="bot-check">
+        On app.surfingdog.ai, the forms for {TURNSTILE_FORMS} are protected from bots.
+        {TURNSTILE_NOTE_AROUND.before}<a class="link" href={TURNSTILE_ADDENDUM_URL} rel="noopener">{TURNSTILE_ADDENDUM_NAME}</a>{TURNSTILE_NOTE_AROUND.after}
       </p>
       <p>
         If you write to us, we keep your message and email address so we can answer, and use them
@@ -242,6 +307,27 @@ const UPDATED = "27 October 2026";
           <b>On the phone</b>, what the app keeps is encrypted with a key in the phone's Android Keystore, and is never
           backed up. Remove an inbox from the phone in the app's Settings, or uninstall the app, and it is
           gone.
+        </li>
+      </ul>
+
+      <h2 class="h-section" id="outreach">Writing to businesses</h2>
+      <p>
+        Now and then we write to a business by email about Surfing Dog Inbox: one email, written for that business, and
+        at most one more if it does not answer. We write only to companies, at an address they publish for their
+        business on their own website, never to consumers, and we never buy or rent lists. Each email says where we
+        found the address and how to stop us writing.
+      </p>
+      <ul>
+        <li>
+          <b>What we keep.</b> The business's name and website, the address we wrote to, what its own site says that
+          the email speaks of, when we wrote and what we sent, and any reply, so that we answer and never write twice.
+          Basis: our legitimate interest in telling a business about a service that fits what its own website already
+          does.
+        </li>
+        <li>
+          <b>Stopping it.</b> Reply "stop", or write to privacy@surfingdog.ai, and we never write again. We then keep
+          only the address and the website on our list of those we must not write to, so that we do not write by
+          mistake. You can also object, and use the rights below, at any time.
         </li>
       </ul>
 

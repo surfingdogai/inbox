@@ -389,6 +389,11 @@ kbd {
   line-height: var(--lh-heading);
   letter-spacing: -0.016em;
 }
+.h-section[id],
+p[id] {
+  /* Anchor jumps land below the sticky nav. */
+  scroll-margin-top: 88px;
+}
 /* One card heading for the whole site: every card, every step. */
 .h-card {
   margin: 0;
