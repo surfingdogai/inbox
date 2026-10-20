@@ -605,6 +605,8 @@ export interface KnownLink {
   readonly ref: string;
   readonly externalId: string | null;
   readonly itemId: string;
+  /** When it was paid, for a link the inbox follows after payment (`orderState`): a shop may show old orders no more. */
+  readonly paidAt?: number | null | undefined;
 }
 
 /** What a platform's request said, once its signature (or the platform itself) vouched for it. */
@@ -853,6 +855,11 @@ export interface ConnectorDefinition {
    * the inbox remove it: "Remove the key in WooCommerce → Settings → Advanced → REST API".
    */
   readonly disconnectNote?: string | undefined;
+  /**
+   * What a connection in test mode is called on its row, in the platform's words: "test key" (the
+   * default) for a payment platform's test key, "development store" for a shop that takes only test orders.
+   */
+  readonly testLabel?: string | undefined;
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**

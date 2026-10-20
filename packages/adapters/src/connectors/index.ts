@@ -4,6 +4,7 @@ import { caldavConnector } from "./caldav/index";
 import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { mollieConnector } from "./mollie";
+import { shopifyConnector } from "./shopify/index";
 import { stripeConnector } from "./stripe";
 
 export { AUTO as CALCOM_AUTO, CALCOM_API, calcomConnector, calcomForm } from "./calcom";
@@ -26,6 +27,15 @@ export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } fr
 export { ICS_PRESETS, icsConnector, icsForm } from "./ics";
 export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
+export {
+  SHOPIFY_API_VERSION,
+  SHOPIFY_HOOK_FIELDS,
+  SHOPIFY_SCOPES,
+  SHOPIFY_TOPICS,
+  shopDomainOf,
+  shopifyConnector,
+  shopifyForm,
+} from "./shopify/index";
 export {
   STRIPE_API,
   STRIPE_EVENTS,
@@ -80,5 +90,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    shopifyConnector(opts.oauth?.shopify ?? null),
   ];
 }

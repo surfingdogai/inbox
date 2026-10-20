@@ -200,10 +200,9 @@ export const GALLERY: readonly CardSpec[] = [
   {
     id: "shopify",
     title: "Shopify",
-    line: "Catalogue in, quotes become orders",
+    line: "Catalogue in, paid at your checkout",
     group: "shops",
     industries: ["shops", "cafes", "bakeries"],
-    building: true,
     ways: [
       { kind: "shopify", preset: null, label: "Your app's keys" },
       { kind: "shopify", preset: "oauth", label: "Sign in with Shopify" },
