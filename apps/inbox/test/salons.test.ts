@@ -79,7 +79,7 @@ async function salon() {
 
 async function mcp(app: ReturnType<typeof createInbox>["app"]) {
   const transport = new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
-    fetch: (input: string | URL, init?: RequestInit) => app.request(String(input), init),
+    fetch: async (input: string | URL, init?: RequestInit): Promise<Response> => app.request(String(input), init),
   });
   const client = new Client({ name: "test-agent", version: "0" });
   await client.connect(transport);
