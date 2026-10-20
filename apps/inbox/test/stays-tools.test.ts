@@ -109,6 +109,13 @@ describe("a place to stay's doors", () => {
       s.owner("POST", `/v1/owner/items/${made.view.item.id}/transitions`, { event: "quote", input: { from: "rates" } }),
     );
     expect(quoted.view.item.payload.quote.lines[0]?.label).toMatch(/3 noches/);
+    // Its email, and the page behind the email's link, speak Spanish too.
+    await s.drain();
+    const mail = s.mail.sent.find((m) => m.to.includes("itzel@example.org"));
+    const link = mail?.text.match(/https:\/\/\S+\/c\/\S+/)?.[0] ?? "";
+    const page = await (await s.inbox.app.request(new Request(link, { headers: { accept: "text/html" } }))).text();
+    expect(page).toContain('lang="es"');
+    expect(page).toContain("Reservar con obligación de pago");
   });
 
   it("tells the owner of a stay's moments in their words", async () => {
