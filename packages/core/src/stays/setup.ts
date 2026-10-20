@@ -17,6 +17,7 @@ import type {
   UpsertRatePlanInput,
   UpsertRoomTypeInput,
 } from "./inputs";
+import { businessZoneAndCurrency } from "./lang";
 import { listProperties, propertyFor, readProperty, readSetup } from "./store";
 
 /**
@@ -314,11 +315,11 @@ async function freeLocation(db: Db, name: string, now: number): Promise<string> 
     method: "all",
   });
   if (rows[0]?.[0]) return String(rows[0][0]);
-  const settings = await readSettings(db);
+  const { timezone } = await businessZoneAndCurrency(db, await readSettings(db));
   const id = ulid(now);
   await db.client.query({
     sql: "INSERT INTO locations (id, name, timezone, address, created_at) VALUES (?, ?, ?, NULL, ?)",
-    params: [id, name, settings.business.timezone ? knownZone(settings.business.timezone) : null, now],
+    params: [id, name, timezone ? knownZone(timezone) : null, now],
     method: "run",
   });
   return id;

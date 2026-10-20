@@ -4,7 +4,7 @@ import type { ScheduledItem, ScheduledOutcome, ScheduleSource, WantedLink } from
 import { shortRef } from "../customer/format";
 import type { Db } from "../db";
 import type { Item, PayloadOf } from "../domain/types";
-import { items, parties } from "../schema/tables";
+import { items } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { formatMinor } from "../util/money";
 import { hasEventListeners } from "../write/common";
@@ -14,7 +14,8 @@ import { refundStatements } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
-import { stayCopy, stayLang } from "./copy";
+import { stayCopy } from "./copy";
+import { guestLang, partyLocale } from "./lang";
 import { nightsOf } from "./nights";
 import { localeOf } from "./price";
 import { readProperty } from "./store";
@@ -38,15 +39,6 @@ async function loadStay(db: Db, itemId: string): Promise<Item | null> {
   return row && row.type === "stay" ? rowToItem(row) : null;
 }
 
-async function localeOfParty(db: Db, partyId: string): Promise<string | null> {
-  const [party] = await db.orm
-    .select({ contact: parties.contact, locale: parties.locale })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  const c = (party?.contact ?? {}) as { locale?: string };
-  return c.locale ?? party?.locale ?? null;
-}
-
 function purposeOf(id: string): WantedLink["purpose"] {
   if (id.startsWith("difference")) return "difference";
   if (id === "balance") return "balance";
@@ -59,9 +51,9 @@ export const staySchedules: ScheduleSource = {
     if (!item) return null;
     const p = item.payload as StayPayload;
     const property = await readProperty(db, p.propertyId);
-    const locale = await localeOfParty(db, item.partyId);
     const settings = await readSettings(db);
-    const lang = stayLang(locale ?? settings.stays.languages[0] ?? settings.business.languages[0]);
+    const locale = await partyLocale(db, item.partyId);
+    const lang = await guestLang(db, { locale, settings });
     const c = stayCopy(lang);
     const ref = shortRef(item.id);
     const nights = nightsOf(p.checkIn, p.checkOut).length;

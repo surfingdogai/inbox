@@ -21,8 +21,9 @@ import { fromZod, WriteError } from "../write/errors";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 import { allotmentsFor } from "./claims";
-import { type StayLang, stayLang } from "./copy";
+import type { StayLang } from "./copy";
 import * as I from "./inputs";
+import { businessZoneAndCurrency, guestLang } from "./lang";
 import { nightsOf, stayTimes } from "./nights";
 import { localeOf, quoteFromRates } from "./price";
 import {
@@ -106,8 +107,8 @@ export class StayCapabilities {
     return this.deps.connectors.definition(String(rows[0][0]))?.title ?? String(rows[0][1]);
   }
 
-  private langOf(caller: Caller, settings: Settings): StayLang {
-    return stayLang(caller.locale ?? settings.stays.languages[0] ?? settings.business.languages[0] ?? "en");
+  private langOf(caller: Caller, settings: Settings): Promise<StayLang> {
+    return guestLang(this.db, { locale: caller.locale, settings });
   }
 
   /** Where the property takes stays instead of here, filled in for these dates; null when it takes them here. */
@@ -159,7 +160,7 @@ export class StayCapabilities {
     const input = parse(I.getPropertyInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
-    return propertyPublic(setup, settings, await this.systemName(setup), this.langOf(caller, settings));
+    return propertyPublic(setup, settings, await this.systemName(setup), await this.langOf(caller, settings));
   }
 
   /** What is free for some dates and guests (`check_stay_availability`). Never stores anything. */
@@ -190,7 +191,7 @@ export class StayCapabilities {
         rooms: input.rooms,
         roomTypeId: input.room_type_id,
       },
-      this.langOf(caller, settings),
+      await this.langOf(caller, settings),
       nowOf(caller),
     );
     const instant = answer.options.some((o) => o.status === "instant");
@@ -223,7 +224,7 @@ export class StayCapabilities {
     const now = nowOf(caller);
     this.checkDates(setup, input.check_in, input.check_out, now);
     const rooms = this.roomsOf(setup, input.rooms);
-    const lang = this.langOf(caller, settings);
+    const lang = await this.langOf(caller, settings);
     const judged = await judgeStay(
       this.db,
       setup,
@@ -319,7 +320,7 @@ export class StayCapabilities {
       children,
       rooms: input.rooms.length,
     });
-    const lang = this.langOf(caller, settings);
+    const lang = await this.langOf(caller, settings);
     const now = nowOf(caller);
     // The estimate the property's rates give, for the owner's draft and the guest's page: never binding.
     let estimate: StayQuote | undefined;
@@ -404,7 +405,7 @@ export class StayCapabilities {
     await this.limitHolds(caller);
     // In connected mode the property's system is asked now, live: a hold is never made on a cache alone.
     if (setup.property.mode === "connected") await this.liveCheck(setup, input.check_in, input.check_out, now);
-    const lang = this.langOf(caller, settings);
+    const lang = await this.langOf(caller, settings);
     const judged = await judgeStay(
       this.db,
       setup,
@@ -528,7 +529,7 @@ export class StayCapabilities {
     // The new terms the guest sees before they ask: the rates' new total and what it means to pay or get back.
     if (isCustomer(c) && rooms.every((r) => r.roomTypeId)) {
       const settings = await readSettings(this.db);
-      const lang = this.langOf(c, settings);
+      const lang = await this.langOf(c, settings);
       const priced = quoteFromRates(setup, {
         checkIn: input.check_in,
         checkOut: input.check_out,
@@ -860,7 +861,7 @@ export class StayCapabilities {
       checkIn: p.checkIn,
       checkOut: p.checkOut,
       rooms,
-      lang: stayLang(settings.stays.languages[0] ?? settings.business.languages[0]),
+      lang: await guestLang(this.db, { partyId: row.partyId, settings }),
       now: nowOf(caller),
       source: "rates",
     });
@@ -949,7 +950,7 @@ export class StayCapabilities {
     const propertyId = await Setup.upsertProperty(this.db, this.secrets, caller, {
       ...(existing
         ? { id: existing.property.id }
-        : { name: ext.name, currency: ext.currency ?? settings.business.currency }),
+        : { name: ext.name, currency: ext.currency ?? (await businessZoneAndCurrency(this.db, settings)).currency }),
       connector_id: input.connector_id,
       external_id: ext.id,
     });

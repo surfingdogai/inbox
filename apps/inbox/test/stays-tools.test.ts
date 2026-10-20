@@ -80,6 +80,37 @@ describe("a place to stay's doors", () => {
     expect(ld).not.toHaveProperty("makesOffer");
   });
 
+  it("speaks the business's own language and keeps its zone, as its profile gives them", async () => {
+    const s = await setup({ name: "Casa Lua", timezone: "UTC", currency: "MXN" });
+    await ok(
+      s.owner("PUT", "/v1/owner/profile", {
+        name: "Casa Lua",
+        timezone: "America/Mexico_City",
+        currency: "MXN",
+        languages: ["es", "en"],
+      }),
+    );
+    const { room } = await casaLua(s);
+    const { rows } = await s.db.client.query({ sql: "SELECT timezone FROM locations", params: [], method: "all" });
+    expect(rows.map((r) => String(r[0]))).toEqual(["America/Mexico_City"]);
+    const day = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
+    const out = new Date(Date.now() + 43 * 86_400_000).toISOString().slice(0, 10);
+    const made = await ok<{ view: { item: { id: string } } }>(
+      s.guest("POST", "/v1/stays", {
+        check_in: day,
+        check_out: out,
+        rooms: [{ room_type_id: room, adults: 2 }],
+        contact: { name: "Itzel M.", email: "itzel@example.org" },
+        consent: true,
+      }),
+      201,
+    );
+    const quoted = await ok<{ view: { item: { payload: { quote: { lines: { label: string }[] } } } } }>(
+      s.owner("POST", `/v1/owner/items/${made.view.item.id}/transitions`, { event: "quote", input: { from: "rates" } }),
+    );
+    expect(quoted.view.item.payload.quote.lines[0]?.label).toMatch(/3 noches/);
+  });
+
   it("tells the owner of a stay's moments in their words", async () => {
     const s = await setup({ name: "Casa Lua", timezone: "America/Mexico_City", currency: "MXN" });
     await ok(s.owner("PUT", "/v1/owner/settings", { doc: { notifications: { ownerEmail: "host@example.net" } } }));

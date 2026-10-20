@@ -7,7 +7,7 @@ import { hintedNights } from "../property/hints";
 import type { StayFacts } from "../rules/evaluate";
 import { readSettings } from "../settings/schema";
 import { closedNights, insideAllotment, nightsFree } from "./claims";
-import { stayLang } from "./copy";
+import { guestLang } from "./lang";
 import { nightsOf } from "./nights";
 import { quoteFromRates } from "./price";
 import { type PropertySetup, readSetup } from "./store";
@@ -38,7 +38,13 @@ function roomsOf(setup: PropertySetup, p: StayPayload) {
 }
 
 /** The rates' quote for a stay as it stands, or null when they do not price every night. */
-export async function ratesQuote(db: Db, setup: PropertySetup, p: StayPayload, now: number): Promise<StayQuote | null> {
+export async function ratesQuote(
+  db: Db,
+  setup: PropertySetup,
+  p: StayPayload,
+  now: number,
+  partyId?: string,
+): Promise<StayQuote | null> {
   const rooms = roomsOf(setup, p);
   if (rooms.some((r) => !r.roomTypeId)) return null;
   const settings = await readSettings(db);
@@ -52,7 +58,7 @@ export async function ratesQuote(db: Db, setup: PropertySetup, p: StayPayload, n
       childrenAges: r.childrenAges,
       extras: r.extras,
     })),
-    lang: stayLang(settings.stays.languages[0] ?? settings.business.languages[0]),
+    lang: await guestLang(db, { partyId, settings }),
     now,
     source: "rates",
   });
@@ -67,7 +73,7 @@ export async function stayFacts(db: Db, item: Item, now: number): Promise<StayFa
   const rooms = roomsOf(setup, p);
   const named = rooms.every((r) => r.roomTypeId);
   const want = wantOf({ rooms, checkIn: p.checkIn, checkOut: p.checkOut });
-  const ratesCover = named && (await ratesQuote(db, setup, p, now)) !== null;
+  const ratesCover = named && (await ratesQuote(db, setup, p, now, item.partyId)) !== null;
   const free = named && (await nightsFree(db, setup, item.id, want, now)).ok;
   let nightsFreeAtOnce = false;
   if (free && setup.property.mode === "allotment")
@@ -118,6 +124,6 @@ export async function draftTerms(db: Db, item: Item, now: number): Promise<Recor
   const p = item.payload as StayPayload;
   const setup = await readSetup(db, p.propertyId);
   if (!setup) return null;
-  const q = await ratesQuote(db, setup, p, now);
+  const q = await ratesQuote(db, setup, p, now, item.partyId);
   return q ? { totalPrice: q.total, lines: q.lines, schedule: q.schedule, validThrough: q.validThrough } : null;
 }

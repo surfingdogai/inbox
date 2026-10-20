@@ -1,7 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import type { StayQuote } from "@surfingdog/spec";
 import { hasLivePayLink, hasPayLinks, payLinkStatement } from "../connectors/pay-queue";
-import { audienceFor } from "../customer/audience";
 import type { Audience } from "../customer/describe";
 import type { Db } from "../db";
 import type { Item, Money, PayloadOf } from "../domain/types";
@@ -26,7 +25,8 @@ import {
   type WantedNights,
   wantedRooms,
 } from "./claims";
-import { type StayLang, stayLang } from "./copy";
+import type { StayLang } from "./copy";
+import { guestLang } from "./lang";
 import { checkDates, nightsOf, stayTimes } from "./nights";
 import { quoteFromRates } from "./price";
 import { stayProblems } from "./problems";
@@ -228,7 +228,7 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
   }
   const setup = found;
   const zone = setup.property.timezone;
-  const lang: StayLang = stayLang((ctx.audience ?? (await audienceFor(db, { partyId: item.partyId, settings }))).lang);
+  const lang: StayLang = await guestLang(db, { partyId: item.partyId, settings });
   const effects = new Set<string>(t.effects ?? []);
   const guards = new Set<string>(t.guards ?? []);
   const _side = sideOf(caller);
