@@ -51,28 +51,37 @@ on 'command -v curl docker' && fail "the server is not fresh: curl or docker is 
 IP=$(on "hostname -I | awk '{ print \$1 }'")
 on "echo '$IP inbox.test' >>/etc/hosts"
 
-# 1. An address with no record: it stops before writing anything (and Docker is installed by then).
+# 1. An address with no record: it stops before it installs anything, Docker included.
 if on 'sh /root/install.sh --domain nowhere.invalid --email owner@example.com --yes --tls internal' >/tmp/vm-out 2>&1; then
   fail "it installed for an address with no DNS record"
 fi
 grep -q "nowhere.invalid has no DNS record yet" /tmp/vm-out || fail "no word about the missing record: $(cat /tmp/vm-out)"
+grep -q "Stopped. Nothing was installed." /tmp/vm-out || fail "it did not say nothing was installed: $(cat /tmp/vm-out)"
 on 'test ! -e /opt/inbox/.env' || fail "it wrote settings before the address was checked"
-on 'systemctl is-active docker' >/dev/null || fail "Docker was not installed and started"
-pass "refuses an address with no record, before writing anything; Docker installed from Docker's repository"
+on 'command -v docker' >/dev/null && fail "it installed Docker for an address with no record"
+pass "refuses an address with no record, before installing Docker or writing anything"
 
-# 2. The install.
-on 'sh /root/install.sh --domain inbox.test --email owner@example.com --yes --tls internal --version ci --image-file /root/inbox-image.tar' ||
-  fail "the install failed"
+# 2. The install, Docker first.
+on 'sh /root/install.sh --domain inbox.test --email owner@example.com --yes --tls internal --version ci --image-file /root/inbox-image.tar' >/tmp/vm-out 2>&1 ||
+  fail "the install failed: $(cat /tmp/vm-out)"
+on 'systemctl is-active docker' >/dev/null || fail "Docker was not installed and started"
 on 'curl -fsS -k https://inbox.test/healthz' | grep -q '"ok":true' || fail "https://inbox.test/healthz"
 [ "$(on 'stat -c "%a %u" /opt/inbox/.env')" = "600 0" ] || fail ".env is not 600 and root's"
 [ "$(on 'stat -c "%a %u" /opt/inbox/data')" = "700 10001" ] || fail "data is not 700 and uid 10001's"
+[ "$(on 'stat -c "%a %u" /opt/inbox/state')" = "700 0" ] || fail "state is not 700 and root's"
 on 'systemctl is-enabled inbox-backup.timer' >/dev/null || fail "no nightly backup"
 on 'inbox status' | grep -q 'and its database answers' || fail "inbox status"
-pass "installed: https answers, the settings are root's only, the data is the inbox's, a backup every night"
+# Its last lines hold the first sign-in, and a line to give an AI.
+grep -Eq 'or the code [0-9]{6} at https://inbox.test/login' /tmp/vm-out || fail "no first sign-in in the summary: $(tail -n 20 /tmp/vm-out)"
+grep -q 'Follow https://surfingdog.ai/install.md from Step 1' /tmp/vm-out || fail "no line for the AI in the summary"
+[ "$(on "docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' \$(cd /opt/inbox && docker compose ps -q caddy)")" = true ] ||
+  fail "Caddy's root file system is writable"
+pass "installed: https answers, the settings are root's only, the data is the inbox's, a backup every night, Caddy hardened"
 
-# 3. Signing in, with no email set up: the code is in the log.
-on "curl -fsS -k -X POST https://inbox.test/auth/magic-link -H 'content-type: application/json' -d '{\"email\":\"owner@example.com\"}'" >/dev/null
-on 'inbox sign-in' | grep -Eq 'Your sign-in code: [0-9]{6}' || fail "inbox sign-in shows no code"
+# 3. Signing in, with no email set up: `inbox sign-in` asks the inbox for the email, and reads it.
+on 'inbox sign-in' >/tmp/vm-out 2>&1 || fail "inbox sign-in: $(cat /tmp/vm-out)"
+grep -Eq 'Your sign-in code: [0-9]{6}' /tmp/vm-out || fail "inbox sign-in shows no code: $(cat /tmp/vm-out)"
+grep -q 'Or open: https://inbox.test/auth/verify?token=' /tmp/vm-out || fail "inbox sign-in shows no link: $(cat /tmp/vm-out)"
 KEY=$(on 'inbox owner-key ci' | head -n 1)
 case "$KEY" in sdi_own_*) ;; *) fail "inbox owner-key printed '$KEY'" ;; esac
 opens() { on "curl -sS -k -o /dev/null -w '%{http_code}' -H 'authorization: Bearer $1' https://inbox.test/v1/owner/settings" 2>/dev/null || true; }
@@ -87,6 +96,15 @@ on 'grep -qx INBOX_TLS=internal /opt/inbox/.env' || fail "the second run changed
 [ "$(opens "$KEY")" = 200 ] || fail "the key stopped working after a second run"
 pass "a second run keeps the key, the certificate and the data"
 
+# 4b. The address check through the inbox's own Caddy (as behind NAT, where it holds port 80), and
+# plain HTTP sent on to HTTPS.
+# shellcheck disable=SC2016  # the $? is the server's own shell's
+on 'SDI_INSTALL_LIB=1 sh -c ". /root/install.sh; DOMAIN=inbox.test; DIR=/opt/inbox; probe_start; probe_address 127.0.0.1; rc=\$?; probe_end; exit \$rc"' ||
+  fail "the address check's token did not come back through Caddy"
+on 'test ! -e /opt/inbox/probe/token' || fail "the token was left behind"
+[ "$(on "curl -sS -o /dev/null -w '%{http_code}' http://inbox.test/login")" = 308 ] || fail "plain HTTP is not sent on to HTTPS"
+pass "the address check answers through Caddy, and plain HTTP goes to HTTPS"
+
 # 5. A backup, then an update that does not start: rolled back, nothing lost.
 on 'inbox backup' >/dev/null || fail "inbox backup"
 BACKUP=$(on 'ls -1 /opt/inbox/data/backups/inbox-*.db | tail -n 1')
@@ -95,7 +113,8 @@ on 'docker create --name broken ghcr.io/surfingdogai/inbox:ci >/dev/null &&
   docker commit --change "CMD [\"node\", \"-e\", \"process.exit(3)\"]" broken ghcr.io/surfingdogai/inbox:0.0.0-broken >/dev/null &&
   docker rm broken >/dev/null' 
 if on 'inbox update 0.0.0-broken' >/tmp/vm-out 2>&1; then fail "an update that does not start was kept"; fi
-grep -q "Rolled back to ci; nothing was lost" /tmp/vm-out || fail "no rollback: $(cat /tmp/vm-out)"
+grep -q "Back on ci; nothing was lost" /tmp/vm-out || fail "no rollback: $(cat /tmp/vm-out)"
+on 'ls /opt/inbox/state/update-*-0.0.0-broken.log' >/dev/null || fail "no log of the broken version in state/"
 on 'grep -qx INBOX_VERSION=ci /opt/inbox/.env' || fail "the version was not put back"
 [ "$(opens "$KEY")" = 200 ] || fail "the key stopped working after the rollback"
 pass "an update that does not start is rolled back, with the data as it was"

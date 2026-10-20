@@ -3,16 +3,17 @@
 # ./data, one SQLite file you can copy.
 #
 #   cp .env.example .env            then set INBOX_DOMAIN, INBOX_OWNER_EMAIL and INBOX_SECRET_KEY
-#   mkdir -p data && sudo chown 10001:10001 data
+#   mkdir -p data probe && sudo chown 10001:10001 data
 #   docker compose up -d
 #
 # The installer (surfingdog.ai/install.sh) writes this same file to /opt/inbox and does those steps
-# for you. Only Caddy is reachable from outside, on 80 and 443; the inbox listens inside.
+# for you; `sudo inbox update` brings it up to date with each release. Only Caddy is reachable from
+# outside, on 80 and 443; the inbox listens inside. Both images are pinned: a release changes them.
 name: inbox
 
 services:
   inbox:
-    image: ${INBOX_IMAGE:-ghcr.io/surfingdogai/inbox}:${INBOX_VERSION:-latest}
+    image: ${INBOX_IMAGE:-ghcr.io/surfingdogai/inbox}:${INBOX_VERSION:?set INBOX_VERSION in .env, like 0.1.0}
     restart: unless-stopped
     init: true
     env_file: .env
@@ -34,7 +35,7 @@ services:
         max-file: "5"
 
   caddy:
-    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    image: caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
     restart: unless-stopped
     depends_on:
       - inbox
@@ -47,8 +48,20 @@ services:
       INBOX_TLS: ${INBOX_TLS:-acme}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./probe:/srv/probe:ro
       - ./caddy/data:/data
       - ./caddy/config:/config
+    # The one container the internet reaches: no root file system to write to, and of root's
+    # powers only binding ports 80 and 443.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
     logging:
       driver: json-file
       options:

@@ -6,14 +6,17 @@
 # For a fresh Ubuntu or Debian server, amd64 or arm64, that a subdomain of your business's domain
 # points at (an A record such as inbox.yourbusiness.com → this server). In order, it:
 #
-#   1. checks the system, and installs Docker from Docker's own apt repository if it is missing;
-#   2. asks two things: the address your inbox answers at, and the owner's email address;
-#   3. checks that the address points at this server;
+#   1. checks the system, and asks two things: the address your inbox answers at, and the owner's
+#      email address;
+#   2. checks, before it installs anything, that ports 80 and 443 are free, that the address has a
+#      DNS record, and which release is the newest;
+#   3. installs Docker from Docker's own apt repository if it is missing, and checks that the address
+#      leads to this server;
 #   4. writes /opt/inbox: the settings (.env, readable by root only, with a secret key it generates),
 #      a Compose file, and Caddy's site file; your data goes in /opt/inbox/data;
 #   5. starts the inbox behind Caddy, which gets the HTTPS certificate on its own;
 #   6. installs the `inbox` command (status, update, backup, restore) and a nightly backup;
-#   7. tells you the next step: signing in, then email.
+#   7. tells you the next step: your first sign-in, then email.
 #
 # Run it again whenever you like: it keeps your data, your secret key and your version, and changes
 # only what you change. `sudo inbox update` moves to a new version, and rolls back if it does not
@@ -44,7 +47,8 @@ IMAGE_FILE=""
 TLS=""
 YES=0
 SKIP_DNS=0
-CADDY_IMAGE="caddy:2-alpine"
+# The same Caddy as the Compose file's, pinned: it answers the address check before anything is installed.
+CADDY_IMAGE="caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f"
 INBOX_UID=10001
 RELEASES="https://github.com/surfingdogai/inbox/releases"
 OS_RELEASE="${SDI_OS_RELEASE:-/etc/os-release}"
@@ -52,6 +56,11 @@ BIN_DIR="${SDI_BIN_DIR:-/usr/local/bin}"
 SYSTEMD_DIR="${SDI_SYSTEMD_DIR:-/etc/systemd/system}"
 EXISTING=0
 HTTPS=0
+# A --version for an inbox already installed here: `inbox update` moves to it, with a backup and a rollback.
+WANT_VERSION=""
+# The addresses the name points at that are not this server's own: the probe says where they lead.
+DNS_OTHERS=""
+PROBE_TOKEN=""
 
 if [ -t 1 ]; then
   B=$(printf '\033[1m') D=$(printf '\033[2m') G=$(printf '\033[32m') Y=$(printf '\033[33m') R=$(printf '\033[31m') N=$(printf '\033[0m')
@@ -249,6 +258,7 @@ install_docker() {
   chmod a+r /etc/apt/keyrings/docker.asc
   printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
     "$(dpkg --print-architecture)" "$family" "$codename" >/etc/apt/sources.list.d/docker.list
+  chmod 644 /etc/apt/sources.list.d/docker.list
   DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
   apt_install docker-ce docker-ce-cli containerd.io docker-compose-plugin
   systemctl enable --now docker >/dev/null 2>&1
@@ -293,80 +303,149 @@ is_private() {
 # What to point the record at: this server's public addresses, if its interfaces have any.
 public_addresses() { local_addresses | while read -r a; do is_private "$a" || printf '%s\n' "$a"; done; }
 
-# dns_verdict "RESOLVED" "LOCAL": none (no record), here (it points at this server), or elsewhere.
+one_line() { printf '%s' "$1" | tr '\n' ' ' | sed 's/ $//'; }
+
+# dns_verdict "RESOLVED" "LOCAL": none (no record), here (every address it points at is this
+# server's own), or else the addresses that are not, space-separated. Let's Encrypt may check any of
+# them (IPv6 first), so one stale AAAA record elsewhere is enough to fail the certificate.
 dns_verdict() {
+  local others="" a l mine
   [ -n "$1" ] || {
     printf none
     return 0
   }
   for a in $1; do
-    for l in $2; do [ "$a" = "$l" ] && {
-      printf here
-      return 0
-    }; done
+    mine=0
+    for l in $2; do if [ "$a" = "$l" ]; then mine=1; fi; done
+    [ "$mine" = 1 ] || others="$others $a"
   done
-  printf elsewhere
+  if [ -z "$others" ]; then printf here; else printf '%s' "${others# }"; fi
 }
 
-# Through NAT, the server does not hold its public address: then the name is asked for over HTTP,
-# and a token that only this run knows has to come back. Needs port 80 free.
-probe_http() {
-  local token got
-  token=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
-  docker run -d --rm --name inbox-dns-probe -p 80:80 "$CADDY_IMAGE" \
-    caddy respond --listen :80 --body "$token" >/dev/null 2>&1 || return 1
-  sleep 2
-  got=$(curl -fsS --max-time 8 "http://$DOMAIN/.well-known/surfingdog-inbox-probe" 2>/dev/null || true)
-  docker rm -f inbox-dns-probe >/dev/null 2>&1 || true
-  [ "$got" = "$token" ]
+# dns_stop_or_ask STOPPED: with no one to ask, stops with STOPPED; else asks, and sets CHOICE
+# (1 check again, 2 go on anyway).
+dns_stop_or_ask() {
+  if [ "$YES" = 1 ] || ! tty_ok; then
+    die "$1 Fix the record and run this again, or add --skip-dns-check to go on without it."
+  fi
+  choose "Then:" "Check again" "Go on anyway: the certificate comes once the record is right" "Stop here"
+  [ "$CHOICE" != 3 ] || die "$1"
 }
 
-# On a second run the inbox itself answers at the address.
-inbox_answers() {
-  local k=""
-  [ "$TLS" = internal ] && k=-k
-  curl -fsS $k --max-time 8 "https://$DOMAIN/healthz" 2>/dev/null | grep -q '"ok":true'
-}
-
-check_dns() {
+# Before anything is installed: the record is there, and where it points. When every address is
+# this server's own, that settles it; addresses that are not (behind NAT a server does not hold its
+# public address) are left in DNS_OTHERS for the probe, which needs Docker.
+check_dns_local() {
+  local resolved verdict pub
+  DNS_OTHERS=""
   if [ "$SKIP_DNS" = 1 ]; then
     note "Not checking where $DOMAIN points (--skip-dns-check)."
     return 0
   fi
   while :; do
-    local resolved locals verdict pub
     resolved=$(resolve "$DOMAIN")
-    locals=$(local_addresses)
-    verdict=$(dns_verdict "$resolved" "$locals")
-    if [ "$verdict" = here ]; then
-      ok "$DOMAIN points at this server ($(printf '%s' "$resolved" | tr '\n' ' ' | sed 's/ $//'))"
-      for a in $resolved; do is_private "$a" && [ "$TLS" = acme ] &&
-        warn "$a is a private address: a public certificate needs $DOMAIN to be reachable from the internet (--tls internal on a private network)."; done
+    verdict=$(dns_verdict "$resolved" "$(local_addresses)")
+    case "$verdict" in
+      here)
+        ok "$DOMAIN points at this server ($(one_line "$resolved"))"
+        for a in $resolved; do if is_private "$a" && [ "$TLS" = acme ]; then
+          warn "$a is a private address: a public certificate needs $DOMAIN to be reachable from the internet (--tls internal on a private network)."
+        fi; done
+        return 0
+        ;;
+      none)
+        pub=$(public_addresses | tr '\n' ' ' | sed 's/ $//')
+        warn "$DOMAIN has no DNS record yet. Where your domain's DNS is, add an A record: $DOMAIN → ${pub:-"this server's public IP address"}"
+        dns_stop_or_ask "Stopped. Nothing was installed."
+        [ "$CHOICE" = 1 ] || return 0
+        ;;
+      *)
+        DNS_OTHERS=$verdict
+        return 0
+        ;;
+    esac
+  done
+}
+
+# The probe: a token only this run knows, answered over plain HTTP at the address. On a first install
+# a throwaway Caddy answers it on port 80; on a second run the inbox's own Caddy does, from the file
+# $DIR/probe/token, so the check also passes while the inbox holds port 80.
+probe_stop() { docker rm -f inbox-dns-probe >/dev/null 2>&1 || true; }
+
+probe_start() {
+  PROBE_TOKEN=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  if [ -d "$DIR/probe" ]; then printf '%s' "$PROBE_TOKEN" | write_file "$DIR/probe/token" 644; fi
+  [ -z "$(ss -Hltn "sport = :80" 2>/dev/null)" ] || return 0
+  probe_stop
+  trap probe_stop EXIT
+  trap 'probe_stop; exit 130' INT TERM
+  docker run -d --rm --name inbox-dns-probe -p 80:80 "$CADDY_IMAGE" \
+    caddy respond --listen :80 --body "$PROBE_TOKEN" >/dev/null 2>&1 || return 0
+  sleep 2
+}
+
+probe_end() {
+  probe_stop
+  trap - EXIT INT TERM
+  rm -f "$DIR/probe/token" 2>/dev/null || true
+}
+
+# probe_address ADDRESS: 0 when the token comes back from that address, 2 when Cloudflare's proxy
+# answers there instead of this server, 1 otherwise.
+probe_address() {
+  local target out
+  case "$1" in *:*) target="[$1]" ;; *) target="$1" ;; esac
+  out=$(curl -sS -D - --max-time 8 --resolve "$DOMAIN:80:$target" "http://$DOMAIN/.well-known/surfingdog-inbox-probe" 2>/dev/null | tr -d '\r') || true
+  if printf '%s\n' "$out" | grep -Eqi '^(cf-ray:|server:[[:space:]]*cloudflare)'; then return 2; fi
+  [ -n "$PROBE_TOKEN" ] && [ "$(printf '%s\n' "$out" | sed '1,/^$/d')" = "$PROBE_TOKEN" ]
+}
+
+# With Docker here: each address the name points at that is not this server's own must lead here.
+check_dns_remote() {
+  local bad rc proxied resolved verdict pub
+  [ -n "$DNS_OTHERS" ] || return 0
+  while :; do
+    bad=""
+    proxied=0
+    probe_start
+    for a in $DNS_OTHERS; do
+      rc=0
+      probe_address "$a" || rc=$?
+      [ "$rc" = 0 ] || bad="$bad $a"
+      [ "$rc" != 2 ] || proxied=1
+    done
+    probe_end
+    if [ -z "$bad" ]; then
+      ok "$DOMAIN reaches this server ($(one_line "$DNS_OTHERS"))"
       return 0
     fi
-    if [ "$verdict" = elsewhere ]; then
-      if inbox_answers || probe_http; then
-        ok "$DOMAIN reaches this server"
-        return 0
-      fi
-    fi
     pub=$(public_addresses | tr '\n' ' ' | sed 's/ $//')
-    pub=${pub:-"this server's public IP address"}
-    if [ "$verdict" = none ]; then
-      warn "$DOMAIN has no DNS record yet. Where your domain's DNS is, add an A record: $DOMAIN → $pub"
+    if [ "$proxied" = 1 ]; then
+      warn "$DOMAIN goes through Cloudflare's proxy (the orange cloud). Set its record to DNS only (grey cloud), so this server gets its own certificate and the inbox sees each visitor's own address."
     else
-      warn "$DOMAIN points at $(printf '%s' "$resolved" | tr '\n' ' ' | sed 's/ $//'), not at this server ($pub)."
-      note "If the record is proxied (such as Cloudflare's orange cloud), set it to DNS only, so the certificate can be issued."
+      warn "$DOMAIN points at${bad}, not at this server (${pub:-its public IP address}). Every A and AAAA record for it must point here: Let's Encrypt may check any of them."
     fi
-    if [ "$YES" = 1 ] || ! tty_ok; then
-      die "Fix the record and run this again, or add --skip-dns-check to go on without it."
-    fi
-    choose "Then:" "Check again" "Go on anyway: the certificate comes once the record is right" "Stop here"
-    case "$CHOICE" in
-      1) continue ;;
-      2) return 0 ;;
-      *) die "Stopped. Nothing was installed yet." ;;
-    esac
+    dns_stop_or_ask "Stopped. Docker is installed; the inbox is not."
+    [ "$CHOICE" = 1 ] || return 0
+    while :; do
+      resolved=$(resolve "$DOMAIN")
+      verdict=$(dns_verdict "$resolved" "$(local_addresses)")
+      case "$verdict" in
+        here)
+          ok "$DOMAIN points at this server ($(one_line "$resolved"))"
+          return 0
+          ;;
+        none)
+          warn "$DOMAIN has no DNS record now."
+          dns_stop_or_ask "Stopped. Docker is installed; the inbox is not."
+          [ "$CHOICE" = 1 ] || return 0
+          ;;
+        *)
+          DNS_OTHERS=$verdict
+          break
+          ;;
+      esac
+    done
   done
 }
 
@@ -444,14 +523,24 @@ latest_version() {
     tr -d '\r' | sed -n 's#^[Ll]ocation:.*/tag/v\{0,1\}\([^/[:space:]]*\)$#\1#p' | tail -n 1
 }
 
+# The version to install. An inbox already here keeps its own; a --version other than it is left in
+# WANT_VERSION for `inbox update`, which backs up first and rolls back if it does not start (and
+# refuses to go back to an older version, which could not read the newer database).
 resolve_version() {
+  local had
+  had=$(env_get INBOX_VERSION)
   if [ -n "$VERSION" ]; then
     VERSION=${VERSION#v}
-  elif [ "$EXISTING" = 1 ] && [ -n "$(env_get INBOX_VERSION)" ]; then
-    VERSION=$(env_get INBOX_VERSION)
+    valid_version "$VERSION" || die "'$VERSION' is not a version."
+    if [ "$EXISTING" = 1 ] && [ -n "$had" ] && [ "$VERSION" != "$had" ]; then
+      WANT_VERSION=$VERSION
+      VERSION=$had
+    fi
+  elif [ "$EXISTING" = 1 ] && [ -n "$had" ]; then
+    VERSION=$had
   else
     VERSION=$(latest_version)
-    VERSION=${VERSION:-latest}
+    [ -n "$VERSION" ] || die "Could not read the newest release from $RELEASES. If this server reaches github.com, no release is published yet; name one with --version."
   fi
   valid_version "$VERSION" || die "'$VERSION' is not a version."
 }
@@ -509,9 +598,18 @@ SDI_KIT_EOF
   write_file "$DIR/Caddyfile" 644 <<'SDI_KIT_EOF'
 @@EMBED deploy/Caddyfile@@
 SDI_KIT_EOF
-  sed "s#^INBOX_DIR=\"\${INBOX_DIR:-/opt/inbox}\"#INBOX_DIR=\"\${INBOX_DIR:-$DIR}\"#" <<'SDI_KIT_EOF' | write_file "$BIN_DIR/inbox" 755
+  # The `inbox` command, set to this directory and to where it is installed (its updates rewrite it
+  # there). Written whole or not at all: a sed that failed would leave an empty command behind.
+  cat >"$BIN_DIR/inbox.kit" <<'SDI_KIT_EOF'
 @@EMBED deploy/inbox@@
 SDI_KIT_EOF
+  sed -e "s#^INBOX_DIR=\"\${INBOX_DIR:-/opt/inbox}\"#INBOX_DIR=\"\${INBOX_DIR:-$DIR}\"#" \
+    -e "s#^INBOX_BIN=\"\${INBOX_BIN:-/usr/local/bin/inbox}\"#INBOX_BIN=\"\${INBOX_BIN:-$BIN_DIR/inbox}\"#" \
+    "$BIN_DIR/inbox.kit" >"$BIN_DIR/inbox.new"
+  rm -f "$BIN_DIR/inbox.kit"
+  grep -q "^INBOX_DIR=\"\${INBOX_DIR:-$DIR}\"\$" "$BIN_DIR/inbox.new" || die "Could not write $BIN_DIR/inbox."
+  chmod 755 "$BIN_DIR/inbox.new"
+  mv "$BIN_DIR/inbox.new" "$BIN_DIR/inbox"
 }
 
 write_backup_timer() {
@@ -542,10 +640,12 @@ EOF
 }
 
 write_files() {
-  install -d -m 755 "$DIR"
-  install -d -m 700 "$DIR/data" "$DIR/caddy"
+  install -d -m 755 "$DIR" "$DIR/probe"
+  # data is the inbox's (uid 10001); state is root's own (the `inbox` command's notes and update
+  # logs), apart from data, so nothing the inbox's container could write is ever written as root.
+  install -d -m 700 "$DIR/data" "$DIR/state" "$DIR/caddy"
   install -d -m 700 "$DIR/caddy/data" "$DIR/caddy/config"
-  chown "$INBOX_UID:$INBOX_UID" "$DIR/data"
+  chown -h "$INBOX_UID:$INBOX_UID" "$DIR/data"
   write_settings
   write_kit
   write_backup_timer
@@ -593,6 +693,20 @@ start() {
   warn "https://$DOMAIN does not answer yet. Caddy keeps trying for the certificate; sudo inbox logs caddy says why."
 }
 
+# The first sign-in, while email is not set up: the inbox is asked for the owner's sign-in email,
+# as /login would, and its link and code are read from where it wrote them.
+sign_in_lines() {
+  local out code link
+  [ "$HTTPS" = 1 ] || return 1
+  out=$(INBOX_DIR="$DIR" "$BIN_DIR/inbox" sign-in 2>/dev/null) || return 1
+  code=$(printf '%s\n' "$out" | sed -n 's/^Your sign-in code: //p' | tail -n 1)
+  link=$(printf '%s\n' "$out" | sed -n 's/^Or open: //p' | tail -n 1)
+  [ -n "$code" ] && [ -n "$link" ] || return 1
+  say "  1. Sign in. It works once, for 15 minutes:"
+  say "       $link"
+  say "     or the code $code at https://$DOMAIN/login. sudo inbox sign-in gives a new one later."
+}
+
 summary() {
   local latest
   say ""
@@ -603,20 +717,23 @@ summary() {
   fi
   say ""
   say "Next:"
-  say "  1. Sign in. Open https://$DOMAIN/login and enter $EMAIL."
   if [ -z "$(env_get MAIL_FROM)" ]; then
-    say "     Email is not set up yet, so the sign-in email stays on this server:"
-    say "       sudo inbox sign-in"
+    sign_in_lines || {
+      say "  1. Sign in. Open https://$DOMAIN/login and enter $EMAIL. Email is not set up yet, so the"
+      say "     sign-in email stays on this server, and this shows its code and link:"
+      say "       sudo inbox sign-in"
+    }
     say "  2. Set up email, so the inbox can send sign-in links and replies:"
     say "       sudo inbox email"
   else
+    say "  1. Sign in. Open https://$DOMAIN/login and enter $EMAIL."
     say "  2. Email goes out from $(env_get MAIL_FROM)."
   fi
-  say "  3. Let your AI set up the rest (email in, your business, your site):"
-  say "       https://surfingdog.ai/install.md, from Step 2"
+  say "  3. Let your AI set up the rest (email in, your business, your site). Give it this line:"
+  say "       My Surfing Dog Inbox is installed at https://$DOMAIN with the one-command installer. Follow https://surfingdog.ai/install.md from Step 1, and ask me before anything that costs money or changes DNS."
   say ""
   say "Your data is in $DIR/data, backed up every night to $DIR/data/backups."
-  say "Keep a copy of $DIR/.env somewhere safe, apart from this server: its secret key opens the data."
+  say "Keep a copy of the inbox's secret key apart from this server (sudo grep INBOX_SECRET_KEY $DIR/.env shows it): it opens the data."
   say "  sudo inbox status | update | backup | restore | help"
   if [ "$EXISTING" = 1 ]; then
     latest=$(latest_version)
@@ -660,6 +777,7 @@ parse_args() {
   done
   case "$TLS" in '' | acme | internal) ;; *) die "--tls is acme (the default) or internal." ;; esac
   case "$DIR" in /*) ;; *) die "--dir is a full path, like /opt/inbox." ;; esac
+  case "$DIR" in *[!A-Za-z0-9/._-]*) die "--dir is letters, digits, / . _ and -, like /opt/inbox." ;; esac
   if [ -n "$IMAGE" ]; then case "$IMAGE" in *[!A-Za-z0-9./:_-]* | *:*:*) die "--image is a name like ghcr.io/surfingdogai/inbox, without a version." ;; esac fi
 }
 
@@ -678,17 +796,24 @@ main() {
     choose "Install the inbox at https://$DOMAIN, with $EMAIL as its owner?" "Yes, install it" "Stop here"
     [ "$CHOICE" = 1 ] || die "Stopped. Nothing was installed."
   fi
+  # What can be checked without Docker is checked before Docker is installed.
+  step "The address"
+  check_ports
+  check_dns_local
+  resolve_version
   step "Docker"
   ensure_docker
   load_image
-  step "The address"
-  check_ports
-  check_dns
+  check_dns_remote
   step "Installing"
-  resolve_version
   write_files
   pull_images
   start
+  if [ -n "$WANT_VERSION" ]; then
+    step "Updating to $WANT_VERSION"
+    INBOX_DIR="$DIR" "$BIN_DIR/inbox" update "$WANT_VERSION" --yes
+    VERSION=$WANT_VERSION
+  fi
   summary
 }
 

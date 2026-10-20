@@ -4,7 +4,11 @@
 #   cd /opt/inbox
 #   cp <this folder>/docker-compose.litestream.yml <this folder>/litestream.yml .
 #   cp <this folder>/litestream.env.example litestream.env && chmod 600 litestream.env   then fill it in
-#   docker compose -f docker-compose.yml -f docker-compose.litestream.yml up -d
+#   sudo inbox start
+#
+# With this file in /opt/inbox, the `inbox` command runs Litestream beside the inbox, and stops it
+# while a restore, a rollback or an update swaps the database. By hand, without that command:
+# docker compose -f docker-compose.yml -f docker-compose.litestream.yml up -d
 #
 # Full steps, and the restore: https://surfingdog.ai/docs/backups/#litestream
 services:

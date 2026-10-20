@@ -1,0 +1,22 @@
+# Proposes new versions of what is pinned by commit or by digest: the workflows' actions, the image's
+# two Node bases, and Caddy and Litestream in the self-host kit. Each comes as a pull request to
+# review; nothing is merged on its own.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy
+      - /deploy/litestream
+    schedule:
+      interval: weekly

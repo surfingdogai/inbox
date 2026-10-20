@@ -17,6 +17,7 @@ on:
       - packages/**
       - pnpm-lock.yaml
       - .github/workflows/selfhost.yml
+      - .github/workflows/release.yml
   pull_request:
     paths:
       - Dockerfile
@@ -30,6 +31,7 @@ on:
       - packages/**
       - pnpm-lock.yaml
       - .github/workflows/selfhost.yml
+      - .github/workflows/release.yml
 
 permissions:
   contents: read
@@ -39,7 +41,7 @@ jobs:
     name: kit · shellcheck · installer and inbox command · compose · caddy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: shellcheck --version && shellcheck -s sh deploy/inbox apps/site/public/install.sh deploy/test/*.sh deploy/test/stubs/docker
       # The installer served at /install.sh is what deploy/ builds, and its checksum is right.
       - run: node scripts/build-install.mjs --check
@@ -57,11 +59,11 @@ jobs:
         run: |
           for tls in acme internal; do
             docker run --rm -e INBOX_DOMAIN=inbox.example.com -e INBOX_TLS=$tls \
-              -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine \
+              -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" "$(sed -n 's/^    image: \(caddy:.*\)$/\1/p' deploy/docker-compose.yml)" \
               caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           done
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -80,9 +82,9 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           load: true
@@ -96,7 +98,7 @@ jobs:
       - if: matrix.arch == 'amd64'
         run: docker save ghcr.io/surfingdogai/inbox:ci -o inbox-image.tar
       - if: matrix.arch == 'amd64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: inbox-image-amd64
           path: inbox-image.tar
@@ -111,8 +113,8 @@ jobs:
         base: ["ubuntu:24.04", "debian:12"]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: inbox-image-amd64
       - run: deploy/test/installer-vm.sh "${{ matrix.base }}" "$PWD/inbox-image.tar"

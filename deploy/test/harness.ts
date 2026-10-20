@@ -64,6 +64,7 @@ const TOOLS = [
   "basename",
   "cat",
   "chmod",
+  "cksum",
   "cp",
   "cut",
   "date",
@@ -80,12 +81,15 @@ const TOOLS = [
   "od",
   "rm",
   "sed",
+  "sha256sum",
   "sort",
   "stty",
   "tail",
+  "tar",
   "touch",
   "tr",
   "wc",
+  "gzip",
 ];
 const where = (tool: string) =>
   ["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map((d) => path.join(d, tool)).find(existsSync);
@@ -122,8 +126,23 @@ export function server(): Server {
 2: eth0    inet $(cat "$STUB_STATE/ip" 2>/dev/null || echo 203.0.113.7)/24 brd 203.0.113.255 scope global eth0\\       valid_lft forever
 EOF`,
     ss: `cat "$STUB_STATE/ss" 2>/dev/null; exit 0`,
+    // A release's files come from $STUB_STATE/release-<version>/ when a test puts them there.
     curl: `case "$*" in
-  *releases/latest*) printf 'HTTP/2 302\\r\\nlocation: https://github.com/surfingdogai/inbox/releases/tag/v%s\\r\\n\\r\\n' "$(cat "$STUB_STATE/latest" 2>/dev/null || echo 0.2.0)" ;;
+  *releases/latest*) [ -f "$STUB_STATE/no-release" ] && exit 22; printf 'HTTP/2 302\\r\\nlocation: https://github.com/surfingdogai/inbox/releases/tag/v%s\\r\\n\\r\\n' "$(cat "$STUB_STATE/latest" 2>/dev/null || echo 0.2.0)" ;;
+  *releases/download/*)
+    url="" out=""
+    while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; http*) url="$1" ;; esac; shift; done
+    rel=$(printf '%s' "$url" | sed 's#.*/download/v\\([^/]*\\)/\\(.*\\)#release-\\1/\\2#')
+    [ -f "$STUB_STATE/$rel" ] || exit 22
+    cp "$STUB_STATE/$rel" "$out" ;;
+  *api.cloudflare.com*) cat "$STUB_STATE/cloudflare-accounts" 2>/dev/null || exit 22 ;;
+  *surfingdog-inbox-probe*)
+    addr="" prev=""
+    for a in "$@"; do [ "$prev" = --resolve ] && addr=\${a##*:80:}; prev=$a; done
+    addr=$(printf '%s' "$addr" | tr -d '[]')
+    grep -qxF "$addr" "$STUB_STATE/probe-answers" 2>/dev/null || exit 7
+    printf 'HTTP/1.1 200 OK\\r\\n'; cat "$STUB_STATE/probe-headers" 2>/dev/null; printf '\\r\\n'
+    cat "$STUB_STATE/probe-body" 2>/dev/null || cat "$INBOX_DIR/probe/token" 2>/dev/null ;;
   *healthz*) [ -f "$STUB_STATE/running" ] && echo '{"ok":true,"version":"0.1.0","db":"ok"}' || exit 7 ;;
   *) exit 7 ;;
 esac`,
@@ -160,6 +179,9 @@ esac`,
             SDI_BIN_DIR: binDir,
             SDI_SYSTEMD_DIR: systemd,
             INBOX_DIR: dir,
+            // The `inbox` command rewrites itself on an update: here, in the test's own directory.
+            INBOX_BIN: path.join(binDir, "inbox"),
+            STUB_NODE: process.execPath,
             ...env,
           },
           stdio: ["ignore", "pipe", "pipe"],

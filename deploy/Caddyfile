@@ -2,7 +2,9 @@
 # gets and renews on its own. It keeps no access log. INBOX_TLS=internal uses Caddy's own certificate
 # authority instead, for a test or a private network, where no public certificate can be had.
 
+# A public certificate, and browsers told to come back over HTTPS only (for a year).
 (tls-acme) {
+	header Strict-Transport-Security "max-age=31536000"
 }
 
 (tls-internal) {
@@ -17,5 +19,18 @@
 	# it is dropped here.
 	reverse_proxy inbox:8787 {
 		header_up -CF-Connecting-IP
+	}
+}
+
+# Over plain HTTP: the installer's address check (a token it writes to ./probe/token for that run
+# only), and everything else sent on to HTTPS. Caddy answers Let's Encrypt's own checks here too.
+http://{$INBOX_DOMAIN} {
+	handle /.well-known/surfingdog-inbox-probe {
+		root * /srv/probe
+		rewrite * /token
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} 308
 	}
 }

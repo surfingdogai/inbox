@@ -6,7 +6,9 @@
 # scripts, paste this file with your address and your email in place of the two below. Point the
 # address's A record at the Droplet's IP (a Reserved IP lets you add the record before it exists).
 # The installer runs once, at first boot; the certificate comes as soon as the record points there.
-# What it did: /var/log/inbox-install.log. Steps: https://surfingdog.ai/docs/platforms/#digitalocean
+# What it did: /var/log/inbox-install.log. Then, over SSH, `sudo inbox sign-in` gives your first
+# sign-in. Steps: https://surfingdog.ai/docs/platforms/#digitalocean
 runcmd:
   - curl -fsSL https://surfingdog.ai/install.sh -o /root/install.sh
-  - sh /root/install.sh --domain inbox.yourbusiness.com --email you@yourbusiness.com --yes --skip-dns-check >/var/log/inbox-install.log 2>&1
+  # Its log holds your first sign-in link, so it is readable by root only.
+  - sh -c 'umask 077; sh /root/install.sh --domain inbox.yourbusiness.com --email you@yourbusiness.com --yes --skip-dns-check >/var/log/inbox-install.log 2>&1'

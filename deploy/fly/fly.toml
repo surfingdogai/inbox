@@ -3,7 +3,8 @@
 #
 #   cd deploy/fly
 #   fly launch --copy-config --no-deploy          pick a name; say no to any database it offers
-#   fly secrets set INBOX_OWNER_EMAIL=you@yourbusiness.com INBOX_SECRET_KEY="$(openssl rand -base64 32)"
+#   KEY=$(openssl rand -base64 32); echo "$KEY"   put it in your password manager now: Fly never shows it again
+#   fly secrets set INBOX_OWNER_EMAIL=you@yourbusiness.com INBOX_SECRET_KEY="$KEY"
 #   fly deploy
 #   fly certs add inbox.yourbusiness.com         then add the DNS record it names
 #   fly secrets set INBOX_PUBLIC_URL=https://inbox.yourbusiness.com
@@ -12,6 +13,11 @@ app = "your-inbox"
 
 [build]
   dockerfile = "Dockerfile"
+
+[env]
+  # Fly's proxy sets Fly-Client-IP itself, and passes a CF-Connecting-IP the caller wrote straight
+  # through: the inbox's limits go by the first.
+  INBOX_CLIENT_ADDRESS_HEADER = "fly-client-ip"
 
 [[mounts]]
   source = "inbox_data"

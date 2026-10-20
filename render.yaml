@@ -12,6 +12,9 @@ services:
     dockerfilePath: ./deploy/render/Dockerfile
     dockerContext: ./deploy/render
     plan: starter
+    # Deploys only when you press it: each one builds the version deploy/render/Dockerfile pins, and
+    # a new version brings its database up to date. Back up first (docs/backups).
+    autoDeployTrigger: "off"
     healthCheckPath: /healthz
     disk:
       name: inbox-data
