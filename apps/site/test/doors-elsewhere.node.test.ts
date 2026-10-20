@@ -22,4 +22,9 @@ describe("the doors elsewhere page", () => {
     expect(page).not.toMatch(/\bconnect (to )?(fresha|opentable|toast|shopify|woocommerce|square|calendly)/i);
     expect(page).not.toMatch(/integration/i);
   });
+
+  it("says nothing of what platforms charge but that it is between the business and the platform", () => {
+    expect(page).not.toMatch(/share of each sale/i);
+    expect(page).toContain("What a platform charges you is between you and it.");
+  });
 });

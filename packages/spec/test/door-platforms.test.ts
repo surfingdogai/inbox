@@ -9,18 +9,20 @@ import {
   doorPlace,
   doorPlatform,
   doorPlatformFit,
+  doorPlatformHolds,
   doorPlatformOf,
   doorPlatformsVocabSchema,
   doorTrackingParams,
   jsonSchemaOf,
   manifestSchema,
+  ownSiteDomain,
   readDoorsElsewhere,
 } from "../src/index";
 import vectors from "../vectors/doors-elsewhere.json";
 
 /**
  * vocab/door-platforms.json (0.9.0, ADR-031): the platforms a door elsewhere may name. Every platform once, in a
- * group, taking bookings or orders; hosts are registrable names; no marketplace that takes a share of each sale; and
+ * group, taking bookings or orders; hosts are registrable names; no delivery app or stay marketplace; and
  * the vectors read as `readDoorsElsewhere`, `doorPlatformOf`, `doorPlace`, `doorTrackingParams` and `cleanDoorUrl` say.
  */
 describe("the door platforms vocabulary", () => {
@@ -59,7 +61,7 @@ describe("the door platforms vocabulary", () => {
     expect(doorPlatform(42)).toBeUndefined();
   });
 
-  it("lists no marketplace that takes a share of each sale", () => {
+  it("lists no delivery app or stay marketplace", () => {
     const marketplaces = [
       "ubereats.com",
       "doordash.com",
@@ -146,6 +148,43 @@ describe("where a URL stands against a platform", () => {
     expect(doorPlatformFit("https://mkate-matamu.myshopify.com/", shopify, "order")).toBe("on_platform");
     expect(doorPlatformFit("https://www.myshopify.com/", shopify, "order")).toBe("platform_page");
     expect(doorPlatformFit("https://shop.mkatematamu.co.ke/", shopify, "order")).toBe("own_site");
+  });
+
+  it("never takes the platform's own pages, its help, sign-in and prices, for a business's", () => {
+    for (const p of DOOR_PLATFORMS) {
+      for (const kind of p.item_types)
+        expect(doorPlatformFit(p.source, p, kind), `${p.id}'s source ${p.source}`).not.toBe("on_platform");
+      for (const h of p.hosts) {
+        for (const kind of p.item_types) {
+          expect(doorPlatformFit(`https://${h}/`, p, kind), `${h}/`).not.toBe("on_platform");
+          expect(doorPlatformFit(`https://www.${h}/pricing`, p, kind), `${h}/pricing`).not.toBe("on_platform");
+          expect(doorPlatformFit(`https://help.${h}/hc/en-gb/`, p, kind), `help.${h}`).not.toBe("on_platform");
+        }
+      }
+    }
+    expect(doorPlatformFit("https://partners.simplybook.me/", simplybook)).toBe("platform_page");
+    expect(doorPlatformFit("https://studio.help.simplybook.me/", simplybook)).toBe("platform_page");
+  });
+
+  it("names a shop on the business's own domain only beside that domain", () => {
+    const own = "https://shop.mkatematamu.co.ke/";
+    expect(doorPlatformHolds(own, shopify, "order", ["mkatematamu.co.ke"])).toBe(true);
+    expect(doorPlatformHolds(own, shopify, "order", [])).toBe(false);
+    expect(doorPlatformHolds(own, shopify, "order", ["another-bakery.co.ke", ""])).toBe(false);
+    expect(doorPlatformHolds("https://mkate-matamu.myshopify.com/", shopify, "order", [])).toBe(true);
+    expect(doorPlatformHolds("https://www.fresha.com/a/x", fresha, "order", ["fresha.com"])).toBe(false);
+  });
+});
+
+describe("a business's own domain, as every check compares it", () => {
+  it("is the host alone, lower case, without www or a trailing dot", () => {
+    expect(ownSiteDomain("Kissahoshi.JP.")).toBe("kissahoshi.jp");
+    expect(ownSiteDomain(" www.kissahoshi.jp ")).toBe("kissahoshi.jp");
+    expect(ownSiteDomain("https://www.kissahoshi.jp/menu?x=1")).toBe("kissahoshi.jp");
+    expect(ownSiteDomain("kissahoshi.jp:8443/menu")).toBe("kissahoshi.jp");
+    expect(ownSiteDomain("")).toBe("");
+    expect(ownSiteDomain(null)).toBe("");
+    expect(ownSiteDomain("https://")).toBe("");
   });
 });
 

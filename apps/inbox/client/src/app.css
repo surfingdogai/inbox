@@ -1725,7 +1725,7 @@ fieldset.chips,
   color: var(--ink-3);
 }
 
-/* Booked or ordered elsewhere: one quiet line per kind, and a small editor that slides open. */
+/* Bookings or orders on another site: one quiet line per kind, and a small editor that slides open. */
 .elsewhere {
   margin-top: 10px;
   padding-top: 10px;
@@ -1750,6 +1750,10 @@ fieldset.chips,
   font-weight: 600;
   color: var(--ink);
 }
+.else-picked {
+  font-weight: 400;
+  color: var(--ink-3);
+}
 .else-link {
   min-width: 0;
   overflow: hidden;
@@ -1770,6 +1774,31 @@ fieldset.chips,
   font-weight: 500;
   color: var(--ink-2);
   text-decoration-thickness: 1px;
+}
+/* Bookings sent to another site take the booking switch's row: an arrow where the switch was, then where. */
+.door-away {
+  gap: 2px 10px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.door-away-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  font-size: 15px;
+  font-weight: 300;
+  color: var(--ink-3);
+}
+.door-away-text strong {
+  font-weight: 600;
+}
+.door-away .else-link {
+  flex: 0 1 auto;
+}
+.door-away .else-acts {
+  margin-left: auto;
 }
 .else-edit {
   display: grid;
@@ -1812,8 +1841,17 @@ fieldset.chips,
   }
 }
 @media (max-width: 640px) {
-  .else-acts {
+  .else-acts,
+  .door-away .else-acts {
     margin-left: 0;
+  }
+  .door-away .else-link,
+  .door-away .else-acts {
+    padding-left: 52px;
+  }
+  /* A long link is cut short, never wider than the phone: its whole text must not widen the page. */
+  .else-link {
+    max-width: calc(100vw - 7.5rem);
   }
   .else-fields {
     grid-template-columns: minmax(0, 1fr);
@@ -2422,7 +2460,19 @@ legend.label-line {
 .int-tag.is-warn {
   color: color-mix(in srgb, var(--c-warning) 70%, var(--ink));
 }
-/* On a phone the cards still to come are one quiet line, not four tiles to scroll past. */
+/* Bookings or orders already taken on another site: one quiet line to the place that says so (General). */
+.int-elsewhere {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.int-elsewhere-link {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+/* On a phone the cards still to come are one quiet line per group, not tiles to scroll past. */
 .int-soon-line {
   display: none;
   margin: 0;

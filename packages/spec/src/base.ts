@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformFit } from "./door-platforms";
+import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformHolds, ownSiteDomain } from "./door-platforms";
 import { MAX_PROFILE_PAYMENTS } from "./payments";
 
 /**
@@ -148,7 +148,12 @@ export const receiptKindSchema = z.enum(["confirmed", "paid", "accepted", "outco
 export type ReceiptKind = z.infer<typeof receiptKindSchema>;
 
 export const moneySchema = z.object({
-  value: z.number().int().describe("Minor units: 4500 is 45.00 of the currency (CA$45.00, R45.00, ₹45.00)."),
+  value: z
+    .number()
+    .int()
+    .describe(
+      "Minor units in the currency's ISO 4217 exponent: 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD.",
+    ),
   currency: z.string().length(3),
 });
 
@@ -252,14 +257,17 @@ export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
  * not this function's to judge.
  *
  * Since 0.9.0 an entry's `platform` is kept with it when the vocabulary knows the token, the platform takes
- * that kind of request, and the URL is the business's own page there, or the platform serves pages on the
- * business's own domain (`own_site`). Otherwise the platform alone is dropped and the entry is kept: a door
- * is never lost for its name.
+ * that kind of request, and the URL is the business's own page there; or the platform serves pages on the
+ * business's own domain (`own_site`) and the URL's host is on the business's own website, the manifest's
+ * `profile.url`. A reader never trusts an `own_site` token on any other host: anyone can call a stranger's
+ * shop theirs. Otherwise the platform alone is dropped and the entry is kept: a door is never lost for its name.
  */
 export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
   const m = (typeof manifest === "object" && manifest !== null ? manifest : {}) as Record<string, unknown>;
   const entries = Array.isArray(m.doors_elsewhere) ? (m.doors_elsewhere as unknown[]) : [];
   const here = new Set(Array.isArray(m.item_types) ? m.item_types : []);
+  const profile = (typeof m.profile === "object" && m.profile !== null ? m.profile : {}) as Record<string, unknown>;
+  const own = typeof profile.url === "string" ? [ownSiteDomain(profile.url)] : [];
   const kept: DoorElsewhere[] = [];
   for (const entry of entries) {
     const e = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
@@ -267,18 +275,16 @@ export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
     if (!type.success || here.has(type.data) || kept.some((k) => k.item_type === type.data)) continue;
     const url = elsewhereUrl(e.url);
     if (!url) continue;
-    const platform = elsewherePlatform(e.platform, url, type.data);
+    const platform = elsewherePlatform(e.platform, url, type.data, own);
     kept.push({ item_type: type.data, url, ...(platform ? { platform } : {}) });
   }
   return kept;
 }
 
-function elsewherePlatform(value: unknown, url: string, kind: string): string | null {
+function elsewherePlatform(value: unknown, url: string, kind: string, own: readonly string[]): string | null {
   if (typeof value !== "string" || !DOOR_PLATFORM_ID.test(value)) return null;
   const platform = doorPlatform(value);
-  if (!platform) return null;
-  const fit = doorPlatformFit(url, platform, kind);
-  return fit === "on_platform" || fit === "own_site" ? platform.id : null;
+  return platform && doorPlatformHolds(url, platform, kind, own) ? platform.id : null;
 }
 
 function elsewhereUrl(value: unknown): string | null {
@@ -302,6 +308,12 @@ export const doorPlatformsVocabSchema = z.object({
   description: z.string(),
   groups: z.array(z.object({ id: z.string().regex(DOOR_PLATFORM_ID), label: z.string().min(1).max(60) })).min(1),
   tracking_params: z.array(z.string().regex(/^[a-z0-9_]+\*?$/)),
+  reserved_subdomains: z
+    .array(z.string().regex(/^[a-z0-9-]+$/))
+    .describe("Names under a platform's host that are the platform's own (help, app, admin…), never a business's."),
+  reserved_paths: z
+    .array(z.string().regex(/^[a-z0-9-]+$/))
+    .describe("First path segments that are a platform's own pages (login, pricing, blog…), never a business's."),
   platforms: z.array(
     z.object({
       id: z
@@ -317,7 +329,26 @@ export const doorPlatformsVocabSchema = z.object({
       page: z
         .enum(["path", "subdomain", "any"])
         .describe(
-          "How the business's own page is told apart: a path other than /, a name under the host other than www, or either.",
+          "How the business's own page is told apart on a platform with no pages: a path other than / whose first segment is not reserved, a name under the host other than www and the reserved names, or either.",
+        ),
+      pages: z
+        .array(
+          z
+            .string()
+            .min(2)
+            .max(200)
+            .refine((re) => {
+              try {
+                new RegExp(re, "i");
+                return true;
+              } catch {
+                return false;
+              }
+            }, "a pattern a JavaScript RegExp reads"),
+        )
+        .optional()
+        .describe(
+          "Where the platform's pages for a business are known to sit: patterns, matched without regard to case against the host without www. followed by the path. With them, a page there is the business's own only when one matches.",
         ),
       own_site: z
         .boolean()

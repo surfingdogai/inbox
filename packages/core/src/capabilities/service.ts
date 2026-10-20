@@ -552,8 +552,27 @@ export class Capabilities {
 
   /** The door elsewhere for `kind` as it is published, with its platform (ADR-031), or null. */
   async doorElsewhereEntry(kind: "booking" | "order"): Promise<DoorElsewhere | null> {
-    const all = publishedDoorsElsewhere((await readSettings(this.db)).doorsElsewhere);
+    const [[row], s] = await Promise.all([
+      this.db.orm.select({ domain: business.domain }).from(business).limit(1),
+      readSettings(this.db),
+    ]);
+    const all = publishedDoorsElsewhere(s.doorsElsewhere, [row?.domain, s.directory.url]);
     return all.find((d) => d.item_type === kind) ?? null;
+  }
+
+  /**
+   * The refusal for a kind taken somewhere else, saying what does still come here: messages, and
+   * requests for a price when that door is open, as the manifest lists them, so an agent that
+   * trusts it is never sent on to a door that refuses it too.
+   */
+  private async takenElsewhereError(kind: "booking" | "order", door: DoorElsewhere): Promise<WriteError> {
+    const s = await readSettings(this.db);
+    const here = await offeredItemTypes(
+      this.db,
+      s.doorsElsewhere.map((d) => d.itemType),
+      s.doors,
+    );
+    return takenElsewhere(kind, door, here);
   }
 
   /**
@@ -564,7 +583,7 @@ export class Capabilities {
   private async refuseElsewhere(caller: Caller, kind: "booking" | "order"): Promise<void> {
     if (!isCustomer(caller)) return;
     const elsewhere = await this.doorElsewhereEntry(kind);
-    if (elsewhere) throw takenElsewhere(kind, elsewhere);
+    if (elsewhere) throw await this.takenElsewhereError(kind, elsewhere);
   }
 
   /**
@@ -612,7 +631,7 @@ export class Capabilities {
 
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
-    const elsewhere = publishedDoorsElsewhere(s.doorsElsewhere);
+    const elsewhere = publishedDoorsElsewhere(s.doorsElsewhere, [row?.domain, s.directory.url]);
     const itemTypes = await offeredItemTypes(
       this.db,
       elsewhere.map((d) => d.item_type),
@@ -706,7 +725,7 @@ export class Capabilities {
   ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
     // Times the inbox would offer for bookings taken at a platform are not the platform's times.
     const elsewhere = await this.doorElsewhereEntry("booking");
-    if (elsewhere) throw takenElsewhere("booking", elsewhere);
+    if (elsewhere) throw await this.takenElsewhereError("booking", elsewhere);
     await this.refuseUnbookable(opts.caller, input.service_id);
     const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
     return findSlots(this.db, {
@@ -1566,10 +1585,12 @@ export class Capabilities {
       }
     }
     // A door elsewhere on a platform that also serves the business's own domain is checked against that
-    // domain when it is written (ADR-031): never a stranger's shop named as this business's checkout.
+    // domain when it is written (ADR-031): never a stranger's shop named as this business's checkout,
+    // and none at all until the business has a website of its own to check it against.
     if ((patch as { doorsElsewhere?: unknown }).doorsElsewhere !== undefined) {
       const [b] = await this.db.orm.select({ domain: business.domain }).from(business).limit(1);
-      const problems = doorElsewhereDomainProblems(parseStoredSettings(merged).settings.doorsElsewhere, b?.domain);
+      const after = parseStoredSettings(merged).settings;
+      const problems = doorElsewhereDomainProblems(after.doorsElsewhere, [b?.domain, after.directory.url]);
       if (problems.length) {
         throw new WriteError("invalid_input", `Invalid input: ${describeProblems(problems)}`, { fields: problems });
       }
@@ -2005,14 +2026,27 @@ function doorShut(kind: "booking" | "quote_request" | "message"): WriteError {
   );
 }
 
-/** The refusal for a kind of request the business takes somewhere else: where to go instead. */
-function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere): WriteError {
+/**
+ * The refusal for a kind of request the business takes somewhere else: where to go instead, and what
+ * still comes here, from the kinds this inbox lists (`here`): never a door it would refuse too.
+ */
+function takenElsewhere(kind: "booking" | "order", door: DoorElsewhere, here: readonly string[]): WriteError {
   const what = kind === "booking" ? "bookings" : "orders";
   const place = doorPlace(door);
   const at = place === new URL(door.url).host ? door.url : `${place} (${door.url})`;
+  const messages = here.includes("message");
+  const quotes = here.includes("quote_request");
+  const still =
+    messages && quotes
+      ? " Messages and quote requests still come here."
+      : messages
+        ? " Messages still come here."
+        : quotes
+          ? " Quote requests still come here."
+          : "";
   return new WriteError(
     "not_allowed",
-    `This business takes ${what} at ${at}, not here: send the customer there. Nothing was written. Messages and quote requests still come here.`,
+    `This business takes ${what} at ${at}, not here: send the customer there. Nothing was written.${still}`,
     {
       details: {
         reason: "taken_elsewhere",

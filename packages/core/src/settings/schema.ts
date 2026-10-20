@@ -1,13 +1,16 @@
 import {
+  cleanDoorUrl,
   DOOR_PLATFORM_ID,
   type DoorElsewhere,
   doorPlatform,
   doorPlatformFit,
+  doorPlatformHolds,
   doorPlatformOf,
   doorTrackingParams,
   hostIsOn,
   isPaymentToken,
   MAX_PROFILE_PAYMENTS,
+  ownSiteDomain,
   readDoorsElsewhere,
 } from "@surfingdog/spec";
 import { z } from "zod";
@@ -710,21 +713,6 @@ const sections = {
     })
     .prefault({}),
   /**
-   * Kinds of request the business takes somewhere else, and where: bookings at a booking platform,
-   * orders in its own shop's checkout. Each is named in the manifest (`doors_elsewhere`) and on the
-   * business's own page ("Book at …"), and is no longer among the kinds the inbox lists as its own,
-   * so an agent goes there for it. It sends customers to another address, so the owner's AI may not
-   * change it (`guard.ts`).
-   */
-  doorsElsewhere: z
-    .array(doorElsewhereSettingSchema())
-    .max(2)
-    .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
-    .default([])
-    .describe(
-      "Kinds of request you take somewhere else, and where: bookings at a booking platform, orders in your own checkout.",
-    ),
-  /**
    * What agents can do here, door by door (`capabilities/directory.ts`): left out, a door follows
    * what the inbox holds — a message always, a booking with a service and opening hours, a request
    * for a price with something to ask about. `false` shuts a door whatever it holds: agents are not
@@ -801,11 +789,12 @@ export function isDoorElsewhereUrl(url: string): boolean {
 }
 
 /**
- * One door elsewhere as the settings keep it (ADR-031): the kind, the page, and the platform the owner picked it on
- * from `vocab/door-platforms.json`, if any. A page is the business's own: on the platform it names, past the
- * platform's own pages, and with no tracking or affiliate parameter in it. A platform that also serves the
- * business's own domain (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the
- * business's domain (`doorElsewhereDomainProblems`).
+ * One door elsewhere as a write sets it (ADR-031): the kind, the page, and the platform the owner picked it on from
+ * `vocab/door-platforms.json`, if any. A page is the business's own: on the platform it names, past the platform's
+ * own pages, and with no tracking or affiliate parameter in it. A platform that also serves the business's own domain
+ * (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the business's domain
+ * (`doorElsewhereDomainProblems`). Only a write is held to this: a stored door is read by
+ * `doorElsewhereStoredSchema`.
  */
 export function doorElsewhereSettingSchema() {
   return z
@@ -816,7 +805,7 @@ export function doorElsewhereSettingSchema() {
         .max(2048)
         .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
         .refine((url) => doorTrackingParams(url).length === 0, {
-          message: "the link carries tracking (like utm_source or ref): send people to the page itself",
+          message: "the link carries tracking (like utm_source or fbclid): send people to the page itself",
         })
         .describe("Where customers go for it: an https address."),
       platform: z
@@ -851,30 +840,82 @@ export function doorElsewhereSettingSchema() {
 }
 
 /**
+ * One door elsewhere as a stored document is read: as leniently as `readDoorsElsewhere` reads a manifest. The link is
+ * cleaned of tracking (`cleanDoorUrl`) and a platform that no longer fits it, or that this vocabulary no longer knows,
+ * is dropped, but the door stands. A door saved before 0.9.0 with `?utm_source=` on it, or one on a host a later
+ * vocabulary narrows away, is never lost: losing it would put bookings back here while the platform still takes them.
+ * What a write may set is `doorElsewhereSettingSchema`'s.
+ */
+export function doorElsewhereStoredSchema() {
+  return z.preprocess(
+    (raw) => {
+      if (!isPlainObject(raw)) return raw;
+      const door: Record<string, unknown> = { ...raw };
+      if (typeof door.url === "string") door.url = cleanDoorUrl(door.url);
+      if ("platform" in door) {
+        const p = doorPlatform(door.platform);
+        const fit = p && typeof door.url === "string" ? doorPlatformFit(door.url, p, String(door.itemType)) : null;
+        if (fit !== "on_platform" && fit !== "own_site") delete door.platform;
+      }
+      return door;
+    },
+    z.object({
+      itemType: z.enum(["booking", "order"]),
+      url: z
+        .url({ protocol: /^https$/ })
+        .max(2048)
+        .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it"),
+      platform: z.string().regex(DOOR_PLATFORM_ID).optional(),
+    }),
+  );
+}
+
+/**
+ * Kinds of request the business takes somewhere else, and where: bookings at a booking platform,
+ * orders in its own shop's checkout. Each is named in the manifest (`doors_elsewhere`) and on the
+ * business's own page ("Book at …"), and is no longer among the kinds the inbox lists as its own,
+ * so an agent goes there for it. It sends customers to another address, so the owner's AI may not
+ * change it (`guard.ts`). A write is held to every rule of a door (`doorElsewhereSettingSchema`); a
+ * stored document is read leniently (`doorElsewhereStoredSchema`), so no upgrade loses a door.
+ */
+function doorsElsewhereList<T extends z.ZodType<{ readonly itemType: "booking" | "order" }>>(door: T) {
+  return z
+    .array(door)
+    .max(2)
+    .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
+    .default([])
+    .describe(
+      "Kinds of request you take somewhere else, and where: bookings at a booking platform, orders in your own checkout.",
+    );
+}
+
+const doorsElsewhereRead = doorsElsewhereList(doorElsewhereStoredSchema());
+const doorsElsewhereWrite = doorsElsewhereList(doorElsewhereSettingSchema());
+
+/**
  * The business's own: a page on a platform that also serves the business's domain (`own_site`) and is not on the
- * platform's own hosts must be on that domain or a name under it, so a door never names a stranger's shop as the
- * business's checkout. Nothing to check while the business has no domain. Paths are the write's (`doc.…`).
+ * platform's own hosts must be on one of the business's own domains (`business.domain`, the website in
+ * `directory.url`) or a name under one, so a door never names a stranger's shop as the business's checkout. With no
+ * domain of its own set, such a page is refused until the owner adds the website. Paths are the write's (`doc.…`).
  */
 export function doorElsewhereDomainProblems(
   entries: readonly Settings["doorsElsewhere"][number][],
-  domain: string | null | undefined,
+  domains: readonly (string | null | undefined)[],
 ): { path: string; problem: "invalid"; message: string }[] {
-  const own = domain
-    ?.trim()
-    .toLowerCase()
-    .replace(/^www\./, "")
-    .replace(/\.$/, "");
-  if (!own) return [];
+  const own = domains.map(ownSiteDomain).filter((d) => d !== "");
   return entries.flatMap((d, i) => {
     const p = doorPlatform(d.platform);
     if (!p?.own_site || doorPlatformFit(d.url, p, d.itemType) !== "own_site") return [];
-    if (hostIsOn(new URL(d.url).hostname, own)) return [];
-    const where = p.hosts.length ? `on your website (${own}) or on ${p.name}` : `on your website (${own})`;
+    if (own.some((o) => hostIsOn(new URL(d.url).hostname, o))) return [];
+    const what = d.itemType === "order" ? "shop" : "page";
+    const where = p.hosts.length ? `on your website (${own[0]}) or on ${p.name}` : `on your website (${own[0]})`;
     return [
       {
         path: `doc.doorsElsewhere.${i}.url`,
         problem: "invalid" as const,
-        message: `that link is not ${where}: paste your own page's link`,
+        message: own.length
+          ? `that link is not ${where}: paste your own page's link`
+          : `add your website in General first, so agents know this ${what} is yours`,
       },
     ];
   });
@@ -883,11 +924,19 @@ export function doorElsewhereDomainProblems(
 /**
  * The doors elsewhere as the manifest, the business's profile and its page name them: each with its platform, the
  * one the owner picked, or else the one the page is plainly on (a Fresha page pasted as "Another page" still says
- * Fresha). Never a platform for a page on the business's own website that the owner did not name.
+ * Fresha). A platform that serves the business's own domain is named only for a page on one of `ownDomains` (the
+ * business's domain, its website), checked each time, so a door whose domain no longer matches keeps its link and
+ * loses the name. Never a platform for a page on the business's own website that the owner did not name.
  */
-export function publishedDoorsElsewhere(entries: Settings["doorsElsewhere"]): DoorElsewhere[] {
+export function publishedDoorsElsewhere(
+  entries: Settings["doorsElsewhere"],
+  ownDomains: readonly (string | null | undefined)[] = [],
+): DoorElsewhere[] {
+  const own = ownDomains.map(ownSiteDomain).filter((d) => d !== "");
   return entries.map((d) => {
-    const platform = d.platform ?? doorPlatformOf(d.url, d.itemType)?.id;
+    const named = doorPlatform(d.platform);
+    const platform =
+      named && doorPlatformHolds(d.url, named, d.itemType, own) ? named.id : doorPlatformOf(d.url, d.itemType)?.id;
     return { item_type: d.itemType, url: d.url, ...(platform ? { platform } : {}) };
   });
 }
@@ -908,7 +957,12 @@ export const NETWORK_KEY_RULE =
   "a network is an https origin on a public host, like https://network.example.com: no path, no port other than 443";
 
 /** The top-level keys a settings write may name; `network` is the legacy spelling, translated. */
-export const SETTINGS_KEYS: ReadonlySet<string> = new Set([...Object.keys(sections), "networks", "network"]);
+export const SETTINGS_KEYS: ReadonlySet<string> = new Set([
+  ...Object.keys(sections),
+  "doorsElsewhere",
+  "networks",
+  "network",
+]);
 
 /**
  * Reading: keys are canonicalised, anything that is not an https origin is dropped, and at most
@@ -944,11 +998,14 @@ const networksWrite = z
   .default(defaultNetworks);
 
 /** The settings as every reader sees them. Parse stored documents with `parseStoredSettings`. */
-export const settingsSchema = z.preprocess(migrateLegacyNetwork, z.object({ ...sections, networks: networksRead }));
+export const settingsSchema = z.preprocess(
+  migrateLegacyNetwork,
+  z.object({ ...sections, doorsElsewhere: doorsElsewhereRead, networks: networksRead }),
+);
 /** The strict form a write is checked against before anything is stored. */
 export const settingsWriteSchema = z.preprocess(
   migrateLegacyNetwork,
-  z.object({ ...sections, networks: networksWrite }),
+  z.object({ ...sections, doorsElsewhere: doorsElsewhereWrite, networks: networksWrite }),
 );
 export type Settings = z.infer<typeof settingsSchema>;
 

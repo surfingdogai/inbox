@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  choiceForLink,
   elsewhereDoc,
   elsewhereLine,
   linkProblem,
+  ownDomains,
+  pickedPlatformNote,
   placeOf,
   platformChoices,
   prefillFor,
+  prefillFrom,
   shortLink,
+  stillHereWords,
 } from "../client/src/lib/doors";
 
 /**
@@ -55,6 +60,14 @@ describe("the link it starts from", () => {
     // Another page starts from a saved link that is on no platform of the list.
     const own = { itemType: "order" as const, url: "https://shop.mkatematamu.co.ke/" };
     expect(prefillFor("", "order", { current: own })).toBe("https://shop.mkatematamu.co.ke/");
+    // Where it came from: a page a network found on a marketplace asks for the platform's direct link.
+    expect(prefillFrom("cloudbeds", "booking", { detected }).from).toBe("found");
+    expect(prefillFrom("shopify", "order", { domain: "Mkatematamu.co.ke." })).toEqual({
+      url: "https://mkatematamu.co.ke/",
+      from: "website",
+    });
+    expect(prefillFrom("fresha", "booking", {}).from).toBe("none");
+    expect(ownDomains("WWW.Kissahoshi.jp", "https://kissahoshi.jp/", null)).toEqual(["kissahoshi.jp"]);
   });
 });
 
@@ -63,7 +76,12 @@ describe("what it says of a link", () => {
     expect(linkProblem("", "fresha", "booking")).toBe("Paste the link.");
     expect(linkProblem("fresha.com/a/x", "fresha", "booking")).toBe("Paste the whole link, starting with https://");
     expect(linkProblem("http://www.fresha.com/a/x", "fresha", "booking")).toBe("The link must start with https://");
-    expect(linkProblem("https://studiolumiere.ca/book", "fresha", "booking")).toBe("That link isn't on Fresha.");
+    expect(linkProblem("https://studiolumiere.ca/book", "fresha", "booking")).toBe(
+      "That link isn't on Fresha. If it's yours, choose Another page.",
+    );
+    expect(linkProblem("https://www.fresha.com/for-business", "fresha", "booking")).toBe(
+      "That's Fresha's own page. Paste the link to yours.",
+    );
     expect(linkProblem("https://www.fresha.com/", "fresha", "booking")).toBe(
       "That's Fresha's own page. Paste the link to yours.",
     );
@@ -77,6 +95,59 @@ describe("what it says of a link", () => {
       "That link isn't on your website (plumbing.co.za).",
     );
     expect(linkProblem("https://shop.mkatematamu.co.ke/", "shopify", "order", "mkatematamu.co.ke")).toBeNull();
+    // The domain as the server compares it: capitals, www and a trailing dot are the same domain.
+    expect(linkProblem("https://shop.mkatematamu.co.ke/", "shopify", "order", "WWW.Mkatematamu.co.ke.")).toBeNull();
+    expect(
+      linkProblem("https://shop.mkatematamu.co.ke/", "shopify", "order", ["", "https://mkatematamu.co.ke/"]),
+    ).toBeNull();
+    // No website yet: a shop there waits for one; its own name on Shopify does not.
+    expect(linkProblem("https://shop.mkatematamu.co.ke/", "shopify", "order", null)).toBe(
+      "Add your website in General first, so agents know this shop is yours.",
+    );
+    expect(linkProblem("https://lotus-spa.in/book", "simplybook", "booking", [])).toBe(
+      "Add your website in General first, so agents know this page is yours.",
+    );
+    expect(linkProblem("https://mkate-matamu.myshopify.com/", "shopify", "order", null)).toBeNull();
+  });
+});
+
+describe("where a pasted link puts the chooser", () => {
+  it("on the listed platform it is plainly on, else Another page, said once", () => {
+    expect(choiceForLink(FRESHA, "", "booking", "other")).toEqual({ choice: "fresha", moved: false });
+    expect(choiceForLink(FRESHA, "other", "booking", "other")).toEqual({ choice: "fresha", moved: false });
+    // A TableCheck link with OpenTable picked picks TableCheck.
+    const tc = "https://www.tablecheck.com/ja/shops/kissa-hoshi-osaka/reserve";
+    expect(choiceForLink(tc, "opentable", "booking", "other")).toEqual({ choice: "tablecheck", moved: false });
+    // On no listed platform: Another page, for nothing picked and for a platform it is not on.
+    expect(choiceForLink("https://kissahoshi.jp/yoyaku", "", "booking", "other")).toEqual({
+      choice: "other",
+      moved: true,
+    });
+    expect(choiceForLink("https://kissahoshi.jp/yoyaku", "treatwell", "booking", "other")).toEqual({
+      choice: "other",
+      moved: true,
+    });
+    // A shop on the business's own website stays where the owner picked it.
+    expect(choiceForLink("https://kissahoshi.jp/shop", "shopify", "order", "other")).toEqual({
+      choice: "shopify",
+      moved: false,
+    });
+    // One of the platform's own pages picks the platform, which then says it isn't the owner's page.
+    expect(choiceForLink("https://www.fresha.com/for-business", "", "booking", "other")).toEqual({
+      choice: "fresha",
+      moved: false,
+    });
+    // Not a link yet: nothing moves.
+    expect(choiceForLink("kissahoshi", "", "booking", "other")).toEqual({ choice: "", moved: false });
+  });
+});
+
+describe("what the editor says still comes here", () => {
+  it("only the doors that are open", () => {
+    expect(stillHereWords({ message: true, quoteRequest: true })).toBe("Messages and price requests still come here.");
+    expect(stillHereWords({ message: true, quoteRequest: false })).toBe("Messages still come here.");
+    expect(stillHereWords({ message: false, quoteRequest: true })).toBe("Price requests still come here.");
+    expect(stillHereWords({ message: false, quoteRequest: false })).toBe("");
   });
 });
 
@@ -100,6 +171,12 @@ describe("the settings write", () => {
     expect(elsewhereLine({ itemType: "order", url: "https://shop.mkatematamu.co.ke/", platform: "shopify" })).toBe(
       "Orders at shop.mkatematamu.co.ke",
     );
+    // The owner's own line keeps the platform they picked when agents name the shop by its address.
+    expect(pickedPlatformNote({ itemType: "order", url: "https://kissahoshi.jp/shop", platform: "shopify" })).toBe(
+      "Shopify",
+    );
+    expect(pickedPlatformNote({ itemType: "booking", url: FRESHA, platform: "fresha" })).toBeNull();
+    expect(pickedPlatformNote({ itemType: "order", url: "https://kissahoshi.jp/shop" })).toBeNull();
     expect(shortLink(FRESHA)).toBe("fresha.com/a/studio-lumiere-toronto-queen-street-west-k3f8q2");
     expect(shortLink("https://shop.mkatematamu.co.ke/")).toBe("shop.mkatematamu.co.ke");
   });

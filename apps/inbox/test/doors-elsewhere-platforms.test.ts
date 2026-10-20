@@ -148,9 +148,16 @@ describe("a pizzeria whose orders are in its own WooCommerce checkout", () => {
     const s = await setup("pizzeria");
     const set = await s.settings({ doorsElsewhere: [{ itemType: "order", url: CHECKOUT, platform: "woocommerce" }] });
     expect(set.status, await set.clone().text()).toBe(200);
-    expect((await s.manifest()).doors_elsewhere).toEqual([
-      { item_type: "order", url: CHECKOUT, platform: "woocommerce" },
-    ]);
+    // The profile carries the business's domain, so it names WooCommerce; the manifest names it only beside the
+    // website its own profile gives, which is what any reader checks it against.
+    const profile = (await (await s.get("/v1/business")).json()) as { doors_elsewhere?: unknown };
+    expect(profile.doors_elsewhere).toEqual([{ item_type: "order", url: CHECKOUT, platform: "woocommerce" }]);
+    expect((await s.manifest()).doors_elsewhere).toEqual([{ item_type: "order", url: CHECKOUT }]);
+    const site = await s.settings({ directory: { url: "https://www.fornodanonnabia.com.br/" } });
+    expect(site.status, await site.clone().text()).toBe(200);
+    const manifest = await s.manifest();
+    expect(manifest.doors_elsewhere).toEqual([{ item_type: "order", url: CHECKOUT, platform: "woocommerce" }]);
+    expect(readDoorsElsewhere(manifest)).toEqual(manifest.doors_elsewhere);
     const html = await (await s.get("/", { "accept-language": "en" })).text();
     expect(html).toContain(`<a href="${CHECKOUT}" rel="noopener noreferrer">Order at fornodanonnabia.com.br</a>`);
     const stranger = await s.settings({

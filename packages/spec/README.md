@@ -80,11 +80,13 @@ or network:
   TableCheck, Toast, Shopify, Cloudbeds and others: each with its hosts, the kinds of request it takes and how a
   business's own page there is told apart from the platform's own pages), so an agent can say "Book at Fresha"
   rather than a host. `readDoorsElsewhere` keeps it only when the vocabulary knows it, the platform takes that kind
-  and the URL is the business's own page there (or on the business's own domain, for a platform that serves pages
-  there); otherwise it drops the platform alone and keeps the door. `doorPlatformOf`, `doorPlatformFit`,
-  `doorPlace`, `doorTrackingParams` and `cleanDoorUrl` say the same for anyone else, and a door carries no tracking
-  or affiliate parameter (`tracking_params`). A 0.8 reader ignores `platform`; a 0.8 manifest reads as before. The
-  spec's own examples (a time zone, an amount) no longer name one country.
+  and the URL is the business's own page there (one of the platform's `pages`, or past its home and its reserved
+  names), or, for a platform that serves pages on the business's own domain, the URL's host is on the website the
+  manifest's `profile.url` names; otherwise it drops the platform alone and keeps the door. `doorPlatformOf`,
+  `doorPlatformFit`, `doorPlatformHolds`, `doorPlace`, `doorTrackingParams`, `cleanDoorUrl` and `ownSiteDomain` say
+  the same for anyone else, and a door carries no tracking or affiliate parameter (`tracking_params`). A 0.8 reader
+  ignores `platform`; a 0.8 manifest reads as before. The spec's own examples (a time zone, an amount) no longer name
+  one country, and minor units follow each currency's ISO 4217 exponent.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -128,8 +130,11 @@ what a business writes (synonyms), what it sees on a site's pages (marks) and a 
 handlers (handlers). A token is never removed or renamed.
 `vocab/door-platforms.json` (0.9) lists the platforms a door elsewhere may name: for each its token, name,
 group, the kinds of request it takes, its hosts, how a business's own page there is told apart, whether it also
-serves pages on the business's own domain, and the platform's public page its hosts were read from. Delivery and
-booking marketplaces that take a share of each sale are not in it. A token is never removed or renamed.
+serves pages on the business's own domain, where its pages for a business are known to sit, and the platform's
+public page its hosts were read from; and the names under a host, and the first path segments, that are a platform's
+own pages. Not listed: delivery apps and stay marketplaces (Uber Eats, DoorDash, Deliveroo, Booking.com, Airbnb,
+Expedia…). Some listed platforms charge the business per booking or order; that is between the business and the
+platform. A token is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by

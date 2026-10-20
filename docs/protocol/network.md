@@ -1586,8 +1586,10 @@ carries, and an inbox serves it for a minute at most, so an owner's switch holds
 **Doors elsewhere** (spec 0.9.0, [ADR-031](../adr/031-doors-elsewhere-platforms.md)). A manifest's `doors_elsewhere`
 names the kinds of request a business takes somewhere else and the page for each, read entry by entry with
 `readDoorsElsewhere`. An entry may name its `platform`, a token of `vocab/door-platforms.json`, kept only when the
-page is the business's own page on that platform (or, for a platform that serves pages on the business's own domain,
-`own_site`). A network that answers `elsewhere` gives that page as it is, and the platform's name when it kept one, so
+page is the business's own page on that platform. For a platform that serves pages on the business's own domain
+(`own_site`), a network trusts the token only when the page's host is on the business's own website (the manifest's
+`profile.url`); on any other host it drops the token and keeps the page, since anyone can call a stranger's shop
+theirs. A network that answers `elsewhere` gives that page as it is, and the platform's name when it kept one, so
 an assistant can say "Book at Fresha"; a page on the business's own domain is named by its host. A network never
 adds tracking or an affiliate parameter to the page, never sends a person through a page of its own on the way, and
 treats a door elsewhere as the business's word: a door the business published for people, not a machine door, and

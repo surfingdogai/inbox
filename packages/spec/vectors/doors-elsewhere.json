@@ -1,5 +1,5 @@
 {
-  "description": "What a reader keeps of a manifest's doors_elsewhere: each case's manifest gives kept. Every entry is checked alone and dropped alone: an item type of the five, not one the manifest lists in item_types and not one an entry kept before it names; a URL kept as written, https, at most 2048 characters, with no user or password, on a host of two labels or more whose last label starts with a letter. Since 0.9.0 an entry's platform is kept when vocab/door-platforms.json knows the token, the platform takes that kind and the URL is the business's own page there (or the platform serves pages on the business's own domain); otherwise the platform alone is dropped. detect gives, for a URL and a kind, the platform doorPlatformOf finds (null for none) and the name doorPlace gives the door; clean gives the tracking and affiliate parameters doorTrackingParams finds and the URL cleanDoorUrl leaves. Read by packages/core/test/doors-elsewhere.test.ts and packages/spec/test/door-platforms.test.ts.",
+  "description": "What a reader keeps of a manifest's doors_elsewhere: each case's manifest gives kept. Every entry is checked alone and dropped alone: an item type of the five, not one the manifest lists in item_types and not one an entry kept before it names; a URL kept as written, https, at most 2048 characters, with no user or password, on a host of two labels or more whose last label starts with a letter. Since 0.9.0 an entry's platform is kept when vocab/door-platforms.json knows the token, the platform takes that kind and the URL is the business's own page there (one of its pages, or past its home and reserved names), or the platform serves pages on the business's own domain and the URL's host is on the website the manifest's profile.url names; otherwise the platform alone is dropped. detect gives, for a URL and a kind, the platform doorPlatformOf finds (null for none) and the name doorPlace gives the door; clean gives the tracking and affiliate parameters doorTrackingParams finds and the URL cleanDoorUrl leaves, every other parameter exactly as written; generic names a platform may use on its own direct link, like ref, are kept. Read by packages/core/test/doors-elsewhere.test.ts and packages/spec/test/door-platforms.test.ts.",
   "cases": [
     {
       "name": "a salon whose bookings are taken at a booking platform",
@@ -475,9 +475,13 @@
       ]
     },
     {
-      "name": "0.9.0: a shop's own checkout on its own domain, run on a platform that serves it there",
+      "name": "0.9.0: a shop's own checkout on its own website, run on a platform that serves it there",
       "manifest": {
         "item_types": ["message", "quote_request"],
+        "profile": {
+          "name": "Mkate Matamu",
+          "url": "https://www.mkatematamu.co.ke/"
+        },
         "doors_elsewhere": [
           {
             "item_type": "order",
@@ -519,6 +523,76 @@
         {
           "item_type": "order",
           "url": "https://order.toasttab.com/online/casa-di-nonna-sp"
+        }
+      ]
+    },
+    {
+      "name": "0.9.0: a platform that serves the business's own domain, on a host its website is not: the platform is dropped",
+      "manifest": {
+        "item_types": ["message"],
+        "profile": {
+          "name": "Mkate Matamu",
+          "url": "https://mkatematamu.co.ke"
+        },
+        "doors_elsewhere": [
+          {
+            "item_type": "order",
+            "url": "https://shop.another-bakery.co.ke/",
+            "platform": "shopify"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://shop.another-bakery.co.ke/"
+        }
+      ]
+    },
+    {
+      "name": "0.9.0: a platform that serves the business's own domain, with no website in the manifest to check it against: the platform is dropped",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "order",
+            "url": "https://tienda.panaderiaflor.com.mx/",
+            "platform": "woocommerce"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "order",
+          "url": "https://tienda.panaderiaflor.com.mx/"
+        }
+      ]
+    },
+    {
+      "name": "0.9.0: the platform's own pages past its home (for business, sign-in, help) are not the business's page there",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://www.fresha.com/for-business",
+            "platform": "fresha"
+          },
+          {
+            "item_type": "order",
+            "url": "https://admin.myshopify.com/",
+            "platform": "shopify"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://www.fresha.com/for-business"
+        },
+        {
+          "item_type": "order",
+          "url": "https://admin.myshopify.com/"
         }
       ]
     }
@@ -589,6 +663,108 @@
       "item_type": "order",
       "platform": null,
       "place": "www.fresha.com"
+    },
+    {
+      "url": "https://www.fresha.com/login",
+      "item_type": "booking",
+      "platform": null,
+      "place": "www.fresha.com"
+    },
+    {
+      "url": "https://www.fresha.com/for-business",
+      "item_type": "booking",
+      "platform": null,
+      "place": "www.fresha.com"
+    },
+    {
+      "url": "https://calendly.com/pricing",
+      "item_type": "booking",
+      "platform": null,
+      "place": "calendly.com"
+    },
+    {
+      "url": "https://squareup.com/us/en/appointments",
+      "item_type": "booking",
+      "platform": null,
+      "place": "squareup.com"
+    },
+    {
+      "url": "https://help.simplybook.me/wiki/Custom_Domain_custom_feature",
+      "item_type": "booking",
+      "platform": null,
+      "place": "help.simplybook.me"
+    },
+    {
+      "url": "https://resy.com/cities/ny",
+      "item_type": "booking",
+      "platform": null,
+      "place": "resy.com"
+    },
+    {
+      "url": "https://www.opentable.com/start/home",
+      "item_type": "booking",
+      "platform": null,
+      "place": "www.opentable.com"
+    },
+    {
+      "url": "https://www.setmore.com/pricing",
+      "item_type": "booking",
+      "platform": null,
+      "place": "www.setmore.com"
+    },
+    {
+      "url": "https://www.toasttab.com/restaurants/pos",
+      "item_type": "order",
+      "platform": null,
+      "place": "www.toasttab.com"
+    },
+    {
+      "url": "https://admin.myshopify.com/",
+      "item_type": "order",
+      "platform": null,
+      "place": "admin.myshopify.com"
+    },
+    {
+      "url": "https://resy.com/cities/ny/venues/kitchen-of-nkem",
+      "item_type": "booking",
+      "platform": "resy",
+      "place": "Resy"
+    },
+    {
+      "url": "https://www.tablecheck.com/ja/shops/kissa-hoshi-osaka/reserve",
+      "item_type": "booking",
+      "platform": "tablecheck",
+      "place": "TableCheck"
+    },
+    {
+      "url": "https://www.toasttab.com/maple-and-rye-halifax/v3",
+      "item_type": "order",
+      "platform": "toast",
+      "place": "Toast"
+    },
+    {
+      "url": "https://book.squareup.com/appointments/8k2b1x7q/location/LQ7ZT3/services",
+      "item_type": "booking",
+      "platform": "square-appointments",
+      "place": "Square Appointments"
+    },
+    {
+      "url": "https://app.acuityscheduling.com/schedule.php?owner=21894712",
+      "item_type": "booking",
+      "platform": "acuity",
+      "place": "Acuity Scheduling"
+    },
+    {
+      "url": "https://studio-amani.booksy.com/a",
+      "item_type": "booking",
+      "platform": "booksy",
+      "place": "Booksy"
+    },
+    {
+      "url": "https://calendly.com/dr-ana-ruiz-fisio/first-visit",
+      "item_type": "booking",
+      "platform": "calendly",
+      "place": "Calendly"
     }
   ],
   "clean": [
@@ -599,8 +775,8 @@
     },
     {
       "url": "https://www.opentable.ca/r/le-petit-coin-montreal?ref=18372&lang=fr-CA",
-      "tracking": ["ref"],
-      "clean": "https://www.opentable.ca/r/le-petit-coin-montreal?lang=fr-CA"
+      "tracking": [],
+      "clean": "https://www.opentable.ca/r/le-petit-coin-montreal?ref=18372&lang=fr-CA"
     },
     {
       "url": "https://www.fresha.com/a/studio-lumiere-toronto-k3f8q2?pId=88213&utm_source=instagram&utm_medium=bio&fbclid=IwAR0x",
@@ -611,6 +787,21 @@
       "url": "https://slicelife.com/restaurants/ny/brooklyn/11211/nonna-pizza/menu?gclid=Cj0KCQ&aff_id=77",
       "tracking": ["gclid", "aff_id"],
       "clean": "https://slicelife.com/restaurants/ny/brooklyn/11211/nonna-pizza/menu"
+    },
+    {
+      "url": "https://bookings.gettimely.com/kiri-nails-auckland/book?tz=Pacific/Auckland&q=gel%20nails&utm_source=x",
+      "tracking": ["utm_source"],
+      "clean": "https://bookings.gettimely.com/kiri-nails-auckland/book?tz=Pacific/Auckland&q=gel%20nails"
+    },
+    {
+      "url": "https://www.exploretock.com/aster-cape-town?fbclid=IwAR1x&date=2026-11-02#experiences",
+      "tracking": ["fbclid"],
+      "clean": "https://www.exploretock.com/aster-cape-town?date=2026-11-02#experiences"
+    },
+    {
+      "url": "https://www.sevenrooms.com/reservations/nori-sao-paulo?utm_campaign=bio",
+      "tracking": ["utm_campaign"],
+      "clean": "https://www.sevenrooms.com/reservations/nori-sao-paulo"
     }
   ]
 }

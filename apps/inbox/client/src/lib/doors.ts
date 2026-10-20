@@ -10,6 +10,7 @@ import {
   doorPlatformFit,
   doorPlatformOf,
   hostIsOn,
+  ownSiteDomain,
 } from "../../../../../packages/spec/src/door-platforms";
 import type { NetworkView, Settings } from "./types";
 
@@ -127,6 +128,35 @@ export function elsewhereLine(d: ElsewhereEntry): string {
   return `${d.itemType === "booking" ? "Bookings" : "Orders"} at ${placeOf(d)}`;
 }
 
+/**
+ * The platform the owner picked, for the owner's own line only, when agents name the door by its address instead (a
+ * shop on the business's own website: "Orders at kissahoshi.jp · Shopify"); null when the line already says it.
+ */
+export function pickedPlatformNote(d: ElsewhereEntry): string | null {
+  const p = doorPlatform(d.platform);
+  return p && placeOf(d) !== p.name ? p.name : null;
+}
+
+/**
+ * What still comes to the inbox while a kind is sent elsewhere, from the doors open now: both, messages alone, price
+ * requests alone, or nothing to say. Never a door that would turn an agent away too.
+ */
+export function stillHereWords(open: { readonly message: boolean; readonly quoteRequest: boolean }): string {
+  if (open.message && open.quoteRequest) return "Messages and price requests still come here.";
+  if (open.message) return "Messages still come here.";
+  if (open.quoteRequest) return "Price requests still come here.";
+  return "";
+}
+
+/** The business's own domains, each as every check compares it: its domain, and the website it gave, if any. */
+export function ownDomains(...values: readonly (string | null | undefined)[]): string[] {
+  return [...new Set(values.map(ownSiteDomain).filter((d) => d !== ""))];
+}
+
+function domainsOf(value: string | null | undefined | readonly (string | null | undefined)[]): string[] {
+  return typeof value === "string" || value == null ? ownDomains(value) : ownDomains(...value);
+}
+
 /** A link as the owner reads it: host and path, no scheme, no trailing slash. */
 export function shortLink(url: string): string {
   try {
@@ -174,17 +204,38 @@ export function prefillFor(
     readonly domain?: string | null | undefined;
   },
 ): string {
+  return prefillFrom(platformId, kind, opts).url;
+}
+
+/**
+ * `prefillFor`, with where the link came from: `saved`, `found` (a network found the page; on a marketplace platform
+ * the owner is asked for the platform's direct link instead, if it has one), `website`, or `none`.
+ */
+export function prefillFrom(
+  platformId: string,
+  kind: ElsewhereKind,
+  opts: {
+    readonly current?: ElsewhereEntry | undefined;
+    readonly detected?: readonly { readonly type: string; readonly url: string }[];
+    readonly domain?: string | null | undefined;
+  },
+): { url: string; from: "saved" | "found" | "website" | "none" } {
   const p = doorPlatform(platformId);
   const cur = opts.current;
   if (cur && cur.itemType === kind && (cur.platform ?? doorPlatformOf(cur.url, kind)?.id ?? "") === platformId)
-    return cur.url;
-  if (!p) return cur?.itemType === kind && !cur.platform && !doorPlatformOf(cur.url, kind) ? cur.url : "";
+    return { url: cur.url, from: "saved" };
+  if (!p)
+    return cur?.itemType === kind && !cur.platform && !doorPlatformOf(cur.url, kind)
+      ? { url: cur.url, from: "saved" }
+      : { url: "", from: "none" };
   for (const d of opts.detected ?? []) {
     if (!/^https:\/\//.test(d.url)) continue;
-    if (d.type === `platform:${p.id}` || doorPlatformFit(d.url, p, kind) === "on_platform") return cleanDoorUrl(d.url);
+    if (d.type === `platform:${p.id}` || doorPlatformFit(d.url, p, kind) === "on_platform")
+      return { url: cleanDoorUrl(d.url), from: "found" };
   }
-  if (p.own_site && opts.domain) return `https://${opts.domain.replace(/^www\./, "")}/`;
-  return "";
+  const own = ownSiteDomain(opts.domain);
+  if (p.own_site && own) return { url: `https://${own}/`, from: "website" };
+  return { url: "", from: "none" };
 }
 
 /**
@@ -196,7 +247,7 @@ export function linkProblem(
   url: string,
   platformId: string,
   kind: ElsewhereKind,
-  domain?: string | null | undefined,
+  domain?: string | null | undefined | readonly (string | null | undefined)[],
 ): string | null {
   const text = url.trim();
   if (!text) return "Paste the link.";
@@ -213,17 +264,59 @@ export function linkProblem(
   const p = doorPlatform(platformId);
   if (!p) return null;
   const fit = doorPlatformFit(text, p, kind);
-  if (fit === "not_on_platform") return `That link isn't on ${p.name}.`;
+  if (fit === "not_on_platform") return `That link isn't on ${p.name}. If it's yours, choose Another page.`;
   if (fit === "platform_page") return `That's ${p.name}'s own page. Paste the link to yours.`;
-  if (fit === "own_site" && domain) {
-    const own = domain.replace(/^www\./, "");
-    if (!hostIsOn(u.hostname, own)) {
+  if (fit === "own_site") {
+    const own = domainsOf(domain);
+    if (own.length === 0) return noWebsiteWords(kind);
+    if (!own.some((d) => hostIsOn(u.hostname, d))) {
       return p.hosts.length
-        ? `That link isn't on your website (${own}) or on ${p.name}.`
-        : `That link isn't on your website (${own}).`;
+        ? `That link isn't on your website (${own[0]}) or on ${p.name}.`
+        : `That link isn't on your website (${own[0]}).`;
     }
   }
   return null;
+}
+
+/** What a page on the business's own website waits for while the business has none set. */
+export function noWebsiteWords(kind: ElsewhereKind): string {
+  return `Add your website in General first, so agents know this ${kind === "order" ? "shop" : "page"} is yours.`;
+}
+
+/**
+ * Where a pasted link puts the chooser: the listed platform it is plainly on (a TableCheck link with OpenTable picked
+ * picks TableCheck), or whose own page it is (so the owner is told it isn't theirs); Another page for a link on no
+ * listed platform, when nothing or a platform it is not on was picked; otherwise where it stands. `moved` says it went
+ * to Another page, so the owner is told.
+ */
+export function choiceForLink(
+  url: string,
+  choice: string,
+  kind: ElsewhereKind,
+  another: string,
+): { choice: string; moved: boolean } {
+  const on = doorPlatformOf(url, kind);
+  const picked = doorPlatform(choice);
+  if (on) {
+    const fits = picked && picked.id !== on.id ? doorPlatformFit(url, picked, kind) : "on_platform";
+    return { choice: !picked || picked.id === on.id || fits !== "on_platform" ? on.id : choice, moved: false };
+  }
+  let valid = false;
+  try {
+    valid = new URL(url).protocol === "https:";
+  } catch {
+    valid = false;
+  }
+  if (!valid) return { choice, moved: false };
+  // One of a platform's own pages (fresha.com/for-business) picks that platform, so the owner is told it isn't theirs.
+  const own = DOOR_PLATFORMS.find(
+    (p) => p.item_types.includes(kind) && doorPlatformFit(url, p, kind) === "platform_page",
+  );
+  if (own) return { choice: own.id, moved: false };
+  if (!choice) return { choice: another, moved: true };
+  if (picked && !picked.own_site && doorPlatformFit(url, picked, kind) === "not_on_platform")
+    return { choice: another, moved: true };
+  return { choice, moved: false };
 }
 
 /** The settings write that sets one kind's door elsewhere, or with null brings that kind back here. */
@@ -244,4 +337,4 @@ export function elsewhereDoc(
   return { doorsElsewhere: all.length ? all : null };
 }
 
-export { cleanDoorUrl, doorPlatform, doorPlatformOf };
+export { cleanDoorUrl, doorPlatform, doorPlatformFit, doorPlatformOf };

@@ -271,7 +271,7 @@ export async function checkManifest(input: unknown): Promise<ConformanceReport> 
         f.warn(
           `$.doors_elsewhere[${i}].platform`,
           "platform_dropped",
-          "A reader keeps this door without its platform: a token of vocab/door-platforms.json that takes this kind of request, with the URL the business's own page there.",
+          "A reader keeps this door without its platform: a token of vocab/door-platforms.json that takes this kind of request, with the URL the business's own page there, or, for a platform that serves the business's own domain, on the website profile.url names.",
         );
       }
       const tracking = doorTrackingParams(k.url);
