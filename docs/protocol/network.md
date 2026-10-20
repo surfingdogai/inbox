@@ -1624,6 +1624,46 @@ An assistant platform's published outbound range is many people, never a trusted
 it keeps a limit of its own, and the range as a whole a share of the network's. A network MUST NOT carry to a business that has no inbox; a later version may
 let a business that claimed its listing opt in.
 
+### 4.18 Stays (spec 0.10, MAY)
+
+A place to stay's inbox ([ADR-033](../adr/033-stays.md)) lists `stay` in its `item_types` once it has
+a room to offer, and, where its area requires one, its short-term rental registration number. Its
+manifest's `profile` MAY carry `lodging` (`schemas/profile-lodging.json`):
+
+```json
+{"lodging": {"kind": "guesthouse", "rooms": 6, "check_in_from": "14:00", "check_out_until": "10:00",
+  "confirmation": "request", "answer_hours": 4, "registration": "STR-0427"}}
+```
+
+`kind` is a token of [`vocab/lodging.json`](../../packages/spec/vocab/lodging.json); `confirmation` is
+`request` (every stay answered by the property), `instant_some` (rooms kept for direct guests confirm at
+once inside their nights) or `instant` (the property's own system, written to first). A network keeps
+each field alone and drops a bad one alone, as for every profile field (§4.6): a kind it does not know,
+a time not in `HH:MM`, `rooms` outside 1 to 5,000, `answer_hours` outside 1 to 168, a registration
+longer than 60 characters. It MAY show `lodging` on a listing and filter by `takes=stay`; it MUST NOT
+read `confirmation` as a promise that a given night is free.
+
+A stay door elsewhere is `{"item_type": "stay", "url": …, "url_template": …}`: the property's own
+booking engine, and its deep link with `{check_in}`, `{check_out}`, `{adults}`, `{children}` and
+`{rooms}` to fill in, on the same host as `url` (`fillStayTemplate`, `vectors/doors-elsewhere-stay.json`).
+A network that sends a person there fills the template; one that cannot sends them to `url`.
+
+**Carried.** A network MAY carry a person's request for a stay (`request_stay`,
+`schemas/mcp-request-stay-input.json`) to the property's own inbox under §4.17's rules: the business's
+switch, the person's consent, their address and words and nothing else. The inbox answers with its own
+quote later, or, where it confirms at once, with `confirm` and its terms; the same call again with
+`terms_sha`, after the person's yes, books. A person's assistant may equally ask the inbox itself,
+through its `get_property`, `check_stay_availability`, `quote_stay`, `request_stay`, `hold_stay`,
+`book_stay` and `change_stay` doors.
+
+What this version does not do:
+
+- A network does not search stays across properties or relay one property's offers to a person: an
+  offer from a place to stay is the inbox's own (an id only it can make, valid 15 minutes), and is never
+  cached, compared or shown by a network.
+- Receipts for stays carry no outcome codes a network publishes: until a rules version names them, a
+  network keeps no record of stays.
+
 ## 5. Persons and passes
 
 ### 5.1 First contact: `POST /v1/persons` (sdi-instance/1)
