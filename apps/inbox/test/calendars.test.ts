@@ -185,7 +185,6 @@ describe("Settings → Integrations", () => {
       ["square", "soon"],
       ["woocommerce", "soon"],
       ["shopify", "soon"],
-      ["property", "soon"],
     ]);
     const calendar = body.cards.find((c) => c.id === "calendar");
     // Outlook is its published calendar link, with Outlook's steps: busy times only, and ready.

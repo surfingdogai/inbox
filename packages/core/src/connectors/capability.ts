@@ -428,7 +428,7 @@ export class ConnectorCapabilities {
   private async holdings(): Promise<{ services: number; products: number; rooms: number }> {
     const { rows } = await this.db.client.query({
       sql: `SELECT (SELECT COUNT(*) FROM services WHERE active = 1), (SELECT COUNT(*) FROM products WHERE active = 1),
-                   (SELECT COUNT(*) FROM room_types WHERE active = 1)`,
+                   (SELECT COUNT(*) FROM properties WHERE active = 1)`,
       method: "all",
     });
     return {

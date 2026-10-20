@@ -235,7 +235,6 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Rooms, rates and what's free",
     group: "lodging",
     industries: ["stays"],
-    building: true,
     ways: [
       { kind: "beds24", preset: null, label: "Beds24" },
       { kind: "hostaway", preset: null, label: "Hostaway" },
@@ -264,7 +263,7 @@ export type Lean = "appointments" | "shop" | "stays" | null;
 export function leanOf(counts: {
   readonly services: number;
   readonly products: number;
-  /** A place to stay's room types (ADR-033): it leans to stays, with its property system first. */
+  /** A place to stay (ADR-033): it leans to stays, with its property system first. */
   readonly rooms?: number | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";
@@ -299,9 +298,14 @@ export function gallery(
 ): GalleryCard[] {
   const out: GalleryCard[] = [];
   for (const card of GALLERY) {
+    // A place to stay's own systems are shown to a place to stay only, each "Soon" until its connector is
+    // registered here (ADR-033 §8.1): the hotel connectors track builds them.
+    const staysOnly = card.industries.length > 0 && card.industries.every((i) => i === "stays");
+    if (staysOnly && opts.lean !== "stays") continue;
+    const spec: CardSpec = staysOnly ? { ...card, building: true } : card;
     const ways: GalleryWay[] = [];
-    for (const w of card.ways) {
-      const way = wayOf(card, w, definitions.get(w.kind), opts);
+    for (const w of spec.ways) {
+      const way = wayOf(spec, w, definitions.get(w.kind), opts);
       if (way) ways.push(way);
     }
     if (ways.length === 0) continue;
