@@ -1,6 +1,13 @@
-import { b64uEncode, pkceS256, proofStatement, sha256b64u } from "../../../../packages/core/src/phones/crypto";
+import {
+  b64uEncode,
+  jwkThumbprint,
+  pairingMatch,
+  pkceS256,
+  proofStatement,
+  sha256b64u,
+} from "../../../../packages/core/src/phones/crypto";
 import type { PhoneLink } from "../../../../packages/core/src/phones/links";
-import type { Native } from "./native";
+import { type Native, NativeError } from "./native";
 
 /**
  * The inboxes this phone is connected to, and their tokens (ADR-026). An operator who looks after
@@ -8,7 +15,12 @@ import type { Native } from "./native";
  * its own refresh token in secure storage, and its own short access token in memory.
  *
  * A refresh token is useless without the device key: every refresh is signed with it, and the key
- * never leaves the phone's keystore.
+ * never leaves the phone's keystore. The key signs only shortly after the owner unlocked the phone or
+ * the app; past that, the app asks for the fingerprint or face and signs again.
+ *
+ * Pairing with a QR code takes two steps: the phone trades the code for tokens that open nothing yet,
+ * shows the inbox's address and two digits, and waits for the owner to press Confirm on the computer,
+ * where the same two digits show. Only then is the inbox kept on the phone.
  */
 export interface InboxEntry {
   /** Where this inbox's keys are kept on the phone: one alias per inbox, never reused. */
@@ -17,6 +29,19 @@ export interface InboxEntry {
   readonly name: string;
   readonly deviceId: string;
   readonly addedAt: number;
+  /** The relay's id for this phone at this inbox: which inbox's key opens a notification naming it. */
+  readonly relayDevice?: string | undefined;
+}
+
+/** A phone that used a code and waits for the owner's Confirm on the computer. Kept in memory only. */
+export interface PendingPhone {
+  readonly alias: string;
+  readonly origin: string;
+  readonly name: string;
+  readonly deviceId: string;
+  /** The two digits this phone worked out, which the computer must show too. */
+  readonly match: string;
+  readonly answer: TokenAnswer;
 }
 
 interface Tokens {
@@ -30,6 +55,8 @@ interface TokenAnswer {
   readonly expires_in: number;
   readonly refresh_token: string;
   readonly device_id: string;
+  readonly state?: "pending" | "connected";
+  readonly match?: string;
   readonly inbox?: { readonly origin: string; readonly name: string };
 }
 
@@ -54,6 +81,8 @@ export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 const LIST_KEY = "inboxes";
 const tokenKey = (alias: string) => `tokens.${alias}`;
 const verifierKey = (origin: string) => `link.${origin}`;
+/** The push token last registered with an inbox (lib/push.ts). */
+export const pushSentKey = (alias: string) => `push.${alias}`;
 
 async function problem(res: Response): Promise<InboxError> {
   try {
@@ -90,7 +119,16 @@ export class Sessions {
 
   private async saveList(list: readonly InboxEntry[]): Promise<void> {
     await this.native.secureSet(LIST_KEY, JSON.stringify(list));
-    await this.native.setInboxes(list.map((e) => ({ alias: e.alias, origin: e.origin, name: e.name })));
+    await this.native.setInboxes(
+      list.map((e) => ({ alias: e.alias, origin: e.origin, name: e.name, device: e.relayDevice })),
+    );
+  }
+
+  /** What the inbox said the relay calls this phone there: kept, and told to the notification service. */
+  async setRelayDevice(alias: string, device: string): Promise<void> {
+    const list = await this.list();
+    if (list.find((e) => e.alias === alias)?.relayDevice === device) return;
+    await this.saveList(list.map((e) => (e.alias === alias ? { ...e, relayDevice: device } : e)));
   }
 
   private async post(url: string, body: unknown): Promise<Response> {
@@ -105,11 +143,27 @@ export class Sessions {
     }
   }
 
-  /** A signed statement, as the inbox checks it: what for, which inbox, a hash of the secret, when. */
+  /**
+   * A signed statement, as the inbox checks it: what for, which inbox, a hash of the secret, when. The
+   * device key signs only shortly after an unlock: past that, the owner is asked once, and it signs.
+   */
   private async proof(alias: string, purpose: "pair" | "link" | "refresh", origin: string, secret: string) {
-    const at = this.clock();
-    const statement = proofStatement(purpose, origin, await sha256b64u(secret), at);
-    return { at, proof: await this.native.sign(alias, statement) };
+    const statement = async () => {
+      const at = this.clock();
+      return { at, text: proofStatement(purpose, origin, await sha256b64u(secret), at) };
+    };
+    let s = await statement();
+    try {
+      return { at: s.at, proof: await this.native.sign(alias, s.text) };
+    } catch (error) {
+      if (error instanceof NativeError && error.code === "key_gone")
+        throw new InboxError("This phone's screen lock changed. Connect it again.", 401, "signed_out");
+      if (!(error instanceof NativeError && error.code === "auth_required")) throw error;
+    }
+    const ok = await this.native.authenticate("Confirm it's you", "To keep your inbox open").catch(() => false);
+    if (!ok) throw new InboxError("Unlock to open your inbox.", 423, "locked");
+    s = await statement();
+    return { at: s.at, proof: await this.native.sign(alias, s.text) };
   }
 
   private static newAlias(): string {
@@ -142,25 +196,73 @@ export class Sessions {
     return entry;
   }
 
-  /** A QR code from Settings → Phone, scanned: pairs this phone with that inbox. */
-  async pair(link: PhoneLink): Promise<InboxEntry> {
+  /**
+   * A QR code from Settings → Phone, scanned (and the inbox's address agreed to on the phone): trades
+   * the code for tokens that open nothing until the owner confirms on the computer. Nothing is kept on
+   * the phone yet.
+   */
+  async pair(link: PhoneLink): Promise<PendingPhone> {
     if (link.kind !== "pair") throw new InboxError("That is a sign-in link, not a code to scan.", 400, "invalid_input");
+    if (!(await this.native.deviceSecure()))
+      throw new InboxError("Set a screen lock on this phone first, then scan the code again.", 400, "no_screen_lock");
     const alias = Sessions.newAlias();
-    const key = await this.native.deviceKey(alias);
-    const { at, proof } = await this.proof(alias, "pair", link.origin, link.secret);
-    const res = await this.post(`${link.origin}/v1/phone/pair`, {
-      secret: link.secret,
-      device_key: key,
-      at,
-      proof,
-      name: await this.native.deviceName(),
-      platform: this.native.platform === "ios" ? "ios" : "android",
-    });
-    if (!res.ok) {
+    try {
+      const key = await this.native.deviceKey(alias);
+      const match = await pairingMatch(link.secret, await jwkThumbprint(key));
+      const { at, proof } = await this.proof(alias, "pair", link.origin, link.secret);
+      const res = await this.post(`${link.origin}/v1/phone/pair`, {
+        secret: link.secret,
+        device_key: key,
+        at,
+        proof,
+        name: await this.native.deviceName(),
+        platform: this.native.platform === "ios" ? "ios" : "android",
+      });
+      if (!res.ok) throw await problem(res);
+      const answer = (await res.json()) as TokenAnswer;
+      // The inbox must have seen this phone's key: the digits it shows the owner are worked out from it.
+      if (answer.match !== undefined && answer.match !== match)
+        throw new InboxError("That inbox answered for another phone. Show a new code.", 409, "mismatch");
+      return {
+        alias,
+        origin: link.origin,
+        name: answer.inbox?.name || new URL(link.origin).host,
+        deviceId: answer.device_id,
+        match,
+        answer,
+      };
+    } catch (error) {
       await this.native.deleteKeys(alias);
-      throw await problem(res);
+      if (error instanceof NativeError && error.code === "no_screen_lock")
+        throw new InboxError("Set a screen lock on this phone first, then scan the code again.", 400, "no_screen_lock");
+      throw error;
     }
-    return this.keep(alias, link.origin, (await res.json()) as TokenAnswer);
+  }
+
+  /** Whether the owner has confirmed this phone on the computer yet, or refused it (or let it run out). */
+  async confirmed(pending: PendingPhone): Promise<"waiting" | "confirmed" | "refused"> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${pending.origin}/v1/phone/me`, {
+        headers: { accept: "application/json", authorization: `Bearer ${pending.answer.access_token}` },
+      });
+    } catch {
+      return "waiting";
+    }
+    if (res.status === 401 || res.status === 403 || res.status === 404) return "refused";
+    if (!res.ok) return "waiting";
+    const me = (await res.json().catch(() => null)) as { phone?: { confirmed?: boolean } } | null;
+    return me?.phone?.confirmed === true ? "confirmed" : "waiting";
+  }
+
+  /** Confirmed: the inbox is kept on the phone, with its tokens. */
+  async finish(pending: PendingPhone): Promise<InboxEntry> {
+    return this.keep(pending.alias, pending.origin, pending.answer);
+  }
+
+  /** Given up on, or refused: the key made for it goes. */
+  async abandon(pending: PendingPhone): Promise<void> {
+    await this.native.deleteKeys(pending.alias);
   }
 
   /**
@@ -168,6 +270,8 @@ export class Sessions {
    * and the device key that will redeem the link is named now.
    */
   async askForLink(origin: string, email: string): Promise<string> {
+    if (!(await this.native.deviceSecure()))
+      throw new InboxError("Set a screen lock on this phone first.", 400, "no_screen_lock");
     const alias = Sessions.newAlias();
     const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
     await this.native.secureSet(verifierKey(origin), JSON.stringify({ alias, verifier }));
@@ -251,10 +355,14 @@ export class Sessions {
     await this.forget(entry);
   }
 
-  /** Forgets an inbox on this phone only (it was removed on the inbox's side). */
+  /**
+   * Forgets an inbox on this phone only (it was removed on the inbox's side): its tokens, its keys
+   * (device and push) and what was registered for it. The app wipes its cached items too (`Box`).
+   */
   async forget(entry: InboxEntry): Promise<void> {
     this.access.delete(entry.alias);
     await this.native.secureRemove(tokenKey(entry.alias));
+    await this.native.secureRemove(pushSentKey(entry.alias));
     await this.native.deleteKeys(entry.alias);
     await this.saveList((await this.list()).filter((e) => e.alias !== entry.alias));
   }

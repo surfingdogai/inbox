@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
-import { relativeTime } from "../../../inbox/client/src/lib/format";
 import { useApp } from "../context";
 import type { PhoneRow } from "../lib/client";
 import { setUpPush } from "../lib/push";
+import { agoSentence } from "../lib/view";
 import { Nav } from "./Nav";
 
 const KINDS: readonly [keyof NotifyPrefs["kinds"], string][] = [
@@ -21,9 +21,9 @@ const TIMES = Array.from(
 );
 
 /**
- * Settings → Notifications (the approved screen): one switch per kind, quiet hours that hold
- * notifications until morning, whether names reach the lock screen, and the phones, with a test.
- * Kept per phone, on the inbox, so each phone of a business can differ.
+ * Settings → Notifications (the approved screen), for the inbox in front: one switch per kind, quiet
+ * hours that hold notifications until morning, whether names reach the lock screen, and the phones,
+ * with a test. Kept per phone, on the inbox, so each phone of a business can differ.
  */
 export function Settings() {
   const app = useApp();
@@ -31,6 +31,7 @@ export function Settings() {
   const [phones, setPhones] = useState<{ phones: PhoneRow[]; this: string } | null>(null);
   const [push, setPush] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const inboxName = app.me?.business.name || app.active?.name || "This inbox";
 
   useEffect(() => {
     if (app.me) setPrefs(app.me.notify);
@@ -73,7 +74,11 @@ export function Settings() {
         ? "Notifications are on."
         : r === "denied"
           ? "Allow notifications for this app in the phone's settings."
-          : "Notifications can't be set up on this phone right now.",
+          : r === "no_build"
+            ? "This version of the app can't get notifications yet."
+            : r === "unavailable"
+              ? `${inboxName} can't send notifications yet.`
+              : "Notifications can't be set up on this phone right now.",
     );
     void app.refresh();
   };
@@ -95,10 +100,13 @@ export function Settings() {
   };
 
   const pushOn = app.me?.phone.push === "on";
+  // Why there are none, in the owner's words: this app, or this inbox.
+  const noBuild = push === "unavailable";
+  const noInbox = app.me !== null && !app.me.push_available;
   return (
     <div className="screen">
       <header className="head" style={{ gap: 4 }}>
-        <div className="sub">Settings</div>
+        <div className="sub">{inboxName}</div>
         <h1>Notifications</h1>
       </header>
       <main className="body" style={{ gap: 18 }}>
@@ -107,14 +115,16 @@ export function Settings() {
             <div className="rows">
               <div>
                 <span className="two">
-                  <span>{push === "unavailable" ? "Notifications aren't available" : "Notifications are off"}</span>
+                  <span>{noBuild || noInbox ? "Notifications aren't available" : "Notifications are off"}</span>
                   <small>
-                    {push === "unavailable"
-                      ? "This build of the app, or this inbox, can't send them yet."
-                      : "Allow them to hear about new requests."}
+                    {noBuild
+                      ? "This version of the app can't get notifications yet."
+                      : noInbox
+                        ? `${inboxName} can't send notifications yet.`
+                        : "Allow them to hear about new requests."}
                   </small>
                 </span>
-                {push !== "unavailable" && (
+                {!noBuild && !noInbox && (
                   <button type="button" className="btn link" onClick={() => void allow()}>
                     Allow
                   </button>
@@ -217,8 +227,8 @@ export function Settings() {
                       {p.id === phones.this
                         ? "this phone"
                         : p.last_seen_at
-                          ? relativeTime(p.last_seen_at)
-                          : "not opened"}
+                          ? `opened ${agoSentence(p.last_seen_at)}`
+                          : "not opened yet"}
                     </span>
                   </span>
                   {p.id === phones.this && pushOn ? (
@@ -227,7 +237,7 @@ export function Settings() {
                     </button>
                   ) : confirmRemove === p.id ? (
                     <button type="button" className="btn link" onClick={() => void remove(p)}>
-                      Remove?
+                      Remove {p.name}?
                     </button>
                   ) : (
                     <button type="button" className="btn quiet sm" onClick={() => setConfirmRemove(p.id)}>
@@ -240,7 +250,7 @@ export function Settings() {
           </section>
         )}
         <section className="group">
-          <h2>{app.active?.name ?? "This inbox"}</h2>
+          <h2>{inboxName}</h2>
           <div className="rows">
             <div>
               <span className="two">
@@ -249,11 +259,11 @@ export function Settings() {
               </span>
               {confirmRemove === "inbox" ? (
                 <button type="button" className="btn link" onClick={() => void app.removeActive()}>
-                  Remove from this phone?
+                  Remove {inboxName}?
                 </button>
               ) : (
                 <button type="button" className="btn quiet sm" onClick={() => setConfirmRemove("inbox")}>
-                  Remove
+                  Remove from this phone
                 </button>
               )}
             </div>

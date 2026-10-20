@@ -31,12 +31,16 @@ import org.json.JSONArray;
 public class InboxNativePlugin extends Plugin {
   private static WeakReference<InboxNativePlugin> current = new WeakReference<>(null);
   private Keys keys;
+  /** The screens' secrets: readable only while the phone is unlocked. */
   private SecureStore store;
+  /** Where an earlier build kept them: read once, moved, then empty. */
+  private SecureStore older;
 
   @Override
   public void load() {
     keys = new Keys(getContext());
-    store = new SecureStore(getContext());
+    store = SecureStore.forApp(getContext());
+    older = SecureStore.forPush(getContext());
     current = new WeakReference<>(this);
   }
 
@@ -77,9 +81,19 @@ public class InboxNativePlugin extends Plugin {
       r.put("x", xy[0]);
       r.put("y", xy[1]);
       call.resolve(r);
+    } catch (Keys.NoScreenLock e) {
+      call.reject(e.getMessage(), "no_screen_lock");
     } catch (Exception e) {
       call.reject("The phone's keystore did not make a key.", e);
     }
+  }
+
+  /** Whether the phone has a screen lock: without one, the app connects to nothing. */
+  @PluginMethod
+  public void deviceSecure(PluginCall call) {
+    JSObject r = new JSObject();
+    r.put("secure", Keys.deviceSecure(getContext()));
+    call.resolve(r);
   }
 
   @PluginMethod
@@ -94,6 +108,11 @@ public class InboxNativePlugin extends Plugin {
       JSObject r = new JSObject();
       r.put("signature", keys.sign(a, data));
       call.resolve(r);
+    } catch (Keys.AuthRequired e) {
+      // Not unlocked lately: the screens ask for the fingerprint and try again.
+      call.reject(e.getMessage(), "auth_required");
+    } catch (Keys.KeyGone e) {
+      call.reject(e.getMessage(), "key_gone");
     } catch (Exception e) {
       call.reject("The phone's keystore did not sign.", e);
     }
@@ -110,7 +129,7 @@ public class InboxNativePlugin extends Plugin {
   public void secureGet(PluginCall call) {
     String k = call.getString("key");
     JSObject r = new JSObject();
-    r.put("value", k == null ? null : store.getString("app." + k));
+    r.put("value", k == null ? null : store.takeOver(older, "app." + k));
     call.resolve(r);
   }
 
@@ -133,12 +152,22 @@ public class InboxNativePlugin extends Plugin {
   @PluginMethod
   public void secureRemove(PluginCall call) {
     String k = call.getString("key");
-    if (k != null) store.remove("app." + k);
+    if (k != null) {
+      store.remove("app." + k);
+      older.remove("app." + k);
+    }
     call.resolve();
   }
 
+  /**
+   * A fingerprint or face of the strong kind, or the screen lock: what also lets the device key sign.
+   * Android 9 and 10 cannot pair a strong biometric with the screen lock in one prompt, so there it is
+   * any biometric or the screen lock (the device key itself still takes only a strong one).
+   */
   private static final int AUTHENTICATORS =
-      BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+          ? BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL
+          : BiometricManager.Authenticators.BIOMETRIC_WEAK | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
 
   @PluginMethod
   public void canAuthenticate(PluginCall call) {
@@ -151,7 +180,8 @@ public class InboxNativePlugin extends Plugin {
   /** BiometricPrompt: a fingerprint, a face, or the screen lock when the phone has no biometrics enrolled. */
   @PluginMethod
   public void authenticate(PluginCall call) {
-    String reason = call.getString("reason", "Open your inbox");
+    String title = call.getString("title", "Open your inbox");
+    String subtitle = call.getString("subtitle", null);
     FragmentActivity activity = getActivity();
     activity.runOnUiThread(
         () -> {
@@ -174,13 +204,13 @@ public class InboxNativePlugin extends Plugin {
                       call.resolve(r);
                     }
                   });
-          BiometricPrompt.PromptInfo info =
+          BiometricPrompt.PromptInfo.Builder info =
               new BiometricPrompt.PromptInfo.Builder()
-                  .setTitle(reason)
+                  .setTitle(title)
                   .setAllowedAuthenticators(AUTHENTICATORS)
-                  .setConfirmationRequired(false)
-                  .build();
-          prompt.authenticate(info);
+                  .setConfirmationRequired(false);
+          if (subtitle != null && !subtitle.isEmpty()) info.setSubtitle(subtitle);
+          prompt.authenticate(info.build());
         });
   }
 
@@ -265,6 +295,20 @@ public class InboxNativePlugin extends Plugin {
     } catch (Exception e) {
       call.reject("Push keys were not made.", e);
     }
+  }
+
+  /**
+   * Whether a notification's action really came from one of this app's notifications: its one-time
+   * nonce, for this item and this action. Spent here. A link any other app or page opens has none.
+   */
+  @PluginMethod
+  public void claimAction(PluginCall call) {
+    JSObject r = new JSObject();
+    r.put(
+        "ok",
+        Notifier.claim(
+            getContext(), call.getString("nonce", ""), call.getString("item", ""), call.getString("event", "")));
+    call.resolve(r);
   }
 
   @PluginMethod

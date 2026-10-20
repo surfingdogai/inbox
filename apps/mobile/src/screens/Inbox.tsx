@@ -1,10 +1,21 @@
 import { useMemo, useState } from "react";
-import { relativeTime, stateWord } from "../../../inbox/client/src/lib/format";
+import { stateWord } from "../../../inbox/client/src/lib/format";
 import type { ItemView } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
-import { badgeOf, cardAmount, cardLine, cardTitle, channelPhrase, KIND_WORD, needsYou } from "../lib/view";
-import { ChevronDown, SearchIcon } from "./icons";
+import {
+  ago,
+  badgeOf,
+  calendarWords,
+  cardAmount,
+  cardLine,
+  cardTitle,
+  channelPhrase,
+  KIND_WORD,
+  needsYou,
+} from "../lib/view";
+import { CheckIcon, ChevronDown, SearchIcon } from "./icons";
 import { Nav } from "./Nav";
+import { CannotReach } from "./Offline";
 
 /** The inbox (the approved Main screen): what needs the owner, everything open, and what was handled. */
 export function Inbox() {
@@ -62,7 +73,8 @@ export function Inbox() {
         </div>
       </header>
       <main className="body">
-        {shown.length === 0 && !app.loading && (
+        {shown.length === 0 && !app.loading && !app.listLoaded && app.offline && <CannotReach inbox={name} />}
+        {shown.length === 0 && !app.loading && app.listLoaded && (
           <div className="empty">
             <b>{tab === "needs" ? "All clear" : "Nothing open"}</b>
             {tab === "needs" ? "Nothing waits for you right now." : "New requests appear here."}
@@ -85,8 +97,9 @@ export function Inbox() {
                   <span>
                     <span className={`chip ${v.item.type}`}>{KIND_WORD[v.item.type]}</span>
                     {stateWord(v.item.state).toLowerCase()}
+                    {v.by_rules ? " by your rules" : ""}
                   </span>
-                  <span>{relativeTime(v.item.updatedAt)}</span>
+                  <span>{ago(v.item.updatedAt)}</span>
                 </div>
                 <div className="what">
                   {cardTitle(v)} · {cardLine(v, tz)}
@@ -105,6 +118,7 @@ function Card({ view, tz, onOpen }: { view: ItemView; tz: string | undefined; on
   const { queued } = useApp();
   const waiting = queued.some((a) => a.itemId === view.item.id);
   const amount = cardAmount(view.item);
+  const calendar = calendarWords(view, tz);
   return (
     <button type="button" className="card" onClick={onOpen}>
       <div className="meta">
@@ -112,13 +126,22 @@ function Card({ view, tz, onOpen }: { view: ItemView; tz: string | undefined; on
           <span className={`chip ${view.item.type}`}>{KIND_WORD[view.item.type]}</span>
           {channelPhrase(view.item)}
         </span>
-        <span>{relativeTime(view.item.createdAt)}</span>
+        <span>{ago(view.item.createdAt)}</span>
       </div>
       <div className="who">{cardTitle(view)}</div>
       <div className="what">{cardLine(view, tz)}</div>
-      {(amount || waiting) && (
+      {(amount || waiting || calendar) && (
         <div className="foot">
-          <span>{waiting ? "Waiting to send" : ""}</span>
+          {waiting ? (
+            <span>Waiting to send</span>
+          ) : calendar?.free ? (
+            <span className="free">
+              <CheckIcon />
+              {calendar.line}
+            </span>
+          ) : (
+            <span>{calendar?.line ?? ""}</span>
+          )}
           {amount && <b>{amount}</b>}
         </div>
       )}

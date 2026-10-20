@@ -1,42 +1,98 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  formatDay,
-  formatMoney,
-  formatWhen,
-  partyName,
-  relativeTime,
-  stateWord,
-} from "../../../inbox/client/src/lib/format";
+import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/client/src/lib/format";
 import type { ItemDetail } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import type { Slots } from "../lib/client";
-import { actionsFor, channelPhrase, requestWord } from "../lib/view";
-import { ChevronLeft, CloseIcon } from "./icons";
+import { actionsFor, agoSentence, calendarWords, money, requestWord, sentPhrase } from "../lib/view";
+import { CheckIcon, ChevronLeft, CloseIcon, MoreIcon } from "./icons";
+
+/** What the "…" menu may do in one press: answers that need no words or times typed. */
+const ONE_PRESS = new Set([
+  "mark_spam",
+  "cancel",
+  "no_show",
+  "complete",
+  "fulfil",
+  "start_fulfilment",
+  "retract",
+  "retract_change",
+  "reopen",
+  "approve",
+  "reject",
+  "accept_change",
+  "decline_change",
+]);
 
 /**
  * One request (the approved Item screen): who and what, the customer's words, an optional reply, and
  * the three answers: accept, propose another time, decline. Opened from a notification's action, the
  * action waits on a confirm sheet: nothing is done until the owner presses it here.
  */
-export function Item({ id, action }: { id: string; action?: string | undefined }) {
+export function Item({
+  id,
+  action,
+  hint,
+}: {
+  id: string;
+  action?: string | undefined;
+  hint?: { readonly title: string; readonly body: string } | undefined;
+}) {
   const app = useApp();
   const [detail, setDetail] = useState<ItemDetail | null>(null);
+  const [tried, setTried] = useState(false);
   const [reply, setReply] = useState("");
-  const [sheet, setSheet] = useState<"propose" | "confirm" | "decline" | null>(null);
+  const [sheet, setSheet] = useState<"propose" | "confirm" | "decline" | "more" | null>(null);
+  const [other, setOther] = useState<{ event: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const tz = app.me?.business.timezone;
 
-  const load = useCallback(async () => setDetail(await app.loadItem(id)), [app, id]);
+  const load = useCallback(async () => {
+    setDetail(await app.loadItem(id));
+    setTried(true);
+  }, [app, id]);
   useEffect(() => {
     void load();
   }, [load]);
+  // Not on the phone and the inbox out of reach: tried again the moment the connection is back.
+  useEffect(() => {
+    if (detail) return;
+    const again = () => void load();
+    window.addEventListener("online", again);
+    return () => window.removeEventListener("online", again);
+  }, [detail, load]);
   const actions = useMemo(() => (detail ? actionsFor(detail, tz) : null), [detail, tz]);
   useEffect(() => {
     if (action && actions?.primary?.event === action) setSheet("confirm");
     else if (action === "propose" && actions?.propose) setSheet("propose");
   }, [action, actions]);
 
-  if (!detail) return <div className="screen" />;
+  if (!detail)
+    return (
+      <div className="screen">
+        <header className="head" style={{ paddingLeft: 12, paddingRight: 12 }}>
+          <div className="head-row">
+            <button type="button" className="back" onClick={app.back}>
+              <ChevronLeft />
+              Inbox
+            </button>
+          </div>
+        </header>
+        <main className="body" style={{ padding: "4px 20px 20px", gap: 16 }}>
+          {hint && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <h1 style={{ fontSize: 26 }}>{hint.title}</h1>
+              {hint.body && <div className="sub">{hint.body}</div>}
+            </div>
+          )}
+          {tried && (
+            <div className="empty">
+              <b>This request isn't on this phone yet.</b>
+              It opens when you're back online.
+            </div>
+          )}
+        </main>
+      </div>
+    );
   const item = detail.item;
   const name = item.type === "order" ? partyName(detail.party) : partyName(detail.party);
   const words = [...detail.thread].filter((t) => t.body.trim()).slice(-3);
@@ -90,6 +146,9 @@ export function Item({ id, action }: { id: string; action?: string | undefined }
             <ChevronLeft />
             Inbox
           </button>
+          <button type="button" className="icon-btn bare" aria-label="More" onClick={() => setSheet("more")}>
+            <MoreIcon />
+          </button>
         </div>
       </header>
       <main className="body" style={{ padding: "4px 20px 20px", gap: 16 }}>
@@ -99,7 +158,7 @@ export function Item({ id, action }: { id: string; action?: string | undefined }
           </span>
           <h1 style={{ fontSize: 26 }}>{name}</h1>
           <div className="sub">
-            {channelPhrase(item).replace(/^./, (c) => c.toUpperCase())} · {relativeTime(item.createdAt)}
+            {sentPhrase(item)} · {agoSentence(item.createdAt)}
           </div>
         </div>
         <Facts detail={detail} tz={tz} />
@@ -152,13 +211,7 @@ export function Item({ id, action }: { id: string; action?: string | undefined }
                 </button>
               )}
               {actions.decline && (
-                <button
-                  type="button"
-                  className="btn quiet"
-                  style={{ flex: "0 0 104px" }}
-                  disabled={busy}
-                  onClick={() => setSheet("decline")}
-                >
+                <button type="button" className="btn decline" disabled={busy} onClick={() => setSheet("decline")}>
                   Decline
                 </button>
               )}
@@ -188,6 +241,36 @@ export function Item({ id, action }: { id: string; action?: string | undefined }
           onNo={() => setSheet(null)}
         />
       )}
+      {sheet === "more" && (
+        <More
+          detail={detail}
+          origin={app.active?.origin ?? ""}
+          skip={[actions?.primary?.event, actions?.propose?.event, actions?.decline?.event]}
+          onClose={() => setSheet(null)}
+          onPick={(t) => {
+            setOther(t);
+            setSheet(null);
+          }}
+          onCopied={() => {
+            setSheet(null);
+            app.toast("Link copied. It opens this request in your inbox on a computer.");
+          }}
+        />
+      )}
+      {other && (
+        <Confirm
+          title={`${other.label}?`}
+          text={`${requestWord(item)} from ${name}.`}
+          yes={other.label}
+          busy={busy}
+          onYes={() => {
+            const t = other;
+            setOther(null);
+            void run(t.event, t.label);
+          }}
+          onNo={() => setOther(null)}
+        />
+      )}
       {sheet === "decline" && actions?.decline && (
         <Confirm
           title="Decline this request?"
@@ -202,14 +285,57 @@ export function Item({ id, action }: { id: string; action?: string | undefined }
   );
 }
 
+/** The "…" menu: the other answers one press gives, and the request's link for the computer. */
+function More(p: {
+  detail: ItemDetail;
+  origin: string;
+  skip: readonly (string | undefined)[];
+  onClose: () => void;
+  onPick: (t: { event: string; label: string }) => void;
+  onCopied: () => void;
+}) {
+  const open = p.detail.item.closedAt === null;
+  const others = open ? p.detail.transitions.filter((t) => ONE_PRESS.has(t.event) && !p.skip.includes(t.event)) : [];
+  const link = `${p.origin}/i/${encodeURIComponent(p.detail.item.id)}`;
+  return (
+    <>
+      <div className="scrim" onClick={p.onClose} aria-hidden="true" />
+      <section className="sheet" role="dialog" aria-label="More">
+        <div className="grabber" aria-hidden="true" />
+        {others.map((t) => (
+          <button key={t.event} type="button" className="btn" onClick={() => p.onPick(t)}>
+            {t.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="btn"
+          onClick={() =>
+            void navigator.clipboard
+              ?.writeText(link)
+              .then(p.onCopied)
+              .catch(() => undefined)
+          }
+        >
+          Copy the link for your computer
+        </button>
+        <button type="button" className="btn quiet" onClick={p.onClose}>
+          Close
+        </button>
+      </section>
+    </>
+  );
+}
+
 function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
   const item = detail.item;
   const rows: [string, string][] = [];
+  const calendar = calendarWords(detail, tz);
   if (item.type === "booking") {
     rows.push(["When", formatWhen(item.payload.startTime, item.payload.endTime, tz)]);
     rows.push([
       "Service",
-      [item.payload.reservationFor.name, item.payload.totalPrice ? formatMoney(item.payload.totalPrice) : ""]
+      [item.payload.reservationFor.name, item.payload.totalPrice ? money(item.payload.totalPrice) : ""]
         .filter(Boolean)
         .join(" · "),
     ]);
@@ -217,7 +343,7 @@ function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
   } else if (item.type === "order") {
     for (const l of item.payload.orderedItem.slice(0, 4)) rows.push([`${l.quantity} ×`, l.name]);
     if (item.payload.orderedItem.length > 4) rows.push(["", `and ${item.payload.orderedItem.length - 4} more`]);
-    rows.push(["Total", formatMoney(item.payload.totalPrice)]);
+    rows.push(["Total", money(item.payload.totalPrice)]);
     const d = item.payload.delivery;
     if (d)
       rows.push([
@@ -226,12 +352,13 @@ function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
       ]);
   } else if (item.type === "quote_request") {
     rows.push(["For", item.payload.itemOffered.name]);
-    if (item.payload.budget) rows.push(["Budget", formatMoney(item.payload.budget)]);
+    if (item.payload.budget) rows.push(["Budget", money(item.payload.budget)]);
     if (item.payload.requestedFor) rows.push(["When", formatDay(item.payload.requestedFor, tz)]);
   } else if (item.type === "refund") {
-    rows.push(["Amount", formatMoney(item.payload.amount)]);
+    rows.push(["Amount", money(item.payload.amount)]);
   }
-  rows.push(["Status", stateWord(item.state)]);
+  // An open booking request says where it sits in the calendar: what the owner needs to accept it.
+  if (!calendar) rows.push(["Status", stateWord(item.state)]);
   return (
     <div className="facts">
       {rows.map(([k, v]) => (
@@ -240,6 +367,19 @@ function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
           <span>{v}</span>
         </div>
       ))}
+      {calendar && (
+        <div>
+          <span>Calendar</span>
+          {calendar.free ? (
+            <span className="free">
+              <CheckIcon />
+              {calendar.short}
+            </span>
+          ) : (
+            <span className="clash">{calendar.short}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

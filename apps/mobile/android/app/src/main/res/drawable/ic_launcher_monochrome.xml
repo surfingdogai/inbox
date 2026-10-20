@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark in one ink, for Android 13 themed icons: the launcher tints it. The half-disc keeps its
+     three bands as gaps; the second line is lighter, as in the colour mark. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.714"
+        android:scaleY="0.714"
+        android:translateX="31.14"
+        android:translateY="31.86">
+        <group>
+            <clip-path android:pathData="M4,36a28,28 0,0 1,56 0z" />
+            <path
+                android:fillColor="#FF14163C"
+                android:fillType="evenOdd"
+                android:pathData="M4,8h56v28h-56z M4,21h56v1.5h-56z M4,25h56v2h-56z M4,29.5h56v2.5h-56z" />
+        </group>
+        <path
+            android:pathData="M8,44h48"
+            android:strokeColor="#FF14163C"
+            android:strokeWidth="3"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M14,52h36"
+            android:strokeAlpha="0.5"
+            android:strokeColor="#FF14163C"
+            android:strokeWidth="3"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

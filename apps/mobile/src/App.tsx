@@ -29,12 +29,22 @@ export interface Deps {
 }
 
 const ACTIVE = "active";
-/** Back from the background after this long, the app asks for the fingerprint or face again. */
-const RELOCK_MS = 60_000;
+/**
+ * Back from the background after this long, the app asks for the fingerprint or face again. Five
+ * minutes: a glance between customers asks nothing, and an Accept always asks on its own.
+ */
+export const RELOCK_MS = 300_000;
+/** An Accept right after the app was unlocked asks nothing more. */
+const JUST_UNLOCKED_MS = 30_000;
 
 function memoryKv(): KV {
   const m = new Map<string, string>();
-  return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v), removeItem: (k) => void m.delete(k) };
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+    keys: () => [...m.keys()],
+  };
 }
 
 export function defaultDeps(): Deps {
@@ -47,18 +57,27 @@ export function defaultDeps(): Deps {
   return { native: nativeOf(), fetch: (i, init) => fetch(i, init), kv, allowLocal: import.meta.env.DEV };
 }
 
+/** An item's cached details, with when they were read (the cache drops what nobody read for a month). */
+interface KeptItem {
+  readonly at: number;
+  readonly detail: ItemDetail;
+}
+
 export function App({ deps }: { deps: Deps }) {
   const { native } = deps;
   const sessions = useMemo(() => new Sessions(native, deps.fetch), [native, deps.fetch]);
   const [ready, setReady] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [insecure, setInsecure] = useState(false);
   const [box, setBox] = useState<Box | null>(null);
   const [inboxes, setInboxes] = useState<InboxEntry[]>([]);
   const [active, setActive] = useState<InboxEntry | null>(null);
   const [views, setViews] = useState<ItemView[]>([]);
   const [me, setMe] = useState<PhoneMe | null>(null);
   const [loading, setLoading] = useState(false);
-  const [offlineSince, setOfflineSince] = useState<number | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [listLoaded, setListLoaded] = useState(false);
   const [queued, setQueued] = useState<QueuedAction[]>([]);
   const [stack, setStack] = useState<Route[]>(
     deps.initial?.name === "item" ? [{ name: "inbox" }, deps.initial] : [deps.initial ?? { name: "inbox" }],
@@ -88,13 +107,18 @@ export function App({ deps }: { deps: Deps }) {
     let alive = true;
     void (async () => {
       const opened = await Box.open(native, deps.kv);
+      // Item details nobody opened for a month go.
+      await opened.evict().catch(() => 0);
       const list = await sessions.list();
       const last = deps.kv.getItem(`sdi.${ACTIVE}`);
       const lock = await native.canAuthenticate().catch(() => false);
+      const secure = await native.deviceSecure().catch(() => true);
       if (!alive) return;
       setBox(opened);
       setInboxes(list);
       setActive(list.find((e) => e.alias === last) ?? list[0] ?? null);
+      // No screen lock on a phone with inboxes on it: nothing opens until there is one.
+      setInsecure(!secure && list.length > 0);
       setLocked(lock && list.length > 0);
       setReady(true);
       const launch = await CapApp.getLaunchUrl().catch(() => undefined);
@@ -105,6 +129,27 @@ export function App({ deps }: { deps: Deps }) {
     };
   }, [native, sessions, deps.kv]);
 
+  /** Everything of one inbox goes from the phone: tokens, keys, cached items, what waited to send. */
+  const wipe = useCallback(
+    async (entry: InboxEntry, how: "remove" | "forget") => {
+      if (how === "remove") await sessions.remove(entry);
+      else await sessions.forget(entry);
+      const list = await sessions.list();
+      await box?.forgetInbox(entry.alias, native, list.length === 0);
+      // The last inbox gone took the cache's key with it: a fresh one for whatever comes next.
+      if (list.length === 0) setBox(await Box.open(native, deps.kv));
+      else if (outbox) setQueued(await outbox.list());
+      setNeedCounts((c) => {
+        const { [entry.alias]: _gone, ...rest } = c;
+        return rest;
+      });
+      setInboxes(list);
+      setActive(list[0] ?? null);
+      return list;
+    },
+    [sessions, box, native, outbox, deps.kv],
+  );
+
   // ---- the active inbox: its items, kept encrypted for offline ----
   const refresh = useCallback(async () => {
     if (!client || !box || !active) return;
@@ -112,7 +157,9 @@ export function App({ deps }: { deps: Deps }) {
     try {
       const page = await client.items("all");
       setViews([...page.items]);
-      setOfflineSince(null);
+      setOffline(false);
+      setCachedAt(null);
+      setListLoaded(true);
       await box.put(`list.${active.alias}`, { at: Date.now(), views: page.items });
       setNeedCounts((c) => ({ ...c, [active.alias]: page.items.filter(needsYou).length }));
       client
@@ -126,28 +173,33 @@ export function App({ deps }: { deps: Deps }) {
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") {
         toast(`This phone was removed from ${active.name}. Connect it again from Settings → Phone.`);
-        await sessions.forget(active);
-        const list = await sessions.list();
-        setInboxes(list);
-        setActive(list[0] ?? null);
+        const list = await wipe(active, "forget");
+        if (list.length === 0) setStack([{ name: "connect" }]);
         return;
       }
       const cached = await box.get<{ at: number; views: ItemView[] }>(`list.${active.alias}`);
-      if (cached) setViews(cached.views);
-      if (error instanceof InboxError && error.offline) setOfflineSince(cached?.at ?? Date.now());
-      else if (error instanceof Error) toast(error.message);
+      if (cached) {
+        setViews(cached.views);
+        setListLoaded(true);
+      }
+      if (error instanceof InboxError && error.offline) {
+        // Honest: the time the shown list was read, or that nothing of it is on this phone.
+        setOffline(true);
+        setCachedAt(cached?.at ?? null);
+      } else if (error instanceof Error) toast(error.message);
     } finally {
       setLoading(false);
     }
-  }, [client, box, active, sessions, toast, native]);
+  }, [client, box, active, toast, native, wipe]);
 
   useEffect(() => {
-    if (!ready || locked) return;
+    if (!ready || locked || insecure) return;
     setViews([]);
     setMe(null);
+    setListLoaded(false);
     void refresh();
     if (active) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
-  }, [ready, locked, active, refresh, deps.kv]);
+  }, [ready, locked, insecure, active, refresh, deps.kv]);
 
   // ---- what was done offline goes when the inbox can be reached ----
   // `announce`: say so when something waiting from offline went. An action pressed online is not that.
@@ -180,10 +232,10 @@ export function App({ deps }: { deps: Deps }) {
   useEffect(() => {
     if (!outbox) return;
     void outbox.list().then(setQueued);
-    const online = () => void flush();
+    const online = () => void flush().then(refresh);
     window.addEventListener("online", online);
     return () => window.removeEventListener("online", online);
-  }, [outbox, flush]);
+  }, [outbox, flush, refresh]);
 
   const act = useCallback(
     async (itemId: string, kind: "transition" | "reply", body: Record<string, unknown>, label: string) => {
@@ -203,13 +255,18 @@ export function App({ deps }: { deps: Deps }) {
       if (!client || !box || !active) return null;
       try {
         const detail = await client.item(id);
-        await box.put(`item.${active.alias}.${id}`, detail);
+        await box.put(`item.${active.alias}.${id}`, { at: Date.now(), detail } satisfies KeptItem);
         return detail;
       } catch (error) {
-        const cached = await box.get<ItemDetail>(`item.${active.alias}.${id}`);
-        if (cached) return cached;
+        const kept = await box.get<KeptItem>(`item.${active.alias}.${id}`);
+        if (kept?.detail) return kept.detail;
         const fromList = views.find((v) => v.item.id === id);
         if (fromList) return { ...fromList, events: [], thread: [], mail: [], draft: null } as ItemDetail;
+        if (error instanceof InboxError && error.offline) {
+          // The banner says it already: the item screen says what it can, and tries again when back.
+          setOffline(true);
+          return null;
+        }
         if (error instanceof Error) toast(error.message);
         return null;
       }
@@ -217,6 +274,10 @@ export function App({ deps }: { deps: Deps }) {
     [client, box, active, views, toast],
   );
 
+  /**
+   * A phone the owner confirmed on the computer: kept, opened, and asked for notifications. A phone
+   * connected by an emailed link arrives here at once.
+   */
   const connected = useCallback(
     async (entry: InboxEntry) => {
       const list = await sessions.list();
@@ -234,22 +295,26 @@ export function App({ deps }: { deps: Deps }) {
 
   const removeActive = useCallback(async () => {
     if (!active) return;
-    await sessions.remove(active);
-    box?.remove(`list.${active.alias}`);
-    const list = await sessions.list();
-    setInboxes(list);
-    setActive(list[0] ?? null);
+    const list = await wipe(active, "remove");
     setStack([{ name: list.length ? "inbox" : "connect" }]);
-  }, [active, sessions, box]);
+  }, [active, wipe]);
+
+  // A code handed over by the page a QR code opens (intent://pair…): Connect asks before it pairs.
+  const [handed, setHanded] = useState<ReturnType<typeof readPhoneLink>>(null);
 
   // ---- links: a scanned or emailed link, a notification opening an item ----
   const openLink = useCallback(
     async (url: string) => {
       const phone = readPhoneLink(url, deps.allowLocal);
       if (phone) {
+        if (phone.kind === "pair") {
+          // The owner agrees to the inbox's address on the Connect screen first.
+          setHanded(phone);
+          setStack([{ name: "connect" }]);
+          return;
+        }
         try {
-          const entry = phone.kind === "pair" ? await sessions.pair(phone) : await sessions.redeem(phone);
-          await connected(entry);
+          await connected(await sessions.redeem(phone));
         } catch (error) {
           toast(error instanceof Error ? error.message : "That link did not work.");
         }
@@ -259,29 +324,55 @@ export function App({ deps }: { deps: Deps }) {
       if (!item) return;
       const entry = inboxes.find((e) => e.origin === item.origin);
       if (!entry) return;
-      let action: string | undefined;
+      let q: URLSearchParams;
       try {
-        action = new URL(url).searchParams.get("a") ?? undefined;
+        q = new URL(url).searchParams;
       } catch {
-        action = undefined;
+        q = new URLSearchParams();
       }
-      // Accept from a notification asks for the owner's fingerprint or face first, every time: once,
-      // when the app has just been unlocked for it.
-      const justUnlocked = Date.now() - unlockedAt.current < 30_000;
+      const title = q.get("t") ?? "";
+      const body = q.get("b") ?? "";
+      let action: string | undefined = q.get("a") ?? undefined;
+      // Only one of this app's own notifications can choose an action: it carries a nonce the
+      // notification service kept. A link any other app or page opens only opens the item.
+      if (action && !(await native.claimAction(q.get("n") ?? "", item.item, action).catch(() => false)))
+        action = undefined;
+      // Accept from a notification asks for the owner's fingerprint or face first, unless the app was
+      // unlocked for it a moment ago.
+      const justUnlocked = Date.now() - unlockedAt.current < JUST_UNLOCKED_MS;
       if (action && !justUnlocked && (await native.canAuthenticate().catch(() => false))) {
-        const ok = await native.authenticate("Accept from a notification").catch(() => false);
+        const ok = await native.authenticate("Confirm it's you", "To accept this request").catch(() => false);
         if (!ok) action = undefined;
       }
       setActive(entry);
-      setStack([{ name: "inbox" }, { name: "item", id: item.item, action }]);
+      setStack([
+        { name: "inbox" },
+        { name: "item", id: item.item, action, ...(title ? { hint: { title, body } } : {}) },
+      ]);
     },
     [sessions, inboxes, native, deps.allowLocal, connected, toast],
   );
 
   useEffect(() => {
     const sub = CapApp.addListener("appUrlOpen", (e) => {
-      if (locked) pendingLink.current = e.url;
-      else void openLink(e.url);
+      // Android hands the link over before the app is back in front: when it has been away long
+      // enough to lock, lock now and open the link once unlocked, so one prompt does for both.
+      const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
+      if (locked) {
+        pendingLink.current = e.url;
+        return;
+      }
+      if (away > RELOCK_MS && inboxes.length > 0) {
+        void native.canAuthenticate().then((can) => {
+          if (can) {
+            pendingLink.current = e.url;
+            hiddenAt.current = null;
+            setLocked(true);
+          } else void openLink(e.url);
+        });
+        return;
+      }
+      void openLink(e.url);
     });
     const state = CapApp.addListener("appStateChange", async ({ isActive }) => {
       if (!isActive) {
@@ -290,6 +381,7 @@ export function App({ deps }: { deps: Deps }) {
       }
       const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
       hiddenAt.current = null;
+      if (locked) return;
       if (away > RELOCK_MS && inboxes.length > 0 && (await native.canAuthenticate().catch(() => false)))
         setLocked(true);
       else void flush().then(refresh);
@@ -301,11 +393,11 @@ export function App({ deps }: { deps: Deps }) {
   }, [locked, openLink, native, inboxes.length, flush, refresh]);
 
   useEffect(() => {
-    if (!ready || locked || !pendingLink.current) return;
+    if (!ready || locked || insecure || !pendingLink.current) return;
     const url = pendingLink.current;
     pendingLink.current = null;
     void openLink(url);
-  }, [ready, locked, openLink]);
+  }, [ready, locked, insecure, openLink]);
 
   // Every inbox's push registration stays current: the push token changes now and then.
   const registerPush = useRef<() => void>(() => undefined);
@@ -316,8 +408,8 @@ export function App({ deps }: { deps: Deps }) {
     native.onPushToken(() => registerPush.current());
   }, [native]);
   useEffect(() => {
-    if (ready && !locked && inboxes.length > 0) registerPush.current();
-  }, [ready, locked, inboxes]);
+    if (ready && !locked && !insecure && inboxes.length > 0) registerPush.current();
+  }, [ready, locked, insecure, inboxes]);
 
   const countAll = useCallback(async () => {
     if (!box) return;
@@ -325,7 +417,7 @@ export function App({ deps }: { deps: Deps }) {
       const cached = await box.get<{ at: number; views: ItemView[] }>(`list.${e.alias}`);
       if (cached) setNeedCounts((c) => ({ ...c, [e.alias]: cached.views.filter(needsYou).length }));
     }
-    if (offlineSince !== null) return;
+    if (offline) return;
     await Promise.all(
       inboxes.map(async (e) => {
         try {
@@ -337,7 +429,7 @@ export function App({ deps }: { deps: Deps }) {
         }
       }),
     );
-  }, [box, inboxes, offlineSince, sessions, deps.fetch]);
+  }, [box, inboxes, offline, sessions, deps.fetch]);
 
   const value: AppValue = {
     native,
@@ -348,7 +440,9 @@ export function App({ deps }: { deps: Deps }) {
     me,
     views,
     loading,
-    offlineSince,
+    offline,
+    cachedAt,
+    listLoaded,
     queued,
     route,
     needCounts,
@@ -368,23 +462,36 @@ export function App({ deps }: { deps: Deps }) {
     setMe,
   };
 
-  if (!ready) return <div className="screen" />;
-  if (locked)
+  if (!ready) return <div className="shell" />;
+  if (insecure || locked)
     return (
       <AppContext.Provider value={value}>
-        <Lock
-          onUnlock={() => {
-            unlockedAt.current = Date.now();
-            setLocked(false);
-          }}
-        />
+        <div className="shell">
+          <Lock
+            insecure={insecure}
+            onUnlock={async () => {
+              if (insecure) {
+                if (!(await native.deviceSecure().catch(() => false))) return false;
+                setInsecure(false);
+              }
+              unlockedAt.current = Date.now();
+              setLocked(false);
+              return true;
+            }}
+          />
+        </div>
       </AppContext.Provider>
     );
   const screen =
     inboxes.length === 0 || route.name === "connect" ? (
-      <Connect canGoBack={inboxes.length > 0} allowLocal={deps.allowLocal} />
+      <Connect
+        canGoBack={inboxes.length > 0}
+        allowLocal={deps.allowLocal}
+        handed={handed}
+        onHandled={() => setHanded(null)}
+      />
     ) : route.name === "item" ? (
-      <Item id={route.id} action={route.action} />
+      <Item id={route.id} action={route.action} hint={route.hint} />
     ) : route.name === "today" ? (
       <Today />
     ) : route.name === "settings" ? (
@@ -394,12 +501,13 @@ export function App({ deps }: { deps: Deps }) {
     ) : (
       <Inbox />
     );
+  const showBanner = offline && inboxes.length > 0 && route.name !== "connect";
   return (
     <AppContext.Provider value={value}>
-      {offlineSince !== null && route.name !== "inboxes" && (
-        <OfflineBanner since={offlineSince} queued={queued.length} />
-      )}
-      {screen}
+      <div className={`shell${showBanner ? " offline" : ""}`}>
+        {showBanner && <OfflineBanner cachedAt={cachedAt} inbox={active?.name ?? ""} queued={queued.length} />}
+        {screen}
+      </div>
       {toastText && (
         <div className="toast" role="status">
           {toastText}

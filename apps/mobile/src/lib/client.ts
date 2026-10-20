@@ -8,7 +8,7 @@ import { type Fetch, type InboxEntry, InboxError, type Sessions } from "./sessio
  * carries this phone's access token; a 401 gets one fresh token and one more try.
  */
 export interface PhoneMe {
-  readonly phone: { readonly id: string; readonly name: string; readonly push: string };
+  readonly phone: { readonly id: string; readonly name: string; readonly push: string; readonly confirmed?: boolean };
   readonly notify: NotifyPrefs;
   readonly business: { readonly name: string; readonly timezone: string };
   readonly push_available: boolean;
@@ -111,8 +111,17 @@ export class InboxClient {
     return this.call("PUT", "/v1/phone/notify", { body: prefs });
   }
 
-  registerPush(push: { token: string; p256dh: string; auth: string }): Promise<{ push: string; error: string | null }> {
+  registerPush(push: {
+    token: string;
+    p256dh: string;
+    auth: string;
+  }): Promise<{ push: string; error: string | null; relay_device?: string }> {
     return this.call("PUT", "/v1/phone/push", { body: push });
+  }
+
+  /** The relay's id for this phone at this inbox, kept beside the inbox for the notification service. */
+  keepRelayDevice(device: string): Promise<void> {
+    return this.sessions.setRelayDevice(this.entry.alias, device);
   }
 
   test(): Promise<{ sent: boolean; note: string }> {

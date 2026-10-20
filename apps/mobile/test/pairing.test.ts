@@ -50,6 +50,13 @@ describe("links", () => {
     expect(readPhoneLink(pairingUri(ORIGIN, SECRET))).toEqual({ kind: "pair", origin: ORIGIN, secret: SECRET });
     expect(readPhoneLink(signInLinkUri(ORIGIN, SECRET))).toEqual({ kind: "link", origin: ORIGIN, secret: SECRET });
     expect(readPhoneLink(appLinkUri(ORIGIN, SECRET))).toEqual({ kind: "link", origin: ORIGIN, secret: SECRET });
+    // The page a QR code opens on an Android phone hands the code to the app itself.
+    expect(readPhoneLink(`ai.surfingdog.inbox://pair?o=${encodeURIComponent(ORIGIN)}&s=${SECRET}`)).toEqual({
+      kind: "pair",
+      origin: ORIGIN,
+      secret: SECRET,
+    });
+    expect(readPhoneLink(`ai.surfingdog.inbox://other?o=${encodeURIComponent(ORIGIN)}&s=${SECRET}`)).toBeNull();
   });
 
   it("refuses plain http, other paths, other versions, odd secrets and passwords in the address", () => {

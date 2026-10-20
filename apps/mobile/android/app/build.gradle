@@ -22,6 +22,18 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+        // The test build a person installs by hand (ADR-026): built as a release is, so not debuggable
+        // (no `run-as`, no debugger reading tokens from memory) and shrunk, signed with the debug key
+        // (in CI the repository's DEBUG_KEYSTORE_BASE64, so each build installs over the last). The
+        // debug build is for the emulator's tests only.
+        internal {
+            initWith release
+            debuggable false
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
     }
 }
 

@@ -1,21 +1,16 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# The internal build (ADR-026) is shrunk as a release would be. Capacitor's own rules come with its
+# library (consumerProguardFiles); these keep what is reached by reflection or from the WebView.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# The bridge between the screens and the native side: Capacitor's classes, reached by name.
+-keep class com.getcapacitor.** { *; }
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes *Annotation*,JavascriptInterface,Signature,InnerClasses,EnclosingMethod
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# The app's own plugin, push service and keys: small, and named in the manifest and by Capacitor.
+-keep class ai.surfingdog.inbox.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Stack traces in a crash report still say where.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

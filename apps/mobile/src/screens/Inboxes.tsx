@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useApp } from "../context";
 import { badgeOf } from "../lib/view";
 import { ChevronLeft, PlusIcon } from "./icons";
-import { OfflineBanner } from "./Offline";
 
 /** Your inboxes (the approved screen): for people who look after more than one business. */
 export function Inboxes() {
@@ -13,7 +12,6 @@ export function Inboxes() {
   }, []);
   return (
     <div className="screen">
-      {app.offlineSince !== null && <OfflineBanner since={app.offlineSince} queued={app.queued.length} />}
       <header className="head" style={{ gap: 6 }}>
         <div className="head-row">
           <button type="button" className="back" onClick={() => app.go({ name: "inbox" })}>

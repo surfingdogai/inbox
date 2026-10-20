@@ -2,15 +2,32 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
 import { useApp } from "../context";
 import { type Scanner, startScanner } from "../lib/scan";
-import { findInbox } from "../lib/session";
+import { findInbox, type PendingPhone } from "../lib/session";
 import { ChevronLeft, Corners } from "./icons";
+
+/** How often the phone asks whether the owner pressed Confirm, and for how long. */
+const ASK_EVERY_MS = 2_000;
+const WAIT_MS = 5 * 60_000;
 
 /**
  * Connect your inbox (the approved Connect screen): scan the code in Settings → Phone, nothing to
- * type. Without a camera, a sign-in link by email: the owner types the address they sign in with, and
- * the app finds the inbox from its domain, asking for the inbox's address only when it cannot.
+ * type. The phone first says which inbox the code is for and asks to connect to it; then it shows two
+ * digits and waits for the owner to press Confirm on the computer, where the same two show. Without a
+ * camera, a sign-in link by email: the owner types the address they sign in with, and the app finds
+ * the inbox from its domain, asking for the inbox's address only when it cannot.
  */
-export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLocal: boolean }) {
+export function Connect({
+  canGoBack,
+  allowLocal,
+  handed,
+  onHandled,
+}: {
+  canGoBack: boolean;
+  allowLocal: boolean;
+  /** A code the page a QR code opens handed to the app (`intent://pair…`). */
+  handed?: PhoneLink | null;
+  onHandled?: () => void;
+}) {
   const app = useApp();
   const video = useRef<HTMLVideoElement>(null);
   const scanner = useRef<Scanner | null>(null);
@@ -18,16 +35,59 @@ export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [byEmail, setByEmail] = useState(false);
+  const [asking, setAsking] = useState<PhoneLink | null>(null);
+  const [pending, setPending] = useState<PendingPhone | null>(null);
+  const [secure, setSecure] = useState(true);
 
   useEffect(() => () => scanner.current?.stop(), []);
+  useEffect(() => {
+    void app.native
+      .deviceSecure()
+      .then(setSecure)
+      .catch(() => undefined);
+  }, [app.native]);
+  useEffect(() => {
+    if (!handed) return;
+    setAsking(handed);
+    onHandled?.();
+  }, [handed, onHandled]);
+
+  // Waiting for the owner's Confirm on the computer: asked every two seconds, for five minutes.
+  useEffect(() => {
+    if (!pending) return;
+    let alive = true;
+    const until = Date.now() + WAIT_MS;
+    const ask = async () => {
+      if (!alive) return;
+      const state = await app.sessions.confirmed(pending);
+      if (!alive) return;
+      if (state === "confirmed") {
+        const entry = await app.sessions.finish(pending);
+        setPending(null);
+        await app.connected(entry);
+        return;
+      }
+      if (state === "refused" || Date.now() > until) {
+        await app.sessions.abandon(pending);
+        setPending(null);
+        setError("Not connected. On your computer, show a new code and scan it again.");
+        return;
+      }
+      setTimeout(() => void ask(), ASK_EVERY_MS);
+    };
+    void ask();
+    return () => {
+      alive = false;
+    };
+  }, [pending, app]);
 
   const pair = async (link: PhoneLink) => {
-    setScanning(false);
+    setAsking(null);
     setBusy(true);
     setError(null);
     try {
-      const entry = link.kind === "pair" ? await app.sessions.pair(link) : await app.sessions.redeem(link);
-      await app.connected(entry);
+      if (link.kind === "pair") setPending(await app.sessions.pair(link));
+      else await app.connected(await app.sessions.redeem(link));
     } catch (e) {
       setError(e instanceof Error ? e.message : "That did not work. Show a new code and try again.");
     } finally {
@@ -40,7 +100,16 @@ export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLo
     if (!video.current) return;
     try {
       setScanning(true);
-      scanner.current = await startScanner(video.current, (link) => void pair(link), allowLocal);
+      scanner.current = await startScanner(
+        video.current,
+        (link) => {
+          setScanning(false);
+          // Which inbox the code is for, before anything is sent to it.
+          if (link.kind === "pair") setAsking(link);
+          else void pair(link);
+        },
+        allowLocal,
+      );
     } catch {
       setScanning(false);
       setError("The camera did not start. Allow the camera for this app, or use a sign-in link instead.");
@@ -48,6 +117,56 @@ export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLo
   };
 
   if (byEmail) return <ByEmail onBack={() => setByEmail(false)} />;
+
+  if (pending)
+    return (
+      <div className="connect screen">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h1>Confirm on your computer</h1>
+          <p>
+            Your computer shows <b>{app.native.platform === "web" ? "this browser" : "this phone"}</b> asking to connect
+            to {new URL(pending.origin).host}, with two digits. Press Confirm there if they are these:
+          </p>
+        </div>
+        <div className="match">{pending.match}</div>
+        <p className="fine">Waiting for you to confirm…</p>
+        <div className="end">
+          <button
+            type="button"
+            className="btn quiet"
+            onClick={() => {
+              void app.sessions.abandon(pending);
+              setPending(null);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+
+  if (asking)
+    return (
+      <div className="connect screen">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h1>Connect to {new URL(asking.origin).host}?</h1>
+          <p>This phone will open that inbox and answer it. Connect only to your own business's inbox.</p>
+        </div>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="end">
+          <button type="button" className="btn primary" disabled={busy} onClick={() => void pair(asking)}>
+            Connect
+          </button>
+          <button type="button" className="btn quiet" onClick={() => setAsking(null)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
 
   return (
     <div className="connect screen">
@@ -74,6 +193,11 @@ export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLo
           <b>2</b>Allow notifications for new requests.
         </li>
       </ol>
+      {!secure && (
+        <p className="error" role="alert">
+          Set a screen lock first. Your inbox opens only on a phone with a PIN, pattern or password.
+        </p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}
@@ -92,11 +216,11 @@ export function Connect({ canGoBack, allowLocal }: { canGoBack: boolean; allowLo
             Stop the camera
           </button>
         ) : (
-          <button type="button" className="btn primary" disabled={busy} onClick={() => void scan()}>
+          <button type="button" className="btn primary" disabled={busy || !secure} onClick={() => void scan()}>
             Scan the code
           </button>
         )}
-        <button type="button" className="btn quiet" onClick={() => setByEmail(true)}>
+        <button type="button" className="btn quiet" disabled={!secure} onClick={() => setByEmail(true)}>
           Email me a sign-in link instead
         </button>
         <p className="fine">

@@ -53,6 +53,62 @@ export function needsYou(view: ItemView): boolean {
   return change?.by === "customer";
 }
 
+/** A short "how long ago", as the approved cards say it: "now", "2 min", "1 h", "Yesterday", "Tue", "3 Oct". */
+export function ago(iso: string, now: number = Date.now()): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const minutes = Math.floor((now - t) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 2) return "Yesterday";
+  if (days < 7) return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(new Date(t));
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(new Date(t));
+}
+
+/** The same in a sentence, never a bare weekday: "just now", "2 min ago", "1 h ago", "yesterday", "3 days ago". */
+export function agoSentence(iso: string, now: number = Date.now()): string {
+  const short = ago(iso, now);
+  if (!short) return "";
+  if (short === "now") return "just now";
+  if (short === "Yesterday") return "yesterday";
+  if (short.endsWith(" min") || short.endsWith(" h")) return `${short} ago`;
+  const days = Math.floor((now - Date.parse(iso)) / 86_400_000);
+  return days < 30 ? `${days} days ago` : `on ${short}`;
+}
+
+/** Money as the design writes it: "€48" for a whole amount, "€36.50" otherwise. */
+export function money(m: Parameters<typeof formatMoney>[0]): string {
+  if (!m) return "";
+  if (m.value % 100 !== 0) return formatMoney(m);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: m.currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(m.value / 100);
+  } catch {
+    return formatMoney(m);
+  }
+}
+
+/** Who sent it, for the item's sub-line: "Sent by an assistant", "Sent by email", "Sent from your website". */
+export function sentPhrase(item: Item): string {
+  switch (item.channel) {
+    case "email":
+      return "Sent by email";
+    case "form":
+      return "Sent from your website";
+    case "owner_ui":
+      return "Added by you";
+    default:
+      return "Sent by an assistant";
+  }
+}
+
 /** How it came: "via an assistant", "via the website", "via email". */
 export function channelPhrase(item: Item): string {
   switch (item.channel) {
@@ -101,9 +157,28 @@ export function cardLine(view: ItemView, tz?: string): string {
 /** The money on a card, when there is any. */
 export function cardAmount(item: Item): string {
   if (item.type === "booking" || item.type === "order")
-    return item.payload.totalPrice ? formatMoney(item.payload.totalPrice) : "";
-  if (item.type === "refund") return formatMoney(item.payload.amount);
+    return item.payload.totalPrice ? money(item.payload.totalPrice) : "";
+  if (item.type === "refund") return money(item.payload.amount);
   return "";
+}
+
+/**
+ * A booking request's place in the calendar, as the card and the item say it: "Free in your calendar",
+ * or what it clashes with. Null when the inbox did not say (anything but an open booking request).
+ */
+export function calendarWords(
+  view: Pick<ItemView, "calendar">,
+  tz?: string,
+): { free: boolean; short: string; line: string } | null {
+  const c = view.calendar;
+  if (!c) return null;
+  if (c.free) return { free: true, short: "Free", line: "Free in your calendar" };
+  if (c.clash) {
+    const who = c.clash.name ?? "another booking";
+    const text = `Clashes with ${who}, ${formatClock(c.clash.startTime, tz)}`;
+    return { free: false, short: text, line: text };
+  }
+  return { free: false, short: "Not a free time", line: "Not a free time in your calendar" };
 }
 
 /** The event the owner most likely means, first: accepting it as it is. */

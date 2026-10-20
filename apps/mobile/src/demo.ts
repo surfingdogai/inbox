@@ -62,6 +62,13 @@ function views() {
     { event: "propose", label: "Propose another time" },
     { event: "decline", label: "Decline" },
   ];
+  // As the inbox says them for the owner: Maya's time is free, Lea's question was answered by a rule.
+  const said = (v: ReturnType<typeof view>) =>
+    v.item.id === "maya"
+      ? { ...v, calendar: { free: true, clash: null } }
+      : v.item.id === "lea"
+        ? { ...v, by_rules: true }
+        : v;
   return [
     view(
       "maya",
@@ -157,7 +164,7 @@ function views() {
       "form",
       400,
     ),
-  ];
+  ].map(said);
 }
 
 function slots() {

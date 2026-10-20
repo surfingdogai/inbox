@@ -120,12 +120,24 @@ h2 {
 }
 
 /* ---- the frame: a screen, its scrolling middle, the bottom bar ---- */
+/* The shell is a column: the offline banner, when there is one, takes its height, and the screen
+   below it the rest, so the bottom bar and the item's answers stay on screen. */
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 .screen {
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: screen-in 200ms ease-out;
+}
+.shell > .screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 @keyframes screen-in {
   from {
@@ -144,6 +156,10 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+/* Under the banner, which already keeps clear of the status bar. */
+.shell.offline .head {
+  padding-top: 12px;
 }
 .sub {
   font-size: 13px;
@@ -356,6 +372,21 @@ button.card {
   font-size: 14px;
   color: var(--ink);
 }
+.free {
+  color: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.free svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+}
+.facts .clash {
+  color: var(--ink-2);
+  font-size: 14px;
+}
 .chip {
   padding: 2px 8px;
   border-radius: 9999px;
@@ -403,6 +434,7 @@ button.card {
   margin-bottom: 4px;
 }
 .banner {
+  flex: none;
   margin: calc(var(--safe-top) + 8px) 12px 0;
   padding: 10px 14px;
   border-radius: 12px;
@@ -494,6 +526,16 @@ button.card {
 }
 .actions .row .btn {
   flex: 1;
+}
+/* Decline: the approved outlined pill, quieter than the other two. */
+.actions .row .btn.decline {
+  flex: 0 0 auto;
+  min-width: 104px;
+  border: 1px solid var(--line-2);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 500;
 }
 
 /* ---- the item ---- */
@@ -800,6 +842,31 @@ fieldset.group legend {
 .switch[aria-checked="true"]::after {
   left: 23px;
 }
+/* At night ON is the violet accent with a white knob, OFF a faint track with a grey one: told apart at
+   a glance, not by how dark the track is. */
+@media (prefers-color-scheme: dark) {
+  .switch {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .switch::after {
+    background: #c9cbe8;
+  }
+  .switch[aria-checked="true"] {
+    background: #8a7bff;
+  }
+  .switch[aria-checked="true"]::after {
+    background: #ffffff;
+  }
+}
+/* The two digits a pairing shows on the phone and on the computer. */
+.match {
+  align-self: center;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", Manrope, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 56px;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
 .time {
   min-height: 40px;
   padding: 0 10px;
@@ -884,6 +951,7 @@ fieldset.group legend {
 /* ---- lock ---- */
 .lock {
   height: 100%;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;

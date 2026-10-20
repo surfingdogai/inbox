@@ -103,3 +103,35 @@ export const Corners = () => (
     <path d="M50 210H18a8 8 0 0 1-8-8v-32" />
   </svg>
 );
+
+export const MoreIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </svg>
+);
+
+/** The owner app's mark (apps/inbox/public/favicon.svg): a sunset half-disc over two ink lines. */
+export const Mark = ({ size = 56 }: { size?: number }) => (
+  <svg className="mark" width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+    <defs>
+      <linearGradient id="sdi-mark-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#ff9650" />
+        <stop offset="0.58" stopColor="#ff6fa8" />
+        <stop offset="1" stopColor="#8a6bff" />
+      </linearGradient>
+      <clipPath id="sdi-mark-c">
+        <path d="M4 36a28 28 0 0 1 56 0z" />
+      </clipPath>
+    </defs>
+    <g clipPath="url(#sdi-mark-c)">
+      <rect x="4" y="8" width="56" height="28" fill="url(#sdi-mark-g)" />
+      <rect x="4" y="21" width="56" height="1.5" fill="var(--ground)" />
+      <rect x="4" y="25" width="56" height="2" fill="var(--ground)" />
+      <rect x="4" y="29.5" width="56" height="2.5" fill="var(--ground)" />
+    </g>
+    <path d="M8 44h48" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" />
+    <path d="M14 52h36" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" opacity="0.5" />
+  </svg>
+);

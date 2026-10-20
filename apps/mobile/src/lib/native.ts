@@ -26,6 +26,28 @@ export interface NativeInbox {
   readonly alias: string;
   readonly origin: string;
   readonly name: string;
+  /** The relay's id for this phone at this inbox (`d` in every message), once the inbox said it. */
+  readonly device?: string | undefined;
+}
+
+/** Why the device key did not sign: not unlocked lately (ask, then try again), or gone (connect again). */
+export class NativeError extends Error {
+  constructor(
+    message: string,
+    readonly code: "auth_required" | "key_gone" | "no_screen_lock" | "other",
+  ) {
+    super(message);
+    this.name = "NativeError";
+  }
+}
+
+function nativeError(error: unknown): NativeError {
+  const code = (error as { code?: unknown } | null)?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  return new NativeError(
+    message,
+    code === "auth_required" || code === "key_gone" || code === "no_screen_lock" ? code : "other",
+  );
 }
 
 export interface Native {
@@ -37,8 +59,13 @@ export interface Native {
   secureGet(key: string): Promise<string | null>;
   secureSet(key: string, value: string): Promise<void>;
   secureRemove(key: string): Promise<void>;
+  /** Whether the phone has a screen lock: without one the app connects to nothing. */
+  deviceSecure(): Promise<boolean>;
   canAuthenticate(): Promise<boolean>;
-  authenticate(reason: string): Promise<boolean>;
+  /** BiometricPrompt: a strong fingerprint or face, or the screen lock. */
+  authenticate(title: string, subtitle?: string): Promise<boolean>;
+  /** Whether a notification's action came from one of this app's own notifications (its one-time nonce). */
+  claimAction(nonce: string, item: string, event: string): Promise<boolean>;
   /** Whether this build can receive notifications at all (Firebase configured), and the permission. */
   pushStatus(): Promise<{ available: boolean; permission: "granted" | "denied" | "prompt" }>;
   requestPushPermission(): Promise<"granted" | "denied" | "prompt">;
@@ -57,8 +84,10 @@ interface InboxNativePlugin {
   secureGet(o: { key: string }): Promise<{ value: string | null }>;
   secureSet(o: { key: string; value: string }): Promise<void>;
   secureRemove(o: { key: string }): Promise<void>;
+  deviceSecure(): Promise<{ secure: boolean }>;
   canAuthenticate(): Promise<{ available: boolean }>;
-  authenticate(o: { reason: string }): Promise<{ ok: boolean }>;
+  authenticate(o: { title: string; subtitle?: string }): Promise<{ ok: boolean }>;
+  claimAction(o: { nonce: string; item: string; event: string }): Promise<{ ok: boolean }>;
   pushStatus(): Promise<{ available: boolean; permission: "granted" | "denied" | "prompt" }>;
   requestPushPermission(): Promise<{ permission: "granted" | "denied" | "prompt" }>;
   pushToken(): Promise<{ token: string | null }>;
@@ -73,16 +102,28 @@ function androidNative(): Native {
     platform: "android",
     deviceName: async () => (await p.deviceName()).name,
     deviceKey: async (alias) => {
-      const k = await p.deviceKey({ alias });
-      return { kty: "EC", crv: "P-256", x: k.x, y: k.y };
+      try {
+        const k = await p.deviceKey({ alias });
+        return { kty: "EC", crv: "P-256", x: k.x, y: k.y };
+      } catch (error) {
+        throw nativeError(error);
+      }
     },
-    sign: async (alias, data) => (await p.sign({ alias, data })).signature,
+    sign: async (alias, data) => {
+      try {
+        return (await p.sign({ alias, data })).signature;
+      } catch (error) {
+        throw nativeError(error);
+      }
+    },
     deleteKeys: (alias) => p.deleteKeys({ alias }),
     secureGet: async (key) => (await p.secureGet({ key })).value,
     secureSet: (key, value) => p.secureSet({ key, value }),
     secureRemove: (key) => p.secureRemove({ key }),
+    deviceSecure: async () => (await p.deviceSecure()).secure,
     canAuthenticate: async () => (await p.canAuthenticate()).available,
-    authenticate: async (reason) => (await p.authenticate({ reason })).ok,
+    authenticate: async (title, subtitle) => (await p.authenticate({ title, ...(subtitle ? { subtitle } : {}) })).ok,
+    claimAction: async (nonce, item, event) => (await p.claimAction({ nonce, item, event })).ok,
     pushStatus: () => p.pushStatus(),
     requestPushPermission: async () => (await p.requestPushPermission()).permission,
     pushToken: async () => (await p.pushToken()).token,
@@ -158,8 +199,11 @@ export function webNative(storage: Pick<Storage, "getItem" | "setItem" | "remove
     secureGet: async (key) => storage?.getItem(prefix + key) ?? null,
     secureSet: async (key, value) => storage?.setItem(prefix + key, value),
     secureRemove: async (key) => storage?.removeItem(prefix + key),
+    deviceSecure: async () => true,
     canAuthenticate: async () => false,
     authenticate: async () => true,
+    // A browser has no notifications of ours: no action ever comes from one.
+    claimAction: async () => false,
     pushStatus: async () => ({ available: false, permission: "denied" }),
     requestPushPermission: async () => "denied",
     pushToken: async () => null,

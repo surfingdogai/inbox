@@ -11,7 +11,13 @@ export type Route =
   | { readonly name: "settings" }
   | { readonly name: "inboxes" }
   | { readonly name: "connect" }
-  | { readonly name: "item"; readonly id: string; readonly action?: string | undefined };
+  | {
+      readonly name: "item";
+      readonly id: string;
+      readonly action?: string | undefined;
+      /** What the notification that opened it said: shown while the item cannot be read. */
+      readonly hint?: { readonly title: string; readonly body: string } | undefined;
+    };
 
 /** What every screen reads and does (ADR-026): the active inbox, its items, and the way to act. */
 export interface App {
@@ -23,8 +29,12 @@ export interface App {
   readonly me: PhoneMe | null;
   readonly views: readonly ItemView[];
   readonly loading: boolean;
-  /** Null while online; when offline, when the shown state was last read. */
-  readonly offlineSince: number | null;
+  /** The active inbox cannot be reached. */
+  readonly offline: boolean;
+  /** When the shown list was read from the inbox, while offline; null when nothing of it is on the phone. */
+  readonly cachedAt: number | null;
+  /** A real list is shown: read from the inbox now, or from the phone's cache. Not yet: say so, never "All clear". */
+  readonly listLoaded: boolean;
   readonly queued: readonly QueuedAction[];
   readonly route: Route;
   /** Each inbox's count of what needs the owner, for Your inboxes. */

@@ -1,15 +1,19 @@
 name: android
 
 # The phone app (apps/mobile, ADR-026): its screens built and bundled, the JVM tests of its native code,
-# and a debug APK a person can install, kept as the run's artifact for 14 days. A second job runs the
-# Keystore tests on an emulator. Nothing is published to any store from here.
+# and a test build a person can install (the `internal` build type: built as a release is, so not
+# debuggable, and shrunk), kept as the run's artifact for 14 days. A second job runs the Keystore tests on
+# an emulator, then installs that very APK there and checks that it opens. Nothing is published to any
+# store from here.
 #
-# Two optional repository secrets (Settings → Secrets and variables → Actions):
+# Two repository secrets (Settings → Secrets and variables → Actions):
+#   DEBUG_KEYSTORE_BASE64 one signing keystore for every build, base64. Without it each run signs with a
+#                         new key, so a newer APK installs only after the older one is removed (and with
+#                         it the phone's connection to its inbox): set it before anyone tests.
 #   GOOGLE_SERVICES_JSON  the Firebase config for ai.surfingdog.inbox. Without it the APK builds and
 #                         works, but cannot receive notifications.
-#   DEBUG_KEYSTORE_BASE64 a debug keystore, base64. Without it each run signs with a new debug key, so a
-#                         newer APK installs only after the older one is removed.
 # Neither is ever printed: they are written to files and the files are not shown.
+# Third-party actions are pinned to a commit; GitHub's own to a major version.
 on:
   push:
     branches: [main, phone-app]
@@ -39,12 +43,14 @@ concurrency:
 
 jobs:
   apk:
-    name: phone app · screens · JVM tests · debug APK
+    name: phone app · screens · JVM tests · test APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      name: ${{ steps.apk.outputs.name }}
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -77,37 +83,43 @@ jobs:
             echo "notifications: on (google-services.json written)"
           else
             echo "notifications: off (no GOOGLE_SERVICES_JSON secret); the APK builds without them"
+            echo "::warning title=No notifications in this build::GOOGLE_SERVICES_JSON is not set: this build cannot receive notifications."
+            echo "- **No notifications in this build**: the repository secret \`GOOGLE_SERVICES_JSON\` is not set." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: a fixed debug key, when the secret is set
+      - name: the signing key, when the secret is set
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           mkdir -p ~/.android
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
-            echo "signing: the repository's debug key"
+            echo "signing: the repository's key"
           else
-            echo "signing: a new debug key for this run"
+            echo "signing: a one-off key for this run"
+            echo "::warning title=Signed with a one-off key::DEBUG_KEYSTORE_BASE64 is not set: this build won't install over the last one."
+            echo "- **Signed with a one-off key: this build won't install over the last one.** Set the repository secret \`DEBUG_KEYSTORE_BASE64\` (apps/mobile/README.md)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: JVM tests and the debug APK
+      - name: JVM tests and the test APK
         working-directory: apps/mobile/android
         env:
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: 0.1.${{ github.run_number }}
-        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleInternal
 
       - name: the APK's name
         id: apk
         run: |
           short="$(git rev-parse --short HEAD)"
-          mv apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk "surfingdog-inbox-debug-${{ github.run_number }}-${short}.apk"
-          echo "name=surfingdog-inbox-debug-${{ github.run_number }}-${short}" >> "$GITHUB_OUTPUT"
-          sha256sum surfingdog-inbox-debug-*.apk
+          name="surfingdog-inbox-${{ github.run_number }}-${short}"
+          mv apps/mobile/android/app/build/outputs/apk/internal/app-internal.apk "${name}.apk"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          sha256sum "${name}.apk"
+          echo "- APK: \`${name}.apk\`, sha256 \`$(sha256sum "${name}.apk" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
-          path: surfingdog-inbox-debug-*.apk
+          path: ${{ steps.apk.outputs.name }}.apk
           retention-days: 14
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -118,12 +130,13 @@ jobs:
           retention-days: 7
 
   emulator:
-    name: phone app · Keystore tests on an emulator
+    name: phone app · Keystore tests and the test APK on an emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    needs: apk
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -140,12 +153,19 @@ jobs:
         run: |
           pnpm --filter @surfingdog/mobile build
           pnpm --filter @surfingdog/mobile exec cap sync android
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.apk.outputs.name }}
+          path: apk
       - name: KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: reactivecircus/android-emulator-runner@v2
+      # A PIN, as every owner's phone has one (the app's keys need a screen lock), set while the screen is
+      # on and unlocked. Then the Keystore tests, then the test APK itself: installed, opened, and still
+      # running with no crash a few seconds later.
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
           target: google_apis
@@ -153,7 +173,18 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: apps/mobile/android
-          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+          script: |
+            adb shell svc power stayon true
+            adb shell input keyevent 82
+            adb shell locksettings set-pin 1111
+            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            adb uninstall ai.surfingdog.inbox || true
+            adb install -r ../../../apk/*.apk
+            adb logcat -c
+            adb shell am start -W -n ai.surfingdog.inbox/.MainActivity
+            sleep 12
+            adb shell pidof ai.surfingdog.inbox
+            ! adb logcat -d -b crash | grep -E "ai\.surfingdog\.inbox|FATAL EXCEPTION"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -3,6 +3,7 @@ import { formatDay } from "../../../inbox/client/src/lib/format";
 import { useApp } from "../context";
 import { cardTitle, today } from "../lib/view";
 import { Nav } from "./Nav";
+import { CannotReach } from "./Offline";
 
 /** Today (the approved screen): the day's bookings in order, what asks for a time today, orders to prepare. */
 export function Today() {
@@ -34,7 +35,10 @@ export function Today() {
         </div>
       </header>
       <main className="body" style={{ padding: "8px 20px 20px" }}>
-        {day.rows.length === 0 && (
+        {day.rows.length === 0 && !app.listLoaded && app.offline && (
+          <CannotReach inbox={app.me?.business.name || app.active?.name || ""} />
+        )}
+        {day.rows.length === 0 && app.listLoaded && (
           <div className="empty">
             <b>Nothing booked today</b>
             New bookings for today appear here.
