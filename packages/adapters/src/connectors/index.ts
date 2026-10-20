@@ -1,8 +1,10 @@
 import type { ConnectorDefinition, OAuthClient } from "@surfingdog/core";
 import { calcomConnector } from "./calcom";
 import { caldavConnector } from "./caldav/index";
+import { calendlyConnector } from "./calendly";
 import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
+import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
 import { stripeConnector } from "./stripe";
 
@@ -13,6 +15,15 @@ export { CALDAV_PRESETS, caldavConnector, caldavForm, isOwnUid, ownUid } from ".
 export { expandRRule, parseRRule } from "./caldav/rrule";
 export { multistatus, parseXml } from "./caldav/xml";
 export { resolveZone, zonedToUtc } from "./caldav/zones";
+export {
+  CALENDLY_API,
+  CALENDLY_AUTO,
+  CALENDLY_EVENTS,
+  CALENDLY_SCOPES,
+  CALENDLY_TOLERANCE_S,
+  calendlyConnector,
+  calendlyForm,
+} from "./calendly";
 export { lookupMx, lookupPath, lookupSrv } from "./dns";
 export {
   GOOGLE_CALENDAR_SCOPES,
@@ -24,6 +35,7 @@ export {
 export { hmacSha256Base64, verifyBase64Hmac, verifyHexHmac } from "./hook-sign";
 export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } from "./http";
 export { ICS_PRESETS, icsConnector, icsForm } from "./ics";
+export { bookingsCalendar, ICS_FEED_AHEAD_DAYS, ICS_FEED_PAST_DAYS, icsFeedConnector } from "./ics-feed";
 export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
@@ -80,5 +92,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    calendlyConnector(),
+    icsFeedConnector(),
   ];
 }

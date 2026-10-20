@@ -157,7 +157,6 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Busy times in, bookings out",
     group: "calendars",
     industries: ["trades", "salons", "clinics", "gyms"],
-    building: true,
     ways: [{ kind: "calendly", preset: null, label: "Calendly" }],
   },
   {
@@ -166,7 +165,6 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Your bookings, for any calendar",
     group: "calendars",
     industries: ["stays", "all"],
-    building: true,
     ways: [{ kind: "ics_feed", preset: null, label: "Calendar link to share" }],
   },
   {

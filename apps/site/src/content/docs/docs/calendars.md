@@ -5,7 +5,7 @@ description: Connect iCloud, Fastmail, Nextcloud, any CalDAV calendar, a calenda
 
 Your Inbox offers times from the opening hours you set. A calendar you connect makes those times honest: when it says you are busy, agents are not offered that time, and every booking your Inbox confirms is written into it, moved when the booking moves and taken off when it is cancelled.
 
-Settings → Integrations → **Calendar** (iCloud, Fastmail, Nextcloud, any other that speaks CalDAV, a calendar link, or Google) or **Cal.com**.
+Settings → Integrations → **Calendar** (iCloud, Fastmail, Nextcloud, any other that speaks CalDAV, a calendar link, or Google), **Cal.com** or [**Calendly**](/docs/connectors/calendly/).
 
 ## What it does, and what it never does
 
@@ -52,6 +52,10 @@ Paste an API key from Cal.com: **Settings → Developer → API keys → New**, 
 - Cal.com cannot change the name on a booking it has: when a customer is erased, their name stays on the Cal.com bookings already made. Calendars connected directly lose it on the next sync.
 
 For a Cal.com you run yourself, give its API address under **More options**.
+
+## Share your bookings
+
+The other way round: **Calendar link to share** makes a private link to your confirmed bookings, for a booking site's calendar sync, Google Calendar or a phone. It shows when you are booked and for which service, never who booked. Your Inbox knows its own bookings when a calendar copies them back, so they block nothing twice. See [Calendar link to share](/docs/connectors/calendar-link/).
 
 ## Google Calendar
 
