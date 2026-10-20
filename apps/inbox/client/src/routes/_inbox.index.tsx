@@ -3,9 +3,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { StatePill } from "../components/Pills";
 import { api, problemOf } from "../lib/api";
+import "../property.css";
 import {
   formatClock,
   formatDay,
+  formatMoney,
   localDateKey,
   partyName,
   relativeTime,
@@ -13,6 +15,7 @@ import {
   TYPE_PLURAL,
   TYPE_WORD,
 } from "../lib/format";
+import { type TodayView, useProperty, useToday } from "../lib/property";
 import { useBusiness, useCounts, useProducts, useServices, useSettings } from "../lib/queries";
 import type { ItemType, ItemView } from "../lib/types";
 import { looksUnconfigured, setupSkipped } from "./setup";
@@ -21,7 +24,7 @@ export const Route = createFileRoute("/_inbox/")({
   component: TodayPane,
 });
 
-const TYPES: readonly ItemType[] = ["booking", "order", "quote_request", "message", "refund"];
+const TYPES: readonly ItemType[] = ["stay", "booking", "order", "quote_request", "message", "refund"];
 
 /**
  * The first screen: what is on today, what waits for a person, and the last things that happened.
@@ -70,6 +73,8 @@ function TodayPane() {
     )
     .filter((b) => localDateKey(b.start, tz) === todayKey)
     .sort((a, b) => a.start.localeCompare(b.start));
+  const property = useProperty();
+  const stays = (property.data?.properties.length ?? 0) > 0;
   const waiting = TYPES.map((type) => ({ type, n: counts.data?.needsByType[type] ?? 0 })).filter((w) => w.n > 0);
 
   return (
@@ -78,6 +83,8 @@ function TodayPane() {
         <div className="eyebrow">Today</div>
         <h2 className="today-date">{formatDay(new Date(now).toISOString(), tz)}</h2>
       </div>
+
+      {stays && <StaysToday />}
 
       <section className="card glass stack">
         <h3 className="sec">Bookings today</h3>
@@ -154,5 +161,52 @@ function Line({ view, when, children }: { view: ItemView; when: string; children
       <span className="what">{children}</span>
       <StatePill state={view.item.state} small />
     </Link>
+  );
+}
+
+/** Today at the property (S14): who arrives, who leaves, who is in, and what is still to pay there. */
+function StaysToday() {
+  const today = useToday(true);
+  const groups: readonly { key: keyof Omit<TodayView, "date">; title: string; none: string }[] = [
+    { key: "arriving", title: "Arriving", none: "Nobody arrives today." },
+    { key: "leaving", title: "Leaving", none: "Nobody leaves today." },
+    { key: "in_house", title: "Staying", none: "Nobody is staying tonight." },
+  ];
+  return (
+    <section className="card glass stack stay-today">
+      <h3 className="sec">At the property</h3>
+      {today.isPending && <div className="skeleton sk-line" />}
+      {today.isError && <p className="hint error">{problemOf(today.error).detail}</p>}
+      {today.data &&
+        groups.map((g) => {
+          const rows = today.data[g.key];
+          return (
+            <div key={g.key} className="stack">
+              <div className="eyebrow">
+                {g.title}
+                {rows.length ? ` · ${rows.length}` : ""}
+              </div>
+              {rows.length === 0 && <p className="hint">{g.none}</p>}
+              {rows.length > 0 && (
+                <ul className="today-list">
+                  {rows.map((r) => (
+                    <li key={r.item_id}>
+                      <Link to="/items/$id" params={{ id: r.item_id }} search={(prev) => prev} className="today-line">
+                        <span className="when">
+                          {g.key === "arriving" && r.arrival ? `${r.arrival.from}–${r.arrival.to}` : r.reference}
+                        </span>
+                        <span className="what">
+                          <b>{r.guest ?? "Guest"}</b> <span>{r.rooms.join(", ")}</span>
+                        </span>
+                        <span className="when">{r.to_pay.value > 0 ? `${formatMoney(r.to_pay)} to pay` : ""}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+    </section>
   );
 }

@@ -4,8 +4,11 @@ import { SourceTag, TimeZonePicker } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
 import { FormActions } from "../components/Form";
 import { ClosuresEditor, HoursEditor } from "../components/Hours";
+import { NightsCard } from "../components/Nights";
 import { problemOf } from "../lib/api";
 import { describeWeekly } from "../lib/hours";
+import { useProperty } from "../lib/property";
+import "../property.css";
 import {
   useAvailability,
   useClearOverride,
@@ -34,6 +37,8 @@ function AvailabilityPage() {
   const saveClosures = useSaveClosures();
   const [scope, setScope] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const property = useProperty();
+  const stays = property.data?.setup ?? null;
 
   if (availability.isPending) {
     return (
@@ -68,6 +73,7 @@ function AvailabilityPage() {
   return (
     <>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
+      {stays && <NightsCard setup={stays} />}
       <section className="card glass stack">
         <div className="settings-grid hours-head">
           <ZoneChoice
