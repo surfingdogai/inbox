@@ -1,3 +1,4 @@
+import type { Policy } from "@surfingdog/spec";
 import { sql } from "drizzle-orm";
 import {
   index,
@@ -81,10 +82,30 @@ export const services = sqliteTable(
     negotiable: integer("negotiable").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /** Its add-ons (0028, ADR-035): each a name, the minutes it adds and an optional price. */
+    addOns: text("add_ons", { mode: "json" }).$type<
+      { id: string; name: string; durationMin: number; price?: { value: number; currency: string } }[]
+    >(),
+    /** What it asks to hold a booking (0028): a share of its price or an amount, paid on the business's own platform. */
+    deposit: text("deposit", { mode: "json" }).$type<{ kind: "percent" | "amount"; value: number }>(),
+    /** Its own cancellation policy (0028, `policySchema`); null: the business's default applies. */
+    policy: text("policy", { mode: "json" }).$type<Policy>(),
+    /**
+     * What must come first (0028): another service (a patch test, a consultation) within `withinDays`
+     * before this one, checked against this business's own bookings. Never shown to anyone.
+     */
+    requires: text("requires", { mode: "json" }).$type<{ serviceId: string; withinDays: number }>(),
+    /** The salon's own system's id for it, when it came from there (0028). */
+    externalId: text("external_id"),
+    source: text("source").notNull().default("builtin"),
   },
   (t) => [index("services_active_sort").on(t.active, t.sort)],
 );
 
+/**
+ * Staff, tables and other things a booking is with (0028, ADR-035). Customers see a member of staff
+ * only by `public_name` (a first name), and their photo when there is one.
+ */
 export const resources = sqliteTable("resources", {
   id: id(),
   locationId: text("location_id").references(() => locations.id),
@@ -92,7 +113,30 @@ export const resources = sqliteTable("resources", {
   capacity: integer("capacity").notNull().default(1),
   active: integer("active").notNull().default(1),
   createdAt: createdAt(),
+  /** `staff` | `table` | `room` | `vehicle` | `equipment`. */
+  kind: text("kind").notNull().default("staff"),
+  publicName: text("public_name"),
+  /** A small JPEG as a data URL (at most 32 KB), read again and kept without metadata. */
+  photo: text("photo"),
+  sort: integer("sort").notNull().default(0),
+  externalId: text("external_id"),
+  source: text("source").notNull().default("builtin"),
+  updatedAt: integer("updated_at"),
 });
+
+/** Who gives which service, and at what price and length when not the service's own (0028). */
+export const serviceResources = sqliteTable(
+  "service_resources",
+  {
+    serviceId: text("service_id").notNull(),
+    resourceId: text("resource_id").notNull(),
+    /** Minor units of the service's currency, for the whole booking. */
+    priceOverride: integer("price_override"),
+    durationOverrideMin: integer("duration_override_min"),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.serviceId, t.resourceId] }), index("service_resources_resource").on(t.resourceId)],
+);
 
 export const products = sqliteTable(
   "products",
@@ -775,6 +819,11 @@ export const connectors = sqliteTable(
     failures: integer("failures").notNull().default(0),
     /** When the owner was told it stopped syncing: once, until it works again. */
     notifiedAt: integer("notified_at"),
+    /**
+     * The member of staff this calendar is theirs (0028, ADR-035): its busy times take only their times
+     * off, and only their bookings are written to it. Null: the whole business's.
+     */
+    resourceId: text("resource_id"),
   },
   (t) => [
     unique("connectors_kind_external").on(t.kind, t.externalId),
