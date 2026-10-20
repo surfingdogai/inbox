@@ -1,6 +1,7 @@
-import { ISO_4217_MINOR_UNITS, isMoneyCurrency } from "@surfingdog/core";
+import { ISO_4217_MINOR_UNITS, isMoneyCurrency, PRESET_KEYS } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { describeService, lengthWords, serviceDraft, serviceWrite } from "../client/src/lib/catalogue";
+import { cardState, cardsFor } from "../client/src/lib/connect";
 import { countryName, countryOptions, ISO_3166_1 } from "../client/src/lib/countries";
 import {
   COMMON_CURRENCIES,
@@ -32,9 +33,9 @@ import {
   withValue,
 } from "../client/src/lib/hours";
 import { ISO_639_1, languagesToSave, matchLanguages } from "../client/src/lib/languages";
-import { offerBodies, wizardDoorsDoc, wizardPreset } from "../client/src/lib/setup";
+import { KINDS, kindOf, offerBodies, wizardDoorsDoc, wizardPreset } from "../client/src/lib/setup";
 import { clearSources, sourceNote } from "../client/src/lib/sources";
-import type { ServiceRow, Settings } from "../client/src/lib/types";
+import type { GalleryCard, ServiceRow, Settings } from "../client/src/lib/types";
 import { matchZones, placeOf, zoneChoices, zoneName } from "../client/src/lib/zones";
 
 // What the owner picks in Settings instead of typing it: hours from the clock (open all the time
@@ -418,6 +419,39 @@ describe("the setup wizard's doors", () => {
     expect(wizardPreset(all)).toBe("appointments");
     expect(wizardPreset({ booking: false, quoteRequest: true, message: true })).toBe("trades");
     expect(wizardPreset({ booking: false, quoteRequest: false, message: true })).toBeNull();
+  });
+
+  it("start from what the business runs: each kind's rules are a server preset, and its doors follow", () => {
+    expect(KINDS.map((k) => k.label)).toEqual(["Appointments", "Trades and quotes", "A shop"]);
+    for (const k of KINDS) {
+      expect(PRESET_KEYS as readonly string[]).toContain(k.preset);
+      expect(kindOf(k.key)).toBe(k);
+      // The kind's rules win over the doors' guess.
+      expect(wizardPreset({ booking: true, quoteRequest: true, message: true }, k)).toBe(k.preset);
+      expect(k.connect.length).toBeGreaterThan(0);
+    }
+    expect(kindOf("trades")?.doors).toEqual({ booking: false, quoteRequest: true, message: true });
+    expect(kindOf("spaceport")).toBeUndefined();
+  });
+
+  it("show the systems a kind runs its days in first, and say plainly which need setup", () => {
+    const way = (status: "ready" | "soon" | "setup", hint?: string) =>
+      ({ kind: "x", preset: null, label: "x", status, auth: "form", form: [], ...(hint ? { hint } : {}) }) as const;
+    const card = (id: string, group: GalleryCard["group"], status: "ready" | "soon", ways: GalleryCard["ways"]) =>
+      ({ id, title: id, line: `${id} line`, group, status, ways }) as GalleryCard;
+    const cards = [
+      card("stripe", "payments", "ready", [way("ready")]),
+      card("calendar", "calendars", "ready", [way("ready")]),
+      card("gated", "lodging", "soon", [way("setup", "Needs a partner key on this server.")]),
+      card("later", "lodging", "soon", [way("soon")]),
+    ];
+    expect(cardsFor(cards, ["lodging", "calendars"]).map((c) => c.id)).toEqual(["gated", "later", "calendar"]);
+    expect(cardState(cards[0] as GalleryCard)).toEqual({ tag: null, hint: null });
+    expect(cardState(cards[2] as GalleryCard)).toEqual({
+      tag: "Needs setup",
+      hint: "Needs a partner key on this server.",
+    });
+    expect(cardState(cards[3] as GalleryCard)).toEqual({ tag: "Soon", hint: null });
   });
 
   it("make what is offered asked about for a price when agents cannot book", () => {

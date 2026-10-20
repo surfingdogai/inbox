@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
+import { presetKeySchema } from "../rules/presets/index";
 import { ruleDefinitionSchema } from "../rules/schema";
 import { canonicalLanguages, currencyProblem } from "../util/locale";
 
@@ -183,7 +184,8 @@ export const updateRuleInput = patchOf(ruleInput).extend({
   expected_version: z.number().int().min(1).optional(),
 });
 export const ruleIdInput = z.object({ rule_id: z.string().min(1) });
-export const presetKeySchema = z.enum(["appointments", "trades", "shop"]);
+/** A preset key (`rules/presets`): one per kind of business, derived from the registry. */
+export { presetKeySchema };
 export const presetConfirmSchema = z
   .enum(["owner", "rules"])
   .describe(

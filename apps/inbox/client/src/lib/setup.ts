@@ -1,6 +1,6 @@
 import { parseMajor } from "./actions";
 import { minorUnitsOf } from "./currencies";
-import type { ProductBody, ServiceBody } from "./types";
+import type { ConnectorGroup, PresetKey, ProductBody, ServiceBody } from "./types";
 
 /**
  * What the setup wizard's "What you offer" step sends, as pure functions so they run in tests on
@@ -98,8 +98,60 @@ export function wizardDoorsDoc(d: WizardDoors): { doors: Record<string, boolean 
   };
 }
 
-/** The rules to start from: bookings' when agents can book, requests for a price's when they can only ask. */
-export function wizardPreset(d: WizardDoors): "appointments" | "trades" | null {
+/**
+ * What a business runs, as the setup's first question asks it (ADR-032): each kind sets the rules to
+ * start from, what agents can do to begin with, and which systems "Connect your system" shows first.
+ * A later kind (a place to stay) is one more entry here.
+ */
+export interface SetupKind {
+  readonly key: string;
+  readonly label: string;
+  /** One line under the chip: what kind of business it is. */
+  readonly line: string;
+  readonly preset: PresetKey;
+  readonly doors: WizardDoors;
+  /** The integration groups its businesses run their days in, shown first when connecting. */
+  readonly connect: readonly ConnectorGroup[];
+}
+
+export const KINDS: readonly SetupKind[] = [
+  {
+    key: "appointments",
+    label: "Appointments",
+    line: "A salon, a clinic, a studio, classes.",
+    preset: "appointments",
+    doors: { booking: true, quoteRequest: true, message: true },
+    connect: ["booking", "calendars"],
+  },
+  {
+    key: "trades",
+    label: "Trades and quotes",
+    line: "Jobs you quote for and visits you arrange.",
+    preset: "trades",
+    doors: { booking: false, quoteRequest: true, message: true },
+    connect: ["work", "calendars"],
+  },
+  {
+    key: "shop",
+    label: "A shop",
+    line: "Things people order, to collect or to deliver.",
+    preset: "shop",
+    doors: { booking: false, quoteRequest: false, message: true },
+    connect: ["shops", "payments"],
+  },
+];
+
+/** The kind of a key, if it is one. */
+export function kindOf(key: string | null | undefined): SetupKind | undefined {
+  return KINDS.find((k) => k.key === key);
+}
+
+/**
+ * The rules to start from: the kind's, once the owner said what they run; else bookings' when agents
+ * can book, requests for a price's when they can only ask.
+ */
+export function wizardPreset(d: WizardDoors, kind?: SetupKind | undefined): PresetKey | null {
+  if (kind) return kind.preset;
   if (d.booking) return "appointments";
   if (d.quoteRequest) return "trades";
   return null;
