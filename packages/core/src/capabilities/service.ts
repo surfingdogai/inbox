@@ -6,10 +6,12 @@ import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { ConnectorCapabilities } from "../connectors/capability";
+import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
+import { audienceFor } from "../customer/audience";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
-import type { Item, ItemType } from "../domain/types";
+import type { Item, ItemType, Money } from "../domain/types";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
@@ -33,6 +35,7 @@ import {
   parties,
   partyContacts,
   products,
+  resources,
   services,
   settings as settingsTable,
   threadEntries,
@@ -70,7 +73,22 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
+import {
+  bookFirstInSystem,
+  bookingSchedules,
+  cancelFeeOf,
+  dayByStaff,
+  findStaffSlots,
+  fromSystem,
+  hasStaff,
+  prepareBooking,
+  registerBookingResolver,
+  StaffCapabilities,
+  type StaffDay,
+  type StaffSlot,
+} from "../staff/index";
 import { hashText } from "../util/canonical";
+import { formatMinor } from "../util/money";
 import {
   type Caller,
   type EventActor,
@@ -93,7 +111,7 @@ import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { askedForAPrice, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
+import { askedForAPrice, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -301,6 +319,9 @@ export class Capabilities {
   /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */
   readonly access: AccessCapabilities;
 
+  /** Staff (ADR-035): who gives which service, their hours, and who customers can book. */
+  readonly staff: StaffCapabilities;
+
   /**
    * People and customers (ADR-017 §2, §8): what agents carry, first keys, customers the business
    * already knows, one-time codes. The host plugs in the network calls (`people.attachPort`) and the
@@ -502,6 +523,11 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.staff = new StaffCapabilities(db, () => this.baseUrl);
+    // A booking's deposit link, and the bookings written first to a salon's own system (ADR-035).
+    // A host or a test that registered its own source for bookings keeps it.
+    if (!scheduleSourceOf("booking")) registerScheduleSource("booking", bookingSchedules);
+    registerBookingResolver(this.connectors);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -664,7 +690,26 @@ export class Capabilities {
       .where(and(...conditions))
       .orderBy(services.sort, services.name, services.id)
       .limit(input.limit + 1);
-    return page(rows, input.limit, (r) => r.id);
+    // What must come first, and where a service came from, are the business's own (ADR-035).
+    const shown = rows.map(({ requires: _requires, externalId: _externalId, source: _source, ...r }) => r);
+    return page(shown, input.limit, (r) => r.id) as Page<typeof services.$inferSelect>;
+  }
+
+  /** Whether the business lists staff now (ADR-035): the tools that name them are offered only then. */
+  async listsStaff(): Promise<boolean> {
+    return hasStaff(this.db);
+  }
+
+  /** One day by member of staff, in the business's zone (ADR-035): the owner app's day view. */
+  async staffDay(caller: Caller, date: string): Promise<StaffDay> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    const profile = await this.getBusinessProfile();
+    return dayByStaff(this.db, date, profile.timezone);
+  }
+
+  /** Who customers can book (ADR-035): first names, photos and the services each gives. */
+  async listStaff(input: T.ListStaffInput): Promise<{ items: Awaited<ReturnType<StaffCapabilities["publicList"]>> }> {
+    return { items: await this.staff.publicList(input.service_id) };
   }
 
   /** Active products by name; the cursor works as for services (keyset on name, id). */
@@ -701,14 +746,46 @@ export class Capabilities {
     if (elsewhere) throw takenElsewhere("booking", elsewhere);
     await this.refuseUnbookable(opts.caller, input.service_id);
     const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
-    return findSlots(this.db, {
+    const now = opts.now ?? Date.now();
+    // A service booked through the salon's own system (ADR-035): the times it says are free.
+    const system = await this.systemTimes(input, now, settings.booking.minNoticeMin);
+    if (system) return system;
+    return findStaffSlots(this.db, {
       serviceId: input.service_id,
+      staffId: input.staff_id,
+      addOnIds: input.add_ons,
       from: input.from,
       to: input.to,
       timezone: profile.timezone,
-      now: opts.now ?? Date.now(),
+      now,
       minNoticeMin: settings.booking.minNoticeMin,
     });
+  }
+
+  /** The free times a salon's own system gives for a service it holds, when it can say now (ADR-035). */
+  private async systemTimes(
+    input: T.CheckAvailabilityInput,
+    now: number,
+    minNoticeMin: number,
+  ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: StaffSlot[] } | null> {
+    if (input.add_ons?.length) return null;
+    const [service] = await this.db.orm.select().from(services).where(eq(services.id, input.service_id));
+    if (!service?.active || service.source === "builtin") return null;
+    const from = Date.parse(input.from);
+    const to = Date.parse(input.to);
+    if (!(to > from) || to - from > 14 * 86_400_000) return null;
+    let staffExternalId: string | undefined;
+    if (input.staff_id && input.staff_id !== "any") {
+      const [r] = await this.db.orm
+        .select({ externalId: resources.externalId, source: resources.source })
+        .from(resources)
+        .where(eq(resources.id, input.staff_id));
+      if (!r?.externalId || r.source !== service.source) return null;
+      staffExternalId = r.externalId;
+    }
+    const read = await this.connectors.systemSlots({ serviceId: service.id, staffExternalId, from, to }, now);
+    if (!read) return null;
+    return fromSystem(this.db, { service, slots: read.slots, source: read.kind, now, minNoticeMin });
   }
 
   async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
@@ -733,13 +810,51 @@ export class Capabilities {
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
     const pricing = await this.customer.pricingFor(c, input);
+    // Who it is with, its add-ons, its deposit and policy, and what comes first (ADR-035): made ready
+    // before the confirm step, so the customer confirms all of it.
+    const profile = await this.getBusinessProfile();
+    const now = nowOf(c);
+    const prepared = await prepareBooking(this.db, {
+      payload: input.payload as Record<string, unknown>,
+      staffId: input.staff_id,
+      addOnIds: input.add_ons,
+      timezone: profile.timezone,
+      lang: input.contact?.locale ?? c.locale ?? profile.languages[0] ?? "en",
+      now,
+      partyId: c.actor.partyId,
+      pricing,
+    });
+    const ready = { ...input, payload: prepared.payload as T.CreateBookingInput["payload"] };
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
-    const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
-    return this.people.create(
+    const confirmed = await this.customer.confirmCreate(c, "booking", ready, pricing);
+    const created = await this.people.create(
       c,
-      { type: "booking", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
+      {
+        type: "booking",
+        payload: prepared.payload,
+        contact: input.contact,
+        message: input.message,
+        confirmed,
+        pricing,
+        asked: { payload: input.payload, staffId: input.staff_id, addOns: input.add_ons },
+        ...(prepared.checkFirst ? { checkFirst: true, flags: { needsHuman: true } } : {}),
+      },
       input,
     );
+    if (created.replayed) return created;
+    if (prepared.ownerNote) {
+      await appendThreadEntry(this.db, systemCaller(now), created.view.item, prepared.ownerNote, "note");
+      return created;
+    }
+    // A salon's own booking system takes it first, and only then is it confirmed (ADR-035).
+    const first = await bookFirstInSystem(this.db, this.connectors, created.view.item.id, now);
+    if (first !== "confirmed") return created;
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, created.view.item.id));
+    if (!row) return created;
+    const audience = isCustomer(c)
+      ? await audienceFor(this.db, { locale: input.contact?.locale ?? c.locale ?? null })
+      : undefined;
+    return { ...created, view: viewFor(rowToItem(row), permissionKind(c), undefined, undefined, audience) };
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
@@ -822,6 +937,31 @@ export class Capabilities {
 
   private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    // A confirmed booking with its own policy (ADR-035): the fee is said before anything is cancelled.
+    const fee = isCustomer(c) ? await this.cancelFeeFor(c, input) : null;
+    if (fee) {
+      const event = fee.fee.value > 0 ? "cancel_late" : "cancel";
+      try {
+        const done = await transitionItem(this.db, c, { itemId: input.item_id, event, ...note });
+        if (fee.fee.value > 0 && !done.replayed) {
+          // The fee is the business's to take, from the deposit or by its own link: said to the owner once.
+          await appendThreadEntry(
+            this.db,
+            systemCaller(nowOf(c)),
+            done.view.item,
+            `Cancelled with a fee of ${formatMinor(fee.fee, "en-GB")} under its policy, as the customer saw it and agreed. Take it from the deposit, or ask for it; nothing was charged here.`,
+            "note",
+          );
+        }
+        return done;
+      } catch (error) {
+        // Cancelling turned dear while the request was on its way: said again, at its new fee.
+        if (error instanceof WriteError && error.code === "guard_failed" && event === "cancel") {
+          await this.cancelFeeFor(c, { ...input, fee_sha: undefined });
+        }
+        throw error;
+      }
+    }
     // A retry of a cancellation that was taken as a withdrawal is answered as that withdrawal.
     if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) {
       try {
@@ -850,6 +990,39 @@ export class Capabilities {
       if (!closed && !retried) throw error;
       return transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
     }
+  }
+
+  /**
+   * The fee for cancelling a confirmed booking under its own policy (ADR-035), as the customer is shown
+   * it first: null when it has none, or nothing to confirm (free); a `confirm_terms` refusal with the fee
+   * and what comes back until they send its `fee_sha`; the fee itself once they did.
+   */
+  private async cancelFeeFor(c: Caller, input: T.CancelItemInput): Promise<{ fee: Money } | null> {
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
+    if (row?.type !== "booking" || row.state !== "confirmed") return null;
+    const item = rowToItem(row);
+    if (item.type !== "booking" || !item.payload.policy) return null;
+    // Withdrawal decides first where it runs (ADR-018 §7): never a fee.
+    if (await this.withdrawalRuns(c, item.id)) return null;
+    const lang = (await audienceFor(this.db, { locale: c.locale ?? null })).lang;
+    const quote = await cancelFeeOf({ id: item.id, payload: item.payload }, nowOf(c), lang);
+    if (!quote) return null;
+    if (quote.fee.value === 0) return { fee: quote.fee };
+    if (input.fee_sha === quote.sha) return { fee: quote.fee };
+    throw new WriteError(
+      "confirm_terms",
+      `${quote.sentence} Nothing is cancelled yet: show your person this, and send fee_sha once they said yes.`,
+      {
+        details: {
+          summary: quote.sentence,
+          fee: quote.fee,
+          ...(quote.refund ? { refund_owed: quote.refund } : {}),
+          fee_sha: quote.sha,
+          policy: item.payload.policy,
+          ...(input.fee_sha ? { changed: true } : {}),
+        },
+      },
+    );
   }
 
   /**
@@ -2041,6 +2214,16 @@ function noHoldError(paths: readonly string[]): WriteError {
 function hostCaller(now: number): Caller {
   return {
     actor: { kind: "system", id: "host", channel: "system" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => now,
+  };
+}
+
+/** The inbox itself, for a note it leaves the owner on an item (ADR-035). */
+function systemCaller(now: number): Caller {
+  return {
+    actor: { kind: "system", id: "booking_prepare", channel: "system" },
     tier: "verified_principal",
     sandbox: false,
     now: () => now,
