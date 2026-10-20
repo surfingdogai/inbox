@@ -439,7 +439,7 @@ is in here, so it is worth doing properly. Ask the person for each; do not inven
 3. **Opening hours** — and any closures.
 4. **Products** — what can be ordered. If their shop publishes a product feed, connect it instead
    and the catalogue fills itself: Settings → Integrations → Connect a feed.
-5. **Rules** — start from a preset (`appointments`, `trades`, `shop`) and change it with them.
+5. **Rules** — start from a preset (`appointments`, `trades`, `shop`, `salon`) and change it with them.
 
 The inbox offers agents only what it has the means to do: `message` always, `booking` once a service
 has opening hours, `order` once a product is active, and `quote_request` with either. So set up what
@@ -458,6 +458,26 @@ fits the business, and nothing else:
 
 A shop with a checkout already chooses between those two: ask the person, and don't decide for
 them.
+
+### A salon, a barber, a beauty studio
+
+Staff people book by name: set up at `/settings/services?tab=staff`, or in the setup wizard's "A
+salon or barber". The inbox offers `list_staff`, and `staff_id` on `check_availability` and
+`create_booking`, once someone on the staff gives a service on offer.
+
+1. **Services** — as above, then each one's terms: add-ons (the minutes and price each adds), a
+   deposit (a share or an amount), a cancellation policy, and what must come first (a patch test
+   within so many days). Ask the person for every number; never invent a price, a deposit or a policy.
+2. **Staff** — each person's name, the first name customers see, the services they give, their own
+   price or length for any, and their own hours. Their own calendar, once connected in Integrations,
+   is chosen under their name.
+3. **Rules** — the `salon` preset: a returning client whose stylist is free is confirmed at once, a
+   new client's first visit goes to the owner.
+
+A salon that runs its days in Phorest starts from it once Phorest is switched on here (today it says
+"Needs setup"); each booking is then written to Phorest first. Salons on another system keep sending
+agents to their own booking page: a booking door kept elsewhere. Deposits are paid through the
+business's own payment account; the inbox never charges anyone.
 
 ---
 
