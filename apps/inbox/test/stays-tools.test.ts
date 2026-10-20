@@ -130,11 +130,27 @@ describe("a place to stay's doors", () => {
         check_out: out,
         rooms: [{ room_type_id: room, adults: 2 }],
         contact: { name: "Lucía R.", email: "lucia@example.org" },
+        requests: "Vegetarian breakfast, please; we land at 19:00.",
         consent: true,
       }),
       201,
     );
     const id = made.view.item.id;
+    await s.drain();
+    const { rows: first } = await s.db.client.query({
+      sql: "SELECT subject, body_text FROM outbound_mail WHERE recipient = 'owner' AND item_id = ? ORDER BY rowid",
+      params: [id],
+      method: "all",
+    });
+    // In the owner's words: who, when, how many, which room, what they wrote, by when you answer, and the
+    // guest's own short reference; never "the business".
+    const body = String(first[0]?.[1] ?? "");
+    expect(String(first[0]?.[0])).toMatch(/^Stay request: Lucía R\., .+, 2 nights$/);
+    expect(body).toMatch(/^Lucía R\. asks for .+ \(2 nights\), 2 adults, /);
+    expect(body).toContain("They wrote: “Vegetarian breakfast, please; we land at 19:00.”");
+    expect(body).toMatch(/You answer within \d+ hours?\. Reference [0-9A-Z]{6}\./);
+    // The link to open it names the item; the words name only the guest's short reference.
+    expect(body.split("\nOpen:")[0]).not.toMatch(/the business|\b[0-9A-HJKMNP-TV-Z]{26}\b/);
     await ok(s.owner("POST", `/v1/owner/items/${id}/transitions`, { event: "quote", input: { from: "rates" } }));
     const asked = await s.guest("POST", `/v1/items/${id}/accept`, { access_token: made.accessToken });
     const sha = ((await asked.json()) as { details: { terms_sha: string } }).details.terms_sha;
@@ -146,7 +162,7 @@ describe("a place to stay's doors", () => {
       method: "all",
     });
     const subjects = rows.map((r) => [String(r[0]), String(r[1])]);
-    expect(subjects[0]?.[1]).toMatch(/^New stay request from Lucía R\./);
+    expect(subjects[0]?.[1]).toMatch(/^Stay request: Lucía R\./);
     expect(subjects.find(([t]) => t?.startsWith("owner.accept"))?.[1]).toMatch(/^Lucía R\. accepted your quote/);
   });
 });

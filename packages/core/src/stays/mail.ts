@@ -6,7 +6,7 @@ import { randomToken } from "../ids";
 import { policySentence } from "../policy/index";
 import type { SecretBox } from "../secrets/box";
 import { formatMinor } from "../util/money";
-import { type StayCopy, type StayLang, stayCopy } from "./copy";
+import { labelled, type StayCopy, type StayLang, stayCopy } from "./copy";
 import { nightsOf } from "./nights";
 import { stayLinkSha } from "./page";
 import { propertyLocale } from "./price";
@@ -97,15 +97,15 @@ const EXTRA: Readonly<
   fr: {
     total: "Total",
     lapsed: (p, d) => [
-      `Votre demande à ${p} : ${d}`,
+      `Votre demande à ${p}\u00a0: ${d}`,
       `${p} n'a pas pu répondre à temps, la demande est close. Écrivez-nous si vous souhaitez toujours venir.`,
     ],
     changeAsked: (p) => `${p} vous propose de modifier votre séjour`,
     changeRefused: (p, d) => [
       `Votre séjour chez ${p} n'a pas pu être modifié`,
-      `${p} n'a pas pu faire la modification : les nouvelles dates ne sont finalement pas libres. Votre séjour reste tel quel, ${d}.`,
+      `${p} n'a pas pu faire la modification\u00a0: les nouvelles dates ne sont finalement pas libres. Votre séjour reste tel quel, ${d}.`,
     ],
-    status: (p, d) => `Votre séjour chez ${p} : ${d}`,
+    status: (p, d) => `Votre séjour chez ${p}\u00a0: ${d}`,
   },
   de: {
     total: "Gesamt",
@@ -216,8 +216,8 @@ function money(m: { value: number; currency: string }, locale: string): string {
 function quoteBlock(p: StayPayload, c: StayCopy, lang: StayLang, locale: string): string[] {
   const q = p.quote;
   if (!q) return [];
-  const lines = q.lines.map((l) => `${l.label}: ${money({ value: l.amount, currency: q.currency }, locale)}`);
-  lines.push(`${EXTRA[lang].total}: ${money(q.total, locale)}`);
+  const lines = q.lines.map((l) => labelled(lang, l.label, money({ value: l.amount, currency: q.currency }, locale)));
+  lines.push(labelled(lang, EXTRA[lang].total, money(q.total, locale)));
   const now = q.schedule.filter((s) => s.type === "immediate").reduce((a, s) => a + s.amount.value, 0);
   const there = q.schedule.filter((s) => s.type === "at_property").reduce((a, s) => a + s.amount.value, 0);
   if (now > 0 && there > 0) {
@@ -249,7 +249,7 @@ export async function renderStayMail(
   const blocks: string[][] = [];
   const link = (a: LinkAction, label: string) => {
     const url = input.links?.get(a);
-    return url ? `${label}: ${url}` : null;
+    return url ? labelled(lang, label, url) : null;
   };
   const policy = p.quote
     ? policySentence(p.quote.policy, {
@@ -267,10 +267,12 @@ export async function renderStayMail(
       .reduce((a, s) => a + s.amount.value, 0);
     return [
       ...(paid.value > 0 ? [c.emails.paymentReceived.body({ property, amount: money(paid, locale) })] : []),
-      ...(there > 0 ? [`${c.schedule.atProperty}: ${money({ value: there, currency: paid.currency }, locale)}`] : []),
+      ...(there > 0
+        ? [labelled(lang, c.schedule.atProperty, money({ value: there, currency: paid.currency }, locale))]
+        : []),
     ];
   };
-  const payLines = () => input.pay.map((x) => `${c.page.pay({ amount: money(x.amount, locale) })}: ${x.url}`);
+  const payLines = () => input.pay.map((x) => labelled(lang, c.page.pay({ amount: money(x.amount, locale) }), x.url));
   let template: string;
   let subject: string;
   switch (input.event) {
@@ -406,7 +408,7 @@ export async function renderStayMail(
             ...(setup.property.arrivalPublic ? { how: setup.property.arrivalPublic } : {}),
             ...(due > 0
               ? {
-                  due: `${c.schedule.atProperty}: ${money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, locale)}.`,
+                  due: `${labelled(lang, c.schedule.atProperty, money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, locale))}.`,
                 }
               : {}),
           }),
@@ -482,7 +484,8 @@ export async function renderStayMail(
           ]);
         blocks.push(paidLines());
         if (policy) blocks.push([policy]);
-        if (setup?.property.arrivalPublic) blocks.push([`${c.page.howToFind}: ${setup.property.arrivalPublic}`]);
+        if (setup?.property.arrivalPublic)
+          blocks.push([labelled(lang, c.page.howToFind, setup.property.arrivalPublic)]);
         if (p.registration) blocks.push([p.registration]);
         const cancel = link("stay_cancel", c.page.cancelMine);
         if (cancel) blocks.push([cancel]);
@@ -512,7 +515,8 @@ export async function renderStayMail(
     .map((b) => b.filter((l) => l?.trim()).join("\n"))
     .filter(Boolean)
     .join("\n\n")
-    .replace(ARRIVAL_MARKER, "");
+    .replace(ARRIVAL_MARKER, "")
+    .replace(/[\u202f\u2009]/g, "\u00a0");
   return {
     template,
     subject: subject.replace(ARRIVAL_MARKER, "").replace(/\s+/g, " ").trim(),

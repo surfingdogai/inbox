@@ -342,6 +342,8 @@ export const draftQuoteInput = z.object({
     .array(z.object({ index: z.int().min(0).max(8), room_type_id: id, rate_plan_id: id.optional() }))
     .max(9)
     .optional(),
+  /** The owner's own price for the room nights, where the rates do not cover them. */
+  price: moneySchema.optional(),
 });
 
 export const mapSystemInput = z.object({

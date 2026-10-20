@@ -296,28 +296,34 @@ export async function stayLinkView(
     case "stay_accept": {
       const q = p.quote;
       if (item.state !== "quoted" || !q) return base(409, w.noLonger(statusWord));
-      const free = q.policy.steps.find((s) => s.fee.value === 0);
       const policy = policySentence(q.policy, {
         lang,
         locale,
         total: q.total,
         what: "stay",
         place: setup?.property.locality ?? undefined,
+      }).replace(/[\u202f\u2009]/g, "\u00a0");
+      // What the stay includes and when the guest comes and goes: the plan's meal, the property's times.
+      const stayLine = [
+        ...q.includes,
+        ...(setup
+          ? [
+              c.page.checkIn({ time: setup.property.checkInFrom }),
+              c.page.checkOut({ time: setup.property.checkOutUntil }),
+            ]
+          : []),
+      ].join(" · ");
+      // The heading says what, when and how much; the policy is said once, under it, in plain weight.
+      return base(opts.status ?? 200, [nights, dates, money(q.total, locale)].join(" · "), {
+        rows: quoteRows(q, c, lang, locale),
+        paragraphs: [
+          policy,
+          ...(stayLine ? [stayLine] : []),
+          c.emails.quote.holds({ until: setup ? whenWords(setup, q.validThrough, lang) : q.validThrough }),
+        ],
+        form: { hidden, fields: [], button: dueNow(q) ? c.page.bookAndPay : c.page.obligation },
+        ...(opts.error ? { error: opts.error } : {}),
       });
-      return base(
-        opts.status ?? 200,
-        c.page.confirmAccept({ nights, dates, total: money(q.total, locale), ...(free ? { free: policy } : {}) }),
-        {
-          rows: quoteRows(q, c, lang, locale),
-          // The policy once: in the heading when cancelling is free for a while, else under it.
-          paragraphs: [
-            ...(free ? [] : [policy]),
-            c.emails.quote.holds({ until: setup ? whenWords(setup, q.validThrough, lang) : q.validThrough }),
-          ],
-          form: { hidden, fields: [], button: dueNow(q) ? c.page.bookAndPay : c.page.obligation },
-          ...(opts.error ? { error: opts.error } : {}),
-        },
-      );
     }
     case "stay_decline":
       if (item.state !== "quoted") return base(409, w.noLonger(statusWord));
@@ -350,21 +356,24 @@ export async function stayLinkView(
       if (item.state !== "confirmed" || !q) return base(409, w.noLonger(statusWord));
       const terms = cancellationTerms(q, paidOf(p), now);
       const paid = paidOf(p);
+      // Nothing paid yet: what cancelling costs under the property's own policy, and that nothing was taken.
       const lines =
         terms.fee.value === 0
           ? [paid.value > 0 ? c.page.cancelFree({ property, paid: money(paid, locale) }) : c.page.cancelNothingBack]
-          : [
-              // The last free day as the guest reads a date, when there was one; else what it costs now.
-              q.policy.steps.at(-1)?.until && setup
-                ? c.page.cancelQuestion({
-                    date: whenWords(setup, q.policy.steps.at(-1)?.until ?? "", lang),
-                    fee: money(terms.fee, locale),
-                  })
-                : c.page.cancelNow({ fee: money(terms.fee, locale) }),
-              terms.refund.value > 0
-                ? c.page.cancelRefund({ paid: money(paid, locale), property, refund: money(terms.refund, locale) })
-                : c.page.cancelNothingBack,
-            ];
+          : paid.value === 0
+            ? [c.page.cancelUnder({ property, fee: money(terms.fee, locale) }), c.page.nothingCharged]
+            : [
+                // The last free day as the guest reads a date, when there was one; else what it costs now.
+                q.policy.steps.at(-1)?.until && setup
+                  ? c.page.cancelQuestion({
+                      date: whenWords(setup, q.policy.steps.at(-1)?.until ?? "", lang),
+                      fee: money(terms.fee, locale),
+                    })
+                  : c.page.cancelNow({ fee: money(terms.fee, locale) }),
+                terms.refund.value > 0
+                  ? c.page.cancelRefund({ paid: money(paid, locale), property, refund: money(terms.refund, locale) })
+                  : c.page.cancelNothingBack,
+              ];
       return base(opts.status ?? 200, c.page.cancelMine, {
         paragraphs: [dates, ...lines],
         form: { hidden: { ...hidden, fee: await feeSha(item.id, terms) }, fields: [], button: c.page.cancelMine },

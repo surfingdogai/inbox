@@ -26,7 +26,7 @@ import type { StayLang } from "./copy";
 import * as I from "./inputs";
 import { businessZoneAndCurrency, guestLang } from "./lang";
 import { nightsOf, stayTimes } from "./nights";
-import { localeOf, quoteFromRates } from "./price";
+import { localeOf, quoteFromPrice, quoteFromRates } from "./price";
 import {
   availability,
   confirmationSentence,
@@ -775,6 +775,10 @@ export class StayCapabilities {
         room_type_id: r[2] === null ? null : String(r[2]),
       })),
       stays: settings.stays,
+      // What the owner's screens need to say what is possible: taking money before arrival, saving a
+      // card, sealing door codes on this server.
+      collect: await payCollection(this.db),
+      can_seal: this.secrets !== null,
     };
   }
 
@@ -901,7 +905,10 @@ export class StayCapabilities {
   }
 
   /** A quote from the rates for a request, worked out and shown, never sent (`draft_stay_quote`). */
-  async draftQuote(caller: Caller, raw: unknown): Promise<{ quote: StayQuote | null; reason?: string }> {
+  async draftQuote(
+    caller: Caller,
+    raw: unknown,
+  ): Promise<{ quote: StayQuote | null; reason?: string; lang: StayLang }> {
     Setup.requireOwner(caller);
     const input = parse(I.draftQuoteInput, raw);
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
@@ -920,16 +927,19 @@ export class StayCapabilities {
       };
     });
     const settings = await readSettings(this.db);
-    const priced = quoteFromRates(setup, {
+    const lang = await guestLang(this.db, { partyId: row.partyId, settings });
+    const req = {
       collect: await payCollection(this.db),
       checkIn: p.checkIn,
       checkOut: p.checkOut,
       rooms,
-      lang: await guestLang(this.db, { partyId: row.partyId, settings }),
+      lang,
       now: nowOf(caller),
-      source: "rates",
-    });
-    return priced.ok ? { quote: priced.quote } : { quote: null, reason: priced.reason };
+      source: "rates" as const,
+    };
+    const priced = input.price ? quoteFromPrice(setup, req, input.price) : quoteFromRates(setup, req);
+    // The lines are in the guest's language: the owner is told which.
+    return priced.ok ? { quote: priced.quote, lang } : { quote: null, reason: priced.reason, lang };
   }
 
   /**
@@ -1168,6 +1178,10 @@ export interface OwnerSetup {
   readonly setup: (PropertySetup & { sentence: string; instant_unlocked: boolean }) | null;
   readonly calendars: readonly { id: string; name: string; room_type_id: string | null }[];
   readonly stays: Settings["stays"];
+  /** Whether a payment platform takes money before arrival (links) and saves cards to hold a stay. */
+  readonly collect: { readonly links: boolean; readonly cards: boolean };
+  /** Whether this server can seal private arrival details (it has a secret key). */
+  readonly can_seal: boolean;
 }
 
 export { localeOf, shareGuests };

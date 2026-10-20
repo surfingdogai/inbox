@@ -15,6 +15,7 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
+import { ownerStayMail } from "../stays/owner-mail";
 import { openArrival } from "../stays/setup";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
@@ -97,11 +98,12 @@ export function notifyHandler(
 
     let logged = await mailByJob(db, job.id);
     if (!logged) {
+      const who = p.to === "owner" ? await nameOf(db, item.partyId) : "";
       const composed =
         p.to === "owner"
           ? await capOwnerAlerts(
               db,
-              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null),
+              ownerMail(item, p, settings, who, job.id, sender !== null, await ownerStayMail(db, item, p.event, who)),
               now,
             )
           : await customerMail(db, item, p, {
@@ -483,6 +485,8 @@ function ownerMail(
   who: string,
   jobKey: string,
   canSend: boolean,
+  /** A stay's own words for the owner (ADR-033 S16), when it has them for this event. */
+  stay: { readonly subject: string; readonly lines: readonly string[] } | null = null,
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
   return {
@@ -494,9 +498,9 @@ function ownerMail(
     eventId: p.eventId ?? null,
     // One line, whatever the customer typed as their name or subject: a subject with a line break
     // in it is refused by a mail service, and the owner would never hear of the request.
-    subject: oneLine(ownerSubject(item, p.event, who)),
+    subject: oneLine(stay?.subject ?? ownerSubject(item, p.event, who)),
     text: [
-      describe(item),
+      ...(stay ? stay.lines : [describe(item)]),
       "",
       `From: ${who}`,
       ...(appUrl ? [`Open: ${appUrl}/items/${item.id}`] : []),
@@ -811,31 +815,7 @@ const TYPE_WORD: Record<Item["type"], string> = {
   stay: "stay request",
 };
 
-/** A stay's moments in the owner's words (ADR-033 S16): who did what, then which stay. */
-const STAY_OWNER_WORDS: Readonly<Record<string, string>> = {
-  provide_info: "answered your question:",
-  counter: "asks for something else:",
-  accept: "accepted your quote, confirmed:",
-  accept_pay: "accepted your quote and is paying what is due now:",
-  book: "booked:",
-  book_pay: "booked and is paying what is due now:",
-  written: "booked, written to your system:",
-  written_pay: "booked in your system and is paying what is due now:",
-  record_payment: "paid:",
-  late_payment: "paid after the time ran out, the nights still free, confirmed:",
-  decline: "is not going ahead:",
-  cancel: "cancelled:",
-  propose_change: "asks to change:",
-  accept_change: "accepted the change:",
-  change_written: "has the change you agreed, written to your system:",
-  change_refused: "keeps the dates: your system did not take the change to",
-  decline_change: "keeps it as agreed:",
-  retract_change: "withdrew their change:",
-};
-
 function ownerSubject(item: Item, event: string, who: string): string {
-  const stay = item.type === "stay" && event !== "create" ? STAY_OWNER_WORDS[event] : undefined;
-  if (stay) return `${who} ${stay} ${item.subject ?? "their stay"}`;
   if (event === "create") return `New ${TYPE_WORD[item.type]} from ${who}: ${item.subject ?? ""}`.trim();
   // A refund whose date is near (ADR-018 §7): it is owed by then, and late it is owed twice in Portugal.
   if (event === "refund_due" && item.type === "refund") {

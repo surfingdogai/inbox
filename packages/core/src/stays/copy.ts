@@ -103,6 +103,9 @@ export interface StayCopy {
     readonly cancelNow: Line;
     readonly cancelFree: Line;
     readonly cancelNothingBack: string;
+    /** What cancelling costs now under the property's own policy, for a stay nothing was paid on yet. */
+    readonly cancelUnder: Line;
+    readonly nothingCharged: string;
     readonly cancelRefund: Line;
     readonly cancelMine: string;
     readonly keep: string;
@@ -136,7 +139,7 @@ const EN: StayCopy = {
   },
   from: (nights, date) => `${nights} from ${date}`,
   purpose: { deposit: "deposit", balance: "balance", difference: "difference" },
-  with: (v) => `Your booking is with ${v.property}.`,
+  with: (v) => `You book directly with ${v.property}.`,
   automatic: (v) => `Sent automatically by ${v.property}.`,
   notInvoice: (v) => `This is your booking confirmation, not an invoice. ${v.property} issues your invoice.`,
   reply: (v) => `Reply to this email to reach ${v.property}.`,
@@ -225,6 +228,8 @@ const EN: StayCopy = {
     cancelNow: (v) => `Cancel your stay? Cancelling now costs ${v.fee}.`,
     cancelFree: (v) => `Cancelling now is free. ${v.property} refunds your ${v.paid} to how you paid.`,
     cancelNothingBack: "There is nothing to refund.",
+    cancelUnder: (v) => `Under ${v.property}'s policy, cancelling now costs ${v.fee}.`,
+    nothingCharged: "Nothing has been charged.",
     cancelRefund: (v) => `You've paid ${v.paid}, so ${v.property} refunds ${v.refund}.`,
     cancelMine: "Cancel my stay",
     keep: "Keep it",
@@ -267,13 +272,13 @@ const ES: StayCopy = {
   schedule: {
     deposit: "Depósito",
     balance: "Resto",
-    atProperty: "En el alojamiento",
+    atProperty: "A pagar en el alojamiento",
     difference: "Diferencia",
     now: "Ahora",
   },
   from: (nights, date) => `${nights} desde el ${date}`,
   purpose: { deposit: "depósito", balance: "resto", difference: "diferencia" },
-  with: (v) => `Su reserva es con ${v.property}.`,
+  with: (v) => `Reserva directamente con ${v.property}.`,
   automatic: (v) => `Enviado automáticamente por ${v.property}.`,
   notInvoice: (v) => `Esta es la confirmación de su reserva, no una factura. ${v.property} emite su factura.`,
   reply: (v) => `Responda a este correo para escribir a ${v.property}.`,
@@ -288,7 +293,7 @@ const ES: StayCopy = {
       intro: (v) => `${v.property} puede recibirle.`,
       holds: (v) => `Este presupuesto es válido hasta el ${v.until}.`,
     },
-    payNow: (v) => `A pagar ahora: ${v.now}. En el alojamiento: ${v.there}.`,
+    payNow: (v) => `A pagar ahora: ${v.now}. A pagar en el alojamiento: ${v.there}.`,
     payParts: (v) => `A pagar ahora: ${v.now}.`,
     confirmed: {
       subject: (v) => `Reservado: ${v.property}, ${v.dates}`,
@@ -366,6 +371,8 @@ const ES: StayCopy = {
     cancelNow: (v) => `¿Cancelar su estancia? Cancelar ahora cuesta ${v.fee}.`,
     cancelFree: (v) => `Cancelar ahora es gratis. ${v.property} le devuelve sus ${v.paid}.`,
     cancelNothingBack: "No hay nada que devolver.",
+    cancelUnder: (v) => `Según la política de ${v.property}, cancelar ahora cuesta ${v.fee}.`,
+    nothingCharged: "No se le ha cobrado nada.",
     cancelRefund: (v) => `Ha pagado ${v.paid}, así que ${v.property} le devuelve ${v.refund}.`,
     cancelMine: "Cancelar mi estancia",
     keep: "Mantenerla",
@@ -414,31 +421,31 @@ const FR: StayCopy = {
   },
   from: (nights, date) => `${nights} à partir du ${date}`,
   purpose: { deposit: "acompte", balance: "solde", difference: "différence" },
-  with: (v) => `Votre réservation est avec ${v.property}.`,
+  with: (v) => `Vous réservez directement auprès de ${v.property}.`,
   automatic: (v) => `Envoyé automatiquement par ${v.property}.`,
   notInvoice: (v) =>
     `Ceci est la confirmation de votre réservation, pas une facture. ${v.property} établit votre facture.`,
   reply: (v) => `Répondez à cet e-mail pour écrire à ${v.property}.`,
   emails: {
     received: {
-      subject: (v) => `Votre demande à ${v.property} : ${v.dates}`,
+      subject: (v) => `Votre demande à ${v.property}\u00a0: ${v.dates}`,
       body: (v) =>
         `Votre demande pour ${v.dates} est arrivée chez ${v.property}. ${v.property} répond sous ${v.hours} heures.`,
     },
     quote: {
-      subject: (v) => `Votre séjour à ${v.property} : ${v.dates}`,
+      subject: (v) => `Votre séjour à ${v.property}\u00a0: ${v.dates}`,
       intro: (v) => `${v.property} peut vous accueillir.`,
       holds: (v) => `Ce devis est valable jusqu'au ${v.until}.`,
     },
-    payNow: (v) => `À payer maintenant : ${v.now}. Sur place : ${v.there}.`,
-    payParts: (v) => `À payer maintenant : ${v.now}.`,
+    payNow: (v) => `À payer maintenant\u00a0: ${v.now}. Sur place\u00a0: ${v.there}.`,
+    payParts: (v) => `À payer maintenant\u00a0: ${v.now}.`,
     confirmed: {
-      subject: (v) => `Réservé : ${v.property}, ${v.dates}`,
+      subject: (v) => `Réservé\u00a0: ${v.property}, ${v.dates}`,
       intro: "Votre réservation est faite.",
       times: (v) => `Arrivée à partir de ${v.time}, départ avant ${v.until}.`,
     },
     declined: {
-      subject: (v) => `${v.property} : pas de chambre du ${v.dates}`,
+      subject: (v) => `${v.property}\u00a0: pas de chambre du ${v.dates}`,
       full: "Désolés, nous sommes complets ces nuits-là.",
     },
     expiredQuote: {
@@ -447,13 +454,13 @@ const FR: StayCopy = {
         `Le devis pour ${v.dates} n'a pas été accepté à temps, les nuits ne sont donc plus retenues. Écrivez-nous si vous en souhaitez un autre.`,
     },
     reminder: {
-      subject: (v) => `Rappel : votre acompte pour ${v.dates}`,
+      subject: (v) => `Rappel\u00a0: votre acompte pour ${v.dates}`,
       body: (v) => `Votre acompte de ${v.amount} est à régler avant le ${v.until}.`,
     },
     notPaid: {
       subject: (v) => `Votre réservation chez ${v.property} n'a pas abouti`,
       body: (v) =>
-        `L'acompte pour ${v.dates} n'a pas été réglé à temps : la réservation n'a pas abouti et les nuits ne sont plus retenues.`,
+        `L'acompte pour ${v.dates} n'a pas été réglé à temps\u00a0: la réservation n'a pas abouti et les nuits ne sont plus retenues.`,
     },
     beforeArrival: {
       subject: (v) => `À ${v.weekday} chez ${v.property}`,
@@ -461,24 +468,24 @@ const FR: StayCopy = {
         `Arrivée à partir de ${v.time}.${v.how ? ` ${v.how}` : ""}${v.due ? ` ${v.due}` : ""} Répondez à cet e-mail si vous avez besoin de quoi que ce soit.`,
     },
     arrivalDetails: {
-      subject: (v) => `Votre arrivée chez ${v.property} : les détails`,
-      body: (v) => `Vos détails d'arrivée pour le ${v.date} :\n\n${v.details}`,
+      subject: (v) => `Votre arrivée chez ${v.property}\u00a0: les détails`,
+      body: (v) => `Vos détails d'arrivée pour le ${v.date}\u00a0:\n\n${v.details}`,
     },
     cancelledByProperty: {
       subject: (v) => `${v.property} a dû annuler votre séjour`,
-      refund: (v) => `${v.property} vous rembourse tout ce que vous avez payé : ${v.paid}.`,
+      refund: (v) => `${v.property} vous rembourse tout ce que vous avez payé\u00a0: ${v.paid}.`,
     },
     cancelled: {
       subject: (v) => `Votre séjour chez ${v.property} est annulé`,
       body: (v) =>
-        `Votre séjour du ${v.dates} est annulé.${v.fee ? ` Frais d'annulation : ${v.fee}.` : ""}${v.refund ? ` ${v.property} vous rembourse ${v.refund}.` : ""}`,
+        `Votre séjour du ${v.dates} est annulé.${v.fee ? ` Frais d'annulation\u00a0: ${v.fee}.` : ""}${v.refund ? ` ${v.property} vous rembourse ${v.refund}.` : ""}`,
     },
     changed: {
-      subject: (v) => `Votre séjour chez ${v.property} a changé : ${v.dates}`,
-      body: (v) => `Votre séjour est désormais du ${v.dates}. Nouveau total : ${v.total}.`,
+      subject: (v) => `Votre séjour chez ${v.property} a changé\u00a0: ${v.dates}`,
+      body: (v) => `Votre séjour est désormais du ${v.dates}. Nouveau total\u00a0: ${v.total}.`,
     },
     paymentReceived: {
-      subject: (v) => `Paiement bien arrivé : ${v.amount} (${v.ref})`,
+      subject: (v) => `Paiement bien arrivé\u00a0: ${v.amount} (${v.ref})`,
       body: (v) => `${v.property} a bien reçu votre paiement de ${v.amount}.`,
     },
     needsInfo: {
@@ -504,14 +511,17 @@ const FR: StayCopy = {
       `${v.property} demande une carte pour garantir votre réservation. Rien n'est débité maintenant. Selon sa politique, une non-présentation ou une annulation tardive peut être facturée.`,
     addCard: "Ajouter une carte",
     cardSaved: "Votre carte garantit la réservation.",
-    cancelQuestion: (v) => `Annuler votre séjour ? Nous sommes après le ${v.date}, les frais sont donc de ${v.fee}.`,
-    cancelNow: (v) => `Annuler votre séjour ? Annuler maintenant coûte ${v.fee}.`,
+    cancelQuestion: (v) =>
+      `Annuler votre séjour\u00a0? Nous sommes après le ${v.date}, les frais sont donc de ${v.fee}.`,
+    cancelNow: (v) => `Annuler votre séjour\u00a0? Annuler maintenant coûte ${v.fee}.`,
     cancelFree: (v) => `Annuler maintenant est gratuit. ${v.property} vous rembourse vos ${v.paid}.`,
     cancelNothingBack: "Il n'y a rien à rembourser.",
+    cancelUnder: (v) => `Selon les conditions de ${v.property}, annuler maintenant coûte ${v.fee}.`,
+    nothingCharged: "Rien ne vous a été débité.",
     cancelRefund: (v) => `Vous avez payé ${v.paid}, ${v.property} vous rembourse donc ${v.refund}.`,
     cancelMine: "Annuler mon séjour",
     keep: "Le garder",
-    newTotal: (v) => `Nouveau total : ${v.total}`,
+    newTotal: (v) => `Nouveau total\u00a0: ${v.total}`,
     payMore: (v) => `Vous payez ${v.more} de plus.`,
     refundLess: (v) => `Nous vous remboursons ${v.refund}.`,
     askProperty: (v) => `Demander à ${v.property}`,
@@ -556,7 +566,7 @@ const DE: StayCopy = {
   },
   from: (nights, date) => `${nights} ab ${date}`,
   purpose: { deposit: "Anzahlung", balance: "Restbetrag", difference: "Differenz" },
-  with: (v) => `Ihre Buchung besteht mit ${v.property}.`,
+  with: (v) => `Sie buchen direkt bei ${v.property}.`,
   automatic: (v) => `Automatisch gesendet von ${v.property}.`,
   notInvoice: (v) => `Dies ist Ihre Buchungsbestätigung, keine Rechnung. ${v.property} stellt Ihre Rechnung aus.`,
   reply: (v) => `Antworten Sie auf diese E-Mail, um ${v.property} zu schreiben.`,
@@ -649,6 +659,8 @@ const DE: StayCopy = {
     cancelNow: (v) => `Aufenthalt stornieren? Eine Stornierung kostet jetzt ${v.fee}.`,
     cancelFree: (v) => `Jetzt stornieren ist kostenlos. ${v.property} erstattet Ihre ${v.paid}.`,
     cancelNothingBack: "Es gibt nichts zu erstatten.",
+    cancelUnder: (v) => `Nach den Bedingungen von ${v.property} kostet eine Stornierung jetzt ${v.fee}.`,
+    nothingCharged: "Es wurde nichts belastet.",
     cancelRefund: (v) => `Sie haben ${v.paid} gezahlt, ${v.property} erstattet daher ${v.refund}.`,
     cancelMine: "Meinen Aufenthalt stornieren",
     keep: "Behalten",
@@ -691,7 +703,7 @@ const IT: StayCopy = {
   schedule: { deposit: "Acconto", balance: "Saldo", atProperty: "In struttura", difference: "Differenza", now: "Ora" },
   from: (nights, date) => `${nights} dal ${date}`,
   purpose: { deposit: "acconto", balance: "saldo", difference: "differenza" },
-  with: (v) => `La sua prenotazione è con ${v.property}.`,
+  with: (v) => `Prenota direttamente con ${v.property}.`,
   automatic: (v) => `Inviato automaticamente da ${v.property}.`,
   notInvoice: (v) => `Questa è la conferma della prenotazione, non una fattura. ${v.property} emette la sua fattura.`,
   reply: (v) => `Risponda a questa email per scrivere a ${v.property}.`,
@@ -784,6 +796,8 @@ const IT: StayCopy = {
     cancelNow: (v) => `Cancellare il soggiorno? Cancellare ora costa ${v.fee}.`,
     cancelFree: (v) => `Cancellare ora è gratuito. ${v.property} le rimborsa i suoi ${v.paid}.`,
     cancelNothingBack: "Non c'è nulla da rimborsare.",
+    cancelUnder: (v) => `Secondo le condizioni di ${v.property}, cancellare ora costa ${v.fee}.`,
+    nothingCharged: "Non le è stato addebitato nulla.",
     cancelRefund: (v) => `Ha pagato ${v.paid}, quindi ${v.property} le rimborsa ${v.refund}.`,
     cancelMine: "Cancella il mio soggiorno",
     keep: "Tienilo",
@@ -832,7 +846,7 @@ const PT: StayCopy = {
   },
   from: (nights, date) => `${nights} a partir de ${date}`,
   purpose: { deposit: "sinal", balance: "restante", difference: "diferença" },
-  with: (v) => `A sua reserva é com ${v.property}.`,
+  with: (v) => `Reserva diretamente com ${v.property}.`,
   automatic: (v) => `Enviado automaticamente por ${v.property}.`,
   notInvoice: (v) => `Esta é a confirmação da sua reserva, não uma fatura. ${v.property} emite a sua fatura.`,
   reply: (v) => `Responda a este email para escrever a ${v.property}.`,
@@ -924,6 +938,8 @@ const PT: StayCopy = {
     cancelNow: (v) => `Cancelar a sua estadia? Cancelar agora custa ${v.fee}.`,
     cancelFree: (v) => `Cancelar agora é grátis. ${v.property} devolve os seus ${v.paid}.`,
     cancelNothingBack: "Não há nada a devolver.",
+    cancelUnder: (v) => `Segundo as condições de ${v.property}, cancelar agora custa ${v.fee}.`,
+    nothingCharged: "Não lhe foi cobrado nada.",
     cancelRefund: (v) => `Pagou ${v.paid}, por isso ${v.property} devolve ${v.refund}.`,
     cancelMine: "Cancelar a minha estadia",
     keep: "Manter",
@@ -957,6 +973,14 @@ const PT: StayCopy = {
 };
 
 export const STAY_COPY: Readonly<Record<StayLang, StayCopy>> = { en: EN, es: ES, fr: FR, de: DE, it: IT, pt: PT };
+
+/**
+ * A label and its value, as the language writes them: French puts a space before the colon (kept from
+ * breaking), the others none. "Total : 7 960,00 MAD", "Total: ¥90,540".
+ */
+export function labelled(lang: StayLang, label: string, value: string): string {
+  return lang === "fr" ? `${label}\u00a0: ${value}` : `${label}: ${value}`;
+}
 
 /** The guest copy for a language tag: its own of the six, else English. */
 export function stayCopy(tag: string | null | undefined): StayCopy {

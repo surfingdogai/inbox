@@ -1,4 +1,4 @@
-import { type StayQuote, type StayQuoteLine, type StayScheduleEntry, shareOf } from "@surfingdog/spec";
+import { type StayQuote, type StayQuoteLine, type StayScheduleEntry, shareOf, stayPolicySteps } from "@surfingdog/spec";
 import type { Money } from "../domain/types";
 import { datePolicy, refundable } from "../policy/index";
 import { countryOfZone, localeFor } from "../util/geo";
@@ -292,6 +292,66 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
       source: req.source,
     },
   };
+}
+
+/**
+ * The terms a person's own price goes on where the property has no plan for these rooms yet (a place
+ * set up a moment ago): room only, free to cancel until 7 days before arrival, nothing paid now.
+ */
+export function standardPlan(propertyId: string): RatePlanRow {
+  return {
+    id: "standard",
+    propertyId,
+    name: "Standard",
+    meal: "room_only",
+    policyId: "",
+    policy: stayPolicySteps({ preset: "free_until", days: 7, after: "first_night", noShow: "full" }),
+    policyPreset: "free_until:7:first_night:full",
+    deposit: { kind: "none" },
+    balance: { when: "at_property" },
+    guarantee: "none",
+    roomTypeIds: null,
+    derived: null,
+    minNights: 1,
+    maxNights: null,
+    externalId: null,
+    offered: true,
+    active: true,
+    sort: 10_000,
+  };
+}
+
+/**
+ * A stay priced at a person's own price for its room nights, where the rates do not cover it: shared
+ * across the rooms and nights, then every tax and fee the property charges added as the rates' quote
+ * would, on its plan for these rooms, else the standard terms. Never automation's: a price of its own
+ * is the owner's to give.
+ */
+export function quoteFromPrice(setup: PropertySetup, req: PriceRequest, price: Money): PriceResult {
+  if (price.currency !== setup.property.currency) {
+    return {
+      ok: false,
+      code: "no_price",
+      reason: `the price is in ${price.currency}, the property's in ${setup.property.currency}`,
+    };
+  }
+  if (!Number.isInteger(price.value) || price.value <= 0) {
+    return { ok: false, code: "no_price", reason: "a price above nothing" };
+  }
+  const nights = nightsOf(req.checkIn, req.checkOut);
+  if (nights.length === 0 || req.rooms.length === 0)
+    return { ok: false, code: "no_room", reason: "no nights to price" };
+  const perRoom = Math.floor(price.value / req.rooms.length);
+  const subtotals = req.rooms.map((_, i) => {
+    const room = perRoom + (i === 0 ? price.value - perRoom * req.rooms.length : 0);
+    const each = Math.floor(room / nights.length);
+    return {
+      nights: nights.map((night, j) => ({ night, amount: each + (j === 0 ? room - each * nights.length : 0) })),
+    };
+  });
+  const planned = req.rooms.every((r) => planFor(setup, r.roomTypeId, r.ratePlanId));
+  const priced = planned ? setup : { ...setup, plans: [...setup.plans, standardPlan(setup.property.id)] };
+  return quoteFromRates(priced, { ...req, systemSubtotals: subtotals, source: "person" });
 }
 
 /**

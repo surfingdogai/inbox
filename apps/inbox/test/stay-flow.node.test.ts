@@ -84,7 +84,7 @@ describe("Kijani House, Nairobi: request, quote, accept, stay, paid at the prope
     const quoteMail = s.mail.sent.find(
       (m) => m.to.includes("amara@example.org") && /Your stay at Kijani House/.test(m.subject),
     );
-    expect(quoteMail?.text).toContain("Your booking is with Kijani House.");
+    expect(quoteMail?.text).toContain("You book directly with Kijani House.");
     // Customers never read our words: not in the email, links aside (they are the property's own address).
     expect(quoteMail?.text.replace(/https:\/\/\S+/g, "")).not.toMatch(/Surfing Dog|network|receipt|inbox|reputation/i);
     // The page behind its link says the terms once: the policy in the heading, not again under it.

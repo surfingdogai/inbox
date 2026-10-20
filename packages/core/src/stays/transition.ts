@@ -29,7 +29,7 @@ import {
 import type { StayLang } from "./copy";
 import { guestLang } from "./lang";
 import { checkDates, nightsOf, stayTimes } from "./nights";
-import { collectableQuote, quoteFromRates } from "./price";
+import { collectableQuote, type PriceRequest, quoteFromPrice, quoteFromRates } from "./price";
 import { stayProblems } from "./problems";
 import { type PropertySetup, readSetup } from "./store";
 import { cancellationTerms, dueNow, feeSha, quoteProblems, stayTermsSha } from "./terms";
@@ -991,7 +991,7 @@ async function composeQuote(
   lang: StayLang,
 ): Promise<boolean> {
   const { caller, data, now } = ctx;
-  if (data.quote !== undefined && isAutomation(caller)) {
+  if ((data.quote !== undefined || data.price !== undefined) && isAutomation(caller)) {
     throw new WriteError(
       "not_allowed",
       'A quote with prices of its own is the owner\'s to send. Quote from the rates (from: "rates"), or tell the owner in a note (reply with internal: true) what you would quote.',
@@ -1029,7 +1029,7 @@ async function composeQuote(
   } else {
     const source =
       setup.property.mode === "allotment" ? "allotment" : setup.property.mode === "connected" ? "connected" : "rates";
-    const priced = quoteFromRates(setup, {
+    const req: PriceRequest = {
       checkIn: p.checkIn,
       checkOut: p.checkOut,
       rooms: p.rooms.map((r) => ({
@@ -1044,7 +1044,9 @@ async function composeQuote(
       validHours: typeof data.validHours === "number" ? data.validHours : undefined,
       source,
       collect,
-    });
+    };
+    // A person's own price for the room nights, where the rates do not cover them.
+    const priced = data.price ? quoteFromPrice(setup, req, data.price as Money) : quoteFromRates(setup, req);
     // The plan wanted money or a card before arrival that nobody can take: nothing was asked.
     const plan = priced.ok ? setup.plans.find((x) => x.id === priced.quote.ratePlan.id) : undefined;
     if (plan) {

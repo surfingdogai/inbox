@@ -81,6 +81,11 @@ export const stayQuoteInput = z.object({
     .optional(),
   /** How many hours the quote holds: 2, 12, 24, 48 (the property's default when left out). */
   validHours: z.number().int().min(1).max(168).optional(),
+  /**
+   * A person's own price for the stay's room nights, where the rates do not cover them: the property's
+   * taxes and fees are added, on its plan for the rooms or the standard terms. Never automation's.
+   */
+  price: moneySchema.optional(),
   note,
 });
 
