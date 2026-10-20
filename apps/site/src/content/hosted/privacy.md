@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted pilot
-updated: 18 October 2026
+updated: 20 October 2026
 order: 3
 ---
 
@@ -14,7 +14,8 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **Your domain and the hostname you chose**, and what our checks see in its DNS (the record you added, your DNS provider's name servers, whether the certificate was issued). Basis: our contract with you.
 - **What we read from your public website** to fill in your inbox's starting details: your kind of business, hours, services and other facts your site publishes, each with where and when we read it. You check them before anything is used. Basis: our contract with you, and our legitimate interest in saving you the typing.
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
-- **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you (the pilot is free; the counts are what a future price would follow).
+- **Usage counts**: the requests customers and their AIs send your inbox, the bookings and orders it confirms, emails sent and the size of your inbox, per month. Basis: our contract with you (the pilot is free; the counts are what a future price would follow).
+- **Your card and your invoices, if you choose a paid package**: our payment provider keeps the card; we keep its brand, its last four digits and its expiry, the package you agreed to and when, the price email we sent you, and your invoices. Basis: our contract with you, and our legal duty to keep invoices.
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
 - **Your listing on network.surfingdog.ai**: from the day your inbox goes live, your business is listed in its directory, where AI agents search, and the receipts your inbox signs are kept there ([what it gets](/privacy/#network-h)). Basis: our contract with you. Switch it off in Settings → Networks.
 - **Reports and our decisions about them**, if anyone reports your inbox. Basis: our legal duties under the Digital Services Act.
@@ -24,6 +25,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - A sign-up you never confirm: deleted after 24 hours. A code: 10 minutes.
 - Your account: while your inbox exists, and for the 30 days of read-only after you close it; then deleted, with backup copies gone within 30 more days.
 - The step and usage counts: kept without your address once your inbox is closed.
+- A card: a card you replace is removed from our payment provider at once; your card is removed there, and its details deleted here, once your inbox is closed and its last invoice is settled. Invoices: as long as tax law asks us to keep them.
 - Reports and decisions: as long as the law asks us to keep them.
 
 ## Who else sees it
@@ -37,6 +39,8 @@ When your website's own data does not say what your business is, a language-mode
 Public DNS resolvers answer our checks of your hostname. A certificate authority issues the certificate for it, and, as for every certificate, your hostname is then listed in public certificate logs.
 
 Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union.
+
+If you add a card, our payment provider, Stripe (Stripe Payments Europe, Limited, Ireland), holds it and charges our invoices to it. It can store data outside the European Union, and it also uses payment data on its own account, for example to prevent fraud ([its privacy policy](https://stripe.com/privacy)).
 
 We sell nothing and share nothing else.
 

@@ -2,7 +2,7 @@
 title: Get your agent inbox
 description: We run Surfing Dog Inbox for you, at an address on your own domain. Free during the pilot.
 eyebrow: Hosted inbox · pilot
-updated: 13 October 2026
+updated: 20 October 2026
 order: 0
 ---
 
@@ -22,7 +22,7 @@ The [step-by-step guide](/docs/get-your-agent-inbox/) has the record and the ste
 
 ## What it costs
 
-Free during the pilot. We count confirmed bookings and accepted orders from the start, so that a price, when there is one, can follow what the inbox does for you. We will tell you at least 30 days before anything is charged, and nothing is charged without your agreement.
+Free during the pilot. We count your inbox's requests from the start, and your account shows them. We will tell you at least 30 days before anything is charged, and nothing is charged without your agreement.
 
 ## What stays yours
 
