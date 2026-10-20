@@ -288,6 +288,15 @@ export const scoreRulesSchema = z.object({
   grades: z.array(z.object({ grade: gradeSchema, min: z.int().min(0).max(100) })),
   rank: z.string(),
   named: z.string(),
+  listing: z
+    .string()
+    .optional()
+    .describe(
+      "Version 3 as amended on 19 October 2026 (0.8.2): who the directory lists and a leaderboard names. A local business a " +
+        "network found when it is a real business (a member, registered or claimed, or a site its crawler matched to its " +
+        "entry on public maps or in a business register); none whose site was found parked, empty or taken over, unless a " +
+        "member's; online shops and software companies on their doors; real businesses above the rest.",
+    ),
   directory: z.string(),
   not_certification: z.string(),
   fixes: z.partialRecord(capabilityIdSchema, fixTextSchema),
@@ -768,10 +777,18 @@ export const LEADERBOARD_CAN = [
 ] as const;
 
 /**
- * A board's order, field by field: whether an agent can book, order or sign up at a business (yes, then partly, then
- * no or not applicable), then its agentic score, then the most recent check, then its domain.
+ * A board's order, field by field: real businesses above the rest (0.8.2, since 19 October 2026: a member, a business
+ * that registered or whose owner proved the site is theirs, or one whose site the network's crawler matched to its entry
+ * on public maps or in a business register), then whether an agent can book, order or sign up at a business (yes, then partly, then no or not
+ * applicable), then its agentic score, then the most recent check, then its domain.
  */
-export const LEADERBOARD_ORDER_BY = ["can_book_order_or_sign_up", "score", "checked_at", "domain"] as const;
+export const LEADERBOARD_ORDER_BY = [
+  "real_business",
+  "can_book_order_or_sign_up",
+  "score",
+  "checked_at",
+  "domain",
+] as const;
 
 export const leaderboardSchema = z.object({
   scope: z.object({
@@ -780,6 +797,7 @@ export const leaderboardSchema = z.object({
     place: z.string().optional(),
     can: z.enum(LEADERBOARD_CAN).optional().describe("A home-page list: the agent-ready businesses that can do this."),
     ready: z.boolean().optional().describe("A home-page list: the agent-ready businesses."),
+    real: z.boolean().optional().describe("A home-page list: the real businesses among the agent-ready (0.8.2)."),
   }),
   rules: rulesRef,
   order: z.string().describe("The order in words."),
@@ -795,6 +813,13 @@ export const leaderboardSchema = z.object({
       position: z.int().min(1),
       domain: z.string(),
       name: z.string(),
+      real_business: z
+        .boolean()
+        .optional()
+        .describe(
+          "A real business (0.8.2): a member, registered or claimed, or a site matched to its entry on public maps or in a " +
+            "business register. Above the rest. Absent from a network without listing rules.",
+        ),
       can_book_order_or_sign_up: z
         .enum(["yes", "partly", "no"])
         .describe("Whether an agent can book, order or sign up here; no when none of them applies to its kind."),

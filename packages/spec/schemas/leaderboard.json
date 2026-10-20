@@ -37,6 +37,10 @@
         "ready": {
           "description": "A home-page list: the agent-ready businesses.",
           "type": "boolean"
+        },
+        "real": {
+          "description": "A home-page list: the real businesses among the agent-ready (0.8.2).",
+          "type": "boolean"
         }
       }
     },
@@ -63,7 +67,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["can_book_order_or_sign_up", "score", "checked_at", "domain"]
+        "enum": ["real_business", "can_book_order_or_sign_up", "score", "checked_at", "domain"]
       },
       "description": "The order, field by field."
     },
@@ -118,6 +122,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "real_business": {
+            "type": "boolean",
+            "description": "A real business (0.8.2): a member, registered or claimed, or a site matched to its entry on public maps or in a business register. Above the rest. Absent from a network without listing rules."
           },
           "can_book_order_or_sign_up": {
             "type": "string",

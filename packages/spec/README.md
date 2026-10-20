@@ -84,6 +84,11 @@ or network:
   `401 signature_required` unsigned) and the vectors that pin it (`vectors/door-reports.json`'s
   `contributors`); and a published limit of 600 requests a minute on `GET /v1/businesses` and
   `GET /v1/businesses/{domain}` (§4.7). Nothing earlier changes.
+- 0.8.2 (optional for a network): listing rules. The score rules' `listing` (`vocab/score-rules-v3.json`, as amended on
+  19 October 2026: who a network's directory lists and its leaderboards name, real businesses above the rest); a
+  leaderboard row's `real_business`, `order_by`'s `real_business` and the home-page list `scope.real` (`?real=1`); and
+  `/v1/stats` `directory.real_businesses_verified`, given only while the rules are applied. A row without
+  `real_business` reads as before.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at

@@ -10,6 +10,7 @@ import {
 } from "../../../packages/spec/src/index";
 import scoreVectors from "../../../packages/spec/vectors/score.json";
 import scoreRulesV1 from "../../../packages/spec/vocab/score-rules-v1.json";
+import scoreRulesV3 from "../../../packages/spec/vocab/score-rules-v3.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
 import {
   ago,
@@ -19,6 +20,7 @@ import {
   countRows,
   looksLikeAddress,
   READY_HREF,
+  REAL_HREF,
   readDirectory,
 } from "../src/lib/ask";
 import { hostedOwnership } from "../src/lib/hosted";
@@ -83,7 +85,9 @@ const withoutPromise = (text: string) =>
 describe("the checker's pages and components", () => {
   it("say Agentic score, and make no claim of being first, alone, people free or verified", () => {
     for (const path of NEW_OR_CHANGED) {
-      const text = withoutPromise(visible(read(path)));
+      // "real businesses verified" is the name of the home page's count of real businesses (the listing rules of
+      // 19 October 2026): what the count counts, not a claim about Surfing Dog.
+      const text = withoutPromise(visible(read(path))).replace(/real businesses verified/g, "real businesses");
       expect(text, path).not.toMatch(/Agent ?Readiness|AgentReady/i);
       expect(text, path).not.toMatch(/\b(first|only|verified|people free)\b/i);
       expect(text, path).not.toMatch(/\b\d{1,3}(\.\d{1,3}){3}\b/);
@@ -138,8 +142,14 @@ describe("the checker's pages and components", () => {
   });
 
   it("who is named is said in the score rules' own words, in the FAQ and beside the leaderboards", () => {
-    const rules = scoreRulesSchema.parse(scoreRulesV1);
-    expect(rules.named).toContain("when it is agent-ready (askable or above); others are counted, not named.");
+    expect(scoreRulesSchema.parse(scoreRulesV1).named).toContain(
+      "when it is agent-ready (askable or above); others are counted, not named.",
+    );
+    // The rules in force: version 3, amended on 19 October 2026 (listing).
+    const rules = scoreRulesSchema.parse(scoreRulesV3);
+    expect(rules.named).toContain(
+      "once it is agent-ready (askable or above). A local business we found is named once we match its site to its entry on public maps or registers, or its owner proves the site is theirs. Parked, empty or taken-over sites never are. Others are counted, not named.",
+    );
     expect(rules.named).toContain(
       "If your site tells AI systems not to use or train on its content, we don't name you or list you publicly.",
     );
@@ -494,13 +504,43 @@ describe("the home page and the three products", () => {
       "0 have a catalogue",
       "0 take payment",
     ]);
+    // The real businesses among the agent-ready (the listing rules of 19 October 2026): read when the network counts
+    // them, and null from one that does not.
+    expect(d.real).toBeNull();
+    const withReal = readDirectory({
+      directory: {
+        checked: 9,
+        agent_ready: 4,
+        real_businesses_verified: 3,
+        capabilities: {},
+        as_of: "2026-10-19T22:00:00Z",
+      },
+    });
+    expect(withReal?.real).toBe(3);
+    expect(
+      readDirectory({
+        directory: { checked: 9, agent_ready: 4, real_businesses_verified: "3", as_of: "2026-10-19T22:00:00Z" },
+      })?.real,
+    ).toBeNull();
+    // A 0 is never shown: a network that counts none yet (a rebuild under way) shows the agent-ready count alone.
+    expect(
+      readDirectory({
+        directory: { checked: 9, agent_ready: 4, real_businesses_verified: 0, as_of: "2026-10-19T22:00:00Z" },
+      })?.real,
+    ).toBeNull();
     // Every count links to the list of the businesses it counts.
     expect(CHECKED_HREF).toBe("/leaderboard");
     expect(READY_HREF).toBe("/leaderboard?ready=1");
+    expect(REAL_HREF).toBe("/leaderboard?real=1");
     for (const c of COUNTED) expect(countHref(c.key)).toBe(`/leaderboard?can=${c.key}`);
     const counts = read("src/components/DirectoryCounts.astro");
     expect(counts).not.toMatch(/CHECKED_HREF/); // how many were checked stays internal
     expect(counts).toMatch(/href=\{READY_HREF\}/);
+    expect(counts).toMatch(/href=\{REAL_HREF\}[^>]*>.*real businesses verified/);
+    // A screen reader hears the real businesses as a part of the agent-ready, and the capabilities as the agent-ready's.
+    expect(counts).toContain("of them real businesses verified.");
+    expect(counts).toContain("Of the agent-ready, ${rows.join");
+    expect(counts).toMatch(/@media \(max-width: 520px\) \{\s*\.c-dot \{\s*display: none;/);
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");

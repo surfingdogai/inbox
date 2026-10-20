@@ -1085,6 +1085,17 @@
   color: var(--ink-2);
   overflow-wrap: normal;
 }
+/* Where a board's real businesses end (the listing rules of 19 October 2026): one quiet line, the
+   rows below it not matched to a place on public maps. */
+.sd-lb tr.sd-lb-break td {
+  width: auto;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--hairline);
+  background: none;
+  font-size: var(--fs-fine);
+  font-weight: 400;
+  color: var(--ink-3);
+}
 @media (max-width: 560px) {
   .sd-caps thead {
     display: none;
@@ -1145,6 +1156,11 @@
   }
   .sd-lb td.sd-when {
     display: none;
+  }
+  .sd-lb tr.sd-lb-break td {
+    grid-column: 1 / -1;
+    padding-top: 0;
+    border-top: 0;
   }
 }
 

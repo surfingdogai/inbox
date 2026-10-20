@@ -22,6 +22,9 @@ request to a business's own inbox, which publishes whether it takes them in its 
 adds, optional for a network, the reporters' reading allowance and `GET /v1/door-reports/me` (§4.15,
 [ADR-019](../adr/019-door-reports.md) Amendment 1), and a published limit of 600 requests a minute on
 `GET /v1/businesses` and `GET /v1/businesses/{domain}` (§4.7).
+Spec 0.8.2 adds, optional for a network, listing rules (§4.10, §4.13): who its directory lists among the businesses
+it found, real businesses above the rest on its leaderboards (`real_business`, `?real=1`), and the
+real businesses it counts (`real_businesses_verified`); a row without `real_business` reads as before.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -248,7 +251,7 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `POST /mcp` | none | one JSON-RPC message → its answer (§4.7) | `mcp-*` |
 | `GET /v1/score-rules` (0.3, MAY) | none | `?version=N` → the agentic score's rules (§4.13) | `score-rules` |
 | `GET /b/{domain}`, `GET /b/{domain}.json` (0.3, MAY) | none | → a check's result page, or its JSON (§4.13) | `check-result` |
-| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&page=` → businesses where an agent can book, order or sign up above the rest, then by agentic score (§4.13) | `leaderboard` |
+| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&real=&page=` (`real`: 0.8.2) → real businesses above the rest, then businesses where an agent can book, order or sign up, then by agentic score (§4.13) | `leaderboard` |
 | `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
 | `POST /v1/door-reports` (0.4, MAY) | optional sdi-agent/1 or Web Bot Auth | `{v: 1, reports}` → `202 {accepted, ignored, next}` (§4.15) | `door-reports-*`, `door-report` |
 | `POST /v1/door-incidents/{id}` (0.4, MAY) | sdi-instance/1 | `{state: "fixed"}` → `{id, state, check_queued}` (§4.15) | `door-incident-*` |
@@ -1045,6 +1048,16 @@ A network may list businesses it found on their own websites. Such an entry:
   `found on its own website · not a member · checked <YYYY-MM-DD>` and `about_url` is the network's
   page for businesses: why it is there, how to correct or claim it, how to opt out;
 - is listed only at `askable` or above (§4.9);
+- (0.8.2, a network's listing rules: `GET /v1/score-rules` `listing`; Surfing Dog's since 19 October
+  2026) when it is a local business (any kind but an online shop, `shop`, or a software, API or AI
+  company, `software-ai`; a known kind in no group counts as local unless every group its kinds name is
+  one of those two), is listed only when it is a **real business**: a member, registered or claimed, or
+  a site the network's crawler matched to its entry in open map data or a business register (the
+  entry's name on the site's own pages, with its town, postcode or phone; or, under another name, its
+  phone with its town or postcode); and is never listed, nor is any entry but a member's, registered or
+  claimed alike, while the network found its site parked (for sale), empty (a host's default or a
+  coming-soon page) or taken over (gambling or adult pages, or another market's language and nothing of
+  the business). Online shops and software, API and AI companies are listed on their doors;
 - is not listed while it is unclaimed and its own site tells AI systems not to use or train on its
   content (`ai-input=no` or `ai-train=no` in its robots.txt `Content-Signal`, or the same wish in
   `Content-Usage`), from the crawl that reads that wish;
@@ -1288,10 +1301,12 @@ the counts in words; a self-reported one as its counts in words, labelled "Self-
 meter; and never puts either in the rank, which is the agentic score's.
 
 **Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`)
-orders, on every board: **whether an agent can book, order or sign up here (yes, then partly, then no
-or not applicable), then agentic score, then the most recent check, then domain**, by category group,
+orders, on every board: **real businesses above the rest (0.8.2: a member, a business that registered
+or whose owner proved the site is theirs, or one whose site the network's crawler matched to its entry
+on public maps or in a business register), then whether an agent can book, order or sign up here (yes, then partly, then no or not
+applicable), then agentic score, then the most recent check, then domain**, by category group,
 country and place. It says that order in words (`order`) and field by field (`order_by`), and each
-row carries `can_book_order_or_sign_up` (`yes`, `partly` or `no`). The score itself is unchanged by
+row carries `can_book_order_or_sign_up` (`yes`, `partly` or `no`) and, when the network publishes listing rules, `real_business` (`true` or `false`, 0.8.2). The score itself is unchanged by
 the order: a business that can be booked scores what its rules give it, and comes above one that
 cannot be booked, ordered from or signed up with, whatever that one scores. It counts every business
 checked that its owner has not hidden and that is of a kind the directory lists.
@@ -1304,15 +1319,20 @@ says so.
 
 **Lists behind the counts.** `?can=<capability>` (one of `message`, `book`, `order`, `signup`,
 `cancel`, `change`, `negotiate`, `catalogue`, `availability`, `pay`, `track`, `return`) lists the
-agent-ready businesses where an agent can do that, and `?ready=1` every agent-ready business, of
-every kind, software and AI companies too, in the same order: the same businesses a network's
-`/v1/stats` counts in its `directory` block (whose `capabilities` count `signup` too), so a count
+agent-ready businesses where an agent can do that, `?ready=1` every agent-ready business, and
+`?real=1` (0.8.2) the real businesses among them, of every kind, software and AI companies too, in the same
+order: the same businesses a network's `/v1/stats` counts in its `directory` block (whose
+`capabilities` count `signup` too, and `real_businesses_verified` the real businesses, given only
+while the network applies its listing rules), so a count
 links to its list. A list names those it may name and says how many more it counts and does not name;
 the count is always the sum. A chip for a category group counts the businesses that group's board
 names, and a group nobody is named in has no chip.
 
 **Naming and indexing.** A business is **named** on leaderboards, and its result page may be
-indexed, when it is agent-ready (`askable` or above, §4.9); others are counted, not named, and their
+indexed, once it is agent-ready (`askable` or above, §4.9) and the network's listing rules let the
+directory list it. A local business it found is named once its site is matched to its entry on public
+maps or registers, or its owner proves the site is theirs; parked, empty or taken-over sites never are.
+Others are counted, not named, and their
 result pages carry `noindex`: no unrequested public grades. Claiming a listing, or showing the badge,
 does not name a business that is not agent-ready. A business whose own site tells AI systems not to
 use or train on its content (`ai-input=no` or `ai-train=no` in a `Content-Signal` line of its
