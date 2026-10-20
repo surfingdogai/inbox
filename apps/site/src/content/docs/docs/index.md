@@ -28,6 +28,7 @@ Still to come: connectors (coming)<!-- hosted: open --> and<!-- hosted: closed -
 ## Pages
 
 - [Quickstart](/docs/quickstart/): <!-- hosted: open -->let us host it, deploy to Cloudflare, or run it on your own server<!-- hosted: closed -->deploy to Cloudflare, run on your own server, or join the hosted waitlist<!-- hosted: end -->, then make your first calls.
+- [Run it yourself](/docs/run-it-yourself/): one command on your own server, the Docker image on a [platform](/docs/platforms/) you use, or Cloudflare Workers; updates that roll back, and [backups](/docs/backups/).
 - [Setting a business up for agents](/docs/setting-up-for-agents/): guidance, not rules, from a real installation: the inbox as the front door, or as a thin agent door in front of the tools a business already has; what handles each door; making doors findable; payments; helpdesk bridges.
 - [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, networks, and receipts: promises kept, broken or still open.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.

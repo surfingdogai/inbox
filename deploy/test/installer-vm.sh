@@ -19,7 +19,7 @@ ROOT=$(cd "$HERE/../.." && pwd)
 
 cleanup() {
   docker rm -f "$VM" >/dev/null 2>&1 || true
-  docker volume rm "$VM-docker" >/dev/null 2>&1 || true
+  docker volume rm "$VM-docker" "$VM-containerd" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -32,9 +32,11 @@ fail() {
 on() { docker exec "$VM" sh -c "$1"; }
 
 docker build -q -t inbox-test-vm --build-arg "BASE=$BASE" "$HERE/vm" >/dev/null
+# Docker inside keeps its images on volumes of the runner's own disk: overlayfs cannot stack on the
+# container's own overlay root, and a real server's disk is no overlay either.
 docker run -d --name "$VM" --hostname vm --privileged --cgroupns=host \
   -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run --tmpfs /run/lock \
-  -v "$VM-docker:/var/lib/docker" inbox-test-vm >/dev/null
+  -v "$VM-docker:/var/lib/docker" -v "$VM-containerd:/var/lib/containerd" inbox-test-vm >/dev/null
 i=0
 until state=$(docker exec "$VM" systemctl is-system-running 2>/dev/null) || [ "$state" = degraded ]; do
   i=$((i + 1))
