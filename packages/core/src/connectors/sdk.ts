@@ -319,6 +319,20 @@ export interface ConnectionChoice {
   readonly label: string;
   readonly options: readonly { readonly id: string; readonly name: string }[];
   readonly value: string | null;
+  /**
+   * A choice about bookings only (who takes them): a till that also takes payments draws it with its
+   * booking choices, and its other choices (the location) with its payments.
+   */
+  readonly bookings?: boolean | undefined;
+}
+
+/**
+ * What a connection cannot do for its account now, a line each saying why, in the owner's words: a
+ * till whose plan takes no bookings from this way of connecting keeps its busy times and writes none.
+ */
+export interface Withheld {
+  readonly busy_times?: string | undefined;
+  readonly write_bookings?: string | undefined;
 }
 
 /**
@@ -853,6 +867,14 @@ export interface ConnectorDefinition {
    * the inbox remove it: "Remove the key in WooCommerce → Settings → Advanced → REST API".
    */
   readonly disconnectNote?: string | undefined;
+  /**
+   * What this account cannot do now (`Withheld`), read from what the connection keeps about itself
+   * (`extra`): left out of what the owner app offers, said in a line, and never run. Read again with
+   * every refresh, so an account that changes plan gets it back.
+   */
+  withheld?(view: { readonly extra: Readonly<Record<string, unknown>> }): Withheld;
+  /** A line under "Add confirmed bookings": what the platform does with them, when the owner should know. */
+  readonly bookingsNote?: string | undefined;
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**
@@ -963,9 +985,11 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 
 /**
  * Every amount in this inbox is kept in hundredths (`util/locale.ts`, `moneyIn`): 4500 EUR is 45.00.
- * A currency counted otherwise (none, like JPY; thousandths, like KWD) is refused before a link is
- * made (`isHundredthsCurrency`), so these never guess another exponent: a guess is a link for a
- * hundred times the order.
+ * A currency counted in thousandths (KWD) is refused before a link is made (`isHundredthsCurrency`),
+ * so these never guess another exponent: a guess is a link for a hundred times the order. A currency
+ * with no minor unit (JPY) is exact in hundredths (¥2,800 is 280000) and reaches a shop's `createLink`
+ * (capability `shop_orders`) only, as `decimalAmount` writes it ("2800.00"): a shop that counts in
+ * minor units divides by 100 first. A payment platform is never sent one (ADR-027).
  */
 
 /** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */

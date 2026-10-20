@@ -1,6 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
-import { isHundredthsCurrency } from "../util/locale";
+import { isHundredthsCurrency, isWholeUnitCurrency } from "../util/locale";
 import { jobStatement } from "../write/common";
 
 /**
@@ -58,7 +58,10 @@ export async function linkComing(
   };
   const value = Number(p.totalPrice?.value ?? 0);
   const currency = String(p.totalPrice?.currency ?? "").toUpperCase();
-  if (!Number.isInteger(value) || value <= 0 || !isHundredthsCurrency(currency)) return false;
+  // A currency with no minor unit is a shop's to take (ADR-027); the connection decides when it makes the link.
+  if (!Number.isInteger(value) || value <= 0 || !(isHundredthsCurrency(currency) || isWholeUnitCurrency(currency))) {
+    return false;
+  }
   if (p.change !== undefined && p.change !== null) return false;
   const url = typeof p.paymentUrl === "string" ? p.paymentUrl : null;
   const { rows } = await db.client.query({

@@ -183,13 +183,13 @@ describe("the gallery says only what is true", () => {
   it("lists no card for a connector nobody is building, and says soon only for what is", () => {
     const cards = gallery(new Map());
     // Nothing registered: only the cards being built show, each soon, with nothing to press.
-    expect(cards.map((c) => c.id)).toEqual(["calendly", "ics_feed", "woocommerce", "shopify", "square"]);
+    expect(cards.map((c) => c.id)).toEqual(["calendly", "ics_feed", "woocommerce", "shopify"]);
     expect(
       cards.every((c) => c.status === "soon" && c.ways.every((w) => w.status === "soon" && w.form.length === 0)),
     ).toBe(true);
     // Every card being built belongs to a track of this workflow; every other one has a connector today.
     const building = GALLERY.filter((c) => c.building).map((c) => c.id);
-    expect(building).toEqual(["calendly", "ics_feed", "woocommerce", "shopify", "square"]);
+    expect(building).toEqual(["calendly", "ics_feed", "woocommerce", "shopify"]);
   });
 
   it("turns a card from soon to ready the moment its connector registers, a way at a time", () => {
@@ -254,9 +254,9 @@ describe("the gallery says only what is true", () => {
     expect(galleryGroups("shop").map((g) => g.label)).toEqual(["Shops and tills", "Payments", "Calendars"]);
     expect(galleryGroups(null).map((g) => g.label)).toEqual(["Calendars", "Payments", "Shops and tills"]);
     const forSalon = gallery(new Map(), { lean: "appointments" }).filter((c) => c.group === "shops");
-    expect(forSalon.map((c) => c.id)).toEqual(["square", "woocommerce", "shopify"]);
+    expect(forSalon.map((c) => c.id)).toEqual(["woocommerce", "shopify"]);
     const forBakery = gallery(new Map(), { lean: "shop" }).filter((c) => c.group === "shops");
-    expect(forBakery.map((c) => c.id)).toEqual(["woocommerce", "shopify", "square"]);
+    expect(forBakery.map((c) => c.id)).toEqual(["woocommerce", "shopify"]);
   });
 
   it("knows the card of every way, Outlook's calendar link included", () => {
