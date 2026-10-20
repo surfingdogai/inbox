@@ -96,6 +96,12 @@ describe("the stays doors", () => {
     expect(sent.view.item.payload).toMatchObject({ change: { checkIn: "2026-12-04", checkOut: "2026-12-07" } });
   });
 
+  it("names the guest arriving today, as they gave their name", async () => {
+    const { m } = await bookedMaple();
+    const today = await m.caps.stays.today(owner, { date: "2026-12-04" });
+    expect(today.arriving.map((r) => r.guest)).toEqual([contact.name]);
+  });
+
   it("answers a cancellation with its fee first (fee_sha), then cancels", async () => {
     const { m, id, token } = await bookedMaple({ in: "2026-11-05", out: "2026-11-07" });
     // Inside the week before arrival: the first night is the fee.

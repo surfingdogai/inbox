@@ -18,6 +18,7 @@ import {
   weekdayWords,
 } from "../client/src/lib/property";
 import { KINDS, kindOf, wizardPreset, wizardRoomBodies } from "../client/src/lib/setup";
+import { stayDates } from "../client/src/lib/stays";
 
 /**
  * The owner app's words and sums for a place to stay (S1–S16): every choice a chooser, each word for
@@ -81,6 +82,9 @@ describe("the owner app for a place to stay", () => {
     expect(weekdayWords(48)).toBe("Friday and Saturday nights");
     expect(weekdayWords(1 | 4)).toBe("Mon, Wed");
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    // A stay's dates as the reader's locale writes a range, never shifted by a zone.
+    expect(stayDates("2026-12-12", "2026-12-15", "es")).toBe("12–15 dic");
+    expect(stayDates("2026-11-03", "2026-11-06", "en-US").replace(/\s/g, " ")).toBe("Nov 3 – 6");
   });
 
   it("keeps rooms for direct guests only once they are closed on the other channels", () => {

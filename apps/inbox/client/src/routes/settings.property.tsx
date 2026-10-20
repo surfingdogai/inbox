@@ -202,6 +202,7 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
       {systems.length === 0 && !hidden && (
         <ConnectYourSystem
           groups={["lodging", "calendars"]}
+          skip={["calcom", "calendly"]}
           lede="Where your rooms already live. With it connected, a stay is written there first, so a room is never sold twice."
           onSkip={() => setHidden(true)}
         />

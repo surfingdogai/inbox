@@ -878,8 +878,9 @@ export class StayCapabilities {
     if (!p) return { date: "", arriving: [], leaving: [], in_house: [] };
     const date = input.date ?? dateIn(nowOf(caller), p.timezone);
     const { rows } = await this.db.client.query({
-      sql: `SELECT id, state, payload, party_id FROM items WHERE type = 'stay' AND state IN ('confirmed', 'checked_in', 'awaiting_payment')
-             AND json_extract(payload, '$.propertyId') = ? AND json_extract(payload, '$.checkIn') <= ? AND json_extract(payload, '$.checkOut') >= ?`,
+      sql: `SELECT i.id, i.state, i.payload, json_extract(p.contact, '$.name') FROM items i LEFT JOIN parties p ON p.id = i.party_id
+             WHERE i.type = 'stay' AND i.state IN ('confirmed', 'checked_in', 'awaiting_payment')
+             AND json_extract(i.payload, '$.propertyId') = ? AND json_extract(i.payload, '$.checkIn') <= ? AND json_extract(i.payload, '$.checkOut') >= ?`,
       params: [p.id, date, date],
       method: "all",
     });
@@ -892,7 +893,7 @@ export class StayCapabilities {
         item_id: String(r[0]),
         state: String(r[1]),
         reference: String(r[0]).slice(-6).toUpperCase(),
-        guest: payload.guests?.lead.name ?? null,
+        guest: payload.guests?.lead.name || (r[3] === null || r[3] === undefined ? null : String(r[3])),
         rooms: payload.rooms.map((x) => x.roomTypeName).filter(Boolean),
         check_in: payload.checkIn,
         check_out: payload.checkOut,

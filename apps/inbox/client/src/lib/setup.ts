@@ -112,6 +112,8 @@ export interface SetupKind {
   readonly doors: WizardDoors;
   /** The integration groups its businesses run their days in, shown first when connecting. */
   readonly connect: readonly ConnectorGroup[];
+  /** Cards of those groups it has no use for. */
+  readonly skip?: readonly string[];
 }
 
 export const KINDS: readonly SetupKind[] = [
@@ -148,6 +150,8 @@ export const KINDS: readonly SetupKind[] = [
     preset: "stays",
     doors: { booking: false, quoteRequest: false, message: true },
     connect: ["lodging", "calendars"],
+    // A stay is nights, never minutes: no booking calendar takes one.
+    skip: ["calcom", "calendly"],
   },
 ];
 

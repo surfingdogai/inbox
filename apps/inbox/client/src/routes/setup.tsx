@@ -817,6 +817,7 @@ function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | und
         {kind && connecting && (
           <ConnectYourSystem
             groups={kind.connect}
+            skip={kind.skip}
             lede="Bring in what you already use, so agents see the truth."
             onSkip={() => setConnecting(false)}
           />

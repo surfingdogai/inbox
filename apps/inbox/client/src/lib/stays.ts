@@ -10,19 +10,18 @@ export function nightsOf(checkIn: string, checkOut: string): number {
   return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86_400_000) : 0;
 }
 
-/** "12–15 Dec" (or "30 Dec – 2 Jan"): the dates of a stay, as local dates, never shifted by a zone. */
+/**
+ * "12–15 Dec", "Dec 12 – 15" or "30 Dec – 2 Jan", as the reader's locale writes a range: the dates of
+ * a stay, as local dates, never shifted by a zone.
+ */
 export function stayDates(checkIn: string, checkOut: string, locale?: string): string {
-  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => {
-    try {
-      return new Intl.DateTimeFormat(locale, { ...o, timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
-    } catch {
-      return d;
-    }
-  };
-  const sameMonth = checkIn.slice(0, 7) === checkOut.slice(0, 7);
-  return sameMonth
-    ? `${fmt(checkIn, { day: "numeric" })}–${fmt(checkOut, { day: "numeric", month: "short" })}`
-    : `${fmt(checkIn, { day: "numeric", month: "short" })} – ${fmt(checkOut, { day: "numeric", month: "short" })}`;
+  const a = new Date(`${checkIn}T12:00:00Z`);
+  const b = new Date(`${checkOut}T12:00:00Z`);
+  try {
+    return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).formatRange(a, b);
+  } catch {
+    return `${checkIn} – ${checkOut}`;
+  }
 }
 
 /** Guests in a stay, in a few words: "2 adults · 1 child". */

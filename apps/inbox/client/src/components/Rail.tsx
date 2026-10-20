@@ -45,6 +45,8 @@ export function Rail({
       </div>
       {FILTERS.map((f) => {
         if (f.key === "refund" && !(counts && counts.byType.refund > 0)) return null;
+        // Stays only in a place to stay's inbox, once one has come in.
+        if (f.key === "stay" && !(counts && counts.byType.stay > 0)) return null;
         const Icon = ICONS[f.key];
         const n = countFor(counts, f.key);
         return (

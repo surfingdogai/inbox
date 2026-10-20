@@ -9,6 +9,7 @@ export type Filter = "needs" | "all" | "done" | "unsent" | ItemType;
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
   { key: "all", label: "All" },
+  { key: "stay", label: "Stays", type: "stay" },
   { key: "booking", label: "Bookings", type: "booking" },
   { key: "order", label: "Orders", type: "order" },
   { key: "quote_request", label: "Quotes", type: "quote_request" },

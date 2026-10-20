@@ -28,6 +28,7 @@ export function ConnectYourSystem({
   lede,
   onSkip,
   onOpen,
+  skip,
   children,
 }: {
   groups: readonly ConnectorGroup[];
@@ -35,10 +36,12 @@ export function ConnectYourSystem({
   lede?: string | undefined;
   onSkip: () => void;
   onOpen?: ((card: GalleryCard) => void) | undefined;
+  /** Cards of those groups this kind of business has no use for (a place to stay books no minutes). */
+  skip?: readonly string[] | undefined;
   children?: ReactNode;
 }) {
   const integrations = useIntegrations();
-  const cards = cardsFor(integrations.data?.cards ?? [], groups);
+  const cards = cardsFor(integrations.data?.cards ?? [], groups).filter((c) => !skip?.includes(c.id));
   return (
     <div className="stack connect-system">
       <h2 className="sec">{title}</h2>
