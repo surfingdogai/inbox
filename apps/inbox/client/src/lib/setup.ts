@@ -139,7 +139,45 @@ export const KINDS: readonly SetupKind[] = [
     doors: { booking: false, quoteRequest: false, message: true },
     connect: ["shops", "payments"],
   },
+  {
+    // A place to stay (ADR-033): stays have their own door, opened by the property it sets up; times
+    // and prices for a request are not how a room is let, so those doors start closed.
+    key: "stays",
+    label: "A place to stay",
+    line: "A hotel, a guesthouse, a B&B, holiday rentals.",
+    preset: "stays",
+    doors: { booking: false, quoteRequest: false, message: true },
+    connect: ["lodging", "calendars"],
+  },
 ];
+
+/** A room as the setup wizard first asks for it: what it is called, how many, how many sleep in it. */
+export interface WizardRoom {
+  readonly id: number;
+  name: string;
+  units: string;
+  sleeps: string;
+}
+
+/** The rooms to make, or what is missing: a name each, at least one, numbers that are numbers. */
+export function wizardRoomBodies(
+  rooms: readonly WizardRoom[],
+  propertyId: string,
+): { bodies: Record<string, unknown>[] } | { problem: string } {
+  const named = rooms.filter((r) => r.name.trim());
+  if (named.length === 0) return { problem: "Name at least one kind of room." };
+  const bodies = named.map((r, i) => {
+    const sleeps = Math.max(1, Math.min(20, Number(r.sleeps) || 1));
+    return {
+      property_id: propertyId,
+      name: r.name.trim(),
+      units: Math.max(1, Math.min(500, Number(r.units) || 1)),
+      capacity: { adults: sleeps, children: 0, total: sleeps },
+      sort: i,
+    };
+  });
+  return { bodies };
+}
 
 /** The kind of a key, if it is one. */
 export function kindOf(key: string | null | undefined): SetupKind | undefined {

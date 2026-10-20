@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CurrencySelect, LengthPicker, MoneyInput, TimeZonePicker } from "../components/Choosers";
+import { CurrencySelect, LengthPicker, MoneyInput, Stepper, TimeZonePicker } from "../components/Choosers";
 import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
@@ -12,6 +12,7 @@ import { ensureSignedIn, session } from "../lib/auth";
 import { guessCurrency } from "../lib/currencies";
 import { countryOfZone, emailLangOfCountry } from "../lib/geo";
 import { languageName, languagesToSave } from "../lib/languages";
+import { KIND_WORDS, propertyApi, useProperty } from "../lib/property";
 import {
   useApplyPreset,
   useNetworks,
@@ -35,8 +36,10 @@ import {
   SETUP_NETWORK,
   type SetupKind,
   type WizardDoors,
+  type WizardRoom,
   wizardDoorsDoc,
   wizardPreset,
+  wizardRoomBodies,
 } from "../lib/setup";
 import type { Weekly } from "../lib/types";
 
@@ -89,7 +92,15 @@ const STEPS = [
   { id: "hours", label: "When you are open" },
   { id: "answering", label: "Answering" },
 ] as const;
-type StepId = (typeof STEPS)[number]["id"];
+/** A place to stay (ADR-033): the place and its rooms instead of doors, offers and hours. Prices come after. */
+const STAY_STEPS = [
+  { id: "kind", label: "What you run" },
+  { id: "you", label: "You" },
+  { id: "place", label: "Your place" },
+  { id: "rooms", label: "Rooms" },
+  { id: "answering", label: "Answering" },
+] as const;
+type StepId = (typeof STEPS)[number]["id"] | (typeof STAY_STEPS)[number]["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -151,10 +162,22 @@ function SetupWizard() {
   const applyPreset = useApplyPreset();
 
   const [step, setStep] = useState(0);
-  const at: StepId = STEPS[step]?.id ?? "kind";
   // What the business runs (ADR-032): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
+  const steps: readonly { readonly id: StepId; readonly label: string }[] = kind?.key === "stays" ? STAY_STEPS : STEPS;
+  const at: StepId = steps[step]?.id ?? "kind";
+  // A place to stay: what kind, when guests come and go, its rooms. Its id once saved, for the rooms.
+  const [lodging, setLodging] = useState("guesthouse");
+  const [checkIn, setCheckIn] = useState("15:00");
+  const [checkOut, setCheckOut] = useState("11:00");
+  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<WizardRoom[]>([{ id: 1, name: "", units: "1", sleeps: "2" }]);
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const [placeError, setPlaceError] = useState<unknown>(null);
+  // Run again, the wizard keeps to the place already set up rather than making a second one.
+  const known = useProperty();
+  const placeId = propertyId ?? known.data?.properties[0]?.id ?? null;
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
@@ -207,7 +230,15 @@ function SetupWizard() {
 
   // Whatever is in flight is the error worth showing; they never overlap.
   const problem: ApiProblem | null =
-    [saveProfile.error, saveSettings.error, serviceWrite.error, productWrite.error, saveWeekly.error, applyPreset.error]
+    [
+      saveProfile.error,
+      saveSettings.error,
+      serviceWrite.error,
+      productWrite.error,
+      saveWeekly.error,
+      applyPreset.error,
+      placeError,
+    ]
       .filter(Boolean)
       .map((e) => problemOf(e))[0] ?? null;
   const busy =
@@ -216,7 +247,8 @@ function SetupWizard() {
     serviceWrite.isPending ||
     productWrite.isPending ||
     saveWeekly.isPending ||
-    applyPreset.isPending;
+    applyPreset.isPending ||
+    placeBusy;
 
   const existing = (services.data?.items.length ?? 0) + (products.data?.items.length ?? 0);
   // Booked at a time, or only asked about for a price.
@@ -247,6 +279,44 @@ function SetupWizard() {
       if (at === "doors") {
         await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
+      if (at === "place") {
+        setPlaceError(null);
+        setPlaceBusy(true);
+        try {
+          await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
+          const saved = await propertyApi.save({
+            ...(placeId ? { id: placeId } : {}),
+            name: name.trim(),
+            kind: lodging,
+            currency,
+            check_in_from: checkIn,
+            check_out_until: checkOut,
+          });
+          setPropertyId(saved.id);
+        } catch (e) {
+          setPlaceError(e);
+          throw e;
+        } finally {
+          setPlaceBusy(false);
+        }
+      }
+      if (at === "rooms" && placeId) {
+        const planned = wizardRoomBodies(rooms, placeId);
+        if ("problem" in planned) {
+          setLocal(planned.problem);
+          return false;
+        }
+        setPlaceError(null);
+        setPlaceBusy(true);
+        try {
+          for (const body of planned.bodies) await propertyApi.room(body);
+        } catch (e) {
+          setPlaceError(e);
+          throw e;
+        } finally {
+          setPlaceBusy(false);
+        }
+      }
       if (at === "offer") {
         const planned = offerBodies(offers, "services", currency, asked);
         if ("problem" in planned) {
@@ -276,7 +346,7 @@ function SetupWizard() {
   };
 
   const next = async () => {
-    if (await saveStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (await saveStep()) setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const canAdvance =
@@ -285,6 +355,8 @@ function SetupWizard() {
     (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
     (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     at === "hours" ||
+    at === "place" ||
+    (at === "rooms" && rooms.some((r) => r.name.trim())) ||
     at === "answering";
 
   if (profile.isError) {
@@ -311,7 +383,7 @@ function SetupWizard() {
       </div>
 
       <ol className="steps" aria-label="Setup steps">
-        {STEPS.map(({ id, label }, i) => (
+        {steps.map(({ id, label }, i) => (
           <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
@@ -506,6 +578,112 @@ function SetupWizard() {
           </>
         )}
 
+        {at === "place" && (
+          <>
+            <h2 className="sec">Your place</h2>
+            <p className="lede small">
+              What guests' assistants are told first. Prices and policies come next, in Settings.
+            </p>
+            <div className="grid2">
+              <Field id="su-lodging" label="It is">
+                <select id="su-lodging" className="input" value={lodging} onChange={(e) => setLodging(e.target.value)}>
+                  {Object.entries(KIND_WORDS).map(([k, w]) => (
+                    <option key={k} value={k}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div />
+              <Field id="su-in" label="Check-in from">
+                <input
+                  id="su-in"
+                  className="input"
+                  type="time"
+                  step={900}
+                  value={checkIn}
+                  onChange={(e) => setCheckIn(e.target.value)}
+                />
+              </Field>
+              <Field id="su-out" label="Check-out until">
+                <input
+                  id="su-out"
+                  className="input"
+                  type="time"
+                  step={900}
+                  value={checkOut}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                />
+              </Field>
+            </div>
+            <p className="hint">
+              To start, you answer each request yourself. Rooms you keep for direct guests, or your property system, can
+              confirm stays on their own later.
+            </p>
+          </>
+        )}
+
+        {at === "rooms" && (
+          <>
+            <h2 className="sec">Your rooms</h2>
+            <p className="lede small">Each kind of room once: how many you have, and how many sleep in one.</p>
+            <div className="stack">
+              {rooms.map((r) => (
+                <div className="offer row-glass" key={r.id}>
+                  <Field id={`su-r-${r.id}`} label="Name">
+                    <input
+                      id={`su-r-${r.id}`}
+                      className="input"
+                      value={r.name}
+                      placeholder="Double room"
+                      onChange={(e) =>
+                        setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))
+                      }
+                    />
+                  </Field>
+                  <Stepper
+                    id={`su-ru-${r.id}`}
+                    label="How many"
+                    value={r.units}
+                    min={1}
+                    max={500}
+                    onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, units: v } : x)))}
+                  />
+                  <Stepper
+                    id={`su-rs-${r.id}`}
+                    label="Sleeps"
+                    value={r.sleeps}
+                    min={1}
+                    max={20}
+                    onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, sleeps: v } : x)))}
+                  />
+                  {rooms.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-label={`Remove ${r.name || "this row"}`}
+                      onClick={() => setRooms((all) => all.filter((x) => x.id !== r.id))}
+                    >
+                      <Trash2 className="icon" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setRooms((all) => [...all, { id: nextId, name: "", units: "1", sleeps: "2" }]);
+                setNextId((n) => n + 1);
+              }}
+            >
+              <Plus className="icon" aria-hidden="true" />
+              Add another
+            </button>
+          </>
+        )}
+
         {at === "hours" && (
           <>
             <h2 className="sec">When are you open?</h2>
@@ -584,8 +762,8 @@ function SetupWizard() {
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={() => void next()} disabled={!canAdvance || busy}>
-            {busy ? "Saving…" : step === STEPS.length - 1 ? "Finish" : "Continue"}
-            {!busy && step < STEPS.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
+            {busy ? "Saving…" : step === steps.length - 1 ? "Finish" : "Continue"}
+            {!busy && step < steps.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
           </button>
         </div>
       </section>
@@ -598,11 +776,14 @@ const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
   trades: "requests for a price",
   shop: "orders",
+  stays: "a place to stay",
 };
 const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
   appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
   trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
   shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+  stays:
+    "A request is quoted from your rates as a draft for you to send, and nothing is confirmed on its own until you say so.",
 };
 
 /** The end. What works now, and — just as important — what does not yet. */
@@ -642,6 +823,11 @@ function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | und
         )}
         <h3 className="sec">Not set up yet</h3>
         <ul className="checks">
+          {kind?.key === "stays" && (
+            <li>
+              <b>Prices and policies.</b> Settings, Property: until they are there, you quote each request yourself.
+            </li>
+          )}
           <li>
             <b>Email in.</b> So a customer can simply write to you. Settings, then the docs page on email.
           </li>
