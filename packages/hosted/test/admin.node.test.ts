@@ -296,7 +296,7 @@ describe("the admin API (C8.1)", () => {
     expect(page.headers["set-cookie"]).toBeUndefined();
   });
 
-  it("counts a month's usage: items, agent items, confirmed items, mail and the file's size; test items never", async () => {
+  it("counts a month's usage: requests, agent requests, confirmed items, mail and the file's size; test items, spam and the owner's own never", async () => {
     const t = await rt.createTenant();
     await rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/probe`, { doors: ["message", "booking"] });
     await rt.setState(t, "live", { ownResolves: true });
@@ -310,6 +310,28 @@ describe("the admin API (C8.1)", () => {
     expect(usage.status).toBe(200);
     expect(usage.body).toMatchObject({ items: 1, agent_items: 1, confirmed_items: 0 });
     expect((usage.body as { db_bytes: number }).db_bytes).toBeGreaterThan(0);
+    // Requests are what customers sent: not what the owner marks as spam, nor the owner's own entries.
+    for (const body of ["Two", "Three"]) {
+      const more = await rt.http(t.ownHost ?? "", "POST", "/v1/messages", {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body, contact: { name: "Rita" } }),
+      });
+      expect(more.status).toBe(201);
+    }
+    const file = new DatabaseSync(rt.shardOf(t).dbPath(t.tenantId));
+    file
+      .prepare(
+        "UPDATE items SET state = 'spam' WHERE type = 'message' AND id = (SELECT id FROM items WHERE type = 'message' AND channel = 'rest' ORDER BY created_at DESC LIMIT 1)",
+      )
+      .run();
+    file
+      .prepare(
+        "UPDATE items SET channel = 'owner_ui' WHERE id = (SELECT id FROM items WHERE type = 'message' AND channel = 'rest' AND state <> 'spam' ORDER BY created_at DESC LIMIT 1)",
+      )
+      .run();
+    file.close();
+    const again = await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=${month}`);
+    expect(again.body).toMatchObject({ items: 1, agent_items: 1 });
     expect((await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=2026-13`)).status).toBe(422);
     const last = await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=2020-01`);
     expect(last.body).toMatchObject({ items: 0, agent_items: 0, confirmed_items: 0, mail_sent: 0 });
