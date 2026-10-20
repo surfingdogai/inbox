@@ -38,6 +38,20 @@ export async function hasPayLinks(db: Db): Promise<boolean> {
 }
 
 /**
+ * What this inbox can take from a guest or customer now, by the business's own payment platform: money
+ * through a link, and a card saved to hold a booking. With neither, nothing is ever asked for now: it is
+ * paid at the place, and no promise waits on a payment nobody can make.
+ */
+export async function payCollection(db: Db): Promise<{ readonly links: boolean; readonly cards: boolean }> {
+  const { rows } = await db.client.query({
+    sql: `SELECT COUNT(*), COALESCE(SUM(json_extract(config_public, '$.guarantees') = 1), 0) FROM connectors WHERE ${USABLE}`,
+    params: [],
+    method: "all",
+  });
+  return { links: Number(rows[0]?.[0] ?? 0) > 0, cards: Number(rows[0]?.[1] ?? 0) > 0 };
+}
+
+/**
  * Whether a link is on its way for an order as it stands after an event, by the rules the payments
  * side makes one by (`PaymentLinks.ensure`): a connection of the order's mode makes links, the order
  * comes to something in a currency whose minor unit is known (ADR-032), no change to it waits, it names no link of

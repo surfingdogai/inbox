@@ -1021,6 +1021,7 @@ async function attempt_(
     state: t.to,
     version: seq,
     payload,
+    ...(stay?.needsHuman !== undefined ? { flags: { ...item.flags, needsHuman: stay.needsHuman } } : {}),
     updatedAt: new Date(now).toISOString(),
     closedAt: closedAt === null ? null : new Date(closedAt).toISOString(),
   } as Item;
@@ -1158,6 +1159,14 @@ async function attempt_(
           method: "run",
         },
   );
+  // A stay that waits for a person now, or no longer (ADR-033): its flag, in the same batch.
+  if (stay?.needsHuman !== undefined) {
+    statements.push({
+      sql: "UPDATE items SET flags = json_set(COALESCE(flags, '{}'), '$.needsHuman', json(?)) WHERE id = ? AND version = ?",
+      params: [stay.needsHuman ? "true" : "false", item.id, seq],
+      method: "run",
+    });
+  }
   // The offers: a legacy item's own first (the same row from every writer), then what this verb closes
   // and opens, closes first — one open offer per item at any moment.
   for (const r of legacy) statements.push(insertOfferStatement(r, { orIgnore: true }));

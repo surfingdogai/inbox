@@ -7,7 +7,7 @@ import { formatMinor } from "../util/money";
 import { instantOf } from "../util/zoned";
 import { type StayLang, stayCopy } from "./copy";
 import { stayTimes } from "./nights";
-import { localeOf } from "./price";
+import { propertyLocale } from "./price";
 import type { PropertySetup } from "./store";
 
 /**
@@ -87,7 +87,7 @@ export function quoteWords(
   quote: StayQuote,
   lang: StayLang,
 ): { readonly total: string; readonly now: string | null; readonly there: string | null; readonly policy: string } {
-  const locale = localeOf(lang);
+  const locale = propertyLocale(lang, setup.property);
   const sum = (types: readonly string[]) =>
     quote.schedule.filter((s) => types.includes(s.type)).reduce((a, s) => a + s.amount.value, 0);
   const now = sum(["immediate"]);
@@ -112,25 +112,30 @@ export function dueNow(quote: StayQuote): boolean {
   return quote.guarantee === "card" || quote.schedule.some((s) => s.type === "immediate" && s.amount.value > 0);
 }
 
-/** The guest's words for a stay's dates, "12–15 Dec", in their language. */
-export function datesWords(checkIn: string, checkOut: string, lang: StayLang): string {
-  const locale = localeOf(lang);
-  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => {
-    try {
-      return new Intl.DateTimeFormat(locale, { ...o, timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
-    } catch {
-      return d;
-    }
-  };
-  if (checkIn.slice(0, 7) === checkOut.slice(0, 7)) {
-    return `${fmt(checkIn, { day: "numeric" })}–${fmt(checkOut, { day: "numeric", month: "short" })}`;
+/**
+ * The guest's words for a stay's dates, "12–15 Dec", "1.–4. Nov.", "Nov 1 – 4", as their language
+ * writes a range where the property is: the runtime's own range, its spaces kept from breaking.
+ */
+export function datesWords(
+  checkIn: string,
+  checkOut: string,
+  lang: StayLang,
+  property?: { readonly timezone: string } | null,
+): string {
+  const locale = propertyLocale(lang, property);
+  const a = new Date(`${checkIn}T12:00:00Z`);
+  const b = new Date(`${checkOut}T12:00:00Z`);
+  try {
+    const f = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" });
+    return f.formatRange(a, b).replace(/[\u202f\u2009]/g, "\u00a0");
+  } catch {
+    return `${checkIn} – ${checkOut}`;
   }
-  return `${fmt(checkIn, { day: "numeric", month: "short" })} – ${fmt(checkOut, { day: "numeric", month: "short" })}`;
 }
 
 /** An instant in the property's zone, in the guest's language: "13 Nov, 10:00 Kyoto time". */
 export function whenWords(setup: PropertySetup, iso: string, lang: StayLang): string {
-  const locale = localeOf(lang);
+  const locale = propertyLocale(lang, setup.property);
   const zone = setup.property.timezone;
   const at = new Date(iso);
   try {

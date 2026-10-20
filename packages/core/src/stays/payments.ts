@@ -17,7 +17,7 @@ import { rowToItem } from "../write/views";
 import { stayCopy } from "./copy";
 import { guestLang, partyLocale } from "./lang";
 import { nightsOf } from "./nights";
-import { localeOf } from "./price";
+import { propertyLocale } from "./price";
 import { readProperty } from "./store";
 
 /**
@@ -59,9 +59,11 @@ export const staySchedules: ScheduleSource = {
     const nights = nightsOf(p.checkIn, p.checkOut).length;
     const date = (() => {
       try {
-        return new Intl.DateTimeFormat(localeOf(lang), { day: "numeric", month: "short", timeZone: "UTC" }).format(
-          new Date(`${p.checkIn}T12:00:00Z`),
-        );
+        return new Intl.DateTimeFormat(propertyLocale(lang, property), {
+          day: "numeric",
+          month: "short",
+          timeZone: "UTC",
+        }).format(new Date(`${p.checkIn}T12:00:00Z`));
       } catch {
         return p.checkIn;
       }
@@ -120,6 +122,16 @@ export const staySchedules: ScheduleSource = {
       // A card saved after the stay ended another way holds nothing: nothing was paid.
       if (payment.purpose === "guarantee")
         return { applied: false, note: `card saved on a stay that is ${item.state}` };
+      // Money in another currency, or with no amount said, is never counted, nor owed back by the inbox's
+      // own sum: a person looks at it in the platform.
+      const reason = (error.details as { reason?: unknown } | undefined)?.reason;
+      if (reason === "payment_currency" || reason === "payment_amount") {
+        await toPerson(db, item, payment.connectorId, payment.now, error.message);
+        return { applied: false, note: `left for a person: ${error.message}` };
+      }
+      // Only a definite no makes it owed back; anything else (a race, a fault) is tried again, so the
+      // pay link puts the payment back and nothing is refunded that the stay could still take.
+      if (!OWED_BACK_ON.has(error.code)) throw error;
       const note = await owedBack(db, item, payment.amount, payment.connectorId, payment.now, error.message);
       return { applied: false, note };
     }
@@ -136,6 +148,20 @@ export const staySchedules: ScheduleSource = {
     }
   },
 };
+
+/** The refusals that mean the stay cannot take the payment: the money is owed back. */
+const OWED_BACK_ON: ReadonlySet<string> = new Set(["wrong_state", "slot_taken", "guard_failed", "offer_expired"]);
+
+/** A payment the inbox cannot count: a note to the owner on the stay, and the stay marked for a person. */
+async function toPerson(db: Db, item: Item, connectorId: string, now: number, why: string): Promise<void> {
+  const caller = connectorCaller(connectorId, now);
+  await appendThreadEntry(db, caller, item, `A payment came in that was not counted: ${why}`, "note");
+  try {
+    await setFlags(db, caller, { itemId: item.id, flags: { needsHuman: true }, reason: "payment_check" });
+  } catch (error) {
+    if (!(error instanceof WriteError)) throw error;
+  }
+}
 
 /**
  * A payment the stay can no longer take: owed back, as a refund linked to the stay (ADR-018 §3.4), and

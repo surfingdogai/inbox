@@ -65,7 +65,10 @@ function dueEvent(
     case "awaiting_payment":
       return p.payments?.dueBy && Date.parse(p.payments.dueBy) <= now ? "expire" : null;
     case "confirmed":
-      if (p.change?.validThrough && Date.parse(p.change.validThrough) <= now) return "expire_change";
+      // A change being written to the property's system waits for its answer, never a clock.
+      if (p.change?.validThrough && !p.change.writing && Date.parse(p.change.validThrough) <= now) {
+        return "expire_change";
+      }
       return zoneTimes().endAt + hours.complete * 3_600_000 <= now ? "complete" : null;
     case "checked_in":
       return zoneTimes().endAt + hours.complete * 3_600_000 <= now ? "check_out" : null;
@@ -74,13 +77,45 @@ function dueEvent(
   }
 }
 
-/** One run of the sweep. Answers what it did. */
+/** An ISO time in a payload, as epoch milliseconds in SQL: SQLite reads its offset or its Z. */
+const msOf = (path: string) => `((julianday(json_extract(payload, '${path}')) - 2440587.5) * 86400000.0)`;
+
+/**
+ * When an open stay is next due a sweep transition, as SQL over its row: the hold's end, the quote's or
+ * the change's validity, the pay window, the request's time to answer, the hours after check-out. Null
+ * when nothing of it can come due (a booking waits for its write, never a clock).
+ */
+function dueAtSql(): string {
+  const at = (path: string) => `CASE WHEN json_extract(payload, '${path}') IS NULL THEN NULL ELSE ${msOf(path)} END`;
+  return `CASE state
+    WHEN 'held' THEN ${at("$.hold.until")}
+    WHEN 'quoted' THEN ${at("$.quote.validThrough")}
+    WHEN 'requested' THEN updated_at + ?
+    WHEN 'needs_info' THEN updated_at + ?
+    WHEN 'awaiting_payment' THEN ${at("$.payments.dueBy")}
+    WHEN 'confirmed' THEN MIN(
+      CASE WHEN json_extract(payload, '$.change.writing') IS NULL THEN COALESCE(${at("$.change.validThrough")}, 9e15) ELSE 9e15 END,
+      COALESCE(${at("$.endTime")} + ?, 9e15))
+    WHEN 'checked_in' THEN ${at("$.endTime")} + ?
+    ELSE NULL END`;
+}
+
+/**
+ * One run of the sweep. Answers what it did. Only the stays that are due are read, the earliest due
+ * first: however many confirmed stays a property has months ahead, a lapsed hold or pay window is
+ * never behind them.
+ */
 export async function sweepStays(db: Db, now: number): Promise<{ moved: number; released: number; open: number }> {
   const settings = await readSettings(db);
+  const requestMs = settings.stays.requestExpiresHours * 3_600_000;
+  const completeMs = settings.stays.autoCompleteHours * 3_600_000;
+  const states = OPEN_STATES.map(() => "?").join(", ");
   const { rows } = await db.client.query({
-    sql: `SELECT id, state, payload, updated_at FROM items WHERE type = 'stay' AND state IN (${OPEN_STATES.map(() => "?").join(", ")})
-           ORDER BY updated_at LIMIT ?`,
-    params: [...OPEN_STATES, 500],
+    sql: `SELECT id, state, payload, updated_at, due_at FROM (
+             SELECT id, state, payload, updated_at, ${dueAtSql()} AS due_at
+               FROM items WHERE type = 'stay' AND state IN (${states})
+           ) WHERE due_at IS NOT NULL AND due_at <= ? ORDER BY due_at LIMIT ?`,
+    params: [requestMs, requestMs, completeMs, completeMs, ...OPEN_STATES, now, BATCH * 4],
     method: "all",
   });
   let moved = 0;
@@ -114,7 +149,12 @@ export async function sweepStays(db: Db, now: number): Promise<{ moved: number; 
     params: [now],
     method: "run",
   });
-  return { moved, released: released.changes, open: rows.length };
+  const { rows: open } = await db.client.query({
+    sql: `SELECT COUNT(*) FROM items WHERE type = 'stay' AND state IN (${states})`,
+    params: [...OPEN_STATES],
+    method: "all",
+  });
+  return { moved, released: released.changes, open: Number(open[0]?.[0] ?? 0) };
 }
 
 /** The sweep job: runs, and queues the next minute's while any stay is open. */

@@ -1,4 +1,5 @@
 import type { StayQuote } from "@surfingdog/spec";
+import { payCollection } from "../connectors/pay-queue";
 import type { Db } from "../db";
 import type { Item, PayloadOf } from "../domain/types";
 import { freeUntil } from "../policy/index";
@@ -49,6 +50,7 @@ export async function ratesQuote(
   if (rooms.some((r) => !r.roomTypeId)) return null;
   const settings = await readSettings(db);
   const priced = quoteFromRates(setup, {
+    collect: await payCollection(db),
     checkIn: p.checkIn,
     checkOut: p.checkOut,
     rooms: rooms.map((r) => ({

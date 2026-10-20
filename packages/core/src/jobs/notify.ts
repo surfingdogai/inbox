@@ -14,7 +14,7 @@ import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
 import { stayLang } from "../stays/copy";
-import { ARRIVAL_PLACEHOLDER, renderStayMail, stayLinks } from "../stays/mail";
+import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
 import { openArrival } from "../stays/setup";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
@@ -37,12 +37,22 @@ export { senderOf } from "./mail-log";
 
 /**
  * A stay's private arrival details (ADR-033 §10), opened from their seal only as the email goes: the
- * kept copy holds the placeholder, never the codes.
+ * kept copy holds the email's own marker, never the codes. Only the arrival-details email the inbox wrote
+ * itself carries them, and only while the stay is confirmed or under way: a reply, whoever asked for it
+ * and whatever it says, never does.
  */
-async function fillArrival(db: Db, secrets: SecretBox | null, item: Item, text: string): Promise<string> {
-  if (item.type !== "stay" || !text.includes(ARRIVAL_PLACEHOLDER)) return text;
+async function fillArrival(
+  db: Db,
+  secrets: SecretBox | null,
+  item: Item,
+  template: string,
+  text: string,
+): Promise<string> {
+  if (item.type !== "stay" || template !== ARRIVAL_TEMPLATE || !ARRIVAL_STATES.includes(item.state)) {
+    return text.replace(ARRIVAL_MARKER, "");
+  }
   const details = await openArrival(db, secrets, item.payload.propertyId);
-  return text.replace(ARRIVAL_PLACEHOLDER, details ?? "");
+  return text.replace(ARRIVAL_MARKER, details ?? "");
 }
 
 /**
@@ -143,6 +153,7 @@ export function notifyHandler(
               db,
               opts.secrets ?? null,
               item,
+              logged.template,
               await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
                 mailKey: logged.jobKey,
                 itemId: logged.itemId,
@@ -816,6 +827,8 @@ const STAY_OWNER_WORDS: Readonly<Record<string, string>> = {
   cancel: "cancelled:",
   propose_change: "asks to change:",
   accept_change: "accepted the change:",
+  change_written: "has the change you agreed, written to your system:",
+  change_refused: "keeps the dates: your system did not take the change to",
   decline_change: "keeps it as agreed:",
   retract_change: "withdrew their change:",
 };

@@ -2,13 +2,14 @@ import { shortRef } from "../customer/format";
 import { LINK_GRACE_MS, type LinkAction, linkUrl, mintLinks } from "../customer/links";
 import type { Db } from "../db";
 import type { Item, PayloadOf } from "../domain/types";
+import { randomToken } from "../ids";
 import { policySentence } from "../policy/index";
 import type { SecretBox } from "../secrets/box";
 import { formatMinor } from "../util/money";
 import { type StayCopy, type StayLang, stayCopy } from "./copy";
 import { nightsOf } from "./nights";
 import { stayLinkSha } from "./page";
-import { localeOf } from "./price";
+import { propertyLocale } from "./price";
 import { readSetup } from "./store";
 import { datesWords, whenWords } from "./terms";
 import { paidOf } from "./transition";
@@ -22,8 +23,17 @@ import { paidOf } from "./transition";
 
 type StayPayload = PayloadOf<"stay">;
 
-/** Where the sealed arrival details go in the email as sent; the kept copy says only that they were sent. */
-export const ARRIVAL_PLACEHOLDER = "{{arrival-details}}";
+/**
+ * Where the sealed arrival details go in the email as sent: a marker of this email's own, random, only
+ * ever in the arrival-details email the inbox writes itself. Anything shaped like one in words someone
+ * else wrote (a reply, a name) is taken out before the email is kept, so no reply can ask for the codes.
+ */
+export const ARRIVAL_MARKER = /\{\{arrival-details(?::[A-Za-z0-9_-]*)?\}\}/g;
+const ARRIVAL_SPOT = "\u0000arrival\u0000";
+
+/** The template whose email carries the arrival details, and the states a stay must be in for it to. */
+export const ARRIVAL_TEMPLATE = "stay.arrival_details";
+export const ARRIVAL_STATES: readonly string[] = ["confirmed", "checked_in"];
 
 export interface StayMailInput {
   readonly item: Item;
@@ -53,6 +63,7 @@ const EXTRA: Readonly<
       total: string;
       lapsed: (p: string, d: string) => [string, string];
       changeAsked: (p: string) => string;
+      changeRefused: (p: string, d: string) => [string, string];
       status: (p: string, d: string) => string;
     }
   >
@@ -64,6 +75,10 @@ const EXTRA: Readonly<
       `${p} could not answer your request in time, so it is closed. Write to us if you would still like to come.`,
     ],
     changeAsked: (p) => `${p} asks to change your stay`,
+    changeRefused: (p, d) => [
+      `Your stay at ${p} could not be changed`,
+      `${p} could not make the change: the new dates are not free after all. Your stay stays as it was, ${d}.`,
+    ],
     status: (p, d) => `Your stay at ${p}: ${d}`,
   },
   es: {
@@ -73,6 +88,10 @@ const EXTRA: Readonly<
       `${p} no pudo responder a tiempo y la solicitud se ha cerrado. Escríbanos si todavía quiere venir.`,
     ],
     changeAsked: (p) => `${p} le pide cambiar su estancia`,
+    changeRefused: (p, d) => [
+      `Su estancia en ${p} no se pudo cambiar`,
+      `${p} no pudo hacer el cambio: las nuevas fechas no están libres. Su estancia sigue como estaba, ${d}.`,
+    ],
     status: (p, d) => `Su estancia en ${p}: ${d}`,
   },
   fr: {
@@ -82,6 +101,10 @@ const EXTRA: Readonly<
       `${p} n'a pas pu répondre à temps, la demande est close. Écrivez-nous si vous souhaitez toujours venir.`,
     ],
     changeAsked: (p) => `${p} vous propose de modifier votre séjour`,
+    changeRefused: (p, d) => [
+      `Votre séjour chez ${p} n'a pas pu être modifié`,
+      `${p} n'a pas pu faire la modification : les nouvelles dates ne sont finalement pas libres. Votre séjour reste tel quel, ${d}.`,
+    ],
     status: (p, d) => `Votre séjour chez ${p} : ${d}`,
   },
   de: {
@@ -91,6 +114,10 @@ const EXTRA: Readonly<
       `${p} konnte nicht rechtzeitig antworten, die Anfrage ist geschlossen. Schreiben Sie uns, wenn Sie trotzdem kommen möchten.`,
     ],
     changeAsked: (p) => `${p} schlägt eine Änderung Ihres Aufenthalts vor`,
+    changeRefused: (p, d) => [
+      `Ihr Aufenthalt bei ${p} konnte nicht geändert werden`,
+      `${p} konnte die Änderung nicht vornehmen: Die neuen Daten sind doch nicht frei. Ihr Aufenthalt bleibt wie vereinbart, ${d}.`,
+    ],
     status: (p, d) => `Ihr Aufenthalt bei ${p}: ${d}`,
   },
   it: {
@@ -100,6 +127,10 @@ const EXTRA: Readonly<
       `${p} non è riuscita a rispondere in tempo e la richiesta è chiusa. Scrivici se vuoi ancora venire.`,
     ],
     changeAsked: (p) => `${p} ti propone di cambiare il soggiorno`,
+    changeRefused: (p, d) => [
+      `Il tuo soggiorno presso ${p} non è stato modificato`,
+      `${p} non ha potuto fare la modifica: le nuove date non sono libere. Il soggiorno resta com'era, ${d}.`,
+    ],
     status: (p, d) => `Il tuo soggiorno presso ${p}: ${d}`,
   },
   pt: {
@@ -109,13 +140,23 @@ const EXTRA: Readonly<
       `${p} não conseguiu responder a tempo e o pedido foi fechado. Escreva-nos se ainda quiser vir.`,
     ],
     changeAsked: (p) => `${p} propõe alterar a sua estadia`,
+    changeRefused: (p, d) => [
+      `Não foi possível alterar a sua estadia em ${p}`,
+      `${p} não conseguiu fazer a alteração: as novas datas afinal não estão livres. A sua estadia mantém-se como estava, ${d}.`,
+    ],
     status: (p, d) => `A sua estadia em ${p}: ${d}`,
   },
 };
 
 export function extraWordsOf(lang: StayLang): string[] {
   const e = EXTRA[lang];
-  return [e.total, ...e.lapsed("X", "1 Jan"), e.changeAsked("X"), e.status("X", "1 Jan")];
+  return [
+    e.total,
+    ...e.lapsed("X", "1 Jan"),
+    e.changeAsked("X"),
+    ...e.changeRefused("X", "1 Jan"),
+    e.status("X", "1 Jan"),
+  ];
 }
 
 /** The links a stay's email carries, as it stands: answer a quote, cancel, add a card, answer a change. */
@@ -166,26 +207,27 @@ export async function stayLinks(
   return out;
 }
 
-function money(m: { value: number; currency: string }, lang: StayLang): string {
-  return formatMinor(m, localeOf(lang));
+/** Money as the guest reads it where the property is. */
+function money(m: { value: number; currency: string }, locale: string): string {
+  return formatMinor(m, locale).replace(/[\u202f\u2009]/g, "\u00a0");
 }
 
 /** The lines of a quote as an email shows them: label, amount; the total; what is paid now and there. */
-function quoteBlock(p: StayPayload, c: StayCopy, lang: StayLang): string[] {
+function quoteBlock(p: StayPayload, c: StayCopy, lang: StayLang, locale: string): string[] {
   const q = p.quote;
   if (!q) return [];
-  const lines = q.lines.map((l) => `${l.label}: ${money({ value: l.amount, currency: q.currency }, lang)}`);
-  lines.push(`${EXTRA[lang].total}: ${money(q.total, lang)}`);
+  const lines = q.lines.map((l) => `${l.label}: ${money({ value: l.amount, currency: q.currency }, locale)}`);
+  lines.push(`${EXTRA[lang].total}: ${money(q.total, locale)}`);
   const now = q.schedule.filter((s) => s.type === "immediate").reduce((a, s) => a + s.amount.value, 0);
   const there = q.schedule.filter((s) => s.type === "at_property").reduce((a, s) => a + s.amount.value, 0);
   if (now > 0 && there > 0) {
     lines.push(
       c.emails.payNow({
-        now: money({ value: now, currency: q.currency }, lang),
-        there: money({ value: there, currency: q.currency }, lang),
+        now: money({ value: now, currency: q.currency }, locale),
+        there: money({ value: there, currency: q.currency }, locale),
       }),
     );
-  } else if (now > 0) lines.push(c.emails.payParts({ now: money({ value: now, currency: q.currency }, lang) }));
+  } else if (now > 0) lines.push(c.emails.payParts({ now: money({ value: now, currency: q.currency }, locale) }));
   return lines;
 }
 
@@ -197,12 +239,13 @@ export async function renderStayMail(
   const { item, lang } = input;
   const p = item.payload as StayPayload;
   const setup = await readSetup(db, p.propertyId);
+  const locale = propertyLocale(lang, setup?.property);
   const property = setup?.property.name ?? "";
   const c = stayCopy(lang);
-  const dates = datesWords(p.checkIn, p.checkOut, lang);
+  const dates = datesWords(p.checkIn, p.checkOut, lang, setup?.property);
   const nights = nightsOf(p.checkIn, p.checkOut).length;
   const ref = shortRef(item.id);
-  const say = input.words?.trim() || "";
+  const say = (input.words ?? "").replace(ARRIVAL_MARKER, "").trim();
   const blocks: string[][] = [];
   const link = (a: LinkAction, label: string) => {
     const url = input.links?.get(a);
@@ -211,7 +254,7 @@ export async function renderStayMail(
   const policy = p.quote
     ? policySentence(p.quote.policy, {
         lang,
-        locale: localeOf(lang),
+        locale,
         total: p.quote.total,
         what: "stay",
         place: setup?.property.locality ?? undefined,
@@ -223,11 +266,11 @@ export async function renderStayMail(
       .filter((s) => s.status === "at_property")
       .reduce((a, s) => a + s.amount.value, 0);
     return [
-      ...(paid.value > 0 ? [c.emails.paymentReceived.body({ property, amount: money(paid, lang) })] : []),
-      ...(there > 0 ? [`${c.schedule.atProperty}: ${money({ value: there, currency: paid.currency }, lang)}`] : []),
+      ...(paid.value > 0 ? [c.emails.paymentReceived.body({ property, amount: money(paid, locale) })] : []),
+      ...(there > 0 ? [`${c.schedule.atProperty}: ${money({ value: there, currency: paid.currency }, locale)}`] : []),
     ];
   };
-  const payLines = () => input.pay.map((x) => `${c.page.pay({ amount: money(x.amount, lang) })}: ${x.url}`);
+  const payLines = () => input.pay.map((x) => `${c.page.pay({ amount: money(x.amount, locale) })}: ${x.url}`);
   let template: string;
   let subject: string;
   switch (input.event) {
@@ -246,7 +289,7 @@ export async function renderStayMail(
       template = "stay.quote";
       subject = c.emails.quote.subject({ property, dates });
       blocks.push([c.emails.quote.intro({ property }), `${dates} · ${c.nights(nights)}`]);
-      blocks.push(quoteBlock(p, c, lang));
+      blocks.push(quoteBlock(p, c, lang, locale));
       if (say) blocks.push([say]);
       if (policy) blocks.push([policy]);
       blocks.push([
@@ -297,8 +340,8 @@ export async function renderStayMail(
         c.emails.cancelled.body({
           property,
           dates,
-          ...(fee && fee.value > 0 ? { fee: money(fee, lang) } : {}),
-          ...(refund && refund.value > 0 ? { refund: money(refund, lang) } : {}),
+          ...(fee && fee.value > 0 ? { fee: money(fee, locale) } : {}),
+          ...(refund && refund.value > 0 ? { refund: money(refund, locale) } : {}),
         }),
       ]);
       break;
@@ -311,7 +354,7 @@ export async function renderStayMail(
         [
           say,
           ...(refund && refund.value > 0
-            ? [c.emails.cancelledByProperty.refund({ property, paid: money(refund, lang) })]
+            ? [c.emails.cancelledByProperty.refund({ property, paid: money(refund, locale) })]
             : []),
         ].filter(Boolean),
       );
@@ -322,8 +365,8 @@ export async function renderStayMail(
       template = "stay.change_asked";
       subject = EXTRA[lang].changeAsked(property);
       blocks.push([
-        datesWords(p.change.checkIn, p.change.checkOut, lang),
-        ...(p.change.quote ? [c.page.newTotal({ total: money(p.change.quote.total, lang) })] : []),
+        datesWords(p.change.checkIn, p.change.checkOut, lang, setup?.property),
+        ...(p.change.quote ? [c.page.newTotal({ total: money(p.change.quote.total, locale) })] : []),
         ...(say ? [say] : []),
       ]);
       blocks.push(
@@ -332,16 +375,24 @@ export async function renderStayMail(
         ),
       );
       break;
+    case "change_refused": {
+      template = "stay.change_refused";
+      const [s, b] = EXTRA[lang].changeRefused(property, dates);
+      subject = s;
+      blocks.push([b]);
+      break;
+    }
     case "accept_change":
+    case "change_written":
       template = "stay.changed";
       subject = c.emails.changed.subject({ property, dates });
-      blocks.push([c.emails.changed.body({ dates, total: p.quote ? money(p.quote.total, lang) : "" })]);
+      blocks.push([c.emails.changed.body({ dates, total: p.quote ? money(p.quote.total, locale) : "" })]);
       if (input.pay.length) blocks.push(payLines());
       break;
     case "stay_before": {
       if (!setup) return null;
       template = "stay.before_arrival";
-      const weekday = new Intl.DateTimeFormat(localeOf(lang), { weekday: "long", timeZone: "UTC" }).format(
+      const weekday = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(
         new Date(`${p.checkIn}T12:00:00Z`),
       );
       subject = c.emails.beforeArrival.subject({ property, weekday });
@@ -355,7 +406,7 @@ export async function renderStayMail(
             ...(setup.property.arrivalPublic ? { how: setup.property.arrivalPublic } : {}),
             ...(due > 0
               ? {
-                  due: `${c.schedule.atProperty}: ${money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, lang)}.`,
+                  due: `${c.schedule.atProperty}: ${money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, locale)}.`,
                 }
               : {}),
           }),
@@ -365,7 +416,8 @@ export async function renderStayMail(
     case "stay_arrival":
       template = "stay.arrival_details";
       subject = c.emails.arrivalDetails.subject({ property });
-      blocks.push([c.emails.arrivalDetails.body({ date: dates, details: ARRIVAL_PLACEHOLDER })]);
+      if (!ARRIVAL_STATES.includes(item.state)) return null;
+      blocks.push([c.emails.arrivalDetails.body({ date: dates, details: ARRIVAL_SPOT })]);
       break;
     case "stay_thanks":
       template = "stay.thank_you";
@@ -380,7 +432,7 @@ export async function renderStayMail(
       if (due > 0 && p.payments?.dueBy) {
         blocks.push([
           c.emails.reminder.body({
-            amount: money({ value: due, currency: input.pay[0]?.amount.currency ?? "" }, lang),
+            amount: money({ value: due, currency: input.pay[0]?.amount.currency ?? "" }, locale),
             until: whenWords(setup, p.payments.dueBy, lang),
           }),
         ]);
@@ -401,7 +453,7 @@ export async function renderStayMail(
         if (due > 0 && p.payments?.dueBy && setup) {
           blocks.push([
             c.page.payBy({
-              amount: money({ value: due, currency: input.pay[0]?.amount.currency ?? "" }, lang),
+              amount: money({ value: due, currency: input.pay[0]?.amount.currency ?? "" }, locale),
               property,
               until: whenWords(setup, p.payments.dueBy, lang),
             }),
@@ -416,8 +468,8 @@ export async function renderStayMail(
       if (item.state === "confirmed" && input.event === "record_payment" && input.fromState === "confirmed") {
         template = "stay.payment_received";
         const paid = paidOf(p);
-        subject = c.emails.paymentReceived.subject({ amount: money(paid, lang), ref });
-        blocks.push([c.emails.paymentReceived.body({ property, amount: money(paid, lang) })]);
+        subject = c.emails.paymentReceived.subject({ amount: money(paid, locale), ref });
+        blocks.push([c.emails.paymentReceived.body({ property, amount: money(paid, locale) })]);
         break;
       }
       if (item.state === "confirmed") {
@@ -445,6 +497,9 @@ export async function renderStayMail(
   }
   // The owner's own words go with whatever the email says, once.
   if (say && !blocks.some((b) => b.includes(say))) blocks.push([say]);
+  // An email that would say nothing but the policy (a deposit with no link to pay it, a reminder with
+  // nothing due) is not sent at all.
+  if (!blocks.some((b) => b.some((l) => Boolean(l?.trim()) && l !== policy))) return null;
   const footer = [
     c.with({ property }),
     ...(input.automated ? [c.automatic({ property })] : []),
@@ -453,12 +508,17 @@ export async function renderStayMail(
   ];
   blocks.push(footer);
   if (property) blocks.push([property]);
+  const text = blocks
+    .map((b) => b.filter((l) => l?.trim()).join("\n"))
+    .filter(Boolean)
+    .join("\n\n")
+    .replace(ARRIVAL_MARKER, "");
   return {
     template,
-    subject: subject.replace(/\s+/g, " ").trim(),
-    text: blocks
-      .map((b) => b.filter((l) => l?.trim()).join("\n"))
-      .filter(Boolean)
-      .join("\n\n"),
+    subject: subject.replace(ARRIVAL_MARKER, "").replace(/\s+/g, " ").trim(),
+    text:
+      template === ARRIVAL_TEMPLATE
+        ? text.replace(ARRIVAL_SPOT, `{{arrival-details:${randomToken(12)}}}`)
+        : text.replaceAll(ARRIVAL_SPOT, ""),
   };
 }

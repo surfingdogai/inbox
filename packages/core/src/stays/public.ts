@@ -1,4 +1,5 @@
-import { decimalOf, type PropertyPublic, type StayAvailability, type StayQuote } from "@surfingdog/spec";
+import { decimalOf, type PropertyPublic, type StayAvailability, type StayQuote, shareOf } from "@surfingdog/spec";
+import { payCollection } from "../connectors/pay-queue";
 import { base64Url } from "../customer/offer";
 import type { Db } from "../db";
 import { policySentence } from "../policy/index";
@@ -11,9 +12,9 @@ import { formatMinor } from "../util/money";
 import { closedNights, insideAllotment, nightsFree, type WantedNights } from "./claims";
 import { type StayLang, stayLang } from "./copy";
 import { nightsOf } from "./nights";
-import { localeOf, quoteFromRates } from "./price";
+import { propertyLocale, quoteFromRates } from "./price";
 import { listProperties, type PropertySetup, type RatePlanRow, type RoomTypeRow, readSetup } from "./store";
-import { stayTermsSha } from "./terms";
+import { stayTermsSha, whenWords } from "./terms";
 
 /**
  * What a guest's assistant reads of a place to stay (ADR-033 §6.1): the property as it presents itself,
@@ -62,8 +63,11 @@ function secureOf(plan: RatePlanRow): "at_property" | "deposit" | "card" {
   return plan.deposit.kind === "none" ? "at_property" : "deposit";
 }
 
-/** A policy before any dates, in words: "Free until 3 days before arrival; then the first night." */
-function policyWords(plan: RatePlanRow, lang: StayLang): string {
+/**
+ * A policy before any dates, in words for agents: "Free cancellation until 3 days before arrival; after
+ * that: the first night." A fixed fee is money in the property's currency, as its guests write it.
+ */
+function policyWords(plan: RatePlanRow, currency: string, locale: string): string {
   const p = plan.policy;
   const fee = (f: (typeof p)["after"]) =>
     f.kind === "none"
@@ -76,8 +80,7 @@ function policyWords(plan: RatePlanRow, lang: StayLang): string {
             : `the first ${f.value} nights`
           : f.kind === "percent"
             ? `${f.value}% of the stay`
-            : `${f.value} (minor units)`;
-  void lang;
+            : formatMinor({ value: f.value ?? 0, currency }, locale);
   if (p.steps.length === 0 && p.after.kind === "full") return "Non-refundable: the full stay from booking.";
   const free = p.steps.find((s) => s.fee.kind === "none");
   const days = free && "days" in free.before ? free.before.days : null;
@@ -122,7 +125,7 @@ export function propertyPublic(
       meal: x.meal as PropertyPublic["rate_plans"][number]["meal"],
       refundable: x.policy.steps.some((s) => s.fee.kind === "none"),
       secure: secureOf(x),
-      policy: policyWords(x, lang),
+      policy: policyWords(x, p.currency, propertyLocale(lang, p)),
       min_nights: x.minNights,
     })),
     extras: setup.extras
@@ -312,7 +315,9 @@ export async function judgeStay(
     extras: r.extras ?? [],
   }));
   const subtotals = await systemSubtotals(db, setup, rooms, nights);
+  const collect = await payCollection(db);
   const priced = quoteFromRates(setup, {
+    collect,
     checkIn: stay.checkIn,
     checkOut: stay.checkOut,
     rooms,
@@ -451,14 +456,20 @@ export async function termsSummary(
   quote: StayQuote,
   lang: StayLang,
 ): Promise<{ readonly summary: string; readonly terms_sha: string }> {
-  const locale = localeOf(lang);
+  const locale = propertyLocale(lang, setup.property);
   const money = (v: number) => formatMinor({ value: v, currency: quote.currency }, locale);
   const now = quote.schedule.filter((s) => s.type === "immediate").reduce((a, s) => a + s.amount.value, 0);
   const there = quote.schedule.filter((s) => s.type === "at_property").reduce((a, s) => a + s.amount.value, 0);
   const nights = nightsOf(stay.checkIn, stay.checkOut).length;
+  // Every payment the guest's person agrees to, with when: what is paid later is said too, by its date
+  // and time where the property is.
+  const later = quote.schedule
+    .filter((s) => s.type === "deferred" && s.amount.value > 0)
+    .map((s) => `Then ${money(s.amount.value)} by ${s.dueAt ? whenWords(setup, s.dueAt, lang) : "before arrival"}.`);
   const parts = [
     `${setup.property.name}: ${nights} night${nights === 1 ? "" : "s"}, ${stay.checkIn} to ${stay.checkOut}, ${money(quote.total.value)} in all.`,
     now > 0 ? `Pay now: ${money(now)}.` : "Nothing to pay now.",
+    ...later,
     there > 0 ? `At the property: ${money(there)}.` : "",
     quote.guarantee === "card" ? "A card holds the booking; nothing is charged now." : "",
     policySentence(quote.policy, { lang, locale, total: quote.total, what: "stay" }),
@@ -553,8 +564,11 @@ const AMENITY_WORDS: Readonly<Record<string, string>> = {
  * HotelRoom (an Apartment or an Accommodation for a rental), with its beds, occupancy and amenities.
  * An Offer with a price only where a stay is booked at once — rooms kept for direct guests, or a
  * connected system confirming on its own — since anywhere else the price is the property's answer to
- * a request, not an offer anyone can take. Its price is the lowest a night on a plan guests are
- * offered; the quote at booking adds every tax and fee. Null with no room to offer.
+ * a request, not an offer anyone can take. Its price is the lowest a night costs on a plan guests are
+ * offered, for the guests the rate is for, with every tax and fee a night carries in it, whoever collects
+ * it (a one-night stay's, so a fee per stay is in it too): never a bare room rate. A room whose taxes
+ * depend on the price per guest in tiers shows no price at all. Null with no room to offer. The page it
+ * goes on is not indexed: the block is for agents and the property's own site to read.
  */
 export function lodgingJsonLd(
   setup: PropertySetup,
@@ -593,13 +607,35 @@ export function lodgingJsonLd(
         }
       : {}),
   });
+  const fees = setup.fees.filter((f) => f.active);
+  /** A night at this rate with every tax and fee in it, or null where the fees cannot be said for one night. */
+  const allIn = (rate: (typeof setup.rates)[number]): number | null => {
+    let total = rate.nightly;
+    for (const f of fees) {
+      if (f.tiers?.length) return null;
+      switch (f.basis) {
+        case "per_stay":
+        case "per_night":
+        case "per_room_night":
+          total += f.amount ?? 0;
+          break;
+        case "per_person_night":
+          total += (f.amount ?? 0) * rate.baseGuests;
+          break;
+        case "percent_of_room":
+          total += shareOf(rate.nightly, f.rateBp ?? 0);
+          break;
+      }
+    }
+    return total;
+  };
   const offers = rooms.flatMap((r) => {
     if (!kept(r.id)) return [];
     const nightly = setup.rates
       .filter((x) => x.roomTypeId === r.id && plans.has(x.ratePlanId) && x.fromDate === "")
-      .map((x) => x.nightly);
-    if (nightly.length === 0) return [];
-    const price = decimalOf(Math.min(...nightly), p.currency);
+      .map(allIn);
+    if (nightly.length === 0 || nightly.some((n) => n === null)) return [];
+    const price = decimalOf(Math.min(...(nightly as number[])), p.currency);
     if (price === null) return [];
     return [
       {
@@ -610,9 +646,9 @@ export function lodgingJsonLd(
           minPrice: price,
           priceCurrency: p.currency,
           unitText: "night",
-          valueAddedTaxIncluded: p.pricesInclude !== null,
+          valueAddedTaxIncluded: true,
         },
-        description: "From, a night; the quote at booking includes every tax and fee.",
+        description: "From, a night, with every tax and fee in it.",
       },
     ];
   });

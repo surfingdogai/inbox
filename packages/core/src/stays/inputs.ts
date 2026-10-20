@@ -128,6 +128,10 @@ export const upsertPropertyInput = z.object({
     .regex(/^[A-Z]{3}$/)
     .optional(),
   location_id: id.optional(),
+  /** The town the property is in: what its guests read a time by ("23:59 Oaxaca time"), and its address. */
+  town: z.string().trim().max(80).nullable().optional(),
+  /** The property's own time zone, where it is not the business's: as its system keeps it, say. */
+  timezone: z.string().trim().min(1).max(64).optional(),
   check_in_from: hhmm.optional(),
   check_in_until: hhmm.nullable().optional(),
   check_out_until: hhmm.optional(),

@@ -5,7 +5,7 @@ import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import { checkDates, stayTimes } from "./nights";
 import { readSetup } from "./store";
-import { STAY_SWEEP_KIND } from "./transition";
+import { checkGuestPlan, STAY_SWEEP_KIND } from "./transition";
 
 /**
  * What only the property, or the inbox for it, writes on a stay (ADR-033 §2.2): a request never
@@ -91,6 +91,7 @@ export async function prepareStay(
       });
     }
     room.roomTypeName = type.name;
+    if (!opts.person) checkGuestPlan(setup, room as { roomTypeId?: string; ratePlanId?: string }, `payload.rooms.${i}`);
     const children = room.childrenAges.length;
     if (
       room.adults > type.capacity.adults ||

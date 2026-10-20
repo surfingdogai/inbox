@@ -64,25 +64,36 @@ export type ClaimPlan =
 /**
  * The claims a stay takes, as statements for the write's batch: its own claims replaced, a lapsed hold
  * on a unit it takes deleted, and one row per room per night. `holdUntil` null: the stay's for good.
+ * Several sets of nights (a change's beside the stay's own, while it is written) are claimed together:
+ * each night as many rooms of each type as the most any of them takes.
  */
 export async function planNightClaims(
   db: Db,
   setup: PropertySetup,
   itemId: string,
-  want: WantedNights,
+  wanted: WantedNights | readonly WantedNights[],
   holdUntil: number | null,
   now: number,
 ): Promise<ClaimPlan> {
-  const ids = [...want.rooms.keys()];
-  const taken = await takenOf(db, ids, want.nights);
+  const wants: readonly WantedNights[] = "rooms" in wanted ? [wanted] : wanted;
+  const need = new Map<string, Map<string, number>>();
+  for (const w of wants) {
+    for (const [roomTypeId, count] of w.rooms) {
+      const per = need.get(roomTypeId) ?? new Map<string, number>();
+      need.set(roomTypeId, per);
+      for (const night of w.nights) per.set(night, Math.max(per.get(night) ?? 0, count));
+    }
+  }
+  const nights = [...new Set(wants.flatMap((w) => w.nights))];
+  const taken = await takenOf(db, [...need.keys()], nights);
   const statements: Statement[] = [
     { sql: "DELETE FROM night_claims WHERE item_id = ?", params: [itemId], method: "run" },
   ];
   const claims: [string, string, number][] = [];
-  for (const [roomTypeId, count] of want.rooms) {
+  for (const [roomTypeId, per] of need) {
     const room = setup.rooms.find((r) => r.id === roomTypeId);
     const capacity = room?.units ?? 0;
-    for (const night of want.nights) {
+    for (const [night, count] of per) {
       const busy = new Set(
         taken
           .filter((t) => t.roomTypeId === roomTypeId && t.night === night && t.itemId !== itemId && live(t, now))
@@ -123,11 +134,6 @@ export async function nightsFree(
   return plan.ok ? { ok: true } : { ok: false, roomTypeId: plan.roomTypeId, night: plan.night };
 }
 
-/** The claims' hold made the stay's for good (`promote_claims`). */
-export function promoteStatement(itemId: string): Statement {
-  return { sql: "UPDATE night_claims SET hold_until = NULL WHERE item_id = ?", params: [itemId], method: "run" };
-}
-
 /** Every claim of the stay let go (`release_nights`). */
 export function releaseStatement(itemId: string): Statement {
   return { sql: "DELETE FROM night_claims WHERE item_id = ?", params: [itemId], method: "run" };
@@ -138,15 +144,6 @@ export function releaseAfterStatement(itemId: string, firstNight: string): State
   return {
     sql: "DELETE FROM night_claims WHERE item_id = ? AND night > ?",
     params: [itemId, firstNight],
-    method: "run",
-  };
-}
-
-/** A hold's claims kept until a new time (a deposit's window, a write in flight). */
-export function holdUntilStatement(itemId: string, until: number): Statement {
-  return {
-    sql: "UPDATE night_claims SET hold_until = ? WHERE item_id = ? AND hold_until IS NOT NULL",
-    params: [until, itemId],
     method: "run",
   };
 }

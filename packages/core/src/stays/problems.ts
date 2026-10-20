@@ -19,6 +19,7 @@ export interface StayProblems {
   readonly onRequest: (hours: number) => string;
   readonly noChange: string;
   readonly changeLapsed: string;
+  readonly changeWriting: string;
 }
 
 const EN: StayProblems = {
@@ -34,6 +35,7 @@ const EN: StayProblems = {
   onRequest: (h) => `On request. The property answers within ${h} hours.`,
   noChange: "There is no change to answer on this stay.",
   changeLapsed: "That change can no longer be accepted. Ask for it again if it still suits you.",
+  changeWriting: "The property is confirming the change now. You will hear in a moment.",
 };
 
 const ES: StayProblems = {
@@ -49,6 +51,7 @@ const ES: StayProblems = {
   onRequest: (h) => `Bajo petición. El alojamiento responde en un máximo de ${h} horas.`,
   noChange: "No hay ningún cambio que responder en esta estancia.",
   changeLapsed: "Ese cambio ya no se puede aceptar. Vuelva a pedirlo si todavía le conviene.",
+  changeWriting: "El alojamiento está confirmando el cambio ahora. Recibirá la respuesta en un momento.",
 };
 
 const FR: StayProblems = {
@@ -64,6 +67,7 @@ const FR: StayProblems = {
   onRequest: (h) => `Sur demande. L'établissement répond sous ${h} heures.`,
   noChange: "Il n'y a aucune modification à laquelle répondre pour ce séjour.",
   changeLapsed: "Cette modification ne peut plus être acceptée. Redemandez-la si elle vous convient toujours.",
+  changeWriting: "L'établissement confirme la modification en ce moment. Vous aurez la réponse dans un instant.",
 };
 
 const DE: StayProblems = {
@@ -80,6 +84,7 @@ const DE: StayProblems = {
   onRequest: (h) => `Auf Anfrage. Die Unterkunft antwortet innerhalb von ${h} Stunden.`,
   noChange: "Zu diesem Aufenthalt gibt es keine Änderung zu beantworten.",
   changeLapsed: "Diese Änderung kann nicht mehr angenommen werden. Fragen Sie erneut, wenn sie noch passt.",
+  changeWriting: "Die Unterkunft bestätigt die Änderung gerade. Sie hören gleich von ihr.",
 };
 
 const IT: StayProblems = {
@@ -96,6 +101,7 @@ const IT: StayProblems = {
   onRequest: (h) => `Su richiesta. La struttura risponde entro ${h} ore.`,
   noChange: "Non c'è nessuna modifica a cui rispondere per questo soggiorno.",
   changeLapsed: "Quella modifica non si può più accettare. Richiedila se ti va ancora bene.",
+  changeWriting: "La struttura sta confermando la modifica. Riceverai la risposta tra un momento.",
 };
 
 const PT: StayProblems = {
@@ -111,6 +117,7 @@ const PT: StayProblems = {
   onRequest: (h) => `Sob pedido. O alojamento responde em até ${h} horas.`,
   noChange: "Não há nenhuma alteração a que responder nesta estadia.",
   changeLapsed: "Essa alteração já não pode ser aceite. Peça-a de novo se ainda lhe convier.",
+  changeWriting: "O alojamento está a confirmar a alteração. Terá a resposta dentro de momentos.",
 };
 
 export const STAY_PROBLEMS: Readonly<Record<StayLang, StayProblems>> = {
@@ -142,5 +149,6 @@ export function sampleProblemStrings(lang: StayLang): string[] {
     p.onRequest(12),
     p.noChange,
     p.changeLapsed,
+    p.changeWriting,
   ];
 }

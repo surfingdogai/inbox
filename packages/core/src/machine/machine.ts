@@ -142,6 +142,8 @@ export type GuardId =
   | "stay_change_theirs"
   | "stay_change_mine"
   | "stay_change_lapsed"
+  /** A change both sides agreed is being written to the property's own system, and waits for its answer. */
+  | "stay_change_writing"
   /** Check-in day has come, in the property's zone. */
   | "checkin_day_reached"
   /** Check-out passed, and the hours after it the property waits before a stay counts as stayed. */
@@ -195,6 +197,10 @@ export type EffectId =
   | "write_stay"
   /** The stay is taken off the property's own system again. */
   | "cancel_stay_write"
+  /** The nights after a no-show's first let go on the property's own system, never by cancelling the stay. */
+  | "release_stay_write"
+  /** A change's new nights held beside the old ones while it is written to the property's own system. */
+  | "hold_change_nights"
   /** The deposit or balance links the schedule wants, made or closed (the pay-link job). */
   | "queue_pay_links"
   | "close_pay_links"

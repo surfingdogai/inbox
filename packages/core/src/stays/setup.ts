@@ -110,6 +110,11 @@ export async function upsertProperty(
     if (input[k] !== undefined)
       requireInPerson(caller, `change how the property confirms stays and its registration (${k})`);
   }
+  if (input.timezone !== undefined && knownZone(input.timezone) !== input.timezone) {
+    throw new WriteError("invalid_input", "That is not a time zone this server knows.", {
+      fields: [{ path: "timezone", problem: "invalid", message: "an IANA time zone, such as America/Mexico_City" }],
+    });
+  }
   if (input.currency !== undefined) {
     const problem = currencyProblem(input.currency);
     if (problem)
@@ -210,6 +215,7 @@ export async function upsertProperty(
       },
     ];
     await db.batch(statements);
+    await setLocation(db, locationId, input);
     if (sealed === "seal" && secrets && input.arrival_private)
       await sealArrival(db, secrets, id, input.arrival_private, now);
     return id;
@@ -256,9 +262,35 @@ export async function upsertProperty(
       method: "run",
     });
   }
+  await setLocation(db, existing.locationId, input);
   if (sealed === "seal" && secrets && input.arrival_private)
     await sealArrival(db, secrets, existing.id, input.arrival_private, now);
   return existing.id;
+}
+
+/** The property's town and zone, kept on its location (the address schema.org and its guests read). */
+async function setLocation(
+  db: Db,
+  locationId: string,
+  input: Pick<UpsertPropertyInput, "town" | "timezone">,
+): Promise<void> {
+  if (input.town !== undefined) {
+    const town = input.town?.trim() || null;
+    await db.client.query({
+      sql: town
+        ? "UPDATE locations SET address = json_set(COALESCE(address, '{}'), '$.addressLocality', ?) WHERE id = ?"
+        : "UPDATE locations SET address = json_remove(COALESCE(address, '{}'), '$.addressLocality') WHERE id = ?",
+      params: town ? [town, locationId] : [locationId],
+      method: "run",
+    });
+  }
+  if (input.timezone !== undefined) {
+    await db.client.query({
+      sql: "UPDATE locations SET timezone = ? WHERE id = ?",
+      params: [input.timezone, locationId],
+      method: "run",
+    });
+  }
 }
 
 function childrenOf(c: UpsertPropertyInput["children"]) {

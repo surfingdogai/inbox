@@ -348,7 +348,8 @@ export async function readSetup(db: Db, propertyId: string): Promise<PropertySet
     db.client.query({
       sql: `SELECT r.rate_plan_id, r.room_type_id, r.from_date, r.to_date, r.weekdays, r.nightly, r.base_guests,
                    r.extra_adult, r.extra_child, r.min_nights
-              FROM rates r JOIN rate_plans p ON p.id = r.rate_plan_id WHERE p.property_id = ?`,
+              FROM rates r JOIN rate_plans p ON p.id = r.rate_plan_id WHERE p.property_id = ?
+             ORDER BY r.rate_plan_id, r.room_type_id, r.from_date DESC, r.weekdays, r.to_date`,
       params: [propertyId],
       method: "all",
     }),

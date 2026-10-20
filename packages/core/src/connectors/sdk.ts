@@ -1226,6 +1226,13 @@ export interface StayWriter {
   cancel(ctx: RunContext, link: LinkState): Promise<void>;
   /** The stay as the system holds it, found by our key; null when it is not there. */
   find(ctx: RunContext, stay: OutboundStay): Promise<LinkState | null>;
+  /**
+   * For a system that takes a stay even on a night it has no room for: its own definite word on whether
+   * the stay written (`link`) left any of its nights oversold — the system's overbooking flag, or its
+   * count of bookings against its rooms, as its documentation gives it. Throws when it cannot tell; the
+   * inbox then promises nothing until it can. A system that refuses a full night instead leaves this out.
+   */
+  oversold?(ctx: RunContext, stay: OutboundStay, link: LinkState): Promise<boolean>;
 }
 
 /** A connector that is a property system: rooms, rates and what is free, and stays written first. */

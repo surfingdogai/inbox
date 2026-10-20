@@ -8,7 +8,8 @@ import type { Machine, Transition } from "./machine";
  * (`stays/transition.ts`) checks its guards and writes its effects in the same batch. Fourteen states:
  * a request the property answers with a quote, or a hold an agent books at once where the inbox cannot
  * sell a room twice; `booking` while a write to the property's own system is in flight, which never
- * lapses on a timeout before the write is looked for; and the ends.
+ * lapses on a timeout before the write is looked for; and the ends. Every move into a wait (a deposit, a
+ * write) keeps the stay's nights claimed until that wait ends, never on the clock of the hold before it.
  *
  * Where one event can lead to two states (an acceptance with a deposit due, or with nothing due), the
  * stays layer fires the right one of two events: the one with nothing due is listed, its twin unlisted.
@@ -296,7 +297,8 @@ export const stayMachine: Machine<StayState> = {
       by: customers,
       guards: ["customer_owns_item", "hold_open", "terms_confirmed", "payment_due_now"],
       input: stayTermsInput,
-      effects: ["queue_pay_links", "notify_owner", "notify_customer"],
+      // The hold's nights kept until the pay window closes, not the hold's own end.
+      effects: ["claim_nights:hold", "queue_pay_links", "notify_owner", "notify_customer"],
       unlisted: true,
     },
     {
@@ -307,7 +309,8 @@ export const stayMachine: Machine<StayState> = {
       by: customers,
       guards: ["customer_owns_item", "hold_open", "terms_confirmed"],
       input: stayTermsInput,
-      effects: ["write_stay"],
+      // The nights kept while the write is in flight, not on the hold's clock.
+      effects: ["claim_nights:hold", "write_stay"],
       unlisted: true,
     },
     // The property's system answered the write with its booking id.
@@ -330,7 +333,7 @@ export const stayMachine: Machine<StayState> = {
       by: machinery,
       guards: ["payment_due_now"],
       input: stayWrittenInput,
-      effects: ["queue_pay_links", "notify_owner", "notify_customer"],
+      effects: ["claim_nights:hold", "queue_pay_links", "notify_owner", "notify_customer"],
       unlisted: true,
     },
     {
@@ -341,7 +344,8 @@ export const stayMachine: Machine<StayState> = {
       to: "expired",
       by: machinery,
       input: stayNoteInput,
-      effects: ["release_nights", "notify_customer", "close"],
+      // A late payment's stay the system would not take again: what was paid is owed back.
+      effects: ["release_nights", "refund_owed", "notify_customer", "close"],
       unlisted: true,
     },
     {
@@ -361,8 +365,10 @@ export const stayMachine: Machine<StayState> = {
       by: ["connector", "owner", "staff"],
       guards: ["payment_complete"],
       input: stayPaymentInput,
+      // On a connected property, the stay written there as confirmed, with its guest.
       effects: [
         "promote_claims",
+        "write_stay",
         "schedule_messages",
         "issue_receipt:paid",
         "issue_receipt:confirmed",
@@ -391,14 +397,15 @@ export const stayMachine: Machine<StayState> = {
       effects: ["queue_pay_links", "notify_customer"],
     },
     {
-      // A payment that landed after the window closed, while the nights are still free: taken, and the
-      // stay confirmed after all. Otherwise it is owed back, for the property to refund.
+      // A payment that landed after the window closed: the stay confirmed after all only where the inbox
+      // cannot sell its nights twice (rooms kept for direct guests, still inside them). Anywhere else the
+      // property may have sold the nights since, so it is owed back for the property to refund.
       event: "late_payment",
       label: "Late payment",
       from: ["expired"],
       to: "confirmed",
       by: ["system", "connector"],
-      guards: ["nights_available", "late_payment_open"],
+      guards: ["late_payment_open", "instant_safe", "nights_available"],
       input: stayPaymentInput,
       effects: [
         "claim_nights",
@@ -408,6 +415,19 @@ export const stayMachine: Machine<StayState> = {
         "notify_owner",
         "notify_customer",
       ],
+      reopens: true,
+      unlisted: true,
+    },
+    {
+      // The same on a connected property: written to its system again first, under a key of its own.
+      event: "late_payment_write",
+      label: "Late payment",
+      from: ["expired"],
+      to: "booking",
+      by: ["system", "connector"],
+      guards: ["late_payment_open", "nights_available"],
+      input: stayPaymentInput,
+      effects: ["claim_nights:hold", "write_stay", "issue_receipt:paid"],
       reopens: true,
       unlisted: true,
     },
@@ -429,7 +449,14 @@ export const stayMachine: Machine<StayState> = {
       by: owners,
       byPerson: true,
       input: stayNoteInput,
-      effects: ["promote_claims", "close_pay_links", "schedule_messages", "issue_receipt:confirmed", "notify_customer"],
+      effects: [
+        "promote_claims",
+        "write_stay",
+        "close_pay_links",
+        "schedule_messages",
+        "issue_receipt:confirmed",
+        "notify_customer",
+      ],
     },
     {
       event: "decline",
@@ -474,7 +501,8 @@ export const stayMachine: Machine<StayState> = {
       to: "expired",
       by: ["system"],
       guards: ["payment_lapsed"],
-      effects: ["release_nights", "cancel_stay_write", "close_pay_links", "notify_customer", "close"],
+      // A part paid before the window closed is owed back.
+      effects: ["release_nights", "cancel_stay_write", "close_pay_links", "refund_owed", "notify_customer", "close"],
     },
     {
       event: "cancel",
@@ -484,7 +512,15 @@ export const stayMachine: Machine<StayState> = {
       by: customers,
       guards: ["customer_owns_item"],
       input: stayCancelInput,
-      effects: ["release_nights", "cancel_stay_write", "close_pay_links", "notify_owner", "notify_customer", "close"],
+      effects: [
+        "release_nights",
+        "cancel_stay_write",
+        "close_pay_links",
+        "refund_owed",
+        "notify_owner",
+        "notify_customer",
+        "close",
+      ],
     },
     {
       // A confirmed stay: the fee as the policy dates it now, seen and confirmed first (`fee_sha`).
@@ -514,7 +550,7 @@ export const stayMachine: Machine<StayState> = {
       by: recorders,
       internalNote: true,
       input: stayRecordCancelInput,
-      effects: ["release_nights", "cancel_stay_write", "close_pay_links", "notify_customer", "close"],
+      effects: ["release_nights", "cancel_stay_write", "close_pay_links", "refund_owed", "notify_customer", "close"],
     },
     {
       // Judged as of when they asked, which can only lower the fee; a lower fee still is a person's.
@@ -586,6 +622,42 @@ export const stayMachine: Machine<StayState> = {
       ],
     },
     {
+      // On a connected property: the change written to its system first; the stay keeps its dates, and
+      // both sets of nights, until the system answers.
+      event: "accept_change_write",
+      label: "Accept the change",
+      from: ["confirmed"],
+      to: "confirmed",
+      by: [...owners, ...customers],
+      guards: ["stay_change_open", "stay_ahead", "change_nights_open"],
+      input: stayTermsInput,
+      effects: ["hold_change_nights", "write_stay"],
+      unlisted: true,
+    },
+    {
+      // The system took the change: now it is the stay.
+      event: "change_written",
+      label: "Change written to the property's system",
+      from: ["confirmed"],
+      to: "confirmed",
+      by: machinery,
+      guards: ["stay_change_writing"],
+      effects: ["apply_stay_change", "reclaim_nights", "queue_pay_links", "notify_owner", "notify_customer"],
+      unlisted: true,
+    },
+    {
+      // The system did not take it: the stay stays as agreed, and both sides hear so.
+      event: "change_refused",
+      label: "Change not written",
+      from: ["confirmed"],
+      to: "confirmed",
+      by: machinery,
+      guards: ["stay_change_writing"],
+      input: stayNoteInput,
+      effects: ["drop_change", "reclaim_nights", "notify_owner", "notify_customer"],
+      unlisted: true,
+    },
+    {
       event: "decline_change",
       label: "Keep it as it is",
       from: ["confirmed"],
@@ -647,7 +719,8 @@ export const stayMachine: Machine<StayState> = {
       to: "no_show",
       by: ["owner", "staff", "connector"],
       guards: ["arrival_passed"],
-      effects: ["release_nights", "cancel_stay_write", "notify_customer", "close"],
+      // The nights after the first let go on the property's system too; the stay itself stays a no-show there.
+      effects: ["release_nights", "release_stay_write", "notify_customer", "close"],
     },
     {
       event: "complete",

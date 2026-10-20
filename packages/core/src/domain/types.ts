@@ -478,6 +478,8 @@ export const stayPayloadSchema = z.object({
       quote: stayQuoteSchema.optional(),
       fee: moneySchema.optional(),
       validThrough: isoDateTime.optional(),
+      /** Since when the agreed change is being written to the property's own system: the stay keeps its dates until it lands. */
+      writing: isoDateTime.optional(),
     })
     .optional(),
   offer: offerPointerSchema.optional(),

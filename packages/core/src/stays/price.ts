@@ -1,6 +1,7 @@
 import { type StayQuote, type StayQuoteLine, type StayScheduleEntry, shareOf } from "@surfingdog/spec";
 import type { Money } from "../domain/types";
 import { datePolicy, refundable } from "../policy/index";
+import { countryOfZone, localeFor } from "../util/geo";
 import { formatMinor } from "../util/money";
 import { addDays, instantOf, isoIn } from "../util/zoned";
 import { lodgingWord, type StayLang, stayCopy } from "./copy";
@@ -38,6 +39,12 @@ export interface PriceRequest {
   readonly source: StayQuote["source"];
   /** A connected system's own subtotal per room (its offer), when it gives one: used in place of the rates. */
   readonly systemSubtotals?: readonly ({ readonly nights: readonly { night: string; amount: number }[] } | null)[];
+  /**
+   * What the property can take before arrival (`payCollection`): with no payment platform connected,
+   * the plan's deposit and balance are paid at the property and no card is asked for. Left out, as
+   * the plan says.
+   */
+  readonly collect?: { readonly links: boolean; readonly cards: boolean } | undefined;
 }
 
 export type PriceResult =
@@ -51,11 +58,31 @@ export function planFor(setup: PropertySetup, roomTypeId: string, ratePlanId?: s
   return setup.plans.find((p) => usable(p) && p.offered);
 }
 
-/** The rate row that prices a night: a season that covers it, latest first, else the base for its weekday. */
-function rateFor(rates: readonly RateRow[], planId: string, roomTypeId: string, night: string): RateRow | undefined {
+/** How many weekdays a row covers: the fewer, the more specific (Friday and Saturday over every day). */
+function weekdayCount(mask: number): number {
+  let n = 0;
+  for (let m = mask & 127; m; m &= m - 1) n++;
+  return n;
+}
+
+/**
+ * The rate row that prices a night, the most specific that covers it, whatever order the rows come in:
+ * a season over the base, the latest-starting season first, then the one for fewer weekdays (a weekend
+ * row over an every-day row), then the shorter season.
+ */
+export function rateFor(
+  rates: readonly RateRow[],
+  planId: string,
+  roomTypeId: string,
+  night: string,
+): RateRow | undefined {
   const mine = rates.filter((r) => r.ratePlanId === planId && r.roomTypeId === roomTypeId && covers(r, night));
-  const seasons = mine.filter((r) => r.fromDate !== "").sort((a, b) => b.fromDate.localeCompare(a.fromDate));
-  return seasons[0] ?? mine.find((r) => r.fromDate === "");
+  const order = (a: RateRow, b: RateRow): number =>
+    Number(a.fromDate === "") - Number(b.fromDate === "") ||
+    b.fromDate.localeCompare(a.fromDate) ||
+    weekdayCount(a.weekdays) - weekdayCount(b.weekdays) ||
+    (a.toDate || a.fromDate).localeCompare(b.toDate || b.fromDate);
+  return [...mine].sort(order)[0];
 }
 
 /** What one night of one room costs for its guests, on a rate row. */
@@ -108,6 +135,7 @@ const percent = (bp: number) => `${Math.round(bp) / 100}%`.replace(/\.0+%$/, "%"
 export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceResult {
   const { property } = setup;
   const c = stayCopy(req.lang);
+  const locale = propertyLocale(req.lang, property);
   const cur = property.currency;
   const money = (value: number): Money => ({ value, currency: cur });
   const nights = nightsOf(req.checkIn, req.checkOut);
@@ -183,11 +211,11 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
         break;
       case "per_night":
         amount = (fee.amount ?? 0) * capped;
-        detail = `${formatMinor(money(fee.amount ?? 0), localeOf(req.lang))} ${lodgingWord("fee_bases", "per_night", req.lang).toLowerCase()}`;
+        detail = `${formatMinor(money(fee.amount ?? 0), locale)} ${lodgingWord("fee_bases", "per_night", req.lang).toLowerCase()}`;
         break;
       case "per_room_night":
         amount = (fee.amount ?? 0) * capped * req.rooms.length;
-        detail = `${formatMinor(money(fee.amount ?? 0), localeOf(req.lang))} ${lodgingWord("fee_bases", "per_room_night", req.lang).toLowerCase()}`;
+        detail = `${formatMinor(money(fee.amount ?? 0), locale)} ${lodgingWord("fee_bases", "per_room_night", req.lang).toLowerCase()}`;
         break;
       case "per_person_night": {
         for (const [i, r] of req.rooms.entries()) {
@@ -204,7 +232,7 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
           }
         }
         if (!fee.tiers && fee.amount !== null) {
-          detail = `${formatMinor(money(fee.amount), localeOf(req.lang))} ${lodgingWord("fee_bases", "per_person_night", req.lang).toLowerCase()}`;
+          detail = `${formatMinor(money(fee.amount), locale)} ${lodgingWord("fee_bases", "per_person_night", req.lang).toLowerCase()}`;
         }
         break;
       }
@@ -235,6 +263,7 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
     timezone: property.timezone,
     now: req.now,
   });
+  const collected = collectable(schedule, plan.guarantee, req.collect, cur, req.lang);
   const policy = datePolicy(plan.policy, {
     start: { date: req.checkIn, time: property.checkInFrom },
     zone: property.timezone,
@@ -256,8 +285,8 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
       total: money(total),
       ratePlan: { id: plan.id, name: plan.name, meal, refundable: refundable(plan.policy) },
       policy,
-      schedule,
-      guarantee: plan.guarantee,
+      schedule: collected.schedule,
+      guarantee: collected.guarantee,
       includes,
       validThrough: isoIn(validThrough, property.timezone),
       source: req.source,
@@ -265,9 +294,57 @@ export function quoteFromRates(setup: PropertySetup, req: PriceRequest): PriceRe
   };
 }
 
-/** The locale amounts in a quote's lines are written in, for the guest's language. */
-export function localeOf(lang: StayLang): string {
-  return { en: "en-GB", es: "es-ES", fr: "fr-FR", de: "de-DE", it: "it-IT", pt: "pt-PT" }[lang];
+/**
+ * The locale a guest's money and dates are written in: their language as it is written in the country
+ * the property is in (`es` in Mexico is es-MX), else the bare language — never one region's by default.
+ */
+export function localeOf(lang: StayLang, country?: string | null): string {
+  return localeFor(lang, country);
+}
+
+/** The locale for a guest of this property: their language, the property's country (from its zone). */
+export function propertyLocale(lang: StayLang, property: { readonly timezone: string } | null | undefined): string {
+  return localeFor(lang, property ? countryOfZone(property.timezone) : null);
+}
+
+/**
+ * A schedule as the property can collect it: with no payment platform to take money before arrival,
+ * everything is paid at the property; with none to save a card, no card is asked for.
+ */
+function collectable(
+  schedule: StayScheduleEntry[],
+  guarantee: StayQuote["guarantee"],
+  collect: PriceRequest["collect"],
+  currency: string,
+  lang: StayLang,
+): { schedule: StayScheduleEntry[]; guarantee: StayQuote["guarantee"] } {
+  if (!collect) return { schedule, guarantee };
+  const card = guarantee === "card" && !collect.cards ? "none" : guarantee;
+  if (collect.links || schedule.every((s) => s.type === "at_property")) return { schedule, guarantee: card };
+  const total = schedule.reduce((a, s) => a + s.amount.value, 0);
+  return {
+    schedule: [
+      {
+        id: "at_property",
+        type: "at_property",
+        amount: { value: total, currency },
+        label: stayCopy(lang).schedule.atProperty,
+      },
+    ],
+    guarantee: card,
+  };
+}
+
+/** A quote as the property can collect it now (a person's own, say): everything at the property without a payment platform. */
+export function collectableQuote(
+  quote: StayQuote,
+  collect: { readonly links: boolean; readonly cards: boolean },
+  lang: StayLang,
+): StayQuote {
+  const schedule = quote.schedule as StayScheduleEntry[];
+  const c = collectable(schedule, quote.guarantee, collect, quote.currency, lang);
+  if (c.guarantee === quote.guarantee && c.schedule === schedule) return quote;
+  return { ...quote, schedule: c.schedule, guarantee: c.guarantee };
 }
 
 /**

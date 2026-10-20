@@ -1,17 +1,19 @@
 import type { Statement } from "@surfingdog/platform";
 import type { StayQuote } from "@surfingdog/spec";
-import { hasLivePayLink, hasPayLinks, payLinkStatement } from "../connectors/pay-queue";
+import { hasLivePayLink, hasPayLinks, payCollection, payLinkStatement } from "../connectors/pay-queue";
 import type { Audience } from "../customer/describe";
 import type { Db } from "../db";
 import type { Item, Money, PayloadOf } from "../domain/types";
+import { ulid } from "../ids";
 import type { Transition } from "../machine/machine";
 import { feeAt } from "../policy/index";
 import { ariCovers } from "../property/ari";
 import type { Settings } from "../settings/schema";
 import { addDays, dateIn, instantOf, isoIn } from "../util/zoned";
 import { type Caller, isCustomer, isPerson } from "../write/caller";
-import { hasEventListeners, jobStatement } from "../write/common";
+import { hasEventListeners, jobStatement, threadEntryStatement } from "../write/common";
 import { WriteError } from "../write/errors";
+import { setFlags } from "../write/flags";
 import { isAutomation, sideOf } from "../write/offers";
 import { refundStatements } from "../write/returns";
 import {
@@ -19,7 +21,6 @@ import {
   insideAllotment,
   nightsFree,
   planNightClaims,
-  promoteStatement,
   releaseAfterStatement,
   releaseStatement,
   type WantedNights,
@@ -28,7 +29,7 @@ import {
 import type { StayLang } from "./copy";
 import { guestLang } from "./lang";
 import { checkDates, nightsOf, stayTimes } from "./nights";
-import { quoteFromRates } from "./price";
+import { collectableQuote, quoteFromRates } from "./price";
 import { stayProblems } from "./problems";
 import { type PropertySetup, readSetup } from "./store";
 import { cancellationTerms, dueNow, feeSha, quoteProblems, stayTermsSha } from "./terms";
@@ -61,6 +62,13 @@ export interface StayWriteJob {
   readonly op: "reserve" | "modify" | "cancel";
   readonly status: "hold" | "provisional" | "confirmed";
   readonly eventId: string;
+  /**
+   * What a modify is for: the change both sides agreed (written first, the stay moved only once it
+   * lands), the stay confirmed with its guest once paid, or the nights after a no-show's first let go.
+   */
+  readonly purpose?: "change" | "confirm" | "release" | undefined;
+  /** A reserve after the first one was cancelled (a late payment): written under a key of its own. */
+  readonly again?: boolean | undefined;
 }
 
 export interface StayMessageJob {
@@ -80,14 +88,14 @@ export function wantOf(p: Pick<StayPayload, "rooms" | "checkIn" | "checkOut">): 
   return { rooms: wantedRooms(p.rooms), nights: nightsOf(p.checkIn, p.checkOut) };
 }
 
-/** What has been paid on a stay, in its quote's currency. */
+/** What has been paid on a stay, in its quote's currency: every entry paid, and any part of one still due. */
 export function paidOf(p: Pick<StayPayload, "payments" | "quote">): Money {
   const currency = p.quote?.currency ?? p.payments?.schedules[0]?.amount.currency ?? "XXX";
   let value = 0;
   for (const s of p.payments?.schedules ?? []) {
-    if (s.status !== "paid" && s.status !== "refund_owed") continue;
-    const amount = s.paidAmount ?? s.amount;
-    if (amount.currency === currency) value += amount.value;
+    const settled = s.status === "paid" || s.status === "refund_owed";
+    const amount = s.paidAmount ?? (settled ? s.amount : undefined);
+    if (amount && amount.currency === currency) value += amount.value;
   }
   return { value, currency };
 }
@@ -98,6 +106,30 @@ export function stillDueNow(p: Pick<StayPayload, "payments">): boolean {
   if (!pay) return false;
   if (pay.guarantee.status === "requested") return true;
   return pay.schedules.some((s) => s.type === "immediate" && s.status === "due");
+}
+
+/** Whether the stay waits for money as it is agreed: its schedule once it has one, else its quote's. */
+export function dueOnAgreement(p: Pick<StayPayload, "payments" | "quote">): boolean {
+  if (p.payments) return stillDueNow(p);
+  return p.quote ? dueNow(p.quote) : false;
+}
+
+/**
+ * Whether the inbox cannot sell these nights twice (ADR-033 §4.1): inside the rooms the owner keeps for
+ * direct guests, closed elsewhere, or on a connected system that confirms at once and was looked at fresh.
+ * Anything else is a person's to confirm.
+ */
+export async function instantSafe(
+  db: Db,
+  setup: PropertySetup,
+  itemId: string,
+  want: WantedNights,
+  now: number,
+): Promise<boolean> {
+  if (want.rooms.size === 0) return false;
+  if (setup.property.mode === "allotment") return insideAllotment(db, setup, itemId, want, now);
+  if (setup.property.mode === "connected" && setup.property.instant) return ariCovers(db, setup, want, now);
+  return false;
 }
 
 /**
@@ -123,13 +155,26 @@ export async function stayEventFor(db: Db, item: Item, event: string, input: unk
       return dueNow(p.quote) ? "book_pay" : "book";
     }
     case "written":
-      return item.state === "booking" && p.quote && dueNow(p.quote) ? "written_pay" : "written";
+      return item.state === "booking" && dueOnAgreement(p) ? "written_pay" : "written";
     case "record_payment": {
-      if (item.state === "expired") return "late_payment";
+      if (item.state === "expired") {
+        const setup = await readSetup(db, p.propertyId);
+        return setup && writesFirst(setup) ? "late_payment_write" : "late_payment";
+      }
       if (item.state !== "awaiting_payment") return event;
       const next = structuredClone(p) as StayPayload;
-      applyPayment(next as unknown as Mut, (input ?? {}) as Mut);
+      try {
+        applyPayment(next as unknown as Mut, (input ?? {}) as Mut, { person: true });
+      } catch {
+        return event; // judged, and refused, as the transition is planned
+      }
       return stillDueNow(next) ? "record_part_payment" : "record_payment";
+    }
+    case "accept_change": {
+      // A connected property takes a change on its own system first; one never written there moves here.
+      if (item.state !== "confirmed" || !p.change || !p.external) return event;
+      const setup = await readSetup(db, p.propertyId);
+      return setup && writesFirst(setup) ? "accept_change_write" : event;
     }
     default:
       return event;
@@ -158,8 +203,11 @@ export function paymentsFrom(quote: StayQuote, dueBy: number | null): NonNullabl
 /**
  * A payment recorded on a stay's schedule: on the entry it names, else the first one due now, else the
  * first one due, else what is paid at the property. A card saved to hold the stay is `guarantee`.
+ * A platform's payment names its amount, in the stay's currency: one in another currency is never
+ * counted as paid, and goes to a person. Only a person at the property records "paid" with no amount,
+ * meaning the entry in full.
  */
-export function applyPayment(payload: Mut, data: Mut): void {
+export function applyPayment(payload: Mut, data: Mut, opts: { readonly person: boolean }): void {
   const pay = payload.payments as StayPayload["payments"] | undefined;
   if (!pay) return;
   const named = typeof data.scheduleId === "string" ? data.scheduleId : undefined;
@@ -175,8 +223,24 @@ export function applyPayment(payload: Mut, data: Mut): void {
     entries.find((s) => s.status === "at_property");
   if (!entry) return;
   const amount = data.amount as Money | undefined;
+  if (!amount && !opts.person) {
+    throw new WriteError("invalid_input", "A payment names the amount paid.", {
+      fields: [{ path: "input.amount", problem: "missing", message: "the amount paid, in the stay's currency" }],
+      details: { reason: "payment_amount" },
+    });
+  }
+  if (amount && amount.currency !== entry.amount.currency) {
+    throw new WriteError(
+      "invalid_input",
+      `This payment is in ${amount.currency}, and the stay's terms are in ${entry.amount.currency}: a person checks it.`,
+      {
+        fields: [{ path: "input.amount", problem: "invalid", message: `in ${entry.amount.currency}` }],
+        details: { reason: "payment_currency", currency: amount.currency, expected: entry.amount.currency },
+      },
+    );
+  }
   const before = entry.paidAmount?.currency === entry.amount.currency ? entry.paidAmount.value : 0;
-  const now = amount && amount.currency === entry.amount.currency ? before + amount.value : entry.amount.value;
+  const now = amount ? before + amount.value : entry.amount.value;
   entry.paidAmount = { value: now, currency: entry.amount.currency };
   if (typeof data.paymentRef === "string") entry.paymentRef = data.paymentRef;
   if (now >= entry.amount.value) entry.status = "paid";
@@ -202,6 +266,11 @@ export interface StayPlan {
   readonly claims: boolean;
   /** The linked item the transition made (a refund owed), for the answer. */
   readonly linkedId?: string | undefined;
+  /**
+   * Whether the stay now waits for a person, whatever the rules: a request back with the property (the
+   * guest's details, other dates) does; a quote sent does not any more. Undefined leaves the flag be.
+   */
+  readonly needsHuman?: boolean | undefined;
 }
 
 /** A refusal in the guest's words for a customer, else in the owner's. */
@@ -241,7 +310,8 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
     delete p.totalPrice;
     delete p.hold;
   }
-  if (t.event === "quote") await composeQuote(ctx, setup, p, lang);
+  // A quote made with nothing asked now, for want of a payment platform: its owner hears why.
+  const nothingAsked = t.event === "quote" ? await composeQuote(ctx, setup, p, lang) : false;
   // An agent's hold makes the inbox's own offer binding, for as long as the hold lasts: the price the
   // inbox worked out from the property's rates or its system when the stay was made, never the agent's.
   if (t.event === "hold") {
@@ -263,11 +333,12 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
     t.event === "record_payment" ||
     t.event === "record_part_payment" ||
     t.event === "late_payment" ||
-    t.event === "payment_failed"
+    t.event === "late_payment_write"
   ) {
-    if (t.event !== "payment_failed") applyPayment(p, data);
+    applyPayment(p, data, { person: isPerson(caller) });
   }
-  if (t.event === "propose_change") planChange(ctx, setup, p, lang);
+  if (t.event === "propose_change") await planChange(ctx, setup, p, lang);
+  if (t.event === "accept_change_write" && p.change) p.change.writing = new Date(now).toISOString();
   if (t.event === "written" || t.event === "written_pay") {
     p.external = {
       connectorId: String(data.connectorId),
@@ -373,8 +444,7 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
         break;
       case "nothing_due_now":
       case "payment_due_now": {
-        const q = p.quote;
-        const due = q ? dueNow(q) : false;
+        const due = dueOnAgreement(p);
         if ((guard === "nothing_due_now") === due) {
           throw new WriteError("guard_failed", due ? "something is due now on this stay" : "nothing is due now", {
             details: { guard },
@@ -461,6 +531,13 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
       case "stay_change_lapsed":
         await checkChange(ctx, before, guard);
         break;
+      case "stay_change_writing":
+        if (!before.change?.writing) {
+          throw new WriteError("guard_failed", "no change is being written to the property's system", {
+            details: { guard },
+          });
+        }
+        break;
       case "checkin_day_reached":
         if (dateIn(now, zone) < before.checkIn) {
           throw new WriteError("guard_failed", `check-in is on ${before.checkIn}`, { details: { guard } });
@@ -531,12 +608,17 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
     };
     const owed = Math.max(0, paid.value - (fee.currency === paid.currency ? fee.value : 0));
     const by = t.event === "cancel_by_property" ? "property" : "guest";
-    p.cancellation = {
-      at: new Date(now).toISOString(),
-      fee: by === "property" ? { value: 0, currency: paid.currency } : fee,
-      ...(owed > 0 ? { refundOwed: { value: owed, currency: paid.currency } } : {}),
-      by,
-    };
+    // A cancellation says what it cost and what is owed back; a stay that lapsed (a pay window closed
+    // on a part paid, a late payment's stay the system would not take) only what is owed back, if anything.
+    const cancelling = t.event === "cancel" || t.event === "record_cancel" || t.event === "cancel_by_property";
+    if (cancelling || owed > 0) {
+      p.cancellation = {
+        at: new Date(now).toISOString(),
+        fee: by === "property" ? { value: 0, currency: paid.currency } : fee,
+        ...(owed > 0 ? { refundOwed: { value: owed, currency: paid.currency } } : {}),
+        by,
+      };
+    }
     if (owed > 0) refundOwedMoney = { value: owed, currency: paid.currency };
   }
   if (effects.has("release_nights") || effects.has("promote_claims")) delete p.hold;
@@ -547,8 +629,9 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
     };
   }
 
-  // The pay window opens as the stay is agreed with something due now.
-  const payWindowOpens = effects.has("queue_pay_links") && !before.payments && p.quote;
+  // The pay window opens as the stay first waits for what is due now: agreed, booked, or written to the
+  // property's system with a deposit to pay.
+  const payWindowOpens = t.to === "awaiting_payment" && item.state !== "awaiting_payment" && p.quote !== undefined;
   let dueBy: number | null = null;
   if (payWindowOpens && p.quote) {
     const hours =
@@ -556,8 +639,17 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
         ? setup.property.payWithinHours
         : Math.min(INSTANT_PAY_HOURS, setup.property.payWithinHours);
     const { startAt } = stayTimes(setup.property, p.checkIn, p.checkOut);
-    dueBy = dueNow(p.quote) ? Math.min(now + hours * 3_600_000, startAt) : null;
-    p.payments = paymentsFrom(p.quote, dueBy);
+    dueBy = Math.min(now + hours * 3_600_000, startAt);
+    const fresh = paymentsFrom(p.quote, dueBy);
+    const kept = p.payments as StayPayload["payments"] | undefined;
+    if (kept?.schedules.some((s) => s.status === "paid")) {
+      kept.dueBy = fresh.dueBy;
+      for (const s of kept.schedules) {
+        if (s.type === "immediate" && s.status === "due" && fresh.dueBy) s.dueAt = fresh.dueBy;
+      }
+    } else {
+      p.payments = fresh;
+    }
   }
   // A stay agreed with nothing due now still gets its schedule, for what is paid later.
   if (
@@ -569,20 +661,53 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
   }
 
   // ---- what goes in the batch ---------------------------------------------
+  // Every move into a wait keeps the nights until that wait ends (a pay window, a write in flight), and a
+  // stay made the guest's for good takes its nights afresh: if they lapsed and another stay took them,
+  // the batch fails and nothing is confirmed.
   const claimsWanted =
     effects.has("claim_nights") ||
     effects.has("claim_nights:hold") ||
     effects.has("reclaim_nights") ||
+    effects.has("promote_claims") ||
+    effects.has("hold_change_nights") ||
     (effects.has("hold_nights") && setup.property.mode !== "request");
   const holdUntil = (): number | null => {
-    if (effects.has("claim_nights") || effects.has("reclaim_nights")) return null;
+    if (
+      effects.has("claim_nights") ||
+      effects.has("reclaim_nights") ||
+      effects.has("promote_claims") ||
+      effects.has("hold_change_nights")
+    ) {
+      return null;
+    }
     if (effects.has("hold_nights") && p.quote) return Date.parse(p.quote.validThrough);
     if (t.event === "hold") return now + setup.property.holdMinutes * 60_000;
     if (effects.has("write_stay")) return now + WRITE_HOLD_MS;
     if (p.payments?.dueBy) return Date.parse(p.payments.dueBy) + PAY_GRACE_MS;
     return now + setup.property.payWithinHours * 3_600_000 + PAY_GRACE_MS;
   };
-  const claim = claimsWanted ? await planNightClaims(db, setup, item.id, wantOf(p), holdUntil(), now) : null;
+  // A change written first keeps the stay's own nights and the new ones together until the system answers.
+  const wanted: WantedNights | WantedNights[] =
+    effects.has("hold_change_nights") && before.change
+      ? [
+          wantOf(before),
+          wantOf({
+            rooms: before.change.rooms ?? before.rooms,
+            checkIn: before.change.checkIn,
+            checkOut: before.change.checkOut,
+          }),
+        ]
+      : wantOf(p);
+  // A stay kept for direct guests whose claims lapsed (a pay window the sweep closed late) is confirmed
+  // only while it still fits inside the rooms kept: never over them, whatever the other units say.
+  if (effects.has("promote_claims") && keptForDirect(before) && !(await claimsIntact(db, item.id, wantOf(p), now))) {
+    if (!(await insideAllotment(db, setup, item.id, wantOf(p), now))) {
+      refuse(ctx, "slot_taken", "The nights were taken by another stay meanwhile.", (w) => w.nightsTaken, {
+        guard: "nights_available",
+      });
+    }
+  }
+  const claim = claimsWanted ? await planNightClaims(db, setup, item.id, wanted, holdUntil(), now) : null;
   if (claim && !claim.ok) {
     refuse(ctx, "slot_taken", `${claim.night} is taken for this room by another stay.`, (w) => w.nightsTaken, {
       guard: "nights_available",
@@ -591,8 +716,18 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
     });
   }
 
-  const plan: { claims: boolean; linkedId?: string; statements(eventId: string): Promise<Statement[]> } = {
+  const plan: {
+    claims: boolean;
+    linkedId?: string;
+    needsHuman?: boolean;
+    statements(eventId: string): Promise<Statement[]>;
+  } = {
     claims: claim !== null,
+    ...(t.to === "requested" && item.state !== "requested"
+      ? { needsHuman: true }
+      : t.event === "quote"
+        ? { needsHuman: false }
+        : {}),
     async statements(eventId: string): Promise<Statement[]> {
       const out: Statement[] = [];
       if (effects.has("release_nights")) {
@@ -600,7 +735,21 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
       }
       if (effects.has("hold_nights") && setup.property.mode === "request") out.push(releaseStatement(item.id));
       if (claim?.ok) out.push(...claim.statements);
-      if (effects.has("promote_claims")) out.push(promoteStatement(item.id));
+      if (nothingAsked) {
+        out.push(
+          threadEntryStatement({
+            id: ulid(now),
+            itemId: item.id,
+            direction: "note",
+            channel: "system",
+            actorKind: "system",
+            actorId: null,
+            partyId: null,
+            body: "No payment account is connected, so nothing was asked now: the guest pays everything at the property. To take a deposit, connect Stripe or Mollie in Payments.",
+            now,
+          }),
+        );
+      }
       if (effects.has("schedule_messages")) out.push(...messageStatements(item.id, setup, p, settings, now));
       if (payWindowOpens && dueBy !== null) {
         // A reminder at half the window, while it is still to be paid.
@@ -619,23 +768,10 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
       ) {
         out.push(payLinkStatement(item.id, eventId, now));
       }
-      if (effects.has("write_stay") && writesFirst(setup)) {
-        const op: StayWriteJob["op"] = t.event === "accept_change" ? "modify" : "reserve";
-        if (op === "reserve" || before.external) {
-          out.push(
-            jobStatement(
-              STAY_WRITE_KIND,
-              {
-                itemId: item.id,
-                op,
-                status: p.quote && dueNow(p.quote) && op === "reserve" ? "provisional" : "confirmed",
-                eventId,
-              } satisfies StayWriteJob,
-              now,
-              { dedupeKey: `stay_write:${eventId}` },
-            ),
-          );
-        }
+      const write =
+        effects.has("write_stay") && writesFirst(setup) ? writeJobOf(t.event, before, p, item.id, eventId) : null;
+      if (write) {
+        out.push(jobStatement(STAY_WRITE_KIND, write, now, { dedupeKey: `stay_write:${eventId}` }));
       }
       if (
         effects.has("cancel_stay_write") &&
@@ -645,6 +781,23 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
           jobStatement(
             STAY_WRITE_KIND,
             { itemId: item.id, op: "cancel", status: "confirmed", eventId } satisfies StayWriteJob,
+            now,
+            { dedupeKey: `stay_write:${eventId}` },
+          ),
+        );
+      }
+      // A no-show keeps its first night on the property's system and lets the rest go there too, never
+      // by cancelling: the system's own no-show record and its fee stay. The system's own word needs no echo.
+      if (
+        effects.has("release_stay_write") &&
+        before.external &&
+        caller.actor.kind !== "connector" &&
+        nightsOf(before.checkIn, before.checkOut).length > 1
+      ) {
+        out.push(
+          jobStatement(
+            STAY_WRITE_KIND,
+            { itemId: item.id, op: "modify", status: "confirmed", eventId, purpose: "release" } satisfies StayWriteJob,
             now,
             { dedupeKey: `stay_write:${eventId}` },
           ),
@@ -681,6 +834,59 @@ export async function planStay(ctx: PlanCtx): Promise<StayPlan> {
   return plan;
 }
 
+/** Whether a stay's nights came from the rooms the owner keeps for direct guests. */
+function keptForDirect(p: StayPayload): boolean {
+  return p.hold?.source === "allotment" || p.quote?.source === "allotment";
+}
+
+/** Whether every night of the stay still holds its claims, live: none lapsed, none taken by another stay. */
+async function claimsIntact(db: Db, itemId: string, want: WantedNights, now: number): Promise<boolean> {
+  let needed = 0;
+  for (const count of want.rooms.values()) needed += count * want.nights.length;
+  if (needed === 0) return true;
+  const { rows } = await db.client.query({
+    sql: "SELECT COUNT(*) FROM night_claims WHERE item_id = ? AND (hold_until IS NULL OR hold_until > ?)",
+    params: [itemId, now],
+    method: "all",
+  });
+  return Number(rows[0]?.[0] ?? 0) >= needed;
+}
+
+/**
+ * The write a transition makes to the property's own system, when it makes one: the stay reserved
+ * (provisional while a deposit is due, confirmed with its guest otherwise; under a key of its own when
+ * one before it was cancelled), the agreed change written before it is applied, or the stay confirmed
+ * with its guest once what was due is paid. Null when there is nothing on the system to write to.
+ */
+function writeJobOf(
+  event: string,
+  before: StayPayload,
+  p: StayPayload,
+  itemId: string,
+  eventId: string,
+): StayWriteJob | null {
+  switch (event) {
+    case "accept_write":
+    case "record_accept_write":
+    case "book_write":
+    case "late_payment_write":
+      return {
+        itemId,
+        op: "reserve",
+        status: dueOnAgreement(p) ? "provisional" : "confirmed",
+        eventId,
+        ...(event === "late_payment_write" || before.external ? { again: true } : {}),
+      };
+    case "accept_change_write":
+      return before.external ? { itemId, op: "modify", status: "confirmed", eventId, purpose: "change" } : null;
+    case "record_payment":
+    case "waive_payment":
+      return before.external ? { itemId, op: "modify", status: "confirmed", eventId, purpose: "confirm" } : null;
+    default:
+      return null;
+  }
+}
+
 /** The guest's other dates or rooms: the request goes back to the property to quote. */
 function applyCounter(setup: PropertySetup, p: StayPayload & Mut, data: Mut): void {
   const checkIn = typeof data.checkIn === "string" ? data.checkIn : p.checkIn;
@@ -688,11 +894,80 @@ function applyCounter(setup: PropertySetup, p: StayPayload & Mut, data: Mut): vo
   checkDates(setup.property, checkIn, checkOut, "input");
   p.checkIn = checkIn;
   p.checkOut = checkOut;
-  if (Array.isArray(data.rooms)) p.rooms = data.rooms as StayPayload["rooms"];
+  if (Array.isArray(data.rooms)) {
+    const rooms = data.rooms as StayPayload["rooms"];
+    rooms.forEach((r, i) => {
+      checkGuestPlan(setup, r, `input.rooms.${i}`);
+    });
+    p.rooms = rooms;
+  }
   Object.assign(p, timesOf(setup, checkIn, checkOut));
   delete p.quote;
   delete p.totalPrice;
   delete p.hold;
+}
+
+/**
+ * A rate plan a guest names: one the property offers to guests, active, for that room. A plan it keeps
+ * for its own use (a friends rate, a staff discount) is only ever a person's to quote.
+ */
+export function checkGuestPlan(
+  setup: PropertySetup,
+  room: { readonly roomTypeId?: string | undefined; readonly ratePlanId?: string | undefined },
+  path: string,
+): void {
+  if (!room.ratePlanId) return;
+  const plan = setup.plans.find((x) => x.id === room.ratePlanId);
+  const ok =
+    plan?.active === true &&
+    plan.offered &&
+    (plan.roomTypeIds === null || !room.roomTypeId || plan.roomTypeIds.includes(room.roomTypeId));
+  if (!ok) {
+    throw new WriteError("invalid_input", "Name a rate plan from get_property, or leave it out.", {
+      fields: [{ path: `${path}.rate_plan_id`, problem: "invalid", message: "a rate plan the property offers" }],
+    });
+  }
+}
+
+/**
+ * What automation would send where a person must look first (ADR-033 §4.1): kept as a draft for a person
+ * to send in one tap, the stay marked for them, and the write refused with why.
+ */
+async function draftForPerson(ctx: PlanCtx, quote: StayQuote | undefined, why: string): Promise<never> {
+  const { db, caller, item, t, data, now } = ctx;
+  const terms = quote
+    ? { totalPrice: quote.total, lines: quote.lines, schedule: quote.schedule, validThrough: quote.validThrough }
+    : {};
+  await db.batch([
+    {
+      sql: `INSERT INTO offer_drafts (item_id, id, event, input, terms, breaches, item_version, actor_kind, actor_id, actor_name, created_at)
+            VALUES (?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)
+            ON CONFLICT (item_id) DO UPDATE SET id = excluded.id, event = excluded.event, input = excluded.input,
+              terms = excluded.terms, breaches = '[]', item_version = excluded.item_version, actor_kind = excluded.actor_kind,
+              actor_id = excluded.actor_id, actor_name = excluded.actor_name, created_at = excluded.created_at`,
+      params: [
+        item.id,
+        ulid(now),
+        t.event === "accept_change_write" ? "accept_change" : t.event,
+        JSON.stringify(data),
+        JSON.stringify(terms),
+        item.version,
+        caller.actor.kind,
+        caller.actor.id,
+        null,
+        now,
+      ],
+      method: "run",
+    },
+  ]);
+  try {
+    await setFlags(db, caller, { itemId: item.id, flags: { needsHuman: true }, reason: why });
+  } catch (error) {
+    if (!(error instanceof WriteError)) throw error;
+  }
+  throw new WriteError("outside_limits", `${why} It is kept as a draft for a person to send.`, {
+    details: { guard: "instant_safe", draft_for_owner: true },
+  });
 }
 
 /** The times a stay is written with: its check-in and check-out in the property's zone. */
@@ -709,7 +984,12 @@ export function timesOf(
  * The property's quote for this stay: the whole quote a person wrote, or one from its rates. Automation
  * quotes only from the rates: a quote with prices of its own is the owner's to send (ADR-018 §4).
  */
-async function composeQuote(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & Mut, lang: StayLang): Promise<void> {
+async function composeQuote(
+  ctx: PlanCtx,
+  setup: PropertySetup,
+  p: StayPayload & Mut,
+  lang: StayLang,
+): Promise<boolean> {
   const { caller, data, now } = ctx;
   if (data.quote !== undefined && isAutomation(caller)) {
     throw new WriteError(
@@ -738,8 +1018,14 @@ async function composeQuote(ctx: PlanCtx, setup: PropertySetup, p: StayPayload &
     });
   }
   let quote: StayQuote;
+  let asked = true;
+  // Nothing is asked for now that no payment platform can take: it is paid at the property, and the
+  // owner hears why.
+  const collect = await payCollection(ctx.db);
   if (data.quote !== undefined) {
-    quote = { ...(data.quote as StayQuote), source: "person" };
+    const own = { ...(data.quote as StayQuote), source: "person" as const };
+    quote = collectableQuote(own, collect, lang);
+    asked = quote === own;
   } else {
     const source =
       setup.property.mode === "allotment" ? "allotment" : setup.property.mode === "connected" ? "connected" : "rates";
@@ -757,7 +1043,14 @@ async function composeQuote(ctx: PlanCtx, setup: PropertySetup, p: StayPayload &
       now,
       validHours: typeof data.validHours === "number" ? data.validHours : undefined,
       source,
+      collect,
     });
+    // The plan wanted money or a card before arrival that nobody can take: nothing was asked.
+    const plan = priced.ok ? setup.plans.find((x) => x.id === priced.quote.ratePlan.id) : undefined;
+    if (plan) {
+      const money = plan.deposit.kind !== "none" || plan.balance.when === "days_before";
+      asked = !((money && !collect.links) || (plan.guarantee === "card" && !collect.cards));
+    }
     if (!priced.ok) {
       throw new WriteError("guard_failed", `Your rates cannot price this stay: ${priced.reason}`, {
         details: { guard: "stay_quote_complete", reason: priced.code },
@@ -781,6 +1074,11 @@ async function composeQuote(ctx: PlanCtx, setup: PropertySetup, p: StayPayload &
       room.ratePlanName = plan.name;
     }
   }
+  // Automation's quote binds the property on the guest's yes: only where the inbox cannot sell the nights
+  // twice. Anywhere else a person looks at the other channels first; the quote waits for them as a draft.
+  if (isAutomation(caller) && !(await instantSafe(ctx.db, setup, ctx.item.id, wantOf(p), now))) {
+    await draftForPerson(ctx, quote, "A person confirms the room on the other channels before this quote goes.");
+  }
   p.quote = quote;
   p.totalPrice = quote.total;
   p.availability = {
@@ -788,6 +1086,7 @@ async function composeQuote(ctx: PlanCtx, setup: PropertySetup, p: StayPayload &
       setup.property.mode === "allotment" ? "allotment" : setup.property.mode === "connected" ? "connected" : "owner",
     checkedAt: new Date(now).toISOString(),
   };
+  return !asked;
 }
 
 /** Every room sleeps its guests: adults, children, and children at all where they are welcome. */
@@ -915,12 +1214,26 @@ function recordedCancellation(ctx: PlanCtx, stay: StayPayload, quote: StayQuote)
  * A change one side asks for (ADR-018 change transitions on `confirmed`): the stay as it would be,
  * priced from the rates when it can be, until the time a change stays open.
  */
-function planChange(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & Mut, lang: StayLang): void {
+async function planChange(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & Mut, lang: StayLang): Promise<void> {
   const { data, now, caller, settings } = ctx;
+  if (p.change?.writing) {
+    refuse(
+      ctx,
+      "guard_failed",
+      "The change agreed is being written to your system: its answer comes in a moment.",
+      (w) => w.changeWriting,
+      { guard: "stay_change_writing" },
+    );
+  }
   const checkIn = String(data.checkIn);
   const checkOut = String(data.checkOut);
   checkDates(setup.property, checkIn, checkOut, "input");
   const rooms = (data.rooms as StayPayload["rooms"] | undefined) ?? p.rooms;
+  if (isCustomer(caller) && data.rooms) {
+    rooms.forEach((r, i) => {
+      checkGuestPlan(setup, r, `input.rooms.${i}`);
+    });
+  }
   let quote = data.quote as StayQuote | undefined;
   if (quote && isAutomation(caller)) {
     throw new WriteError("not_allowed", "A change with prices of its own is the owner's to send.", {
@@ -946,8 +1259,19 @@ function planChange(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & Mut, la
       lang,
       now,
       source: p.quote?.source === "person" ? "rates" : (p.quote?.source ?? "rates"),
+      collect: await payCollection(ctx.db),
     });
     if (priced.ok) quote = priced.quote;
+  } else if (quote) {
+    quote = collectableQuote(quote, await payCollection(ctx.db), lang);
+  }
+  // The property's own change says what it costs: the old total never goes with other nights.
+  if (!quote && sideOf(caller) === "business") {
+    throw new WriteError(
+      "invalid_input",
+      "Your rates do not price these nights: send the change with its price (input.quote).",
+      { fields: [{ path: "input.quote", problem: "missing", message: "the change's price" }] },
+    );
   }
   if (quote) {
     const problems = quoteProblems(setup, { checkIn, checkOut }, quote, now);
@@ -956,6 +1280,14 @@ function planChange(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & Mut, la
         fields: problems.map((m) => ({ path: "input.quote", problem: "invalid" as const, message: m })),
       });
     }
+  }
+  // The property's own change, sent by automation, binds it on the guest's yes: only on nights the inbox
+  // cannot sell twice.
+  if (
+    isAutomation(caller) &&
+    !(await instantSafe(ctx.db, setup, ctx.item.id, wantOf({ rooms, checkIn, checkOut }), now))
+  ) {
+    await draftForPerson(ctx, quote, "A person confirms the new nights on the other channels before this change goes.");
   }
   const validThrough = Math.min(
     now + settings.negotiation.offerValidHours * 3_600_000,
@@ -979,7 +1311,7 @@ async function checkChange(ctx: PlanCtx, stay: StayPayload, guard: string): Prom
   const words = (owner: string, guest: (w: ReturnType<typeof stayProblems>) => string) =>
     ctx.audience ? guest(stayProblems(ctx.audience.lang)) : owner;
   if (guard === "stay_change_lapsed") {
-    if (!c?.validThrough || Date.parse(c.validThrough) > now) {
+    if (!c?.validThrough || c.writing || Date.parse(c.validThrough) > now) {
       throw new WriteError("guard_failed", "the change has not lapsed yet", { details: { guard } });
     }
     return;
@@ -990,6 +1322,13 @@ async function checkChange(ctx: PlanCtx, stay: StayPayload, guard: string): Prom
       words("There is no change open on this stay.", (w) => w.noChange),
       { details: { guard } },
     );
+  if (c.writing) {
+    throw new WriteError(
+      "guard_failed",
+      words("The change agreed is being written to your system: its answer comes in a moment.", (w) => w.changeWriting),
+      { details: { guard: "stay_change_writing" } },
+    );
+  }
   const mine = c.by === side;
   // A yes the guest gave a person to the property's own change is recorded by a person.
   const heard = guard === "stay_change_open" && mine && side === "business";
@@ -1015,6 +1354,35 @@ async function checkChange(ctx: PlanCtx, stay: StayPayload, guard: string): Prom
         {
           details: { guard, validThrough: c.validThrough },
         },
+      );
+    }
+    // New nights or rooms come with their own price and policy, dated to the new arrival: never the old
+    // total for a different stay.
+    if (!c.quote) {
+      throw new WriteError(
+        "guard_failed",
+        words(
+          "This change has no price yet: your rates do not cover it. Send the guest your own change with a price, or keep the stay as it is.",
+          (w) => w.noChange,
+        ),
+        { details: { guard: "stay_change_priced" } },
+      );
+    }
+    // Automation accepts new nights only where the inbox cannot sell them twice; a person looks first anywhere else.
+    if (
+      isAutomation(caller) &&
+      !(await instantSafe(
+        ctx.db,
+        (await readSetup(ctx.db, stay.propertyId)) as PropertySetup,
+        ctx.item.id,
+        wantOf({ rooms: c.rooms ?? stay.rooms, checkIn: c.checkIn, checkOut: c.checkOut }),
+        now,
+      ))
+    ) {
+      await draftForPerson(
+        ctx,
+        c.quote,
+        "A person confirms the new nights on the other channels before this change is accepted.",
       );
     }
     // A guest says yes to the new price only having seen it.

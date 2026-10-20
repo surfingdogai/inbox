@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AccessCapabilities } from "../access/keys";
 import type { CarriedInput, IdentityCapabilities } from "../capabilities/identity";
 import type { ConnectorCapabilities } from "../connectors/capability";
+import { payCollection } from "../connectors/pay-queue";
 import { isPropertySystem } from "../connectors/sdk";
 import type { Db } from "../db";
 import { type Item, type PayloadOf, payloadSchemas } from "../domain/types";
@@ -14,7 +15,7 @@ import { syncAri } from "../property/sync";
 import { items } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
-import { addDays, dateIn } from "../util/zoned";
+import { addDays, dateIn, knownZone } from "../util/zoned";
 import { type Caller, isCustomer, nowOf, withIdempotencyKey } from "../write/caller";
 import type { CreateInput, CreateResult } from "../write/create";
 import { fromZod, WriteError } from "../write/errors";
@@ -41,9 +42,12 @@ import {
 import * as Setup from "./setup";
 import { listProperties, type PropertySetup, propertyFor, readSetup } from "./store";
 import { cancellationTerms, dueNow, feeSha, stayTermsSha } from "./terms";
-import { paidOf } from "./transition";
+import { checkGuestPlan, paidOf } from "./transition";
 
 type StayPayload = PayloadOf<"stay">;
+
+/** The most open holds one guest may have at once. */
+const MAX_HOLDS = 2;
 
 /** Room types and rate plans named by id or by a few words of their name (an agent's "double"). */
 function _roomByWords(setup: PropertySetup, words: string | undefined): string | undefined {
@@ -223,7 +227,7 @@ export class StayCapabilities {
     const setup = await this.setupFor(input.property_id);
     const now = nowOf(caller);
     this.checkDates(setup, input.check_in, input.check_out, now);
-    const rooms = this.roomsOf(setup, input.rooms);
+    const rooms = this.roomsOf(setup, input.rooms, caller);
     const lang = await this.langOf(caller, settings);
     const judged = await judgeStay(
       this.db,
@@ -277,8 +281,11 @@ export class StayCapabilities {
     if (checkIn < dateIn(now, setup.property.timezone)) throw bad("check_in", "the arrival date has passed");
   }
 
-  /** The guest's rooms as the inbox keeps them, every room type named one of the property's. */
-  private roomsOf(setup: PropertySetup, rooms: readonly I.GuestRoom[]) {
+  /**
+   * The guest's rooms as the inbox keeps them, every room type named one of the property's, and every rate
+   * plan a guest names one the property offers to guests (a person at the property may name any of its own).
+   */
+  private roomsOf(setup: PropertySetup, rooms: readonly I.GuestRoom[], caller: Caller) {
     return rooms.map((r, i) => {
       const room = r.room_type_id
         ? setup.rooms.find((x) => x.id === r.room_type_id && x.active && x.offered)
@@ -294,6 +301,7 @@ export class StayCapabilities {
           ],
         });
       }
+      if (isCustomer(caller)) checkGuestPlan(setup, { roomTypeId: room.id, ratePlanId: r.rate_plan_id }, `rooms.${i}`);
       return {
         roomTypeId: room.id,
         ...(r.rate_plan_id ? { ratePlanId: r.rate_plan_id } : {}),
@@ -328,13 +336,14 @@ export class StayCapabilities {
       const judged = await judgeStay(
         this.db,
         setup,
-        { checkIn: input.check_in, checkOut: input.check_out, rooms: this.roomsOf(setup, input.rooms) },
+        { checkIn: input.check_in, checkOut: input.check_out, rooms: this.roomsOf(setup, input.rooms, caller) },
         lang,
         now,
       );
       if (judged.quote) estimate = judged.quote;
     }
-    const created = await this.create(caller, input, setup, estimate);
+    // A request is a person's to answer, whatever the rules say: it waits for them from the start.
+    const created = await this.create(caller, input, setup, estimate, { needsHuman: true });
     return { ...created, words: `Sent. ${setup.property.name} answers within ${setup.property.answerHours} hours.` };
   }
 
@@ -343,6 +352,7 @@ export class StayCapabilities {
     input: z.infer<typeof I.requestStayInput>,
     setup: PropertySetup,
     estimate: StayQuote | undefined,
+    flags?: { readonly needsHuman: boolean },
   ): Promise<CreateResult> {
     const c = withIdempotencyKey(caller, input.idempotency_key);
     const payload = {
@@ -367,6 +377,7 @@ export class StayCapabilities {
       contact: input.contact,
       ...(input.message ? { message: input.message } : {}),
       ...(estimate ? { stayExtra: { estimate } } : {}),
+      ...(flags ? { flags } : {}),
     };
     return this.deps.people.create(c, create, { pass: input.pass, key: input.key } satisfies CarriedInput);
   }
@@ -401,10 +412,18 @@ export class StayCapabilities {
       rooms: input.rooms.length,
     });
     this.checkDates(setup, input.check_in, input.check_out, now);
-    const rooms = this.roomsOf(setup, input.rooms);
-    await this.limitHolds(caller);
+    const rooms = this.roomsOf(setup, input.rooms, caller);
+    const email = input.contact.email;
+    await this.limitHolds(caller, email);
     // In connected mode the property's system is asked now, live: a hold is never made on a cache alone.
-    if (setup.property.mode === "connected") await this.liveCheck(setup, input.check_in, input.check_out, now);
+    // A system that does not answer leaves the stay on request.
+    if (setup.property.mode === "connected" && !(await this.liveCheck(setup, input.check_in, input.check_out, now))) {
+      throw new WriteError(
+        "guard_failed",
+        `On request. ${setup.property.name} answers within ${setup.property.answerHours} hours. Use request_stay.`,
+        { details: { guard: "instant_safe", status: "on_request", reason: "system_unanswered" } },
+      );
+    }
     const lang = await this.langOf(caller, settings);
     const judged = await judgeStay(
       this.db,
@@ -437,17 +456,9 @@ export class StayCapabilities {
       sandbox: caller.sandbox,
       now: () => now,
     };
+    let held: TransitionResult;
     try {
-      const held = await transitionItem(this.db, system, { itemId, event: "hold" });
-      const p = held.view.item.payload as StayPayload;
-      const terms = p.quote ? await termsSummary(setup, { ...subject }, p.quote, lang) : undefined;
-      return {
-        ...created,
-        view: held.view,
-        ...(p.hold ? { hold_until: p.hold.until } : {}),
-        ...(terms ? { terms_sha: terms.terms_sha, summary: terms.summary } : {}),
-        words: `Held until ${p.hold?.until ?? "soon"}. Book before then, after your person confirms the terms.`,
-      };
+      held = await transitionItem(this.db, system, { itemId, event: "hold" });
     } catch (error) {
       // Taken a moment ago: the request stays with the property, which answers it.
       if (error instanceof WriteError && (error.code === "slot_taken" || error.code === "guard_failed")) {
@@ -458,39 +469,90 @@ export class StayCapabilities {
       }
       throw error;
     }
+    // Two asking at once may both have passed the count before either held: counted again, and a hold
+    // over the limit let go at once.
+    if ((await this.holdsOf(caller, email)) > MAX_HOLDS) {
+      await transitionItem(this.db, withToken(caller, created.accessToken), { itemId, event: "release" }).catch(
+        () => undefined,
+      );
+      throw new WriteError("guard_failed", "You hold two stays already: book or let one go first.", {
+        details: { guard: "holds", reason: "holds" },
+      });
+    }
+    const p = held.view.item.payload as StayPayload;
+    const terms = p.quote ? await termsSummary(setup, { ...subject }, p.quote, lang) : undefined;
+    return {
+      ...created,
+      view: held.view,
+      ...(p.hold ? { hold_until: p.hold.until } : {}),
+      ...(terms ? { terms_sha: terms.terms_sha, summary: terms.summary } : {}),
+      // A connected property's room is kept by the inbox's offer, not on its own system: it is confirmed
+      // only once the system takes the booking, which book_stay writes there first.
+      words:
+        setup.property.mode === "connected"
+          ? `Offer kept until ${p.hold?.until ?? "soon"}. Book before then, after your person confirms the terms: the room is confirmed once ${setup.property.name}'s own system takes the booking.`
+          : `Held until ${p.hold?.until ?? "soon"}. Book before then, after your person confirms the terms.`,
+    };
   }
 
-  /** At most two open holds per person and per agent: nobody parks rooms by asking (§6.1). */
-  private async limitHolds(caller: Caller): Promise<void> {
+  /**
+   * The open holds of whoever asks: by their party, their agent's signature, and the guest's address
+   * (an assistant that signs nothing is still one guest at one address).
+   */
+  private async holdsOf(caller: Caller, email: string | undefined): Promise<number> {
     const party = caller.actor.partyId;
     const agent = caller.agent?.thumbprint;
-    if (!party && !agent) return;
+    const mail = email?.trim().toLowerCase();
+    const where: string[] = [];
+    const params: string[] = [];
+    if (party) {
+      where.push("party_id = ?");
+      params.push(party);
+    }
+    if (agent) {
+      where.push("agent_thumbprint = ?");
+      params.push(agent);
+    }
+    if (mail) {
+      where.push("party_id IN (SELECT id FROM parties WHERE lower(trim(json_extract(contact, '$.email'))) = ?)");
+      params.push(mail);
+    }
+    if (where.length === 0) return 0;
     const { rows } = await this.db.client.query({
-      sql: `SELECT COUNT(*) FROM items WHERE type = 'stay' AND state = 'held'
-             AND (${party ? "party_id = ?" : "0"} OR ${agent ? "agent_thumbprint = ?" : "0"})`,
-      params: [...(party ? [party] : []), ...(agent ? [agent] : [])],
+      sql: `SELECT COUNT(*) FROM items WHERE type = 'stay' AND state = 'held' AND (${where.join(" OR ")})`,
+      params,
       method: "all",
     });
-    if (Number(rows[0]?.[0] ?? 0) >= 2) {
+    return Number(rows[0]?.[0] ?? 0);
+  }
+
+  /** At most two open holds per person, agent and address: nobody parks rooms by asking (§6.1). */
+  private async limitHolds(caller: Caller, email: string | undefined): Promise<void> {
+    if ((await this.holdsOf(caller, email)) >= MAX_HOLDS) {
       throw new WriteError("guard_failed", "You hold two stays already: book or let one go first.", {
         details: { guard: "holds", reason: "holds" },
       });
     }
   }
 
-  /** The property's system asked now for these nights; its answer goes in the cache as `live`. */
-  async liveCheck(setup: PropertySetup, checkIn: string, checkOut: string, now: number): Promise<void> {
+  /**
+   * The property's system asked now for these nights; its answer goes in the cache as `live`. Answers
+   * whether it answered: a hold is never made when it did not.
+   */
+  async liveCheck(setup: PropertySetup, checkIn: string, checkOut: string, now: number): Promise<boolean> {
     const id = setup.property.connectorId;
     const ext = setup.property.externalId;
-    if (!id || !ext) return;
+    if (!id || !ext) return false;
     const conn = await this.deps.connectors.contextFor(id, now);
-    if (!conn || !isPropertySystem(conn.definition)) return;
+    if (!conn || !isPropertySystem(conn.definition)) return false;
     try {
       const read = await conn.definition.stays.ari(conn.ctx, ext, { from: checkIn, to: checkOut });
       const rows = Array.isArray(read) ? read : read.rows;
+      if (!Array.isArray(read) && read.until < checkOut) return false;
       await this.db.batch(ariStatements(id, rows, "live", now));
+      return true;
     } catch {
-      // Not answered: the cache says what it says, and stale is on request.
+      return false;
     }
   }
 
@@ -525,12 +587,13 @@ export class StayCapabilities {
     const p = item.payload as StayPayload;
     const setup = await readSetup(this.db, p.propertyId);
     if (!setup) throw new WriteError("not_found", "no such stay");
-    const rooms = input.rooms ? this.roomsOf(setup, input.rooms) : p.rooms;
+    const rooms = input.rooms ? this.roomsOf(setup, input.rooms, c) : p.rooms;
     // The new terms the guest sees before they ask: the rates' new total and what it means to pay or get back.
     if (isCustomer(c) && rooms.every((r) => r.roomTypeId)) {
       const settings = await readSettings(this.db);
       const lang = await this.langOf(c, settings);
       const priced = quoteFromRates(setup, {
+        collect: await payCollection(this.db),
         checkIn: input.check_in,
         checkOut: input.check_out,
         rooms: rooms.map((r) => ({
@@ -858,6 +921,7 @@ export class StayCapabilities {
     });
     const settings = await readSettings(this.db);
     const priced = quoteFromRates(setup, {
+      collect: await payCollection(this.db),
       checkIn: p.checkIn,
       checkOut: p.checkOut,
       rooms,
@@ -948,10 +1012,30 @@ export class StayCapabilities {
       });
     const existing = input.property_id ? await readSetup(this.db, input.property_id) : null;
     const settings = await readSettings(this.db);
+    // The system's prices are in its currency and its nights in its zone: a property in another currency
+    // would read them as the wrong money, and one in another zone would count the wrong nights.
+    if (existing && ext.currency && ext.currency.toUpperCase() !== existing.property.currency) {
+      throw new WriteError(
+        "invalid_input",
+        `Your system keeps this property in ${ext.currency.toUpperCase()}, and here it is in ${existing.property.currency}. Make them the same first.`,
+        { fields: [{ path: "external_property_id", problem: "invalid", message: "a property in the same currency" }] },
+      );
+    }
+    if (existing && ext.timezone && knownZone(ext.timezone) !== existing.property.timezone) {
+      throw new WriteError(
+        "invalid_input",
+        `Your system keeps this property in the ${ext.timezone} time zone, and here it is in ${existing.property.timezone}. Set the property's time zone to match first.`,
+        { fields: [{ path: "external_property_id", problem: "invalid", message: "a property in the same time zone" }] },
+      );
+    }
     const propertyId = await Setup.upsertProperty(this.db, this.secrets, caller, {
       ...(existing
         ? { id: existing.property.id }
-        : { name: ext.name, currency: ext.currency ?? (await businessZoneAndCurrency(this.db, settings)).currency }),
+        : {
+            name: ext.name,
+            currency: ext.currency?.toUpperCase() ?? (await businessZoneAndCurrency(this.db, settings)).currency,
+            ...(ext.timezone && knownZone(ext.timezone) === ext.timezone ? { timezone: ext.timezone } : {}),
+          }),
       connector_id: input.connector_id,
       external_id: ext.id,
     });

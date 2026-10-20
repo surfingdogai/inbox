@@ -11,7 +11,7 @@ import { WriteError } from "../write/errors";
 import { transitionItem } from "../write/transition";
 import { type StayCopy, type StayLang, stayCopy, stayLang } from "./copy";
 import { nightsOf } from "./nights";
-import { localeOf } from "./price";
+import { propertyLocale } from "./price";
 import { readSetup } from "./store";
 import { cancellationTerms, datesWords, dueNow, feeSha, stayTermsSha, whenWords } from "./terms";
 import { paidOf } from "./transition";
@@ -216,8 +216,9 @@ export interface StayPageDeps {
   readonly base?: string | undefined;
 }
 
-function money(m: { value: number; currency: string }, lang: StayLang): string {
-  return formatMinor(m, localeOf(lang));
+/** Money as the guest reads it where the property is, its narrow spaces kept from vanishing in a bold face. */
+function money(m: { value: number; currency: string }, locale: string): string {
+  return formatMinor(m, locale).replace(/[\u202f\u2009]/g, "\u00a0");
 }
 
 function guestCaller(ctx: StayLinkContext, now: number, lang: StayLang): Caller {
@@ -232,18 +233,21 @@ function guestCaller(ctx: StayLinkContext, now: number, lang: StayLang): Caller 
 }
 
 /** The quote's lines, total and schedule as a page's rows. */
-function quoteRows(q: StayQuote, c: StayCopy, lang: StayLang): { label: string; value: string }[] {
-  const rows = q.lines.map((l) => ({ label: l.label, value: money({ value: l.amount, currency: q.currency }, lang) }));
-  rows.push({ label: WORDS[lang].total, value: money(q.total, lang) });
+function quoteRows(q: StayQuote, c: StayCopy, lang: StayLang, locale: string): { label: string; value: string }[] {
+  const rows = q.lines.map((l) => ({
+    label: l.label,
+    value: money({ value: l.amount, currency: q.currency }, locale),
+  }));
+  rows.push({ label: WORDS[lang].total, value: money(q.total, locale) });
   const now = q.schedule.filter((s) => s.type === "immediate").reduce((a, s) => a + s.amount.value, 0);
   const there = q.schedule.filter((s) => s.type === "at_property").reduce((a, s) => a + s.amount.value, 0);
-  if (now > 0) rows.push({ label: c.schedule.now, value: money({ value: now, currency: q.currency }, lang) });
+  if (now > 0) rows.push({ label: c.schedule.now, value: money({ value: now, currency: q.currency }, locale) });
   if (there > 0)
-    rows.push({ label: c.schedule.atProperty, value: money({ value: there, currency: q.currency }, lang) });
+    rows.push({ label: c.schedule.atProperty, value: money({ value: there, currency: q.currency }, locale) });
   return rows;
 }
 
-async function payLinks(db: Db, itemId: string, lang: StayLang): Promise<PageLink[]> {
+async function payLinks(db: Db, itemId: string, lang: StayLang, locale: string): Promise<PageLink[]> {
   const { rows } = await db.client.query({
     sql: "SELECT url, amount, currency FROM connector_payments WHERE item_id = ? AND state = 'open' AND url IS NOT NULL ORDER BY created_at",
     params: [itemId],
@@ -251,7 +255,7 @@ async function payLinks(db: Db, itemId: string, lang: StayLang): Promise<PageLin
   });
   const c = stayCopy(lang);
   return rows.map((r) => ({
-    label: c.page.pay({ amount: money({ value: Number(r[1]), currency: String(r[2]) }, lang) }),
+    label: c.page.pay({ amount: money({ value: Number(r[1]), currency: String(r[2]) }, locale) }),
     href: String(r[0]),
   }));
 }
@@ -269,6 +273,7 @@ export async function stayLinkView(
   const c = stayCopy(lang);
   const w = WORDS[lang];
   const setup = await readSetup(deps.db, p.propertyId);
+  const locale = propertyLocale(lang, setup?.property);
   const property = setup?.property.name ?? ctx.business;
   const ref = shortRef(item.id);
   const base = (status: CustomerPage["status"], heading: string, more: Partial<CustomerPage> = {}): CustomerPage => ({
@@ -280,7 +285,7 @@ export async function stayLinkView(
     help: w.help,
     ...more,
   });
-  const dates = datesWords(p.checkIn, p.checkOut, lang);
+  const dates = datesWords(p.checkIn, p.checkOut, lang, setup?.property);
   const statusWord = c.page.status[item.state] ?? item.state;
   if (row.usedAt !== null) return doneView(deps, ctx, base, now);
   if (now > row.expiresAt) return base(410, w.expired);
@@ -294,16 +299,16 @@ export async function stayLinkView(
       const free = q.policy.steps.find((s) => s.fee.value === 0);
       const policy = policySentence(q.policy, {
         lang,
-        locale: localeOf(lang),
+        locale,
         total: q.total,
         what: "stay",
         place: setup?.property.locality ?? undefined,
       });
       return base(
         opts.status ?? 200,
-        c.page.confirmAccept({ nights, dates, total: money(q.total, lang), ...(free ? { free: policy } : {}) }),
+        c.page.confirmAccept({ nights, dates, total: money(q.total, locale), ...(free ? { free: policy } : {}) }),
         {
-          rows: quoteRows(q, c, lang),
+          rows: quoteRows(q, c, lang, locale),
           // The policy once: in the heading when cancelling is free for a while, else under it.
           paragraphs: [
             ...(free ? [] : [policy]),
@@ -347,17 +352,17 @@ export async function stayLinkView(
       const paid = paidOf(p);
       const lines =
         terms.fee.value === 0
-          ? [paid.value > 0 ? c.page.cancelFree({ property, paid: money(paid, lang) }) : c.page.cancelNothingBack]
+          ? [paid.value > 0 ? c.page.cancelFree({ property, paid: money(paid, locale) }) : c.page.cancelNothingBack]
           : [
               // The last free day as the guest reads a date, when there was one; else what it costs now.
               q.policy.steps.at(-1)?.until && setup
                 ? c.page.cancelQuestion({
                     date: whenWords(setup, q.policy.steps.at(-1)?.until ?? "", lang),
-                    fee: money(terms.fee, lang),
+                    fee: money(terms.fee, locale),
                   })
-                : c.page.cancelNow({ fee: money(terms.fee, lang) }),
+                : c.page.cancelNow({ fee: money(terms.fee, locale) }),
               terms.refund.value > 0
-                ? c.page.cancelRefund({ paid: money(paid, lang), property, refund: money(terms.refund, lang) })
+                ? c.page.cancelRefund({ paid: money(paid, locale), property, refund: money(terms.refund, locale) })
                 : c.page.cancelNothingBack,
             ];
       return base(opts.status ?? 200, c.page.cancelMine, {
@@ -381,11 +386,14 @@ export async function stayLinkView(
     case "stay_change_no": {
       const change = p.change;
       if (item.state !== "confirmed" || !change || change.by !== "business") return base(409, w.noLonger(statusWord));
-      const newDates = datesWords(change.checkIn, change.checkOut, lang);
+      const newDates = datesWords(change.checkIn, change.checkOut, lang, setup?.property);
       const yes = row.action === "stay_change_yes";
       return base(opts.status ?? 200, yes ? c.page.changeMine : c.page.keep, {
-        paragraphs: [newDates, ...(change.quote ? [c.page.newTotal({ total: money(change.quote.total, lang) })] : [])],
-        ...(change.quote ? { rows: quoteRows(change.quote, c, lang) } : {}),
+        paragraphs: [
+          newDates,
+          ...(change.quote ? [c.page.newTotal({ total: money(change.quote.total, locale) })] : []),
+        ],
+        ...(change.quote ? { rows: quoteRows(change.quote, c, lang, locale) } : {}),
         form: { hidden, fields: [], button: yes ? c.page.changeMine : c.page.keep },
         ...(opts.error ? { error: opts.error } : {}),
       });
@@ -414,15 +422,16 @@ async function doneView(
   const lang = stayLang(ctx.row.langTag);
   const c = stayCopy(lang);
   const setup = await readSetup(deps.db, p.propertyId);
+  const locale = propertyLocale(lang, setup?.property);
   const property = setup?.property.name ?? ctx.business;
-  const paragraphs: string[] = [datesWords(p.checkIn, p.checkOut, lang)];
+  const paragraphs: string[] = [datesWords(p.checkIn, p.checkOut, lang, setup?.property)];
   if (state === "confirmed" && setup) {
     paragraphs.push(
       c.emails.confirmed.times({ time: setup.property.checkInFrom, until: setup.property.checkOutUntil }),
     );
     paragraphs.push(c.notInvoice({ property }));
   }
-  const links = state === "awaiting_payment" ? await payLinks(deps.db, ctx.item.id, lang) : [];
+  const links = state === "awaiting_payment" ? await payLinks(deps.db, ctx.item.id, lang, locale) : [];
   if (state === "awaiting_payment" && p.payments?.dueBy && setup) {
     const due = (p.payments.schedules ?? [])
       .filter((s) => s.type === "immediate" && s.status === "due")
@@ -430,7 +439,7 @@ async function doneView(
     if (due > 0)
       paragraphs.push(
         c.page.payBy({
-          amount: money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, lang),
+          amount: money({ value: due, currency: p.quote?.currency ?? setup.property.currency }, locale),
           property,
           until: whenWords(setup, p.payments.dueBy, lang),
         }),
