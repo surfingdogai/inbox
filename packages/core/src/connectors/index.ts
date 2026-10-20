@@ -101,6 +101,13 @@ export {
 } from "./schedules";
 export * from "./sdk";
 export { shopOrderOf } from "./shop";
+export type {
+  SetupSnapshot,
+  SnapshotMenuSection,
+  SnapshotService,
+  SnapshotSource,
+  SnapshotStaff,
+} from "./setup-snapshot";
 export {
   BUSY_HORIZON_MS,
   type BusyDetail,

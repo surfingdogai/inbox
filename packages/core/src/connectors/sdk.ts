@@ -38,9 +38,42 @@ export type ConnectorCapability =
    * checkout (ADR-026 §2): the connector is the payment platform for its orders, so it rides on
    * `pay_links`, and its `createLink` is given the order (`PayLinkRequest.order`).
    */
-  | "shop_orders";
+  | "shop_orders"
+  /**
+   * The names every industry track codes against (ADR-032), each defined with its track: a property
+   * system's rooms, rates and availability read into the inbox (`stay_inventory`), stays written to it
+   * before they are confirmed (`write_stays`), and its word that one changed, as a hint to read again
+   * (`stay_events`); a job tool that takes the requests an owner accepts (`requests_out`); services,
+   * staff, hours or a menu brought in to start from (`setup_in`); a booking system's free times
+   * (`availability_in`); orders sent to a till or a kitchen (`orders_out`); and its word on where one
+   * stands (`status_in`).
+   */
+  | "stay_inventory"
+  | "write_stays"
+  | "stay_events"
+  | "requests_out"
+  | "setup_in"
+  | "availability_in"
+  | "orders_out"
+  | "status_in";
 
-export type ConnectorGroup = "calendars" | "payments" | "shops";
+/**
+ * Where a card sits in Settings → Integrations: calendars, payments, shops; and, for the industry
+ * tracks (ADR-032), property systems (`lodging`), job tools (`work`), points of sale and ordering
+ * (`pos`) and booking systems (`booking`).
+ */
+export type ConnectorGroup = "calendars" | "payments" | "shops" | "lodging" | "work" | "pos" | "booking";
+
+/** Each group's heading, as the owner app shows it. */
+export const CONNECTOR_GROUP_LABELS: Readonly<Record<ConnectorGroup, string>> = {
+  calendars: "Calendars",
+  payments: "Payments",
+  shops: "Shops",
+  lodging: "Property systems",
+  work: "Job tools",
+  pos: "Point of sale and ordering",
+  booking: "Booking systems",
+};
 
 /**
  * How the owner connects (ADR-026 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
@@ -407,6 +440,11 @@ export interface Interval {
 export interface BusyRead {
   readonly intervals: readonly Interval[];
   readonly until: number;
+  /**
+   * Whose busy times these are, for a connection tied to one resource (a member of staff's own
+   * calendar, ADR-032): the inbox's resource id. Absent: the whole business's.
+   */
+  readonly resourceId?: string | undefined;
 }
 
 /** A confirmed booking as a connector writes it: times, and words the owner wants to see in a calendar. */
@@ -423,6 +461,8 @@ export interface OutboundBooking {
   readonly serviceName: string;
   readonly customerName: string | null;
   readonly durationMin: number;
+  /** The resource it is with (a member of staff), for a system that books per person (ADR-032). */
+  readonly resourceId?: string | undefined;
 }
 
 /** What a connector keeps about one booking it wrote. */
