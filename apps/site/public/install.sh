@@ -151,7 +151,9 @@ new_secret() { head -c 32 /dev/urandom | base64 | tr -d '\n'; }
 
 # --- the settings file ------------------------------------------------------------------------------
 
-env_get() { [ -f "$DIR/.env" ] && sed -n "s/^$1=//p" "$DIR/.env" | tail -n 1 || true; }
+env_get() {
+  if [ -f "$DIR/.env" ]; then sed -n "s/^$1=//p" "$DIR/.env" | tail -n 1; fi
+}
 
 env_set() {
   K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; done = 0 }
@@ -222,7 +224,7 @@ apt_install() {
 ensure_tools() {
   local missing=""
   command -v curl >/dev/null 2>&1 || missing="$missing curl"
-  [ -d /etc/ssl/certs ] && [ -n "$(ls /etc/ssl/certs 2>/dev/null)" ] || missing="$missing ca-certificates"
+  if [ -z "$(ls /etc/ssl/certs 2>/dev/null)" ]; then missing="$missing ca-certificates"; fi
   command -v ss >/dev/null 2>&1 || missing="$missing iproute2"
   command -v ip >/dev/null 2>&1 || case "$missing" in *iproute2*) ;; *) missing="$missing iproute2" ;; esac
   [ -z "$missing" ] && return 0
@@ -680,7 +682,9 @@ ask_secret() {
 
 # --- the settings file ------------------------------------------------------------------------------
 
-env_get() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1 || true; }
+env_get() {
+  if [ -f "$ENV_FILE" ]; then sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1; fi
+}
 
 # env_set KEY VALUE: one line KEY=VALUE, in place of any before, the file kept readable by root only.
 env_set() {
@@ -705,8 +709,9 @@ env_unset() {
 dc() { docker compose --project-directory "$INBOX_DIR" -f "$INBOX_DIR/docker-compose.yml" "$@"; }
 
 need_install() {
-  [ -f "$INBOX_DIR/docker-compose.yml" ] && [ -f "$ENV_FILE" ] ||
+  if [ ! -f "$INBOX_DIR/docker-compose.yml" ] || [ ! -f "$ENV_FILE" ]; then
     die "No inbox is installed in $INBOX_DIR. Install one: curl -fsSL https://surfingdog.ai/install.sh | sudo sh"
+  fi
   [ "$(id -u)" = 0 ] || die "Run it as root: sudo inbox $COMMAND"
   command -v docker >/dev/null 2>&1 || die "Docker is not installed here."
 }
@@ -1050,7 +1055,7 @@ cmd_email() {
       ask "Your Cloudflare account ID"
       local account="$ANSWER"
       ask_secret "An API token that can send email (Email Sending: Edit)"
-      [ -n "$from" ] && [ -n "$account" ] && [ -n "$ANSWER" ] || die "All three are needed. Nothing changed."
+      if [ -z "$from" ] || [ -z "$account" ] || [ -z "$ANSWER" ]; then die "All three are needed. Nothing changed."; fi
       env_set MAIL_FROM "$from"
       env_set CLOUDFLARE_ACCOUNT_ID "$account"
       env_set CLOUDFLARE_EMAIL_TOKEN "$ANSWER"
@@ -1060,7 +1065,7 @@ cmd_email() {
       ask "The address it sends from" "${current:-$from_default}"
       local from="$ANSWER"
       ask_secret "Your Resend API key"
-      [ -n "$from" ] && [ -n "$ANSWER" ] || die "Both are needed. Nothing changed."
+      if [ -z "$from" ] || [ -z "$ANSWER" ]; then die "Both are needed. Nothing changed."; fi
       env_set MAIL_FROM "$from"
       env_set RESEND_API_KEY "$ANSWER"
       env_unset CLOUDFLARE_ACCOUNT_ID

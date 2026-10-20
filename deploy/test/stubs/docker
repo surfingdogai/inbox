@@ -19,7 +19,7 @@ if [ "${1:-}" != compose ]; then
     inspect)
       case "$*" in
         *RestartCount*) cat "$STUB_STATE/restarts" 2>/dev/null || echo 0 ;;
-        *State.Running*) [ -f "$STUB_STATE/running" ] && echo true || echo false ;;
+        *State.Running*) if [ -f "$STUB_STATE/running" ]; then echo true; else echo false; fi ;;
         *) echo '{}' ;;
       esac
       ;;

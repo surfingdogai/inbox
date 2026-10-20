@@ -44,7 +44,8 @@ wait_healthy() {
 }
 
 # server_uid NAME: the uid the inbox's own process runs as, as the host sees it.
-server_uid() { docker top "$1" -o uid,args | awk '/start\.mjs/ { print $1; exit }'; }
+# (docker top needs the pid column to find the container's own processes.)
+server_uid() { docker top "$1" -o pid,uid,args | awk '/start\.mjs/ { print $2; exit }'; }
 
 get() { curl -fsS --max-time 10 "http://127.0.0.1:$PORT$1"; }
 

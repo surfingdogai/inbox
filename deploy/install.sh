@@ -151,7 +151,9 @@ new_secret() { head -c 32 /dev/urandom | base64 | tr -d '\n'; }
 
 # --- the settings file ------------------------------------------------------------------------------
 
-env_get() { [ -f "$DIR/.env" ] && sed -n "s/^$1=//p" "$DIR/.env" | tail -n 1 || true; }
+env_get() {
+  if [ -f "$DIR/.env" ]; then sed -n "s/^$1=//p" "$DIR/.env" | tail -n 1; fi
+}
 
 env_set() {
   K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; done = 0 }
@@ -222,7 +224,7 @@ apt_install() {
 ensure_tools() {
   local missing=""
   command -v curl >/dev/null 2>&1 || missing="$missing curl"
-  [ -d /etc/ssl/certs ] && [ -n "$(ls /etc/ssl/certs 2>/dev/null)" ] || missing="$missing ca-certificates"
+  if [ -z "$(ls /etc/ssl/certs 2>/dev/null)" ]; then missing="$missing ca-certificates"; fi
   command -v ss >/dev/null 2>&1 || missing="$missing iproute2"
   command -v ip >/dev/null 2>&1 || case "$missing" in *iproute2*) ;; *) missing="$missing iproute2" ;; esac
   [ -z "$missing" ] && return 0
