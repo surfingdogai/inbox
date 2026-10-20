@@ -800,7 +800,29 @@ const TYPE_WORD: Record<Item["type"], string> = {
   stay: "stay request",
 };
 
+/** A stay's moments in the owner's words (ADR-033 S16): who did what, then which stay. */
+const STAY_OWNER_WORDS: Readonly<Record<string, string>> = {
+  provide_info: "answered your question:",
+  counter: "asks for something else:",
+  accept: "accepted your quote, confirmed:",
+  accept_pay: "accepted your quote and is paying what is due now:",
+  book: "booked:",
+  book_pay: "booked and is paying what is due now:",
+  written: "booked, written to your system:",
+  written_pay: "booked in your system and is paying what is due now:",
+  record_payment: "paid:",
+  late_payment: "paid after the time ran out, the nights still free, confirmed:",
+  decline: "is not going ahead:",
+  cancel: "cancelled:",
+  propose_change: "asks to change:",
+  accept_change: "accepted the change:",
+  decline_change: "keeps it as agreed:",
+  retract_change: "withdrew their change:",
+};
+
 function ownerSubject(item: Item, event: string, who: string): string {
+  const stay = item.type === "stay" && event !== "create" ? STAY_OWNER_WORDS[event] : undefined;
+  if (stay) return `${who} ${stay} ${item.subject ?? "their stay"}`;
   if (event === "create") return `New ${TYPE_WORD[item.type]} from ${who}: ${item.subject ?? ""}`.trim();
   // A refund whose date is near (ADR-018 §7): it is owed by then, and late it is owed twice in Portugal.
   if (event === "refund_due" && item.type === "refund") {
