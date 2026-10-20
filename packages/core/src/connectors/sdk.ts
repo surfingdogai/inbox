@@ -1136,6 +1136,12 @@ export interface ExternalRoom {
   readonly units: number;
   readonly capacity?: { readonly adults: number; readonly children: number; readonly total: number } | undefined;
   readonly beds?: readonly { readonly type: string; readonly count: number }[] | undefined;
+  /**
+   * True when the system holds no price for the room on the nights it was asked about: a system whose
+   * availability calls answer nothing for an unpriced room (Beds24) cannot offer it, which the owner is
+   * told while mapping rooms. Absent: not known.
+   */
+  readonly unpriced?: boolean | undefined;
 }
 
 export interface ExternalRate {
@@ -1220,6 +1226,21 @@ export interface OutboundStay {
 export type StayWriteStatus = "hold" | "provisional" | "confirmed";
 
 export interface StayWriter {
+  /**
+   * What the system's documentation says of a normal write (ADR-033 §5.3): it refuses a night it has no
+   * room for (`refuses_unavailable`), or nothing says it does, so the inbox checks live, writes, and reads
+   * back (`check_then_write`, with `oversold`). Absent: `check_then_write` when `oversold` is given.
+   */
+  readonly writeGuard?: "refuses_unavailable" | "check_then_write" | undefined;
+  /**
+   * How a stay waiting for what is due now keeps its room off sale on the system (ADR-033 D6): a hold
+   * the system releases itself (`native_release`), a status it documents as blocking
+   * (`provisional_status`), or none known yet (`none`). With `none` the adapter writes such a stay as
+   * confirmed, marked as waiting, for the inbox to cancel if it is not paid; declared so the stays layer
+   * can keep confirming at once to stays with nothing due now (paid at the property, or held by a card)
+   * until a blocking status is tested. Absent: not declared.
+   */
+  readonly hold?: "native_release" | "provisional_status" | "none" | undefined;
   /** Writes the stay, or moves the one written (`link`) to these dates, rooms and status. */
   put(ctx: RunContext, stay: OutboundStay, link: LinkState | null, status: StayWriteStatus): Promise<LinkState>;
   /** Cancels it on the system: never a delete. */
