@@ -1,0 +1,144 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  AMENITY_WORDS,
+  addDays,
+  allotmentReady,
+  BED_WORDS,
+  cellOf,
+  EXTRA_WORDS,
+  KIND_WORDS,
+  MEAL_WORDS,
+  paymentWords,
+  policyChoiceOf,
+  policyWords,
+  quoteSums,
+  RULE_WORDS,
+  type StayQuoteView,
+  weekdayWords,
+} from "../client/src/lib/property";
+import { KINDS, kindOf, wizardPreset, wizardRoomBodies } from "../client/src/lib/setup";
+
+/**
+ * The owner app's words and sums for a place to stay (S1–S16): every choice a chooser, each word for
+ * the vocabulary's every token, the policy and the payments said back in one sentence each, the
+ * Nights grid's cells, the sheet that keeps rooms only once they are closed elsewhere, a quote's sums,
+ * and the wizard's "A place to stay".
+ */
+/** The spec's lodging vocabulary, read as it is published. */
+const VOCAB = JSON.parse(
+  readFileSync(new URL("../../../packages/spec/vocab/lodging.json", import.meta.url), "utf8"),
+) as Record<"kinds" | "beds" | "amenities" | "meals" | "house_rules" | "extras", Record<string, unknown>>;
+
+describe("the owner app for a place to stay", () => {
+  it("has a word for every token of the lodging vocabulary", () => {
+    const has = (words: Readonly<Record<string, string>>, group: keyof typeof VOCAB) =>
+      expect(Object.keys(words).sort(), group).toEqual(Object.keys(VOCAB[group]).sort());
+    has(KIND_WORDS, "kinds");
+    has(BED_WORDS, "beds");
+    has(AMENITY_WORDS, "amenities");
+    has(MEAL_WORDS, "meals");
+    has(RULE_WORDS, "house_rules");
+    has(EXTRA_WORDS, "extras");
+  });
+
+  it("says a policy and its payments back in a sentence", () => {
+    const flexible = policyChoiceOf("free_until:7:first_night:full");
+    expect(flexible).toEqual({ preset: "free_until", days: 7, after: "first_night", no_show: "full" });
+    expect(policyWords(flexible)).toBe(
+      "Free to cancel until 7 days before arrival; after that, the first night. Not coming costs the whole stay.",
+    );
+    expect(policyWords(policyChoiceOf("non_refundable"))).toBe("Non-refundable: cancelling costs the whole stay.");
+    expect(policyChoiceOf("custom")).toEqual({ preset: "custom" });
+    expect(paymentWords({ kind: "percent", value: 20 }, { when: "days_before", days: 14 }, "none")).toBe(
+      "20% now, the rest 14 days before arrival",
+    );
+    expect(paymentWords({ kind: "none" }, { when: "at_property" }, "card")).toBe(
+      "A card to hold the stay, nothing taken now, the rest at the property",
+    );
+    expect(paymentWords({ kind: "full" }, { when: "at_property" }, "none")).toBe("Everything now");
+  });
+
+  it("reads each night of the grid: closed first, a hint never fills a room", () => {
+    const cell = (o: Partial<Parameters<typeof cellOf>[0]>) => ({
+      night: "2026-12-12",
+      stays: [],
+      holds: [],
+      kept: 0,
+      hint: null,
+      closed: false,
+      ...o,
+    });
+    expect(cellOf(cell({ closed: true, stays: [{ item_id: "a", reference: "A" }] }), 2).tone).toBe("closed");
+    expect(cellOf(cell({ hint: "Airbnb" }), 1)).toEqual({ tone: "free", words: "Airbnb shows it taken" });
+    expect(cellOf(cell({ stays: [{ item_id: "a", reference: "A" }] }), 1).tone).toBe("full");
+    expect(cellOf(cell({ holds: [{ item_id: "b", minutes_left: 12 }] }), 1).tone).toBe("held");
+    expect(cellOf(cell({ stays: [{ item_id: "a", reference: "A" }], kept: 1 }), 3)).toEqual({
+      tone: "some",
+      words: "1 booked · 1 kept for direct guests · 2 free",
+    });
+    expect(weekdayWords(127)).toBe("every night");
+    expect(weekdayWords(48)).toBe("Friday and Saturday nights");
+    expect(weekdayWords(1 | 4)).toBe("Mon, Wed");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+  });
+
+  it("keeps rooms for direct guests only once they are closed on the other channels", () => {
+    const ready = { units: 1, from: "2026-12-01", to: "2026-12-20", closedElsewhere: true };
+    expect(allotmentReady(ready)).toBeNull();
+    expect(allotmentReady({ ...ready, closedElsewhere: false })).toMatch(/^Close these rooms/);
+    expect(allotmentReady({ ...ready, to: "2026-11-30" })).toBe("The last night comes after the first.");
+    expect(allotmentReady({ ...ready, from: "" })).toBe("Choose the first and last night.");
+  });
+
+  it("sums a quote for the composer: now, later, at the property", () => {
+    const q = {
+      currency: "KES",
+      lines: [
+        { type: "subtotal", label: "Garden room, 2 nights", amount: 1_800_000, collected: "with_booking" },
+        { type: "tax", label: "Tourism levy", amount: 40_000, collected: "at_property" },
+      ],
+      total: { value: 1_840_000, currency: "KES" },
+      ratePlan: { name: "Bed and breakfast", meal: "breakfast", refundable: true },
+      policy: { steps: [], after: { value: 0, currency: "KES" }, noShow: { value: 0, currency: "KES" } },
+      schedule: [
+        { id: "deposit", type: "immediate", amount: { value: 900_000, currency: "KES" }, label: "Now" },
+        { id: "balance", type: "at_property", amount: { value: 940_000, currency: "KES" }, label: "There" },
+      ],
+      guarantee: "none",
+      includes: [],
+      validThrough: "2026-11-03T06:00:00+03:00",
+      source: "rates",
+    } as unknown as StayQuoteView;
+    const sums = quoteSums(q);
+    expect(sums.later).toBeNull();
+    expect(sums.total).toMatch(/18,400/);
+    expect(sums.now).toMatch(/9,000/);
+    expect(sums.atProperty).toMatch(/9,400/);
+  });
+
+  it("offers 'A place to stay' in the wizard: its rules, its systems, its rooms", () => {
+    const stays = kindOf("stays");
+    expect(stays).toMatchObject({ label: "A place to stay", preset: "stays", connect: ["lodging", "calendars"] });
+    expect(KINDS.map((k) => k.key)).toContain("stays");
+    expect(wizardPreset({ booking: false, quoteRequest: false, message: true }, stays)).toBe("stays");
+    expect(wizardRoomBodies([{ id: 1, name: " ", units: "1", sleeps: "2" }], "p1")).toEqual({
+      problem: "Name at least one kind of room.",
+    });
+    expect(
+      wizardRoomBodies(
+        [
+          { id: 1, name: "Garden room", units: "3", sleeps: "2" },
+          { id: 2, name: "", units: "1", sleeps: "4" },
+          { id: 3, name: "Family room", units: "1", sleeps: "4" },
+        ],
+        "p1",
+      ),
+    ).toEqual({
+      bodies: [
+        { property_id: "p1", name: "Garden room", units: 3, capacity: { adults: 2, children: 0, total: 2 }, sort: 0 },
+        { property_id: "p1", name: "Family room", units: 1, capacity: { adults: 4, children: 0, total: 4 }, sort: 1 },
+      ],
+    });
+  });
+});
