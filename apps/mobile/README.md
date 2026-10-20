@@ -34,18 +34,19 @@ Add them in GitHub → the repository → Settings → Secrets and variables →
    Keep `debug.keystore` somewhere safe and out of the repository. Its SHA-1 (`keytool -list -v
    -keystore debug.keystore -storepass android`) is what the Firebase API key is restricted to (below).
 
-2. **`GOOGLE_SERVICES_JSON`**: the whole text of `google-services.json` for the Android app
-   `ai.surfingdog.inbox` (Firebase console → Project settings → Your apps → Android → Download
-   google-services.json). Without it the app builds and works, without notifications.
+2. **`GOOGLE_SERVICES_JSON_BASE64`**: `google-services.json` for the Android app `ai.surfingdog.inbox`
+   (Firebase console → Project settings → Your apps → Android → Download google-services.json), base64,
+   since GitHub cannot reliably mask a JSON secret in logs. Without it the app builds and works, without
+   notifications.
 
    ```sh
-   gh secret set GOOGLE_SERVICES_JSON --repo surfingdogai/inbox < google-services.json
+   base64 -i google-services.json | gh secret set GOOGLE_SERVICES_JSON_BASE64 --repo surfingdogai/inbox
    ```
 
-   An APK always carries the Firebase API key in it, so restrict that key: Google Cloud console → APIs &
-   Services → Credentials → the Android key Firebase made → Application restrictions: Android apps,
-   package `ai.surfingdog.inbox` with the keystore's SHA-1; API restrictions: Firebase Cloud Messaging API
-   and Firebase Installations API only.
+   An APK always carries the Firebase API key in it, so restrict that key first: Google Cloud console →
+   APIs & Services → Credentials → the Android key Firebase made → API restrictions: Firebase
+   Installations API and FCM Registration API only; Application restrictions: Android apps, package
+   `ai.surfingdog.inbox` with the keystore's SHA-1.
 
 Neither file belongs in the repository (`google-services.json` is ignored here), and the workflow never
 prints them.
