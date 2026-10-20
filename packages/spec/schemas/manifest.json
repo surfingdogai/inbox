@@ -348,6 +348,43 @@
             "type": "string",
             "pattern": "^[a-z0-9_]{2,40}$"
           }
+        },
+        "lodging": {
+          "description": "A place to stay (spec 0.10): its kind, how it confirms, how soon it answers.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["hotel", "bnb", "guesthouse", "hostel", "rental", "apartment", "campsite", "ryokan", "other"]
+            },
+            "rooms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000
+            },
+            "check_in_from": {
+              "type": "string",
+              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            "check_out_until": {
+              "type": "string",
+              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            "confirmation": {
+              "type": "string",
+              "enum": ["request", "instant_some", "instant"]
+            },
+            "answer_hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 168
+            },
+            "registration": {
+              "type": "string",
+              "maxLength": 60
+            }
+          },
+          "required": ["kind", "check_in_from", "check_out_until", "confirmation", "answer_hours"]
         }
       },
       "required": ["name"]
@@ -356,7 +393,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["message", "quote_request", "booking", "order", "refund"]
+        "enum": ["message", "quote_request", "booking", "order", "refund", "stay"]
       }
     },
     "protocols": {
@@ -459,24 +496,62 @@
       }
     },
     "doors_elsewhere": {
-      "maxItems": 5,
+      "maxItems": 6,
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "item_type": {
             "type": "string",
-            "enum": ["message", "quote_request", "booking", "order", "refund"]
+            "enum": ["message", "quote_request", "booking", "order", "refund", "stay"]
           },
           "url": {
             "type": "string",
             "maxLength": 2048,
             "format": "uri",
             "description": "Where to go for it: an https page on a named host, with no user or password in it."
+          },
+          "url_template": {
+            "description": "Spec 0.10, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
+            "type": "string",
+            "maxLength": 2048
           }
         },
         "required": ["item_type", "url"]
       }
+    },
+    "stay": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["request", "instant_with_connector"]
+        },
+        "answers_within_h": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 168
+        },
+        "secure": {
+          "default": [],
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["at_property", "deposit", "card"]
+          }
+        },
+        "currencies": {
+          "default": [],
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          }
+        }
+      },
+      "required": ["mode"]
     }
   },
   "required": ["spec", "instance", "item_types", "protocols", "agent_policy", "receipt_keys", "review_services"]

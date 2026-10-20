@@ -106,6 +106,36 @@ export const requestBookingInputSchema = z.object({
 });
 export type RequestBookingInput = z.infer<typeof requestBookingInputSchema>;
 
+/**
+ * `request_stay` (spec 0.10, ADR-033): a request for a stay, carried to a place to stay's own inbox, as
+ * the inbox's own `request_stay` takes it. The property answers with its own quote, or, where it
+ * confirms at once, with its terms first (`confirm`) and the same call again with `terms_sha` books.
+ * Networks carry it later; it falls under the carried requests ADR-025 allows.
+ */
+export const requestStayInputSchema = z.object({
+  domain: domainArg,
+  check_in: z.iso.date().describe("Arrival date, the property's own, as YYYY-MM-DD."),
+  check_out: z.iso.date().describe("Departure date, after check_in."),
+  adults: z.int().min(1).max(20),
+  children_ages: z.array(z.int().min(0).max(17)).max(10).optional().describe("Each child's age on arrival."),
+  room: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("A room type's name or id from get_property; any room when left out."),
+  notes: z.string().min(1).max(2000).optional().describe("Anything the property should know: an arrival time, a cot."),
+  terms_sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional()
+    .describe("The confirm.terms_sha of the last answer, sent only after your person said yes to its summary."),
+  contact: carryContactSchema,
+  consent: consentArg,
+  language: languageArg,
+});
+export type RequestStayInput = z.infer<typeof requestStayInputSchema>;
+
 /** What became of one carried request (§4.17). */
 export const carryOutcomeSchema = z
   .enum([
@@ -137,7 +167,7 @@ export const carryOutputSchema = z.object({
   item: z
     .object({
       id: z.string(),
-      type: z.enum(["message", "quote_request", "booking"]),
+      type: z.enum(["message", "quote_request", "booking", "stay"]),
       state: z.string(),
     })
     .optional()

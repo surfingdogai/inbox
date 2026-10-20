@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "description": "Words for a place to stay (spec 0.10, ADR-033): property kinds, bed types, amenities, meal plans, house rules, how a tax or fee is charged, and the extras a guest may add, each with labels in English, Spanish, French, German, Italian and Portuguese. Extras are on-property items only: transfers, tours and car hire are never on this list, so an inbox never bundles another trader's travel service (Directive 2015/2302 Art. 3(5)). A token is never removed or renamed.",
+  "kinds": {
+    "hotel": { "en": "Hotel", "es": "Hotel", "fr": "Hôtel", "de": "Hotel", "it": "Hotel", "pt": "Hotel" },
+    "bnb": { "en": "B&B", "es": "B&B", "fr": "Chambre d'hôtes", "de": "Pension", "it": "B&B", "pt": "B&B" },
+    "guesthouse": {
+      "en": "Guesthouse",
+      "es": "Casa de huéspedes",
+      "fr": "Maison d'hôtes",
+      "de": "Gästehaus",
+      "it": "Guesthouse",
+      "pt": "Casa de hóspedes"
+    },
+    "hostel": { "en": "Hostel", "es": "Hostal", "fr": "Auberge", "de": "Hostel", "it": "Ostello", "pt": "Hostel" },
+    "rental": {
+      "en": "Holiday rental",
+      "es": "Alquiler vacacional",
+      "fr": "Location de vacances",
+      "de": "Ferienunterkunft",
+      "it": "Casa vacanze",
+      "pt": "Alojamento de férias"
+    },
+    "apartment": {
+      "en": "Apartment",
+      "es": "Apartamento",
+      "fr": "Appartement",
+      "de": "Apartment",
+      "it": "Appartamento",
+      "pt": "Apartamento"
+    },
+    "campsite": {
+      "en": "Campsite",
+      "es": "Camping",
+      "fr": "Camping",
+      "de": "Campingplatz",
+      "it": "Campeggio",
+      "pt": "Parque de campismo"
+    },
+    "ryokan": { "en": "Ryokan", "es": "Ryokan", "fr": "Ryokan", "de": "Ryokan", "it": "Ryokan", "pt": "Ryokan" },
+    "other": { "en": "Other", "es": "Otro", "fr": "Autre", "de": "Andere", "it": "Altro", "pt": "Outro" }
+  },
+  "beds": {
+    "double": {
+      "en": "Double",
+      "es": "Doble",
+      "fr": "Double",
+      "de": "Doppelbett",
+      "it": "Matrimoniale",
+      "pt": "Casal"
+    },
+    "single": {
+      "en": "Single",
+      "es": "Individual",
+      "fr": "Simple",
+      "de": "Einzelbett",
+      "it": "Singolo",
+      "pt": "Individual"
+    },
+    "queen": { "en": "Queen", "es": "Queen", "fr": "Queen", "de": "Queen-Size-Bett", "it": "Queen", "pt": "Queen" },
+    "king": { "en": "King", "es": "King", "fr": "King", "de": "King-Size-Bett", "it": "King", "pt": "King" },
+    "bunk": {
+      "en": "Bunk",
+      "es": "Litera",
+      "fr": "Lit superposé",
+      "de": "Etagenbett",
+      "it": "Letto a castello",
+      "pt": "Beliche"
+    },
+    "sofa_bed": {
+      "en": "Sofa bed",
+      "es": "Sofá cama",
+      "fr": "Canapé-lit",
+      "de": "Schlafsofa",
+      "it": "Divano letto",
+      "pt": "Sofá-cama"
+    },
+    "futon": { "en": "Futon", "es": "Futón", "fr": "Futon", "de": "Futon", "it": "Futon", "pt": "Futon" },
+    "cot": { "en": "Cot", "es": "Cuna", "fr": "Lit bébé", "de": "Kinderbett", "it": "Culla", "pt": "Berço" }
+  },
+  "amenities": {
+    "private_bathroom": {
+      "en": "Private bathroom",
+      "es": "Baño privado",
+      "fr": "Salle de bain privée",
+      "de": "Eigenes Bad",
+      "it": "Bagno privato",
+      "pt": "Casa de banho privativa"
+    },
+    "air_conditioning": {
+      "en": "Air conditioning",
+      "es": "Aire acondicionado",
+      "fr": "Climatisation",
+      "de": "Klimaanlage",
+      "it": "Aria condizionata",
+      "pt": "Ar condicionado"
+    },
+    "heating": {
+      "en": "Heating",
+      "es": "Calefacción",
+      "fr": "Chauffage",
+      "de": "Heizung",
+      "it": "Riscaldamento",
+      "pt": "Aquecimento"
+    },
+    "kitchen": { "en": "Kitchen", "es": "Cocina", "fr": "Cuisine", "de": "Küche", "it": "Cucina", "pt": "Cozinha" },
+    "balcony": { "en": "Balcony", "es": "Balcón", "fr": "Balcon", "de": "Balkon", "it": "Balcone", "pt": "Varanda" },
+    "sea_view": {
+      "en": "Sea view",
+      "es": "Vista al mar",
+      "fr": "Vue sur la mer",
+      "de": "Meerblick",
+      "it": "Vista mare",
+      "pt": "Vista mar"
+    },
+    "desk": {
+      "en": "Desk",
+      "es": "Escritorio",
+      "fr": "Bureau",
+      "de": "Schreibtisch",
+      "it": "Scrivania",
+      "pt": "Secretária"
+    },
+    "wifi": { "en": "Wifi", "es": "Wifi", "fr": "Wifi", "de": "WLAN", "it": "Wifi", "pt": "Wifi" },
+    "washer": {
+      "en": "Washing machine",
+      "es": "Lavadora",
+      "fr": "Lave-linge",
+      "de": "Waschmaschine",
+      "it": "Lavatrice",
+      "pt": "Máquina de lavar"
+    },
+    "parking": {
+      "en": "Parking",
+      "es": "Aparcamiento",
+      "fr": "Parking",
+      "de": "Parkplatz",
+      "it": "Parcheggio",
+      "pt": "Estacionamento"
+    },
+    "step_free": {
+      "en": "Step-free access",
+      "es": "Acceso sin escalones",
+      "fr": "Accès de plain-pied",
+      "de": "Stufenloser Zugang",
+      "it": "Accesso senza gradini",
+      "pt": "Acesso sem degraus"
+    },
+    "onsen": {
+      "en": "Hot spring bath",
+      "es": "Baño termal",
+      "fr": "Bain thermal",
+      "de": "Thermalbad",
+      "it": "Bagno termale",
+      "pt": "Banho termal"
+    }
+  },
+  "meals": {
+    "room_only": {
+      "en": "Room only",
+      "es": "Solo alojamiento",
+      "fr": "Logement seul",
+      "de": "Nur Übernachtung",
+      "it": "Solo pernottamento",
+      "pt": "Só alojamento"
+    },
+    "breakfast": {
+      "en": "Breakfast",
+      "es": "Desayuno",
+      "fr": "Petit-déjeuner",
+      "de": "Frühstück",
+      "it": "Colazione",
+      "pt": "Pequeno-almoço"
+    },
+    "half_board": {
+      "en": "Half board",
+      "es": "Media pensión",
+      "fr": "Demi-pension",
+      "de": "Halbpension",
+      "it": "Mezza pensione",
+      "pt": "Meia pensão"
+    },
+    "full_board": {
+      "en": "Full board",
+      "es": "Pensión completa",
+      "fr": "Pension complète",
+      "de": "Vollpension",
+      "it": "Pensione completa",
+      "pt": "Pensão completa"
+    },
+    "all_inclusive": {
+      "en": "All inclusive",
+      "es": "Todo incluido",
+      "fr": "Tout compris",
+      "de": "All inclusive",
+      "it": "All inclusive",
+      "pt": "Tudo incluído"
+    }
+  },
+  "house_rules": {
+    "no_smoking": {
+      "en": "No smoking",
+      "es": "Prohibido fumar",
+      "fr": "Non-fumeur",
+      "de": "Nichtraucher",
+      "it": "Vietato fumare",
+      "pt": "Proibido fumar"
+    },
+    "no_parties": {
+      "en": "No parties",
+      "es": "Sin fiestas",
+      "fr": "Pas de fêtes",
+      "de": "Keine Partys",
+      "it": "Niente feste",
+      "pt": "Sem festas"
+    },
+    "quiet_hours": {
+      "en": "Quiet hours",
+      "es": "Horas de silencio",
+      "fr": "Heures calmes",
+      "de": "Ruhezeiten",
+      "it": "Ore di silenzio",
+      "pt": "Horas de silêncio"
+    },
+    "no_visitors_after": {
+      "en": "No visitors after",
+      "es": "Sin visitas después de",
+      "fr": "Pas de visiteurs après",
+      "de": "Keine Besucher nach",
+      "it": "Niente visite dopo",
+      "pt": "Sem visitas depois de"
+    },
+    "shoes_off": {
+      "en": "Shoes off inside",
+      "es": "Sin zapatos dentro",
+      "fr": "Chaussures retirées à l'intérieur",
+      "de": "Schuhe drinnen ausziehen",
+      "it": "Senza scarpe all'interno",
+      "pt": "Sem sapatos dentro"
+    }
+  },
+  "fee_bases": {
+    "per_stay": {
+      "en": "Per stay",
+      "es": "Por estancia",
+      "fr": "Par séjour",
+      "de": "Pro Aufenthalt",
+      "it": "Per soggiorno",
+      "pt": "Por estadia"
+    },
+    "per_night": {
+      "en": "Per night",
+      "es": "Por noche",
+      "fr": "Par nuit",
+      "de": "Pro Nacht",
+      "it": "Per notte",
+      "pt": "Por noite"
+    },
+    "per_room_night": {
+      "en": "Per room per night",
+      "es": "Por habitación y noche",
+      "fr": "Par chambre et par nuit",
+      "de": "Pro Zimmer und Nacht",
+      "it": "Per camera a notte",
+      "pt": "Por quarto por noite"
+    },
+    "per_person_night": {
+      "en": "Per guest per night",
+      "es": "Por huésped y noche",
+      "fr": "Par personne et par nuit",
+      "de": "Pro Gast und Nacht",
+      "it": "Per ospite a notte",
+      "pt": "Por hóspede por noite"
+    },
+    "percent_of_room": {
+      "en": "% of the room price",
+      "es": "% del precio de la habitación",
+      "fr": "% du prix de la chambre",
+      "de": "% des Zimmerpreises",
+      "it": "% del prezzo della camera",
+      "pt": "% do preço do quarto"
+    }
+  },
+  "extras": {
+    "breakfast": {
+      "en": "Breakfast",
+      "es": "Desayuno",
+      "fr": "Petit-déjeuner",
+      "de": "Frühstück",
+      "it": "Colazione",
+      "pt": "Pequeno-almoço"
+    },
+    "parking": {
+      "en": "Parking",
+      "es": "Aparcamiento",
+      "fr": "Parking",
+      "de": "Parkplatz",
+      "it": "Parcheggio",
+      "pt": "Estacionamento"
+    },
+    "cot": { "en": "Cot", "es": "Cuna", "fr": "Lit bébé", "de": "Kinderbett", "it": "Culla", "pt": "Berço" },
+    "late_checkout": {
+      "en": "Late check-out",
+      "es": "Salida tardía",
+      "fr": "Départ tardif",
+      "de": "Später Check-out",
+      "it": "Check-out posticipato",
+      "pt": "Saída tardia"
+    },
+    "early_checkin": {
+      "en": "Early check-in",
+      "es": "Llegada anticipada",
+      "fr": "Arrivée anticipée",
+      "de": "Früher Check-in",
+      "it": "Check-in anticipato",
+      "pt": "Chegada antecipada"
+    },
+    "pet": {
+      "en": "Pet",
+      "es": "Mascota",
+      "fr": "Animal",
+      "de": "Haustier",
+      "it": "Animale",
+      "pt": "Animal de estimação"
+    },
+    "towels": {
+      "en": "Towels",
+      "es": "Toallas",
+      "fr": "Serviettes",
+      "de": "Handtücher",
+      "it": "Asciugamani",
+      "pt": "Toalhas"
+    },
+    "other_on_site": {
+      "en": "Something else here",
+      "es": "Otra cosa aquí",
+      "fr": "Autre chose sur place",
+      "de": "Etwas anderes vor Ort",
+      "it": "Altro sul posto",
+      "pt": "Outra coisa no local"
+    }
+  }
+}

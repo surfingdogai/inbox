@@ -1,0 +1,540 @@
+{
+  "description": "A stay's cancellation preset dated for its arrival (stayPolicySteps in @surfingdog/spec, datePolicy and feeAt in the inbox): each step ends at 23:59:59 local on the day N days before the check-in date, in the property's zone, whatever its clocks do; `first_night` is the first night's price, `half` half the total, `full` the total. Then the fee at given instants. Read by packages/core/test/stay-vectors.test.ts.",
+  "cases": [
+    {
+      "name": "Kyoto: free until 3 days before, then the first night; no-show the full stay",
+      "preset": {
+        "preset": "free_until",
+        "days": 3,
+        "after": "first_night",
+        "noShow": "full"
+      },
+      "check_in": "2026-12-12",
+      "check_in_time": "15:00",
+      "zone": "Asia/Tokyo",
+      "total": {
+        "value": 90540,
+        "currency": "JPY"
+      },
+      "nights": [25800, 25800, 25800],
+      "at": ["2026-12-09T23:59:58+09:00", "2026-12-10T00:00:00+09:00"],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 3
+            },
+            "fee": {
+              "kind": "none"
+            }
+          }
+        ],
+        "after": {
+          "kind": "units",
+          "value": 1
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2026-12-09T23:59:59+09:00",
+            "fee": {
+              "value": 0,
+              "currency": "JPY"
+            }
+          }
+        ],
+        "after": {
+          "value": 25800,
+          "currency": "JPY"
+        },
+        "noShow": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "zone": "Asia/Tokyo"
+      },
+      "fees": [
+        {
+          "at": "2026-12-09T23:59:58+09:00",
+          "fee": {
+            "value": 0,
+            "currency": "JPY"
+          }
+        },
+        {
+          "at": "2026-12-10T00:00:00+09:00",
+          "fee": {
+            "value": 25800,
+            "currency": "JPY"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Halifax, check-in on the day the clocks go forward: the step ends at 23:59:59 local, the day before is still standard time",
+      "preset": {
+        "preset": "free_until",
+        "days": 1,
+        "after": "half",
+        "noShow": "full"
+      },
+      "check_in": "2027-03-14",
+      "check_in_time": "16:00",
+      "zone": "America/Halifax",
+      "total": {
+        "value": 43470,
+        "currency": "CAD"
+      },
+      "nights": [18900, 18900],
+      "at": ["2027-03-13T23:59:58-04:00", "2027-03-14T00:00:00-04:00"],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 1
+            },
+            "fee": {
+              "kind": "none"
+            }
+          }
+        ],
+        "after": {
+          "kind": "percent",
+          "value": 50
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2027-03-13T23:59:59-04:00",
+            "fee": {
+              "value": 0,
+              "currency": "CAD"
+            }
+          }
+        ],
+        "after": {
+          "value": 21735,
+          "currency": "CAD"
+        },
+        "noShow": {
+          "value": 43470,
+          "currency": "CAD"
+        },
+        "zone": "America/Halifax"
+      },
+      "fees": [
+        {
+          "at": "2027-03-13T23:59:58-04:00",
+          "fee": {
+            "value": 0,
+            "currency": "CAD"
+          }
+        },
+        {
+          "at": "2027-03-14T00:00:00-04:00",
+          "fee": {
+            "value": 21735,
+            "currency": "CAD"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Havana, whose clocks change at midnight: 2 days before ends at 23:59:59 local",
+      "preset": {
+        "preset": "free_until",
+        "days": 2,
+        "after": "first_night",
+        "noShow": "first_night"
+      },
+      "check_in": "2027-03-16",
+      "check_in_time": "14:00",
+      "zone": "America/Havana",
+      "total": {
+        "value": 36000,
+        "currency": "USD"
+      },
+      "nights": [12000, 12000, 12000],
+      "at": ["2027-03-14T23:59:00-04:00", "2027-03-15T00:00:30-04:00"],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 2
+            },
+            "fee": {
+              "kind": "none"
+            }
+          }
+        ],
+        "after": {
+          "kind": "units",
+          "value": 1
+        },
+        "noShow": {
+          "kind": "units",
+          "value": 1
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2027-03-14T23:59:59-04:00",
+            "fee": {
+              "value": 0,
+              "currency": "USD"
+            }
+          }
+        ],
+        "after": {
+          "value": 12000,
+          "currency": "USD"
+        },
+        "noShow": {
+          "value": 12000,
+          "currency": "USD"
+        },
+        "zone": "America/Havana"
+      },
+      "fees": [
+        {
+          "at": "2027-03-14T23:59:00-04:00",
+          "fee": {
+            "value": 0,
+            "currency": "USD"
+          }
+        },
+        {
+          "at": "2027-03-15T00:00:30-04:00",
+          "fee": {
+            "value": 12000,
+            "currency": "USD"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lord Howe Island, half-hour daylight saving",
+      "preset": {
+        "preset": "free_until",
+        "days": 7,
+        "after": "full",
+        "noShow": "full"
+      },
+      "check_in": "2027-04-05",
+      "check_in_time": "14:00",
+      "zone": "Australia/Lord_Howe",
+      "total": {
+        "value": 150000,
+        "currency": "AUD"
+      },
+      "nights": [50000, 50000, 50000],
+      "at": ["2027-03-29T23:59:00+11:00", "2027-03-30T00:30:00+11:00"],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 7
+            },
+            "fee": {
+              "kind": "none"
+            }
+          }
+        ],
+        "after": {
+          "kind": "full"
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2027-03-29T23:59:59+11:00",
+            "fee": {
+              "value": 0,
+              "currency": "AUD"
+            }
+          }
+        ],
+        "after": {
+          "value": 150000,
+          "currency": "AUD"
+        },
+        "noShow": {
+          "value": 150000,
+          "currency": "AUD"
+        },
+        "zone": "Australia/Lord_Howe"
+      },
+      "fees": [
+        {
+          "at": "2027-03-29T23:59:00+11:00",
+          "fee": {
+            "value": 0,
+            "currency": "AUD"
+          }
+        },
+        {
+          "at": "2027-03-30T00:30:00+11:00",
+          "fee": {
+            "value": 150000,
+            "currency": "AUD"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Kathmandu, +5:45; non-refundable from booking",
+      "preset": {
+        "preset": "non_refundable"
+      },
+      "check_in": "2027-01-08",
+      "check_in_time": "13:00",
+      "zone": "Asia/Kathmandu",
+      "total": {
+        "value": 1200000,
+        "currency": "NPR"
+      },
+      "nights": [600000, 600000],
+      "at": ["2027-01-01T09:00:00+05:45"],
+      "policy": {
+        "steps": [],
+        "after": {
+          "kind": "full"
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [],
+        "after": {
+          "value": 1200000,
+          "currency": "NPR"
+        },
+        "noShow": {
+          "value": 1200000,
+          "currency": "NPR"
+        },
+        "zone": "Asia/Kathmandu"
+      },
+      "fees": [
+        {
+          "at": "2027-01-01T09:00:00+05:45",
+          "fee": {
+            "value": 1200000,
+            "currency": "NPR"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jaipur, +5:30: custom steps, 50% inside 14 days, the full stay inside 2",
+      "preset": {
+        "preset": "custom",
+        "steps": [
+          {
+            "daysBefore": 14,
+            "fee": {
+              "kind": "none"
+            }
+          },
+          {
+            "daysBefore": 2,
+            "fee": {
+              "kind": "percent",
+              "value": 50
+            }
+          }
+        ],
+        "after": {
+          "kind": "full"
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "check_in": "2027-02-20",
+      "check_in_time": "12:00",
+      "zone": "Asia/Kolkata",
+      "total": {
+        "value": 4800000,
+        "currency": "INR"
+      },
+      "nights": [1600000, 1600000, 1600000],
+      "at": [
+        "2027-02-06T23:59:59+05:30",
+        "2027-02-07T00:00:00+05:30",
+        "2027-02-18T23:59:59+05:30",
+        "2027-02-19T00:00:00+05:30"
+      ],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 14
+            },
+            "fee": {
+              "kind": "none"
+            }
+          },
+          {
+            "before": {
+              "days": 2
+            },
+            "fee": {
+              "kind": "percent",
+              "value": 50
+            }
+          }
+        ],
+        "after": {
+          "kind": "full"
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2027-02-06T23:59:59+05:30",
+            "fee": {
+              "value": 0,
+              "currency": "INR"
+            }
+          },
+          {
+            "until": "2027-02-18T23:59:59+05:30",
+            "fee": {
+              "value": 2400000,
+              "currency": "INR"
+            }
+          }
+        ],
+        "after": {
+          "value": 4800000,
+          "currency": "INR"
+        },
+        "noShow": {
+          "value": 4800000,
+          "currency": "INR"
+        },
+        "zone": "Asia/Kolkata"
+      },
+      "fees": [
+        {
+          "at": "2027-02-06T23:59:59+05:30",
+          "fee": {
+            "value": 0,
+            "currency": "INR"
+          }
+        },
+        {
+          "at": "2027-02-07T00:00:00+05:30",
+          "fee": {
+            "value": 2400000,
+            "currency": "INR"
+          }
+        },
+        {
+          "at": "2027-02-18T23:59:59+05:30",
+          "fee": {
+            "value": 2400000,
+            "currency": "INR"
+          }
+        },
+        {
+          "at": "2027-02-19T00:00:00+05:30",
+          "fee": {
+            "value": 4800000,
+            "currency": "INR"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Apia, across the date line: a step 1 day before",
+      "preset": {
+        "preset": "free_until",
+        "days": 1,
+        "after": "first_night",
+        "noShow": "full"
+      },
+      "check_in": "2027-01-10",
+      "check_in_time": "14:00",
+      "zone": "Pacific/Apia",
+      "total": {
+        "value": 90000,
+        "currency": "WST"
+      },
+      "nights": [45000, 45000],
+      "at": ["2027-01-09T23:59:59+13:00", "2027-01-10T00:00:00+13:00"],
+      "policy": {
+        "steps": [
+          {
+            "before": {
+              "days": 1
+            },
+            "fee": {
+              "kind": "none"
+            }
+          }
+        ],
+        "after": {
+          "kind": "units",
+          "value": 1
+        },
+        "noShow": {
+          "kind": "full"
+        }
+      },
+      "dated": {
+        "steps": [
+          {
+            "until": "2027-01-09T23:59:59+13:00",
+            "fee": {
+              "value": 0,
+              "currency": "WST"
+            }
+          }
+        ],
+        "after": {
+          "value": 45000,
+          "currency": "WST"
+        },
+        "noShow": {
+          "value": 90000,
+          "currency": "WST"
+        },
+        "zone": "Pacific/Apia"
+      },
+      "fees": [
+        {
+          "at": "2027-01-09T23:59:59+13:00",
+          "fee": {
+            "value": 0,
+            "currency": "WST"
+          }
+        },
+        {
+          "at": "2027-01-10T00:00:00+13:00",
+          "fee": {
+            "value": 45000,
+            "currency": "WST"
+          }
+        }
+      ]
+    }
+  ]
+}
