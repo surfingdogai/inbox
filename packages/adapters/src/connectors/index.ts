@@ -29,6 +29,7 @@ export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm 
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
   SHOPIFY_API_VERSION,
+  SHOPIFY_HOOK_FIELDS,
   SHOPIFY_SCOPES,
   SHOPIFY_TOPICS,
   shopDomainOf,
@@ -89,6 +90,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
-    shopifyConnector(opts.oauth?.shopify ?? null, { hosted: opts.hosted }),
+    shopifyConnector(opts.oauth?.shopify ?? null),
   ];
 }

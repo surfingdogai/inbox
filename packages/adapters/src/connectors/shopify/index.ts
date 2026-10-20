@@ -80,8 +80,7 @@ export { forgetBuckets, MAX_WAIT_MS, SHOPIFY_API_VERSION, SHOPIFY_SCOPES, shopDo
  * Client ID and Client secret, for a token by the client credentials grant that lasts 24 hours and is
  * asked for again before it lapses. An app made in the shop's admin before 2026 still works with its
  * Admin API access token, under More options. "Sign in with Shopify" needs a Shopify app of whoever
- * runs the server (`SHOPIFY_CLIENT_ID`/`_SECRET`); without one it says "set up" on one's own server
- * and "Soon" on a hosted inbox.
+ * runs the server (`SHOPIFY_CLIENT_ID`/`_SECRET`), and is shown only where there is one.
  *
  * Everything is the GraphQL Admin API in version 2026-10, every call within the shop's cost-based
  * rate limit (`admin.ts`). Documents are in `queries.ts`. The docs cited are the ones Shopify
@@ -107,12 +106,37 @@ export const SHOPIFY_TOPICS: Readonly<Record<string, string>> = {
   "app/uninstalled": "APP_UNINSTALLED",
 };
 
-/** What every draft the inbox makes is tagged with, and the tag that names its link. */
-const TAG = "sdi";
+/**
+ * What each webhook carries (`includeFields`): the ids the inbox reads back, and for an order what
+ * tells the inbox's own from the rest (`source_name`, `tags`). Nothing about a customer, and never a
+ * body near the inbox's size limit. https://shopify.dev/docs/api/admin-graphql/2026-10/input-objects/WebhookSubscriptionInput
+ */
+const ORDER_FIELDS = ["id", "admin_graphql_api_id", "source_name", "tags"] as const;
+const PRODUCT_FIELDS = ["id", "admin_graphql_api_id"] as const;
+export const SHOPIFY_HOOK_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  ORDERS_PAID: ORDER_FIELDS,
+  ORDERS_FULFILLED: ORDER_FIELDS,
+  ORDERS_UPDATED: ORDER_FIELDS,
+  ORDERS_CANCELLED: ORDER_FIELDS,
+  REFUNDS_CREATE: ["order_id"],
+  DRAFT_ORDERS_DELETE: ["id"],
+  PRODUCTS_CREATE: PRODUCT_FIELDS,
+  PRODUCTS_UPDATE: PRODUCT_FIELDS,
+  PRODUCTS_DELETE: PRODUCT_FIELDS,
+  APP_UNINSTALLED: ["id"],
+};
+
+/**
+ * What every draft the inbox makes is tagged with, and the tag that names its link. Shopify carries a
+ * draft's tags over to the order it becomes:
+ * https://help.shopify.com/en/manual/shopify-flow/reference/actions/add-draft-order-tags
+ */
+const TAG = "inbox";
 const refTag = (ref: string) => `${TAG}-${ref}`;
 const HOUR_MS = 3_600_000;
+/** Shopify shows an app only the last 60 days of orders without `read_all_orders` (Order, 2026-10). */
+const ORDERS_VISIBLE_MS = 60 * 24 * HOUR_MS;
 const DEV_DASHBOARD = "https://dev.shopify.com/dashboard/";
-const DOCS = "https://surfingdog.ai/docs/connectors/shopify/";
 
 /** The shop's address, with or without https, or the admin's address: never a format to guess. */
 function storeField() {
@@ -130,14 +154,14 @@ function storeField() {
       label: "Shop address",
       input: "text",
       placeholder: "your-shop.myshopify.com",
-      help: "Shopify shows it under Settings → Domains. Your admin's address works too.",
+      help: "Paste your Shopify admin's address from the browser, or your-shop.myshopify.com.",
       autocomplete: "off",
     },
   );
 }
 
+/** The app's keys first, with how to make the app; then which shop. */
 export const shopifyForm = z.object({
-  store: storeField(),
   client_id: field(
     z
       .string()
@@ -147,12 +171,12 @@ export const shopifyForm = z.object({
       .regex(/^[A-Za-z0-9_-]+$/, "a Shopify Client ID is letters and numbers"),
     {
       label: "Client ID",
-      help: "From an app you make for this inbox, in Shopify's Dev Dashboard:",
+      help: "Make a small app for your shop in Shopify's Dev Dashboard:",
       steps: [
-        "Create app → Start from Dev Dashboard, and name it after this inbox.",
-        "Versions: App URL https://shopify.dev/apps/default-app-home; scopes read_products, read_orders, write_draft_orders. Release.",
-        "Install app, on this shop.",
-        "App settings → Credentials: copy the Client ID and the Client secret.",
+        "Create app → Start from Dev Dashboard. Name it Inbox, then Create.",
+        "Versions: keep the App URL Shopify suggests, tick read_products, read_orders and write_draft_orders, then Release.",
+        "Install app, and pick your shop.",
+        "App settings → Credentials: copy the Client ID and Client secret here.",
       ],
       link: { href: DEV_DASHBOARD, text: "Open the Dev Dashboard" },
       autocomplete: "off",
@@ -167,6 +191,7 @@ export const shopifyForm = z.object({
       .regex(/^[A-Za-z0-9_-]+$/, "a Shopify Client secret is letters, numbers and underscores"),
     { label: "Client secret", placeholder: "shpss_…" },
   ),
+  store: storeField(),
   access_token: secretField(
     z
       .string()
@@ -175,12 +200,18 @@ export const shopifyForm = z.object({
       .optional(),
     {
       label: "Admin API access token",
-      help: "Only for an app made in your Shopify admin before 2026: its access token, with its API key and API secret key above.",
+      help: "Only for an app made in your Shopify admin before 2026. Paste its API key as the Client ID and its API secret key as the Client secret above: Shopify signs its updates with that secret.",
       placeholder: "shpat_…",
       advanced: true,
     },
   ),
 });
+
+/** Why a shop's currency cannot be connected, in the owner's words; null when it can. */
+function currencyProblem(name: string, currency: string): string | null {
+  if (/^[A-Z]{3}$/.test(currency) && isHundredthsCurrency(currency)) return null;
+  return `${name} sells in ${currency || "a currency Shopify did not name"}. Shops that price in whole units, like yen or won, can't connect yet.`;
+}
 
 /* --- what Shopify answers ------------------------------------------------------------ */
 
@@ -257,6 +288,14 @@ interface Hook {
   readonly id: string;
   readonly topic: string;
   readonly uri: string;
+  readonly fields: readonly string[];
+}
+/** The webhooks at the connection's address, what was made now, what goes once kept, and the topics Shopify did not make. */
+interface Hooks {
+  readonly hooks: readonly Hook[];
+  readonly created: readonly string[];
+  readonly stale: readonly string[];
+  readonly failed: readonly string[];
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -282,7 +321,7 @@ function tagsOf(v: unknown): string[] {
 /** The inbox's own id for the link, from the tag it put on its draft (Shopify keeps tags in any case). */
 function refOf(tags: unknown): string | null {
   for (const t of tagsOf(tags)) {
-    const m = /^sdi-([0-9a-z]{26})$/i.exec(t.trim());
+    const m = /^inbox-([0-9a-z]{26})$/i.exec(t.trim());
     if (m?.[1]) return m[1].toUpperCase();
   }
   return null;
@@ -300,8 +339,6 @@ type Way = "keys" | "token" | "oauth";
 interface Options {
   /** The Shopify app of whoever runs the server, for "Sign in with Shopify"; null without one. */
   readonly client?: OAuthClient | null | undefined;
-  /** A hosted inbox, whose app is the host's own and on its way: "Soon" rather than "set up". */
-  readonly hosted?: boolean | undefined;
   /** How the connector waits for Shopify's bucket to refill: tests give one that does not. */
   readonly sleep?: Sleep | undefined;
 }
@@ -406,18 +443,17 @@ export function shopifyConnector(
     const externalId = gid("Shop", s?.id);
     if (!s || !externalId) throw new ConnectorError("bad_response", "Shopify did not say which shop this is.");
     const currency = str(s.currencyCode).toUpperCase();
-    if (!/^[A-Z]{3}$/.test(currency) || !isHundredthsCurrency(currency)) {
-      throw new ConnectorError(
-        "config",
-        `This inbox counts money in hundredths, and ${str(s.name) || shop} sells in ${currency || "another currency"}, which is not. It cannot be connected yet.`,
-        { field: "store" },
-      );
-    }
+    const unfit = currencyProblem(str(s.name).trim() || shop, currency);
+    if (unfit) throw new ConnectorError("config", unfit, { field: "store" });
     // What the shop approved; a token's own `scope` is the app version's, which a shop may not have
-    // approved yet, and is used only when the installation does not say.
+    // approved yet, and is used only when the installation does not say. A write scope includes its
+    // read scope, and Shopify may list only the write one ("don't read an absent read_ handle as a
+    // missing permission"): https://shopify.dev/docs/apps/build/authentication-authorization/app-installation/manage-access-scopes
     const installed = (info.currentAppInstallation?.accessScopes ?? []).map((a) => str(a?.handle)).filter(Boolean);
     const scopes = new Set(installed.length > 0 ? installed : grantScopes);
-    const missing = SHOPIFY_SCOPES.filter((scope) => !scopes.has(scope));
+    const has = (scope: string) =>
+      scopes.has(scope) || (scope.startsWith("read_") && scopes.has(`write_${scope.slice("read_".length)}`));
+    const missing = SHOPIFY_SCOPES.filter((scope) => !has(scope));
     if (missing.length > 0) {
       throw new ConnectorError(
         "config",
@@ -430,11 +466,18 @@ export function shopifyConnector(
     const storefront = /^https:\/\//.test(str(s.primaryDomain?.url)) ? str(s.primaryDomain?.url) : `https://${home}`;
     const name = str(s.name).trim().slice(0, 120) || home;
     const previous = hooksOf(ctx.previous?.extra ?? {}).map((h) => h.id);
-    let made: { hooks: Hook[]; created: string[]; stale: string[] } = { hooks: [], created: [], stale: [] };
-    let webhook: "added" | "pending" | "none" = "none";
+    let made: Hooks = { hooks: [], created: [], stale: [], failed: [] };
+    let webhook: "added" | "pending" | "failed" | "none" = "none";
     if (ctx.hookUrl && ctx.hooksLive !== false) {
-      made = await ensureHooks({ ...target, shop: home }, ctx.hookUrl, previous);
-      webhook = "added";
+      // A webhook Shopify will not make is no reason to refuse the shop: polling is the source of
+      // truth, and a refresh tries again within the hour.
+      try {
+        made = await ensureHooks({ ...target, shop: home }, ctx.hookUrl, previous);
+        webhook = made.failed.length === 0 ? "added" : "failed";
+      } catch (error) {
+        if (!(error instanceof ConnectorError)) throw error;
+        webhook = "failed";
+      }
     } else if (ctx.hookUrl) {
       // A hosted inbox before it goes live answers only its owner: webhooks made now would fail, and
       // Shopify removes a subscription after eight failures. They are made once it is live.
@@ -455,7 +498,8 @@ export function shopifyConnector(
         api_version: SHOPIFY_API_VERSION,
         webhook,
         hooks: made.hooks.map(({ id, topic }) => ({ id, topic })),
-        ...(webhook === "added" && ctx.hookUrl ? { hook_origin: originOf(ctx.hookUrl) } : {}),
+        ...((webhook === "added" || webhook === "failed") && ctx.hookUrl ? { hook_origin: originOf(ctx.hookUrl) } : {}),
+        ...(webhook === "failed" ? { hook_retry_at: ctx.now + HOUR_MS } : {}),
       },
       calendars: [],
       destinations: [],
@@ -526,40 +570,66 @@ export function shopifyConnector(
     }
   }
 
+  const sameFields = (a: readonly string[], b: readonly string[]) =>
+    a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",");
+
   /**
-   * Every topic the inbox asks for, at `url`: what is there already is kept, what is missing is made
-   * (one Shopify removed after failed deliveries comes back here). What this inbox made before
-   * (`made`, by id) and points elsewhere now, or what points at another of its addresses for Shopify,
-   * is named `stale`, to go once the connection is kept.
+   * Every topic the inbox asks for, at `url`, carrying only its fields: what is there already is kept,
+   * what is missing is made (one Shopify removed after failed deliveries comes back here), one at this
+   * address carrying other fields is made again (Shopify takes one a topic and address). A topic
+   * Shopify will not make is named in `failed`, and the rest are still made; after a failure that is
+   * not this topic's own (the shop unreachable, the bucket empty), the rest wait for the next refresh.
+   * What this inbox made before (`made`, by id) and points elsewhere now, or what points at another of
+   * its addresses for Shopify, is named `stale`, to go once the connection is kept.
    */
-  async function ensureHooks(t: AdminTarget, url: string, made: readonly string[]) {
+  async function ensureHooks(t: AdminTarget, url: string, made: readonly string[]): Promise<Hooks> {
     const listed = await admin<{ webhookSubscriptions?: { nodes?: readonly Record<string, unknown>[] } }>(t, HOOKS);
     const all: Hook[] = (listed.webhookSubscriptions?.nodes ?? [])
-      .map((n) => ({ id: str(n.id), topic: str(n.topic), uri: str(n.uri) }))
+      .map((n) => ({
+        id: str(n.id),
+        topic: str(n.topic),
+        uri: str(n.uri),
+        fields: Array.isArray(n.includeFields) ? n.includeFields.map(str) : [],
+      }))
       .filter((h) => h.id !== "");
     const here = all.filter((h) => h.uri === url);
     const created: string[] = [];
-    const hooks: Hook[] = [...here];
-    for (const topic of Object.values(SHOPIFY_TOPICS)) {
-      if (here.some((h) => h.topic === topic)) continue;
-      const answer = await admin<{
-        webhookSubscriptionCreate?: { webhookSubscription?: Record<string, unknown> | null; userErrors?: unknown };
-      }>(t, HOOK_CREATE, { topic, webhookSubscription: { uri: url } });
-      const sub = answer.webhookSubscriptionCreate?.webhookSubscription;
-      const id = str(sub?.id);
-      if (!id) {
-        throw new ConnectorError(
-          "refused",
-          `Shopify did not make the ${topic} webhook: ${userErrors(answer.webhookSubscriptionCreate) ?? "no reason given"}`,
-        );
+    const failed: string[] = [];
+    const hooks: Hook[] = [];
+    let waiting = false;
+    for (const [topic, fields] of Object.entries(SHOPIFY_HOOK_FIELDS)) {
+      const atUrl = here.filter((h) => h.topic === topic);
+      const right = atUrl.find((h) => sameFields(h.fields, fields));
+      if (right) {
+        hooks.push(right);
+        continue;
       }
-      created.push(id);
-      hooks.push({ id, topic, uri: url });
+      if (waiting) {
+        failed.push(topic);
+        continue;
+      }
+      try {
+        for (const h of atUrl) await removeHook(t, h.id);
+        const answer = await admin<{
+          webhookSubscriptionCreate?: { webhookSubscription?: Record<string, unknown> | null; userErrors?: unknown };
+        }>(t, HOOK_CREATE, { topic, webhookSubscription: { uri: url, includeFields: [...fields] } });
+        const id = str(answer.webhookSubscriptionCreate?.webhookSubscription?.id);
+        if (!id) {
+          failed.push(topic);
+          continue;
+        }
+        created.push(id);
+        hooks.push({ id, topic, uri: url, fields });
+      } catch (error) {
+        if (!(error instanceof ConnectorError)) throw error;
+        failed.push(topic);
+        waiting = !["refused", "bad_response", "config"].includes(error.code);
+      }
     }
     const prefix = `${originOf(url)}/v1/hooks/shopify/`;
     const ours = new Set(made);
     const stale = all.filter((h) => h.uri !== url && (ours.has(h.id) || h.uri.startsWith(prefix))).map((h) => h.id);
-    return { hooks, created, stale };
+    return { hooks, created, stale, failed };
   }
 
   async function removeHook(t: AdminTarget, id: string): Promise<void> {
@@ -687,15 +757,44 @@ export function shopifyConnector(
     return /^\+[1-9]\d{6,14}$/.test(p) ? p : null;
   }
 
-  /** The words a draft's shipping line carries at the shop's checkout, in the customer's language. */
+  /**
+   * The words a draft's shipping line carries at the shop's checkout, in the customer's language: the
+   * world's main languages, English only when theirs is not here.
+   */
   const SHIPPING_WORDS: Readonly<Record<string, { readonly delivery: string; readonly pickup: string }>> = {
+    ar: { delivery: "توصيل", pickup: "استلام من المتجر" },
+    bn: { delivery: "ডেলিভারি", pickup: "দোকান থেকে সংগ্রহ" },
+    cs: { delivery: "Doručení", pickup: "Osobní odběr" },
+    da: { delivery: "Levering", pickup: "Afhentning" },
+    de: { delivery: "Lieferung", pickup: "Abholung" },
+    el: { delivery: "Παράδοση", pickup: "Παραλαβή από το κατάστημα" },
     en: { delivery: "Delivery", pickup: "Pickup" },
     es: { delivery: "Envío", pickup: "Recogida" },
-    pt: { delivery: "Entrega", pickup: "Retirada" },
+    fa: { delivery: "ارسال", pickup: "تحویل حضوری" },
+    fi: { delivery: "Toimitus", pickup: "Nouto" },
     fr: { delivery: "Livraison", pickup: "Retrait" },
-    de: { delivery: "Lieferung", pickup: "Abholung" },
+    he: { delivery: "משלוח", pickup: "איסוף עצמי" },
+    hi: { delivery: "डिलीवरी", pickup: "स्टोर से पिकअप" },
+    hu: { delivery: "Kiszállítás", pickup: "Személyes átvétel" },
+    id: { delivery: "Pengiriman", pickup: "Ambil di toko" },
     it: { delivery: "Consegna", pickup: "Ritiro" },
+    ja: { delivery: "配送", pickup: "店頭受け取り" },
+    ko: { delivery: "배송", pickup: "매장 픽업" },
+    ms: { delivery: "Penghantaran", pickup: "Ambil di kedai" },
+    nb: { delivery: "Levering", pickup: "Henting" },
     nl: { delivery: "Bezorging", pickup: "Afhalen" },
+    no: { delivery: "Levering", pickup: "Henting" },
+    pl: { delivery: "Dostawa", pickup: "Odbiór osobisty" },
+    pt: { delivery: "Entrega", pickup: "Retirada" },
+    ro: { delivery: "Livrare", pickup: "Ridicare personală" },
+    ru: { delivery: "Доставка", pickup: "Самовывоз" },
+    sv: { delivery: "Leverans", pickup: "Avhämtning" },
+    sw: { delivery: "Usafirishaji", pickup: "Kuchukua dukani" },
+    th: { delivery: "จัดส่ง", pickup: "รับที่ร้าน" },
+    tr: { delivery: "Teslimat", pickup: "Mağazadan teslim alma" },
+    uk: { delivery: "Доставка", pickup: "Самовивіз" },
+    vi: { delivery: "Giao hàng", pickup: "Nhận tại cửa hàng" },
+    zh: { delivery: "配送", pickup: "到店自取" },
   };
 
   /**
@@ -922,9 +1021,11 @@ export function shopifyConnector(
    * What became of the draft, asked of Shopify: deleted before anyone paid is cancelled; once paid,
    * fulfilled, delivered or refunded. One fact an answer: when Shopify holds several, each is given
    * in turn, an hour apart (the inbox asks paid orders hourly), and the inbox takes the ones it can.
+   * Not asked past 60 days after it was paid: Shopify shows an app no older order.
    */
   async function orderState(ctx: RunContext, link: KnownLink): Promise<OrderFact | null> {
     if (!gid("DraftOrder", link.externalId)) return null;
+    if (typeof link.paidAt === "number" && ctx.now - link.paidAt > ORDERS_VISIBLE_MS) return null;
     const draft = await readDraft(ctx, link.externalId);
     if (!draft) return { linkId: link.externalId, ref: link.ref, state: "cancelled", at: ctx.now };
     if (!draft.order) return null;
@@ -937,8 +1038,9 @@ export function shopifyConnector(
 
   /**
    * A delivery: its signature over the exact bytes, under the app's client secret, in constant time;
-   * then the ids it names. The body is Shopify's, signed, so it may say an order is not one of the
-   * inbox's (not from a draft) and spare a read; it is never believed about what happened.
+   * then the ids it names. The body is Shopify's, signed, and carries only the fields asked for
+   * (`SHOPIFY_HOOK_FIELDS`), so it may say an order is not one of the inbox's (not from a draft, or
+   * without the inbox's tag) and spare a read; it is never believed about what happened.
    * https://shopify.dev/docs/apps/build/webhooks/subscribe/https
    * https://shopify.dev/docs/apps/build/webhooks/delivery-structure
    */
@@ -962,8 +1064,9 @@ export function shopifyConnector(
       typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v)) ? String(v) : "";
     const refs: string[] = [];
     if (topic.startsWith("orders/")) {
-      // An order that did not come from a draft is not one the inbox made.
+      // An order that did not come from a draft, or whose draft was not the inbox's, is not one it made.
       if (typeof body.source_name === "string" && body.source_name !== "shopify_draft_order") return null;
+      if (body.tags !== undefined && refOf(body.tags) === null) return null;
       const id =
         gid("Order", body.admin_graphql_api_id) ??
         (numeric(body.id) ? `gid://shopify/Order/${numeric(body.id)}` : null);
@@ -981,13 +1084,16 @@ export function shopifyConnector(
     return { eventId, topic, refs };
   }
 
-  /** The draft an order came from: by the tag it kept, else among the inbox's latest completed drafts. */
+  /**
+   * The draft an order came from, by the tag it kept from it: an order without the inbox's tag is
+   * not one it made, and is read no further. Shopify's search can lag a draft just completed, so one
+   * not found by its tag is looked for among the inbox's latest completed drafts.
+   */
   async function draftOfOrder(ctx: RunContext, order: OrderNode): Promise<DraftNode | null> {
     const ref = refOf(order.tags);
-    if (ref) {
-      const found = await findDraft(ctx, ref);
-      if (found && str(found.order?.id) === str(order.id)) return found;
-    }
+    if (!ref) return null;
+    const found = await findDraft(ctx, ref);
+    if (found && str(found.order?.id) === str(order.id)) return found;
     const recent = await call<{ draftOrders?: { nodes?: DraftNode[] } }>(ctx, DRAFTS_COMPLETED);
     const match = (recent.draftOrders?.nodes ?? []).find((d) => str(d.order?.id) === str(order.id));
     return match ? { ...match, order } : null;
@@ -1036,7 +1142,8 @@ export function shopifyConnector(
   /**
    * Every few hours, and when the inbox's address moved or it went live: the shop read again (its name
    * and currency), the access checked, and the webhooks put right at the connection's address. One
-   * Shopify removed after deliveries kept failing is made again; what pointed elsewhere goes.
+   * Shopify removed after deliveries kept failing is made again; what pointed elsewhere goes once every
+   * topic is made. A shop that moved to a currency the inbox cannot count is said so, and not repriced.
    */
   async function refresh(ctx: RunContext) {
     const info = await call<ShopAnswer>(ctx, SHOP);
@@ -1045,27 +1152,51 @@ export function shopifyConnector(
     const name = str(s?.name).trim().slice(0, 120) || shop;
     const extra: Record<string, unknown> = { ...ctx.extra };
     const currency = str(s?.currencyCode).toUpperCase();
-    if (/^[A-Z]{3}$/.test(currency)) extra.currency = currency;
+    if (currency) {
+      const unfit = currencyProblem(name, currency);
+      if (unfit) throw new ConnectorError("config", unfit);
+      extra.currency = currency;
+    }
     if (/^https:\/\//.test(str(s?.primaryDomain?.url))) extra.storefront = str(s?.primaryDomain?.url);
     extra.taxes_included = s?.taxesIncluded === true;
     if (ctx.hookUrl && ctx.hooksLive !== false) {
       const target: AdminTarget = { http: ctx.http, shop, token: await tokenOf(ctx), sleep };
-      const made = await ensureHooks(
-        target,
-        ctx.hookUrl,
-        hooksOf(ctx.extra).map((h) => h.id),
-      );
-      for (const id of made.stale) await removeHook(target, id);
-      extra.webhook = "added";
-      extra.hooks = made.hooks.map(({ id, topic }) => ({ id, topic }));
+      const before = hooksOf(ctx.extra);
+      try {
+        const made = await ensureHooks(
+          target,
+          ctx.hookUrl,
+          before.map((h) => h.id),
+        );
+        const whole = made.failed.length === 0;
+        if (whole) for (const id of made.stale) await removeHook(target, id);
+        extra.webhook = whole ? "added" : "failed";
+        // What still points elsewhere is kept by id while it stays, so disconnecting removes it too.
+        extra.hooks = [
+          ...made.hooks.map(({ id, topic }) => ({ id, topic })),
+          ...(whole ? [] : before.filter((h) => made.stale.includes(h.id))),
+        ];
+      } catch (error) {
+        if (!(error instanceof ConnectorError) || error.code === "auth") throw error;
+        extra.webhook = "failed";
+      }
       extra.hook_origin = originOf(ctx.hookUrl);
+      if (extra.webhook === "failed") extra.hook_retry_at = ctx.now + HOUR_MS;
+      else delete extra.hook_retry_at;
     }
     return { account: `${name} · ${shop}`, calendars: [], destinations: [], extra };
   }
 
-  /** Read again now: webhooks still to make now that the inbox is live, or an address that moved. */
+  /**
+   * Read again now: webhooks still to make now that the inbox is live, an address that moved, or
+   * webhooks Shopify did not make, tried again hourly.
+   */
   function stale(ctx: RunContext): boolean {
     if (!ctx.hookUrl || ctx.hooksLive === false) return false;
+    if (ctx.extra.webhook === "failed") {
+      if (ctx.extra.hook_origin !== originOf(ctx.hookUrl)) return true;
+      return ctx.now >= Number(ctx.extra.hook_retry_at ?? 0);
+    }
     if (ctx.extra.webhook !== "added") return true;
     return ctx.extra.hook_origin !== originOf(ctx.hookUrl);
   }
@@ -1090,26 +1221,23 @@ export function shopifyConnector(
     auth: "form",
     form: shopifyForm,
     note: "Your products come in. Accepted orders and quotes become draft orders, paid at your own Shopify checkout.",
-    disconnectNote: "To end its access too, uninstall the app in Shopify: Settings → Apps.",
-    presets: [
-      {
-        id: "oauth",
-        label: "Sign in with Shopify",
-        values: {},
-        auth: "oauth",
-        action: "Sign in with Shopify",
-        consent: "Shopify will ask to let this inbox read your products and orders, and make draft orders.",
-        ready: () =>
-          operator ? true : "No Shopify app is set up on this server (SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET).",
-        whenNotReady: opts.hosted
-          ? { status: "soon" }
-          : {
-              status: "setup",
-              hint: "Add your Shopify app's SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET to this server.",
-              href: DOCS,
-            },
-      },
-    ],
+    disconnectNote:
+      "Unpaid draft orders it made are deleted in Shopify. To end its access too, uninstall the app in Shopify: Settings → Apps.",
+    testLabel: "development store",
+    // "Sign in with Shopify" only where the server has its own Shopify app: otherwise there is
+    // nothing to press, so it is not shown at all, and the keys are the one way.
+    presets: operator
+      ? [
+          {
+            id: "oauth",
+            label: "Sign in with Shopify",
+            values: {},
+            auth: "oauth",
+            action: "Sign in with Shopify",
+            consent: "Shopify will ask to let this inbox read your products and orders, and make draft orders.",
+          },
+        ]
+      : [],
     oauth: {
       before,
       authorizeUrl({ redirectUri, state, input }) {

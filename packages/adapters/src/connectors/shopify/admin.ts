@@ -161,6 +161,9 @@ interface GraphQLError {
   readonly code: string;
 }
 
+/** Shopify's words for a field it withholds: "This app is not approved to access the Order object." */
+const WITHHELD = /not approved to access|protected customer data/i;
+
 function errorsOf(json: Record<string, unknown>): GraphQLError[] {
   const raw = json.errors;
   // Shopify answers some refusals with a plain string (`{"errors": "[API] Invalid API key or access token"}`).
@@ -217,6 +220,15 @@ export async function admin<T>(t: AdminTarget, doc: Doc, variables: Record<strin
       throw new ConnectorError("rate_limited", "Shopify asked this inbox to slow down.", { retryAfterMs: wait });
     }
     statusError(res, t.shop, errors);
+    // Orders and draft orders are protected customer data: an app Shopify has not let see them gets
+    // the field as null and an error naming it, with HTTP 200. That is never "not paid yet".
+    // https://shopify.dev/docs/apps/launch/protected-customer-data
+    if (errors.some((e) => WITHHELD.test(e.message))) {
+      throw new ConnectorError(
+        "config",
+        `Shopify is keeping order details from this app (protected customer data). An app you make for your own shop has that access: make it with the account that owns ${t.shop}, and install it there.`,
+      );
+    }
     const denied = errors.find((e) => e.code === "ACCESS_DENIED");
     const data = json.data;
     if (denied && (!data || typeof data !== "object")) {
@@ -310,8 +322,8 @@ async function tokenCall(
   if (error === "shop_not_permitted") {
     throw new ConnectorError(
       "config",
-      `Shopify does not let this app sign in to ${shop}: make the app in the same Shopify organization as the shop, and install it on the shop.`,
-      { field: "client_id" },
+      `This app can't reach ${shop}. Check the shop address, and that you made the app with the account that owns this shop and installed it there.`,
+      { field: "store" },
     );
   }
   if (res.status === 404)

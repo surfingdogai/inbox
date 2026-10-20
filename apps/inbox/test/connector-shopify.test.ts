@@ -197,7 +197,9 @@ describe("a Shopify shop, connected with its own app's keys", () => {
     expect(text).not.toContain("shpat_");
     expect(JSON.parse(text)).toMatchObject({
       account: "Florería Xóchitl · xochitl-flores.myshopify.com",
-      disconnect_note: "To end its access too, uninstall the app in Shopify: Settings → Apps.",
+      disconnect_note:
+        "Unpaid draft orders it made are deleted in Shopify. To end its access too, uninstall the app in Shopify: Settings → Apps.",
+      test_label: "development store",
     });
     // Each webhook names the connection's own address.
     const uris = new Set([...s.shop.hooks.values()].map((h) => h.uri));
@@ -287,7 +289,7 @@ describe("the shop's checkout for the cart, the inbox for quotes", () => {
       ],
       presentmentCurrencyCode: "MXN",
       email: "itzel.hernandez@example.mx",
-      tags: ["sdi", expect.stringMatching(/^sdi-[0-9A-Z]{26}$/)],
+      tags: ["inbox", expect.stringMatching(/^inbox-[0-9A-Z]{26}$/)],
     });
     const invoice = `https://${s.shop.shop}/64120557901/invoices/inv${draft?.id}fake`;
     expect(await itemOf(s.db, order)).toMatchObject({ state: "awaiting_payment", payload: { paymentUrl: invoice } });

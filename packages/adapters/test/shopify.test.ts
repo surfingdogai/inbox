@@ -14,6 +14,7 @@ import { forgetBuckets, MAX_WAIT_MS } from "../src/connectors/shopify/index";
 import {
   builtInConnectors,
   SHOPIFY_API_VERSION,
+  SHOPIFY_HOOK_FIELDS,
   SHOPIFY_SCOPES,
   SHOPIFY_TOPICS,
   shopDomainOf,
@@ -172,35 +173,43 @@ const REQUEST: PayLinkRequest = {
 };
 
 describe("the form and the gallery", () => {
-  it("asks for the shop's address and the app's two keys, with the steps; the old token is under More options", () => {
+  it("asks for the app's two keys first, with how to make the app, then the shop; the old token is under More options", () => {
     const form = describeForm(shopifyForm);
     expect(form.map((f) => [f.key, f.secret, f.advanced, f.required])).toEqual([
-      ["store", false, false, true],
       ["client_id", false, false, true],
       ["client_secret", true, false, true],
+      ["store", false, false, true],
       ["access_token", true, true, false],
     ]);
     const id = form.find((f) => f.key === "client_id");
+    expect(id?.help).toBe("Make a small app for your shop in Shopify's Dev Dashboard:");
     expect(id?.steps).toHaveLength(4);
-    expect(id?.steps?.join(" ")).toContain("read_products, read_orders, write_draft_orders");
+    expect(id?.steps?.join(" ")).toContain("read_products, read_orders and write_draft_orders");
+    // No variable names, no URL to type: the App URL Shopify suggests is kept.
+    expect(JSON.stringify(form)).not.toMatch(/SHOPIFY_|default-app-home/);
+    expect(form.find((f) => f.key === "access_token")?.help).toContain("API key as the Client ID");
     expect(id?.link?.href).toBe("https://dev.shopify.com/dashboard/");
     expect(SHOPIFY_SCOPES).toEqual(["read_products", "read_orders", "write_draft_orders"]);
     expect(SHOPIFY_API_VERSION).toBe("2026-10");
   });
 
-  it("is a ready card with Connect; Sign in with Shopify says set up on one's own server, Soon on hosted, and works with an app", () => {
+  it("is a ready card with one way, the keys; Sign in with Shopify shows only where the server has its own app", () => {
     const card = (defs: ReturnType<typeof builtInConnectors>) =>
       gallery(new Map(defs.map((d) => [d.kind, d]))).find((c) => c.id === "shopify");
-    const own = card(builtInConnectors());
-    expect(own).toMatchObject({ status: "ready", group: "shops", line: "Catalogue in, quotes become orders" });
-    expect(own?.ways.map((w) => [w.label, w.status, w.auth, w.action])).toEqual([
-      ["Your app's keys", "ready", "form", "Connect"],
-      ["Sign in with Shopify", "setup", "oauth", "Sign in with Shopify"],
+    for (const own of [card(builtInConnectors()), card(builtInConnectors({ hosted: true }))]) {
+      expect(own).toMatchObject({ status: "ready", group: "shops", line: "Catalogue in, paid at your checkout" });
+      // Nothing to press is not shown: no "set up", no "Soon", no variable names.
+      expect(own?.ways.map((w) => [w.label, w.status, w.auth, w.action])).toEqual([
+        ["Your app's keys", "ready", "form", "Connect"],
+      ]);
+      expect(JSON.stringify(own)).not.toContain("SHOPIFY_");
+    }
+    const withApp = card(builtInConnectors({ oauth: { shopify: OPERATOR } }));
+    expect(withApp?.ways.map((w) => [w.label, w.status, w.auth])).toEqual([
+      ["Your app's keys", "ready", "form"],
+      ["Sign in with Shopify", "ready", "oauth"],
     ]);
-    expect(card(builtInConnectors({ hosted: true }))?.ways[1]?.status).toBe("soon");
-    const withApp = card(builtInConnectors({ oauth: { shopify: OPERATOR } }))?.ways[1];
-    expect(withApp).toMatchObject({ status: "ready", auth: "oauth" });
-    expect(withApp?.before?.map((f) => f.key)).toEqual(["store"]);
+    expect(withApp?.ways[1]?.before?.map((f) => f.key)).toEqual(["store"]);
   });
 
   it("takes the shop's address as people have it, and nothing that is not Shopify's own", () => {
@@ -271,9 +280,27 @@ describe("connecting with the app's keys", () => {
     // One webhook per topic, each at the connection's own address.
     expect([...s.hooks.values()].map((h) => h.topic).sort()).toEqual(Object.values(SHOPIFY_TOPICS).sort());
     expect([...s.hooks.values()].every((h) => h.uri === HOOK_URL)).toBe(true);
+    // Each carries only ids, and for an order what tells the inbox's own: never a customer's details.
     expect(
-      s.operations.filter((o) => o.name === "InboxHookCreate").map((o) => o.variables.webhookSubscription),
-    ).toEqual(Object.values(SHOPIFY_TOPICS).map(() => ({ uri: HOOK_URL })));
+      s.operations
+        .filter((o) => o.name === "InboxHookCreate")
+        .map((o) => [o.variables.topic, o.variables.webhookSubscription]),
+    ).toEqual(Object.values(SHOPIFY_TOPICS).map((t) => [t, { uri: HOOK_URL, includeFields: SHOPIFY_HOOK_FIELDS[t] }]));
+    expect(SHOPIFY_HOOK_FIELDS.ORDERS_UPDATED).toEqual(["id", "admin_graphql_api_id", "source_name", "tags"]);
+    expect(SHOPIFY_HOOK_FIELDS.REFUNDS_CREATE).toEqual(["order_id"]);
+  });
+
+  it("takes an app whose shop lists only the write scope: a write scope includes its read", async () => {
+    const s = fakeShopify();
+    s.scopes = ["write_products", "write_orders", "write_draft_orders"];
+    const { made } = await connected(s);
+    expect(made.extra).toMatchObject({ webhook: "added" });
+    const partial = fakeShopify();
+    partial.scopes = ["write_products", "write_draft_orders"];
+    const e = await refusal(shopifyConnector(null, noSleep).connect?.(connectCtx(partial), KEYS) as Promise<Connected>);
+    expect(e.message).toBe(
+      "The app is missing read_orders. Add it on the app's Versions page, release, and approve it in Shopify.",
+    );
   });
 
   it("says what is wrong in the owner's words, on the field to fix", async () => {
@@ -286,8 +313,10 @@ describe("connecting with the app's keys", () => {
     const elsewhere = fakeShopify();
     elsewhere.sameOrganization = false;
     const e2 = await refusal(def.connect?.(connectCtx(elsewhere), KEYS) as Promise<Connected>);
-    expect([e2.code, e2.field]).toEqual(["config", "client_id"]);
-    expect(e2.message).toContain("same Shopify organization");
+    expect([e2.code, e2.field]).toEqual(["config", "store"]);
+    expect(e2.message).toBe(
+      "This app can't reach xochitl-flores.myshopify.com. Check the shop address, and that you made the app with the account that owns this shop and installed it there.",
+    );
 
     const noShop = fakeShopify();
     const e3 = await refusal(
@@ -317,8 +346,21 @@ describe("connecting with the app's keys", () => {
       }) as Promise<Connected>,
     );
     expect([e.code, e.field]).toEqual(["config", "store"]);
-    expect(e.message).toContain("JPY");
+    expect(e.message).toBe(
+      "喫茶うめだ sells in JPY. Shops that price in whole units, like yen or won, can't connect yet.",
+    );
     expect(osaka.hooks.size).toBe(0);
+  });
+
+  it("says so, and reprices nothing, when a connected shop moves to a currency it cannot count", async () => {
+    const s = fakeShopify();
+    const { def, ctx } = await connected(s);
+    s.info.currency = "KRW";
+    const e = await refusal(def.refresh?.(ctx()) as Promise<unknown>);
+    expect([e.code, e.message]).toEqual([
+      "config",
+      "Florería Xóchitl sells in KRW. Shops that price in whole units, like yen or won, can't connect yet.",
+    ]);
   });
 
   it("calls nothing for a custom domain, plain http or a private address, and follows no redirect", async () => {
@@ -416,6 +458,37 @@ describe("keeping the token and the webhooks right", () => {
       extra: (fresh?.extra ?? made.extra) as Record<string, unknown>,
     });
     expect(s.hooks.size).toBe(0);
+  });
+
+  it("connects even when Shopify will not make a webhook, makes the rest, and tries again within the hour", async () => {
+    const s = fakeShopify();
+    s.refuseTopics.add("ORDERS_UPDATED");
+    const { def, made, ctx } = await connected(s);
+    expect(made.extra).toMatchObject({
+      webhook: "failed",
+      hook_origin: "https://inbox.xochitl.example.mx",
+      hook_retry_at: NOW + 3_600_000,
+    });
+    expect(s.hooks.size).toBe(Object.keys(SHOPIFY_TOPICS).length - 1);
+    // Not asked again at every sync: only once the hour is up.
+    expect(def.stale?.(ctx())).toBe(false);
+    expect(def.stale?.(ctx({ now: NOW + 3_600_000 }))).toBe(true);
+    s.refuseTopics.clear();
+    const fresh = await def.refresh?.(ctx({ now: NOW + 3_600_000 }));
+    expect(fresh?.extra).toMatchObject({ webhook: "added" });
+    expect(fresh?.extra).not.toHaveProperty("hook_retry_at");
+    expect(s.hooks.size).toBe(Object.keys(SHOPIFY_TOPICS).length);
+  });
+
+  it("makes again, carrying only its fields, a webhook at its address that carries more", async () => {
+    const s = fakeShopify();
+    const { def, ctx } = await connected(s);
+    const paid = [...s.hooks.values()].find((h) => h.topic === "ORDERS_PAID");
+    if (paid) paid.includeFields = [];
+    await def.refresh?.(ctx());
+    const now = [...s.hooks.values()].filter((h) => h.topic === "ORDERS_PAID");
+    expect(now.map((h) => h.includeFields)).toEqual([["id", "admin_graphql_api_id", "source_name", "tags"]]);
+    expect(now[0]?.id).not.toBe(paid?.id);
   });
 
   it("takes back what it just made when the connection is refused after all", async () => {
@@ -575,7 +648,7 @@ describe("an accepted order, as a draft order paid at the shop's checkout", () =
         },
       ],
       presentmentCurrencyCode: "MXN",
-      tags: ["sdi", "sdi-01JC0SHOPREF00000000000001"],
+      tags: ["inbox", "inbox-01JC0SHOPREF00000000000001"],
       note: "Inbox order XK7Q2M.\nTo deliver.\nWanted: 2026-11-01.\nThe customer wrote: “Para el altar de mi abuela, por favor.”",
       acceptAutomaticDiscounts: false,
       allowDiscountCodesInCheckout: false,
@@ -768,6 +841,34 @@ describe("what became of a draft, asked of Shopify", () => {
     expect(u.s.drafts.size).toBe(1);
   });
 
+  it("says plainly when Shopify keeps the order from the app as protected customer data, never 'not paid'", async () => {
+    const t = await paidSetup();
+    t.pay();
+    t.s.withheld = true;
+    const e = await refusal(t.def.payments?.check(t.ctx(), t.known) as Promise<unknown>);
+    expect(e.code).toBe("config");
+    expect(e.message).toContain("protected customer data");
+  });
+
+  it("asks no more 60 days after it was paid: Shopify shows an app no older order", async () => {
+    const t = await paidSetup();
+    t.pay();
+    const before = t.s.operations.length;
+    const old = { ...t.known, paidAt: NOW - 61 * 86_400_000 };
+    expect(await t.def.payments?.orderState?.(t.ctx(), old)).toBeNull();
+    expect(t.s.operations.length).toBe(before);
+    // A refund on an order Shopify no longer shows is read as nothing, not as an error.
+    const order = [...t.s.orders.values()][0];
+    t.s.ordersShownSince = Date.parse(order?.processedAt ?? "") + 1;
+    expect(
+      await t.def.hooks?.read(t.ctx(), {
+        eventId: "w9",
+        topic: "refunds/create",
+        refs: [`gid://shopify/Order/${order?.id}`],
+      }),
+    ).toEqual([]);
+  });
+
   it("follows the order: fulfilled with its tracking, delivered, refunded, each in turn an hour apart", async () => {
     const t = await paidSetup();
     const order = t.pay();
@@ -812,13 +913,15 @@ describe("webhooks from Shopify", () => {
     const d = await t.s.delivery("orders/paid", orderBody(order), {
       webhookId: "b54557e4-bdd9-4b37-8a5f-000000000001",
     });
+    // Shopify sent only the fields asked for: no customer's details reach the inbox at all.
+    expect(Object.keys(JSON.parse(d.body))).toEqual(["id", "admin_graphql_api_id", "source_name", "tags"]);
+    expect(d.body).not.toContain("itzel");
     const event = await t.def.hooks?.verify(t.ctx(), inbound(d));
     expect(event).toEqual({
       eventId: "b54557e4-bdd9-4b37-8a5f-000000000001",
       topic: "orders/paid",
       refs: [`gid://shopify/Order/${order.id}`],
     });
-    expect(JSON.stringify(event)).not.toContain("itzel");
     const tampered = await t.s.delivery("orders/paid", orderBody(order), { tamper: true });
     expect((await refusal(t.def.hooks?.verify(t.ctx(), inbound(tampered)) as Promise<unknown>)).code).toBe("refused");
     const byAnother = await t.s.delivery("orders/paid", orderBody(order), { secret: "shpss_someone_else" });
@@ -838,6 +941,9 @@ describe("webhooks from Shopify", () => {
     expect(await t.def.hooks?.verify(t.ctx(), inbound(other))).toBeNull();
     const web = await t.s.delivery("orders/paid", { ...orderBody(order), source_name: "web" });
     expect(await t.def.hooks?.verify(t.ctx(), inbound(web))).toBeNull();
+    // From a draft, but one the owner made in Shopify: no inbox tag, nothing read.
+    const staff = await t.s.delivery("orders/updated", { ...orderBody(order), tags: "wholesale, vip" });
+    expect(await t.def.hooks?.verify(t.ctx(), inbound(staff))).toBeNull();
     const customers = await t.s.delivery("customers/create", { id: 1 });
     expect(await t.def.hooks?.verify(t.ctx(), inbound(customers))).toBeNull();
     const odd = await t.s.delivery("constructor", { id: 1 });
@@ -860,17 +966,24 @@ describe("webhooks from Shopify", () => {
     });
   });
 
-  it("finds the draft of an order whose tags say nothing, among the inbox's latest", async () => {
+  it("reads no further an order without its tag, and finds a tagged one among the latest while search lags", async () => {
     const t = await hooked();
     const order = t.s.pay(t.draftId);
-    order.tags = [];
-    const facts = await t.def.hooks?.read(t.ctx(), {
-      eventId: "w2",
-      topic: "orders/paid",
-      refs: [`gid://shopify/Order/${order.id}`],
+    const event = { eventId: "w2", topic: "refunds/create", refs: [`gid://shopify/Order/${order.id}`] };
+    // Shopify has not indexed the draft just completed yet: found among the inbox's latest completed.
+    t.s.searchLags = true;
+    expect((await t.def.hooks?.read(t.ctx(), event))?.[0]).toMatchObject({
+      kind: "payment",
+      fact: { linkId: t.link?.externalId },
     });
-    expect(facts?.[0]).toMatchObject({ kind: "payment", fact: { linkId: t.link?.externalId } });
     expect(t.s.operations.map((o) => o.name)).toContain("InboxDraftsCompleted");
+    // An order the inbox did not make (a refund elsewhere in the shop): one read, nothing more.
+    const tags = order.tags;
+    order.tags = ["wholesale"];
+    const asked = t.s.operations.length;
+    expect(await t.def.hooks?.read(t.ctx(), event)).toEqual([]);
+    expect(t.s.operations.slice(asked).map((o) => o.name)).toEqual(["InboxOrder"]);
+    order.tags = tags;
   });
 
   it("turns products changed into a catalogue read, and a draft deleted into a cancel only when it is gone", async () => {

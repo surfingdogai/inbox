@@ -13,6 +13,8 @@ import type { Doc } from "./admin";
  * - DraftOrder: https://shopify.dev/docs/api/admin-graphql/2026-10/objects/DraftOrder
  * - Order: https://shopify.dev/docs/api/admin-graphql/2026-10/objects/Order
  * - webhookSubscriptionCreate: https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/webhookSubscriptionCreate
+ *   (`includeFields`: https://shopify.dev/docs/api/admin-graphql/2026-10/input-objects/WebhookSubscriptionInput;
+ *   https://shopify.dev/docs/api/admin-graphql/2026-10/objects/WebhookSubscription)
  * - webhookSubscriptionDelete: https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/webhookSubscriptionDelete
  */
 
@@ -97,7 +99,7 @@ export const DRAFTS_COMPLETED: Doc = {
   name: "InboxDraftsCompleted",
   cost: 77,
   text: `query InboxDraftsCompleted {
-  draftOrders(first: 25, query: "tag:sdi status:completed", sortKey: ID, reverse: true) {
+  draftOrders(first: 25, query: "tag:inbox status:completed", sortKey: ID, reverse: true) {
     nodes { id tags order { id } }
   }
 }`,
@@ -123,7 +125,7 @@ export const HOOKS: Doc = {
   name: "InboxHooks",
   cost: 52,
   text: `query InboxHooks {
-  webhookSubscriptions(first: 50) { nodes { id topic uri } }
+  webhookSubscriptions(first: 50) { nodes { id topic uri includeFields } }
 }`,
 };
 
@@ -132,7 +134,7 @@ export const HOOK_CREATE: Doc = {
   cost: 10,
   text: `mutation InboxHookCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
   webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-    webhookSubscription { id topic uri }
+    webhookSubscription { id topic uri includeFields }
     userErrors { field message }
   }
 }`,

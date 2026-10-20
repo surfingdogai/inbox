@@ -21,9 +21,15 @@ import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
  * - `draftOrderCreate` (and its `userErrors`, "Add at least 1 product"), `draftOrderDelete` ("Draft
  *   order not found"), `webhookSubscriptionCreate` (`{id, topic, uri}`), `webhookSubscriptionDelete`;
  *   https://shopify.dev/docs/api/admin-graphql/2026-10/mutations/draftOrderCreate
- * - webhook deliveries: the REST resource as the body, with `X-Shopify-Topic`, `X-Shopify-Hmac-Sha256`,
- *   `X-Shopify-Shop-Domain`, `X-Shopify-Webhook-Id`, `X-Shopify-Event-Id`, `X-Shopify-API-Version`;
+ * - webhook deliveries: the REST resource as the body, cut to the subscription's `includeFields`, with
+ *   `X-Shopify-Topic`, `X-Shopify-Hmac-Sha256`, `X-Shopify-Shop-Domain`, `X-Shopify-Webhook-Id`,
+ *   `X-Shopify-Event-Id`, `X-Shopify-API-Version`;
  *   https://shopify.dev/docs/apps/build/webhooks/delivery-structure
+ *   https://shopify.dev/docs/api/admin-graphql/2026-10/input-objects/WebhookSubscriptionInput
+ * - protected customer data withheld: the field null, with "This app is not approved to access the
+ *   Order object." in `errors` and HTTP 200; https://shopify.dev/docs/apps/launch/protected-customer-data
+ * - orders older than 60 days are not shown without `read_all_orders`;
+ *   https://shopify.dev/docs/api/admin-graphql/2026-10/queries/order
  *
  * The shops rotate the world: a florist in Oaxaca (MXN, prices with tax, the default), a florist in
  * Toronto (CAD, tax added at checkout), a café in Osaka (JPY, counted in whole yen).
@@ -118,7 +124,15 @@ export interface FakeShopify {
   readonly variants: FakeVariant[];
   readonly drafts: Map<number, FakeDraft>;
   readonly orders: Map<number, FakeOrder>;
-  readonly hooks: Map<string, { id: string; topic: string; uri: string }>;
+  readonly hooks: Map<string, { id: string; topic: string; uri: string; includeFields: string[] }>;
+  /** Topics Shopify will not make a webhook for, with its words. */
+  readonly refuseTopics: Set<string>;
+  /** Shopify keeps orders from the app as protected customer data. */
+  withheld: boolean;
+  /** Orders processed before this are no longer shown to the app (the 60 days); null shows all. */
+  ordersShownSince: number | null;
+  /** Shopify's search has not caught up yet: a search by tag finds nothing. */
+  searchLags: boolean;
   /** GraphQL operations asked, by name, with their variables. */
   readonly operations: { name: string; variables: Record<string, unknown>; token: string }[];
   /** The bucket Shopify reports; `throttle` answers THROTTLED that many times. */
@@ -184,6 +198,10 @@ export function fakeShopify(
     drafts: new Map(),
     orders: new Map(),
     hooks: new Map(),
+    refuseTopics: new Set(),
+    withheld: false,
+    ordersShownSince: null,
+    searchLags: false,
     operations: [],
     bucket: { maximum: 2000, available: 2000, restoreRate: 100 },
     throttle: 0,
@@ -213,10 +231,14 @@ export function fakeShopify(
       return order;
     },
     async delivery(topic, body, o = {}) {
-      const raw = JSON.stringify(body);
+      const hook = [...s.hooks.values()].find((h) => h.topic === topic.toUpperCase().replace("/", "_"));
+      // Shopify sends only the fields the subscription asked for.
+      const fields = hook?.includeFields ?? [];
+      const sent =
+        fields.length > 0 ? Object.fromEntries(Object.entries(body).filter(([k]) => fields.includes(k))) : body;
+      const raw = JSON.stringify(sent);
       let signature = await hmacSha256Base64(o.secret ?? s.client.secret, raw);
       if (o.tamper) signature = `${signature.slice(0, -2)}${signature.at(-2) === "A" ? "B" : "A"}${signature.at(-1)}`;
-      const hook = [...s.hooks.values()].find((h) => h.topic === topic.toUpperCase().replace("/", "_"));
       return {
         url: hook?.uri ?? "",
         body: raw,
@@ -328,10 +350,20 @@ export function fakeShopify(
       trackingInfo: f.tracking ? [f.tracking] : [],
     })),
   });
+  /** An order the app may see: not withheld, and within the days Shopify shows. */
+  const shown = (o: FakeOrder | undefined) =>
+    o && !s.withheld && (s.ordersShownSince === null || Date.parse(o.processedAt) >= s.ordersShownSince)
+      ? o
+      : undefined;
+  const withheldError = {
+    message:
+      "This app is not approved to access the Order object. See https://shopify.dev/docs/apps/launch/protected-customer-data for more details.",
+    extensions: { code: "ACCESS_DENIED" },
+  };
   const draftNode = (d: FakeDraft) => {
     const ready = d.notReadyFor <= 0;
     if (!ready) d.notReadyFor--;
-    const order = d.orderId ? s.orders.get(d.orderId) : undefined;
+    const order = shown(d.orderId ? s.orders.get(d.orderId) : undefined);
     return {
       id: toGid("DraftOrder", d.id),
       name: `#D${d.id}`,
@@ -438,13 +470,15 @@ export function fakeShopify(
     },
     InboxDraftFind: (v) => {
       const tag = /tag:'([^']+)'/.exec(String(v.query))?.[1]?.toLowerCase();
-      const found = [...s.drafts.values()].find((d) => d.tags.some((t) => t.toLowerCase() === tag));
+      const found = s.searchLags
+        ? undefined
+        : [...s.drafts.values()].find((d) => d.tags.some((t) => t.toLowerCase() === tag));
       return { draftOrders: { nodes: found ? [draftNode(found)] : [] } };
     },
     InboxDraftsCompleted: () => ({
       draftOrders: {
         nodes: [...s.drafts.values()]
-          .filter((d) => d.status === "COMPLETED" && d.tags.includes("sdi"))
+          .filter((d) => d.status === "COMPLETED" && d.tags.includes("inbox"))
           .sort((a, b) => b.id - a.id)
           .slice(0, 25)
           .map((d) => ({
@@ -465,13 +499,22 @@ export function fakeShopify(
       return { draftOrderDelete: { deletedId: toGid("DraftOrder", id), userErrors: [] } };
     },
     InboxOrder: (v) => {
-      const o = s.orders.get(fromGid(v.id));
+      const o = shown(s.orders.get(fromGid(v.id)));
       return { order: o ? orderNode(o) : null };
     },
     InboxHooks: () => ({ webhookSubscriptions: { nodes: [...s.hooks.values()] } }),
     InboxHookCreate: (v) => {
-      const uri = String((v.webhookSubscription as { uri?: unknown }).uri ?? "");
+      const input = v.webhookSubscription as { uri?: unknown; includeFields?: unknown };
+      const uri = String(input.uri ?? "");
       const topic = String(v.topic);
+      if (s.refuseTopics.has(topic)) {
+        return {
+          webhookSubscriptionCreate: {
+            webhookSubscription: null,
+            userErrors: [{ field: ["topic"], message: `Topic ${topic} is not available for this app` }],
+          },
+        };
+      }
       if ([...s.hooks.values()].some((h) => h.topic === topic && h.uri === uri)) {
         return {
           webhookSubscriptionCreate: {
@@ -486,7 +529,8 @@ export function fakeShopify(
         };
       }
       const id = toGid("WebhookSubscription", 8_589_934_000 + ++n);
-      const hook = { id, topic, uri };
+      const includeFields = Array.isArray(input.includeFields) ? input.includeFields.map(String) : [];
+      const hook = { id, topic, uri, includeFields };
       s.hooks.set(id, hook);
       return { webhookSubscriptionCreate: { webhookSubscription: hook, userErrors: [] } };
     },
@@ -542,7 +586,17 @@ export function fakeShopify(
         extensions,
       });
     }
-    return json({ data: op(variables ?? {}), extensions });
+    const data = op(variables ?? {}) as Record<string, unknown>;
+    // An order withheld as protected customer data: the field is null, with Shopify's error, HTTP 200.
+    const orderAsked = name === "InboxOrder" || name === "InboxDraft" || name === "InboxDraftFind";
+    if (s.withheld && orderAsked && [...s.orders.values()].length > 0) {
+      return json({
+        data,
+        errors: [{ ...withheldError, path: [Object.keys(data)[0] ?? "order", "order"] }],
+        extensions,
+      });
+    }
+    return json({ data, extensions });
   });
 
   return s;

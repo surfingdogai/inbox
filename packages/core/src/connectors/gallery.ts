@@ -200,7 +200,7 @@ export const GALLERY: readonly CardSpec[] = [
   {
     id: "shopify",
     title: "Shopify",
-    line: "Catalogue in, quotes become orders",
+    line: "Catalogue in, paid at your checkout",
     group: "shops",
     industries: ["shops", "cafes", "bakeries"],
     ways: [
