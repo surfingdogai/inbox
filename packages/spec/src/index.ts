@@ -8,4 +8,5 @@ export * from "./conformance";
 export * from "./money";
 export * from "./network/index";
 export * from "./payments";
+export * from "./policy";
 export { JSON_SCHEMAS, jsonSchemaOf, SCHEMA_BASE } from "./schemas";

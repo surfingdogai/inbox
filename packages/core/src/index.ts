@@ -3,10 +3,11 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
+export type { DatedPolicy, DoorElsewhere, Manifest, Policy, PolicyFee } from "@surfingdog/spec";
 export {
   CARD_BRANDS,
   currencyCodeProblem,
+  datedPolicySchema,
   decimalOf,
   discoverySnippets,
   ISO_4217_FUNDS,
@@ -77,6 +78,7 @@ export {
   type Standing,
 } from "./negotiation/rewards";
 export * from "./network/index";
+export * from "./policy/index";
 export * from "./protocol/index";
 export * from "./receipts/index";
 export * from "./rules/index";
@@ -103,5 +105,14 @@ export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
 export { formatMinor, moneyText, servicePriceText } from "./util/money";
 export { crc32, type ZipFile, zip } from "./util/zip";
+export {
+  addDays as addLocalDays,
+  dateIn,
+  daysBetween,
+  instantOf,
+  isLocalDate,
+  isoIn,
+  isoWeekday,
+} from "./util/zoned";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";
