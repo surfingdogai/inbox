@@ -155,7 +155,7 @@ jobs:
       - run: deploy/test/smoke-image.sh "$IMAGE:smoke"
       - name: it says the version of its tag
         run: |
-          docker run -d --name v -p 127.0.0.1:18788:8787 "$IMAGE:smoke"
+          docker run -d --name version-check -p 127.0.0.1:18788:8787 -v version-check-data:/opt/inbox/data "$IMAGE:smoke"
           for i in $(seq 1 30); do curl -fsS 127.0.0.1:18788/healthz && break; sleep 2; done
           curl -fsS 127.0.0.1:18788/healthz | grep -q "\"version\":\"${{ needs.bundles.outputs.version }}\""
 
