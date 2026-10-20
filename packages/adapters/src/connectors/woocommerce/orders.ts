@@ -11,7 +11,7 @@ import {
   type RunContext,
   type ShopOrder,
 } from "@surfingdog/core";
-import { call, decimal, hundredths, type Keys, metaOf, type Store } from "./api";
+import { call, decimal, hundredths, type Keys, metaOf, plain, type Store } from "./api";
 import { isoGmt } from "./catalogue";
 import { extraOf, keysOf, markOf, storeOf } from "./state";
 
@@ -38,6 +38,10 @@ import { extraOf, keysOf, markOf, storeOf } from "./state";
  *   `cancelled`, the bin, or gone; **refunded** is the store's refunds on the order.
  * - **Safe to ask again.** Before making an order, the store's last orders are looked through for the
  *   one this inbox made under the same id, so a retry after a lost answer makes no second order.
+ * - **The region as the store knows it.** WooCommerce matches a state's tax rates on its code (ON, MH,
+ *   SP), and an address's region is free text: it is written as the store's own code for it, found by
+ *   code or name in the store's list for the country (`/wc/v3/data/countries/<cc>`), and left out when
+ *   the store lists the country's states and none is it, as WooCommerce does for a place it does not know.
  *
  * https://woocommerce.github.io/woocommerce-rest-api-docs/#create-an-order,
  * https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties.
@@ -51,6 +55,16 @@ const ORDER_FIELDS =
 
 /** How far back the store's orders are looked through for one this inbox made and did not hear back about. */
 const FIND_WINDOW_MS = 3 * 86_400_000;
+/** The most a list of orders is read up to: a store too old for `include_meta` sends all their meta. */
+const ORDERS_MAX_BYTES = 8 * 1024 * 1024;
+/** How long a store's list of a country's states is kept, by store and country. */
+const STATES_TTL_MS = 6 * 3_600_000;
+const statesKept = new Map<string, { readonly at: number; readonly states: readonly State[] }>();
+
+interface State {
+  readonly code: string;
+  readonly name: string;
+}
 
 /** WooCommerce's payment gateways, in the receipt's payment words (vocab/payments.json); others are left out. */
 export const WOO_METHODS: Readonly<Record<string, string>> = {
@@ -112,6 +126,69 @@ function addressOf(a: PostalAddress | null): Record<string, string> {
   if (a.postalCode) out.postcode = a.postalCode;
   if (a.addressCountry) out.country = a.addressCountry.toUpperCase();
   return out;
+}
+
+/** A place name as it is compared: no accents, no case, single spaces ("São Paulo" is "sao paulo"). */
+function folded(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** The store's states for a country (code and name); empty for a country it lists none for; null when it would not say. */
+async function statesOf(ctx: RunContext, store: Store, keys: Keys, country: string): Promise<readonly State[] | null> {
+  const key = `${store.base}|${country}`;
+  const kept = statesKept.get(key);
+  if (kept && ctx.now - kept.at < STATES_TTL_MS && ctx.now >= kept.at) return kept.states;
+  try {
+    const answer = await call(ctx.http, store, keys, "GET", `/wc/v3/data/countries/${country.toLowerCase()}`, {
+      query: { _fields: "code,states" },
+      maxBytes: 256 * 1024,
+    });
+    const list = (answer.json as { states?: unknown } | null)?.states;
+    const states = (Array.isArray(list) ? (list as { code?: unknown; name?: unknown }[]) : [])
+      .filter((x) => x && typeof x.code === "string" && x.code.trim())
+      .map((x) => ({ code: String(x.code).trim(), name: plain(typeof x.name === "string" ? x.name : "") }));
+    if (statesKept.size >= 500) statesKept.clear();
+    statesKept.set(key, { at: ctx.now, states });
+    return states;
+  } catch (error) {
+    if (error instanceof ConnectorError) return null;
+    throw error;
+  }
+}
+
+/**
+ * The address with its region as the store's own code: matched by code or by name in the store's list
+ * for the country, left out when the store lists the country's states and none matches, and kept as
+ * written for a country it lists none for. When the store would not say, a region written as a code is
+ * kept and a name is left out.
+ */
+async function storeAddress(
+  ctx: RunContext,
+  store: Store,
+  keys: Keys,
+  a: PostalAddress | null,
+): Promise<PostalAddress | null> {
+  const region = a?.addressRegion?.trim();
+  const country = a?.addressCountry?.trim().toUpperCase();
+  if (!a || !region) return a;
+  const { addressRegion: _region, ...rest } = a;
+  const looksLikeCode = /^[A-Za-z0-9]{1,3}$/.test(region);
+  if (!country || !/^[A-Z]{2}$/.test(country))
+    return looksLikeCode ? { ...rest, addressRegion: region.toUpperCase() } : rest;
+  const states = await statesOf(ctx, store, keys, country);
+  if (states === null) return looksLikeCode ? { ...rest, addressRegion: region.toUpperCase() } : rest;
+  if (states.length === 0) return a;
+  const want = folded(region);
+  const found =
+    states.find((s) => s.code.toUpperCase() === region.toUpperCase()) ??
+    states.find((s) => folded(s.name) === want) ??
+    states.find((s) => folded(`${country}-${s.code}`) === want);
+  return found ? { ...rest, addressRegion: found.code } : rest;
 }
 
 /** The order as WooCommerce takes it, from what the inbox accepted. */
@@ -207,6 +284,7 @@ async function findOrder(ctx: RunContext, store: Store, keys: Keys, ref: string)
       include_meta: "_sdi_ref,_sdi_mark",
       _fields: "id,meta_data",
     },
+    maxBytes: ORDERS_MAX_BYTES,
   });
   const list = Array.isArray(answer.json) ? (answer.json as Raw[]) : [];
   for (const wc of list) {
@@ -339,9 +417,14 @@ async function createLink(ctx: RunContext, req: PayLinkRequest): Promise<PayLink
   const mark = await markOf(ctx, req.ref);
   let wc = await findOrder(ctx, store, keys, req.ref);
   if (!wc) {
+    const placed: ShopOrder = {
+      ...order,
+      shipping: await storeAddress(ctx, store, keys, order.shipping),
+      billing: await storeAddress(ctx, store, keys, order.billing),
+    };
     const made = await call(ctx.http, store, keys, "POST", "/wc/v3/orders", {
       query: { dp: 6, _fields: ORDER_FIELDS },
-      body: orderBody(order, req, mark),
+      body: orderBody(placed, req, mark),
     });
     wc = (made.json ?? {}) as Raw;
     await noteOn(ctx, store, keys, wc.id, order, req.reference);
@@ -486,7 +569,10 @@ export async function factsOf(
   if (paid) out.push({ kind: "payment", fact: paid });
   const state = stateFact(wc, ref, ctx.now);
   if (state) out.push({ kind: "order", fact: state });
-  const refunds = paid ? refundsOf(wc) : null;
+  // Refunded in full, WooCommerce says `refunded`: no longer paid, its refunds are read all the same.
+  const status = String(wc.status ?? "");
+  const refunds =
+    paid || status === "processing" || status === "completed" || status === "refunded" ? refundsOf(wc) : null;
   if (refunds) {
     out.push({
       kind: "order",

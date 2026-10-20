@@ -1560,7 +1560,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const r = await caps.connectors.integrations(caller);
           const connected = r.connections.map((c) =>
             c.payments
-              ? `${c.id} ${c.title} [${c.status}${c.payments.disconnecting ? ", disconnecting" : ""}] ${c.mode === "test" ? "test key (links for test orders only), " : ""}${c.pay_on ? "links to pay on" : "links to pay off"}, ${c.payments.open} waiting to be paid, ${c.payments.paid} paid${c.payments.held ? `, ${c.payments.held} held (the shop counts another total; the owner decides)` : ""}${c.payments.failing ? `, ${c.payments.failing} order${c.payments.failing === 1 ? "" : "s"} without a link` : ""}${c.catalogue ? `, ${c.catalogue.products} product${c.catalogue.products === 1 ? "" : "s"} on sale` : ""}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`
+              ? `${c.id} ${c.title} [${c.status}${c.payments.disconnecting ? ", disconnecting" : ""}] ${c.mode === "test" ? "test key (links for test orders only), " : ""}${c.pay_on ? "links to pay on" : "links to pay off"}, ${c.payments.open} waiting to be paid, ${c.payments.paid} paid${c.payments.held ? `, ${c.payments.held} held (the shop counts another total; the owner decides)` : ""}${c.payments.failing ? `, ${c.payments.failing} order${c.payments.failing === 1 ? "" : "s"} without a link` : ""}${c.catalogue ? `, ${c.catalogue.products} product${c.catalogue.products === 1 ? "" : "s"} on sale` : ""}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}${c.notes?.length ? `; ${c.notes.map((n) => n.text).join(" ")}` : ""}`
               : c.capabilities.length === 0
                 ? `${c.id} ${c.title} [${c.status}] serves a link the owner sees in Settings → Integrations${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`
                 : `${c.id} ${c.title} [${c.status}] ${c.busy_on ? `${c.busy_times} busy time${c.busy_times === 1 ? "" : "s"} ahead${c.busy_until ? ` (read to ${new Date(c.busy_until).toISOString().slice(0, 10)})` : ""}` : "busy times off"}, ${c.capabilities.includes("write_bookings") ? (c.bookings_on ? `${c.bookings_written} booking${c.bookings_written === 1 ? "" : "s"} written` : "bookings off") : "busy times only"}${c.bookings_failing ? `, ${c.bookings_failing} failing` : ""}${c.last_sync_at ? `, synced ${new Date(c.last_sync_at).toISOString()}` : ", not synced yet"}${c.last_error ? `; last error: ${JSON.stringify(c.last_error)}` : ""}`,
@@ -1569,6 +1569,8 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           // ("Google Calendar") that are soon, or need setting up on the server.
           const soon: string[] = [];
           const setup: string[] = [];
+          // A way that works once this inbox is live at its own address (a store that sends its key here).
+          const live: string[] = [];
           for (const card of r.cards) {
             if (card.status === "soon") {
               soon.push(card.title);
@@ -1577,7 +1579,9 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
             for (const way of card.ways) {
               const name = card.id === "calendar" ? `${way.label} Calendar` : `${way.label} (${card.title})`;
               if (way.status === "soon") soon.push(name);
-              if (way.status === "setup") setup.push(`${name}${way.hint ? `: ${way.hint.replace(/\.$/, "")}` : ""}`);
+              if (way.status === "setup" && way.untilLive) live.push(`${name}: ${way.untilLive}`);
+              else if (way.status === "setup")
+                setup.push(`${name}${way.hint ? `: ${way.hint.replace(/\.$/, "")}` : ""}`);
             }
           }
           return {
@@ -1585,6 +1589,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
               connected.length ? connected.join("\n") : "Nothing is connected yet.",
               soon.length ? `Soon: ${soon.join(", ")}.` : "",
               setup.length ? `Not set up on this server: ${setup.join("; ")}.` : "",
+              live.join("\n"),
             ]
               .filter(Boolean)
               .join("\n"),

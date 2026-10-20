@@ -1,4 +1,10 @@
-import { ConnectorError, type ConnectorHttp, type ConnectorHttpResponse } from "@surfingdog/core";
+import {
+  ConnectorError,
+  type ConnectorHttp,
+  type ConnectorHttpResponse,
+  isHundredthsCurrency,
+  isWholeUnitCurrency,
+} from "@surfingdog/core";
 import { basicAuth, retryAfterMs } from "../http";
 
 /**
@@ -235,6 +241,35 @@ export interface StoreSettings {
 
 export const SETTINGS_ROUTE = "/wc/v3/settings/general";
 
+/**
+ * Why a store's currency cannot be taken here, in the owner's words; null when it can. Every amount
+ * here is in hundredths: a currency with no minor unit (yen, won, dong) is exact in them, and a shop
+ * takes it back as a decimal in its own currency; one counted in thousandths (Kuwaiti or Bahraini
+ * dinars) is not, and is refused before a price of the shop's is read wrong.
+ */
+export function currencyRefusal(currency: string | null): string | null {
+  if (currency === null || isHundredthsCurrency(currency) || isWholeUnitCurrency(currency)) return null;
+  return `Your shop sells in ${currency}, which this inbox cannot take orders in yet: its amounts are counted in hundredths.`;
+}
+
+/**
+ * Whether the store's prices include tax (`woocommerce_prices_include_tax`, in the tax group WooCommerce
+ * lists only when it counts tax): false for a store that adds tax at checkout. Null when it does not say.
+ */
+export async function pricesIncludeTax(http: ConnectorHttp, store: Store, keys: Keys): Promise<boolean | null> {
+  try {
+    const answer = await send(http, store, keys, "GET", "/wc/v3/settings/tax/woocommerce_prices_include_tax", {
+      query: { _fields: "id,value" },
+      maxBytes: 64 * 1024,
+    });
+    const value = (answer.json as { value?: unknown } | null)?.value;
+    if (answer.status !== 200 || !answer.isJson) return null;
+    return value === "yes" ? true : value === "no" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
 export function settingsOf(json: unknown): StoreSettings {
   const list = Array.isArray(json) ? (json as { id?: unknown; value?: unknown }[]) : [];
   const value = (id: string) => list.find((s) => s && s.id === id)?.value;
@@ -338,25 +373,90 @@ export async function siteName(http: ConnectorHttp, store: Store): Promise<strin
   }
 }
 
-/** Text a store sends, as plain words: tags taken off, the entities WordPress writes turned back. */
+/** The named entities WordPress and WooCommerce write (its state names: `S&atilde;o Paulo`): signs, then letters. */
+const SIGNS: Readonly<Record<string, string>> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+  lsquo: "‘",
+  rsquo: "’",
+  ldquo: "“",
+  rdquo: "”",
+  euro: "€",
+  pound: "£",
+  yen: "¥",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+  times: "×",
+};
+const LETTERS: Readonly<Record<string, string>> = {
+  aacute: "á",
+  agrave: "à",
+  acirc: "â",
+  atilde: "ã",
+  auml: "ä",
+  aring: "å",
+  aelig: "æ",
+  ccedil: "ç",
+  eacute: "é",
+  egrave: "è",
+  ecirc: "ê",
+  euml: "ë",
+  iacute: "í",
+  igrave: "ì",
+  icirc: "î",
+  iuml: "ï",
+  ntilde: "ñ",
+  oacute: "ó",
+  ograve: "ò",
+  ocirc: "ô",
+  otilde: "õ",
+  ouml: "ö",
+  oslash: "ø",
+  uacute: "ú",
+  ugrave: "ù",
+  ucirc: "û",
+  uuml: "ü",
+  yacute: "ý",
+  yuml: "ÿ",
+  szlig: "ß",
+};
+
+/** A named entity as text (`&Atilde;` is Ã: a capital first letter is the capital); undefined when it is not one of these. */
+function named(name: string): string | undefined {
+  const sign = SIGNS[name.toLowerCase()];
+  if (sign !== undefined) return sign;
+  const letter = LETTERS[name];
+  if (letter !== undefined) return letter;
+  const lower = `${name.charAt(0).toLowerCase()}${name.slice(1)}`;
+  const capital = lower !== name && lower !== "szlig" ? LETTERS[lower] : undefined;
+  return capital?.toUpperCase();
+}
+
+/**
+ * Text a store sends, as plain words: tags taken off, the entities WordPress writes turned back in one
+ * pass, so `&amp;lt;` is the text `&lt;` and never a `<`.
+ */
 export function plain(html: string): string {
   return html
     .replace(/<\s*(br|\/p|\/li|\/div|\/h[1-6])\b[^>]*>/gi, " ")
     .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;|&#x27;|&apos;/gi, "'")
-    .replace(/&#(\d{2,6});/g, (_, n: string) => {
-      const code = Number(n);
-      return code > 31 && code < 0x110000 ? String.fromCodePoint(code) : " ";
-    })
-    .replace(/&#x([0-9a-f]{2,6});/gi, (_, h: string) => {
-      const code = Number.parseInt(h, 16);
-      return code > 31 && code < 0x110000 ? String.fromCodePoint(code) : " ";
-    })
+    .replace(
+      /&(?:#(\d{2,7})|#x([0-9a-f]{2,6})|([a-z]{2,8}));/gi,
+      (whole, dec?: string, hex?: string, name?: string) => {
+        if (name !== undefined) return named(name) ?? whole;
+        const code = dec !== undefined ? Number(dec) : Number.parseInt(hex ?? "", 16);
+        return code > 31 && code < 0x110000 ? String.fromCodePoint(code) : " ";
+      },
+    )
     .replace(/\s+/g, " ")
     .trim();
 }

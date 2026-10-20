@@ -81,7 +81,7 @@ export function Payments({
               {p.state === "held" && (
                 <span className="hint">
                   {p.propose_shop_total
-                    ? "The customer accepted less. Propose the shop's total; the link goes once they accept."
+                    ? "Your shop adds tax or delivery. Send the customer its total; the link goes once they accept."
                     : `Check the order's prices and taxes in ${p.provider}, then ask for payment again.`}
                 </span>
               )}

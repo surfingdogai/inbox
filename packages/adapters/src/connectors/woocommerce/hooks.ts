@@ -14,7 +14,12 @@ import { extraOf, keysOf, markOf, randomSecret, storeOf, type WooExtra } from ".
 /**
  * The store's webhooks, at the connection's own address (ADR-026 §4, ADR-027 §5). WooCommerce signs
  * each delivery with `X-WC-Webhook-Signature`: the base64 HMAC-SHA-256 of the body under the
- * webhook's secret, and names it in `X-WC-Webhook-Topic`, `-ID` and `-Delivery-ID`. When a webhook is
+ * webhook's secret, and names it in `X-WC-Webhook-Topic`, `-ID` and `-Delivery-ID`. The delivery id is
+ * no event's own: WooCommerce makes it of the webhook's id and the second it is sent
+ * (`get_new_delivery_id`: `wp_hash($id . strtotime('now'))`), so every delivery of a webhook within one
+ * second shares it (a batch the scheduler sends, a bulk edit in wp-admin). An event is known by its
+ * webhook and its signed body instead: a delivery sent again is the same event, and two orders, or two
+ * changes to one, are two. When a webhook is
  * made it pings its address once, unsigned, with the form body `webhook_id=<id>`; that is answered
  * 200 and nothing else. A webhook whose deliveries keep failing is switched off by the store (after
  * more than five in a row); every few hours this inbox switches its own back on.
@@ -73,11 +78,8 @@ async function verify(ctx: RunContext, request: InboundRequest): Promise<HookEve
     const parent = Number.isInteger(body.parent_id) && Number(body.parent_id) > 0 ? String(body.parent_id) : null;
     refs = parent ? [`v:${id}`, `p:${parent}`] : [`p:${id}`];
   }
-  const delivery = (request.headers.get("x-wc-webhook-delivery-id") ?? "").trim();
   const hook = (request.headers.get("x-wc-webhook-id") ?? "").trim();
-  const eventId = /^[A-Za-z0-9]{8,64}$/.test(delivery)
-    ? `${/^\d{1,20}$/.test(hook) ? hook : "0"}:${delivery}`
-    : `body:${(await sha256Hex(request.body)).slice(0, 40)}`;
+  const eventId = `${/^\d{1,20}$/.test(hook) ? hook : "0"}:${(await sha256Hex(request.body)).slice(0, 40)}`;
   return { eventId, topic, refs };
 }
 
@@ -99,8 +101,11 @@ function hookName(host: string, topic: string): string {
  * This inbox's webhooks, as they should be: one per topic, at the connection's own address, switched
  * on, signed with the secret this inbox keeps. Made where missing (connected before the inbox was
  * live, or removed in the store), moved where the address changed (the inbox went to its own domain),
- * switched back on where the store switched one off. Answers what the connection keeps of them; null
- * when the inbox cannot be reached yet.
+ * switched back on where the store switched one off. A webhook of this inbox's own that the connection
+ * no longer knows by id (the store approved again, and the connection began anew) is taken over by its
+ * name or address rather than made again, and any second one of a topic is removed, so the store sends
+ * each change once and never to an address that is gone. Answers what the connection keeps of them;
+ * null when the inbox cannot be reached yet.
  */
 export async function keepWebhooks(ctx: RunContext): Promise<Pick<WooExtra, "webhook" | "hooks" | "hook_url"> | null> {
   if (!ctx.hookUrl || ctx.hooksLive === false) return null;
@@ -117,13 +122,32 @@ export async function keepWebhooks(ctx: RunContext): Promise<Pick<WooExtra, "web
   const listed = await call(ctx.http, store, keys, "GET", "/wc/v3/webhooks", {
     query: { per_page: 100, search: "Agent inbox", _fields: "id,name,status,topic,delivery_url" },
   });
-  const there = Array.isArray(listed.json) ? (listed.json as Record<string, unknown>[]) : [];
+  const there = (Array.isArray(listed.json) ? (listed.json as Record<string, unknown>[]) : []).filter((w) =>
+    Number.isInteger(w?.id),
+  );
+  // This inbox's own, whatever the connection kept: its name in the store's list, or its address here.
+  const prefix = `${ctx.inbox.origin.replace(/\/+$/, "")}/v1/hooks/woocommerce/`;
+  const own = (w: Record<string, unknown>) =>
+    w.name === hookName(ctx.inbox.host, String(w.topic)) ||
+    (typeof w.delivery_url === "string" && w.delivery_url.startsWith(prefix));
   const hooks: Record<string, number> = {};
   for (const topic of WOO_TOPICS) {
+    const ofTopic = there.filter((w) => w.topic === topic);
     const found =
-      there.find((w) => w.id === extra.hooks[topic] && w.topic === topic) ??
-      there.find((w) => w.topic === topic && w.delivery_url === ctx.hookUrl);
-    if (found && Number.isInteger(found.id)) {
+      ofTopic.find((w) => w.id === extra.hooks[topic]) ??
+      ofTopic.find((w) => w.delivery_url === ctx.hookUrl) ??
+      ofTopic.find(own);
+    for (const other of ofTopic) {
+      if (other === found || !own(other)) continue;
+      try {
+        await call(ctx.http, store, keys, "DELETE", `/wc/v3/webhooks/${String(other.id)}`, {
+          query: { force: "true", _fields: "id" },
+        });
+      } catch (error) {
+        if (!(error instanceof ConnectorError) || error.code !== "not_found") throw error;
+      }
+    }
+    if (found) {
       const id = Number(found.id);
       // Moved, switched off, or not signed with the secret this inbox keeps (a new secret, or one made
       // by an earlier connection of this inbox): put right in place.

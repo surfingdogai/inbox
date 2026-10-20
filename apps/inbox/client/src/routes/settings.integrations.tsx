@@ -11,6 +11,7 @@ import {
   useCreateWebhook,
   useFeeds,
   useFeedWrite,
+  useIntegrations,
   useRotateSecret,
   useTestWebhook,
   useWebhooks,
@@ -48,6 +49,8 @@ function IntegrationsPage() {
 function FeedsCard() {
   const feeds = useFeeds();
   const write = useFeedWrite();
+  // A shop connected under Connect brings the catalogue itself: a feed is then for what it does not sell.
+  const shop = useIntegrations().data?.connections.find((c) => c.catalogue && c.catalogue.products > 0);
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -96,7 +99,11 @@ function FeedsCard() {
       {feeds.isSuccess && rows.length === 0 && !adding && (
         <div className="state">
           <h3>No feed connected</h3>
-          <p>If your shop publishes a product feed, this is the fastest way to give agents a real catalogue.</p>
+          <p>
+            {shop
+              ? `Your catalogue comes from ${shop.title}. Add a feed only for products sold elsewhere.`
+              : "If your shop publishes a product feed, this is the fastest way to give agents a real catalogue."}
+          </p>
         </div>
       )}
       {adding && (

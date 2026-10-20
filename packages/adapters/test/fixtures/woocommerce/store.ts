@@ -18,7 +18,13 @@ import { type FakePlatform, fakePlatform, json } from "../../fakes/platform";
  * - webhooks: one topic each, pinged unsigned (`webhook_id=<id>`) when made, deliveries signed with the
  *   base64 HMAC-SHA-256 of the body (`X-WC-Webhook-Signature`), the whole resource as the body;
  * - the authorize endpoint: the key made, POSTed to `callback_url` as JSON, deleted unless that answers
- *   200, then the owner sent to `return_url` with `success` and `user_id` (includes/class-wc-auth.php).
+ *   200, then the owner sent to `return_url` with `success` and `user_id` (includes/class-wc-auth.php);
+ * - settings: `general` always; `tax` only while the store counts tax, as WooCommerce lists its tax
+ *   settings page only then (`woocommerce_prices_include_tax`, "yes" or "no");
+ * - `/data/countries/<cc>`: a country's code and its states, `{ code, name }`, as WooCommerce lists them
+ *   (`WC_Countries::get_states`), an empty list for a country it has none for, 404 for no country;
+ * - a webhook's delivery id made as WooCommerce makes it: of the webhook's id and the second it is sent
+ *   (`get_new_delivery_id`), so two deliveries in one second share it.
  *
  * Ids and keys are made up; nothing here is any real store's. Keys are put together at run time, so no
  * file holds a string shaped like a real key.
@@ -110,6 +116,8 @@ export interface FakeWooStore {
   readonly webhooks: Map<number, WooWebhook>;
   /** Pings the store sent when a webhook was made: where, and the body. */
   readonly pings: { url: string; body: string }[];
+  /** The countries whose states the store was asked for, in order. */
+  readonly countriesAsked: string[];
   settings: {
     name: string;
     currency: string;
@@ -153,6 +161,30 @@ export interface SignedDelivery {
   readonly headers: Record<string, string>;
 }
 
+/** Some of the states WooCommerce lists for a country (i18n/states.php), by its own codes. */
+const STATES: Readonly<Record<string, readonly { code: string; name: string }[]>> = {
+  BR: [
+    { code: "RJ", name: "Rio de Janeiro" },
+    { code: "SP", name: "S&atilde;o Paulo" },
+    { code: "MG", name: "Minas Gerais" },
+  ],
+  CA: [
+    { code: "ON", name: "Ontario" },
+    { code: "QC", name: "Quebec" },
+    { code: "BC", name: "British Columbia" },
+  ],
+  IN: [
+    { code: "KA", name: "Karnataka" },
+    { code: "MH", name: "Maharashtra" },
+    { code: "TN", name: "Tamil Nadu" },
+  ],
+  JP: [
+    { code: "JP13", name: "Tokyo" },
+    { code: "JP27", name: "Osaka" },
+  ],
+  KE: [],
+};
+
 /** A WooCommerce error, as its REST API answers one. */
 export function wooError(status: number, code: string, message: string): Response {
   return json({ code, message, data: { status } }, status);
@@ -176,6 +208,7 @@ export function fakeWooStore(
     orders: new Map(),
     webhooks: new Map(),
     pings: [],
+    countriesAsked: [],
     settings: {
       name: opts.name ?? "Pizzaria Bixiga",
       currency: opts.currency ?? "BRL",
@@ -214,7 +247,9 @@ export function fakeWooStore(
       must(id).status = status;
     },
     async delivery(topic, resourceId, d = {}) {
-      const hook = [...store.webhooks.values()].find((w) => w.topic === topic);
+      const hooks = [...store.webhooks.values()];
+      const hook =
+        hooks.find((w) => w.topic === topic && w.status === "active") ?? hooks.find((w) => w.topic === topic);
       if (!hook) throw new Error(`no webhook for ${topic}`);
       const resource = topic.startsWith("order.") ? orderView(must(resourceId), 2) : productById(resourceId);
       const body = JSON.stringify(resource);
@@ -232,7 +267,9 @@ export function fakeWooStore(
           "x-wc-webhook-event": event ?? "",
           "x-wc-webhook-signature": signature,
           "x-wc-webhook-id": String(hook.id),
-          "x-wc-webhook-delivery-id": d.deliveryId ?? Math.random().toString(16).slice(2).padEnd(32, "0").slice(0, 32),
+          // wp_hash( $webhook_id . strtotime( 'now' ) ): the same for every delivery of a webhook in one second.
+          "x-wc-webhook-delivery-id":
+            d.deliveryId ?? `${hook.id.toString(16)}${Math.floor(Date.now() / 1000).toString(16)}`.padEnd(32, "0"),
         },
       };
     },
@@ -538,6 +575,33 @@ export function fakeWooStore(
           fields,
         ),
       );
+    }
+    if (what === "settings" && idRaw === "tax" && method === "GET") {
+      if (!store.settings.calcTaxes) {
+        return wooError(404, "rest_setting_setting_group_invalid", "Invalid setting group.");
+      }
+      const setting = {
+        id: "woocommerce_prices_include_tax",
+        label: "Prices entered with tax",
+        type: "radio",
+        default: "no",
+        value: store.settings.pricesIncludeTax ? "yes" : "no",
+      };
+      if (sub === "woocommerce_prices_include_tax") return json(only(setting, fields));
+      if (!sub) return json(only([setting], fields));
+      return wooError(404, "rest_setting_setting_invalid", "Invalid setting.");
+    }
+    if (what === "data" && idRaw === "countries" && method === "GET") {
+      const cc = (sub ?? "").toUpperCase();
+      const states = STATES[cc];
+      if (!states)
+        return wooError(
+          404,
+          "woocommerce_rest_data_invalid_location",
+          "There are no locations matching these parameters.",
+        );
+      store.countriesAsked.push(cc);
+      return json(only({ code: cc, name: cc, states }, fields));
     }
     if (what === "products" && !idRaw && method === "GET") {
       const status = q.get("status") ?? "any";

@@ -25,7 +25,15 @@ import { confirmed, freshDb } from "./harness";
 const BASE = "https://inbox.pizzaria-bixiga.example.com";
 const SECRET_KEY = "woocommerce-test-secret-0123456789abcdef";
 
-async function setup(opts: { store?: FakeWooStore; currency?: string; timezone?: string } = {}) {
+async function setup(
+  opts: {
+    store?: FakeWooStore;
+    currency?: string;
+    timezone?: string;
+    base?: string;
+    policy?: { hooksLive: boolean };
+  } = {},
+) {
   const db = await freshDb();
   const store = opts.store ?? fakeWooStore();
   store.products.push(
@@ -39,9 +47,10 @@ async function setup(opts: { store?: FakeWooStore; currency?: string; timezone?:
     db,
     mailOut: mail,
     secretKey: SECRET_KEY,
-    baseUrl: BASE,
+    baseUrl: opts.base ?? BASE,
     eventSettleMs: 0,
     background: (work) => void pending.push(work),
+    ...(opts.policy ? { policy: opts.policy } : {}),
     fetchImpl: store.platform.fetch,
   });
   const owner = { authorization: `Bearer ${(await createApiKey(db, { kind: "owner", name: "cli" })).key}` };
@@ -220,6 +229,7 @@ describe("Settings → Integrations, WooCommerce", () => {
           status: string;
           auth: string;
           action: string;
+          again?: string;
           advanced?: boolean;
           consent?: string;
           before?: { key: string; value?: string }[];
@@ -230,8 +240,16 @@ describe("Settings → Integrations, WooCommerce", () => {
     const card = list.cards.find((c) => c.id === "woocommerce");
     expect(card).toMatchObject({ status: "ready", line: "Catalogue in, paid at your checkout" });
     const [approve, keys] = card?.ways ?? [];
-    expect(approve).toMatchObject({ preset: null, status: "ready", auth: "oauth", action: "Connect your shop" });
-    expect(approve?.consent).toContain("read and write access");
+    expect(approve).toMatchObject({
+      preset: null,
+      status: "ready",
+      auth: "oauth",
+      action: "Connect your shop",
+      again: "Approve again",
+    });
+    expect(approve?.consent).toBe(
+      "WooCommerce will ask you to approve this inbox. It reads your products and stock, and only writes the orders you accept.",
+    );
     expect(approve?.before).toEqual([expect.objectContaining({ key: "store_url", value: s.store.base })]);
     expect(keys).toMatchObject({ preset: "keys", status: "ready", auth: "form", advanced: true, action: "Connect" });
     expect(keys?.form.map((f) => [f.key, f.secret])).toEqual([
@@ -240,6 +258,39 @@ describe("Settings → Integrations, WooCommerce", () => {
       ["consumer_secret", true],
     ]);
     expect(keys?.form[1]?.steps?.[0]).toBe("In WordPress: WooCommerce → Settings → Advanced → REST API → Add key.");
+    // The keys way starts from the same address, filled in from the business's website.
+    expect(keys?.form[0]).toMatchObject({
+      key: "store_url",
+      value: s.store.base,
+      help: "Where your WordPress shop is.",
+    });
+  });
+
+  it("offers one press only once the store can reach this inbox; the keys meanwhile, said so, and refused to start", async () => {
+    const wait =
+      "Your shop can send this inbox its key once the inbox is live at its own address. Until then, paste the keys.";
+    // A hosted inbox not live yet, and an inbox with no https address of its own (one at a time: the
+    // Workers runtime keeps one database per file).
+    for (const opts of [{ policy: { hooksLive: false } }, { base: "http://127.0.0.1:8787" }]) {
+      const s = await setup(opts);
+      const list = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as {
+        cards: { id: string; status: string; ways: { preset: string | null; status: string; untilLive?: string }[] }[];
+      };
+      const card = list.cards.find((c) => c.id === "woocommerce");
+      expect(card?.status).toBe("ready");
+      expect(card?.ways.map((w) => [w.preset, w.status, w.untilLive ?? null])).toEqual([
+        [null, "setup", wait],
+        ["keys", "ready", null],
+      ]);
+      const started = await s.call(
+        "POST",
+        "/v1/owner/integrations/authorize",
+        { kind: "woocommerce", input: { store_url: s.store.base } },
+        s.owner,
+      );
+      expect(started.status).toBe(403);
+      expect(((await started.json()) as { detail: string }).detail).toBe(wait);
+    }
   });
 });
 
@@ -274,8 +325,10 @@ describe("connecting by the store's own Approve page", () => {
     expect(JSON.parse(text)).toMatchObject({
       kind: "woocommerce",
       account: "pizzaria-bixiga.example.com",
-      disconnect_note: "Remove the key in WooCommerce → Settings → Advanced → REST API",
+      disconnect_note: "Then remove the key named Agent inbox in WooCommerce → Settings → Advanced → REST API.",
+      notes: [],
     });
+
     expect(text).not.toContain(key?.[1].secret ?? "-");
     const { rows } = await s.db.client.query({
       sql: "SELECT config_enc, config_public FROM connectors",
@@ -312,7 +365,26 @@ describe("connecting by the store's own Approve page", () => {
   it("says plainly what went wrong when the owner declines, or the store's key does not check out, and keeps nothing", async () => {
     const s = await setup();
     const declined = await connectByApproving(s, { deny: true });
-    expect(declined.to.searchParams.get("connect_error")).toContain("did not send this inbox a key");
+    expect(declined.to.searchParams.get("connect_error")).toBe(
+      "Nothing was connected: you didn't approve this inbox in WooCommerce.",
+    );
+    // Back with no key and no decline (the store could not reach this inbox): said so, with the keys as the way.
+    const started0 = await s.call(
+      "POST",
+      "/v1/owner/integrations/authorize",
+      { kind: "woocommerce", input: { store_url: s.store.base } },
+      s.owner,
+    );
+    const state0 = new URL(((await started0.json()) as { authorize_url: string }).authorize_url).searchParams.get(
+      "user_id",
+    );
+    const lost = await s.call(
+      "GET",
+      `/oauth/connect/woocommerce/callback?state=${encodeURIComponent(state0 ?? "")}&success=1`,
+    );
+    expect(new URL(String(lost.headers.get("location")), BASE).searchParams.get("connect_error")).toBe(
+      "Nothing was connected: your shop could not send this inbox its key. Try again, or paste the keys under More options.",
+    );
     // A key the store can only read: refused, and the store deletes the key it made (no 200 came back).
     const started = await s.call(
       "POST",
@@ -327,6 +399,52 @@ describe("connecting by the store's own Approve page", () => {
     expect(s.store.keys.size).toBe(before);
     const { rows } = await s.db.client.query({ sql: "SELECT COUNT(*) FROM connectors", method: "all" });
     expect(Number(rows[0]?.[0])).toBe(0);
+  });
+
+  it("finds on the first sync a host that drops the Authorization header, and reads the catalogue the same run", async () => {
+    const store = fakeWooStore();
+    store.quirks.dropsAuthHeader = true;
+    const s = await setup({ store });
+    const id = await connected(s);
+    const view = (await (await s.call("GET", `/v1/owner/integrations/${id}`, undefined, s.owner)).json()) as {
+      status: string;
+      catalogue: { products: number } | null;
+    };
+    expect(view).toMatchObject({ status: "active", catalogue: { products: 2 } });
+    expect((await productsOf(s.db)).map((p) => [p.externalId, p.active])).toEqual([
+      ["p:11", true],
+      ["p:13", false],
+      ["v:22", true],
+    ]);
+  });
+
+  it("connects the same shop again in place when it is approved again: its webhooks kept, the earlier key said", async () => {
+    const s = await setup();
+    const id = await connected(s);
+    const hooks = [...s.store.webhooks.values()].map((w) => [w.id, w.delivery_url]);
+    expect(hooks).toHaveLength(3);
+    const firstKey = [...s.store.keys.entries()].find(([, v]) => v.description.startsWith("Agent inbox ("))?.[0];
+    const again = await connectByApproving(s);
+    expect(again.to.searchParams.get("connected")).toBe(id);
+    await s.drain();
+    for (const ping of s.store.pings.splice(0)) await s.call("POST", ping.url, ping.body);
+    // The same webhooks, at the same address, signed now with a new secret; no second set.
+    expect([...s.store.webhooks.values()].map((w) => [w.id, w.delivery_url])).toEqual(hooks);
+    const view = (await (await s.call("GET", `/v1/owner/integrations/${id}`, undefined, s.owner)).json()) as {
+      notes: { text: string; href?: string }[];
+    };
+    expect(view.notes).toEqual([
+      expect.objectContaining({
+        text: "Your shop made this inbox a new key. Remove the earlier Agent inbox key in WooCommerce → Settings → Advanced → REST API.",
+        href: expect.stringMatching(/\/wp-admin\/admin\.php\?page=wc-settings&tab=advanced&section=keys&edit-key=\d+$/),
+      }),
+    ]);
+    expect(firstKey && s.store.keys.has(firstKey)).toBe(true);
+    // A delivery signed with the new secret is taken.
+    const margherita = (await productsOf(s.db)).find((p) => p.externalId === "p:11");
+    expect(margherita?.active).toBe(true);
+    const d = await s.store.delivery("product.updated", 11);
+    expect((await s.call("POST", d.url, d.body, d.headers)).status).toBe(200);
   });
 
   it("is the owner's in person: a key handed to another system cannot start it", async () => {

@@ -9,7 +9,7 @@ import {
   type ShopOrder,
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { hundredths, normalizeStore, routeUrl } from "../src/connectors/woocommerce/api";
+import { hundredths, normalizeStore, plain, routeUrl } from "../src/connectors/woocommerce/api";
 import { hmacSha256Base64, woocommerceConnector } from "../src/index";
 import { type FakeWooStore, fakeWooStore, simple, variable, variation } from "./fixtures/woocommerce/store";
 
@@ -17,8 +17,9 @@ import { type FakeWooStore, fakeWooStore, simple, variable, variation } from "./
  * Contract tests for the WooCommerce connector (ADR-027) against a made-up store that answers as
  * WooCommerce's REST API v3 documents it (fixtures/woocommerce/store.ts), through the inbox's own
  * connector client: https only, public hosts only, no redirect followed. Its businesses: a pizzeria in
- * São Paulo (BRL), a hardware shop in Pune whose prices include GST (INR), and a bakery in Toronto whose
- * prices leave HST to the checkout (CAD). No real store is ever called.
+ * São Paulo (BRL), a hardware shop in Pune whose prices include GST (INR), a bakery in Toronto whose
+ * prices leave HST to the checkout (CAD), a homeware shop in Osaka selling in yen (JPY), a spice shop in
+ * Kuwait City counting in fils (KWD), and a ceramics studio in Nairobi (KES). No real store is ever called.
  */
 
 const woo = woocommerceConnector();
@@ -138,6 +139,14 @@ describe("a store's address and amounts", () => {
     ]) {
       expect(() => normalizeStore(bad), bad).toThrow(ConnectorError);
     }
+  });
+
+  it("turns a store's entities back into text once: an escaped tag stays text", () => {
+    expect(plain("P&atilde;o &amp;lt;script&amp;gt; &amp; queijo &#8211; 1&nbsp;kg")).toBe(
+      "Pão &lt;script&gt; & queijo – 1 kg",
+    );
+    expect(plain("&Aacute;gua, &Ccedil;a&ntilde;a &hellip; &unknown;")).toBe("Água, Çaña … &unknown;");
+    expect(plain("<p>Caf&#233; &#x2615;</p>")).toBe("Café ☕");
   });
 
   it("reads the store's decimals in hundredths, rounding at the third, and never guesses", () => {
@@ -322,8 +331,26 @@ describe("connecting by WooCommerce's own Approve page", () => {
     });
     expect(flow?.postedState?.(posted(body))).toBe("st4te");
     expect(flow?.postedState?.(posted("not json"))).toBeNull();
+    // While the store waits for this answer it is asked nothing: a small host may have no worker free.
+    const asked = store.platform.seen.length;
     const c = await flow?.receivePosted?.(connectCtx(store), posted(body), { store_url: store.base });
-    expect(c).toMatchObject({ externalId: "pizzaria-bixiga.example.com", extra: { via: "authorize", key_id: 42 } });
+    expect(store.platform.seen.length).toBe(asked);
+    expect(c).toMatchObject({
+      externalId: "pizzaria-bixiga.example.com",
+      extra: { via: "authorize", key_id: 42, store: store.base, api: "path", auth: "header", currency: null },
+    });
+    expect((c?.extra as { checked_at?: unknown } | undefined)?.checked_at).toBeUndefined();
+    // Checked on the first sync instead: the store found, its currency read.
+    const first = runCtx(store, c as Connected);
+    expect(woo.stale?.(first)).toBe(true);
+    const checked = await woo.refresh?.(first);
+    expect(checked?.extra).toMatchObject({ currency: "BRL", checked_at: expect.any(Number) });
+    expect(woo.stale?.(runCtx(store, { ...(c as Connected), extra: checked?.extra }))).toBe(false);
+    // The same store approved again is known by its address: connecting it again in place.
+    expect(flow?.accountOf?.({ store_url: "https://WWW.pizzaria-bixiga.example.com/wp-admin/" })).toBe(
+      "pizzaria-bixiga.example.com",
+    );
+    expect(flow?.accountOf?.({ store_url: "http://pizzaria-bixiga.example.com" })).toBeNull();
     // Read only is not enough to write the orders the owner accepts.
     await expect(
       flow?.receivePosted?.(connectCtx(store), posted(body.replace('"read_write"', '"read"')), {
@@ -333,15 +360,49 @@ describe("connecting by WooCommerce's own Approve page", () => {
     await expect(
       flow?.receivePosted?.(connectCtx(store), posted('{"user_id":"st4te"}'), { store_url: store.base }),
     ).rejects.toMatchObject({ code: "bad_response" });
-    // A pair the store did not make for this inbox is not taken, whatever the POST says.
+    // A pair the store did not make for this inbox: taken as the POST says, and refused by the store on
+    // the first sync, which the connection says.
     const stranger = body.replace("9".repeat(40), "7".repeat(40));
-    await expect(
-      flow?.receivePosted?.(connectCtx(store), posted(stranger), { store_url: store.base }),
-    ).rejects.toMatchObject({
-      code: "auth",
+    const taken = await flow?.receivePosted?.(connectCtx(store), posted(stranger), { store_url: store.base });
+    const hooksBefore = store.webhooks.size;
+    await expect(woo.refresh?.(runCtx(store, taken as Connected))).rejects.toMatchObject({ code: "auth" });
+    expect(store.webhooks.size).toBe(hooksBefore);
+  });
+
+  it("finds on the first sync a store the POST could not say: plain permalinks, a dropped header", async () => {
+    const store = fakeWooStore({ host: "ufinyanzi-studio.example.co.ke", name: "Ufinyanzi Studio", currency: "KES" });
+    store.quirks.plainPermalinks = true;
+    store.quirks.dropsAuthHeader = true;
+    store.addKey(`ck_${"5".repeat(40)}`, `cs_${"6".repeat(40)}`);
+    store.products.push(simple(5, "Mug, terracotta", "1450.00"));
+    const body = JSON.stringify({
+      key_id: 7,
+      user_id: "st4te",
+      consumer_key: `ck_${"5".repeat(40)}`,
+      consumer_secret: `cs_${"6".repeat(40)}`,
+      key_permissions: "read_write",
     });
-    // While the store waits for this answer it is asked one thing only: whether the pair works.
-    expect(store.webhooks.size).toBe(0);
+    const c = (await woo.oauth?.receivePosted?.(connectCtx(store), posted(body), {
+      store_url: store.base,
+    })) as Connected;
+    const r = await woo.refresh?.(runCtx(store, c));
+    expect(r?.extra).toMatchObject({ api: "query", auth: "query", currency: "KES" });
+    const products = await readAll(runCtx(store, { ...c, extra: r?.extra }));
+    expect(products.map((p) => [p.externalId, p.price])).toEqual([["p:5", { value: 145_000, currency: "KES" }]]);
+  });
+
+  it("says the owner declined, rather than a fault, when WooCommerce sends them back with success=0", async () => {
+    const store = fakeWooStore();
+    const started = woo.oauth?.authorizeUrl({
+      redirectUri: "https://inbox.pizzaria-bixiga.example.com/oauth/connect/woocommerce/callback",
+      state: "st4te",
+      challenge: "unused",
+      input: { store_url: store.base },
+      postUrl: "https://inbox.pizzaria-bixiga.example.com/v1/hooks/woocommerce/authorized",
+    });
+    const back = await store.approve(started ?? "", () => new Response("{}"), { deny: true });
+    expect(new URL(back.location).searchParams.get("success")).toBe("0");
+    expect(back.posted).toBeNull();
   });
 });
 
@@ -401,10 +462,10 @@ describe("the store's catalogue", () => {
       description: "Molho de tomate, mussarela & manjericão.",
       price: { currency: "BRL" },
     });
-    // Asked only for the fields it reads, a hundred at a time, in a stable order.
+    // Asked only for the fields it reads, 25 at a time, in a stable order.
     const listed = store.platform.seen.find((r) => r.url.pathname === "/wp-json/wc/v3/products");
     expect(Object.fromEntries(listed?.url.searchParams ?? [])).toMatchObject({
-      per_page: "100",
+      per_page: "25",
       status: "any",
       orderby: "id",
       order: "asc",
@@ -432,14 +493,19 @@ describe("the store's catalogue", () => {
     store.products.push(
       simple(61, "Portuguesa", "52.00"),
       simple(62, "Fora do cardápio", "40.00", { status: "trash" }),
+      variable(63, "Pizza doce", [variation(64, "Média", "39.00"), variation(65, "Grande", "49.00")], {
+        status: "trash",
+      }),
     );
     const changed = await readAll(ctx, since);
     expect(changed.map((p) => [p.externalId, p.available])).toEqual([
       ["p:61", true],
       // The variable product changed: all its variations, read after the page that listed it.
       ...Array.from({ length: 130 }, (_, i) => [`v:${1_000 + i}`, true]),
-      // Moved to the bin since: off sale now, not at the next full pass.
+      // Moved to the bin since: off sale now, not at the next full pass; a variable one with all its variations.
       ["p:62", false],
+      ["v:64", false],
+      ["v:65", false],
     ]);
     const asked = store.platform.seen.filter((r) => r.url.pathname === "/wp-json/wc/v3/products").slice(-2);
     expect(asked.map((r) => [r.url.searchParams.get("status"), r.url.searchParams.get("dates_are_gmt")])).toEqual([
@@ -447,6 +513,61 @@ describe("the store's catalogue", () => {
       ["trash", "true"],
     ]);
     expect(asked[0]?.url.searchParams.get("modified_after")).toBe(new Date(since).toISOString().slice(0, 19));
+  });
+
+  it("reads a store whose page builder writes long descriptions: small pages, each read whole", async () => {
+    const store = fakeWooStore({ host: "chai-and-co.example.in", name: "Chai & Co", currency: "INR" });
+    // A page builder's markup: 150 KB a product, a hundred of which pass what one answer may be.
+    const long = `<div class="elementor-section">${"<p>Assam, first flush, hand-rolled.</p>".repeat(3_900)}</div>`;
+    expect(long.length).toBeGreaterThan(150_000);
+    for (let i = 0; i < 40; i++) store.products.push(simple(100 + i, `Tea ${i + 1}`, "349.00", { description: long }));
+    const ctx = runCtx(store, await connected(store));
+    const all = await readAll(ctx);
+    expect(all).toHaveLength(40);
+    expect(all[0]?.description?.length).toBe(1_000);
+    expect(store.platform.seen.filter((r) => r.url.pathname === "/wp-json/wc/v3/products")).toHaveLength(2);
+  });
+
+  it("prices a store in yen in hundredths, exactly, and refuses a store counted in thousandths", async () => {
+    const osaka = fakeWooStore({ host: "zakka-osaka.example.jp", name: "Zakka Osaka", currency: "JPY" });
+    osaka.settings.decimals = 0;
+    osaka.products.push(simple(1, "Furoshiki, indigo", "1200"));
+    const c = await connected(osaka);
+    expect(c.extra).toMatchObject({ currency: "JPY" });
+    const [furoshiki] = await readAll(runCtx(osaka, c));
+    // ¥1,200 is 120000 hundredths, as every amount here is kept; never 1200.
+    expect(furoshiki?.price).toEqual({ value: 120_000, currency: "JPY" });
+    const order = shopOrder(
+      [
+        {
+          externalId: "p:1",
+          sku: null,
+          name: "Furoshiki, indigo",
+          quantity: 2,
+          unit: { value: 120_000, currency: "JPY" },
+        },
+      ],
+      {
+        customer: { name: "Haruto Sato", email: "haruto@example.jp", phone: null, language: "ja" },
+        shipping: {
+          streetAddress: "1-2-3 Namba",
+          addressLocality: "Osaka",
+          addressRegion: "大阪府",
+          addressCountry: "JP",
+        },
+        note: null,
+      },
+    );
+    const link = await woo.payments?.createLink(runCtx(osaka, c), payRequest(order));
+    expect(link?.total).toEqual({ value: 240_000, currency: "JPY" });
+    expect([...osaka.orders.values()][0]?.lines[0]?.total).toBe(2_400);
+
+    const kuwait = fakeWooStore({ host: "souq-spices.example.com.kw", name: "Souq Spices", currency: "KWD" });
+    await expect(connected(kuwait)).rejects.toMatchObject({
+      code: "config",
+      field: "store_url",
+      message: expect.stringContaining("KWD"),
+    });
   });
 });
 
@@ -584,6 +705,61 @@ describe("an order the inbox accepts, written into the store", () => {
     expect([...store.orders.values()][0]?.lines[0]?.total).toBe(18);
   });
 
+  it("writes the customer's region as the store's own code, so the store's tax rates apply", async () => {
+    const store = fakeWooStore({ host: "maple-crust-on.example.ca", name: "Maple Crust Bakery", currency: "CAD" });
+    store.products.push(simple(80, "Butter tarts (6)", "18.00"));
+    const ctx = runCtx(store, await connected(store));
+    const tarts = {
+      externalId: "p:80",
+      sku: null,
+      name: "Butter tarts (6)",
+      quantity: 1,
+      unit: { value: 1_800, currency: "CAD" },
+    };
+    const place = async (addressRegion: string, addressCountry: string, ref: string) => {
+      await woo.payments?.createLink(
+        ctx,
+        payRequest(
+          shopOrder([tarts], {
+            customer: { name: "Émilie Tremblay", email: "emilie@example.ca", phone: null, language: "fr-CA" },
+            shipping: { streetAddress: "120 Queen St W", addressLocality: "Toronto", addressRegion, addressCountry },
+          }),
+          ref,
+        ),
+      );
+      const wc = [...store.orders.values()].at(-1);
+      return [wc?.shipping.state ?? null, wc?.billing.state ?? null];
+    };
+    expect(await place("Ontario", "CA", "01JB7Z8K3M4N5P6Q7R8S9T0A01")).toEqual(["ON", "ON"]);
+    expect(await place("québec", "CA", "01JB7Z8K3M4N5P6Q7R8S9T0A02")).toEqual(["QC", "QC"]);
+    expect(await place("on", "CA", "01JB7Z8K3M4N5P6Q7R8S9T0A03")).toEqual(["ON", "ON"]);
+    expect(await place("IN-MH", "IN", "01JB7Z8K3M4N5P6Q7R8S9T0A04")).toEqual(["MH", "MH"]);
+    // A region the store does not list for the country: left out, as WooCommerce does for a place it does not know.
+    expect(await place("Atlantis", "CA", "01JB7Z8K3M4N5P6Q7R8S9T0A05")).toEqual([null, null]);
+    // A country the store lists no states for: as written.
+    expect(await place("Nairobi County", "KE", "01JB7Z8K3M4N5P6Q7R8S9T0A06")).toEqual([
+      "Nairobi County",
+      "Nairobi County",
+    ]);
+    // Each country's list asked for once.
+    expect(store.countriesAsked).toEqual(["CA", "IN", "KE"]);
+  });
+
+  it("says when a store adds tax at checkout: each order's total goes to the owner first", async () => {
+    const toronto = fakeWooStore({ host: "maple-crust-tax.example.ca", name: "Maple Crust Bakery", currency: "CAD" });
+    Object.assign(toronto.settings, { calcTaxes: true, pricesIncludeTax: false, rate: 0.13 });
+    const t = await connected(toronto);
+    expect(t.extra).toMatchObject({ taxes: true, prices_include_tax: false });
+    expect(woo.notes?.({ extra: t.extra ?? {}, now: Date.now() })).toEqual([
+      { text: "Your shop adds tax at checkout, so each order's total goes to you first." },
+    ]);
+    const pune = fakeWooStore({ host: "deshpande-tax.example.in", name: "Deshpande Hardware", currency: "INR" });
+    Object.assign(pune.settings, { calcTaxes: true, pricesIncludeTax: true, rate: 0.18 });
+    const p = await connected(pune);
+    expect(p.extra).toMatchObject({ prices_include_tax: true });
+    expect(woo.notes?.({ extra: p.extra ?? {}, now: Date.now() })).toEqual([]);
+  });
+
   it("writes nothing for an order in another currency than the store's", async () => {
     const { store, ctx } = await pizzaria();
     const order = shopOrder([{ ...margherita(), unit: { value: 1_000, currency: "USD" } }]);
@@ -658,6 +834,20 @@ describe("what the store says became of an order", () => {
     expect(r?.amount).toEqual({ value: 1_550, currency: "BRL" });
     expect(Number(r?.refundIds[0])).toBeGreaterThan(Number(r?.refundIds[1]));
     expect(await woo.payments?.refunded?.(ctx, { paymentId: "pi_not_an_order" })).toBeNull();
+  });
+
+  it("says a refund in full, which leaves the order refunded and no longer paid", async () => {
+    const { store, ctx, id } = await made();
+    store.pay(id);
+    store.refund(id, 49.9);
+    expect(store.orders.get(id)?.status).toBe("refunded");
+    const facts = await woo.hooks?.read(ctx, { eventId: "x", topic: "order.updated", refs: [String(id)] });
+    expect(facts).toEqual([
+      {
+        kind: "order",
+        fact: expect.objectContaining({ state: "refunded", refunded: { value: 4_990, currency: "BRL" } }),
+      },
+    ]);
   });
 
   it("believes no order that is not this inbox's: another inbox's mark, or none, is nothing", async () => {
@@ -763,7 +953,7 @@ describe("the store's webhooks", () => {
     const event = await woo.hooks?.verify(ctx, posted(good.body, good.headers));
     const hookId = good.headers["x-wc-webhook-id"];
     expect(event).toEqual({
-      eventId: `${hookId}:5f2b9c0d1e3a4b6c7d8e9f0a1b2c3d4e`,
+      eventId: expect.stringMatching(new RegExp(`^${hookId}:[0-9a-f]{40}$`)),
       topic: "order.updated",
       refs: [String(id)],
     });
@@ -776,6 +966,29 @@ describe("the store's webhooks", () => {
     await expect(woo.hooks?.verify(ctx, posted(`${good.body} `, good.headers))).rejects.toBeInstanceOf(ConnectorError);
     const unsigned = Object.fromEntries(Object.entries(good.headers).filter(([k]) => k !== "x-wc-webhook-signature"));
     await expect(woo.hooks?.verify(ctx, posted(good.body, unsigned))).rejects.toBeInstanceOf(ConnectorError);
+  });
+
+  it("tell two orders in one second apart, though WooCommerce gives both the same delivery id", async () => {
+    const { store, ctx } = await hooked();
+    const a = Number((await woo.payments?.createLink(ctx, payRequest(shopOrder([margherita()]))))?.externalId);
+    const b = Number(
+      (await woo.payments?.createLink(ctx, payRequest(shopOrder([margherita(3)]), "01JB7Z8K3M4N5P6Q7R8S9T0V2X")))
+        ?.externalId,
+    );
+    // wp_hash( $webhook_id . strtotime( 'now' ) ): one second, one delivery id for every delivery of the webhook.
+    const same = { deliveryId: "901f2b9c0d1e3a4b6c7d8e9f0a1b2c3d" };
+    const da = await store.delivery("order.updated", a, same);
+    const db = await store.delivery("order.updated", b, same);
+    expect(da.headers["x-wc-webhook-delivery-id"]).toBe(db.headers["x-wc-webhook-delivery-id"]);
+    const first = await woo.hooks?.verify(ctx, posted(da.body, da.headers));
+    const second = await woo.hooks?.verify(ctx, posted(db.body, db.headers));
+    expect(first?.refs).toEqual([String(a)]);
+    expect(second?.refs).toEqual([String(b)]);
+    expect(first?.eventId).not.toBe(second?.eventId);
+    // The same order changed again in that second is another event too; the same delivery again is not.
+    store.pay(a);
+    const changed = await store.delivery("order.updated", a, same);
+    expect((await woo.hooks?.verify(ctx, posted(changed.body, changed.headers)))?.eventId).not.toBe(first?.eventId);
   });
 
   it("let go, unkept, an order the shop took itself at its own checkout", async () => {
@@ -872,6 +1085,79 @@ describe("the store's webhooks", () => {
     expect(r?.extra).toMatchObject({ hook_url: moved, webhook: "added" });
   });
 
+  it("are taken over, not made again, when the store is approved again; a second one of a topic goes", async () => {
+    const { store } = await hooked();
+    expect(store.webhooks.size).toBe(3);
+    // A stray second one of this inbox's own, as a store approved twice would have.
+    const stray = { ...([...store.webhooks.values()][0] as NonNullable<ReturnType<typeof store.webhooks.get>>) };
+    store.webhooks.set(9_999, { ...stray, id: 9_999, delivery_url: `${HOOK.slice(0, -43)}${"Q".repeat(43)}` });
+    // Approved again: a new key, a connection that knows no webhook by id, at a new address of this inbox.
+    store.addKey(`ck_${"3".repeat(40)}`, `cs_${"4".repeat(40)}`);
+    const again = (await woo.oauth?.receivePosted?.(
+      connectCtx(store),
+      posted(
+        JSON.stringify({
+          key_id: 77,
+          user_id: "st4te",
+          consumer_key: `ck_${"3".repeat(40)}`,
+          consumer_secret: `cs_${"4".repeat(40)}`,
+          key_permissions: "read_write",
+        }),
+      ),
+      { store_url: store.base },
+    )) as Connected;
+    const fresh = `${HOOK.slice(0, -43)}${"Z".repeat(43)}`;
+    const r = await woo.refresh?.(runCtx(store, again, { hookUrl: fresh }));
+    expect([...store.webhooks.values()].map((w) => [w.topic, w.delivery_url, w.status])).toEqual([
+      ["order.updated", fresh, "active"],
+      ["product.updated", fresh, "active"],
+      ["product.deleted", fresh, "active"],
+    ]);
+    expect(r?.extra).toMatchObject({ webhook: "added", hook_url: fresh });
+    // Another inbox's webhook on the same store is never touched.
+    store.webhooks.set(8_888, {
+      id: 8_888,
+      name: "Agent inbox (inbox.another-business.example.org) · order.updated",
+      topic: "order.updated",
+      delivery_url: "https://inbox.another-business.example.org/v1/hooks/woocommerce/abc",
+      secret: "theirs",
+      status: "active",
+    });
+    await woo.refresh?.(runCtx(store, { ...again, extra: r?.extra }, { hookUrl: fresh }));
+    expect(store.webhooks.get(8_888)?.secret).toBe("theirs");
+  });
+
+  it("say, connected again in place by a new approval, to remove the earlier key, and where", async () => {
+    const { store, ctx } = await hooked();
+    store.addKey(`ck_${"3".repeat(40)}`, `cs_${"4".repeat(40)}`);
+    const before: Record<string, unknown> = { ...ctx.extra, via: "authorize", key_id: 41 };
+    const again = (await woo.oauth?.receivePosted?.(
+      { ...connectCtx(store), previous: { externalId: "pizzaria-bixiga.example.com", extra: before } },
+      posted(
+        JSON.stringify({
+          key_id: 77,
+          user_id: "st4te",
+          consumer_key: `ck_${"3".repeat(40)}`,
+          consumer_secret: `cs_${"4".repeat(40)}`,
+          key_permissions: "read_write",
+        }),
+      ),
+      { store_url: store.base },
+    )) as Connected;
+    // What was found of the store before is kept, and its webhooks by id.
+    expect(again.extra).toMatchObject({ currency: "BRL", key_id: 77, hooks: before.hooks, earlier_key: { id: 41 } });
+    const notes = woo.notes?.({ extra: again.extra ?? {}, now: Date.now() }) ?? [];
+    expect(notes).toEqual([
+      {
+        text: "Your shop made this inbox a new key. Remove the earlier Agent inbox key in WooCommerce → Settings → Advanced → REST API.",
+        href: `${store.base}/wp-admin/admin.php?page=wc-settings&tab=advanced&section=keys&edit-key=41`,
+        link: "Remove it",
+      },
+    ]);
+    // Two weeks on, it is not said again.
+    expect(woo.notes?.({ extra: again.extra ?? {}, now: Date.now() + 15 * 86_400_000 })).toEqual([]);
+  });
+
   it("are taken out of the store on disconnect; the key is the owner's to remove", async () => {
     const { store, ctx } = await hooked();
     expect(store.webhooks.size).toBe(3);
@@ -880,7 +1166,9 @@ describe("the store's webhooks", () => {
     expect(
       store.platform.seen.filter((r) => r.method === "DELETE").every((r) => r.url.searchParams.get("force") === "true"),
     ).toBe(true);
-    expect(woo.disconnectNote).toBe("Remove the key in WooCommerce → Settings → Advanced → REST API");
+    expect(woo.disconnectNote).toBe(
+      "Then remove the key named Agent inbox in WooCommerce → Settings → Advanced → REST API.",
+    );
     // Gone already is gone.
     await expect(woo.disconnect?.(ctx)).resolves.toBeUndefined();
   });

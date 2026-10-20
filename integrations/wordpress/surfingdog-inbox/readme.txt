@@ -8,7 +8,7 @@ Stable tag: 0.2.0
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
-Points AI agents from your website to your agent inbox, and connects your WooCommerce shop to it in one step.
+Points AI agents from your website to your agent inbox, and connects your WooCommerce shop to it without copying a key.
 
 == Description ==
 
@@ -26,8 +26,8 @@ Settings → Agent inbox has the one setting (the inbox's address: inbox.yourdom
 = With WooCommerce =
 
 * **Connect WooCommerce** opens your inbox with its WooCommerce card open. Press Connect your shop there, then Approve on WooCommerce's own page. Your products and stock come into your inbox, and the orders it accepts go into WooCommerce, paid at your own checkout with your own payment methods.
-* Your llms.txt gains one line: orders at your shop's own checkout; questions, quotes and bookings to your inbox.
-* Your customer hears from you once. For the orders your inbox made, WooCommerce's own processing, completed, refunded and cancelled emails stay quiet while your inbox is connected, since your inbox already told your customer. On-hold emails (with bank transfer details), invoices and your notes go as usual. Developers can turn this off with the `sdi_quiet_store_emails` filter.
+* Your llms.txt gains one line for your shop: once your inbox is connected to it, agents order through your inbox and your customers pay at your own checkout; before that, orders at your own checkout and questions, quotes and bookings to your inbox.
+* Your customer hears from you once. For the orders your inbox made, WooCommerce's own processing and completed emails stay quiet while your inbox is connected, since your inbox sends its own receipt and tells your customer when the order is on its way. Refund and cancellation emails, on-hold emails (with bank transfer details), invoices and your notes go as usual. Developers can turn this off with the `sdi_quiet_store_emails` filter.
 
 The plugin makes no key and sends nothing to connect your shop: WooCommerce makes the key on its own Approve page, for your inbox.
 
@@ -82,7 +82,7 @@ In your inbox: Settings → Integrations → WooCommerce → Disconnect. Your in
 == Changelog ==
 
 = 0.2.0 =
-* With WooCommerce: Connect WooCommerce, the shop's line in llms.txt, and WooCommerce's own customer emails kept quiet for the orders the inbox made.
+* With WooCommerce: Connect WooCommerce, the shop's line in llms.txt, and WooCommerce's own processing and completed emails kept quiet for the orders the inbox made.
 * Declared compatible with WooCommerce's order tables (HPOS).
 
 = 0.1.0 =
@@ -91,4 +91,4 @@ In your inbox: Settings → Integrations → WooCommerce → Disconnect. Your in
 == Upgrade Notice ==
 
 = 0.2.0 =
-Connect your WooCommerce shop to your agent inbox in one step.
+Connect your WooCommerce shop to your agent inbox without copying a key.

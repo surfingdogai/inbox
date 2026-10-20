@@ -1398,7 +1398,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       summary:
         "What can be connected (calendars, Cal.com, Stripe, Mollie; what is being built marked soon) and what is connected",
       description:
-        "Groups (Calendars, Payments, Shops and tills) in the order this inbox sees them, then each card with its ways in: the form to fill in (secret fields marked), a sign-in on the platform (with what it asks first, before), or a link the inbox makes (auth: link). A payment platform's way names the webhook address and events (hook) for an owner who adds the webhook by hand. Only what this release can connect says ready; what is being built says soon; nothing else is listed. Connections never carry a secret; a link a connection serves is shown to the owner in person only.",
+        "Groups (Calendars, Payments, Shops and checkouts) in the order this inbox sees them, then each card with its ways in: the form to fill in (secret fields marked), a sign-in on the platform (with what it asks first, before), or a link the inbox makes (auth: link). A payment platform's way names the webhook address and events (hook) for an owner who adds the webhook by hand. Only what this release can connect says ready; what is being built says soon; nothing else is listed. Connections never carry a secret; a link a connection serves is shown to the owner in person only.",
       responses: json("Integrations", R.integrationsSchema),
     }),
     async (c) => c.json(await caps.connectors.integrations(c.get("caller"))),

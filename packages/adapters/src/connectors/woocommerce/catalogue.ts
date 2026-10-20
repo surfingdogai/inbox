@@ -1,5 +1,5 @@
 import { type CatalogueProduct, type CatalogueReader, ConnectorError, type RunContext } from "@surfingdog/core";
-import { call, hundredths, plain } from "./api";
+import { call, currencyRefusal, hundredths, plain } from "./api";
 import { keysOf, storeOf } from "./state";
 
 /**
@@ -19,13 +19,21 @@ import { keysOf, storeOf } from "./state";
  * - **What changed** is read with `modified_after` in GMT (WooCommerce saves a product's modified time
  *   on every save, a stock change included); a variable product changed has all its variations read,
  *   and products moved to the bin since are read too, and come in off sale (a full pass takes off sale
- *   whatever it no longer sees, the bin and products deleted for good alike).
+ *   whatever it no longer sees, the bin and products deleted for good alike). A variable product moved
+ *   to the bin has its variations read too, and they come in off sale.
+ * - **A page is small enough to read** whatever a store writes in its descriptions: 25 products a
+ *   page (a page builder's description can be tens of kilobytes each), read up to 8 MB.
  *
  * Endpoints: https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-products and
  * https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-product-variations (`per_page` at most 100).
  */
 
-export const PAGE_SIZE = 100;
+/** Products a page: a page builder's descriptions can be 100 KB each, and a page is read whole. */
+export const PAGE_SIZE = 25;
+/** Variations a page (WooCommerce's most): a variation's own description is short when it has one. */
+const VARIATION_PAGE_SIZE = 100;
+/** The most a page of products or variations is read up to. */
+const PAGE_MAX_BYTES = 8 * 1024 * 1024;
 
 const PRODUCT_FIELDS =
   "id,name,type,status,purchasable,sku,price,manage_stock,stock_quantity,stock_status,short_description,description";
@@ -88,8 +96,10 @@ function describe(p: Raw): string | null {
 }
 
 function priceOf(p: Raw, currency: string | null) {
+  // A currency this inbox cannot count is never read as hundredths: no price, so never on sale here.
+  if (!currency || currencyRefusal(currency)) return null;
   const value = p.price === "" || p.price === null ? null : hundredths(p.price);
-  return value === null || value < 0 || !currency ? null : { value, currency };
+  return value === null || value < 0 ? null : { value, currency };
 }
 
 function totalPages(headers: Headers): number {
@@ -109,9 +119,19 @@ async function page(
   const [parent, ...rest] = c.parents;
   if (parent) {
     const [id, parentName, published] = parent;
-    const answer = await call(ctx.http, store, keys, "GET", `/wc/v3/products/${id}/variations`, {
-      query: { per_page: PAGE_SIZE, page: c.vpage, orderby: "id", order: "asc", _fields: VARIATION_FIELDS },
-    });
+    let answer: Awaited<ReturnType<typeof call>>;
+    try {
+      answer = await call(ctx.http, store, keys, "GET", `/wc/v3/products/${id}/variations`, {
+        query: { per_page: VARIATION_PAGE_SIZE, page: c.vpage, orderby: "id", order: "asc", _fields: VARIATION_FIELDS },
+        maxBytes: PAGE_MAX_BYTES,
+      });
+    } catch (error) {
+      // Deleted for good since it was listed: its variations go off sale at the next full pass.
+      if (error instanceof ConnectorError && error.code === "not_found") {
+        return { products: [], cursor: encode({ ...c, parents: rest, vpage: 1 }) };
+      }
+      throw error;
+    }
     const list = Array.isArray(answer.json) ? (answer.json as Raw[]) : [];
     const products = list
       .filter((v) => Number.isInteger(v.id))
@@ -134,6 +154,7 @@ async function page(
         _fields: PRODUCT_FIELDS,
         ...(p.since !== null ? { modified_after: isoGmt(p.since), dates_are_gmt: "true" } : {}),
       },
+      maxBytes: PAGE_MAX_BYTES,
     });
   } catch (error) {
     // A store that will not list its bin is read without it: a full pass takes those off sale anyway.
@@ -146,8 +167,11 @@ async function page(
   for (const item of list) {
     if (!Number.isInteger(item.id)) continue;
     if (trash) {
-      // In the bin: off sale, whatever it was; a variable one's variations go at the next full pass.
-      if (item.type !== "variable" && item.type !== "grouped" && item.type !== "external") {
+      // In the bin: off sale, whatever it was; a variable one's variations are read next, off sale too.
+      if (item.type === "variable") {
+        const name = typeof item.name === "string" ? plain(item.name).slice(0, 120) : "";
+        parents.push([Number(item.id), name, 0]);
+      } else if (item.type !== "grouped" && item.type !== "external") {
         products.push({ ...simpleOf(item, currency), available: false });
       }
       continue;

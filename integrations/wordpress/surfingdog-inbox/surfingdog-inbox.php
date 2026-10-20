@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Surfing Dog Inbox
  * Plugin URI:        https://github.com/surfingdogai/inbox/tree/main/integrations/wordpress
- * Description:       Points AI agents from your website to your agent inbox: a link in every page, structured data, a line in llms.txt and a copy of the inbox's manifest at /.well-known/agent-inbox.json. With WooCommerce, connects your shop to your inbox in one step. One setting.
+ * Description:       Points AI agents from your website to your agent inbox: a link in every page, structured data, a line in llms.txt and a copy of the inbox's manifest at /.well-known/agent-inbox.json. With WooCommerce, connects your shop to your inbox without copying a key. One setting.
  * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
@@ -56,10 +56,13 @@ define( 'SDI_KEEP', 7 * 24 * 3600 );
  *   - offers Connect WooCommerce, which opens the inbox's own Settings → Integrations with the
  *     WooCommerce drawer open; the owner presses Connect your shop there, and Approve on WooCommerce's
  *     own page. The plugin itself makes no key and sends nothing;
- *   - adds one line to its llms.txt: orders at the shop's own checkout, everything else to the inbox;
- *   - keeps WooCommerce's own emails to the customer quiet for the orders the inbox made and already
- *     wrote to the customer about (processing, completed, refunded, cancelled), while the inbox is
- *     connected to the shop. Bank transfer details (on hold), invoices and notes go as usual.
+ *   - adds one line to its llms.txt for the shop: while the inbox is connected to it, agents order
+ *     through the inbox and pay at the shop's own checkout; before, orders at the shop's own checkout
+ *     and everything else to the inbox;
+ *   - keeps WooCommerce's own processing and completed emails quiet for the orders the inbox made,
+ *     while the inbox is connected to the shop: the inbox sends the customer its own receipt and says
+ *     when the order is on its way. Refund and cancellation emails, bank transfer details (on hold),
+ *     invoices and notes go as WooCommerce has them: the inbox does not send those.
  */
 
 /** The site's own domain: its home URL's host, without www. */
@@ -404,10 +407,17 @@ function sdi_shop_url() {
 	return '' !== $url ? $url : home_url( '/' );
 }
 
-/** The llms.txt line for a WooCommerce shop: orders at its own checkout, the rest to the inbox; '' without one. */
+/**
+ * The llms.txt line for a WooCommerce shop; '' without one. While the inbox is connected to the shop,
+ * agents order through the inbox (a person pays at the shop's own checkout); before, orders go to the
+ * shop's own checkout and everything else to the inbox.
+ */
 function sdi_shop_line() {
 	if ( ! sdi_woocommerce_active() ) {
 		return '';
+	}
+	if ( sdi_store_connected() ) {
+		return '- [Shop](' . esc_url_raw( sdi_shop_url() ) . '): products and stock; agents order through the agent inbox, paid at this shop\'s own checkout';
 	}
 	return '- [Shop](' . esc_url_raw( sdi_shop_url() ) . '): orders at this shop\'s own checkout; questions, quotes and bookings to the agent inbox';
 }
@@ -455,20 +465,21 @@ function sdi_store_connected( $forget = false ) {
 	return $known;
 }
 
-/** WooCommerce's emails to the customer that the inbox sends itself for the orders it made. */
+/**
+ * WooCommerce's emails to the customer that the inbox sends itself for the orders it made: the receipt
+ * once paid (processing), and the order on its way (completed). Refunds and cancellations made in the
+ * shop are not the inbox's to tell, so WooCommerce's own emails about them always go.
+ */
 function sdi_quiet_emails() {
 	return array(
 		'customer_processing_order',
 		'customer_completed_order',
-		'customer_refunded_order',
-		'customer_partially_refunded_order',
-		'customer_cancelled_order',
 	);
 }
 
 /**
  * One of those emails, for an order the inbox made (`_sdi_ref`) while the inbox is connected to the
- * shop: not sent, since the inbox already told the customer, in the business's name. Every other
+ * shop: not sent, since the inbox tells the customer itself, in the business's name. Every other
  * order, and every other email, is left as WooCommerce has it.
  *
  * @param bool  $enabled Whether WooCommerce would send it.

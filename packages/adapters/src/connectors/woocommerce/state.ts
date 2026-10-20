@@ -14,10 +14,26 @@ export interface WooExtra {
   readonly currency: string | null;
   /** Whether the store counts tax (`woocommerce_calc_taxes`). */
   readonly taxes: boolean;
+  /**
+   * Whether the store's prices include tax (`woocommerce_prices_include_tax`): false is a store that
+   * adds tax at checkout, whose orders go to the owner first. Null when it does not count tax, or
+   * would not say.
+   */
+  readonly prices_include_tax?: boolean | null | undefined;
+  /**
+   * When the key was last checked against the store, and the store found where it answers. Absent for
+   * a key the store POSTed, until the first sync checks it (the store waits for nothing meanwhile).
+   */
+  readonly checked_at?: number | undefined;
   /** How it was connected: the store's Approve page (`authorize`), or keys pasted (`keys`). */
   readonly via: "authorize" | "keys";
   /** The id WooCommerce gave the key it made on its Approve page, for the owner to find it by. */
   readonly key_id?: number | undefined;
+  /**
+   * Connected again in place with a new key: the one before, for the owner to remove (WooCommerce gives
+   * an app no way to). Its id when the store made it on its Approve page; when it was replaced.
+   */
+  readonly earlier_key?: { readonly id: number | null; readonly at: number } | undefined;
   /** `added`: this inbox's webhooks are in the store; `pending`: still to add (not live yet, or failed). */
   readonly webhook: "added" | "pending";
   /** The ids of this inbox's webhooks in the store, by topic. */
@@ -38,13 +54,22 @@ export function extraOf(ctx: Pick<RunContext, "extra">): WooExtra {
     auth: e.auth === "query" ? "query" : "header",
     currency: typeof e.currency === "string" ? e.currency : null,
     taxes: e.taxes === true,
+    ...(typeof e.prices_include_tax === "boolean" ? { prices_include_tax: e.prices_include_tax } : {}),
+    ...(typeof e.checked_at === "number" ? { checked_at: e.checked_at } : {}),
     via: e.via === "keys" ? "keys" : "authorize",
     ...(Number.isInteger(e.key_id) ? { key_id: Number(e.key_id) } : {}),
+    ...(earlierOf(e.earlier_key) ? { earlier_key: earlierOf(e.earlier_key) } : {}),
     webhook: e.webhook === "added" ? "added" : "pending",
     hooks,
     hook_url: typeof e.hook_url === "string" ? e.hook_url : null,
     ...(typeof e.hook_failed_at === "number" ? { hook_failed_at: e.hook_failed_at } : {}),
   };
+}
+
+function earlierOf(raw: unknown): WooExtra["earlier_key"] {
+  const k = raw as { id?: unknown; at?: unknown } | null | undefined;
+  if (!k || typeof k !== "object" || typeof k.at !== "number") return undefined;
+  return { id: Number.isInteger(k.id) ? Number(k.id) : null, at: k.at };
 }
 
 export function storeOf(ctx: Pick<RunContext, "extra">): Store {

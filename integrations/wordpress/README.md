@@ -16,11 +16,12 @@ waits; a failed fetch waits 15 minutes; with no good copy for a week, nothing is
 
 With WooCommerce active (ADR-027), Settings → Agent inbox also offers **Connect WooCommerce**, which
 opens the inbox's Settings → Integrations with its WooCommerce card open
-(`https://<inbox>/settings/integrations?connect=woocommerce`); llms.txt gains the shop's line; and,
-while the inbox is connected to the shop (one of its webhooks delivers to the saved address),
-WooCommerce's own processing, completed, refunded and cancelled emails stay quiet for the orders the
-inbox made (`_sdi_ref`), since the inbox already told the customer. The plugin makes no key and sends
-nothing for it: WooCommerce makes the key on its own Approve page.
+(`https://<inbox>/settings/integrations?connect=woocommerce`); llms.txt gains the shop's line (agents
+order through the inbox once it is connected to the shop); and, while the inbox is connected to the shop
+(one of its webhooks delivers to the saved address), WooCommerce's own processing and completed emails
+stay quiet for the orders the inbox made (`_sdi_ref`), since the inbox sends its own receipt and says
+when the order is on its way. Refund and cancellation emails always go: the inbox does not send those.
+The plugin makes no key and sends nothing for it: WooCommerce makes the key on its own Approve page.
 
 Settings → Agent inbox also has Check, which asks Surfing Dog's checker (`GET /v1/discovery/{domain}`)
 what is in place and what is missing, robots.txt included, only when pressed.

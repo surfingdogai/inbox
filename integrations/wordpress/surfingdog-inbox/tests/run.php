@@ -51,7 +51,11 @@ function get_option( $k, $d = false ) {
 	return array_key_exists( $k, $GLOBALS['sdi_t']['options'] ) ? $GLOBALS['sdi_t']['options'][ $k ] : $d;
 }
 function add_action() {}
-function add_filter() {}
+/** The filters the plugin adds, by hook name: what WordPress would run. */
+$GLOBALS['sdi_filters'] = array();
+function add_filter( $hook = '' ) {
+	$GLOBALS['sdi_filters'][] = $hook;
+}
 function register_activation_hook() {}
 function register_deactivation_hook() {}
 function update_option( $k, $v ) {
@@ -438,6 +442,8 @@ check( 'another service\'s webhook is not the inbox', true === sdi_quiet_store_e
 $GLOBALS['sdi_t']['webhooks'][78] = 'https://inbox.example.com/v1/hooks/woocommerce/Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4zAb7cDe0fGh2';
 sdi_store_connected( true );
 check( 'connected, an order the inbox made: quiet', false === sdi_quiet_store_email( true, $ours ) );
+$a = sdi_llms_answer();
+check( 'connected: llms.txt sends agents to order through the inbox, paid at the shop\'s own checkout', false !== strpos( $a['body'], "- [Shop](https://www.example.com/shop/): products and stock; agents order through the agent inbox, paid at this shop's own checkout\n" ) && false === strpos( $a['body'], 'orders at this shop' ), var_export( $a['body'], true ) );
 ob_start();
 sdi_settings_page();
 $page = ob_get_clean();
@@ -446,7 +452,14 @@ check( 'an order the shop took itself: as WooCommerce has it', true === sdi_quie
 check( 'an email the store had off stays off', false === sdi_quiet_store_email( false, $theirs ) );
 check( 'not an order: as it was', true === sdi_quiet_store_email( true, null ) && true === sdi_quiet_store_email( true, 'x' ) );
 check( 'the inbox\'s webhooks are looked for by name, active only', 'active' === $GLOBALS['sdi_t']['webhook_search']['status'] && 'Agent inbox' === $GLOBALS['sdi_t']['webhook_search']['search'] );
-check( 'quiet: what the inbox sends itself, never on-hold (bank details), invoices or notes', array( 'customer_processing_order', 'customer_completed_order', 'customer_refunded_order', 'customer_partially_refunded_order', 'customer_cancelled_order' ) === sdi_quiet_emails() );
+check( 'quiet: only the receipt and the order on its way, which the inbox sends itself', array( 'customer_processing_order', 'customer_completed_order' ) === sdi_quiet_emails() );
+check( 'the store\'s processing and completed emails are filtered', in_array( 'woocommerce_email_enabled_customer_processing_order', $GLOBALS['sdi_filters'], true ) && in_array( 'woocommerce_email_enabled_customer_completed_order', $GLOBALS['sdi_filters'], true ) );
+// A refund or a cancellation made in the shop is not the inbox's to tell: WooCommerce's own email always goes.
+$refund_quieted = false;
+foreach ( array( 'customer_refunded_order', 'customer_partially_refunded_order', 'customer_cancelled_order', 'customer_on_hold_order', 'customer_invoice', 'customer_note' ) as $sdi_email ) {
+	$refund_quieted = $refund_quieted || in_array( 'woocommerce_email_enabled_' . $sdi_email, $GLOBALS['sdi_filters'], true );
+}
+check( 'a refund or cancellation the shop makes, on-hold, invoices and notes: WooCommerce\'s own emails go', false === $refund_quieted );
 
 echo "$count checks, $failures failed\n";
 exit( $failures > 0 ? 1 : 0 );

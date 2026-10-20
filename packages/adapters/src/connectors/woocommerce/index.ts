@@ -1,6 +1,7 @@
 import {
   type ConnectContext,
   type Connected,
+  type ConnectionNote,
   type ConnectorDefinition,
   ConnectorError,
   field,
@@ -9,7 +10,20 @@ import {
   secretField,
 } from "@surfingdog/core";
 import { z } from "zod";
-import { call, discover, type Keys, normalizeStore, SETTINGS_ROUTE, settingsOf, siteName, storeId } from "./api";
+import {
+  call,
+  currencyRefusal,
+  discover,
+  type Keys,
+  normalizeStore,
+  pricesIncludeTax,
+  SETTINGS_ROUTE,
+  type Store,
+  type StoreSettings,
+  settingsOf,
+  siteName,
+  storeId,
+} from "./api";
 import { catalogue } from "./catalogue";
 import { hooks, hooksStale, keepWebhooks, removeWebhooks } from "./hooks";
 import { payments } from "./orders";
@@ -29,6 +43,11 @@ export { orderBody as wooOrderBody, WOO_METHODS } from "./orders";
  * Approve page cannot work (no pretty permalinks) takes a pair made by hand in WooCommerce → Settings →
  * Advanced → REST API instead, under More options.
  *
+ * The store POSTs the key while it waits for this inbox's answer, so the key is taken as it comes (read
+ * and write, the shape of a WooCommerce key) and checked against the store on the first sync, where a
+ * failure is said on the connection: a small host may have no PHP worker free to answer the inbox
+ * while one waits, and WooCommerce deletes the key unless it hears 200 within its time limit.
+ *
  * Products and stock come into the catalogue; an order the inbox accepts is written into the store,
  * pending, and paid at the store's own checkout; what the store says became of it (paid, completed,
  * cancelled, refunded) is read back with the key, on each sync and when a signed webhook says
@@ -40,6 +59,9 @@ export { orderBody as wooOrderBody, WOO_METHODS } from "./orders";
  */
 
 const KEY_GUIDE = "https://woocommerce.com/document/woocommerce-rest-api/";
+
+/** How long the owner is reminded to remove the key a new one replaced. */
+const EARLIER_KEY_MS = 14 * 86_400_000;
 
 /** Accepted as a shop's address: what `normalizeStore` takes. */
 function isStoreAddress(value: string): boolean {
@@ -64,7 +86,7 @@ const storeUrl = () =>
       input: "url",
       prefill: "website",
       placeholder: "https://…",
-      help: "Where your WordPress shop is. You approve this inbox there.",
+      help: "Where your WordPress shop is.",
     },
   );
 
@@ -107,31 +129,51 @@ function onField(error: unknown, keysWay: boolean): unknown {
   return error;
 }
 
+/**
+ * The key a connection replaces, for the owner to remove: the one before, when connecting again in
+ * place made a new one (the store makes one on each approval; a key pasted by hand replaces one made
+ * on the Approve page). Two keys pasted by hand are the owner's own to sort out.
+ */
+function earlierKey(before: WooExtra | null, via: WooExtra["via"], now: number): WooExtra["earlier_key"] | undefined {
+  if (!before || (before.via === "keys" && via === "keys")) return undefined;
+  return { id: before.via === "authorize" ? (before.key_id ?? null) : null, at: now };
+}
+
 function connectedOf(
-  found: Awaited<ReturnType<typeof discover>>,
+  store: Store,
+  settings: StoreSettings,
   keys: Keys,
   name: string | null,
   via: WooExtra["via"],
   previous: ConnectContext["previous"],
-  keyId?: number,
+  opts: {
+    readonly now: number;
+    readonly keyId?: number | undefined;
+    readonly checkedAt?: number | undefined;
+    readonly pricesIncludeTax?: boolean | null | undefined;
+  },
 ): Connected {
-  const before = previous?.extra?.hooks;
+  const before = previous?.extra ? extraOf({ extra: previous.extra }) : null;
+  const earlier = earlierKey(before, via, opts.now);
   const extra: WooExtra = {
-    store: found.store.base,
-    api: found.store.api,
-    auth: found.store.auth,
-    currency: found.settings.currency,
-    taxes: found.settings.taxes,
+    store: store.base,
+    api: store.api,
+    auth: store.auth,
+    currency: settings.currency,
+    taxes: settings.taxes,
+    ...(opts.pricesIncludeTax !== undefined ? { prices_include_tax: opts.pricesIncludeTax } : {}),
+    ...(opts.checkedAt !== undefined ? { checked_at: opts.checkedAt } : {}),
     via,
-    ...(keyId !== undefined ? { key_id: keyId } : {}),
+    ...(opts.keyId !== undefined ? { key_id: opts.keyId } : {}),
+    ...(earlier ? { earlier_key: earlier } : {}),
     // Made on the first sync once the inbox can be reached: a store pings each webhook it is given
     // at once, and a sign-in is answered before this connection exists to answer it.
     webhook: "pending",
     // Connected again in place: the webhooks made before are kept, and signed again with the new secret.
-    hooks: before && typeof before === "object" ? (before as Record<string, number>) : {},
+    hooks: before?.hooks ?? {},
     hook_url: null,
   };
-  const id = storeId(found.store.base);
+  const id = storeId(store.base);
   return {
     account: name ?? id,
     externalId: id,
@@ -148,7 +190,14 @@ async function connect(ctx: ConnectContext, input: Readonly<Record<string, strin
   const keys = { key: String(input.consumer_key ?? "").trim(), secret: String(input.consumer_secret ?? "").trim() };
   try {
     const found = await discover(ctx.http, String(input.store_url ?? ""), keys);
-    return connectedOf(found, keys, await siteName(ctx.http, found.store), "keys", ctx.previous);
+    const refusal = currencyRefusal(found.settings.currency);
+    if (refusal) throw new ConnectorError("config", refusal, { field: "store_url" });
+    const including = found.settings.taxes ? await pricesIncludeTax(ctx.http, found.store, keys) : null;
+    return connectedOf(found.store, found.settings, keys, await siteName(ctx.http, found.store), "keys", ctx.previous, {
+      now: ctx.now,
+      checkedAt: ctx.now,
+      pricesIncludeTax: including,
+    });
   } catch (error) {
     throw onField(error, true);
   }
@@ -173,9 +222,11 @@ function postedOf(request: InboundRequest): Posted | null {
 }
 
 /**
- * The key pair the store POSTed after the owner approved: checked against the store at the address
- * the owner gave (never one the POST names), read and write, and nothing more is asked of the store
- * while it waits for this answer (it deletes the key unless it hears 200 in time).
+ * The key pair the store POSTed after the owner approved: read and write, shaped as WooCommerce makes
+ * them, for the store at the address the owner gave (never one the POST names). Nothing is asked of
+ * the store while it waits for this answer (it deletes the key unless it hears 200 in time, and a small
+ * host may have no PHP worker free to answer meanwhile): the key is checked on the first sync, and the
+ * store found where it answers then. The same store approved again keeps what was found of it before.
  */
 async function receivePosted(
   ctx: ConnectContext,
@@ -195,26 +246,82 @@ async function receivePosted(
     );
   }
   const keys = { key, secret };
-  const found = await discover(ctx.http, String(input.store_url ?? ""), keys);
+  const typed = normalizeStore(String(input.store_url ?? ""));
+  const before = ctx.previous?.extra ? extraOf({ extra: ctx.previous.extra }) : null;
+  const same = before?.store ? storeId(before.store) === storeId(typed) : false;
+  const store: Store =
+    same && before
+      ? { base: before.store, api: before.api, auth: before.auth }
+      : {
+          base: typed,
+          api: "path",
+          auth: "header",
+        };
+  const settings: StoreSettings =
+    same && before
+      ? { currency: before.currency, taxes: before.taxes }
+      : {
+          currency: null,
+          taxes: false,
+        };
   const keyId = Number(posted?.key_id);
-  return connectedOf(found, keys, null, "authorize", undefined, Number.isInteger(keyId) ? keyId : undefined);
+  return connectedOf(store, settings, keys, null, "authorize", ctx.previous, {
+    now: ctx.now,
+    keyId: Number.isInteger(keyId) ? keyId : undefined,
+    ...(same && before?.prices_include_tax !== undefined ? { pricesIncludeTax: before.prices_include_tax } : {}),
+  });
+}
+
+/** The store an address names, as the inbox knows it once per inbox: what connecting it again finds. */
+function accountOf(input: Readonly<Record<string, string>>): string | null {
+  try {
+    return storeId(normalizeStore(String(input.store_url ?? "")));
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Every few hours: the key still works, the store's currency and name as they are now, and this
- * inbox's webhooks as they should be (made once the inbox can be reached, moved when it moves,
- * switched on again when the store switched them off). A store that will not take the webhooks just
- * now is asked again later: every order is read back on each sync anyway.
+ * Every few hours, and on the first sync of a key the store POSTed: the key works (checked, and the
+ * store found where it answers, the first time), the store's currency and name and whether its prices
+ * include tax as they are now, and this inbox's webhooks as they should be (made once the inbox can be
+ * reached, moved when it moves, switched on again when the store switched them off). A store that will
+ * not take the webhooks just now is asked again later: every order is read back on each sync anyway.
  */
 async function refresh(ctx: RunContext) {
-  const store = storeOf(ctx);
-  const settings = settingsOf(
-    (await call(ctx.http, store, keysOf(ctx), "GET", SETTINGS_ROUTE, { query: { _fields: "id,value" } })).json,
-  );
   const now = extraOf(ctx);
-  let extra: WooExtra = { ...now, currency: settings.currency ?? now.currency, taxes: settings.taxes };
+  const keys = keysOf(ctx);
+  let store: Store;
+  let settings: StoreSettings;
+  if (now.checked_at === undefined) {
+    const found = await discover(ctx.http, now.store || storeOf(ctx).base, keys);
+    store = found.store;
+    settings = found.settings;
+  } else {
+    store = storeOf(ctx);
+    settings = settingsOf(
+      (await call(ctx.http, store, keys, "GET", SETTINGS_ROUTE, { query: { _fields: "id,value" } })).json,
+    );
+  }
+  const refusal = currencyRefusal(settings.currency);
+  if (refusal) throw new ConnectorError("config", refusal);
+  const including = settings.taxes ? await pricesIncludeTax(ctx.http, store, keys) : null;
+  let extra: WooExtra = {
+    ...now,
+    store: store.base,
+    api: store.api,
+    auth: store.auth,
+    currency: settings.currency ?? now.currency,
+    taxes: settings.taxes,
+    prices_include_tax: including,
+    checked_at: ctx.now,
+  };
+  if (extra.earlier_key && ctx.now - extra.earlier_key.at >= EARLIER_KEY_MS) {
+    const { earlier_key: _done, ...rest } = extra;
+    extra = rest;
+  }
   try {
-    const kept = await keepWebhooks(ctx);
+    const kept = await keepWebhooks({ ...ctx, extra: extra as unknown as Record<string, unknown> });
     if (kept) {
       const { hook_failed_at: _done, ...rest } = extra;
       extra = { ...rest, ...kept };
@@ -232,6 +339,28 @@ async function refresh(ctx: RunContext) {
   };
 }
 
+/** What the owner should know about the connection now, a line each. */
+function notes(view: { readonly extra: Readonly<Record<string, unknown>>; readonly now: number }): ConnectionNote[] {
+  const e = extraOf(view);
+  const out: ConnectionNote[] = [];
+  if (e.taxes && e.prices_include_tax === false) {
+    out.push({ text: "Your shop adds tax at checkout, so each order's total goes to you first." });
+  }
+  const earlier = e.earlier_key;
+  if (earlier && view.now - earlier.at < EARLIER_KEY_MS && e.store) {
+    const keysPage = `${e.store}/wp-admin/admin.php?page=wc-settings&tab=advanced&section=keys`;
+    out.push({
+      text:
+        earlier.id === null
+          ? "Your shop made this inbox a new key. Remove the one made by hand before, in WooCommerce → Settings → Advanced → REST API."
+          : "Your shop made this inbox a new key. Remove the earlier Agent inbox key in WooCommerce → Settings → Advanced → REST API.",
+      href: earlier.id === null ? keysPage : `${keysPage}&edit-key=${earlier.id}`,
+      link: "Remove it",
+    });
+  }
+  return out;
+}
+
 async function disconnect(ctx: RunContext): Promise<void> {
   await removeWebhooks(ctx);
 }
@@ -244,8 +373,9 @@ export function woocommerceConnector(): ConnectorDefinition {
     capabilities: ["catalogue", "shop_orders", "pay_links"],
     auth: "oauth",
     action: "Connect your shop",
+    again: "Approve again",
     consent:
-      "WooCommerce asks you to approve read and write access. This inbox reads your products, stock and the orders it makes, and writes only the orders you accept.",
+      "WooCommerce will ask you to approve this inbox. It reads your products and stock, and only writes the orders you accept.",
     note: "Orders you accept go into your shop and are paid at its own checkout.",
     form: woocommerceForm,
     presets: [
@@ -260,7 +390,8 @@ export function woocommerceConnector(): ConnectorDefinition {
         note: "Orders you accept go into your shop and are paid at its own checkout.",
       },
     ],
-    disconnectNote: "Remove the key in WooCommerce → Settings → Advanced → REST API",
+    disconnectNote: "Then remove the key named Agent inbox in WooCommerce → Settings → Advanced → REST API.",
+    notes,
     connect,
     oauth: {
       before: woocommerceBefore,
@@ -286,9 +417,11 @@ export function woocommerceConnector(): ConnectorDefinition {
         return typeof id === "string" && id.length > 0 && id.length <= 600 ? id : null;
       },
       receivePosted,
+      accountOf,
     },
     refresh,
-    stale: (ctx) => hooksStale(ctx),
+    // A key the store POSTed is checked on the first sync; the webhooks, whenever they want looking at.
+    stale: (ctx) => extraOf(ctx).checked_at === undefined || hooksStale(ctx),
     disconnect,
     catalogue,
     hooks,
