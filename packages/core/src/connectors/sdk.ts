@@ -290,8 +290,21 @@ export interface Connected {
   readonly calendars: readonly CalendarChoice[];
   /** Where bookings may be written: calendars, or event types. */
   readonly destinations: readonly CalendarChoice[];
-  /** What is chosen until the owner chooses otherwise. */
-  readonly defaults: { readonly busy: readonly string[]; readonly destination: string | null };
+  /**
+   * What is chosen until the owner chooses otherwise. `bookings`: whether confirmed bookings are added
+   * from the start (absent: when the connector writes bookings); false for an account whose plan does
+   * not let other apps add them, so nothing is promised that the platform will refuse.
+   */
+  readonly defaults: {
+    readonly busy: readonly string[];
+    readonly destination: string | null;
+    readonly bookings?: boolean | undefined;
+  };
+  /**
+   * One line the owner reads on the connection, in their words, when it does less than its card says:
+   * "Calendly Free: busy times only". Null or absent for none; a sync's `refresh` says it again or clears it.
+   */
+  readonly note?: string | null | undefined;
   /**
    * A payment platform's mode: a test key makes links for test items only, and a live key for real
    * ones, so nobody is ever asked for real money for a test, nor marked paid with a test card.
@@ -870,7 +883,7 @@ export interface ConnectorDefinition {
    * what the connector keeps about itself (a payment platform's webhook moved to a new address).
    */
   refresh?(ctx: RunContext): Promise<
-    Pick<Connected, "account" | "calendars" | "destinations" | "choices"> & {
+    Pick<Connected, "account" | "calendars" | "destinations" | "choices" | "note"> & {
       readonly extra?: Readonly<Record<string, unknown>> | undefined;
     }
   >;

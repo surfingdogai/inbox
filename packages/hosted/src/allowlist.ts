@@ -16,7 +16,10 @@
  *
  * Everything else is refused: the manifest and every other `/.well-known` document, the rest of
  * `/v1` (inbound email included), `/mcp` and `/mcp/owner`, `/oauth/*`, `/openapi.json`, the
- * customer's pages (`/c/*`, `/p/*`), `/demo/*` and `/healthz`.
+ * customer's pages (`/c/*`, `/p/*`), `/demo/*` and `/healthz`. A platform's webhook
+ * (`/v1/hooks/*`) and a calendar link to share (`GET /v1/feeds/<kind>/*`) are among them: they reach
+ * the inbox only once it is live at its own name, and the inbox makes no link before then
+ * (`hooksLive`), so none is ever handed out at a setup address.
  */
 
 export const OWNER_FILES = ["/favicon.svg"] as const;

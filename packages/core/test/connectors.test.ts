@@ -1292,10 +1292,10 @@ describe("the gallery", () => {
       http: noHttp,
     });
     const { cards } = await caps.connectors.integrations(owner());
-    // What is registered here, and what is being built; Cal.com, Stripe and Mollie are not registered in
-    // this test, and nobody is building them here, so they have no card. An inbox with services to book
-    // sees the till that takes bookings first among the shops.
-    expect(cards.map((c) => c.id)).toEqual(["calendar", "calendly", "ics_feed", "square", "woocommerce", "shopify"]);
+    // What is registered here, and what is being built; Cal.com, Calendly, the calendar link to share,
+    // Stripe and Mollie are not registered in this test, and nobody is building them here, so they have
+    // no card. An inbox with services to book sees the till that takes bookings first among the shops.
+    expect(cards.map((c) => c.id)).toEqual(["calendar", "square", "woocommerce", "shopify"]);
     const calendar = cards[0];
     expect(calendar?.line).toBe("iCloud, Fastmail, Nextcloud and more");
     // The calendar link is not registered in this test: its ways (and Outlook's) are not shown.
