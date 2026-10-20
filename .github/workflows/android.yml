@@ -179,13 +179,7 @@ jobs:
             adb shell input keyevent 82
             adb shell locksettings set-pin 1111
             ./gradlew --no-daemon :app:connectedDebugAndroidTest
-            adb uninstall ai.surfingdog.inbox || true
-            adb install -r ../../../apk/*.apk
-            adb logcat -c
-            adb shell am start -W -n ai.surfingdog.inbox/.MainActivity
-            sleep 12
-            adb shell pidof ai.surfingdog.inbox
-            ! adb logcat -d -b crash | grep -E "ai\.surfingdog\.inbox|FATAL EXCEPTION"
+            sh ../scripts/smoke-apk.sh ../../../apk/*.apk
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
