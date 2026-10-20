@@ -304,8 +304,9 @@ export async function stayLinkView(
         c.page.confirmAccept({ nights, dates, total: money(q.total, lang), ...(free ? { free: policy } : {}) }),
         {
           rows: quoteRows(q, c, lang),
+          // The policy once: in the heading when cancelling is free for a while, else under it.
           paragraphs: [
-            policy,
+            ...(free ? [] : [policy]),
             c.emails.quote.holds({ until: setup ? whenWords(setup, q.validThrough, lang) : q.validThrough }),
           ],
           form: { hidden, fields: [], button: dueNow(q) ? c.page.bookAndPay : c.page.obligation },

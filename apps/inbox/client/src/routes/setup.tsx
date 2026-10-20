@@ -178,6 +178,16 @@ function SetupWizard() {
   // Run again, the wizard keeps to the place already set up rather than making a second one.
   const known = useProperty();
   const placeId = propertyId ?? known.data?.properties[0]?.id ?? null;
+  // …and starts from what it says of itself, never from the defaults over it.
+  const knownPlace = known.data?.setup?.property;
+  const [placeRead, setPlaceRead] = useState(false);
+  useEffect(() => {
+    if (!knownPlace || placeRead) return;
+    setPlaceRead(true);
+    setLodging(knownPlace.kind);
+    setCheckIn(knownPlace.checkInFrom);
+    setCheckOut(knownPlace.checkOutUntil);
+  }, [knownPlace, placeRead]);
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);

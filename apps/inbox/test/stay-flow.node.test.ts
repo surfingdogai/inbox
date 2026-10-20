@@ -87,6 +87,10 @@ describe("Kijani House, Nairobi: request, quote, accept, stay, paid at the prope
     expect(quoteMail?.text).toContain("Your booking is with Kijani House.");
     // Customers never read our words: not in the email, links aside (they are the property's own address).
     expect(quoteMail?.text.replace(/https:\/\/\S+/g, "")).not.toMatch(/Surfing Dog|network|receipt|inbox|reputation/i);
+    // The page behind its link says the terms once: the policy in the heading, not again under it.
+    const acceptUrl = quoteMail?.text.match(/https:\/\/\S+\/c\/\S+/)?.[0] ?? "";
+    const page = await (await s.inbox.app.request(new Request(acceptUrl, { headers: { accept: "text/html" } }))).text();
+    expect(page.match(/Free cancellation until/g)?.length).toBe(1);
     // The guest's assistant accepts on the terms their person saw.
     const asked = await s.guest("POST", `/v1/items/${id}/accept`, { access_token: token });
     expect(asked.status).toBe(409);
