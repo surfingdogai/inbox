@@ -164,7 +164,7 @@ export class StayCapabilities {
     const input = parse(I.getPropertyInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
-    return propertyPublic(setup, settings, await this.systemName(setup), await this.langOf(caller, settings));
+    return propertyPublic(setup, settings, await this.langOf(caller, settings));
   }
 
   /** What is free for some dates and guests (`check_stay_availability`). Never stores anything. */
@@ -987,7 +987,19 @@ export class StayCapabilities {
   async systemProperties(
     caller: Caller,
     raw: unknown,
-  ): Promise<{ properties: { id: string; name: string; rooms: { id: string; name: string; units: number }[] }[] }> {
+  ): Promise<{
+    properties: {
+      id: string;
+      name: string;
+      rooms: {
+        id: string;
+        name: string;
+        units: number;
+        unpriced?: boolean;
+        charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
+      }[];
+    }[];
+  }> {
     Setup.requireInPerson(caller, "connect the property's system");
     const { connector_id } = parse(z.object({ connector_id: z.string().min(1) }), raw);
     const conn = await this.deps.connectors.contextFor(connector_id, nowOf(caller));
@@ -997,7 +1009,18 @@ export class StayCapabilities {
     const out = [];
     for (const p of props.slice(0, 20)) {
       const rooms = await conn.definition.stays.rooms(conn.ctx, p.id);
-      out.push({ id: p.id, name: p.name, rooms: rooms.map((r) => ({ id: r.id, name: r.name, units: r.units })) });
+      out.push({
+        id: p.id,
+        name: p.name,
+        // A room with no price there is never offered from here; charges besides the price are the owner's to check.
+        rooms: rooms.map((r) => ({
+          id: r.id,
+          name: r.name,
+          units: r.units,
+          ...(r.unpriced ? { unpriced: true } : {}),
+          ...(r.charges?.length ? { charges: [...r.charges] } : {}),
+        })),
+      });
     }
     return { properties: out };
   }

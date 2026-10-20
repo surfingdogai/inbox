@@ -507,6 +507,25 @@ describe("Ryokan Hoshi, Kyoto: a change written to its own system first (JPY)", 
     expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(/oversold, so they were put back/);
   });
 
+  it("tells the owner when the dates it put back are oversold too, sold elsewhere meanwhile", async () => {
+    const c = await connected();
+    c.system.sold.set(`R1|${c.checkOut}`, 1);
+    // Another channel sold the stay's own first night as well: put back, the stay is oversold there.
+    c.system.sold.set(`R1|${c.checkIn}`, 1);
+    c.system.mode.guard = "oversell";
+    const after = await c.ask();
+    expect(after.item.payload.checkOut).toBe(c.checkOut);
+    expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: c.checkOut });
+    const notes = await c.s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [c.id],
+      method: "all",
+    });
+    expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(
+      /put back on its own dates\. Another booking took some of those nights meanwhile, so they are oversold now/,
+    );
+  });
+
   it("moves the stay once the system took the new night", async () => {
     const c = await connected();
     const after = await c.ask();
