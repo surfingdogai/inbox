@@ -11,7 +11,7 @@ import {
   type ShopOrder,
 } from "@surfingdog/core";
 import { extraOf, locationOf } from "./account";
-import { arr, msOf, obj, refusal, type SquareApi, type SquareEnv, str } from "./api";
+import { arr, fromSquare, msOf, obj, refusal, type SquareApi, type SquareEnv, str, toSquare } from "./api";
 
 /**
  * Orders paid at the business's own Square checkout (ADR-026 §2, ADR-029). Each order the inbox
@@ -24,7 +24,8 @@ import { arr, msOf, obj, refusal, type SquareApi, type SquareEnv, str } from "./
  * be more than the customer accepted, and the base then holds the link. Paid is a tender on the order
  * whose payment Square says is `COMPLETED`, read with the business's key; the order's reference is the
  * inbox's own id for the link, so the facts find it however they arrive. A link the inbox closes is
- * deleted, which cancels its order unless it was paid.
+ * deleted, which cancels its order: so the order is read first, and a link that was paid meanwhile is
+ * never deleted. Amounts are Square's smallest unit, kept here in hundredths (`fromSquare`, `toSquare`).
  *
  * - https://developer.squareup.com/docs/checkout-api/square-order-checkout
  * - https://developer.squareup.com/docs/checkout-api/optional-checkout-configurations
@@ -116,6 +117,11 @@ async function orderOf(api: SquareApi, id: string): Promise<Obj | null> {
   return obj(a.json.order);
 }
 
+/** Waiting to be paid: open or a draft, with no payment on it yet. */
+function unpaid(order: Obj): boolean {
+  return (order.state === "DRAFT" || order.state === "OPEN") && arr(order.tenders).length === 0;
+}
+
 /** An order the inbox made at this connection's location: its reference is the inbox's own id for the link. */
 function ours(ctx: RunContext, order: Obj, ref?: string): boolean {
   const reference = str(order.reference_id);
@@ -141,17 +147,13 @@ async function paidOf(api: SquareApi, ctx: RunContext, order: Obj, linkId: strin
     if (a.status !== 200) throw refusal(a, "read a payment");
     const p = obj(a.json.payment);
     if (p.status !== "COMPLETED" || p.order_id !== order.id) continue;
-    const m = obj(p.amount_money);
     const paidAt = msOf(p.updated_at ?? p.created_at);
     out.push({
       status: "paid",
       linkId,
       ref: str(order.reference_id),
       paymentId: id,
-      amount:
-        Number.isInteger(m.amount) && typeof m.currency === "string"
-          ? { value: Number(m.amount), currency: m.currency.toUpperCase() }
-          : null,
+      amount: moneyOf(obj(p.amount_money)),
       ...(methodOf(p) ? { method: methodOf(p) } : {}),
       ...(Number.isFinite(paidAt) ? { paidAt } : {}),
       dashboardUrl: dashboardOf(extraOf(ctx).env),
@@ -161,16 +163,23 @@ async function paidOf(api: SquareApi, ctx: RunContext, order: Obj, linkId: strin
   return out;
 }
 
+/** An amount Square gives, in hundredths here; null when it is not one this inbox can hold. */
+function moneyOf(m: Obj): { value: number; currency: string } | null {
+  const currency = str(m.currency)?.toUpperCase();
+  const value = currency ? fromSquare(m.amount, currency) : null;
+  return currency && value !== null ? { value, currency } : null;
+}
+
 /** What Square refunded of the order's payments, in all; null for nothing. */
 async function refundedOf(api: SquareApi, order: Obj): Promise<{ value: number; currency: string } | null> {
   let value = 0;
   let currency = "";
   for (const r of arr(order.refunds)) {
     if (r.status !== "COMPLETED") continue;
-    const m = obj(r.amount_money);
-    if (Number.isInteger(m.amount)) {
-      value += Number(m.amount);
-      currency = String(m.currency ?? currency).toUpperCase();
+    const m = moneyOf(obj(r.amount_money));
+    if (m) {
+      value += m.value;
+      currency = m.currency;
     }
   }
   if (value === 0) {
@@ -180,10 +189,10 @@ async function refundedOf(api: SquareApi, order: Obj): Promise<{ value: number; 
       if (!id) continue;
       const a = await api.call("GET", `/v2/payments/${encodeURIComponent(id)}`);
       if (a.status !== 200) continue;
-      const m = obj(obj(a.json.payment).refunded_money);
-      if (Number.isInteger(m.amount) && Number(m.amount) > 0) {
-        value += Number(m.amount);
-        currency = String(m.currency ?? currency).toUpperCase();
+      const m = moneyOf(obj(obj(a.json.payment).refunded_money));
+      if (m && m.value > 0) {
+        value += m.value;
+        currency = m.currency;
       }
     }
   }
@@ -242,16 +251,22 @@ export function ordersHandler(apiOf: Api): PaymentsHandler {
           `This Square location sells in ${currency ?? "another currency"}, and this order is in ${request.amount.currency}. Choose the location that sells in it.`,
         );
       }
-      const lines = order.lines.map((l) =>
-        l.externalId
-          ? // An item of the catalogue, at Square's own price for it here.
-            { catalog_object_id: l.externalId, quantity: String(l.quantity) }
-          : {
-              name: (l.name || "Item").slice(0, 500),
-              quantity: String(l.quantity),
-              base_price_money: { amount: l.unit.value, currency: l.unit.currency.toUpperCase() },
-            },
-      );
+      const lines = order.lines.map((l) => {
+        // An item of the catalogue, at Square's own price for it here.
+        if (l.externalId) return { catalog_object_id: l.externalId, quantity: String(l.quantity) };
+        const amount = toSquare(l.unit.value, l.unit.currency);
+        if (amount === null) {
+          throw new ConnectorError(
+            "config",
+            `${l.name || "A line"} has a price Square cannot take in ${l.unit.currency}.`,
+          );
+        }
+        return {
+          name: (l.name || "Item").slice(0, 500),
+          quantity: String(l.quantity),
+          base_price_money: { amount, currency: l.unit.currency.toUpperCase() },
+        };
+      });
       if (lines.length === 0) throw new ConnectorError("config", "This order has no lines to write into Square.");
       const email = order.customer.email;
       const phone = phoneOf(order.customer.phone);
@@ -287,28 +302,27 @@ export function ordersHandler(apiOf: Api): PaymentsHandler {
       if (!linkId || !url || !orderId)
         throw new ConnectorError("bad_response", "Square did not say which link it made.");
       // What Square counts the order at: on the answer, or read back (a retry's answer may not carry it).
+      // Never a link without it: Square's tax may make it more than the customer accepted.
       let made = arr(obj(a.json.related_resources).orders).find((o) => o.id === orderId) ?? null;
       if (!made) made = await orderOf(api, orderId);
-      const total = obj(made?.total_money);
-      return {
-        externalId: `${linkId}:${orderId}`,
-        url,
-        ...(Number.isInteger(total.amount) && typeof total.currency === "string"
-          ? { total: { value: Number(total.amount), currency: total.currency.toUpperCase() } }
-          : {}),
-        dashboardUrl: dashboardOf(extraOf(ctx).env),
-      };
+      const total = moneyOf(obj(made?.total_money));
+      if (!total) throw new ConnectorError("bad_response", "Square did not say what the order comes to.");
+      return { externalId: `${linkId}:${orderId}`, url, total, dashboardUrl: dashboardOf(extraOf(ctx).env) };
     },
 
+    /**
+     * Deleting a link cancels its order, paid or not (https://developer.squareup.com/docs/checkout-api/manage-checkout#delete-a-payment-link):
+     * so the order is read first, and only one still waiting to be paid loses its link. One paid
+     * meanwhile is left as it is, and `check` says so.
+     */
     async closeLink(ctx, link) {
       const ids = idsOf(link.externalId);
       if (!ids) return;
       const api = await apiOf(ctx);
+      const order = await orderOf(api, ids.order);
+      if (!order || !unpaid(order)) return;
       const a = await api.call("DELETE", `/v2/online-checkout/payment-links/${encodeURIComponent(ids.link)}`);
       if (a.status === 200 || a.status === 404) return;
-      // Paid already: there is nothing left to close.
-      const order = await orderOf(api, ids.order);
-      if (!order || order.state === "COMPLETED" || arr(order.tenders).length > 0) return;
       throw refusal(a, "close the link to pay");
     },
 
@@ -337,10 +351,10 @@ export function ordersHandler(apiOf: Api): PaymentsHandler {
       if (a.status === 404) return null;
       if (a.status !== 200) throw refusal(a, "read a payment");
       const p = obj(a.json.payment);
-      const m = obj(p.refunded_money);
-      if (!Number.isInteger(m.amount) || Number(m.amount) <= 0 || typeof m.currency !== "string") return null;
+      const m = moneyOf(obj(p.refunded_money));
+      if (!m || m.value <= 0) return null;
       const ids = Array.isArray(p.refund_ids) ? p.refund_ids.filter((x): x is string => typeof x === "string") : [];
-      return { amount: { value: Number(m.amount), currency: m.currency.toUpperCase() }, refundIds: [...ids].reverse() };
+      return { amount: m, refundIds: [...ids].reverse() };
     },
 
     async receive() {

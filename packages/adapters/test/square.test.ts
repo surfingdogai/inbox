@@ -36,9 +36,11 @@ import {
  * Contract tests for the Square connector (ADR-029) against a made-up seller answering as Square's API
  * documents it (`fixtures/square.ts`), through the inbox's own connector client: what is asked of
  * Square, with which token, and what the inbox makes of the answer. Above all: the token goes to
- * Square's own hosts and nowhere else; a booking's customer is the inbox's own record with the
- * business's phone, so Square never texts the customer; a webhook is believed only once its signature
- * checks out and Square, asked back, says the same; no fee is ever asked. No real Square is called.
+ * Square's own hosts and nowhere else; bookings are written only the way Square takes them (an access
+ * token as the seller on Appointments Plus or Premium, a sign-in as a customer on every plan); a
+ * booking's customer record carries the business's phone, so Square never texts the customer; a
+ * webhook is believed only once its signature checks out and Square, asked back, says the same; no fee
+ * is ever asked. No real Square is called.
  */
 
 const DAY = 86_400_000;
@@ -94,6 +96,15 @@ async function connected(opts: FakeSquareOptions = {}, over: Partial<ConnectCont
   return { sq, def, made, ...runner(sq, made) };
 }
 
+/** Connected through Sign in with Square, whose token books as a customer. */
+async function signedIn(opts: FakeSquareOptions = {}) {
+  const sq = fakeSquare(opts);
+  const def = squareConnector(CLIENT);
+  const made = await def.oauth?.exchange(connectCtx(sq), { code: OAUTH_CODE, verifier: "v", redirectUri: "x" });
+  if (!made) throw new Error("not signed in");
+  return { sq, def, made, ...runner(sq, made) };
+}
+
 async function refusal(p: Promise<unknown>): Promise<ConnectorError> {
   try {
     await p;
@@ -145,9 +156,9 @@ describe("connecting with an access token", () => {
       externalId: sq.merchantId,
       mode: "live",
       defaults: { busy: [], destination: "auto" },
-      extra: { env: "production", merchantId: sq.merchantId, mainLocation: sq.location, hooks: "added" },
+      extra: { env: "production", via: "token", merchantId: sq.merchantId, mainLocation: sq.location, hooks: "added" },
     });
-    // Choosers, never typed ids: the open locations, and who takes bookings.
+    // Choosers, never typed ids: the open locations, and who takes bookings (a choice about bookings).
     expect(made.choices).toEqual([
       {
         key: "location",
@@ -167,15 +178,20 @@ describe("connecting with an access token", () => {
           { id: "TM_kwame", name: "Kwame Mensah" },
         ],
         value: "any",
+        bookings: true,
       },
     ]);
-    // Services with their length; one with a cancellation fee is left out (Square refuses it through its API).
-    expect(made.destinations.map((d) => [d.id, d.name])).toEqual([
-      ["auto", "The service of the same name"],
-      ["VARHAIRCUT45MIN0", "Haircut · 45 min"],
-      ["VARCOLOURFULL120", "Colour · Full · 120 min"],
-      ["VARCOLOURROOTS60", "Colour · Roots · 60 min"],
-      ["VARBEARDTRIM30M0", "Beard trim · 30 min"],
+    // Each booking goes to the service of its own name and length: one service for all would send a
+    // colour to the haircut, so there is nothing to choose.
+    expect(made.destinations).toEqual([{ id: "auto", name: "Matched by name", writable: true }]);
+    // The services, with their length; one with a cancellation fee is left out (Square refuses it through its API).
+    const services = (made.extra as { services: { id: string; name: string; minutes: number }[] }).services;
+    expect(services.map((x) => [x.id, x.name, x.minutes])).toEqual([
+      ["VARHAIRCUT45MIN0", "Haircut", 45],
+      ["VARCOLOURFULL120", "Colour · Full", 120],
+      ["VARCOLOURROOTS60", "Colour · Roots", 60],
+      ["VARBEARDTRIM30M0", "Beard trim", 30],
+      ["VARSCALPMASSAGE0", "Scalp massage", 45],
     ]);
     const [sub] = [...sq.subscriptions.values()];
     expect(sub).toMatchObject({
@@ -278,6 +294,75 @@ describe("connecting with an access token", () => {
     expect(made.destinations).toEqual([]);
     expect(made.choices?.map((c) => c.key)).toEqual(["location"]);
     expect(await def.busy?.(ctx(), { start: D0, end: D0 + 7 * DAY })).toEqual([]);
+    // Nothing of bookings is offered: the row says products and links only.
+    const off = "Square Appointments is off for this account.";
+    expect(def.withheld?.({ extra: made.extra ?? {} })).toEqual({ busy_times: off, write_bookings: off });
+  });
+
+  it("asks a seller with one location nothing about it", async () => {
+    const { made } = await connected({ locations: 1 });
+    expect(made.choices?.map((c) => c.key)).toEqual(["team"]);
+  });
+});
+
+describe("which way Square takes bookings", () => {
+  it("keeps busy times from an access token on Appointments Free, adds no bookings, and says why", async () => {
+    const { sq, def, made, ctx } = await connected();
+    expect(def.withheld?.({ extra: made.extra ?? {} })).toEqual({
+      write_bookings:
+        "Square adds bookings from an access token on Appointments Plus or Premium only. Busy times still come from Square.",
+    });
+    // Where the server has a Square app, the line names the way that takes them on this plan.
+    expect(squareConnector(CLIENT).withheld?.({ extra: made.extra ?? {} }).write_bookings).toContain(
+      "Sign in with Square",
+    );
+    const read = await def.busy?.(ctx(), { start: D0, end: D0 + DAY });
+    expect(Array.isArray(read) && read.length > 0).toBe(true);
+    // Were it asked anyway, nothing reaches Square, which would refuse the token as the seller.
+    const e = await refusal(def.bookings?.put(ctx(), booking(), null) ?? Promise.resolve());
+    expect(e.message).toContain("Appointments Plus or Premium");
+    expect(body(sq, "POST", "/v2/bookings")).toHaveLength(0);
+    const direct = await sq.platform.http.request({
+      method: "POST",
+      url: `${PRODUCTION}/v2/bookings`,
+      headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ idempotency_key: "k", booking: { appointment_segments: [] } }),
+    });
+    expect(direct.status).toBe(403);
+    expect(direct.text).toContain("Merchant subscription does not support write operations.");
+  });
+
+  it("writes as the seller from an access token on Appointments Plus: its own note, which the client never sees", async () => {
+    const { sq, def, made, ctx } = await connected({ appointments: "plus" });
+    expect(def.withheld?.({ extra: made.extra ?? {} })).toEqual({});
+    const link = await def.bookings?.put(ctx(), booking(), null);
+    const written = sq.bookings.get(String(link?.externalId));
+    expect(written?.sellerNote).toContain("Haircut · Oluwaseun Adeyemi");
+    expect(written?.customerNote).toBeUndefined();
+    const sent = body(sq, "POST", "/v2/bookings")[0] as {
+      booking: { appointment_segments: Record<string, unknown>[] };
+    };
+    expect(sent.booking.appointment_segments[0]).toMatchObject({ duration_minutes: 45 });
+  });
+
+  it("books as a customer through Sign in with Square, on every plan: a note of the customer's, Square's own length", async () => {
+    const { sq, def, made, ctx } = await signedIn();
+    expect(made.extra).toMatchObject({ via: "signin", hooks: "none" });
+    expect(def.withheld?.({ extra: made.extra ?? {} })).toEqual({});
+    // Bookings go in here, so a location Square cannot book for says so before one is refused.
+    expect(made.choices?.[0]?.options.map((o) => o.name)).toEqual([
+      "Queen Street West",
+      "Danforth · add a phone in Square to take bookings",
+    ]);
+    const link = await def.bookings?.put(ctx(), booking(), null);
+    const written = sq.bookings.get(String(link?.externalId));
+    expect(written?.customerNote).toContain("Haircut · Oluwaseun Adeyemi");
+    expect(written?.sellerNote).toBeUndefined();
+    const sent = body(sq, "POST", "/v2/bookings")[0] as {
+      booking: Record<string, unknown> & { appointment_segments: Record<string, unknown>[] };
+    };
+    expect(sent.booking).not.toHaveProperty("seller_note");
+    expect(sent.booking.appointment_segments[0]).not.toHaveProperty("duration_minutes");
   });
 });
 
@@ -287,7 +372,7 @@ describe("busy times, from what Square would book", () => {
     // Kwame is with a walk-in from 15:00 to 16:00, Amélie at a training: nobody takes a haircut then.
     sq.blocked.push({ team: "TM_kwame", start: H(15), end: H(16) }, { team: "TM_amelie", start: H(15), end: H(16) });
     const window = { start: D0, end: D0 + 2 * DAY };
-    const read = await def.busy?.(ctx({ destination: "VARHAIRCUT45MIN0" }), window);
+    const read = await def.busy?.(ctx(), window);
     const intervals = Array.isArray(read) ? read : (read?.intervals ?? []);
     // Open 14:00 to 22:00 UTC: closed before, a gap at 15:00, closed after.
     expect(intervals.slice(0, 3)).toEqual([
@@ -297,12 +382,12 @@ describe("busy times, from what Square would book", () => {
     ]);
     // One person away is not busy: the other takes the haircut.
     sq.blocked.splice(1, 1);
-    const one = await def.busy?.(ctx({ destination: "VARHAIRCUT45MIN0" }), window);
+    const one = await def.busy?.(ctx(), window);
     expect((Array.isArray(one) ? one : []).slice(0, 2)).toEqual([
       { start: D0, end: H(14) },
       { start: H(22), end: H(38) },
     ]);
-    // Asked of Square for that service, at the chosen location, a day at least.
+    // Asked of Square for the service most of the team take (a haircut), at the location, a day at least.
     const asked = body(sq, "POST", "/v2/bookings/availability/search").at(-1) as {
       query: { filter: { location_id: string; segment_filters: unknown[]; start_at_range: { start_at: string } } };
     };
@@ -336,7 +421,7 @@ describe("busy times, from what Square would book", () => {
 
   it("reads the whole way ahead 31 days at a time, and says how far it got past that", async () => {
     const { sq, def, ctx } = await connected();
-    const full = await def.busy?.(ctx({ destination: "VARHAIRCUT45MIN0" }), { start: D0, end: D0 + 92 * DAY });
+    const full = await def.busy?.(ctx(), { start: D0, end: D0 + 92 * DAY });
     expect(Array.isArray(full)).toBe(true);
     const ranges = body(sq, "POST", "/v2/bookings/availability/search").map((b) => {
       const r = (b as { query: { filter: { start_at_range: { start_at: string; end_at: string } } } }).query.filter
@@ -344,38 +429,50 @@ describe("busy times, from what Square would book", () => {
       return (Date.parse(r.end_at) - Date.parse(r.start_at)) / DAY;
     });
     expect(ranges).toEqual([31, 31, 30]);
-    const far = await def.busy?.(ctx({ destination: "VARHAIRCUT45MIN0" }), { start: D0, end: D0 + 120 * DAY });
+    const far = await def.busy?.(ctx(), { start: D0, end: D0 + 120 * DAY });
     expect(far).toMatchObject({ until: D0 + 93 * DAY });
   });
 });
 
 describe("bookings written into Square", () => {
-  it("books who Square says is free, for the inbox's own customer record, with the business's phone and no email", async () => {
-    const { sq, def, ctx } = await connected();
+  it("books who Square says is free, for a record of the customer's own under the business's phone, with no email", async () => {
+    const { sq, def, ctx } = await connected({ appointments: "plus" });
     const link = await def.bookings?.put(ctx(), booking(), null);
     expect(link).toMatchObject({ calendar: "VARHAIRCUT45MIN0", start: H(15), end: H(15, 45) });
     const made = sq.bookings.get(String(link?.externalId));
     expect(made).toMatchObject({ start: H(15), service: "VARHAIRCUT45MIN0", team: "TM_amelie", status: "ACCEPTED" });
-    // Booked as a customer would (Square Appointments Free): the note names who it is for.
-    expect(made?.customerNote).toContain("Haircut · Oluwaseun Adeyemi");
-    const [holder] = [...sq.customers.values()];
-    expect(holder).toMatchObject({ given_name: "Inbox", family_name: "bookings", phone_number: "+1 416-555-0142" });
-    expect(holder?.email_address).toBeUndefined();
-    expect(made?.customer).toBe(holder?.id);
-    // The length is the service's own: never sent by an app that books as a customer.
-    const sent = body(sq, "POST", "/v2/bookings")[0] as {
-      booking: { appointment_segments: Record<string, unknown>[] };
-    };
-    expect(sent.booking.appointment_segments[0]).not.toHaveProperty("duration_minutes");
+    // The salon's calendar shows who is coming; Square's texts go to the salon's own number.
+    const customer = sq.customers.get(String(made?.customer));
+    expect(customer).toMatchObject({ given_name: "Oluwaseun Adeyemi", phone_number: "+1 416-555-0142" });
+    expect(customer?.email_address).toBeUndefined();
+    expect(customer?.family_name).toBeUndefined();
     expect(JSON.stringify(sq.platform.seen.map((r) => r.body))).not.toContain("@");
 
-    // A second booking, the same record: the customer directory is not filled with the inbox.
+    // Their next booking: the same record. Another customer: one of their own.
     await def.bookings?.put(ctx(), booking({ itemId: "01JBOOKINGLUMIERE0000000002", start: H(17) }), null);
     expect(sq.customers.size).toBe(1);
+    await def.bookings?.put(
+      ctx(),
+      booking({
+        itemId: "01JBOOKINGLUMIERE0000000003",
+        start: H(19),
+        title: "Haircut · Chen Mei Lin",
+        customerName: "Chen Mei Lin",
+      }),
+      null,
+    );
+    expect([...sq.customers.values()].map((c) => c.given_name)).toEqual(["Oluwaseun Adeyemi", "Chen Mei Lin"]);
+    // A customer who was erased has no name to show: one record stands for all of them.
+    await def.bookings?.put(
+      ctx(),
+      booking({ itemId: "01JBOOKINGLUMIERE0000000004", start: H(20), title: "Haircut", customerName: null }),
+      null,
+    );
+    expect([...sq.customers.values()].at(-1)?.given_name).toBe("Inbox booking");
   });
 
   it("finds a booking a stopped run made, and a retry makes no second one", async () => {
-    const { sq, def, ctx } = await connected();
+    const { sq, def, ctx } = await connected({ appointments: "plus" });
     const first = await def.bookings?.put(ctx(), booking(), null);
     const retried = await def.bookings?.put(ctx(), booking(), null);
     expect(retried?.externalId).toBe(first?.externalId);
@@ -383,24 +480,53 @@ describe("bookings written into Square", () => {
     const found = await def.bookings?.find?.(ctx(), booking());
     expect(found?.externalId).toBe(first?.externalId);
     expect(await def.bookings?.find?.(ctx(), booking({ start: H(19) }))).toBeNull();
+    expect(await def.bookings?.find?.(ctx(), booking({ customerName: "Someone Else" }))).toBeNull();
   });
 
-  it("moves a booking in place when its team member is free then, and otherwise books anew before letting the old one go", async () => {
-    const { sq, def, ctx } = await connected();
+  it("moves a booking in place only when Square says its team member is free then, and otherwise books anew first", async () => {
+    const { sq, def, ctx } = await connected({ appointments: "plus" });
+    const puts = () => sq.platform.seen.filter((r) => r.method === "PUT" && r.url.pathname.startsWith("/v2/bookings/"));
     const link = (await def.bookings?.put(ctx(), booking(), null)) as LinkState;
     const moved = await def.bookings?.put(ctx(), booking({ start: H(16) }), link);
     expect(moved?.externalId).toBe(link.externalId);
     expect(sq.bookings.get(String(link.externalId))).toMatchObject({ start: H(16), version: 1, status: "ACCEPTED" });
-    // Amélie is away at 18:00; Kwame is free: a new booking with him, and the old one cancelled after.
+    expect(puts()).toHaveLength(1);
+    // Amélie is with a walk-in at 18:00, which Square would let a seller double-book: the inbox asks
+    // first, books Kwame anew, and lets the old one go after.
     sq.blocked.push({ team: "TM_amelie", start: H(18), end: H(19) });
     const again = await def.bookings?.put(ctx(), booking({ start: H(18) }), moved as LinkState);
+    expect(puts()).toHaveLength(1);
     expect(again?.externalId).not.toBe(link.externalId);
     expect(sq.bookings.get(String(again?.externalId))).toMatchObject({ start: H(18), team: "TM_kwame" });
-    expect(sq.bookings.get(String(link.externalId))?.status).toBe("CANCELLED_BY_CUSTOMER");
+    expect(sq.bookings.get(String(link.externalId))?.status).toBe("CANCELLED_BY_SELLER");
+  });
+
+  it("never leaves one booking holding two times: the new one goes again when the old one cannot", async () => {
+    const { sq, def, ctx } = await signedIn();
+    const link = (await def.bookings?.put(ctx(), booking(), null)) as LinkState;
+    // The 15:00 haircut's cancellation window has closed for a customer, and Amélie is away at 18:00.
+    sq.cancelBefore = H(16);
+    sq.blocked.push({ team: "TM_amelie", start: H(18), end: H(19) });
+    const said =
+      "Square would not let the old time go: The cancellation period for this booking has ended. Move it in Square.";
+    const e = await refusal(def.bookings?.put(ctx(), booking({ start: H(18) }), link) ?? Promise.resolve());
+    expect(e).toMatchObject({ code: "refused", message: said });
+    const live = () => [...sq.bookings.values()].filter((b) => b.status === "ACCEPTED").map((b) => b.id);
+    expect(live()).toEqual([link.externalId]);
+    // Tried again, it says the same, and nothing more is made.
+    const twice = await refusal(def.bookings?.put(ctx(), booking({ start: H(18) }), link) ?? Promise.resolve());
+    expect(twice.message).toBe(said);
+    expect(sq.bookings.size).toBe(2);
+    expect(live()).toEqual([link.externalId]);
+    // Neither can go: the new one is kept and named, and the old one is the owner's to cancel in Square.
+    sq.cancelBefore = H(20);
+    const kept = await def.bookings?.put(ctx(), booking({ start: H(18, 30) }), link);
+    expect(kept?.externalId).not.toBe(link.externalId);
+    expect(sq.bookings.get(String(kept?.externalId))).toMatchObject({ start: H(18, 30), status: "ACCEPTED" });
   });
 
   it("cancels with the booking's version, is done when it was gone, and says when Square's own window has closed", async () => {
-    const { sq, def, ctx } = await connected();
+    const { sq, def, ctx } = await signedIn();
     const link = (await def.bookings?.put(ctx(), booking(), null)) as LinkState;
     await def.bookings?.remove(ctx(), link);
     expect(sq.bookings.get(String(link.externalId))?.status).toBe("CANCELLED_BY_CUSTOMER");
@@ -417,40 +543,44 @@ describe("bookings written into Square", () => {
     expect(e.message).toBe(
       "Square would not cancel it: The cancellation period for this booking has ended. Cancel it in Square.",
     );
+    // As the seller, Square lets it go.
+    const seller = await connected({ appointments: "plus" });
+    const own = (await seller.def.bookings?.put(seller.ctx(), booking(), null)) as LinkState;
+    await seller.def.bookings?.remove(seller.ctx(), own);
+    expect(seller.sq.bookings.get(String(own.externalId))?.status).toBe("CANCELLED_BY_SELLER");
   });
 
   it("refuses in plain words what Square cannot take, before it writes anything", async () => {
-    const { sq, def, ctx } = await connected();
-    const nothing = await refusal(
+    const { sq, def, ctx } = await connected({ appointments: "plus" });
+    const none = await refusal(
       def.bookings?.put(ctx(), booking({ durationMin: 50, serviceName: "Fade" }), null) ?? Promise.resolve(),
     );
-    expect(nothing.message).toContain("No Square service here is 50 minutes long");
-    const chosen = await refusal(
-      def.bookings?.put(ctx({ destination: "VARBEARDTRIM30M0" }), booking(), null) ?? Promise.resolve(),
-    );
-    expect(chosen.message).toContain("Beard trim is 30 minutes in Square");
+    expect(none.message).toBe("No Square service here is 50 minutes long. Add one in Square.");
+    // A haircut and a scalp massage are both 45 minutes: a 45-minute fade is no guess.
+    const two = await refusal(def.bookings?.put(ctx(), booking({ serviceName: "Fade" }), null) ?? Promise.resolve());
+    expect(two.message).toBe("Several Square services are 45 minutes long. In Square, name one Fade, as it is here.");
     const closed = await refusal(def.bookings?.put(ctx(), booking({ start: H(23) }), null) ?? Promise.resolve());
     expect(closed.message).toContain("Square has nobody free for Haircut");
     expect(sq.bookings.size).toBe(0);
   });
 
-  it("asks for the location's phone number when it has none, rather than a customer's", async () => {
-    const { sq, def, ctx } = await connected({ locationPhone: null });
+  it("says a location needs its phone number before a booking is refused for it, and never asks for the customer's", async () => {
+    const { sq, def, made, ctx } = await connected({ appointments: "plus", locationPhone: null });
+    expect(made.choices?.[0]?.options.map((o) => o.name)).toEqual([
+      "Queen Street West · add a phone in Square to take bookings",
+      "Danforth · add a phone in Square to take bookings",
+    ]);
+    // One location: still drawn, to say so.
+    const one = await connected({ appointments: "plus", locationPhone: null, locations: 1 });
+    expect(one.made.choices?.[0]).toMatchObject({
+      key: "location",
+      options: [{ name: "Queen Street West · add a phone in Square to take bookings" }],
+    });
     const e = await refusal(def.bookings?.put(ctx(), booking(), null) ?? Promise.resolve());
-    expect(e.message).toContain("Add your phone number to this location in Square");
+    expect(e.message).toBe(
+      "Square needs a phone number for bookings. Add your business's number to this location in Square (Dashboard → Locations), then confirm again.",
+    );
     expect(sq.customers.size).toBe(0);
-  });
-
-  it("writes as the seller on Appointments Plus: its own note, which the client never sees", async () => {
-    const { sq, def, ctx } = await connected({ appointments: "plus" });
-    const link = await def.bookings?.put(ctx(), booking(), null);
-    const made = sq.bookings.get(String(link?.externalId));
-    expect(made?.sellerNote).toContain("Haircut · Oluwaseun Adeyemi");
-    expect(made?.customerNote).toBeUndefined();
-    const sent = body(sq, "POST", "/v2/bookings")[0] as {
-      booking: { appointment_segments: Record<string, unknown>[] };
-    };
-    expect(sent.booking.appointment_segments[0]).toMatchObject({ duration_minutes: 45 });
   });
 });
 
@@ -506,19 +636,76 @@ describe("the catalogue", () => {
     expect(first?.products).toEqual([]);
     expect(first?.cursor).toBe("i:");
     const asked = body(sq, "POST", "/v2/catalog/search").at(-1);
-    expect(asked).toMatchObject({ begin_time: "2026-10-19T00:00:00Z", include_deleted_objects: true });
+    expect(asked).toMatchObject({
+      object_types: ["ITEM", "ITEM_VARIATION"],
+      begin_time: "2026-10-19T00:00:00Z",
+      include_deleted_objects: true,
+      include_related_objects: true,
+    });
     const stock = await def.catalogue?.page(ctx(), { cursor: first?.cursor ?? null, since });
     expect(stock?.products.map((p) => [p.externalId, p.stock])).toEqual([["VARBANANABREAD00", 3]]);
     expect(stock?.cursor).toBeNull();
   });
 
-  it("never prices in a currency not counted in hundredths: a shop in yen comes in off sale", async () => {
+  it("takes a variation off sale within minutes when it is taken off its item", async () => {
+    const { sq, def, ctx } = await connected({ seller: "melbourne" });
+    const since = Date.parse("2026-10-19T00:00:00Z");
+    // The large flat white is deleted in Square: it leaves the item's list, and its item is unchanged.
+    const flat = sq.items.find((i) => i.id === "ITMFLATWHITE0000") as { item_data: { variations: { id: string }[] } };
+    const [large] = flat.item_data.variations.filter((v) => v.id === "VARFLATWHITELRG0");
+    flat.item_data.variations = flat.item_data.variations.filter((v) => v.id !== "VARFLATWHITELRG0");
+    sq.variationChanges.push({ ...large, is_deleted: true, updated_at: "2026-10-20T08:15:00.000Z" });
+    const page = await def.catalogue?.page(ctx(), { cursor: null, since });
+    expect(page?.products.map((p) => [p.externalId, p.name, p.available])).toEqual([
+      ["VARFLATWHITELRG0", "Flat white · Large", false],
+    ]);
+  });
+
+  it("prices a shop in yen exactly, in hundredths: ¥12,800 is 1280000", async () => {
     const { def, ctx } = await connected({ seller: "osaka" });
     const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
-    expect(page?.products.map((p) => [p.name, p.price])).toEqual([
-      ["三徳包丁 Santoku · 165 mm", null],
-      ["土鍋 Donabe · 2 people", null],
+    expect(page?.products.map((p) => [p.name, p.price, p.available])).toEqual([
+      ["三徳包丁 Santoku · 165 mm", { value: 1_280_000, currency: "JPY" }, true],
+      ["土鍋 Donabe · 2 people", { value: 680_000, currency: "JPY" }, true],
     ]);
+  });
+
+  it("reads a page past the client's usual 2 MB: a catalogue never stops on one large page", async () => {
+    const { sq, def, ctx } = await connected({ seller: "melbourne" });
+    const long = "Single origin, washed, from a cooperative in the highlands. ".repeat(45_000);
+    expect(long.length).toBeGreaterThan(2 * 1024 * 1024);
+    sq.items.unshift({
+      type: "ITEM",
+      id: "ITMSINGLEORIGIN0",
+      updated_at: "2026-10-01T06:00:00.000Z",
+      version: 1759300000000,
+      is_deleted: false,
+      present_at_all_locations: true,
+      item_data: {
+        name: "Single origin beans",
+        product_type: "REGULAR",
+        description_plaintext: long,
+        variations: [
+          {
+            type: "ITEM_VARIATION",
+            id: "VARSINGLEORIG250",
+            is_deleted: false,
+            present_at_all_locations: true,
+            item_variation_data: {
+              item_id: "ITMSINGLEORIGIN0",
+              name: "250 g",
+              pricing_type: "FIXED_PRICING",
+              price_money: { amount: 2_400, currency: "AUD" },
+              sellable: true,
+            },
+          },
+        ],
+      },
+    });
+    const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
+    const beans = page?.products.find((p) => p.externalId === "VARSINGLEORIG250");
+    expect(beans).toMatchObject({ name: "Single origin beans · 250 g", price: { value: 2_400, currency: "AUD" } });
+    expect(beans?.description?.length).toBe(5_000);
   });
 });
 
@@ -673,6 +860,64 @@ describe("orders paid at the seller's own Square checkout", () => {
     expect(link?.total).toEqual({ value: 6_893, currency: "CAD" });
   });
 
+  it("never answers a link without Square's total: one it cannot read back is not sent unchecked", async () => {
+    const { sq, def, ctx } = await connected();
+    sq.relatedOrders = false;
+    sq.platform.fail("GET", `${PRODUCTION}/v2/orders/*`, 404);
+    const e = await refusal(def.payments?.createLink(ctx(), payRequest()) ?? Promise.resolve());
+    expect(e).toMatchObject({ code: "bad_response", message: "Square did not say what the order comes to." });
+  });
+
+  it("writes an order in yen as Square counts it, whole yen, and reads it back in hundredths", async () => {
+    const { sq, def, ctx } = await connected({ seller: "osaka" });
+    const yen = (value: number) => ({ value, currency: "JPY" });
+    const request = payRequest({
+      ref: "01JREFOSAKA000000000000001",
+      amount: yen(1_330_000),
+      order: order({
+        lines: [
+          {
+            externalId: "VARSANTOKU165MM0",
+            sku: "SNT-165",
+            name: "三徳包丁 Santoku",
+            quantity: 1,
+            unit: yen(1_280_000),
+          },
+          { externalId: null, sku: null, name: "Gift wrapping", quantity: 1, unit: yen(50_000) },
+        ],
+        total: yen(1_330_000),
+        customer: { name: "佐藤 陽菜", email: "hina@example.jp", phone: "+81 90 5555 0147", language: "ja" },
+      }),
+    });
+    const link = await def.payments?.createLink(ctx(), request);
+    const sent = body(sq, "POST", "/v2/online-checkout/payment-links")[0] as {
+      order: { line_items: Record<string, unknown>[] };
+    };
+    expect(sent.order.line_items[1]).toMatchObject({ base_price_money: { amount: 500, currency: "JPY" } });
+    expect(link?.total).toEqual(yen(1_330_000));
+    const orderId = String(link?.externalId).split(":")[1] ?? "";
+    sq.pay(orderId);
+    const [fact] =
+      (await def.payments?.check(ctx(), { ref: request.ref, externalId: String(link?.externalId), itemId: "x" })) ?? [];
+    expect(fact?.amount).toEqual(yen(1_330_000));
+    // A fraction of a yen is no price Square takes: refused before Square is asked.
+    const e = await refusal(
+      def.payments?.createLink(
+        ctx(),
+        payRequest({
+          ref: "01JREFOSAKA000000000000002",
+          amount: yen(50_050),
+          order: order({
+            lines: [{ externalId: null, sku: null, name: "Furoshiki", quantity: 1, unit: yen(50_050) }],
+            total: yen(50_050),
+          }),
+        }),
+      ) ?? Promise.resolve(),
+    );
+    expect(e).toMatchObject({ code: "config" });
+    expect(sq.orders.size).toBe(1);
+  });
+
   it("makes the same link again for the same order, and refuses an order in another currency than the location's", async () => {
     const { sq, def, ctx } = await connected();
     const one = await def.payments?.createLink(ctx(), payRequest());
@@ -707,15 +952,22 @@ describe("orders paid at the seller's own Square checkout", () => {
     expect(await def.payments?.check(ctx(), { ...known, ref: "01JSOMEOTHERREF" })).toEqual([]);
   });
 
-  it("closes a link by deleting it, which cancels its order; one gone or paid is closed already", async () => {
+  it("closes a link by deleting it, which cancels its order; never one paid just before, which Square would cancel too", async () => {
     const { sq, def, ctx } = await connected();
     const link = await def.payments?.createLink(ctx(), payRequest());
     await def.payments?.closeLink(ctx(), { externalId: String(link?.externalId) });
     expect([...sq.orders.values()][0]?.state).toBe("CANCELED");
     await def.payments?.closeLink(ctx(), { externalId: String(link?.externalId) });
+    // The customer pays a moment before the inbox closes the link: the order is read first, and left paid.
     const paid = await def.payments?.createLink(ctx(), payRequest({ ref: "01JREFPAID000000000000000" }));
-    sq.pay(String(paid?.externalId).split(":")[1] ?? "");
+    const [linkId, orderId] = String(paid?.externalId).split(":");
+    sq.pay(orderId ?? "");
     await def.payments?.closeLink(ctx(), { externalId: String(paid?.externalId) });
+    expect(sq.orders.get(orderId ?? "")?.state).toBe("OPEN");
+    expect(sq.links.has(linkId ?? "")).toBe(true);
+    expect(sq.platform.seen.filter((r) => r.method === "DELETE" && r.url.pathname.endsWith(linkId ?? ""))).toHaveLength(
+      0,
+    );
   });
 
   it("follows the order in Square: ready, picked up, cancelled, shipped with its tracking, refunded", async () => {
@@ -922,6 +1174,55 @@ describe("webhooks at the connection's own address", () => {
   });
 });
 
+describe("the webhook, kept in step", () => {
+  it("tries one Square would not make again an hour on, never on every sync", async () => {
+    const { sq, def, ctx } = await connected({}, { hooksLive: false });
+    sq.platform.fail("POST", `${PRODUCTION}/v2/webhooks/subscriptions`, 403);
+    const fresh = await def.refresh?.(ctx());
+    expect(sq.subscriptions.size).toBe(0);
+    const now = Date.now();
+    expect(fresh?.extra).toMatchObject({ hooks: "pending", hooksTriedAt: expect.any(Number) });
+    const after = (ms: number) => ctx({ extra: fresh?.extra ?? {}, now: now + ms });
+    expect(def.stale?.(after(10 * 60_000))).toBe(false);
+    expect(def.stale?.(after(61 * 60_000))).toBe(true);
+    const again = await def.refresh?.(after(61 * 60_000));
+    expect(sq.subscriptions.size).toBe(1);
+    expect(again?.extra).toMatchObject({ hooks: "added" });
+    expect(again?.extra).not.toHaveProperty("hooksTriedAt");
+  });
+
+  it("makes one subscription however often a lost answer is retried, and takes away the others it made", async () => {
+    const { sq, def, ctx } = await connected({}, { hooksLive: false });
+    // One an earlier connection of this inbox left behind, at its own address.
+    sq.subscriptions.set("wbhk_leftover", {
+      id: "wbhk_leftover",
+      notification_url: `${INBOX.origin}/v1/hooks/square/OldTokenOldTokenOldTokenOldTokenOldToken000`,
+      enabled: true,
+      signature_key: "old",
+    });
+    await def.refresh?.(ctx());
+    // The answer was lost: the run saw nothing, and tries again as it was.
+    await def.refresh?.(ctx());
+    expect([...sq.subscriptions.values()].map((x) => x.notification_url)).toEqual([HOOK_URL]);
+    const keys = body(sq, "POST", "/v2/webhooks/subscriptions").map((b) => b.idempotency_key);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+  });
+
+  it("takes the new key when the owner makes one in the Developer Console", async () => {
+    const { sq, def, ctx, held } = await connected();
+    const [sub] = [...sq.subscriptions.values()];
+    if (!sub) throw new Error("no subscription");
+    sub.signature_key = "NewKeyMadeInTheConsole";
+    await def.refresh?.(ctx());
+    expect(held.secret.signature_key).toBe("NewKeyMadeInTheConsole");
+    const paid = await sq.event("catalog.version.updated", { object: { catalog_version: {} } });
+    expect(await def.hooks?.verify(ctx({ secret: held.secret }), inbound(paid))).toMatchObject({
+      topic: "catalog.version.updated",
+    });
+  });
+});
+
 describe("disconnecting", () => {
   it("removes the webhook it made", async () => {
     const { sq, def, ctx } = await connected();
@@ -937,6 +1238,7 @@ describe("Sign in with Square", () => {
       gallery(new Map(defs.map((d) => [d.kind, d])))
         .find((c) => c.id === "square")
         ?.ways.map((w) => [w.label, w.status, w.hint ?? null]);
+    // What can be pressed comes first: the owner's own token until Sign in is ready, then Sign in (one press).
     expect(ways(builtInConnectors())).toEqual([
       ["Access token", "ready", null],
       ["Sign in with Square", "setup", "Needs a Square app on the server."],
@@ -946,8 +1248,8 @@ describe("Sign in with Square", () => {
       ["Sign in with Square", "soon", null],
     ]);
     expect(ways(builtInConnectors({ oauth: { square: CLIENT } }))).toEqual([
-      ["Access token", "ready", null],
       ["Sign in with Square", "ready", null],
+      ["Access token", "ready", null],
     ]);
     const card = gallery(new Map(builtInConnectors().map((d) => [d.kind, d]))).find((c) => c.id === "square");
     expect(card).toMatchObject({ status: "ready", group: "shops", line: "Bookings, catalogue and payments" });

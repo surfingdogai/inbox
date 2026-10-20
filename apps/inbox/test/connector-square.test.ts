@@ -13,11 +13,13 @@ import { confirmed, freshDb, futureDay, nextDay, openWeekdays } from "./harness"
 
 /**
  * Square (ADR-029) end to end, through the doors an owner, a customer's agent and Square use, with a
- * made-up salon in Toronto that charges in Canadian dollars (`fixtures/square.ts`). Connected with the
- * owner's own access token: Square's closed hours and busy team come off the free times; a booking the
- * owner confirms is written into Square for the inbox's own customer record, so Square never texts the
- * customer; the shelf comes in as the catalogue; an order the owner accepts is paid at the salon's own
- * Square checkout, and marked paid only once Square, asked back, says so. No real Square is called.
+ * made-up salon in Toronto that charges in Canadian dollars and a kitchen shop in Osaka that sells in
+ * yen (`fixtures/square.ts`). Connected with the owner's own access token: Square's closed hours and
+ * busy team come off the free times; on Appointments Plus a booking the owner confirms is written into
+ * Square under the customer's name and the salon's own number, so Square never texts the customer; on
+ * the free plan none is, and the owner is told why; the shelf comes in as the catalogue; an order the
+ * owner accepts is paid at the shop's own Square checkout, and marked paid only once Square, asked
+ * back, says so. No real Square is called.
  */
 const BASE = "https://inbox.lumiere.example.ca";
 const SECRET_KEY = "connector-square-test-secret-0123456789";
@@ -39,6 +41,7 @@ async function setup(opts: FakeSquareOptions & { taxRate?: number } = {}) {
   });
   await openWeekdays(db);
   const sq = fakeSquare(opts);
+  const osaka = opts.seller === "osaka";
   if (opts.taxRate) sq.taxRate = opts.taxRate;
   const pending: Promise<unknown>[] = [];
   const inbox = createInbox({
@@ -66,7 +69,9 @@ async function setup(opts: FakeSquareOptions & { taxRate?: number } = {}) {
     "/v1/owner/settings",
     {
       doc: {
-        business: { name: "Salon Lumière", currency: "CAD", timezone: "UTC", languages: ["fr", "en"] },
+        business: osaka
+          ? { name: "Osaka Kitchenware", currency: "USD", timezone: "UTC", languages: ["ja", "en"] }
+          : { name: "Salon Lumière", currency: "CAD", timezone: "UTC", languages: ["fr", "en"] },
         email: { fromAddress: "bonjour@lumiere.example.ca" },
         notifications: { ownerEmail: "amelie@lumiere.example.ca", appUrl: BASE },
         directory: { url: "https://lumiere.example.ca" },
@@ -214,7 +219,7 @@ describe("Square, connected with the owner's own access token", () => {
 
 describe("bookings, kept in step with Square", () => {
   it("takes Square's closed hours off the free times, and writes a confirmed booking without a word to the customer", async () => {
-    const s = await setup();
+    const s = await setup({ appointments: "plus" });
     expect(await freeTimes(s)).toContain("09:00");
     const id = await connected(s);
     await s.call("POST", `/v1/owner/integrations/${id}/sync`, {}, s.owner);
@@ -245,11 +250,11 @@ describe("bookings, kept in step with Square", () => {
       service: "VARHAIRCUT45MIN0",
       status: "ACCEPTED",
     });
-    expect(made?.customerNote).toContain("Haircut · Nguyễn Thị Lan");
-    // The customer of the booking is the inbox's own record, under the salon's own number: Square's
-    // texts reach the salon. The customer's address never went to Square.
-    const holder = s.sq.customers.get(String(made?.customer));
-    expect(holder).toMatchObject({ given_name: "Inbox", phone_number: "+1 416-555-0142" });
+    expect(made?.sellerNote).toContain("Haircut · Nguyễn Thị Lan");
+    // The customer of the booking is a record under their name and the salon's own number: the salon's
+    // calendar shows who is coming, and Square's texts reach the salon. Their address never went to Square.
+    const customer = s.sq.customers.get(String(made?.customer));
+    expect(customer).toMatchObject({ given_name: "Nguyễn Thị Lan", phone_number: "+1 416-555-0142" });
     expect(JSON.stringify(s.sq.platform.seen.map((r) => r.body))).not.toContain("lan.nguyen@example.com");
     const view = (await (await s.call("GET", `/v1/owner/integrations/${id}`, undefined, s.owner)).json()) as {
       bookings_written: number;
@@ -264,7 +269,35 @@ describe("bookings, kept in step with Square", () => {
     );
     expect(cancelled.status, await cancelled.clone().text()).toBe(200);
     await drain(s);
-    expect(made?.status).toBe("CANCELLED_BY_CUSTOMER");
+    expect(made?.status).toBe("CANCELLED_BY_SELLER");
+  });
+
+  it("on Appointments Free keeps busy times, adds no booking, and tells the owner why in one line", async () => {
+    const s = await setup();
+    const id = await connected(s);
+    const view = (await (await s.call("GET", `/v1/owner/integrations/${id}`, undefined, s.owner)).json()) as {
+      capabilities: string[];
+      withheld: Record<string, string>;
+    };
+    expect(view.capabilities).not.toContain("write_bookings");
+    expect(view.capabilities).toContain("busy_times");
+    expect(view.withheld.write_bookings).toBe(
+      "Square adds bookings from an access token on Appointments Plus or Premium only. Busy times still come from Square.",
+    );
+    expect(await freeTimes(s)).not.toContain("09:00");
+    const created = await s.call("POST", "/v1/bookings", {
+      payload: {
+        reservationFor: { serviceId: s.serviceId, name: "Haircut" },
+        startTime: `${DAY}T15:00:00Z`,
+        endTime: `${DAY}T15:45:00Z`,
+      },
+      contact: { name: "Thabo Nkosi", email: "thabo@example.com" },
+    });
+    const itemId = ((await created.json()) as { view: { item: { id: string } } }).view.item.id;
+    await s.call("POST", `/v1/owner/items/${itemId}/transitions`, { event: "confirm" }, s.owner);
+    await drain(s);
+    expect(s.sq.bookings.size).toBe(0);
+    expect(s.sq.platform.requests("POST", "https://connect.squareup.com/v2/customers")).toHaveLength(0);
   });
 });
 
@@ -396,6 +429,50 @@ describe("an order paid at the salon's own Square checkout", () => {
       shop_total: { value: 3_164, currency: "CAD" },
     });
     expect((await itemOf(s.db, id)).payload.paymentUrl).toBeUndefined();
+  });
+
+  it("sells in yen at a shop in Osaka: priced exactly, and Square's link made in whole yen", async () => {
+    const s = await setup({ seller: "osaka" });
+    await connected(s);
+    const { rows } = await s.db.client.query({
+      sql: "SELECT external_id, price, active FROM products ORDER BY external_id",
+      method: "all",
+    });
+    expect(rows.map((r) => [String(r[0]), JSON.parse(String(r[1])), Number(r[2])])).toEqual([
+      ["VARDONABE2PERS00", { value: 680_000, currency: "JPY" }, 1],
+      ["VARSANTOKU165MM0", { value: 1_280_000, currency: "JPY" }, 1],
+    ]);
+    const productId = String(
+      (
+        await s.db.client.query({
+          sql: "SELECT id FROM products WHERE external_id = 'VARDONABE2PERS00'",
+          method: "all",
+        })
+      ).rows[0]?.[0],
+    );
+    const made = await confirmed(
+      (r) => s.inbox.app.request(r),
+      new Request(`${BASE}/v1/orders`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          payload: {
+            orderedItem: [{ productId, name: "土鍋 Donabe", quantity: 1, price: { value: 680_000, currency: "JPY" } }],
+            totalPrice: { value: 680_000, currency: "JPY" },
+            delivery: { method: "pickup" },
+          },
+          contact: { name: "Tanaka Yui", email: "yui.tanaka@example.jp", locale: "ja" },
+        }),
+      }),
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+    const id = ((await made.json()) as { view: { item: { id: string } } }).view.item.id;
+    expect((await s.call("POST", `/v1/owner/items/${id}/transitions`, { event: "accept" }, s.owner)).status).toBe(200);
+    await drain(s, 60_000);
+    const order = orderOf(s.sq);
+    expect([order.total, order.currency]).toEqual([6_800, "JPY"]);
+    const [pay] = await paymentsOf(s, id);
+    expect(pay).toMatchObject({ state: "open", amount: { value: 680_000, currency: "JPY" } });
   });
 
   it("takes the webhook away when disconnected, and the shelf off sale", async () => {

@@ -1,4 +1,10 @@
-import { ConnectorError, type ConnectorHttp, type ConnectorHttpResponse } from "@surfingdog/core";
+import {
+  ConnectorError,
+  type ConnectorHttp,
+  type ConnectorHttpResponse,
+  isHundredthsCurrency,
+  isWholeUnitCurrency,
+} from "@surfingdog/core";
 import { retryAfterMs } from "../http";
 
 /**
@@ -149,6 +155,30 @@ export function refusal(a: Answer, doing: string): ConnectorError {
   if (a.status === 404) return new ConnectorError("not_found", `Square could not find what it needed to ${doing}.`);
   if (a.status === 403) return new ConnectorError("refused", `Square would not let this inbox ${doing}${tail}`);
   return new ConnectorError("refused", `Square would not ${doing}${tail}`);
+}
+
+/**
+ * Square counts money in the currency's smallest unit: cents for most, whole yen or won for a currency
+ * with none (https://developer.squareup.com/docs/build-basics/common-data-types/working-with-monetary-amounts).
+ * The inbox counts in hundredths, which is exact for both: ¥12,800 is 1280000 here and 12800 in Square.
+ * A currency counted any other way (thousandths) is never converted: null.
+ */
+export function fromSquare(amount: unknown, currency: string): number | null {
+  const n = Number(amount);
+  if (typeof amount !== "number" || !Number.isInteger(n) || n < 0) return null;
+  const code = currency.toUpperCase();
+  if (isHundredthsCurrency(code)) return n;
+  if (isWholeUnitCurrency(code)) return n * 100;
+  return null;
+}
+
+/** Hundredths as Square counts them, or null when they are not (a yen amount with a fraction). */
+export function toSquare(value: number, currency: string): number | null {
+  const code = currency.toUpperCase();
+  if (!Number.isInteger(value) || value < 0) return null;
+  if (isHundredthsCurrency(code)) return value;
+  if (isWholeUnitCurrency(code)) return value % 100 === 0 ? value / 100 : null;
+  return null;
 }
 
 /** SHA-256 of a text, as lowercase hex, with Web Crypto. */

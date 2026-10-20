@@ -11,6 +11,7 @@ import {
   type OAuthFlow,
   type RunContext,
   secretField,
+  type Withheld,
 } from "@surfingdog/core";
 import { z } from "zod";
 import { verifyBase64Hmac } from "../hook-sign";
@@ -21,10 +22,12 @@ import {
   destinationsOf,
   extraFrom,
   extraOf,
+  type HookState,
   readAccount,
-  type SquareExtra,
+  type SquareVia,
+  writeLevel,
 } from "./account";
-import { answerOf, arr, obj, SQUARE_API, SQUARE_VERSION, SquareApi, type SquareEnv, str } from "./api";
+import { answerOf, arr, obj, SQUARE_API, SQUARE_VERSION, SquareApi, type SquareEnv, sha256, str } from "./api";
 import { bookingWriter, busy } from "./bookings";
 import { catalogueReader } from "./catalogue";
 import { orderFacts, ordersHandler } from "./orders";
@@ -34,9 +37,12 @@ import { orderFacts, ordersHandler } from "./orders";
  * paid at its own Square checkout. Salons, barbers, cafés, restaurants, trades and gyms that already
  * run their day on Square keep it as it is; their inbox reads it and writes into it.
  *
- * - **Busy times and bookings** (Square Appointments, on every plan): what Square would not book takes
- *   those times off what the inbox offers, and each booking the inbox confirms is written into Square,
- *   moved and cancelled with it (`bookings.ts`).
+ * - **Busy times** (Square Appointments, on every plan): what Square would not book takes those times
+ *   off what the inbox offers (`bookings.ts`).
+ * - **Bookings**: each booking the inbox confirms is written into Square, moved and cancelled with it.
+ *   Square takes them from an access token on Appointments Plus or Premium, where the token acts as
+ *   the seller, and from Sign in with Square on every plan, where the app books as a customer
+ *   (`writeLevel`). An access token on the free plan writes none, and the owner is told why (`withheld`).
  * - **The catalogue**: items and their variations, priced and counted at the chosen location
  *   (`catalogue.ts`).
  * - **Orders**: each order the inbox accepts becomes a Square order with its payment link, a pickup
@@ -45,12 +51,13 @@ import { orderFacts, ordersHandler } from "./orders";
  *   over that address and the body (`x-square-hmacsha256-signature`); each is a nudge, read back with
  *   the business's key.
  *
- * Two ways in. **An access token** the owner makes in their own Square app (Developer Console →
- * Credentials → Production), which needs nobody else's app: a personal access token works for its own
- * account only, and may make the webhook subscription (Square takes only such a token for that). A
- * Sandbox token connects in test mode. **Sign in with Square**, the code flow of an app whoever runs the
- * server registers (`SQUARE_CLIENT_ID`/`_SECRET`): "Soon" on a hosted inbox until ours exists. Square
- * keeps its webhook subscriptions for an app's own token, so a sign-in hears of changes by polling.
+ * Two ways in. **Sign in with Square**, the code flow of an app whoever runs the server registers
+ * (`SQUARE_CLIENT_ID`/`_SECRET`), offered first where it is ready: "Soon" on a hosted inbox until ours
+ * exists. Square keeps its webhook subscriptions for an app's own token, so a sign-in hears of changes
+ * by polling. **An access token** the owner makes in their own Square app (Developer Console →
+ * Credentials → Production), which needs nobody else's app: a personal access token opens the whole
+ * account it was made in, and may make the webhook subscription (Square takes only such a token for
+ * that). A Sandbox token connects in test mode.
  *
  * - https://developer.squareup.com/docs/build-basics/access-tokens
  * - https://developer.squareup.com/docs/oauth-api/create-urls-for-square-authorization
@@ -93,6 +100,8 @@ export const SQUARE_TOPICS: readonly string[] = [
 const KNOWN = new Set([...SQUARE_TOPICS, "oauth.authorization.revoked"]);
 /** A sign-in's token lasts 30 days; Square asks apps to renew it every seven days or sooner. */
 const RENEW_WHEN_LEFT_MS = 23 * 86_400_000;
+/** A webhook Square would not make or move is tried again after this, never on every sync. */
+const HOOK_RETRY_MS = 3_600_000;
 const DOCS = "https://surfingdog.ai/docs/connectors/square/";
 
 export const squareForm = z.object({
@@ -105,10 +114,10 @@ export const squareForm = z.object({
       .regex(/^[A-Za-z0-9_-]+$/, "a Square access token is letters, digits, - and _"),
     {
       label: "Access token",
-      help: "From an app of your own in Square: it works for your account only.",
+      help: "From your own Square app. It opens your Square account: this inbox only reads your business, items and team, and adds bookings and orders.",
       steps: [
         "Open the Square Developer Console with your Square login, and create an app (name it Inbox).",
-        "In the app: Credentials → Production → Production access token → Show. Copy it.",
+        "In the app, open Credentials, switch to Production, press Show beside the access token and copy it.",
       ],
       link: { href: "https://developer.squareup.com/apps", text: "Open the Square Developer Console" },
       placeholder: "EAAA…",
@@ -181,10 +190,18 @@ function apiOpener(client: OAuthClient | null): (ctx: RunContext) => Promise<Squ
 
 /* --- the webhook subscription ------------------------------------------------------------------ */
 
-/** Makes the subscription at the connection's own address: its id and the key Square signs with. */
-async function subscribe(api: SquareApi, ctx: ConnectContext, url: string): Promise<{ id: string; key: string }> {
+/**
+ * Makes the subscription at the connection's own address: its id and the key Square signs with.
+ * `idempotency` makes a retry of the same attempt the same subscription; without it, each connect is its own.
+ */
+async function subscribe(
+  api: SquareApi,
+  ctx: ConnectContext,
+  url: string,
+  idempotency: string = crypto.randomUUID(),
+): Promise<{ id: string; key: string }> {
   const made = await api.must("POST", "/v2/webhooks/subscriptions", "add the webhook", {
-    idempotency_key: crypto.randomUUID(),
+    idempotency_key: idempotency,
     subscription: {
       name: `Inbox at ${ctx.inbox.host}`.slice(0, 64),
       event_types: SQUARE_TOPICS,
@@ -227,8 +244,9 @@ function labelOf(read: AccountRead, env: SquareEnv): string {
 function connectedOf(
   read: AccountRead,
   env: SquareEnv,
+  via: SquareVia,
   secret: Record<string, string>,
-  hooks: Pick<SquareExtra, "hooks" | "subscriptionId" | "notificationUrl">,
+  hooks: HookState,
   settle?: (kept: boolean) => Promise<void>,
 ): Connected {
   return {
@@ -236,13 +254,13 @@ function connectedOf(
     // The same merchant in the Sandbox is another account.
     externalId: env === "sandbox" ? `sandbox:${read.merchantId}` : read.merchantId,
     secret,
-    extra: extraFrom(read, env, hooks) as unknown as Record<string, unknown>,
+    extra: extraFrom(read, env, via, hooks) as unknown as Record<string, unknown>,
     calendars: [],
     destinations: destinationsOf(read.services),
     defaults: { busy: [], destination: AUTO },
     // A Sandbox token takes test payments only: links for test orders only.
     mode: env === "sandbox" ? "test" : "live",
-    choices: choicesOf(read),
+    choices: choicesOf(read, via),
     ...(settle ? { settle } : {}),
   };
 }
@@ -274,6 +292,7 @@ async function connectWithToken(ctx: ConnectContext, input: Readonly<Record<stri
   return connectedOf(
     read,
     api.env,
+    "token",
     { access_token: token, ...(made ? { signature_key: made.key } : {}) },
     made
       ? { hooks: "added", subscriptionId: made.id, notificationUrl: ctx.hookUrl ?? undefined }
@@ -297,23 +316,27 @@ async function connectWithToken(ctx: ConnectContext, input: Readonly<Record<stri
 /**
  * Every few hours, and as soon as the webhook needs it: the account read again (locations, services,
  * team), and the webhook made once the inbox is live, moved with the inbox's address, put back when it
- * was removed in Square, and switched on again when Square switched it off.
+ * was removed in Square, switched on again when Square switched it off, and its key taken again when
+ * the owner made a new one in the Developer Console. One Square would not make or move is tried again
+ * an hour on (`hooksTriedAt`).
  */
 async function refresh(apiOf: (ctx: RunContext) => Promise<SquareApi>, ctx: RunContext) {
   const api = await apiOf(ctx);
   const read = await readAccount(api);
   const x = extraOf(ctx);
-  let hooks: Pick<SquareExtra, "hooks" | "subscriptionId" | "notificationUrl"> = {
-    hooks: x.hooks,
-    subscriptionId: x.subscriptionId,
-    notificationUrl: x.notificationUrl,
-  };
-  const keyed = !ctx.secret.refresh_token;
-  if (keyed && ctx.hookUrl && ctx.hooksLive !== false) {
+  let hooks: HookState = { hooks: x.hooks, subscriptionId: x.subscriptionId, notificationUrl: x.notificationUrl };
+  if (x.via === "token" && ctx.hookUrl && ctx.hooksLive !== false) {
+    const url = ctx.hookUrl;
     const anew = async () => {
-      const made = await subscribe(api, ctx, ctx.hookUrl as string);
+      // The same attempt is the same subscription: a retry whose answer was lost makes no second one.
+      const key = `sdi-${(await sha256(`${ctx.marker}:hook:${url}:${x.subscriptionId ?? "none"}`)).slice(0, 40)}`;
+      const made = await subscribe(api, ctx, url, key);
       await ctx.saveSecret({ ...ctx.secret, signature_key: made.key });
-      hooks = { hooks: "added", subscriptionId: made.id, notificationUrl: ctx.hookUrl ?? undefined };
+      hooks = { hooks: "added", subscriptionId: made.id, notificationUrl: url };
+      // Any other this inbox made for Square goes, now that this one is in place.
+      for (const id of await subscriptionsOf(api, ctx.inbox.origin).catch(() => [])) {
+        if (id !== made.id) await unsubscribe(api, id);
+      }
     };
     try {
       if (x.hooks !== "added" || !x.subscriptionId) {
@@ -322,36 +345,59 @@ async function refresh(apiOf: (ctx: RunContext) => Promise<SquareApi>, ctx: RunC
         const got = await api.call("GET", `/v2/webhooks/subscriptions/${encodeURIComponent(x.subscriptionId)}`);
         const s = obj(got.json.subscription);
         if (got.status === 404) await anew();
-        else if (got.status === 200 && (s.notification_url !== ctx.hookUrl || s.enabled === false)) {
-          await api.must(
-            "PUT",
-            `/v2/webhooks/subscriptions/${encodeURIComponent(x.subscriptionId)}`,
-            "move the webhook",
-            {
-              subscription: { notification_url: ctx.hookUrl, enabled: true },
-            },
-          );
-          hooks = { ...hooks, notificationUrl: ctx.hookUrl };
+        else if (got.status === 200) {
+          // A key made anew in the Developer Console: every delivery would fail its signature until taken.
+          const key = str(s.signature_key);
+          if (key && key !== ctx.secret.signature_key) await ctx.saveSecret({ ...ctx.secret, signature_key: key });
+          if (s.notification_url !== url || s.enabled === false) {
+            await api.must(
+              "PUT",
+              `/v2/webhooks/subscriptions/${encodeURIComponent(x.subscriptionId)}`,
+              "move the webhook",
+              { subscription: { notification_url: url, enabled: true } },
+            );
+            hooks = { ...hooks, notificationUrl: url };
+          }
         }
       }
     } catch (error) {
       if (!(error instanceof ConnectorError) || error.code === "auth") throw error;
+      hooks = { ...hooks, hooksTriedAt: ctx.now };
     }
   }
   return {
     account: labelOf(read, x.env),
     calendars: [],
     destinations: destinationsOf(read.services),
-    choices: choicesOf(read),
-    extra: extraFrom(read, x.env, hooks) as unknown as Record<string, unknown>,
+    choices: choicesOf(read, x.via),
+    extra: extraFrom(read, x.env, x.via, hooks) as unknown as Record<string, unknown>,
   };
 }
 
-/** Read again now: the webhook is still to make (the inbox went live), or the inbox moved to another address. */
+/**
+ * Read again now: the webhook is still to make (the inbox went live), or the inbox moved to another
+ * address. Not again within the hour when Square would not, the last time.
+ */
 function stale(ctx: RunContext): boolean {
-  if (ctx.secret.refresh_token || !ctx.hookUrl || ctx.hooksLive === false) return false;
   const x = extraOf(ctx);
+  if (x.via !== "token" || !ctx.hookUrl || ctx.hooksLive === false) return false;
+  if (x.hooksTriedAt !== undefined && ctx.now - x.hooksTriedAt < HOOK_RETRY_MS) return false;
   return x.hooks !== "added" || x.notificationUrl !== ctx.hookUrl;
+}
+
+/** What Square cannot do for this account now, a line each: bookings, on a plan or way in that takes none. */
+function withheldOf(extra: Readonly<Record<string, unknown>>, signIn: boolean): Withheld {
+  const x = extraOf({ extra });
+  if (!x.booking.enabled) {
+    const off = "Square Appointments is off for this account.";
+    return { busy_times: off, write_bookings: off };
+  }
+  if (writeLevel(x) !== null) return {};
+  return {
+    write_bookings: signIn
+      ? "On Square Appointments Free, Square takes bookings through Sign in with Square only: connect again that way to add them. Busy times still come from Square."
+      : "Square adds bookings from an access token on Appointments Plus or Premium only. Busy times still come from Square.",
+  };
 }
 
 /* --- webhooks ---------------------------------------------------------------------------------- */
@@ -479,6 +525,7 @@ function oauthFlow(client: OAuthClient): OAuthFlow {
       return connectedOf(
         read,
         "production",
+        "signin",
         {
           access_token: t.access,
           ...(t.refresh ? { refresh_token: t.refresh } : {}),
@@ -538,7 +585,9 @@ export function squareConnector(
       },
     ],
     disconnectNote:
-      "An access token you pasted stays in your app in the Square Developer Console until you delete that app there.",
+      "If you pasted an access token, delete your Inbox app in the Square Developer Console to switch it off.",
+    bookingsNote: "Square texts its booking messages to your location's phone, never to your customer.",
+    withheld: ({ extra }) => withheldOf(extra, app !== null),
     connect: connectWithToken,
     ...(app ? { oauth: oauthFlow(app) } : {}),
     refresh: (ctx) => refresh(apiOf, ctx),

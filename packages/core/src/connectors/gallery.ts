@@ -216,8 +216,9 @@ export const GALLERY: readonly CardSpec[] = [
     group: "shops",
     industries: ["salons", "cafes", "restaurants", "trades", "gyms", "shops"],
     ways: [
-      { kind: "square", preset: null, label: "Access token" },
+      // Sign in first where it is ready (one press); the owner's own access token until then.
       { kind: "square", preset: "oauth", label: "Sign in with Square" },
+      { kind: "square", preset: null, label: "Access token" },
     ],
   },
 ];

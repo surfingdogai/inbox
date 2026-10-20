@@ -1,6 +1,6 @@
-import { type CatalogueProduct, type CatalogueReader, isHundredthsCurrency, type RunContext } from "@surfingdog/core";
+import type { CatalogueProduct, CatalogueReader, RunContext } from "@surfingdog/core";
 import { isAt, locationOf, presenceOf } from "./account";
-import { arr, iso, obj, type SquareApi, str } from "./api";
+import { arr, fromSquare, iso, obj, type SquareApi, str } from "./api";
 
 /**
  * Square's items into the inbox's catalogue (ADR-026 §3, ADR-029): each variation of an item is one
@@ -8,8 +8,9 @@ import { arr, iso, obj, type SquareApi, str } from "./api";
  * one), in stock as Square counts it there, on sale while it is sold there and not archived, sold out
  * or hidden from Square Online. Services are bookings, not products, and are left out.
  *
- * A full pass reads every item (`SearchCatalogObjects`); a pass of what changed reads the items
- * changed since (`begin_time`, deleted ones too), then the stock counts that changed since
+ * A full pass reads every item (`SearchCatalogObjects`); a pass of what changed reads the items and
+ * the variations changed since (`begin_time`, deleted ones too, each variation with its item), so a
+ * variation taken off an item comes off sale within minutes; then the stock counts that changed since
  * (`updated_after`), whose variations are read back by id: a count that changes never changes the
  * catalogue's own version.
  *
@@ -17,13 +18,18 @@ import { arr, iso, obj, type SquareApi, str } from "./api";
  * - https://developer.squareup.com/reference/square/catalog-api/batch-retrieve-catalog-objects
  * - https://developer.squareup.com/reference/square/inventory-api/batch-retrieve-inventory-counts
  *
- * Prices are Square's in the currency's smallest unit, which is the inbox's hundredths only for a
- * currency counted in hundredths. Any other (yen, won) is never converted by a guessed exponent: such
- * a product comes in with no price, and is kept off sale.
+ * Prices are Square's in the currency's smallest unit, kept here in hundredths (`fromSquare`): exact
+ * for a currency counted in hundredths and for one with no minor unit (¥12,800 is 1280000). One counted
+ * in thousandths comes in with no price, and is kept off sale.
  */
 
-/** Items asked for in a page. */
-const ITEMS_PER_PAGE = 100;
+/** Items asked for in a page: fifty, each with every variation, its descriptions and its prices at each location. */
+const ITEMS_PER_PAGE = 50;
+/**
+ * A page of items with many variations (sizes and colours) or many locations can pass the client's
+ * usual 2 MB: read up to 8 MB, so a large catalogue never stops on one page.
+ */
+const PAGE_BYTES = 8 * 1024 * 1024;
 /** Product types an agent can order; services, gift cards, donations and events are not. */
 const ORDERABLE = new Set(["REGULAR", "FOOD_AND_BEV", "DIGITAL"]);
 /** Square Online's own "not here" (`ecom_visibility`): the seller chose not to sell it online. */
@@ -39,17 +45,40 @@ export function catalogueReader(apiOf: (ctx: RunContext) => Promise<SquareApi>):
       const phase = p.cursor?.startsWith("i:") ? "inventory" : "items";
       if (phase === "items") {
         const at = p.cursor?.startsWith("c:") ? p.cursor.slice(2) : null;
-        const read = await api.must("POST", "/v2/catalog/search", "read your items", {
-          object_types: ["ITEM"],
-          limit: ITEMS_PER_PAGE,
-          ...(p.since !== null ? { begin_time: iso(p.since), include_deleted_objects: true } : {}),
-          ...(at ? { cursor: at } : {}),
-        });
-        const items = arr(read.objects).filter((o) => o.type === "ITEM");
-        const pairs = items.flatMap((item) =>
-          arr(obj(item.item_data).variations).map((variation) => ({ item, variation })),
+        const changed = p.since !== null;
+        const read = await api.must(
+          "POST",
+          "/v2/catalog/search",
+          "read your items",
+          {
+            // What changed: variations too, each with its item, since one taken off an item leaves no trace on it.
+            object_types: changed ? ["ITEM", "ITEM_VARIATION"] : ["ITEM"],
+            limit: ITEMS_PER_PAGE,
+            ...(changed
+              ? { begin_time: iso(p.since ?? 0), include_deleted_objects: true, include_related_objects: true }
+              : {}),
+            ...(at ? { cursor: at } : {}),
+          },
+          { maxBytes: PAGE_BYTES },
         );
-        const products = await productsOf(api, pairs, location);
+        const objects = arr(read.objects);
+        const items = objects.filter((o) => o.type === "ITEM");
+        const parents = new Map(
+          [...arr(read.related_objects), ...items]
+            .filter((o) => o.type === "ITEM" && typeof o.id === "string")
+            .map((o) => [String(o.id), o] as const),
+        );
+        // One product per variation: one read on its own (deleted, say) is newer than its item's list.
+        const byId = new Map<string, { item: Obj; variation: Obj }>();
+        for (const item of items) {
+          for (const variation of arr(obj(item.item_data).variations))
+            byId.set(String(variation.id), { item, variation });
+        }
+        for (const variation of objects.filter((o) => o.type === "ITEM_VARIATION")) {
+          const item = parents.get(String(obj(variation.item_variation_data).item_id));
+          if (item) byId.set(String(variation.id), { item, variation });
+        }
+        const products = await productsOf(api, [...byId.values()], location);
         const next = str(read.cursor);
         // A pass of what changed goes on to the stock counts that changed.
         return { products, cursor: next ? `c:${next}` : p.since !== null ? "i:" : null };
@@ -72,10 +101,13 @@ export function catalogueReader(apiOf: (ctx: RunContext) => Promise<SquareApi>):
       ];
       const next = str(counts.cursor);
       if (ids.length === 0) return { products: [], cursor: next ? `i:${next}` : null };
-      const got = await api.must("POST", "/v2/catalog/batch-retrieve", "read your items", {
-        object_ids: ids,
-        include_related_objects: true,
-      });
+      const got = await api.must(
+        "POST",
+        "/v2/catalog/batch-retrieve",
+        "read your items",
+        { object_ids: ids, include_related_objects: true },
+        { maxBytes: PAGE_BYTES },
+      );
       const items = new Map(
         [...arr(got.related_objects), ...arr(got.objects)]
           .filter((o) => o.type === "ITEM" && typeof o.id === "string")
@@ -158,9 +190,8 @@ function priceOf(pricing: unknown, money: unknown): CatalogueProduct["price"] {
   if (pricing === "VARIABLE_PRICING") return null;
   const m = obj(money);
   const currency = str(m.currency)?.toUpperCase();
-  const amount = Number(m.amount);
-  if (!currency || !Number.isInteger(amount) || amount < 0 || !isHundredthsCurrency(currency)) return null;
-  return { value: amount, currency };
+  const value = currency ? fromSquare(m.amount, currency) : null;
+  return currency && value !== null ? { value, currency } : null;
 }
 
 /** How many of each variation Square has in stock at the location (`IN_STOCK`), whole units. */

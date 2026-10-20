@@ -13,8 +13,15 @@ import { type FakePlatform, type FakeRequest, fakePlatform, json } from "../fake
  *   and deleting one: https://developer.squareup.com/docs/checkout-api/manage-checkout
  * - Fulfillments: https://developer.squareup.com/docs/orders-api/fulfillments
  * - Webhook subscriptions: https://developer.squareup.com/docs/webhooks/webhook-subscriptions-api
+ *   (RetrieveWebhookSubscription's example carries the `signature_key`)
  * - Signatures: https://developer.squareup.com/docs/webhooks/step3validate
  * - OAuth: https://developer.squareup.com/docs/oauth-api/receive-and-manage-tokens
+ * - Seller-level and buyer-level writes: https://developer.squareup.com/docs/bookings-api/what-it-is.
+ *   A personal access token opens the whole account (https://developer.squareup.com/docs/build-basics/access-tokens),
+ *   so it acts as the seller, which Square refuses on Appointments Free with a 403; a sign-in's token
+ *   books as a customer: `duration_minutes` is read-only to it, and a `seller_note` is not its to write.
+ * - Money in the currency's smallest unit, whole yen for JPY:
+ *   https://developer.squareup.com/docs/build-basics/common-data-types/working-with-monetary-amounts
  *
  * The sellers rotate the world: a salon in Toronto that charges in Canadian dollars and adds Ontario's
  * HST when asked to, a café in Melbourne, a shop in Osaka that sells in yen. Their customers' names are
@@ -63,9 +70,11 @@ export interface FakeOrder {
 
 export interface FakeSquareOptions {
   readonly seller?: "toronto" | "melbourne" | "osaka";
-  /** Square Appointments on (Free: buyer-level), on with Plus (seller-level), or off. */
+  /** Square Appointments on the free plan (no seller-level writes), on Plus (seller-level writes too), or off. */
   readonly appointments?: "free" | "plus" | "off";
   readonly locationPhone?: string | null;
+  /** One open location only, or the usual two. */
+  readonly locations?: 1 | 2;
 }
 
 export interface FakeSquare {
@@ -88,6 +97,12 @@ export interface FakeSquare {
   readonly stock: Map<string, { quantity: number; at: string }>;
   /** Times the seller is busy that no booking of the inbox explains (another booking, a break), by team member. */
   readonly blocked: { team: string; start: number; end: number }[];
+  /** A customer's cancellation window: a booking that starts before this is no longer theirs to cancel. */
+  cancelBefore: number;
+  /** Variations changed on their own (one taken off its item, say), as `SearchCatalogObjects` answers them. */
+  readonly variationChanges: Record<string, unknown>[];
+  /** Whether a payment link's answer carries its order (`related_resources`), as Square's example does. */
+  relatedOrders: boolean;
   /** Pays an order through its link, as a customer at Square's checkout. */
   pay(orderId: string, opts?: { method?: "CARD" | "WALLET" }): string;
   /** Marks the order's fulfillment as the seller does in Square (`PREPARED`, `COMPLETED`). */
@@ -135,7 +150,7 @@ const SELLERS = {
   },
 } as const;
 
-/** The salon's services: a cut, a colour and a beard trim, each taken by its own team members. */
+/** The salon's services: a cut, a colour, a beard trim and a scalp massage, each taken by its own team members. */
 function services(currency: string): Record<string, unknown>[] {
   const service = (
     id: string,
@@ -180,6 +195,10 @@ function services(currency: string): Record<string, unknown>[] {
     ]),
     service("SVCBEARD00000000", "Beard trim", [
       { id: "VARBEARDTRIM30M0", name: "Regular", minutes: 30, price: 3_000, team: ["TM_kwame"] },
+    ]),
+    // As long as a haircut: a booking named neither is no guess.
+    service("SVCSCALP00000000", "Scalp massage", [
+      { id: "VARSCALPMASSAGE0", name: "Regular", minutes: 45, price: 5_500, team: ["TM_amelie"] },
     ]),
     // A service with a cancellation fee: Square refuses those through its API.
     service("SVCBRIDAL0000000", "Bridal styling", [
@@ -351,6 +370,9 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
       ["VARARGANSHAMP250", { quantity: 7, at: "2026-10-20T05:00:00Z" }],
     ]),
     blocked: [],
+    cancelBefore: 0,
+    variationChanges: [],
+    relatedOrders: true,
     pay(orderId, payOpts = {}) {
       const order = sq.orders.get(orderId);
       if (!order) throw new Error(`no order ${orderId}`);
@@ -427,6 +449,25 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
   const base = (env: "production" | "sandbox") => (env === "sandbox" ? SANDBOX : PRODUCTION);
   const authed = (req: FakeRequest, env: "production" | "sandbox") =>
     req.headers.get("authorization") === `Bearer ${tokens[env]}`;
+  /** A personal access token acts as the seller; a sign-in's token books as a customer. */
+  const asSeller = (req: FakeRequest) =>
+    [`Bearer ${TOKEN}`, `Bearer ${SANDBOX_TOKEN}`].includes(req.headers.get("authorization") ?? "");
+  /** What Square answers a seller-level write on Appointments Free. */
+  const noSellerWrites = (req: FakeRequest) =>
+    asSeller(req) && appointments !== "plus"
+      ? json(
+          {
+            errors: [
+              {
+                category: "AUTHENTICATION_ERROR",
+                code: "FORBIDDEN",
+                detail: "Merchant subscription does not support write operations.",
+              },
+            ],
+          },
+          403,
+        )
+      : null;
   const unauthorized = () =>
     json(
       {
@@ -464,15 +505,19 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
       type: "PHYSICAL",
       ...(opts.locationPhone === null ? {} : { phone_number: opts.locationPhone ?? seller.phone }),
     },
-    {
-      id: seller.other.id,
-      name: seller.other.name,
-      status: "ACTIVE",
-      merchant_id: seller.merchant,
-      currency: seller.other.currency,
-      business_name: seller.name,
-      type: "PHYSICAL",
-    },
+    ...(opts.locations === 1
+      ? []
+      : [
+          {
+            id: seller.other.id,
+            name: seller.other.name,
+            status: "ACTIVE",
+            merchant_id: seller.merchant,
+            currency: seller.other.currency,
+            business_name: seller.name,
+            type: "PHYSICAL",
+          },
+        ]),
     { id: "LCLOSED000000000", name: "Closed pop-up", status: "INACTIVE", currency: seller.currency },
   ];
 
@@ -485,7 +530,7 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
     location_id: b.location,
     customer_id: b.customer,
     ...(b.customerNote !== undefined ? { customer_note: b.customerNote } : {}),
-    ...(appointments === "plus" && b.sellerNote !== undefined ? { seller_note: b.sellerNote } : {}),
+    ...(b.sellerNote !== undefined ? { seller_note: b.sellerNote } : {}),
     start_at: new Date(b.start).toISOString().replace(".000Z", "Z"),
     all_day: false,
     appointment_segments: [
@@ -680,6 +725,8 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
               }[];
             };
           };
+          const refused = noSellerWrites(req);
+          if (refused) return refused;
           return once(`book:${String(body.idempotency_key)}`, () => {
             const bk = body.booking;
             const customer = sq.customers.get(bk.customer_id);
@@ -687,7 +734,7 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
             const seg = bk.appointment_segments[0];
             const v = seg ? variationOf(seg.service_variation_id) : null;
             if (!seg || !v) return bad("Invalid service variation.");
-            if (appointments !== "plus" && seg.duration_minutes !== undefined) {
+            if (!asSeller(req) && seg.duration_minutes !== undefined) {
               return bad("duration_minutes is read-only with buyer-level permissions.", "duration_minutes");
             }
             const start = Date.parse(bk.start_at);
@@ -706,7 +753,8 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
               service: seg.service_variation_id,
               team: seg.team_member_id,
               ...(bk.customer_note !== undefined ? { customerNote: bk.customer_note } : {}),
-              ...(bk.seller_note !== undefined ? { sellerNote: bk.seller_note } : {}),
+              // Square reads a seller's note from the seller only.
+              ...(bk.seller_note !== undefined && asSeller(req) ? { sellerNote: bk.seller_note } : {}),
             };
             sq.bookings.set(made.id, made);
             return json({ booking: bookingView(made), errors: [] });
@@ -725,18 +773,17 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         "PUT",
         `${b}/v2/bookings/:id`,
         guard((req) => {
+          const refused = noSellerWrites(req);
+          if (refused) return refused;
           const bk = sq.bookings.get(req.params.id ?? "");
           if (!bk) return notFound();
           const body = JSON.parse(req.body) as { booking: { version?: number; start_at?: string } };
           if (body.booking.version !== bk.version)
             return json({ errors: [{ code: "CONFLICT", detail: "Stale version." }] }, 409);
-          if (body.booking.start_at) {
-            const start = Date.parse(body.booking.start_at);
-            if (busyFor(bk.team, start, start + bk.minutes * 60_000, bk.id)) {
-              return bad("The time slot is not available.", "start_at");
-            }
-            bk.start = start;
-          }
+          // Square does not check that the new time is free: an app is asked to search availability
+          // first (https://developer.squareup.com/docs/bookings-api/use-the-api), and a seller may
+          // double-book. A move onto a busy team member goes through here.
+          if (body.booking.start_at) bk.start = Date.parse(body.booking.start_at);
           bk.version++;
           return json({ booking: bookingView(bk), errors: [] });
         }),
@@ -747,12 +794,14 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         guard((req) => {
           const bk = sq.bookings.get(req.params.id ?? "");
           if (!bk) return notFound();
+          const refused = noSellerWrites(req);
+          if (refused) return refused;
           const body = JSON.parse(req.body) as { booking_version?: number };
           if (body.booking_version !== bk.version) return bad("The booking version does not match.");
-          if (bk.start < Date.now() && appointments !== "plus") {
+          if (!asSeller(req) && (bk.start < Date.now() || bk.start < sq.cancelBefore)) {
             return bad("The cancellation period for this booking has ended.", "base");
           }
-          bk.status = appointments === "plus" ? "CANCELLED_BY_SELLER" : "CANCELLED_BY_CUSTOMER";
+          bk.status = asSeller(req) ? "CANCELLED_BY_SELLER" : "CANCELLED_BY_CUSTOMER";
           bk.version++;
           return json({ booking: bookingView(bk), errors: [] });
         }),
@@ -778,14 +827,32 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         "POST",
         `${b}/v2/catalog/search`,
         guard((req) => {
-          const body = JSON.parse(req.body) as { begin_time?: string; cursor?: string; limit?: number };
+          const body = JSON.parse(req.body) as {
+            object_types?: string[];
+            begin_time?: string;
+            cursor?: string;
+            limit?: number;
+            include_related_objects?: boolean;
+          };
           const since = body.begin_time ? Date.parse(body.begin_time) : Number.NEGATIVE_INFINITY;
-          const list = sq.items.filter((i) => Date.parse(String(i.updated_at)) >= since);
+          const types = body.object_types ?? ["ITEM"];
+          const list = [
+            ...(types.includes("ITEM") ? sq.items : []),
+            ...(types.includes("ITEM_VARIATION") ? sq.variationChanges : []),
+          ].filter((o) => Date.parse(String(o.updated_at)) >= since);
           const start = Number(body.cursor ?? 0);
           const size = 3;
           const page = list.slice(start, start + size);
+          // A variation's item, when asked for what the page refers to.
+          const related = body.include_related_objects
+            ? page
+                .filter((o) => o.type === "ITEM_VARIATION")
+                .map((v) => sq.items.find((i) => i.id === (v.item_variation_data as { item_id?: string }).item_id))
+                .filter((i): i is Record<string, unknown> => i !== undefined && !page.includes(i))
+            : [];
           return json({
             objects: page,
+            ...(related.length > 0 ? { related_objects: related } : {}),
             ...(start + size < list.length ? { cursor: String(start + size) } : {}),
             latest_time: nowIso(),
           });
@@ -912,7 +979,7 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
             sq.links.set(linkId, { id: linkId, orderId, url, request: body as unknown as Record<string, unknown> });
             return json({
               payment_link: { id: linkId, version: 1, description: "", order_id: orderId, url, created_at: nowIso() },
-              related_resources: { orders: [orderView(order)] },
+              ...(sq.relatedOrders ? { related_resources: { orders: [orderView(order)] } } : {}),
             });
           });
         }),
@@ -923,8 +990,9 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         guard((req) => {
           const link = sq.links.get(req.params.id ?? "");
           if (!link) return notFound();
+          // "Sets the corresponding order state to CANCELED and deletes the checkout link": paid or not
+          // (https://developer.squareup.com/docs/checkout-api/manage-checkout#delete-a-payment-link).
           const order = sq.orders.get(link.orderId);
-          if (order && order.tenders.length > 0) return bad("A paid order cannot be canceled.");
           sq.links.delete(link.id);
           if (order) {
             order.state = "CANCELED";
@@ -976,18 +1044,20 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         "POST",
         `${b}/v2/webhooks/subscriptions`,
         guard((req) => {
-          const body = JSON.parse(req.body) as { subscription: Record<string, unknown> };
-          const sid = `wbhk_${crypto.randomUUID().replaceAll("-", "")}`;
-          const subscription = {
-            id: sid,
-            ...body.subscription,
-            enabled: true,
-            signature_key: btoa(crypto.randomUUID()).slice(0, 22),
-            created_at: nowIso(),
-            updated_at: nowIso(),
-          };
-          sq.subscriptions.set(sid, subscription);
-          return json({ subscription });
+          const body = JSON.parse(req.body) as { idempotency_key?: string; subscription: Record<string, unknown> };
+          return once(`sub:${String(body.idempotency_key)}`, () => {
+            const sid = `wbhk_${crypto.randomUUID().replaceAll("-", "")}`;
+            const subscription = {
+              id: sid,
+              ...body.subscription,
+              enabled: true,
+              signature_key: btoa(crypto.randomUUID()).slice(0, 22),
+              created_at: nowIso(),
+              updated_at: nowIso(),
+            };
+            sq.subscriptions.set(sid, subscription);
+            return json({ subscription });
+          });
         }),
       )
       .on(
@@ -995,9 +1065,7 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
         `${b}/v2/webhooks/subscriptions/:id`,
         guard((req) => {
           const s = sq.subscriptions.get(req.params.id ?? "");
-          if (!s) return notFound();
-          const { signature_key: _k, ...shown } = s;
-          return json({ subscription: shown });
+          return s ? json({ subscription: s }) : notFound();
         }),
       )
       .on(

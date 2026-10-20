@@ -46,14 +46,26 @@ export interface LocationInfo {
 export interface BookingInfo {
   /** Square Appointments is on, so bookings can be read and made at all. */
   readonly enabled: boolean;
-  /** Appointments Plus or Premium: the API acts as the seller, and Square sends the client no message. */
+  /**
+   * Appointments Plus or Premium (`support_seller_level_writes`): Square takes bookings from an app
+   * that acts as the seller. On the free plan it takes them only from one that books as a customer.
+   */
   readonly sellerLevel: boolean;
-  /** Bookings are accepted as they come; otherwise each waits for the seller in Square. */
-  readonly acceptAll: boolean;
 }
+
+/**
+ * How the connection came in: the owner's own access token, or Sign in with Square. Square decides from
+ * the token's permissions whether an app acts as the seller or books as a customer
+ * (https://developer.squareup.com/docs/bookings-api/what-it-is): a personal access token opens the
+ * whole account (https://developer.squareup.com/docs/build-basics/access-tokens), so it always acts as
+ * the seller; a sign-in asks for no seller-level permission (`SQUARE_SCOPES`), so it always books as a
+ * customer.
+ */
+export type SquareVia = "token" | "signin";
 
 export interface SquareExtra {
   readonly env: SquareEnv;
+  readonly via: SquareVia;
   readonly merchantId: string;
   readonly mainLocation: string | null;
   readonly locations: Readonly<Record<string, LocationInfo>>;
@@ -64,6 +76,23 @@ export interface SquareExtra {
   readonly subscriptionId?: string | undefined;
   /** The address the subscription was made for: Square signs it with the body. */
   readonly notificationUrl?: string | undefined;
+  /** When making or moving the subscription last failed: tried again an hour on, never on every sync. */
+  readonly hooksTriedAt?: number | undefined;
+}
+
+/** What the webhook's state is kept as, beside the account. */
+export type HookState = Pick<SquareExtra, "hooks" | "subscriptionId" | "notificationUrl" | "hooksTriedAt">;
+
+/**
+ * How bookings are written into Square for this connection, or null when Square takes none from it:
+ * an access token acts as the seller, which Square allows on Appointments Plus or Premium only (on the
+ * free plan it answers 403, "Merchant subscription does not support write operations"); a sign-in books
+ * as a customer, on every plan (https://developer.squareup.com/docs/bookings-api/what-it-is).
+ */
+export function writeLevel(x: Pick<SquareExtra, "via" | "booking">): "seller" | "buyer" | null {
+  if (!x.booking.enabled) return null;
+  if (x.via === "signin") return "buyer";
+  return x.booking.sellerLevel ? "seller" : null;
 }
 
 /** The destination that books the service of the same name and length as the booking. */
@@ -125,15 +154,11 @@ export async function readAccount(api: SquareApi): Promise<AccountRead> {
 /** How the seller takes bookings; off when Square Appointments is not set up (Square answers no profile). */
 async function readBooking(api: SquareApi): Promise<BookingInfo> {
   const a: Answer = await api.call("GET", "/v2/bookings/business-booking-profile");
-  const off: BookingInfo = { enabled: false, sellerLevel: false, acceptAll: true };
+  const off: BookingInfo = { enabled: false, sellerLevel: false };
   if (a.status !== 200) return off;
   const p = obj(a.json.business_booking_profile);
   if (p.booking_enabled !== true) return off;
-  return {
-    enabled: true,
-    sellerLevel: p.support_seller_level_writes === true,
-    acceptAll: p.booking_policy !== "REQUIRES_ACCEPTANCE",
-  };
+  return { enabled: true, sellerLevel: p.support_seller_level_writes === true };
 }
 
 /**
@@ -216,14 +241,16 @@ export function extraOf(ctx: Pick<RunContext, "extra">): SquareExtra {
   const e = ctx.extra as Partial<SquareExtra>;
   return {
     env: e.env === "sandbox" ? "sandbox" : "production",
+    via: e.via === "signin" ? "signin" : "token",
     merchantId: String(e.merchantId ?? ""),
     mainLocation: typeof e.mainLocation === "string" ? e.mainLocation : null,
     locations: (e.locations ?? {}) as Record<string, LocationInfo>,
-    booking: e.booking ?? { enabled: false, sellerLevel: false, acceptAll: true },
+    booking: e.booking ?? { enabled: false, sellerLevel: false },
     services: Array.isArray(e.services) ? e.services : [],
     hooks: e.hooks === "added" || e.hooks === "pending" ? e.hooks : "none",
     subscriptionId: typeof e.subscriptionId === "string" ? e.subscriptionId : undefined,
     notificationUrl: typeof e.notificationUrl === "string" ? e.notificationUrl : undefined,
+    hooksTriedAt: typeof e.hooksTriedAt === "number" ? e.hooksTriedAt : undefined,
   };
 }
 
@@ -250,49 +277,53 @@ export function servicesAt(x: SquareExtra, location: string, team: string | null
   );
 }
 
-/** The services as the owner chooses where bookings go: the matching one first, then each by name. */
+/**
+ * Where bookings go: each to the Square service of its own name and length, one by one. A single
+ * service for every booking would send a colour to the haircut, so there is nothing else to choose.
+ */
 export function destinationsOf(services: readonly ServiceInfo[]): CalendarChoice[] {
-  if (services.length === 0) return [];
-  return [
-    { id: AUTO, name: "The service of the same name", writable: true },
-    ...services.map((s) => ({
-      id: s.id,
-      name: `${s.name} · ${s.minutes} min`.slice(0, 120),
-      writable: true,
-      lengths: [s.minutes],
-    })),
-  ];
+  return services.length === 0 ? [] : [{ id: AUTO, name: "Matched by name", writable: true }];
 }
 
-/** The choosers drawn once connected: the location, and who takes bookings when Square books. */
-export function choicesOf(read: AccountRead): ConnectionChoice[] {
-  const out: ConnectionChoice[] = [
-    {
+/**
+ * The choosers drawn once connected. The location, where there is more than one to choose: it sets
+ * the prices, the stock, where orders are paid and where bookings go. A location Square cannot book
+ * for yet, for want of its phone number, says so in its name, before a booking is refused for it.
+ * Who takes bookings, when Square books: a choice about bookings only.
+ */
+export function choicesOf(read: AccountRead, via: SquareVia): ConnectionChoice[] {
+  const books = writeLevel({ via, booking: read.booking }) !== null;
+  const locations = Object.entries(read.locations);
+  const phoneless = books && locations.some(([, l]) => !l.phone);
+  const out: ConnectionChoice[] = [];
+  if (locations.length > 1 || phoneless) {
+    out.push({
       key: "location",
       label: "Location",
-      options: Object.entries(read.locations).map(([id, l]) => ({ id, name: l.name })),
+      options: locations.map(([id, l]) => ({
+        id,
+        name: books && !l.phone ? `${l.name} · add a phone in Square to take bookings` : l.name,
+      })),
       value: read.mainLocation,
-    },
-  ];
+    });
+  }
   if (read.booking.enabled && read.team.length > 0) {
     out.push({
       key: "team",
       label: "Bookings go to",
       options: [{ id: ANYONE, name: "Whoever is free" }, ...read.team],
       value: ANYONE,
+      bookings: true,
     });
   }
   return out;
 }
 
 /** What is kept of the account, beside the webhook's state. */
-export function extraFrom(
-  read: AccountRead,
-  env: SquareEnv,
-  hooks: Pick<SquareExtra, "hooks" | "subscriptionId" | "notificationUrl">,
-): SquareExtra {
+export function extraFrom(read: AccountRead, env: SquareEnv, via: SquareVia, hooks: HookState): SquareExtra {
   return {
     env,
+    via,
     merchantId: read.merchantId,
     mainLocation: read.mainLocation,
     locations: read.locations,
@@ -301,5 +332,6 @@ export function extraFrom(
     hooks: hooks.hooks,
     ...(hooks.subscriptionId ? { subscriptionId: hooks.subscriptionId } : {}),
     ...(hooks.notificationUrl ? { notificationUrl: hooks.notificationUrl } : {}),
+    ...(hooks.hooksTriedAt ? { hooksTriedAt: hooks.hooksTriedAt } : {}),
   };
 }

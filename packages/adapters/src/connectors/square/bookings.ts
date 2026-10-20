@@ -9,26 +9,27 @@ import {
   type RunContext,
   subtractIntervals,
 } from "@surfingdog/core";
-import { AUTO, extraOf, locationOf, type ServiceInfo, servicesAt, teamOf } from "./account";
+import { extraOf, locationOf, type ServiceInfo, servicesAt, teamOf, writeLevel } from "./account";
 import { arr, iso, msOf, obj, refusal, type SquareApi, sha256, str, why } from "./api";
 
 /**
  * Square Appointments for the inbox (ADR-029): busy times from what Square says is free, and the
  * bookings the inbox confirms written into Square.
  *
- * **Busy times.** On the free plan, Square shows an app only the bookings the app made, so the times
- * Square would not take are read from its own answer to "when is this service free"
- * (`SearchAvailability`): every time no available slot covers is busy. The answer already leaves out
- * other bookings, the hours, time off and each team member's own schedule. It is read for the service
- * bookings go to (the shortest one when the inbox matches by service), for the team member the owner
+ * **Busy times.** Square's own answer to "when is this service free" (`SearchAvailability`) already
+ * leaves out every booking, the hours, time off and each team member's own schedule, whichever way the
+ * connection came in, so the times Square would not take are every time no available slot covers. It
+ * is read for one service Square books at the location (`probeOf`), for the team member the owner
  * chose or whoever is free, 31 days at a time as Square asks.
  *
- * **Bookings.** A booking is an availability plus a customer: the team member is the one Square says
- * is free at that time. Square texts and emails the customer of a booking it is given through its API,
- * and asks every customer for a phone number. So the customer of every booking the inbox writes is one
- * customer record per location that stands for the inbox, with the location's own phone number and no
- * email: Square's messages reach the business, and the inbox, which has already told the customer, stays
- * the only one that does. The booking names who it is for in its note.
+ * **Bookings.** Square takes them from an access token on Appointments Plus or Premium (it acts as the
+ * seller), and from Sign in with Square on every plan (it books as a customer); an access token on the
+ * free plan writes none (`writeLevel`). A booking is an availability plus a customer: the team member
+ * is the one Square says is free at that time. Square texts and emails the customer of a booking it is
+ * given through its API, and asks every customer for a phone number. So each customer of the inbox has
+ * a customer record of its own in Square, under their name and the location's own phone number, with
+ * no email: the salon's calendar shows who is coming, Square's messages reach the business, and the
+ * inbox, which has already told the customer, stays the only one that does.
  *
  * - https://developer.squareup.com/docs/bookings-api/what-it-is
  * - https://developer.squareup.com/docs/bookings-api/use-the-api
@@ -94,11 +95,14 @@ async function availability(
   return out;
 }
 
-/** The service busy times are read for: the one bookings go to, or the shortest one Square books here. */
-function probeOf(ctx: RunContext, services: readonly ServiceInfo[]): ServiceInfo | null {
-  const chosen = ctx.destination && ctx.destination !== AUTO ? services.find((s) => s.id === ctx.destination) : null;
-  if (chosen) return chosen;
-  return [...services].sort((a, b) => a.minutes - b.minutes)[0] ?? null;
+/**
+ * The service busy times are read for. For one team member, the shortest they take, which fits in any
+ * gap of theirs. For whoever is free, the one most of the team take (anyone, when Square does not say),
+ * the shortest of those: a service only one person takes would show their day as everyone's.
+ */
+function probeOf(services: readonly ServiceInfo[], team: string | null): ServiceInfo | null {
+  const reach = (s: ServiceInfo) => (team !== null || s.team === null ? Number.POSITIVE_INFINITY : s.team.length);
+  return [...services].sort((a, b) => reach(b) - reach(a) || a.minutes - b.minutes)[0] ?? null;
 }
 
 /** Busy times: whatever Square would not book, from now to the end of the window (or as far as was read). */
@@ -108,7 +112,7 @@ export async function busy(apiOf: Api, ctx: RunContext, window: Interval): Promi
   if (!x.booking.enabled) return [];
   const location = locationOf(ctx);
   const team = teamOf(ctx);
-  const probe = probeOf(ctx, servicesAt(x, location, team));
+  const probe = probeOf(servicesAt(x, location, team), team);
   if (!probe) return [];
   const api = await apiOf(ctx);
   // What is past is no time anyone books.
@@ -141,26 +145,9 @@ function complement(merged: readonly Interval[], window: Interval): Interval[] {
   return out;
 }
 
-/** The Square service a booking is written on: the one the owner chose, or the one of the same name and length. */
+/** The Square service a booking is written on: the one of the same name and length, never a guess. */
 function serviceFor(ctx: RunContext, booking: OutboundBooking, location: string, team: string | null): ServiceInfo {
-  const x = extraOf(ctx);
-  const here = servicesAt(x, location, team);
-  if (ctx.destination && ctx.destination !== AUTO) {
-    const chosen = here.find((s) => s.id === ctx.destination);
-    if (!chosen) {
-      throw new ConnectorError(
-        "refused",
-        "The Square service chosen for bookings is not booked at this location any more. Choose another here.",
-      );
-    }
-    if (chosen.minutes !== booking.durationMin) {
-      throw new ConnectorError(
-        "refused",
-        `${chosen.name} is ${chosen.minutes} minutes in Square, and this booking is ${booking.durationMin}. Choose another service here.`,
-      );
-    }
-    return chosen;
-  }
+  const here = servicesAt(extraOf(ctx), location, team);
   const long = here.filter((s) => s.minutes === booking.durationMin);
   const name = booking.serviceName.trim().toLowerCase();
   const named =
@@ -170,16 +157,16 @@ function serviceFor(ctx: RunContext, booking: OutboundBooking, location: string,
   if (long.length === 0) {
     throw new ConnectorError(
       "refused",
-      `No Square service here is ${booking.durationMin} minutes long. Add one in Square, or choose one here.`,
+      `No Square service here is ${booking.durationMin} minutes long. Add one in Square.`,
     );
   }
   throw new ConnectorError(
     "refused",
-    `Several Square services are ${booking.durationMin} minutes long. Choose one here, or name ${booking.serviceName} the same in both.`,
+    `Several Square services are ${booking.durationMin} minutes long. In Square, name one ${booking.serviceName}, as it is here.`,
   );
 }
 
-/** Who Square says is free for the service at exactly this time: the team member to book. */
+/** Who Square says is free for the service at exactly this time (the given team member, or anyone). */
 async function slotAt(
   api: SquareApi,
   q: { location: string; service: ServiceInfo; team: string | null; start: number },
@@ -191,7 +178,10 @@ async function slotAt(
     start: q.start - DAY / 2,
     end: q.start + DAY / 2,
   });
-  return slots.find((s) => s.start === q.start && s.service === q.service.id) ?? null;
+  return (
+    slots.find((s) => s.start === q.start && s.service === q.service.id && (q.team === null || s.team === q.team)) ??
+    null
+  );
 }
 
 /** The note on a booking: who it is for and where it is in the inbox, never the customer's contact details. */
@@ -199,13 +189,27 @@ function noteOf(booking: OutboundBooking): string {
   return `${booking.title}\n${booking.description}`.slice(0, 4_000);
 }
 
+/** The name a booking's customer record carries: the customer's, whole (names are not split by guess). */
+function nameOf(booking: OutboundBooking): string | null {
+  const n = booking.customerName?.trim();
+  return n ? n.slice(0, 300) : null;
+}
+
 /**
- * The customer record that stands for the inbox at a location: found by a reference only this inbox can
- * make, and made when `make` says so, with the location's own phone number and no email.
+ * The customer record of a booking's customer at a location: found by a reference only this inbox can
+ * make, of the customer's name, and made when `make` says so, with that name, the location's own phone
+ * number and no email. A customer who was erased is one record, "Inbox booking", for all of them.
  */
-async function holderOf(api: SquareApi, ctx: RunContext, location: string, make: boolean): Promise<string | null> {
-  const reference = `inbox-${(await sha256(`${ctx.marker}:holder:${location}`)).slice(0, 24)}`;
-  const found = await api.must("POST", "/v2/customers/search", "look up the inbox's bookings", {
+async function customerOf(
+  api: SquareApi,
+  ctx: RunContext,
+  booking: OutboundBooking,
+  location: string,
+  make: boolean,
+): Promise<string | null> {
+  const name = nameOf(booking);
+  const reference = `inbox-${(await sha256(`${ctx.marker}:customer:${location}:${name?.toLowerCase() ?? ""}`)).slice(0, 24)}`;
+  const found = await api.must("POST", "/v2/customers/search", "look up the booking's customer", {
     query: { filter: { reference_id: { exact: reference } } },
     limit: 1,
   });
@@ -215,17 +219,16 @@ async function holderOf(api: SquareApi, ctx: RunContext, location: string, make:
   if (!phone) {
     throw new ConnectorError(
       "refused",
-      "Square needs a phone number on every booking. Add your phone number to this location in Square (your Square Dashboard, under Locations): this inbox puts it on the bookings it makes, so Square's texts reach you, never your customer.",
+      "Square needs a phone number for bookings. Add your business's number to this location in Square (Dashboard → Locations), then confirm again.",
     );
   }
-  const made = await api.must("POST", "/v2/customers", "keep the inbox's bookings together", {
-    idempotency_key: reference,
-    given_name: "Inbox",
-    family_name: "bookings",
-    company_name: ctx.inbox.name.slice(0, 100),
+  const made = await api.must("POST", "/v2/customers", "add the booking's customer", {
+    // A day's retries make one record; one deleted in Square is made again the next day.
+    idempotency_key: `${reference}:${Math.floor(ctx.now / DAY)}`,
+    given_name: name ?? "Inbox booking",
     phone_number: phone,
     reference_id: reference,
-    note: "Holds the bookings your own inbox makes, under your own phone number, so Square's texts about them reach you and not your customer. Each booking's note says who it is for.",
+    note: "Made by your inbox for its bookings, under your location's own phone number, so Square's texts about them reach you and not your customer.",
   });
   const madeId = str(obj(made.customer).id);
   if (!madeId) throw new ConnectorError("bad_response", "Square did not say which customer record it made.");
@@ -245,6 +248,18 @@ async function keyOf(ctx: RunContext, ...parts: readonly (string | number)[]): P
   return `sdi-${(await sha256([ctx.marker, ...parts].join(":"))).slice(0, 40)}`;
 }
 
+/** How bookings are written for this connection; never called when Square takes none (the base withholds it). */
+function levelOf(ctx: RunContext): "seller" | "buyer" {
+  const level = writeLevel(extraOf(ctx));
+  if (!level) {
+    throw new ConnectorError(
+      "refused",
+      "Square adds bookings from an access token on Appointments Plus or Premium only. Busy times still come from Square.",
+    );
+  }
+  return level;
+}
+
 export function bookingWriter(apiOf: Api): BookingWriter {
   const linkOf = (b: Record<string, unknown>, service: string, booking: OutboundBooking): LinkState => {
     const id = str(b.id);
@@ -252,19 +267,17 @@ export function bookingWriter(apiOf: Api): BookingWriter {
     return { externalId: id, etag: null, calendar: service, start: booking.start, end: booking.end };
   };
 
-  const cancel = async (api: SquareApi, ctx: RunContext, id: string): Promise<void> => {
+  /** Cancels a booking: null when it is gone, or was gone already; Square's words when it would not. */
+  const cancel = async (api: SquareApi, ctx: RunContext, id: string): Promise<string | null> => {
     const now = await bookingOf(api, id);
-    if (!now || CANCELLED.has(String(now.status))) return;
+    if (!now || CANCELLED.has(String(now.status))) return null;
     const a = await api.call("POST", `/v2/bookings/${encodeURIComponent(id)}/cancel`, {
       idempotency_key: await keyOf(ctx, "cancel", id, Number(now.version ?? 0)),
       booking_version: Number(now.version ?? 0),
     });
-    if (a.status === 200 || a.status === 404) return;
-    const detail = why(a.errors);
-    throw new ConnectorError(
-      "refused",
-      `Square would not cancel it${detail ? `: ${detail.replace(/\.$/, "")}` : ""}. Cancel it in Square.`,
-    );
+    if (a.status === 200 || a.status === 404) return null;
+    if (a.status === 403) throw refusal(a, "cancel bookings");
+    return why(a.errors).replace(/\.$/, "") || "Square said no";
   };
 
   const create = async (
@@ -273,13 +286,13 @@ export function bookingWriter(apiOf: Api): BookingWriter {
     booking: OutboundBooking,
     replacing: string | null = null,
   ): Promise<LinkState> => {
+    const seller = levelOf(ctx) === "seller";
     const location = locationOf(ctx);
     const team = teamOf(ctx);
     const service = serviceFor(ctx, booking, location, team);
     const slot = await slotAt(api, { location, service, team, start: booking.start });
     if (!slot) throw notFree(ctx, service, booking);
-    const customer = await holderOf(api, ctx, location, true);
-    const seller = extraOf(ctx).booking.sellerLevel;
+    const customer = await customerOf(api, ctx, booking, location, true);
     const a = await api.call("POST", "/v2/bookings", {
       // Of the booking it replaces too: a booking moved back to a time it once had is a new one.
       idempotency_key: await keyOf(ctx, "booking", booking.itemId, booking.start, service.id, replacing ?? "first"),
@@ -287,14 +300,15 @@ export function bookingWriter(apiOf: Api): BookingWriter {
         start_at: iso(booking.start),
         location_id: location,
         customer_id: customer,
-        // A note the seller sees and the client does not, where Square lets the inbox write one.
+        // As the seller, a note the client never sees; as a customer, the customer's own note, which
+        // goes to the business's number like the rest (Square reads `seller_note` from a seller only).
         ...(seller ? { seller_note: noteOf(booking) } : { customer_note: noteOf(booking) }),
         appointment_segments: [
           {
             service_variation_id: service.id,
             service_variation_version: slot.version || service.version,
             team_member_id: slot.team,
-            // Read-only to an app that books as a customer (buyer-level): the service's own length then.
+            // Read-only to an app that books as a customer: the service's own length then.
             ...(seller ? { duration_minutes: service.minutes } : {}),
           },
         ],
@@ -313,42 +327,53 @@ export function bookingWriter(apiOf: Api): BookingWriter {
       if (!now || CANCELLED.has(String(now.status))) return create(api, ctx, booking, link.externalId);
       if (sameTimes) return link;
       const location = locationOf(ctx);
-      const team = teamOf(ctx);
-      const service = serviceFor(ctx, booking, location, team);
+      const service = serviceFor(ctx, booking, location, teamOf(ctx));
       const segment = arr(now.appointment_segments)[0];
-      // The same service with the same team member: moved in place, and Square says whether the new
-      // time is free. Anything else is a booking of its own (an app that books as a customer cannot
-      // change a booking's service or team member): made first, so the old one goes only once it is.
-      if (str(segment?.team_member_id) && segment?.service_variation_id === service.id) {
-        const a = await api.call("PUT", `/v2/bookings/${encodeURIComponent(link.externalId)}`, {
-          idempotency_key: await keyOf(ctx, "move", link.externalId, booking.start, Number(now.version ?? 0)),
-          booking: { version: Number(now.version ?? 0), start_at: iso(booking.start) },
-        });
-        if (a.status === 200) return linkOf(obj(a.json.booking), service.id, booking);
-        if (a.status !== 400 && a.status !== 409 && a.status !== 422) throw refusal(a, "move this booking");
+      const member = str(segment?.team_member_id);
+      // The same service, and its team member free at the new time as Square says (Square does not
+      // check for an app that moves a booking): moved in place. Anything else is a booking of its own,
+      // since an app that books as a customer cannot change a booking's service or team member.
+      if (member && segment?.service_variation_id === service.id) {
+        const free = await slotAt(api, { location, service, team: member, start: booking.start });
+        if (free) {
+          const a = await api.call("PUT", `/v2/bookings/${encodeURIComponent(link.externalId)}`, {
+            idempotency_key: await keyOf(ctx, "move", link.externalId, booking.start, Number(now.version ?? 0)),
+            booking: { version: Number(now.version ?? 0), start_at: iso(booking.start) },
+          });
+          if (a.status === 200) return linkOf(obj(a.json.booking), service.id, booking);
+          if (a.status !== 400 && a.status !== 409 && a.status !== 422) throw refusal(a, "move this booking");
+        }
       }
+      // Made first, so the old one goes only once the new one is in place.
       const made = await create(api, ctx, booking, link.externalId);
-      await cancel(api, ctx, link.externalId);
-      return made;
+      const refused = await cancel(api, ctx, link.externalId);
+      if (refused === null) return made;
+      // The old one stays (its cancellation window has closed, say): the new one goes again, so one
+      // booking of the inbox never holds two times in Square. Should that fail too, the new one is
+      // kept and named, and the old one is the owner's to cancel in Square.
+      if ((await cancel(api, ctx, String(made.externalId)).catch(() => "kept")) !== null) return made;
+      throw new ConnectorError("refused", `Square would not let the old time go: ${refused}. Move it in Square.`);
     },
 
     async remove(ctx, link) {
       if (!link.externalId) return;
-      await cancel(await apiOf(ctx), ctx, link.externalId);
+      const refused = await cancel(await apiOf(ctx), ctx, link.externalId);
+      if (refused !== null)
+        throw new ConnectorError("refused", `Square would not cancel it: ${refused}. Cancel it in Square.`);
     },
 
     /**
-     * A booking this inbox made and kept no id for: one for the inbox's own customer record, at the
-     * booking's start, on a service it would be written on. A booking anyone else made is never on it.
+     * A booking this inbox made and kept no id for: one for this customer's record, at the booking's
+     * start, on a service it would be written on. A booking anyone else made is never on that record.
      */
     async find(ctx, booking) {
       const api = await apiOf(ctx);
       const location = locationOf(ctx);
-      const holder = await holderOf(api, ctx, location, false);
-      if (!holder) return null;
+      const customer = await customerOf(api, ctx, booking, location, false);
+      if (!customer) return null;
       const q = new URLSearchParams({
         location_id: location,
-        customer_id: holder,
+        customer_id: customer,
         start_at_min: iso(booking.start - 60_000),
         start_at_max: iso(booking.start + 60_000),
         limit: "50",
@@ -358,7 +383,7 @@ export function bookingWriter(apiOf: Api): BookingWriter {
       const found = arr(listed.bookings).find(
         (b) =>
           msOf(b.start_at) === booking.start &&
-          b.customer_id === holder &&
+          b.customer_id === customer &&
           !CANCELLED.has(String(b.status)) &&
           services.has(String(arr(b.appointment_segments)[0]?.service_variation_id)),
       );
