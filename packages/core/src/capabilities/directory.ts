@@ -10,6 +10,8 @@ import {
 import type { z } from "zod";
 import type { Db } from "../db";
 import type { Settings } from "../settings/schema";
+import { lodgingProfile } from "../stays/public";
+import { listProperties, readSetup } from "../stays/store";
 import { dateLocaliser, readClosures } from "./closures";
 
 /**
@@ -20,7 +22,7 @@ import { dateLocaliser, readClosures } from "./closures";
  */
 
 /** The canonical order the types are listed in. */
-const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund"];
+const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund", "stay"];
 
 /**
  * The owner's switches for what agents can do (`settings.doors`). Left out, a door follows what the
@@ -30,6 +32,7 @@ export interface DoorSwitches {
   readonly booking?: boolean | undefined;
   readonly quoteRequest?: boolean | undefined;
   readonly message?: boolean | undefined;
+  readonly stay?: boolean | undefined;
 }
 
 /** The switch for a door, by item type; undefined for a door no switch governs (order, refund). */
@@ -37,6 +40,7 @@ export function doorSwitch(doors: DoorSwitches, type: ItemType): boolean | undef
   if (type === "booking") return doors.booking;
   if (type === "quote_request") return doors.quoteRequest;
   if (type === "message") return doors.message;
+  if (type === "stay") return doors.stay;
   return undefined;
 }
 
@@ -64,7 +68,7 @@ export async function offeredItemTypes(
   elsewhere: readonly string[] = [],
   doors: DoorSwitches = {},
 ): Promise<ItemType[]> {
-  const [services, open, products] = await Promise.all([
+  const [services, open, products, rooms] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
       sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'",
@@ -72,6 +76,16 @@ export async function offeredItemTypes(
       method: "all",
     }),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", params: [], method: "all" }),
+    // A place to stay takes stays once it has a room to offer, and its registration where its area
+    // requires one (ADR-033): a rental without its number is not bookable.
+    db.client.query({
+      sql: `SELECT 1 FROM room_types r JOIN properties p ON p.id = r.property_id
+             WHERE r.active = 1 AND r.offered = 1 AND p.active = 1
+               AND NOT (json_extract(p.registration, '$.required') = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
+             LIMIT 1`,
+      params: [],
+      method: "all",
+    }),
   ]);
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
   const own = new Map(open.rows.filter((r) => r[0] !== null && r[0] !== undefined).map((r) => [String(r[0]), r[1]]));
@@ -98,6 +112,7 @@ export async function offeredItemTypes(
   const askable = doors.quoteRequest === true || services.rows.length > 0 || products.rows.length > 0;
   if (askable && doors.quoteRequest !== false) offered.add("quote_request");
   if (orderable || (bookable && priced)) offered.add("refund");
+  if (!elsewhere.includes("stay") && doors.stay !== false && rooms.rows.length > 0) offered.add("stay");
   return ITEM_TYPES.filter((t) => offered.has(t));
 }
 
@@ -144,6 +159,13 @@ export async function directoryProfile(
   if (services.length) fields.services = services;
   const payments = publishedPayments(input.payments ?? []);
   if (payments.length) fields.payments = payments;
+  // A place to stay that takes stays here (ADR-033 §6.3): its kind, how it confirms, how soon it answers.
+  const types = await offeredItemTypes(db);
+  if (types.includes("stay")) {
+    const property = (await listProperties(db, { active: true }))[0];
+    const setup = property ? await readSetup(db, property.id) : null;
+    if (setup) fields.lodging = lodgingProfile(setup);
+  }
 
   const shape = profileSchema.shape as unknown as Record<string, z.ZodType>;
   const kept: Record<string, unknown> = {};

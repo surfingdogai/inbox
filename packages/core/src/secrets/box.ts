@@ -33,7 +33,9 @@ export type SecretPurpose =
   /** A stored idempotent answer that carries a secret shown once (a signing secret, a key). */
   | "idempotent-response"
   /** A person's key and first pass from a network, held until they reach the customer (ADR-017 §2.1). */
-  | "person-secret";
+  | "person-secret"
+  /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-033 §10). */
+  | "arrival-details";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few
@@ -41,6 +43,8 @@ export type SecretPurpose =
  * so one cannot be replayed as another.
  */
 export type MacPurpose =
+  /** A stay's offer id (ADR-033 §6.1): only this inbox can make one, so an agent cannot pass off its own. */
+  | "stay-offer"
   | "receipt-subject"
   /**
    * `trm` on a receipt (ADR-017 Amendment 3): the key each agreed offer's fingerprint is bound under,

@@ -227,6 +227,12 @@ export async function diagnoseFailure(
   if (ctx.itemId && /item_offers/.test(e.message)) {
     throw new WriteError("version_conflict", "the item changed while you were writing; read it again and retry");
   }
+  // Another stay took the last room on one of these nights first (ADR-033 §4.2): judged afresh.
+  if (ctx.itemId && /night_claims/.test(e.message)) {
+    throw new WriteError("slot_taken", "those nights were taken a moment ago", {
+      details: { guard: "nights_available" },
+    });
+  }
   if (ctx.claims) {
     for (const [bucket, ordinal] of ctx.claims.claims) {
       const [row] = await db.orm

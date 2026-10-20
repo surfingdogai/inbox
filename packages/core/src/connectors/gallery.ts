@@ -226,6 +226,26 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "square", preset: "oauth", label: "Sign in with Square" },
     ],
   },
+  // A place to stay's own system (ADR-033 §8.1): each way is "Soon" until its connector is registered
+  // here, and one that needs a partner account says "Needs setup" once it is. Calendar links per room
+  // are the calendar card's own way.
+  {
+    id: "property",
+    title: "Property system",
+    line: "Rooms, rates and what's free",
+    group: "lodging",
+    industries: ["stays"],
+    building: true,
+    ways: [
+      { kind: "beds24", preset: null, label: "Beds24" },
+      { kind: "hostaway", preset: null, label: "Hostaway" },
+      { kind: "smoobu", preset: null, label: "Smoobu" },
+      { kind: "guesty", preset: null, label: "Guesty" },
+      { kind: "mews", preset: null, label: "Mews" },
+      { kind: "apaleo", preset: null, label: "apaleo" },
+      { kind: "cloudbeds", preset: null, label: "Cloudbeds" },
+    ],
+  },
 ];
 
 /** The card a connection belongs to, for its tile's state. */
@@ -239,9 +259,15 @@ export function cardOf(kind: string, preset?: string | null): string | undefined
  * appointments, one with more products than services to a shop. Orders the groups and the cards in
  * them; it never hides one.
  */
-export type Lean = "appointments" | "shop" | null;
+export type Lean = "appointments" | "shop" | "stays" | null;
 
-export function leanOf(counts: { readonly services: number; readonly products: number }): Lean {
+export function leanOf(counts: {
+  readonly services: number;
+  readonly products: number;
+  /** A place to stay's room types (ADR-033): it leans to stays, with its property system first. */
+  readonly rooms?: number | undefined;
+}): Lean {
+  if ((counts.rooms ?? 0) > 0) return "stays";
   if (counts.products > counts.services) return "shop";
   if (counts.services > 0) return "appointments";
   return null;
@@ -250,7 +276,11 @@ export function leanOf(counts: { readonly services: number; readonly products: n
 /** The groups in the order this inbox sees them: a shop sees its shop and till first. */
 export function galleryGroups(lean: Lean): GalleryGroup[] {
   const order: ConnectorGroup[] =
-    lean === "shop" ? ["shops", "payments", "calendars"] : ["calendars", "payments", "shops"];
+    lean === "stays"
+      ? ["lodging", "calendars", "payments", "shops"]
+      : lean === "shop"
+        ? ["shops", "payments", "calendars"]
+        : ["calendars", "payments", "shops"];
   return order.map((id) => ({ id, label: GROUP_LABELS[id] }));
 }
 
@@ -293,7 +323,7 @@ export function gallery(
   const lean = opts.lean ?? null;
   if (lean === null) return out;
   // Within a group, the cards this kind of business uses most first; otherwise as listed.
-  const fits = new Set<Industry>(lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS);
+  const fits = new Set<Industry>(lean === "stays" ? ["stays"] : lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS);
   const score = (c: GalleryCard) => (c.industries.includes("all") || c.industries.some((i) => fits.has(i)) ? 0 : 1);
   return out
     .map((c, i) => ({ c, i }))

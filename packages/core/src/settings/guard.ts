@@ -62,6 +62,9 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // How the business is paid, as it tells every agent (`payments`): a customer's message must never get the owner's
   // AI to declare a way to pay the business does not take.
   { path: ["payments"] },
+  // A place to stay's clocks and messages (ADR-033): when requests lapse, when stays count as stayed,
+  // and when arrival details go to a guest.
+  { path: ["stays"] },
 ];
 
 function at(doc: unknown, path: readonly string[]): unknown {

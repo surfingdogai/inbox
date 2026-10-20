@@ -527,8 +527,9 @@ const EN: Copy = {
     quote_request: "your request",
     message: "your message",
     refund: "your return",
+    stay: "your stay",
   },
-  gender: { booking: "f", order: "f", quote_request: "m", message: "f", refund: "f" },
+  gender: { booking: "f", order: "f", quote_request: "m", message: "f", refund: "f", stay: "f" },
   states: {
     requested: "is with us; we will confirm it or suggest another time",
     received: "is with us; we will get back to you soon",
@@ -558,6 +559,12 @@ const EN: Copy = {
     goods_received: "is back with us",
     rejected: "was not approved",
     refunded: "is refunded",
+    quoted: "has our quote",
+    held: "is held for you for a few minutes",
+    booking: "is being confirmed",
+    checked_in: "has begun: welcome",
+    cancelled_by_guest: "is cancelled, as you asked",
+    cancelled_by_property: "was cancelled by us",
   },
   byCustomer: { cancelled: "is cancelled, as you asked", declined: "is closed, as you asked" },
   sentence: (v) =>
@@ -1120,8 +1127,9 @@ const PT: Copy = {
     quote_request: "o seu pedido de orçamento",
     message: "a sua mensagem",
     refund: "a sua devolução",
+    stay: "a sua estadia",
   },
-  gender: { booking: "f", order: "f", quote_request: "m", message: "f", refund: "f" },
+  gender: { booking: "f", order: "f", quote_request: "m", message: "f", refund: "f", stay: "f" },
   states: {
     requested: {
       f: "está connosco; vamos confirmá-la ou sugerir outra hora",
@@ -1154,6 +1162,12 @@ const PT: Copy = {
     goods_received: "chegou até nós",
     rejected: { f: "não foi aprovada", m: "não foi aprovado" },
     refunded: { f: "foi reembolsada", m: "foi reembolsado" },
+    quoted: "tem a nossa proposta",
+    held: "está reservada para si por alguns minutos",
+    booking: "está a ser confirmada",
+    checked_in: "começou: bem-vindo",
+    cancelled_by_guest: { f: "foi cancelada, como pediu", m: "foi cancelado, como pediu" },
+    cancelled_by_property: { f: "foi cancelada por nós", m: "foi cancelado por nós" },
   },
   byCustomer: {
     cancelled: { f: "foi cancelada, como pediu", m: "foi cancelado, como pediu" },

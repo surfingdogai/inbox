@@ -991,6 +991,10 @@ export interface ConnectorDefinition {
   readonly bookings?: BookingWriter | undefined;
   /** Pay links in the business's own account, and the platform's word that they were paid (ADR-023). */
   readonly payments?: PaymentsHandler | undefined;
+  /** A property system's rooms, rates and what is free (ADR-033): read into the stays cache. */
+  readonly stays?: StayInventory | undefined;
+  /** A property system that takes stays, written to it before anything is promised (ADR-033). */
+  readonly stayWriter?: StayWriter | undefined;
   /**
    * For a payment platform: the mode a key is for, read from the form before the platform is asked
    * anything (`rk_live_…` is live), so connecting a second key of a mode already connected is
@@ -1098,4 +1102,129 @@ export function minorAmount(value: string, exponent = 2): number | null {
   if (/[1-9]/.test(fraction.slice(exponent))) return null;
   const whole = Number(m[1]) * 10 ** exponent;
   return exponent === 0 ? whole : whole + Number(fraction.padEnd(exponent, "0").slice(0, exponent));
+}
+
+/* --- property systems (ADR-033) ------------------------------------------- */
+
+/**
+ * A place to stay's own system (a channel manager or a property management system): what it says is
+ * free is the truth, and a stay is written to it first, so a room is never sold twice. Built from each
+ * system's public documentation, against recorded fixtures and local fakes; a system that needs a
+ * partner account ships switched off (`whenNotReady: {status: "setup"}`).
+ */
+export interface ExternalProperty {
+  readonly id: string;
+  readonly name: string;
+  readonly currency?: string | undefined;
+  readonly timezone?: string | undefined;
+}
+
+export interface ExternalRoom {
+  readonly id: string;
+  readonly name: string;
+  /** How many like it the system sells. */
+  readonly units: number;
+  readonly capacity?: { readonly adults: number; readonly children: number; readonly total: number } | undefined;
+  readonly beds?: readonly { readonly type: string; readonly count: number }[] | undefined;
+}
+
+export interface ExternalRate {
+  readonly id: string;
+  readonly name: string;
+  /** The room ids it prices; absent for every room. */
+  readonly roomIds?: readonly string[] | undefined;
+}
+
+/** One room's night as the system said it: units free, restrictions and prices by its rate ids. */
+export interface AriRow {
+  readonly roomId: string;
+  readonly night: string;
+  readonly units: number;
+  readonly closed?: boolean | undefined;
+  readonly minStay?: number | undefined;
+  readonly maxStay?: number | undefined;
+  readonly noArrival?: boolean | undefined;
+  readonly noDeparture?: boolean | undefined;
+  /** Rate id → price of the night, in minor units of the property's currency. */
+  readonly prices?: Readonly<Record<string, number>> | undefined;
+}
+
+export interface StayPriceQuery {
+  readonly propertyId: string;
+  readonly roomId: string;
+  readonly rateId?: string | undefined;
+  readonly checkIn: string;
+  readonly checkOut: string;
+  readonly adults: number;
+  readonly childrenAges: readonly number[];
+}
+
+export interface StayInventory {
+  /** The properties the connection can see: the owner chooses which one is theirs. */
+  properties(ctx: RunContext): Promise<ExternalProperty[]>;
+  rooms(ctx: RunContext, propertyId: string): Promise<ExternalRoom[]>;
+  ratePlans(ctx: RunContext, propertyId: string): Promise<ExternalRate[]>;
+  /**
+   * What is free night by night, for the nights from `from` up to `to` (local dates, `to` excluded).
+   * A system that could not read all of it says how far it got (`until`, excluded).
+   */
+  ari(
+    ctx: RunContext,
+    propertyId: string,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<AriRow[] | { readonly rows: readonly AriRow[]; readonly until: string }>;
+  /** The system's own price for a stay, night by night; null when it gives none. */
+  price?(
+    ctx: RunContext,
+    q: StayPriceQuery,
+  ): Promise<{ readonly subtotal: PayAmount; readonly nights?: readonly { night: string; amount: number }[] } | null>;
+  /** What a call cost, from the answer's headers, where the system counts credits. */
+  credits?(res: ConnectorHttpResponse): { readonly remaining: number; readonly resetsInMs: number } | null;
+}
+
+/** A stay as it is written to the property's own system. */
+export interface OutboundStay {
+  readonly itemId: string;
+  /** The guest's reference, as on the confirmation. */
+  readonly reference: string;
+  /** Sent as the system's own idempotency key or reference, so a write is found again by it. */
+  readonly key: string;
+  readonly propertyId: string;
+  readonly checkIn: string;
+  readonly checkOut: string;
+  readonly rooms: readonly {
+    readonly roomId: string;
+    readonly rateId?: string | undefined;
+    readonly adults: number;
+    readonly childrenAges: readonly number[];
+    /** What the room costs, written by the inbox: a system does not price what an API writes. */
+    readonly price: PayAmount;
+  }[];
+  /** Only once confirmed, and only to the property's own system. */
+  readonly guest?:
+    | { readonly name: string; readonly email?: string | undefined; readonly phone?: string | undefined }
+    | undefined;
+  readonly notes?: string | undefined;
+}
+
+export type StayWriteStatus = "hold" | "provisional" | "confirmed";
+
+export interface StayWriter {
+  /** Writes the stay, or moves the one written (`link`) to these dates, rooms and status. */
+  put(ctx: RunContext, stay: OutboundStay, link: LinkState | null, status: StayWriteStatus): Promise<LinkState>;
+  /** Cancels it on the system: never a delete. */
+  cancel(ctx: RunContext, link: LinkState): Promise<void>;
+  /** The stay as the system holds it, found by our key; null when it is not there. */
+  find(ctx: RunContext, stay: OutboundStay): Promise<LinkState | null>;
+}
+
+/** A connector that is a property system: rooms, rates and what is free, and stays written first. */
+export type PropertySystem = { readonly stays: StayInventory } & Pick<
+  ConnectorDefinition,
+  "stayWriter" | "kind" | "title"
+>;
+
+/** Whether a connector is a property system. */
+export function isPropertySystem(def: ConnectorDefinition | undefined): def is ConnectorDefinition & PropertySystem {
+  return def?.stays !== undefined;
 }

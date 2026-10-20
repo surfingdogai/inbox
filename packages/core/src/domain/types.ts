@@ -1,10 +1,11 @@
+import { stayQuoteSchema } from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
  * Domain schemas: the single source of truth for types, validation, JSON Schema (MCP tools) and
  * OpenAPI. Field names follow schema.org where it fits (Reservation, Order, Offer, PostalAddress).
  */
-export const itemTypeSchema = z.enum(["message", "quote_request", "booking", "order", "refund"]);
+export const itemTypeSchema = z.enum(["message", "quote_request", "booking", "order", "refund", "stay"]);
 export type ItemType = z.infer<typeof itemTypeSchema>;
 
 export const actorKindSchema = z.enum([
@@ -368,12 +369,129 @@ export const refundPayloadSchema = z.object({
   paidAmount: moneySchema.optional(),
 });
 
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+
+/** One room of a stay: which, for how many, and what extras (ADR-033). */
+export const stayRoomSchema = z.object({
+  /** Absent: "any room for two", the property picks in its quote. */
+  roomTypeId: z.string().max(64).optional(),
+  roomTypeName: z.string().max(120).default(""),
+  ratePlanId: z.string().max(64).optional(),
+  ratePlanName: z.string().max(80).optional(),
+  adults: z.number().int().min(1).max(20),
+  childrenAges: z.array(z.number().int().min(0).max(17)).max(10).default([]),
+  extras: z
+    .array(z.object({ extraId: z.string().min(1).max(64), quantity: z.number().int().min(1).max(20) }))
+    .max(10)
+    .default([]),
+});
+
+/** One entry of a stay's payment schedule, as it stands: due, paid, at the property, waived, or owed back. */
+export const stayPaymentSchema = z.object({
+  id: z.string().min(1).max(64),
+  type: z.enum(["immediate", "deferred", "at_property"]),
+  amount: moneySchema,
+  dueAt: isoDateTime.optional(),
+  status: z.enum(["due", "paid", "at_property", "waived", "refund_owed"]),
+  paymentUrl: z.url().optional(),
+  paidAmount: moneySchema.optional(),
+  paymentRef: z.string().max(200).optional(),
+});
+
+/**
+ * A stay (ADR-033): local dates (nights are their difference, never minutes), rooms as lines, the
+ * property's binding quote with its breakdown, schedule and dated policy, and where it stands with the
+ * property's own system. `startTime`, `endTime` and `totalPrice` are written by the inbox, so the
+ * generated columns, the indexes and the auto-complete sweep work as for a booking. Only the property
+ * writes `quote`, `payments`, `cancellation` and `external`.
+ */
+export const stayPayloadSchema = z.object({
+  propertyId: z.string().min(1).max(64),
+  checkIn: z.iso.date(),
+  checkOut: z.iso.date(),
+  /** Check-in date at the property's check-in time, check-out at its check-out time, with the zone's offset. */
+  startTime: isoDateTime.optional(),
+  endTime: isoDateTime.optional(),
+  /** The guest's expected arrival window. */
+  arrival: z.object({ from: hhmm, to: hhmm }).optional(),
+  rooms: z.array(stayRoomSchema).min(1).max(9),
+  guests: z
+    .object({
+      lead: z.object({ name: z.string().max(200) }),
+      others: z
+        .array(z.object({ name: z.string().max(200) }))
+        .max(40)
+        .default([]),
+    })
+    .optional(),
+  /** Special requests, in the guest's own words. */
+  requests: z.string().max(2_000).optional(),
+  /** The offer in force: only the property writes it. */
+  quote: stayQuoteSchema.optional(),
+  /** What the rates gave before a quote: never binding, never shown as an offer. */
+  estimate: stayQuoteSchema.optional(),
+  /** = quote.total, for `amount_minor`. */
+  totalPrice: moneySchema.optional(),
+  /** A hold on the nights, until when, and on what (rooms kept for direct guests, or the connected system). */
+  hold: z.object({ until: isoDateTime, source: z.enum(["allotment", "connected"]) }).optional(),
+  payments: z
+    .object({
+      schedules: z.array(stayPaymentSchema).max(6).default([]),
+      /** Until when what is due now (a deposit, a card to hold the stay) can be paid: the pay window. */
+      dueBy: isoDateTime.optional(),
+      guarantee: z
+        .object({ status: z.enum(["none", "requested", "saved"]), url: z.url().optional() })
+        .prefault({ status: "none" }),
+    })
+    .optional(),
+  cancellation: z
+    .object({
+      at: isoDateTime,
+      fee: moneySchema,
+      refundOwed: moneySchema.optional(),
+      by: z.enum(["guest", "property"]),
+    })
+    .optional(),
+  /** Where availability came from when the stay was answered. */
+  availability: z
+    .object({ source: z.enum(["owner", "allotment", "connected", "ical_hint"]), checkedAt: isoDateTime })
+    .optional(),
+  /** The property system's own booking. */
+  external: z
+    .object({
+      connectorId: z.string().min(1).max(64),
+      externalId: z.string().min(1).max(200),
+      status: z.string().max(40).optional(),
+    })
+    .optional(),
+  checkedInAt: isoDateTime.optional(),
+  checkedOutAt: isoDateTime.optional(),
+  /** The property's short-term rental registration number, as shown at booking. */
+  registration: z.string().max(60).optional(),
+  /** A change one side asked for and the other has not answered (ADR-018): the stay as it would be. */
+  change: z
+    .object({
+      by: changeBySchema,
+      checkIn: z.iso.date(),
+      checkOut: z.iso.date(),
+      rooms: z.array(stayRoomSchema).min(1).max(9).optional(),
+      quote: stayQuoteSchema.optional(),
+      fee: moneySchema.optional(),
+      validThrough: isoDateTime.optional(),
+    })
+    .optional(),
+  offer: offerPointerSchema.optional(),
+  /** The cancellation fee the guest confirmed (`fee_sha`), and the terms they accepted (`terms_sha`). */
+  termsSha: z.string().max(64).optional(),
+});
+
 export const payloadSchemas = {
   message: messagePayloadSchema,
   quote_request: quoteRequestPayloadSchema,
   booking: bookingPayloadSchema,
   order: orderPayloadSchema,
   refund: refundPayloadSchema,
+  stay: stayPayloadSchema,
 } as const satisfies Record<ItemType, z.ZodType>;
 
 export type PayloadOf<T extends ItemType> = z.infer<(typeof payloadSchemas)[T]>;
@@ -403,6 +521,7 @@ export const itemSchema = z.discriminatedUnion("type", [
   envelopeSchema.extend({ type: z.literal("booking"), payload: bookingPayloadSchema }),
   envelopeSchema.extend({ type: z.literal("order"), payload: orderPayloadSchema }),
   envelopeSchema.extend({ type: z.literal("refund"), payload: refundPayloadSchema }),
+  envelopeSchema.extend({ type: z.literal("stay"), payload: stayPayloadSchema }),
 ]);
 export type Item = z.infer<typeof itemSchema>;
 export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
@@ -414,4 +533,6 @@ export const PII_PATHS: Record<ItemType, readonly string[]> = {
   booking: ["notes"],
   order: ["billingAddress", "shippingAddress", "notes"],
   refund: ["reason", "disputed"],
+  // Guests' names, their requests and their arrival window; children's ages are a minor's data too.
+  stay: ["guests", "requests", "arrival", "rooms"],
 };

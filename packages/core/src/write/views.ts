@@ -189,6 +189,7 @@ const TYPE_WORD: Record<ItemType, string> = {
   booking: "Booking",
   order: "Order",
   refund: "Refund",
+  stay: "Stay",
 };
 
 const STATE_WORD: Record<string, string> = {
@@ -296,5 +297,13 @@ export function defaultSubject(type: ItemType, payload: Record<string, unknown>)
     }
     case "refund":
       return "Refund request";
+    case "stay": {
+      const rooms = (payload.rooms as { roomTypeName?: string; adults?: number }[] | undefined) ?? [];
+      const nights = Math.round(
+        (Date.parse(String(payload.checkOut)) - Date.parse(String(payload.checkIn))) / 86_400_000,
+      );
+      const room = rooms[0]?.roomTypeName || "A room";
+      return `${room}, ${String(payload.checkIn)} · ${Number.isFinite(nights) ? nights : "?"} night${nights === 1 ? "" : "s"}`;
+    }
   }
 }

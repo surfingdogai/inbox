@@ -13,6 +13,9 @@ import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { stayLang } from "../stays/copy";
+import { ARRIVAL_PLACEHOLDER, renderStayMail, stayLinks } from "../stays/mail";
+import { openArrival } from "../stays/setup";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
@@ -31,6 +34,16 @@ import type { JobHandler } from "./runner";
 import { ensureJob } from "./schedule";
 
 export { senderOf } from "./mail-log";
+
+/**
+ * A stay's private arrival details (ADR-033 §10), opened from their seal only as the email goes: the
+ * kept copy holds the placeholder, never the codes.
+ */
+async function fillArrival(db: Db, secrets: SecretBox | null, item: Item, text: string): Promise<string> {
+  if (item.type !== "stay" || !text.includes(ARRIVAL_PLACEHOLDER)) return text;
+  const details = await openArrival(db, secrets, item.payload.propertyId);
+  return text.replace(ARRIVAL_PLACEHOLDER, details ?? "");
+}
 
 /**
  * Turns a `notify` job into an email: to the customer at the address they gave, to the owner at the
@@ -126,10 +139,15 @@ export function notifyHandler(
       // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
       text:
         logged.recipient === "customer"
-          ? await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
-              mailKey: logged.jobKey,
-              itemId: logged.itemId,
-            })
+          ? await fillArrival(
+              db,
+              opts.secrets ?? null,
+              item,
+              await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
+                mailKey: logged.jobKey,
+                itemId: logged.itemId,
+              }),
+            )
           : logged.bodyText,
       headers,
     };
@@ -245,6 +263,48 @@ async function customerMail(
           : !o.canSend
             ? ("no_sender" as const)
             : undefined;
+  // A stay's emails (ADR-033 §12): in the guest's language among six, from the stay as it stands.
+  if (item.type === "stay") {
+    const stayLangOf = stayLang(o.contact?.locale ?? o.settings.stays.languages[0] ?? facts.languages[0]);
+    const links = skip
+      ? null
+      : await stayLinks(db, o.secrets, item, { mailKey: o.jobKey, lang: stayLangOf, base: o.base, now: o.now });
+    const { rows: open } = await db.client.query({
+      sql: "SELECT schedule_id, url, amount, currency FROM connector_payments WHERE item_id = ? AND state = 'open' AND url IS NOT NULL AND purpose <> 'guarantee' ORDER BY created_at",
+      params: [item.id],
+      method: "all",
+    });
+    const rendered = await renderStayMail(db, {
+      item,
+      event: p.event,
+      lang: stayLangOf,
+      words: cause.words,
+      automated: isAutomated(cause.actorKind, cause.channel, cause.writtenBy),
+      replies: o.mailOut.replies !== false,
+      links,
+      pay: open.map((r) => ({
+        scheduleId: String(r[0]),
+        url: String(r[1]),
+        amount: { value: Number(r[2]), currency: String(r[3]) },
+      })),
+      fromState: cause.fromState,
+      now: o.now,
+    });
+    if (!rendered) return { note: `no email for a stay's ${p.event}` };
+    const held = skip ?? (await heldAs(o.mailOut, kind, customerMailKind(p.event, cause, rendered.template)));
+    return {
+      itemId: item.id,
+      jobKey: o.jobKey,
+      recipient: "customer",
+      template: rendered.template,
+      lang: stayLangOf,
+      entryId: cause.entryId,
+      eventId: p.eventId ?? null,
+      subject: rendered.subject,
+      text: cutLinks(rendered.text),
+      ...(held ? { skip: held } : {}),
+    };
+  }
   // What waits for the customer's answer carries the links to give it: a page on this inbox, in
   // the customer's language (ADR-018 §5). Without a secret to sign them, or an address for them to
   // point at, the email asks for a reply instead.
@@ -737,6 +797,7 @@ const TYPE_WORD: Record<Item["type"], string> = {
   booking: "booking",
   order: "order",
   refund: "return",
+  stay: "stay request",
 };
 
 function ownerSubject(item: Item, event: string, who: string): string {

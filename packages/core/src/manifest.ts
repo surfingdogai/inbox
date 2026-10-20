@@ -29,6 +29,8 @@ export function buildManifest(input: {
    * nothing and is carried nothing.
    */
   carried?: { readonly accepted: boolean } | undefined;
+  /** A place to stay's door (ADR-033), published while `item_types` lists `stay`. */
+  stay?: Manifest["stay"] | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   const elsewhere = input.doorsElsewhere ?? [];
@@ -57,6 +59,17 @@ export function buildManifest(input: {
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
     ...(input.carried ? { carried_requests: { accepted: input.carried.accepted } } : {}),
-    ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
+    ...(elsewhere.length
+      ? {
+          doors_elsewhere: elsewhere.map((d) => ({
+            item_type: d.item_type,
+            url: d.url,
+            ...(d.url_template ? { url_template: d.url_template } : {}),
+          })),
+        }
+      : {}),
+    ...(input.stay && (input.itemTypes ?? []).includes("stay") && !elsewhere.some((d) => d.item_type === "stay")
+      ? { stay: input.stay }
+      : {}),
   });
 }

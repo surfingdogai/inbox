@@ -7,7 +7,8 @@
 export interface CustomerPage {
   /** The HTTP status to answer with. */
   readonly status: 200 | 404 | 409 | 410 | 422 | 429 | 500;
-  readonly lang: "en" | "pt";
+  /** A stay's page (ADR-033) may be in any of its six languages; every other page is in English or Portuguese. */
+  readonly lang: "en" | "pt" | "es" | "fr" | "de" | "it";
   /** The business's name: the header and the page title. Empty when it has none. */
   readonly business: string;
   /** The page title, when it is more than the business's name. */
@@ -66,8 +67,8 @@ export type PageField =
       readonly value?: string | undefined;
     }
   | {
-      /** One line: a name, an email address (the front page's forms). */
-      readonly kind: "text" | "email";
+      /** One line: a name, an email address (the front page's forms), a date (a stay's other dates). */
+      readonly kind: "text" | "email" | "date";
       readonly name: string;
       readonly label: string;
       readonly required: boolean;

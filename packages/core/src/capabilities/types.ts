@@ -135,6 +135,13 @@ export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_
 export const cancelItemInput = z.object({
   item_id: z.string().min(1),
   reason: z.string().max(2_000).optional(),
+  fee_sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional()
+    .describe(
+      "A confirmed stay: the fingerprint of the cancellation fee your person saw (details.fee_sha of the 409 confirm_terms a cancel without it gets).",
+    ),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
   ...carried,

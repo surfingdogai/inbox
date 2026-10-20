@@ -9,6 +9,7 @@ import {
   returnReasonSchema,
 } from "../domain/types";
 import type { Machine, Transition } from "./machine";
+import { stayMachine } from "./stay";
 
 const owners = BUSINESS_ACTORS;
 const customers = CUSTOMER_ACTORS;
@@ -1452,4 +1453,5 @@ export const machines: Record<ItemType, Machine> = {
   booking: bookingMachine as Machine,
   order: orderMachine as Machine,
   refund: refundMachine as Machine,
+  stay: stayMachine as Machine,
 };

@@ -101,6 +101,22 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   connector_writes: {
     note: "Each time this inbox wrote to a system of yours (a property system) before confirming: when, what came of it and the system's id for it. Never what was written.",
   },
+  // A place to stay (ADR-033).
+  properties: {
+    leftOut:
+      "The private arrival details (door codes, wifi), which are sealed: write them again where you open the copy.",
+    strip: () => ["UPDATE properties SET arrival_private_enc = NULL"],
+  },
+  room_types: {},
+  stay_policies: {},
+  rate_plans: {},
+  rates: {},
+  stay_fees: {},
+  stay_extras: {},
+  night_claims: { note: "Which rooms each stay holds on each night." },
+  allotments: { note: "The rooms you keep for direct guests, and who set them aside." },
+  stay_ari: { note: "Availability and rates as your property system last said them." },
+  stay_closures: {},
   connector_auth: {
     leftOut: "Sign-ins with a calendar that were on their way.",
     strip: empty("connector_auth"),

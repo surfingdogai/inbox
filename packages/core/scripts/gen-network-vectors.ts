@@ -3,6 +3,8 @@
  *
  *   vectors/signatures.json, vectors/passes.json, vectors/receipts-v2.json,
  *   vectors/receipts-v6.json                                                 from ./network-vectors.ts
+ *   vectors/stay-totals.json, stay-policy.json, stay-nights.json,
+ *   vectors/doors-elsewhere-stay.json                                        from ./stay-vectors.ts
  *   schemas/<name>.json                                                      from @surfingdog/spec's JSON_SCHEMAS
  *
  * Run from packages/core, then format:
@@ -16,6 +18,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { JSON_SCHEMAS, jsonSchemaOf } from "@surfingdog/spec";
 import { buildNetworkVectors } from "./network-vectors";
+import { buildStayVectors } from "./stay-vectors";
 
 const spec = path.resolve(import.meta.dirname, "../../spec");
 const write = (file: string, value: unknown) => writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
@@ -25,6 +28,12 @@ write(path.join(spec, "vectors/signatures.json"), v.signatures);
 write(path.join(spec, "vectors/passes.json"), v.passes);
 write(path.join(spec, "vectors/receipts-v2.json"), v.receiptsV2);
 write(path.join(spec, "vectors/receipts-v6.json"), v.receiptsV6);
+// Stays (spec 0.10, ADR-033): `test/stay-vectors.test.ts` rebuilds these.
+const stays = buildStayVectors();
+write(path.join(spec, "vectors/stay-totals.json"), stays.totals);
+write(path.join(spec, "vectors/stay-policy.json"), stays.policy);
+write(path.join(spec, "vectors/stay-nights.json"), stays.nights);
+write(path.join(spec, "vectors/doors-elsewhere-stay.json"), stays.doorsElsewhere);
 
 const dir = path.join(spec, "schemas");
 mkdirSync(dir, { recursive: true });

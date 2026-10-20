@@ -28,6 +28,7 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
+import { planStay, type StayPlan, stayEventFor } from "../stays/transition";
 import { hashJson, hashText } from "../util/canonical";
 import {
   actorMeta,
@@ -211,7 +212,9 @@ async function attempt_(
   // A paid contract's cancellation the business records, asked while the customer could withdraw: their
   // withdrawal (ADR-018 §7, §8), never late and never a refund left to our say.
   const instead = late ? null : await withdrawalInstead(db, item, input, settings, now);
-  const eventName = late?.event ?? instead ?? input.event;
+  // A stay's acceptance, booking or payment leads where its terms say (ADR-033 D2): one of twin events.
+  const asked = late?.event ?? instead ?? input.event;
+  const eventName = item.type === "stay" ? await stayEventFor(db, item, asked, input.input) : asked;
   const eventInput = late ? late.input : input.input;
 
   const machine = machines[item.type];
@@ -236,6 +239,14 @@ async function attempt_(
   // A yes the customer gave a person is recorded by a person (ADR-018 N13): not the owner's AI, not a
   // rule, not a key handed to another system.
   if (t.byPerson && !isPerson(caller)) {
+    // A stay's promise made, waived or broken on a person's word (ADR-033 §3): never automation's.
+    if (item.type === "stay") {
+      throw new WriteError(
+        "not_allowed",
+        `Only a person at the property can do this (${t.label}). Tell the owner in a note (reply with internal: true) what you would do.`,
+        { details: { reason: "person_only", draft_for_owner: true } },
+      );
+    }
     // Refusing a return, disputing what came back, cancelling what a customer paid for: a person's
     // decision about money and a customer's rights (ADR-018 §3.4, §4), never automation's.
     if (
@@ -389,6 +400,10 @@ async function attempt_(
   }
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
+  // A stay's own guards and effects (ADR-033): judged here, before anything is written, and written in
+  // this transition's batch.
+  const stay: StayPlan | undefined =
+    item.type === "stay" ? await planStay({ db, caller, item, t, payload, data, settings, now, audience }) : undefined;
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,
   // written once the checks every offer passes have passed.
@@ -423,7 +438,11 @@ async function attempt_(
       item,
       rows,
       words,
-      t.offer === "make" ? offeredTerms(item, t, payload) : t.offer === "take" ? payload : undefined,
+      t.offer === "make"
+        ? offeredTerms(item, t, payload)
+        : t.offer === "take" || item.type === "stay"
+          ? payload
+          : undefined,
     ))
   ) {
     if (judged) judged = { ...judged, breaches: withBreach(judged.breaches, "amount_named") };
@@ -995,7 +1014,8 @@ async function attempt_(
       ? { ...waiting, validThrough: requestExpiresAt, updatedAt: now }
       : undefined;
   if (rewound) payload.offer = pointerOf(rewound);
-  const closedAt = effects.has("close") ? now : row.closedAt;
+  // A late payment that finds its nights still free confirms a lapsed stay after all: open again.
+  const closedAt = effects.has("close") ? now : t.reopens ? null : row.closedAt;
   const updated: Item = {
     ...item,
     state: t.to,
@@ -1197,15 +1217,17 @@ async function attempt_(
   // is: an order the payments side makes none for (a test order with only a live key, nothing to pay,
   // the owner's own link, a change still open) is told at once.
   const linkWait =
-    payLinks &&
-    item.type === "order" &&
-    (t.to === "accepted" || t.event === "payment_failed" || (t.event === "request_payment" && !data.paymentUrl)) &&
-    (await linkComing(
-      db,
-      { id: item.id, payload, sandbox: item.flags.sandbox === true },
-      now,
-      t.event === "request_payment" && caller.actor.kind !== "connector",
-    ));
+    // A stay agreed with a deposit due (ADR-033): its email waits a moment for the link too.
+    (item.type === "stay" && effects.has("queue_pay_links") && (await hasPayLinks(db))) ||
+    (payLinks &&
+      item.type === "order" &&
+      (t.to === "accepted" || t.event === "payment_failed" || (t.event === "request_payment" && !data.paymentUrl)) &&
+      (await linkComing(
+        db,
+        { id: item.id, payload, sandbox: item.flags.sandbox === true },
+        now,
+        t.event === "request_payment" && caller.actor.kind !== "connector",
+      )));
   /** A refund's date, once fixed (Unix ms): its promise is made then (ADR-018 §8), and its outcome reads it. */
   const refundDueAt = (p: Record<string, unknown>): number | null => {
     const due = typeof p.refundDue === "string" ? Date.parse(p.refundDue) : Number.NaN;
@@ -1287,6 +1309,7 @@ async function attempt_(
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
     if (linkedEvent) statements.push(webhookFanoutStatement(linkedEvent, now));
   }
+  if (stay) statements.push(...(await stay.statements(eventId)));
   if (input.extraStatements) statements.push(...input.extraStatements);
 
   try {
@@ -1946,6 +1969,8 @@ function applyQuoteCounter(payload: Record<string, unknown>, data: Record<string
  */
 const MONEY_RECORDED: ReadonlySet<string> = new Set([
   "record_payment",
+  "record_part_payment",
+  "late_payment",
   "payment_failed",
   "charge_back",
   "record_charge_back",

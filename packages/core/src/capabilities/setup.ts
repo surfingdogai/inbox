@@ -585,8 +585,8 @@ export class SetupCapabilities {
     await this.db.batch([
       ...(input.replace ? [{ sql: "DELETE FROM rules", method: "run" as const }] : []),
       ...preset.map((r) => ({
-        sql: "INSERT INTO rules (id, name, priority, enabled, definition, version, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 1, ?, ?)",
-        params: [ulid(), r.name, r.priority, JSON.stringify(r.definition), now, now],
+        sql: "INSERT INTO rules (id, name, priority, enabled, definition, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+        params: [ulid(), r.name, r.priority, r.enabled === false ? 0 : 1, JSON.stringify(r.definition), now, now],
         method: "run" as const,
       })),
     ]);

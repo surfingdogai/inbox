@@ -425,12 +425,17 @@ export class ConnectorCapabilities {
   }
 
   /** What the inbox holds, for the order its cards are shown in: services to book, products to sell. */
-  private async holdings(): Promise<{ services: number; products: number }> {
+  private async holdings(): Promise<{ services: number; products: number; rooms: number }> {
     const { rows } = await this.db.client.query({
-      sql: `SELECT (SELECT COUNT(*) FROM services WHERE active = 1), (SELECT COUNT(*) FROM products WHERE active = 1)`,
+      sql: `SELECT (SELECT COUNT(*) FROM services WHERE active = 1), (SELECT COUNT(*) FROM products WHERE active = 1),
+                   (SELECT COUNT(*) FROM room_types WHERE active = 1)`,
       method: "all",
     });
-    return { services: Number(rows[0]?.[0] ?? 0), products: Number(rows[0]?.[1] ?? 0) };
+    return {
+      services: Number(rows[0]?.[0] ?? 0),
+      products: Number(rows[0]?.[1] ?? 0),
+      rooms: Number(rows[0]?.[2] ?? 0),
+    };
   }
 
   /**
@@ -1269,6 +1274,25 @@ export class ConnectorCapabilities {
       busy,
       note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed${catalogueNote}${payNote}`,
     };
+  }
+
+  /**
+   * A connection's definition and what it runs with, for a caller outside this class that drives one
+   * (a property system's stays, ADR-033); null when it is gone, paused, or cannot run here.
+   */
+  async contextFor(
+    connectorId: string,
+    now: number,
+  ): Promise<{ readonly definition: ConnectorDefinition; readonly ctx: RunContext; readonly status: string } | null> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row || row.status === "disabled") return null;
+    const definition = this.definitions.get(row.kind);
+    if (!definition || !this.http || !this.secrets) return null;
+    try {
+      return { definition, ctx: await this.runContext(row, now), status: row.status };
+    } catch {
+      return null;
+    }
   }
 
   /** Whether the connection is still there (and not paused): a job chain for one that is not ends. */
