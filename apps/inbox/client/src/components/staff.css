@@ -109,6 +109,7 @@
 }
 .staffday-block.is-request {
   border-style: dashed;
+  border-color: color-mix(in srgb, var(--ink-2) 35%, transparent);
   color: var(--ink-2);
 }
 .staffday-block.is-needs {
@@ -134,9 +135,10 @@
 .booking-salon {
   display: grid;
   gap: 4px;
+  margin: 2px 0 12px;
   font-size: 13px;
 }
-.booking-salon .row {
+.booking-salon .bs-row {
   display: flex;
   gap: 8px;
   align-items: baseline;
@@ -145,4 +147,8 @@
   min-width: 84px;
   color: var(--ink-2);
   font-size: 12px;
+}
+
+.services-tabs {
+  width: fit-content;
 }

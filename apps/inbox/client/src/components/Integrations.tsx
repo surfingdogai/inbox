@@ -89,7 +89,9 @@ export function IntegrationsCard() {
   const byCard = new Map<string, ConnectionView[]>();
   for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
-  const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
+  // A card every way of which needs something only the server or the company can give (a booking
+  // system, ADR-035) says "Needs setup", never "Soon".
+  const soon = (data?.cards ?? []).filter((c) => c.status === "soon" && !needsSetup(c));
   // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named. A shop
   // that takes its orders at its own checkout is one of them (ADR-026).
   const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
@@ -266,7 +268,8 @@ function Tile({
   onOpen: () => void;
 }) {
   const Icon = ICONS[card.group];
-  const soon = card.status === "soon";
+  const setup = needsSetup(card);
+  const soon = card.status === "soon" && !setup;
   const tag = tagOf(connections);
   const body = (
     <>
@@ -277,6 +280,8 @@ function Tile({
       </span>
       {soon ? (
         <span className="int-tag">Soon</span>
+      ) : setup ? (
+        <span className="int-tag">Needs setup</span>
       ) : tag ? (
         <span className={clsx("int-tag", tag.tone === "on" && "is-on", tag.tone === "warn" && "is-warn")}>
           {tag.text}
@@ -369,6 +374,29 @@ function ConnectPanel({
     values,
   });
   if (!way) return null;
+  // Nothing to connect yet: what each way needs, and where it is explained.
+  if (needsSetup(card)) {
+    return (
+      <div className="confirm row-glass stack int-panel">
+        {setup.map((w) => (
+          <p key={keyOf(w)} className="hint">
+            {w.label}: {w.hint ?? "needs setting up first."}{" "}
+            {w.href && (
+              <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
+                How
+                <ExternalLink className="icon-xs" aria-hidden="true" />
+              </a>
+            )}
+          </p>
+        ))}
+        <div className="rowx">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="confirm row-glass stack int-panel">
       {main.length > 1 && !way.advanced && (
@@ -1465,4 +1493,9 @@ function NewLink({
       )}
     </div>
   );
+}
+
+/** Every way of the card needs something only the server or the company can give: nothing to connect yet. */
+function needsSetup(card: GalleryCard): boolean {
+  return card.ways.length > 0 && card.ways.every((w) => w.status === "setup");
 }

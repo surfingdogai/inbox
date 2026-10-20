@@ -4,6 +4,7 @@ import { type FormEvent, useId, useState } from "react";
 import { majorText, parseMajor } from "../lib/actions";
 import { problemOf } from "../lib/api";
 import { minorUnitsOf } from "../lib/currencies";
+import { formatMoney } from "../lib/format";
 import { useServiceWrite } from "../lib/queries";
 import { DEPOSIT_PRESETS, depositKey, POLICY_PRESETS, policyKey, policyWords } from "../lib/staff";
 import type { ServiceBody, ServiceRow } from "../lib/types";
@@ -35,7 +36,7 @@ export function termsLine(s: ServiceRow, currency: string): string {
     out.push(
       t.deposit.kind === "percent"
         ? `${t.deposit.value} % deposit`
-        : `${majorText(t.deposit.value, s.price?.currency ?? currency)} deposit`,
+        : `${formatMoney({ value: t.deposit.value, currency: s.price?.currency ?? currency })} deposit`,
     );
   if (t.policy) out.push(policyWords(t.policy));
   if (t.requires) out.push("needs another first");

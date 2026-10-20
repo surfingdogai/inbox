@@ -209,7 +209,11 @@ export function datedSteps(dated: DatedPolicy, money: (m: Money) => string, when
   const out = dated.steps.map((s) =>
     s.fee.value === 0 ? `Free until ${when(s.until)}` : `${money(s.fee)} until ${when(s.until)}`,
   );
-  out.push(`then ${dated.after.value === 0 ? "free" : money(dated.after)}`);
+  const after = dated.after.value === 0 ? "free" : money(dated.after);
+  // Booked after every step had passed: only what cancelling costs now.
+  out.push(
+    dated.steps.length > 0 ? `then ${after}` : dated.after.value === 0 ? "Free to cancel" : `Cancelling costs ${after}`,
+  );
   out.push(`no-show ${money(dated.noShow)}`);
   return out;
 }

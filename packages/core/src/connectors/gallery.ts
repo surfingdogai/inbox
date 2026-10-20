@@ -231,7 +231,7 @@ export const GALLERY: readonly CardSpec[] = [
   {
     id: "phorest",
     title: "Phorest",
-    line: "Services, staff and bookings, written there first",
+    line: "Services, staff and bookings",
     group: "booking",
     industries: ["salons"],
     ways: [

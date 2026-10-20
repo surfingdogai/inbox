@@ -80,8 +80,9 @@ export function StaffDayCard({ tz }: { tz: string | undefined }) {
                 <span className="hint">· {c.bookings.length}</span>
               </div>
               <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
-                {c.bookings.map((b) => {
+                {c.bookings.map((b, i) => {
                   const top = px(minutesIn(b.start, zone));
+                  const lane = lanes(c.bookings, zone)[i] ?? { at: 0, of: 1 };
                   const height = Math.max(18, px(minutesIn(b.end, zone)) - top - 2);
                   const request = b.state !== "confirmed" && b.state !== "completed";
                   return (
@@ -91,7 +92,13 @@ export function StaffDayCard({ tz }: { tz: string | undefined }) {
                       params={{ id: b.id }}
                       search={(prev) => prev}
                       className={`staffday-block${request ? " is-request" : ""}${b.needsHuman ? " is-needs" : ""}`}
-                      style={{ top, height }}
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${(lane.at / lane.of) * 100}% + 4px)`,
+                        width: `calc(${100 / lane.of}% - 6px)`,
+                        right: "auto",
+                      }}
                       title={`${formatClock(b.start, zone)} ${b.service}${b.customer ? ` · ${b.customer}` : ""}`}
                     >
                       <b>{formatClock(b.start, zone)}</b> {b.service}
@@ -106,4 +113,38 @@ export function StaffDayCard({ tz }: { tz: string | undefined }) {
       )}
     </section>
   );
+}
+
+/**
+ * Side by side where bookings overlap (two requests for one person's afternoon): each gets a lane, and
+ * the lanes of one overlapping run share the column.
+ */
+function lanes(
+  bookings: readonly { readonly start: string; readonly end: string }[],
+  zone: string,
+): { at: number; of: number }[] {
+  const spans = bookings.map((b, i) => ({ i, s: minutesIn(b.start, zone), e: minutesIn(b.end, zone) }));
+  const order = [...spans].sort((a, b) => a.s - b.s || a.e - b.e);
+  const out: { at: number; of: number }[] = bookings.map(() => ({ at: 0, of: 1 }));
+  let run: typeof order = [];
+  let runEnd = -1;
+  const close = () => {
+    const ends: number[] = [];
+    const at = new Map<number, number>();
+    for (const x of run) {
+      let lane = ends.findIndex((end) => end <= x.s);
+      if (lane < 0) lane = ends.push(x.e) - 1;
+      else ends[lane] = x.e;
+      at.set(x.i, lane);
+    }
+    for (const x of run) out[x.i] = { at: at.get(x.i) ?? 0, of: Math.max(1, ends.length) };
+    run = [];
+  };
+  for (const x of order) {
+    if (run.length > 0 && x.s >= runEnd) close();
+    run.push(x);
+    runEnd = Math.max(runEnd, x.e);
+  }
+  if (run.length > 0) close();
+  return out;
 }

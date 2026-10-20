@@ -27,7 +27,7 @@ export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined 
   return (
     <section className="booking-salon" aria-label="Who, deposit and policy">
       {p.staffName && (
-        <div className="row">
+        <div className="bs-row">
           <span className="k">With</span>
           <span>
             <b>{p.staffName}</b>
@@ -36,7 +36,7 @@ export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined 
         </div>
       )}
       {p.addOns && p.addOns.length > 0 && (
-        <div className="row">
+        <div className="bs-row">
           <span className="k">Added</span>
           <span>
             {p.addOns
@@ -46,7 +46,7 @@ export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined 
         </div>
       )}
       {p.deposit && (
-        <div className="row">
+        <div className="bs-row">
           <span className="k">Deposit</span>
           <span>
             {formatMoney(p.deposit.amount)}
@@ -62,7 +62,7 @@ export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined 
         </div>
       )}
       {p.policy && (
-        <div className="row">
+        <div className="bs-row">
           <span className="k">Cancelling</span>
           <span>{datedSteps(p.policy, (m) => formatMoney(m), when).join(" · ")}</span>
         </div>
