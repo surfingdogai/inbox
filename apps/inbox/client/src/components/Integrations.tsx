@@ -73,6 +73,18 @@ export function IntegrationsCard() {
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }, []);
 
+  // Sent here to connect one card (`?connect=woocommerce`, the WordPress plugin's Connect WooCommerce):
+  // its drawer opens once, when the card can be connected here; the owner still presses its one button.
+  useEffect(() => {
+    if (!data) return;
+    const url = new URL(window.location.href);
+    const want = url.searchParams.get("connect");
+    if (!want) return;
+    url.searchParams.delete("connect");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    if (data.can_connect && data.cards.some((c) => c.id === want && c.status === "ready")) setOpen(want);
+  }, [data]);
+
   const connections = data?.connections ?? [];
   const byCard = new Map<string, ConnectionView[]>();
   for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);

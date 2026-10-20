@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Surfing Dog Inbox
  * Plugin URI:        https://github.com/surfingdogai/inbox/tree/main/integrations/wordpress
- * Description:       Points AI agents from your website to your agent inbox: a link in every page, structured data, a line in llms.txt and a copy of the inbox's manifest at /.well-known/agent-inbox.json. One setting.
- * Version:           0.1.0
+ * Description:       Points AI agents from your website to your agent inbox: a link in every page, structured data, a line in llms.txt and a copy of the inbox's manifest at /.well-known/agent-inbox.json. With WooCommerce, connects your shop to your inbox in one step. One setting.
+ * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Surfing Dog
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SDI_VERSION', '0.1.0' );
+define( 'SDI_VERSION', '0.2.0' );
 define( 'SDI_OPTION', 'sdi_inbox_host' );
 define( 'SDI_COPY', 'sdi_manifest_copy' );
 define( 'SDI_MANIFEST_PATH', '/.well-known/agent-inbox.json' );
@@ -50,6 +50,16 @@ define( 'SDI_KEEP', 7 * 24 * 3600 );
  * It calls out to two addresses only: the inbox's own manifest, and, when an administrator presses
  * Check, Surfing Dog's checker. Both through wp_safe_remote_get, https only, no redirect followed,
  * with a timeout and a size cap.
+ *
+ * With WooCommerce active (ADR-027 in the inbox's repository), it also:
+ *
+ *   - offers Connect WooCommerce, which opens the inbox's own Settings → Integrations with the
+ *     WooCommerce drawer open; the owner presses Connect your shop there, and Approve on WooCommerce's
+ *     own page. The plugin itself makes no key and sends nothing;
+ *   - adds one line to its llms.txt: orders at the shop's own checkout, everything else to the inbox;
+ *   - keeps WooCommerce's own emails to the customer quiet for the orders the inbox made and already
+ *     wrote to the customer about (processing, completed, refunded, cancelled), while the inbox is
+ *     connected to the shop. Bank transfer details (on hold), invoices and notes go as usual.
  */
 
 /** The site's own domain: its home URL's host, without www. */
@@ -338,6 +348,10 @@ function sdi_llms_answer() {
 		$body .= '> ' . $tagline . "\n\n";
 	}
 	$body .= "## Agents\n\n" . $s['llms_line'] . "\n";
+	$shop  = sdi_shop_line();
+	if ( '' !== $shop ) {
+		$body .= $shop . "\n";
+	}
 	/**
 	 * The llms.txt this plugin serves, for a theme or plugin that adds its own sections.
 	 *
@@ -371,6 +385,121 @@ function sdi_manifest_answer() {
 		'body'    => $copy,
 	);
 }
+
+// ---- WooCommerce --------------------------------------------------------------------------------
+
+/** Whether WooCommerce is active on this site. */
+function sdi_woocommerce_active() {
+	return class_exists( 'WooCommerce' );
+}
+
+/** Where the owner connects WooCommerce: the inbox's own Settings → Integrations, its drawer open. */
+function sdi_connect_url( $host ) {
+	return 'https://' . $host . '/settings/integrations?connect=woocommerce';
+}
+
+/** The shop's own page, for the llms.txt line: WooCommerce's shop page, or the site's front page. */
+function sdi_shop_url() {
+	$url = function_exists( 'wc_get_page_permalink' ) ? (string) wc_get_page_permalink( 'shop' ) : '';
+	return '' !== $url ? $url : home_url( '/' );
+}
+
+/** The llms.txt line for a WooCommerce shop: orders at its own checkout, the rest to the inbox; '' without one. */
+function sdi_shop_line() {
+	if ( ! sdi_woocommerce_active() ) {
+		return '';
+	}
+	return '- [Shop](' . esc_url_raw( sdi_shop_url() ) . '): orders at this shop\'s own checkout; questions, quotes and bookings to the agent inbox';
+}
+
+/**
+ * Whether the inbox at the saved address is connected to this shop now: one of its webhooks, active,
+ * delivers to it (the inbox makes them once it is connected, and removes them when it is not). Asked
+ * once a request.
+ *
+ * @param bool $forget Forget what was found this request (the tests' own; WordPress never passes it).
+ */
+function sdi_store_connected( $forget = false ) {
+	static $known = null;
+	if ( $forget ) {
+		$known = null;
+		return false;
+	}
+	if ( null !== $known ) {
+		return $known;
+	}
+	$known = false;
+	$host  = sdi_inbox_host();
+	if ( '' === $host || ! sdi_woocommerce_active() || ! class_exists( 'WC_Data_Store' ) || ! function_exists( 'wc_get_webhook' ) ) {
+		return $known;
+	}
+	try {
+		$ids = WC_Data_Store::load( 'webhook' )->search_webhooks(
+			array(
+				'status' => 'active',
+				'search' => 'Agent inbox',
+				'limit'  => 20,
+			)
+		);
+	} catch ( Exception $e ) {
+		return $known;
+	}
+	$prefix = 'https://' . $host . '/v1/hooks/woocommerce/';
+	foreach ( (array) $ids as $id ) {
+		$hook = wc_get_webhook( $id );
+		if ( $hook && 0 === strpos( (string) $hook->get_delivery_url(), $prefix ) ) {
+			$known = true;
+			break;
+		}
+	}
+	return $known;
+}
+
+/** WooCommerce's emails to the customer that the inbox sends itself for the orders it made. */
+function sdi_quiet_emails() {
+	return array(
+		'customer_processing_order',
+		'customer_completed_order',
+		'customer_refunded_order',
+		'customer_partially_refunded_order',
+		'customer_cancelled_order',
+	);
+}
+
+/**
+ * One of those emails, for an order the inbox made (`_sdi_ref`) while the inbox is connected to the
+ * shop: not sent, since the inbox already told the customer, in the business's name. Every other
+ * order, and every other email, is left as WooCommerce has it.
+ *
+ * @param bool  $enabled Whether WooCommerce would send it.
+ * @param mixed $order   What the email is about.
+ */
+function sdi_quiet_store_email( $enabled, $order = null ) {
+	if ( ! $enabled || ! is_object( $order ) || ! method_exists( $order, 'get_meta' ) ) {
+		return $enabled;
+	}
+	if ( '' === (string) $order->get_meta( '_sdi_ref' ) || ! sdi_store_connected() ) {
+		return $enabled;
+	}
+	/**
+	 * Whether WooCommerce's own emails stay quiet for an order the inbox made. True by default.
+	 *
+	 * @param bool     $quiet Quiet.
+	 * @param WC_Order $order The order.
+	 */
+	return apply_filters( 'sdi_quiet_store_emails', true, $order ) ? false : $enabled;
+}
+foreach ( sdi_quiet_emails() as $sdi_email_id ) {
+	add_filter( 'woocommerce_email_enabled_' . $sdi_email_id, 'sdi_quiet_store_email', 10, 2 );
+}
+
+/** Declared compatible with WooCommerce's order tables (HPOS): orders are read only through WC_Order. */
+function sdi_declare_compatibility() {
+	if ( class_exists( 'Automattic\WooCommerce\Utilities\FeaturesUtil' ) ) {
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+	}
+}
+add_action( 'before_woocommerce_init', 'sdi_declare_compatibility' );
 
 // ---- the setting --------------------------------------------------------------------------------
 
@@ -544,6 +673,18 @@ function sdi_settings_page() {
 		echo '<p>' . esc_html__( 'Nothing is published until you save the address.', 'surfingdog-inbox' ) . '</p>';
 	} else {
 		echo '<p>' . esc_html( sprintf( /* translators: %s: the inbox's address */ __( 'Nothing is published yet: %s does not answer as an agent inbox. It is tried again twice a day.', 'surfingdog-inbox' ), $host ) ) . '</p>';
+	}
+	if ( sdi_woocommerce_active() ) {
+		echo '<h2>WooCommerce</h2>';
+		if ( '' === $host ) {
+			echo '<p>' . esc_html__( 'Save your inbox\'s address first.', 'surfingdog-inbox' ) . '</p>';
+		} elseif ( sdi_store_connected() ) {
+			echo '<p>' . esc_html__( 'Connected. Orders your inbox accepts go into WooCommerce, paid at your own checkout. WooCommerce\'s own emails about them stay quiet: your inbox already told your customer.', 'surfingdog-inbox' ) . '</p>';
+		} else {
+			echo '<p>' . esc_html__( 'Your products in your inbox, and the orders it accepts in WooCommerce, paid at your own checkout.', 'surfingdog-inbox' ) . '</p>';
+			echo '<p><a class="button button-primary" href="' . esc_url( sdi_connect_url( $host ) ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Connect WooCommerce', 'surfingdog-inbox' ) . '</a> ';
+			echo '<span class="description">' . esc_html__( 'Opens your inbox. Press Connect your shop there, then Approve.', 'surfingdog-inbox' ) . '</span></p>';
+		}
 	}
 	echo '<form method="post">';
 	wp_nonce_field( 'sdi_check' );

@@ -5,6 +5,7 @@ import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { mollieConnector } from "./mollie";
 import { stripeConnector } from "./stripe";
+import { woocommerceConnector } from "./woocommerce/index";
 
 export { AUTO as CALCOM_AUTO, CALCOM_API, calcomConnector, calcomForm } from "./calcom";
 export { DISCOVERY_BUDGET_MS } from "./caldav/client";
@@ -35,6 +36,7 @@ export {
   stripeConnector,
   stripeForm,
 } from "./stripe";
+export { WOO_METHODS, WOO_TOPICS, woocommerceBefore, woocommerceConnector, woocommerceForm } from "./woocommerce/index";
 
 /**
  * The OAuth clients an instance may hold, from its environment: each platform's id and secret
@@ -80,5 +82,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    woocommerceConnector(),
   ];
 }
