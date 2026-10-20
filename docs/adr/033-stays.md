@@ -82,6 +82,22 @@ the stays layer (`stays/transition.ts`) plans the night claims and statements fo
 the same batch. A promise made, waived or broken on a person's word (`record_accept`, `waive_payment`,
 `record_cancel` lower than the policy, `no_show`) is never automation's.
 
+Every move into a wait keeps the stay's nights until that wait ends: a hold booked with a deposit due
+(`book_pay`) until the pay window closes, a write in flight (`book_write`, `accept_write`) for a day,
+a stay written with a deposit due (`written_pay`) until its window closes. A stay made the guest's for
+good (`record_payment`, `waive_payment`, `written`) takes its nights afresh in the same batch: if they
+lapsed and another stay took them, the batch fails and the payment is owed back. A stay kept for
+direct guests whose claims lapsed is confirmed only while it still fits inside the rooms kept.
+
+On a connected property a change both sides agreed is written to the system first
+(`accept_change_write`): the stay keeps its dates, and both sets of nights, until the system answers
+(`change_written` applies it; `change_refused` drops it and both sides hear so). A stay paid for after
+it was written provisional is written again as confirmed, with its guest. A no-show lets the nights
+after its first go on the system, never by cancelling the booking there.
+
+A request waits for a person whatever the rules say (`needsHuman` from the start, and again when the
+guest sends details or other dates).
+
 ## 4. Availability
 
 ### 4.1 Three modes, one per property, read back as one sentence
@@ -100,7 +116,11 @@ stay is confirmed, the other gets `slot_taken`.
 
 A hold claims its nights until `hold_until` (10, 20, 30 or 60 minutes, the owner's choice). A sweep
 lets lapsed holds go. A stay in `booking` keeps its claims for a day, and the sweep never lets them go:
-a write that may have landed is settled by its resolver, never by a timer.
+a write that may have landed is settled by its resolver, never by a timer. The sweep reads only the
+stays that are due, earliest first, so a property with a season of confirmed stays ahead never leaves
+a lapsed hold behind them. A connected property's hold is the inbox's offer, not a hold on its
+system: the agent is told so, and the room is confirmed once the system takes the booking. Holds are
+counted by person, agent and the guest's address, and counted again once made.
 
 ### 4.4 Calendar links are hints
 
@@ -115,7 +135,9 @@ asks a person.
 What the property's system says is free is kept in `stay_ari`, read every 15 minutes while stays are
 near and every 6 hours otherwise, within the system's own budget. Agents are offered instant rooms
 only when the cache is fresh (5, 15 or 60 minutes, the owner's choice) and the system is asked again,
-live, at hold and at book. A webhook from the system only marks nights stale; they are read again.
+live, at hold and at book; a system that does not answer leaves the stay on request. A webhook from the
+system only marks nights stale; they are read again. Mapping a property onto a system refuses one in
+another currency or time zone: its prices and nights would be read as the wrong money and days.
 
 ## 5. Prices, policies and payments
 
@@ -123,8 +145,14 @@ live, at hold and at book. A webhook from the system only marks nights stale; th
 
 Night by night from the rate plan's base price and its seasons (weekdays included), extra adults and
 children above the base, children free under an age, derived plans (a percentage off another), each
-line rounded half-up once. Automation may only quote from the rates; a quote with prices of its own
-is the owner's to send.
+line rounded half-up once. The most specific rate prices a night, whatever order the rows come in: a
+season over the base, the latest-starting season, then the one for fewer weekdays. Automation may only
+quote from the rates, and only where the nights cannot be sold twice (rooms kept, or a connected
+system confirming at once): anywhere else its quote, change or acceptance is kept as a draft for a
+person, who checks the other channels. A person may quote a price of their own for the room nights
+the rates do not cover; the property's taxes and fees are added, on its plan or the standard terms
+(free until 7 days before, nothing now). A guest names only rate plans the property offers to guests.
+A change of nights comes with its own price and policy: never the old total for other nights.
 
 ### 5.2 Taxes and fees
 
@@ -145,9 +173,15 @@ Each plan says what is paid when the guest accepts (nothing, the first night, 20
 everything) and when the rest is (at the property, or 7, 14 or 30 days before). Each schedule entry
 gets its own pay link on the property's account when it is due: the deposit's window closes with the
 pay window, the balance's opens three days before it is due. A card to hold the stay is made when the
-guest opens its link. A payment that lands after its window takes the nights again when they are
-still free (`late_payment`) and is otherwise written down as a refund owed: a linked refund item,
-approved, with the owner's note *"Refund … Nothing is refunded automatically."*
+guest opens its link. With no payment platform connected, nothing is asked for before arrival: the
+quote says everything is paid at the property, and the owner's note says why; no stay ever waits on a
+payment nobody can make. A payment that lands after its window confirms the stay only where nothing
+can have sold its nights since (inside the rooms kept, `late_payment`); a connected property writes it
+to its system again first, under a key of its own (`late_payment_write`); anywhere else it is written
+down as a refund owed: a linked refund item, approved, with the owner's note *"Refund … Nothing is
+refunded automatically."* A part paid before a window closes, or before a cancellation, is owed back
+too. A platform's payment counts only in the stay's currency and with its amount; anything else goes
+to a person, never counted and never refunded by the inbox's own sum.
 
 ## 6. Doors
 
@@ -162,7 +196,8 @@ property has a room to offer.
 - `book_stay`, `accept_offer` and `change_stay` without the fingerprint of the terms the person
   confirmed answer `409 confirm_terms` with those terms; with a stale one, `offer_changed`.
 - A cancellation of a confirmed stay answers its fee and what is owed back first (`fee_sha`).
-- At most two open holds per person and per agent.
+- At most two open holds per person, per agent and per guest's address.
+- A rate plan the property keeps for its own use (`offered: false`) is never a guest's to name.
 
 ### 6.2 For the owner and the owner's AI
 
@@ -184,7 +219,10 @@ A property that takes stays at its own booking engine keeps a stay door elsewher
 deep link (`{check_in}`, `{check_out}`, `{adults}`, `{children}`, `{rooms}`): agents are sent there
 with the dates filled in. The business's own page carries the place as schema.org reads it: a
 LodgingBusiness of its kind, each room offered as a HotelRoom, and an Offer with a price only where a
-stay is booked at once, since anywhere else the price is the property's answer to a request.
+stay is booked at once, since anywhere else the price is the property's answer to a request. Its price
+is a night with every tax and fee in it, never the bare room rate; a room whose taxes step by price
+per guest shows none. The page itself is not indexed: the block is for agents and the property's own
+site to read.
 
 ## 7. Rules (preset `stays`)
 
@@ -194,7 +232,7 @@ stay is booked at once, since anywhere else the price is the property's answer t
 | R2 | Send the quote at once when the rooms are kept for direct guests | Only inside an allotment; left out when the owner confirms each stay |
 | R3 | Say sorry when you are full | Only when the property is full by its own word (closed or claimed) |
 | R4 | Ask me when another calendar shows the nights as taken | A note and needs-a-person; never declines |
-| R5 | Accept date changes while cancellation is free | Off until the owner switches it on |
+| R5 | Accept date changes while cancellation is free | Off until the owner switches it on; only where the new nights cannot be sold twice |
 | R6 | Messages before arrival | Not a rule: the stay's scheduled messages (§10) |
 | R7 | Ask a person about anything else | |
 
@@ -225,15 +263,24 @@ code-complete but switched off, saying "Needs setup", with a checklist for the f
 `properties`, `rooms`, `ratePlans`, `ari`, `quote`, `reserve`, `release`, `modify`, `cancel`, `get`,
 `find`, `receive`, `subscribe`, `budget`; capabilities `stay_inventory`, `write_stays`,
 `stay_events`. Writes go through the write journal (ADR-032 §4) with our reference, so a retry finds
-its own write. A `check_then_write` system is read back after the write; a conflict cancels our own
-write and the stay is on request. `packages/adapters/test/property/contract.ts` is the contract
-every adapter runs against its own fake; the generic fake runs it here.
+its own write. A system that takes a stay on a night it has no room for says so itself, definitely
+(`StayWriter.oversold`: its overbooking flag, or its count of bookings against its rooms, as its
+documentation gives it); after our write the inbox reads that back, and a conflict takes our own write
+back: a new stay is cancelled there, a change is put back to its old dates, never cancelled. A read-back
+that cannot be made promises nothing: the resolver reads it again, and takes the write back if it never
+can. A reserve that lands after the resolver stopped looking is looked for once more and cancelled; a
+change, a confirmation or a cancellation whose answer never came is the owner's to check, and they are
+told. `packages/adapters/test/property/contract.ts` is the contract every adapter runs against its own
+fake; the generic fake runs it here.
 
 ## 9. Onboarding
 
-The setup wizard's "A place to stay" asks for the place (kind, check-in and check-out) and its rooms
-(name, how many, how many sleep), applies the `stays` rules, and leaves prices and policies for
-Settings → Property, so every request waits for the owner's quote until they are set. A hosted
+The setup wizard's "A place to stay" asks for the place (kind, town, check-in and check-out) and its
+rooms (name, how many, how many sleep, and a price a night), applies the `stays` rules, and puts the
+prices on a standard plan (room only, free to cancel until 7 days before, nothing now), so the first
+request is quoted in one press. Without prices it finishes on "Add your prices"; until then the owner
+types a price for each request. Settings → General asks what the business runs, for an owner who
+skipped the wizard. A hosted
 inbox's setup plan may name the `stays` preset, the `stay` door and a stay door elsewhere with its
 deep link; it never makes a property, a room or a price.
 
@@ -241,7 +288,10 @@ deep link; it never makes a property, a room or a price.
 
 One thread per stay, in the property's name. Before arrival (2 days by default), the arrival
 details (2 days, sealed at rest, opened only as the email goes, never shown on a page or to an
-agent), and a thank-you after the stay only when the owner switches it on.
+agent), and a thank-you after the stay only when the owner switches it on. The arrival details go only
+into their own email, under a marker of that email's own, and only while the stay is confirmed or
+under way: anything shaped like the marker in words someone else wrote is taken out, so no reply,
+whoever asked for it, can carry the codes.
 
 ## 11. Before a guest is bound; the owner's screens
 
@@ -258,7 +308,15 @@ emails in their own words (S16).
 The pages behind an email's links (G1–G5: accept the quote, other dates, cancel, a card to hold the
 stay, the change answered) and six emails (G1–G6), in English, Spanish, French, German, Italian and
 Portuguese, each checked by the copy lint: no guest string names us, a network, a receipt, a pass, a
-key, a reputation or an inbox.
+key, a reputation or an inbox. Money and dates are written as the guest's language writes them where
+the property is (`es-MX`, `pt-BR`, `en-US`, from the property's zone), never one region's by default; a
+time's zone is named by the property's town, else its country where it has one zone, else the zone's
+own name in the guest's language, never its IANA city. Japanese, Chinese, Arabic, Turkish, Indonesian
+and Thai are next for guests; until then a property's guests in those languages read English, and the
+setup says so.
+
+The owner's emails are in the owner's words: *"Stay request: Hana Okafor, 1–4 Nov, 3 nights"*, with
+the guests, the room, what they wrote, by when the owner answers and the guest's own short reference.
 
 ## 14. Tests
 

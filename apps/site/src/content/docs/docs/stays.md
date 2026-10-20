@@ -9,14 +9,14 @@ Settings → **Property**, or **A place to stay** in the setup wizard.
 
 ## What you set up
 
-- **The place** — what kind it is, the currency, check-in and check-out times, how soon you answer, how long a quote holds and how long a guest has to pay what is due.
-- **Rooms** — each kind of room once: how many you have, how many sleep in one, the beds, what is in it.
+- **The place** — what kind it is, the town, the currency, check-in and check-out times, how soon you answer, and how long a quote holds. How long a guest has to pay what is due, and how long a guest's assistant may hold a room, show only where they apply.
+- **Rooms** — each kind of room once: how many you have, how many sleep in one, the beds, what is in it. The setup wizard asks a price a night with each, and puts it on a standard plan (room only, free to cancel until 7 days before, nothing now).
 - **Plans** — what a stay includes (room only, breakfast…), what cancelling costs (free until a few days before, or non-refundable), and when it is paid: nothing now, the first night, a share, or everything; the rest at the property or some days before arrival.
 - **Prices** — a price a night per room and plan, for so many guests, and seasons or weekends that differ.
 - **Taxes and fees** — a tourist or city tax, a cleaning fee: per stay, per night, per guest, or a share of the room price, collected with the booking or at the property. Every one is in the total a guest sees.
 - **House rules and arrival** — quiet hours, children and pets, how to find you, and the door code, key box or Wi-Fi, which are sealed when saved and sent only to confirmed guests, two days before.
 
-Until you have prices, every request waits for your own quote.
+Until you have prices, you type a price for each request in its quote; your taxes and fees are added to it.
 
 ## How a stay is confirmed
 
@@ -31,8 +31,9 @@ A calendar link from another channel (Airbnb, Booking.com, Vrbo) is a hint: the 
 ## Money
 
 - Deposits, balances and a card to hold a stay all go through **your own payment account** (Settings → Payments). Each has its own link, sent when it is due; a deposit's link closes when the time to pay ends.
-- Paying at the property works everywhere, with nothing to connect.
-- If a payment arrives after the stay lapsed and the nights went to someone else, the inbox writes down a refund you owe, with the amount, and refunds nothing itself. You refund it from your own account.
+- Paying at the property works everywhere, with nothing to connect. Until a payment account is connected, a plan asks nothing before arrival: its quotes say everything is paid at the property, and you are told why.
+- A payment that arrives after the time to pay ended confirms the stay only inside the rooms you keep for direct guests, where nothing can have sold them since (or, with your system connected, once your system takes the stay again). Anywhere else the inbox writes down a refund you owe, with the amount, and refunds nothing itself: you may have sold those nights elsewhere. You refund it from your own account.
+- A payment in another currency than the stay's is never counted: it waits for you to look at it.
 
 ## Changes and cancellations
 
@@ -41,11 +42,21 @@ A guest asking to change dates sees the new total and what it means to pay or ge
 ## Your day
 
 - **Today** (the inbox's first screen): who arrives, with their arrival window, who leaves, who is staying, and what is still to pay at the property.
-- **Nights** (Availability): each room type by the next two weeks, with stays, holds, rooms kept for direct guests, closed nights and other calendars' hints.
+- **Nights** (Availability): each room type by the next two weeks, with stays, holds, the rooms still free for direct guests, closed nights and other calendars' hints. A place to stay takes nights, not hours: the opening hours appear only once you also offer something booked by the hour.
 
 ## What your AI may do
 
-Your own AI may fill in rooms, prices, taxes, fees and extras that guests are not offered yet, read the Nights grid and Today, and draft a quote from your rates. How stays are confirmed, rooms kept for direct guests, policies, deposits, a card to hold a stay and your registration number are yours alone, in the app.
+Your own AI may fill in rooms, prices, taxes, fees and extras that guests are not offered yet, read the Nights grid and Today, and draft a quote from your rates. It sends a quote, or says yes to a change, only where a room cannot be sold twice (rooms you keep for direct guests, or your system confirming at once); anywhere else it is kept as a draft for you, since only you can check your other channels. How stays are confirmed, rooms kept for direct guests, policies, deposits, a card to hold a stay and your registration number are yours alone, in the app.
+
+## Your guests' words
+
+Guests are written to in English, Spanish, French, German, Italian or Portuguese: theirs when they gave one, else the first language you chose. Money and dates are written as that language writes them where you are (Spanish in Mexico, Portuguese in Brazil). Japanese, Chinese, Arabic, Turkish, Indonesian and Thai are next; until then those guests read English.
+
+The private arrival details go only in their own email, two days before arrival by default, and only to a confirmed guest: never in a reply, whoever asks for them.
+
+## Your page, as agents read it
+
+Your inbox's front page carries your place as schema.org reads it (the place, its rooms, and a price only where a stay is booked at once, a night with every tax and fee in it). The page itself is not indexed by search engines; the block is there for agents, and for your own site to copy.
 
 ## If you take bookings elsewhere already
 
