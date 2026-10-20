@@ -54,14 +54,25 @@ describe("the stays doors", () => {
     expect((await hold("2026-12-10", "2026-12-12")).view.item.state).toBe("held");
     const third = await hold("2026-12-18", "2026-12-20").catch((e: WriteError) => e);
     expect(third).toMatchObject({ code: "guard_failed", details: { guard: "holds" } });
-    // Another assistant is not held back by this one's.
+    // An assistant that signs nothing, for the same guest's address, is the same guest.
+    const unsigned = await m.caps.stays
+      .hold(guest(), {
+        check_in: "2026-12-18",
+        check_out: "2026-12-20",
+        rooms: [{ room_type_id: m.rooms.harbour, adults: 2 }],
+        contact,
+        consent: true,
+      })
+      .catch((e: WriteError) => e);
+    expect(unsigned).toMatchObject({ code: "guard_failed", details: { guard: "holds" } });
+    // Another assistant, for another guest, is not held back by this one's.
     const other = await m.caps.stays.hold(
       { ...guest(), agent: { level: "self", thumbprint: "tp-maple-2" } },
       {
         check_in: "2026-12-18",
         check_out: "2026-12-20",
         rooms: [{ room_type_id: m.rooms.harbour, adults: 2 }],
-        contact,
+        contact: { ...contact, name: "Kofi A.", email: "kofi@example.org" },
         consent: true,
       },
     );
@@ -173,7 +184,13 @@ describe("the stays doors", () => {
         {
           "@type": "Offer",
           itemOffered: { "@type": "HotelRoom", name: "Harbour room" },
-          priceSpecification: { minPrice: "189.00", priceCurrency: "CAD", unitText: "night" },
+          // A night with its HST in it (15%): never the bare room rate.
+          priceSpecification: {
+            minPrice: "217.35",
+            priceCurrency: "CAD",
+            unitText: "night",
+            valueAddedTaxIncluded: true,
+          },
         },
       ],
     });

@@ -20,8 +20,9 @@ import { type FakePlatform, fakePlatform } from "../platform";
  * be proved against it, and each real adapter later against its own recorded fixtures.
  *
  * Its modes are the ways real systems behave:
- * - write guards: `check` refuses a booking on a full night; `oversell` takes it and goes below none,
- *   so the inbox's read-back takes its own write back;
+ * - write guards: `check` refuses a booking (or a move) onto a full night; `oversell` takes it, goes
+ *   below none and flags the booking as overbooked, its own definite word the inbox reads back before it
+ *   promises anything;
  * - hold styles: a `hold` that `blocks` the room, or one that does not;
  * - rate limits: a credit budget per five minutes, said in every answer's headers, and 429 when spent;
  * - webhooks that arrive twice and out of order (`hints`), never to be believed;
@@ -75,6 +76,10 @@ export interface FakePropertySystem {
     guard: "check" | "oversell";
     hold: "blocks" | "nonblocking";
     write: "ok" | "refuse" | "unreachable" | "never" | "slow_lands";
+    /** Whether reading a booking back answers, or fails (a read-back that cannot be made). */
+    readBack: "ok" | "fails";
+    /** How many looks by our reference miss before one finds it (an index that lags the write). */
+    findMisses: number;
     credits: number;
     /** When the credits come back, ms from the fake's own clock. */
     resetsInMs: number;
@@ -113,6 +118,8 @@ export function genericPropertySystem(opts: {
     guard: "check",
     hold: "blocks",
     write: "ok",
+    readBack: "ok",
+    findMisses: 0,
     credits: 100,
     resetsInMs: 300_000,
   };
@@ -193,8 +200,29 @@ export function genericPropertySystem(opts: {
       );
       return answer(200, { rows, ...(shown.length < nights.length ? { until: nights[shown.length] } : {}) });
     })
+    .on("GET", `${BASE}/bookings/:id`, (req) => {
+      const b = bookings.get(req.params.id ?? "");
+      if (!b) return answer(404, { error: "no such booking" });
+      if (mode.readBack === "fails") return new Response("bad gateway", { status: 502 });
+      // The system's own overbooking flag: any night of this booking with more booked than rooms.
+      const overbooked =
+        b.status !== "cancelled" &&
+        b.roomIds.some((r) => nightsBetween(b.checkIn, b.checkOut).some((night) => free(r, night) < 0));
+      return answer(200, {
+        id: b.id,
+        status: b.status,
+        checkIn: b.checkIn,
+        checkOut: b.checkOut,
+        overbooked,
+        ...(b.guest ? { guest: b.guest } : {}),
+      });
+    })
     .on("GET", `${BASE}/bookings`, (req) => {
       const ref = req.url.searchParams.get("reference");
+      if (mode.findMisses > 0) {
+        mode.findMisses -= 1;
+        return answer(200, []);
+      }
       const found = [...bookings.values()].filter((b) => b.reference === ref);
       return answer(
         200,
@@ -241,10 +269,31 @@ export function genericPropertySystem(opts: {
     .on("PATCH", `${BASE}/bookings/:id`, (req) => {
       const b = bookings.get(req.params.id ?? "");
       if (!b) return answer(404, { error: "no such booking" });
-      const body = JSON.parse(req.body) as Partial<FakeBooking>;
-      if (body.checkIn) b.checkIn = body.checkIn;
-      if (body.checkOut) b.checkOut = body.checkOut;
+      if (mode.write === "refuse") return answer(409, { error: "not free" });
+      const body = JSON.parse(req.body) as Partial<FakeBooking> & { rooms?: string[] };
+      const next = {
+        checkIn: body.checkIn ?? b.checkIn,
+        checkOut: body.checkOut ?? b.checkOut,
+        roomIds: body.rooms ?? b.roomIds,
+      };
+      // A move onto nights or rooms that are full: refused under `check`, taken under `oversell`.
+      const own = (roomId: string, night: string) =>
+        b.status !== "cancelled" && b.roomIds.includes(roomId) && night >= b.checkIn && night < b.checkOut
+          ? b.roomIds.filter((r) => r === roomId).length
+          : 0;
+      const short = next.roomIds.some((r) =>
+        nightsBetween(next.checkIn, next.checkOut).some(
+          (night) => free(r, night) + own(r, night) < next.roomIds.filter((x) => x === r).length,
+        ),
+      );
+      if (short && mode.guard === "check") return answer(409, { error: "not free" });
+      if (mode.write === "unreachable") return new Response("bad gateway", { status: 502 });
+      b.checkIn = next.checkIn;
+      b.checkOut = next.checkOut;
+      (b as { roomIds: readonly string[] }).roomIds = next.roomIds;
       if (body.status) b.status = body.status;
+      if (body.guest) b.guest = body.guest;
+      if (body.price !== undefined) b.price = body.price;
       return answer(200, { id: b.id, status: b.status });
     })
     .on("POST", `${BASE}/bookings/:id/cancel`, (req) => {
@@ -373,7 +422,10 @@ export function genericPropertySystem(opts: {
           await call(ctx, "PATCH", `/bookings/${link.externalId}`, {
             checkIn: stay.checkIn,
             checkOut: stay.checkOut,
+            rooms: stay.rooms.map((r) => r.roomId),
             status,
+            price: stay.rooms.reduce((a, r) => a + r.price.value, 0),
+            ...(stay.guest ? { guest: stay.guest } : {}),
           });
           return link;
         }
@@ -395,6 +447,10 @@ export function genericPropertySystem(opts: {
         const { json } = await call(ctx, "GET", `/bookings?reference=${encodeURIComponent(stay.key)}`);
         const found = (json as { id: string }[])[0];
         return found ? { externalId: found.id, etag: null, calendar: null } : null;
+      },
+      async oversold(ctx, _stay, link) {
+        const { json } = await call(ctx, "GET", `/bookings/${encodeURIComponent(link.externalId ?? "")}`);
+        return (json as { overbooked?: unknown }).overbooked === true;
       },
     },
   };

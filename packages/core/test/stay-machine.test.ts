@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 import type { PayloadOf } from "../src/domain/types";
 import { stayMachine } from "../src/machine/stay";
 import { transitionItem, WriteError } from "../src/write/index";
-import { clock, contact, guest, kijaniHouse, mapleHollow, owner, ownerAi, ryokanHoshi, system } from "./stay-fixtures";
+import {
+  clock,
+  contact,
+  guest,
+  kijaniHouse,
+  mapleHollow,
+  owner,
+  ownerAi,
+  payPlatform,
+  ryokanHoshi,
+  system,
+} from "./stay-fixtures";
 
 type StayPayload = PayloadOf<"stay">;
 
@@ -95,9 +106,46 @@ describe("the stay machine (ADR-033)", () => {
     expect(completed.view.item.state).toBe("completed");
   });
 
+  it("Ryokan Hoshi with no payment platform: nothing is asked now, everything at the property, the owner told", async () => {
+    clock.now = Date.parse("2026-11-02T01:00:00Z");
+    const r = await ryokanHoshi();
+    const made = await r.caps.stays.request(guest(), {
+      check_in: "2026-12-12",
+      check_out: "2026-12-15",
+      rooms: [{ room_type_id: r.rooms.japanese, adults: 2 }],
+      contact,
+      consent: true,
+    });
+    const id = made.view.item.id;
+    const quoted = await transitionItem(r.db, owner, { itemId: id, event: "quote", input: { from: "rates" } });
+    const q = (quoted.view.item.payload as StayPayload).quote;
+    expect(q?.schedule.map((s) => [s.type, s.amount.value])).toEqual([["at_property", 77_400 + 7_740 + 2_400]]);
+    const { rows: notes } = await r.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [id],
+      method: "all",
+    });
+    expect(notes.map((n) => String(n[0]))).toContain(
+      "No payment account is connected, so nothing was asked now: the guest pays everything at the property. To take a deposit, connect Stripe or Mollie in Payments.",
+    );
+    const token = made.accessToken as string;
+    const ask = await expectCode(
+      transitionItem(r.db, guest({ accessToken: token }), { itemId: id, event: "accept" }),
+      "confirm_terms",
+    );
+    const done = await transitionItem(r.db, guest({ accessToken: token }), {
+      itemId: id,
+      event: "accept",
+      input: { terms_sha: (ask.details as { terms_sha: string }).terms_sha },
+    });
+    // Never waiting on a payment nobody can make.
+    expect(done.view.item.state).toBe("confirmed");
+  });
+
   it("Ryokan Hoshi: the deposit is due now, so the stay waits for it; the pay window lapses it", async () => {
     clock.now = Date.parse("2026-11-02T01:00:00Z");
     const r = await ryokanHoshi();
+    await payPlatform(r.db);
     const made = await r.caps.stays.request(guest(), {
       check_in: "2026-12-12",
       check_out: "2026-12-15",

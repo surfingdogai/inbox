@@ -6,13 +6,16 @@ import { at, HOUR, OWNER, ok, type Setup, setup } from "./stay-harness";
 
 /**
  * Stays' pay links (ADR-033 §5.4) on the property's own Stripe: one live link per stay and entry, the
- * deposit's closed when its window closes; a payment landing after that takes the nights again when
- * they are still free and is owed back when they are not, never refunded here; the balance's own link
+ * deposit's closed when its window closes; a payment landing after that takes the nights again only
+ * where nothing can have sold them since (rooms kept for direct guests, still inside them) and is owed
+ * back anywhere else, never refunded here; the balance's own link
  * in the days before it is due; and a card to hold a stay, a page in setup mode made when it is opened.
  */
 type S = Setup & { stripe: ReturnType<typeof stripePlatform> };
 
-async function kyoto(opts: { deposit?: unknown; balance?: unknown; guarantee?: "card"; units?: number } = {}) {
+async function kyoto(
+  opts: { deposit?: unknown; balance?: unknown; guarantee?: "card"; units?: number; kept?: number } = {},
+) {
   const s = (await setup({ name: "Ryokan Hoshi", timezone: "Asia/Tokyo", currency: "JPY" })) as S;
   const conn = await ok<{ id: string }>(
     s.owner("POST", "/v1/owner/integrations", { kind: "stripe", values: { api_key: STRIPE_LIVE_KEY } }),
@@ -25,6 +28,7 @@ async function kyoto(opts: { deposit?: unknown; balance?: unknown; guarantee?: "
       currency: "JPY",
       check_in_from: "15:00",
       check_out_until: "10:00",
+      ...(opts.kept ? { mode: "allotment" } : {}),
     }),
   );
   const room = await ok<{ id: string }>(
@@ -54,7 +58,34 @@ async function kyoto(opts: { deposit?: unknown; balance?: unknown; guarantee?: "
       base_guests: 2,
     }),
   );
+  if (opts.kept) {
+    const today = dateIn(s.clock.now, "Asia/Tokyo");
+    await ok(
+      s.owner("PUT", "/v1/owner/property/allotments", {
+        room_type_id: room.id,
+        from_date: today,
+        to_date: addLocalDays(today, 120),
+        units: opts.kept,
+        closed_elsewhere: true,
+      }),
+    );
+  }
   return { s, room: room.id, conn: conn.id };
+}
+
+async function lapse(s: S, id: string) {
+  await transitionItem(
+    s.db,
+    { ...at(s, { kind: "system", id: "sweep", channel: "system" }), now: () => Date.now() + 25 * HOUR },
+    { itemId: id, event: "expire" },
+  );
+}
+
+async function refundsOf(s: S) {
+  const refunds = await ok<{
+    items: { item: { type: string; state: string; linkedItemId: string; payload: { amount: { value: number } } } }[];
+  }>(s.owner("GET", "/v1/owner/items?type=refund&open_only=false"));
+  return refunds.items.map((r) => [r.item.linkedItemId, r.item.state, r.item.payload.amount.value]);
 }
 
 /** A request quoted from the rates and accepted on the terms shown: the stay waiting for what is due now. */
@@ -118,19 +149,120 @@ describe("stays' pay links", () => {
     expect([...s.stripe.links.values()][0]?.active).toBe(false);
   });
 
-  it("takes a payment that lands late while the nights are still free, and confirms the stay", async () => {
-    const { s, room } = await kyoto();
+  it("confirms a stay paid late inside the rooms kept for direct guests, nothing being able to sell them since", async () => {
+    const { s, room } = await kyoto({ kept: 1, units: 4 });
     const stay = await accepted(s, room, ahead(s, 30));
     const [made] = [...s.stripe.links.values()];
-    await transitionItem(
-      s.db,
-      { ...at(s, { kind: "system", id: "sweep", channel: "system" }), now: () => Date.now() + 25 * HOUR },
-      { itemId: stay.id, event: "expire" },
-    );
+    await lapse(s, stay.id);
     expect(await state(s, stay.id)).toBe("expired");
     const hook = await s.inbox.app.request(await s.stripe.pay(made?.id ?? ""));
     expect(hook.status).toBe(200);
     expect(await state(s, stay.id)).toBe("confirmed");
+  });
+
+  it("owes back a payment that lands late on request: the property may have sold the nights elsewhere", async () => {
+    const { s, room } = await kyoto({ units: 3 });
+    const stay = await accepted(s, room, ahead(s, 30));
+    const [made] = [...s.stripe.links.values()];
+    await lapse(s, stay.id);
+    await s.inbox.app.request(await s.stripe.pay(made?.id ?? ""));
+    expect(await state(s, stay.id)).toBe("expired");
+    expect(await refundsOf(s)).toEqual([[stay.id, "approved", 25_800]]);
+    const item = await ok<{ item: { flags: { needsHuman?: boolean } } }>(s.owner("GET", `/v1/owner/items/${stay.id}`));
+    expect(item.item.flags.needsHuman).toBe(true);
+  });
+
+  it("never confirms a late payment over the rooms kept: the kept room went to another guest meanwhile", async () => {
+    // One Japanese room of four kept for direct guests, closed elsewhere; the other three on sale elsewhere.
+    const { s, room } = await kyoto({ kept: 1, units: 4 });
+    const checkIn = ahead(s, 30);
+    const first = await accepted(s, room, checkIn);
+    const [made] = [...s.stripe.links.values()];
+    await lapse(s, first.id);
+    // Another guest's assistant holds and books the kept room, and pays.
+    const held = await ok<{ view: { item: { id: string; state: string } }; accessToken: string; terms_sha: string }>(
+      s.guest("POST", "/v1/stays/holds", {
+        check_in: checkIn,
+        check_out: addLocalDays(checkIn, 3),
+        rooms: [{ room_type_id: room, adults: 2 }],
+        contact: { name: "Kenji T.", email: "kenji@example.org" },
+        consent: true,
+      }),
+      201,
+    );
+    expect(held.view.item.state).toBe("held");
+    const booked = await ok<{ view: { item: { state: string } } }>(
+      s.guest("POST", "/v1/stays/book", {
+        item_id: held.view.item.id,
+        terms_sha: held.terms_sha,
+        access_token: held.accessToken,
+      }),
+    );
+    expect(booked.view.item.state).toBe("awaiting_payment");
+    await s.drain();
+    const secondLink = [...s.stripe.links.values()].at(-1);
+    await s.inbox.app.request(await s.stripe.pay(secondLink?.id ?? ""));
+    expect(await state(s, held.view.item.id)).toBe("confirmed");
+    // The first guest's payment lands after all: three rooms are free in all, but none kept.
+    await s.inbox.app.request(await s.stripe.pay(made?.id ?? ""));
+    expect(await state(s, first.id)).toBe("expired");
+    expect(await refundsOf(s)).toEqual([[first.id, "approved", 25_800]]);
+  });
+
+  it("keeps a booked stay's nights for its whole pay window, not the hold's: the kept room is never sold twice", async () => {
+    // One room of four kept for direct guests; a hold lasts its 20 minutes, the deposit's window an hour.
+    const { s, room } = await kyoto({ kept: 1, units: 4 });
+    const checkIn = ahead(s, 30);
+    const hold = async (name: string, email: string) =>
+      s.guest("POST", "/v1/stays/holds", {
+        check_in: checkIn,
+        check_out: addLocalDays(checkIn, 3),
+        rooms: [{ room_type_id: room, adults: 2 }],
+        contact: { name, email },
+        consent: true,
+      });
+    const a = await ok<{ view: { item: { id: string } }; accessToken: string; terms_sha: string }>(
+      hold("Amara O.", "amara@example.org"),
+      201,
+    );
+    const booked = await ok<{ view: { item: { state: string } } }>(
+      s.guest("POST", "/v1/stays/book", {
+        item_id: a.view.item.id,
+        terms_sha: a.terms_sha,
+        access_token: a.accessToken,
+      }),
+    );
+    expect(booked.view.item.state).toBe("awaiting_payment");
+    await s.drain();
+    const { rows } = await s.db.client.query({
+      sql: "SELECT hold_until FROM night_claims WHERE item_id = ?",
+      params: [a.view.item.id],
+      method: "all",
+    });
+    // Held until the window closes (and a little after), well past the hold's 20 minutes.
+    expect(rows.every((r) => Number(r[0]) > s.clock.now + 55 * 60_000)).toBe(true);
+    // 25 minutes on, past the hold, inside the window: the kept room is still A's.
+    s.clock.now += 25 * 60_000;
+    const b = await hold("Bo L.", "bo@example.org");
+    expect(b.status).toBe(409);
+    expect(((await b.json()) as { details: { guard?: string } }).details.guard).toBe("instant_safe");
+    // The deposit lands, inside the window (as the platform's webhook records it).
+    await transitionItem(
+      s.db,
+      { ...at(s, { kind: "connector", id: "connector:stripe", channel: "connector" }) },
+      {
+        itemId: a.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: "pi_amara", amount: { value: 25_800, currency: "JPY" } },
+      },
+    );
+    expect(await state(s, a.view.item.id)).toBe("confirmed");
+    const { rows: after } = await s.db.client.query({
+      sql: "SELECT COUNT(*), SUM(hold_until IS NULL) FROM night_claims WHERE item_id = ?",
+      params: [a.view.item.id],
+      method: "all",
+    });
+    expect([Number(after[0]?.[0]), Number(after[0]?.[1])]).toEqual([3, 3]);
   });
 
   it("owes back a payment that lands late when the nights went to someone else: never refunded here", async () => {
@@ -138,11 +270,7 @@ describe("stays' pay links", () => {
     const checkIn = ahead(s, 30);
     const first = await accepted(s, room, checkIn);
     const [made] = [...s.stripe.links.values()];
-    await transitionItem(
-      s.db,
-      { ...at(s, { kind: "system", id: "sweep", channel: "system" }), now: () => Date.now() + 25 * HOUR },
-      { itemId: first.id, event: "expire" },
-    );
+    await lapse(s, first.id);
     // Another guest takes the last room and pays.
     const second = await accepted(s, room, checkIn, 3, "kenji@example.org");
     expect(second.state).toBe("awaiting_payment");
@@ -152,12 +280,7 @@ describe("stays' pay links", () => {
     // The first guest's payment lands after all.
     await s.inbox.app.request(await s.stripe.pay(made?.id ?? ""));
     expect(await state(s, first.id)).toBe("expired");
-    const refunds = await ok<{
-      items: { item: { type: string; state: string; linkedItemId: string; payload: { amount: { value: number } } } }[];
-    }>(s.owner("GET", "/v1/owner/items?type=refund&open_only=false"));
-    expect(refunds.items.map((r) => [r.item.linkedItemId, r.item.state, r.item.payload.amount.value])).toEqual([
-      [first.id, "approved", 25_800],
-    ]);
+    expect(await refundsOf(s)).toEqual([[first.id, "approved", 25_800]]);
     const { rows } = await s.db.client.query({
       sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
       params: [first.id],

@@ -220,3 +220,16 @@ export async function darAlBahr(): Promise<Built<"king", "roomOnly">> {
 }
 
 export const contact = { name: "Amara O.", email: "amara@example.org", locale: "en" };
+
+/**
+ * A payment platform the property connected, as the inbox sees one that makes links (and, when asked,
+ * saves cards): only what the stays layer reads of it. Without one, nothing is ever asked for now.
+ */
+export async function payPlatform(db: Db, opts: { cards?: boolean } = {}): Promise<void> {
+  await db.client.query({
+    sql: `INSERT INTO connectors (id, kind, name, config_enc, config_public, status, busy_gen, created_at, updated_at)
+          VALUES ('pay1', 'stripe', 'Stripe', '', ?, 'active', 0, ?, ?)`,
+    params: [JSON.stringify({ payOn: 1, ...(opts.cards ? { guarantees: 1 } : {}) }), clock.now, clock.now],
+    method: "run",
+  });
+}

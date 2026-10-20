@@ -215,6 +215,25 @@ describe("a stay's price from the rates", () => {
     expect(nights).toEqual([800_000 + 150_000 + 90_000, 1_200_000 + 150_000 + 90_000, 1_200_000 + 150_000 + 90_000]);
   });
 
+  it("prices a weekend night outside any season at the weekend rate, whatever order the rows come in", () => {
+    const every = base(800_000);
+    // Friday and Saturday (16 + 32).
+    const weekend = base(950_000, { weekdays: 48 });
+    const winter = base(700_000, { fromDate: "2027-02-01", toDate: "2027-02-28" });
+    const winterWeekend = base(820_000, { fromDate: "2027-02-01", toDate: "2027-02-28", weekdays: 48 });
+    for (const rates of [
+      [every, weekend, winter, winterWeekend],
+      [weekend, every, winterWeekend, winter],
+    ]) {
+      const s = setup({ currency: "INR", timezone: "Asia/Kolkata", rates });
+      // Thu 14, Fri 15, Sat 16 Jan 2027: no season; then Thu 4, Fri 5 Feb 2027 in the winter season.
+      expect(priced(s, "2027-01-14", "2027-01-17").lines[0]?.nights?.map((n) => n.amount)).toEqual([
+        800_000, 950_000, 950_000,
+      ]);
+      expect(priced(s, "2027-02-04", "2027-02-06").lines[0]?.nights?.map((n) => n.amount)).toEqual([700_000, 820_000]);
+    }
+  });
+
   it("gives a derived plan's percent off night by night, rounded half up in the currency's own unit", () => {
     const s = setup({
       currency: "MXN",

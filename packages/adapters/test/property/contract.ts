@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
  * its own fake or recorded fixtures: it reads the properties, rooms, rates and what is free night by
  * night; writes a stay under our own key and finds it again by that key; writes the same key once,
  * however often it is sent; refuses (never takes quietly) a stay on a night it has no room for, or
- * shows the night below none so the inbox's read-back takes the stay back; moves a stay it wrote;
+ * takes it and says so itself, definitely (`oversold`: its overbooking flag, or its count of bookings
+ * against its rooms), so the inbox's read-back takes the stay back; moves a stay it wrote, refusing or
+ * flagging a move onto a full night the same way;
  * cancels by status, never by deleting; and says how many credits it has left, and when it asks the
  * inbox to wait. Nothing here names any vendor.
  */
@@ -123,15 +125,35 @@ export function propertyContract(name: string, make: () => ContractSystem): void
       const ctx = runContext(s.http, s.secret);
       const writer = s.definition.stayWriter;
       if (!writer) throw new Error("no writer");
-      await writer.put(ctx, stay(s, "sd-contract-a", "2027-05-01", "2027-05-03"), null, "confirmed");
+      const firstStay = stay(s, "sd-contract-a", "2027-05-01", "2027-05-03");
+      const first = await writer.put(ctx, firstStay, null, "confirmed");
       const second = stay(s, "sd-contract-b", "2027-05-02", "2027-05-04");
       if (s.oversells) {
-        await writer.put(ctx, second, null, "confirmed");
-        const read = await s.definition.stays.ari(ctx, s.propertyId, { from: "2027-05-02", to: "2027-05-03" });
-        const rows = Array.isArray(read) ? read : read.rows;
-        expect(rows.find((r) => r.roomId === s.oneUnitRoom)?.units).toBeLessThan(0);
+        // A system that takes it says so itself, definitely: never left to a count clamped at none.
+        expect(writer.oversold).toBeDefined();
+        const taken = await writer.put(ctx, second, null, "confirmed");
+        expect(await writer.oversold?.(ctx, second, taken)).toBe(true);
+        await writer.cancel(ctx, taken);
+        expect(await writer.oversold?.(ctx, firstStay, first)).toBe(false);
       } else {
         await expect(writer.put(ctx, second, null, "confirmed")).rejects.toMatchObject({ code: "refused" });
+      }
+    });
+
+    it("never quietly moves a stay onto a night it has no room for", async () => {
+      const s = make();
+      const ctx = runContext(s.http, s.secret);
+      const writer = s.definition.stayWriter;
+      if (!writer) throw new Error("no writer");
+      await writer.put(ctx, stay(s, "sd-contract-c", "2027-07-03", "2027-07-05"), null, "confirmed");
+      const mine = stay(s, "sd-contract-d", "2027-07-01", "2027-07-03");
+      const link = await writer.put(ctx, mine, null, "confirmed");
+      const longer = { ...mine, checkOut: "2027-07-04" };
+      if (s.oversells) {
+        await writer.put(ctx, longer, link, "confirmed");
+        expect(await writer.oversold?.(ctx, longer, link)).toBe(true);
+      } else {
+        await expect(writer.put(ctx, longer, link, "confirmed")).rejects.toMatchObject({ code: "refused" });
       }
     });
 

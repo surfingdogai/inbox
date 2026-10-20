@@ -218,6 +218,13 @@ describe("Ryokan Hoshi, Kyoto: written to its own system first, a first-night de
     await s.drain();
     const confirmed = await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${id}`));
     expect(confirmed.item.state).toBe("confirmed");
+    // Paid: the system's booking is written again as confirmed, with its guest, never left provisional.
+    await s.drain();
+    expect([...system.bookings.values()][0]).toMatchObject({
+      reference: `sd-${id}`,
+      status: "confirmed",
+      guest: { name: "Maria A.", email: "maria@example.org" },
+    });
 
     // Now the system has taken a stay this inbox wrote: confirming at once is unlocked.
     await ok(s.owner("PUT", "/v1/owner/property", { id: mapped.property_id, instant: true }));
@@ -265,6 +272,7 @@ describe("Ryokan Hoshi, Kyoto: written to its own system first, a first-night de
 describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests (CAD)", () => {
   it("holds and books at once, changes the dates, then cancels with the fee and owes back what was paid", async () => {
     const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD" });
+    await ok(s.owner("POST", "/v1/owner/integrations", { kind: "stripe", values: { api_key: STRIPE_LIVE_KEY } }), 201);
     const prop = await ok<{ id: string }>(
       s.owner("PUT", "/v1/owner/property", {
         name: "Maple Hollow B&B",
@@ -324,16 +332,16 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests (CAD)", (
     );
     const token = held.accessToken as string;
     const id = held.view.item.id;
-    // Everything paid now, with nobody to take it: the guest waits on a payment the owner records.
+    // Everything paid now, by the property's own Stripe.
     const booked = await ok<{ view: { item: { state: string } } }>(
       s.guest("POST", "/v1/stays/book", { item_id: id, terms_sha: held.terms_sha, access_token: token }),
     );
     expect(booked.view.item.state).toBe("awaiting_payment");
-    await ok(
-      s.owner("POST", `/v1/owner/items/${id}/transitions`, {
-        event: "record_payment",
-        input: { paymentRef: "e-transfer 4411" },
-      }),
+    await s.drain();
+    const [link] = [...s.stripe.links.values()];
+    await s.inbox.app.request(await s.stripe.pay(link?.id ?? ""));
+    expect((await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${id}`))).item.state).toBe(
+      "confirmed",
     );
     // A change of dates while cancelling is free: the property says yes.
     const newIn = addLocalDays(checkIn, 1);
@@ -371,5 +379,218 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests (CAD)", (
     expect(refunds.items.map((r) => [r.item.type, r.item.state, r.item.payload.amount.value])).toEqual([
       ["refund", "approved", 18_900],
     ]);
+  });
+});
+
+describe("Ryokan Hoshi, Kyoto: a change written to its own system first (JPY)", () => {
+  /** The ryokan connected to its own system (one Japanese room), and a guest's stay quoted and accepted. */
+  async function property() {
+    const system = genericPropertySystem({
+      name: "Ryokan Hoshi",
+      currency: "JPY",
+      timezone: "Asia/Tokyo",
+      rooms: [{ id: "R1", name: "Japanese room", units: 1, prices: { FLEX: 25_800 } }],
+    });
+    const s = await setup({ name: "Ryokan Hoshi", timezone: "Asia/Tokyo", currency: "JPY", property: system });
+    const conn = await ok<{ id: string }>(
+      s.owner("POST", "/v1/owner/integrations", { kind: "fake_property", values: { api_key: API_KEY } }),
+      201,
+    );
+    const mapped = await ok<{ property_id: string }>(
+      s.owner("POST", "/v1/owner/property/system", {
+        connector_id: conn.id,
+        external_property_id: "P1",
+        rooms: [{ external_id: "R1", room_type_id: "new" }],
+      }),
+    );
+    const view = await ok<{ setup: { rooms: { id: string }[] } }>(s.owner("GET", "/v1/owner/property"));
+    const room = view.setup.rooms[0]?.id as string;
+    const plan = await ok<{ id: string }>(
+      s.owner("POST", "/v1/owner/property/rate-plans", {
+        name: "Flexible",
+        external_id: "FLEX",
+        policy: { preset: "free_until", days: 3, after: "first_night", no_show: "full" },
+        deposit: { kind: "none" },
+      }),
+    );
+    await ok(
+      s.owner("PUT", "/v1/owner/property/rates", {
+        rate_plan_id: plan.id,
+        room_type_id: room,
+        nightly: 25_800,
+        base_guests: 2,
+      }),
+    );
+    await ok(s.owner("PUT", "/v1/owner/property", { id: mapped.property_id, mode: "connected" }));
+    const checkIn = addLocalDays(dateIn(s.clock.now, "Asia/Tokyo"), 40);
+    const checkOut = addLocalDays(checkIn, 2);
+    const accept = async () => {
+      const made = await ok<ItemBody>(
+        s.guest("POST", "/v1/stays", {
+          check_in: checkIn,
+          check_out: checkOut,
+          rooms: [{ room_type_id: room, adults: 2 }],
+          contact: { name: "Wanjiru K.", email: "wanjiru@example.org", locale: "en" },
+          consent: true,
+        }),
+        201,
+      );
+      const id = made.view.item.id;
+      const token = made.accessToken as string;
+      await ok(s.owner("POST", `/v1/owner/items/${id}/transitions`, { event: "quote", input: { from: "rates" } }));
+      const asked = await s.guest("POST", `/v1/items/${id}/accept`, { access_token: token });
+      const sha = ((await asked.json()) as { details: { terms_sha: string } }).details.terms_sha;
+      const r = await ok<{ view: { item: { state: string } } }>(
+        s.guest("POST", `/v1/items/${id}/accept`, { access_token: token, terms_sha: sha }),
+      );
+      expect(r.view.item.state).toBe("booking");
+      return { id, token };
+    };
+    const state = async (id: string) =>
+      (await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${id}`))).item.state;
+    return { s, system, conn: conn.id, mapped: mapped.property_id, room, checkIn, checkOut, accept, state };
+  }
+
+  async function connected() {
+    const c = await property();
+    const { s, system, checkIn, checkOut } = c;
+    const { id, token } = await c.accept();
+    await s.drain();
+    const booking = [...system.bookings.values()][0];
+    expect(booking).toMatchObject({ status: "confirmed", checkIn, checkOut });
+    // The guest asks for one more night, priced from the rates, and the owner says yes.
+    const ask = async () => {
+      const body = { check_in: checkIn, check_out: addLocalDays(checkOut, 1), access_token: token };
+      const first = await s.guest("POST", `/v1/stays/${id}/change`, body);
+      const terms = ((await first.json()) as { details: { terms_sha: string } }).details.terms_sha;
+      await ok(s.guest("POST", `/v1/stays/${id}/change`, { ...body, terms_sha: terms }));
+      const accepted = await ok<{ view: { item: { payload: { checkOut: string; change?: { writing?: string } } } } }>(
+        s.owner("POST", `/v1/owner/items/${id}/transitions`, { event: "accept_change" }),
+      );
+      // Not moved yet: written to the system first.
+      expect(accepted.view.item.payload.checkOut).toBe(checkOut);
+      expect(accepted.view.item.payload.change?.writing).toBeTruthy();
+      await s.drain();
+      return ok<{ item: { state: string; payload: { checkOut: string; change?: unknown } } }>(
+        s.owner("GET", `/v1/owner/items/${id}`),
+      );
+    };
+    return { ...c, id, booking, ask };
+  }
+
+  it("keeps the stay as it was when the system has no room for the new night, and never cancels it", async () => {
+    const c = await connected();
+    // The night after was sold on another channel.
+    c.system.sold.set(`R1|${c.checkOut}`, 1);
+    const after = await c.ask();
+    expect(after.item.state).toBe("confirmed");
+    expect(after.item.payload.checkOut).toBe(c.checkOut);
+    expect(after.item.payload.change).toBeUndefined();
+    expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: c.checkOut });
+    const mail = c.s.mail.sent.filter((m) => m.to.includes("wanjiru@example.org")).map((m) => m.subject);
+    expect(mail.some((m) => /could not be changed/i.test(m))).toBe(true);
+  });
+
+  it("puts the old dates back when the system takes the new night only to show it oversold", async () => {
+    const c = await connected();
+    c.system.sold.set(`R1|${c.checkOut}`, 1);
+    c.system.mode.guard = "oversell";
+    const after = await c.ask();
+    expect(after.item.payload.checkOut).toBe(c.checkOut);
+    // Put back as it was, by the system's own booking: still confirmed, never cancelled.
+    expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: c.checkOut });
+    const notes = await c.s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [c.id],
+      method: "all",
+    });
+    expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(/oversold, so they were put back/);
+  });
+
+  it("moves the stay once the system took the new night", async () => {
+    const c = await connected();
+    const after = await c.ask();
+    expect(after.item.payload.checkOut).toBe(addLocalDays(c.checkOut, 1));
+    expect(c.booking).toMatchObject({ status: "confirmed", checkOut: addLocalDays(c.checkOut, 1) });
+  });
+
+  it("promises nothing while the system's read-back cannot be made, and confirms once it can", async () => {
+    const c = await property();
+    c.system.mode.guard = "oversell";
+    c.system.mode.readBack = "fails";
+    const { id } = await c.accept();
+    await c.s.drain();
+    // Written, but not known to be sound: still booking, nothing promised.
+    expect(await c.state(id)).toBe("booking");
+    c.system.mode.readBack = "ok";
+    c.s.clock.now += 31_000;
+    await c.s.drain();
+    expect(await c.state(id)).toBe("confirmed");
+  });
+
+  it("takes its write back when it can never be read back", async () => {
+    const c = await property();
+    c.system.mode.guard = "oversell";
+    c.system.mode.readBack = "fails";
+    const { id } = await c.accept();
+    await c.s.drain();
+    for (let i = 0; i < 12; i++) {
+      c.s.clock.now += 31_000;
+      await c.s.drain();
+    }
+    expect(await c.state(id)).toBe("expired");
+    expect([...c.system.bookings.values()][0]?.status).toBe("cancelled");
+  });
+
+  it("cancels a booking that landed after the inbox stopped looking for it", async () => {
+    const c = await property();
+    c.system.mode.write = "unreachable";
+    const { id } = await c.accept();
+    await c.s.drain();
+    expect(await c.state(id)).toBe("booking");
+    // It landed after all, and the system's index of references lags: the last look misses it.
+    c.system.bookings.set("B9", {
+      id: "B9",
+      reference: `sd-${id}`,
+      roomIds: ["R1"],
+      checkIn: c.checkIn,
+      checkOut: c.checkOut,
+      status: "confirmed",
+      price: 51_600,
+    });
+    c.system.mode.findMisses = 1;
+    c.s.clock.now += 6 * 60_000;
+    await c.s.drain();
+    expect(await c.state(id)).toBe("expired");
+    expect(c.system.bookings.get("B9")?.status).toBe("cancelled");
+  });
+
+  it("refuses to take a system's property in another currency or zone than its own", async () => {
+    const c = await property();
+    const other = await c.s.owner("POST", "/v1/owner/property/system", {
+      connector_id: c.conn,
+      external_property_id: "P1",
+      property_id: c.mapped,
+      rooms: [],
+    });
+    expect(other.status).toBe(200);
+    // The property here is now priced in another currency: the system's prices would be read as it.
+    await ok(c.s.owner("PUT", "/v1/owner/property", { id: c.mapped, currency: "USD" }));
+    const refused = await c.s.owner("POST", "/v1/owner/property/system", {
+      connector_id: c.conn,
+      external_property_id: "P1",
+      property_id: c.mapped,
+      rooms: [],
+    });
+    expect(refused.status).toBe(422);
+    expect(((await refused.json()) as { detail?: string; message?: string }).detail ?? "").toMatch(/JPY/);
+  });
+
+  it("lets the nights after a no-show's first go on the system, and keeps its booking there", async () => {
+    const c = await connected();
+    c.s.clock.now = Date.parse(`${addLocalDays(c.checkIn, 1)}T03:00:00Z`);
+    await transitionItem(c.s.db, at(c.s, OWNER), { itemId: c.id, event: "no_show" });
+    await c.s.drain();
+    expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: addLocalDays(c.checkIn, 1) });
   });
 });
