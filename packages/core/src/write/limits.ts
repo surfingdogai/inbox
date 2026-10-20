@@ -31,6 +31,7 @@ import {
 } from "./common";
 import { dearer, lastBusinessOffer } from "./offers";
 import {
+  bookedWith,
   type LinePricing,
   linePricing,
   orderPersonalised,
@@ -127,7 +128,7 @@ export async function judgeOffer(o: {
       | { startTime: string; endTime: string; totalPrice?: Money; personalised?: Personalised }
       | undefined;
     if (offered) {
-      const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing);
+      const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing, bookedWith(b));
       const length = Date.parse(offered.endTime) - Date.parse(offered.startTime);
       const agreedLength = Date.parse(b.endTime) - Date.parse(b.startTime);
       // Longer than the service (or than what was agreed) is a price the list does not cover.
@@ -304,7 +305,7 @@ export async function judgeAccept(o: {
   const pricing = await pricingForItem(db, item, settings);
   if (item.type === "booking") {
     const b = payload as PayloadOf<"booking">;
-    const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing);
+    const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing, bookedWith(b));
     if (!b.totalPrice) return [];
     // What the catalogue does not price for this booking — a service priced from or by quote, a longer
     // time — a person priced. A price of the customer's own on it has no floor to be judged against, so

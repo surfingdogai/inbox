@@ -66,6 +66,16 @@ export interface CreateInput {
    * of the idempotency hash.
    */
   readonly pricing?: PricingFor | undefined;
+  /**
+   * Salons (ADR-035): the request as the customer sent it, before the inbox made it ready (who it is
+   * with, its add-ons, the deposit and the policy dated at that moment). A retry is matched on it, so
+   * the same request sent again a minute later is the same request. Never stored.
+   */
+  readonly asked?:
+    | { readonly payload: unknown; readonly staffId?: string | undefined; readonly addOns?: unknown }
+    | undefined;
+  /** A person checks what comes first before this booking is confirmed (ADR-035): no rule confirms it. */
+  readonly checkFirst?: boolean | undefined;
 }
 
 /**
@@ -106,7 +116,18 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
   // signature or a pass presented again is the same request.
-  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, ...hashed } = input;
+  const {
+    identity: _identity,
+    confirmed: _confirmed,
+    pricing: _pricing,
+    asked,
+    checkFirst: _checkFirst,
+    ...rest
+  } = input;
+  // Hashed as the customer asked it; a request with nothing made ready hashes as it always did.
+  const hashed = asked
+    ? { ...rest, payload: asked.payload, ...(asked.staffId || asked.addOns ? { with: asked } : {}) }
+    : rest;
   const requestHash = idem ? await hashJson({ op: "create", scope: idem.scope, input: hashed }) : undefined;
   if (idem) {
     const hit = await findIdempotent(db, idem);
@@ -307,6 +328,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         sandbox: flags.sandbox,
         // A price the business did not set: no rule confirms or accepts it (ADR-018 §3.2).
         ...(priced.unpriced ? { unpriced: true } : {}),
+        // What comes first is a person's to check (ADR-035): no rule confirms it either.
+        ...(input.checkFirst ? { checkFirst: true } : {}),
         // A price the owner's reward gave this customer (ADR-018 §4): for the owner's history.
         ...(payload.personalised ? { personalised: true } : {}),
         ...actorMeta(caller),

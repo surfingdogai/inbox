@@ -228,6 +228,7 @@ export class SetupCapabilities {
     if (input.withdrawal !== undefined && input.withdrawal !== "standard" && !isPerson(caller))
       throw withdrawalOwners();
     if (input.negotiable === false && !isPerson(caller)) throw negotiableOwners();
+    const salon = await this.salonTerms(caller, input, null);
     await this.db.orm.insert(services).values({
       id,
       name: input.name,
@@ -242,10 +243,70 @@ export class SetupCapabilities {
       sort: input.sort,
       ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
       ...(input.negotiable === false ? { negotiable: 0 } : {}),
+      ...salon,
       createdAt: now,
       updatedAt: now,
     });
     return this.service(id);
+  }
+
+  /**
+   * A salon's terms for a service (ADR-035): its add-ons (each given an id), its deposit, its own
+   * policy and what must come first. The deposit, the policy, what comes first and any add-on's price
+   * are the owner's in person (money and the terms a customer is bound by), never the owner's AI's.
+   */
+  private async salonTerms(
+    caller: Caller,
+    input: Pick<S.ServiceInput, "add_ons" | "deposit" | "policy" | "requires">,
+    stored: ServiceRow | null,
+  ): Promise<Partial<Pick<ServiceRow, "addOns" | "deposit" | "policy" | "requires">>> {
+    const out: Partial<Pick<ServiceRow, "addOns" | "deposit" | "policy" | "requires">> = {};
+    if (input.add_ons !== undefined) {
+      const before = stored?.addOns ?? [];
+      const next = input.add_ons.map((a) => ({
+        id: a.id ?? ulid().slice(-10).toLowerCase(),
+        name: a.name,
+        durationMin: a.duration_min,
+        ...(a.price ? { price: { value: a.price.value, currency: a.price.currency.toUpperCase() } } : {}),
+      }));
+      if (!isPerson(caller)) {
+        // The owner's AI may name and time add-ons; what one costs stays as the owner set it.
+        const priceOf = (x: { id: string; price?: { value: number; currency: string } | undefined }) =>
+          x.price ? `${x.price.value} ${x.price.currency}` : "";
+        const changed = next.some((a) => priceOf(a) !== priceOf(before.find((b) => b.id === a.id) ?? { id: a.id }));
+        if (changed) throw ownerMoney("add_ons", "What an add-on costs is the owner's to set.");
+      }
+      await this.published(
+        caller,
+        next.map((a) => a.name),
+      );
+      out.addOns = next;
+    }
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    if (input.deposit !== undefined) {
+      if (!isPerson(caller) && !same(input.deposit, stored?.deposit))
+        throw ownerMoney("deposit", "A deposit is money, and money is the owner's.");
+      out.deposit = input.deposit;
+    }
+    if (input.policy !== undefined) {
+      if (!isPerson(caller) && !same(input.policy, stored?.policy))
+        throw ownerMoney("policy", "A cancellation policy is what customers are bound by: the owner sets it.");
+      out.policy = input.policy;
+    }
+    if (input.requires !== undefined) {
+      const requires = input.requires
+        ? { serviceId: input.requires.service_id, withinDays: input.requires.within_days }
+        : null;
+      if (!isPerson(caller) && !same(requires, stored?.requires))
+        throw ownerMoney("requires", "What must come first is the owner's to set.");
+      if (requires) {
+        if (stored && requires.serviceId === stored.id)
+          throw unknown("requires.service_id", "a service cannot come before itself");
+        await this.service(requires.serviceId);
+      }
+      out.requires = requires;
+    }
+    return out;
   }
 
   async updateService(caller: Caller, input: S.UpdateServiceInput): Promise<ServiceRow> {
@@ -271,10 +332,17 @@ export class SetupCapabilities {
         throw ownerMoney("active", "Publishing something with a price is the owner's to do, in the app.");
       }
     }
+    const salon = await this.salonTerms(caller, patch, await this.service(service_id));
     await this.patchRow(
       "services",
       service_id,
       {
+        add_ons: salon.addOns === undefined ? undefined : JSON.stringify(salon.addOns),
+        deposit:
+          salon.deposit === undefined ? undefined : salon.deposit === null ? null : JSON.stringify(salon.deposit),
+        policy: salon.policy === undefined ? undefined : salon.policy === null ? null : JSON.stringify(salon.policy),
+        requires:
+          salon.requires === undefined ? undefined : salon.requires === null ? null : JSON.stringify(salon.requires),
         name: patch.name,
         description: patch.description,
         duration_min: patch.duration_min,
@@ -407,7 +475,10 @@ export class SetupCapabilities {
     requireOwner(caller);
     if (input.service_id) await this.service(input.service_id);
     const now = nowOf(caller);
-    const scope = input.service_id ? "service_id = ?" : "service_id IS NULL";
+    // A member of staff's own hours (ADR-035) are theirs: the business's or a service's never touch them.
+    const scope = input.service_id
+      ? "service_id = ? AND resource_id IS NULL"
+      : "service_id IS NULL AND resource_id IS NULL";
     const scopeParams = input.service_id ? [input.service_id] : [];
     await this.db.batch([
       { sql: `DELETE FROM availability_rules WHERE kind = 'open' AND ${scope}`, params: scopeParams, method: "run" },
@@ -424,7 +495,7 @@ export class SetupCapabilities {
   async clearWeeklyOverride(caller: Caller, input: { service_id: string }): Promise<Availability> {
     requireOwner(caller);
     await this.db.client.query({
-      sql: "DELETE FROM availability_rules WHERE kind = 'open' AND service_id = ?",
+      sql: "DELETE FROM availability_rules WHERE kind = 'open' AND service_id = ? AND resource_id IS NULL",
       params: [input.service_id],
       method: "run",
     });
@@ -435,7 +506,10 @@ export class SetupCapabilities {
     requireOwner(caller);
     const now = nowOf(caller);
     await this.db.batch([
-      { sql: "DELETE FROM availability_rules WHERE kind = 'closed' AND service_id IS NULL", method: "run" },
+      {
+        sql: "DELETE FROM availability_rules WHERE kind = 'closed' AND service_id IS NULL AND resource_id IS NULL",
+        method: "run",
+      },
       ...input.closures.map((c) => ({
         sql: "INSERT INTO availability_rules (id, service_id, kind, weekly, created_at) VALUES (?, NULL, 'closed', ?, ?)",
         params: [ulid(), JSON.stringify(c), now],
@@ -448,13 +522,13 @@ export class SetupCapabilities {
   private async availability(): Promise<Availability> {
     const profile = await this.profile();
     const open = await this.db.orm.select().from(availabilityRules).where(eq(availabilityRules.kind, "open"));
-    const base = open.find((r) => !r.serviceId);
+    const base = open.find((r) => !r.serviceId && !r.resourceId);
     return {
       timezone: profile.timezone,
       weekly: (base?.weekly as Weekly | null) ?? NO_HOURS,
       weekly_set: base !== undefined,
       overrides: open
-        .filter((r) => r.serviceId)
+        .filter((r) => r.serviceId && !r.resourceId)
         .map((r) => ({ service_id: r.serviceId as string, weekly: r.weekly as Weekly })),
       closures: await readClosures(this.db),
     };

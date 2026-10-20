@@ -10,6 +10,7 @@ import {
   itemEvents,
   items,
   parties,
+  resources,
   rules as rulesTable,
   services,
   threadEntries,
@@ -385,8 +386,18 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   if (item.type !== "booking") return { slotIsFree: null, withinBusinessHours: null };
   const [service] = await db.orm.select().from(services).where(eq(services.id, item.payload.reservationFor.serviceId));
   if (!service) return { slotIsFree: false, withinBusinessHours: false };
+  // With a member of staff (ADR-035): their places, as many as they take at once, and their hours.
+  const resource = item.payload.resourceId
+    ? (
+        await db.orm
+          .select({ capacity: resources.capacity })
+          .from(resources)
+          .where(eq(resources.id, item.payload.resourceId))
+      )[0]
+    : undefined;
   const spec = {
     ...service,
+    ...(resource ? { capacity: resource.capacity } : {}),
     resourceKey: item.payload.resourceId ? `resource:${item.payload.resourceId}` : `service:${service.id}`,
   };
   let slotIsFree = false;
@@ -399,7 +410,7 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   }
   const rows = await db.orm.select().from(availabilityRules).where(eq(availabilityRules.kind, "open"));
   // Hours nobody set are no hours: a booking is never within them.
-  const weekly = weeklyFor(rows, service.id);
+  const weekly = weeklyFor(rows, service.id, item.payload.resourceId);
   const closures = await readClosures(db, service.id);
   const withinBusinessHours =
     withinOpening(localiser(timezone), weekly, Date.parse(item.payload.startTime), Date.parse(item.payload.endTime)) &&

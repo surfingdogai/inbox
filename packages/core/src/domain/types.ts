@@ -1,3 +1,4 @@
+import { bookedAddOnSchema, datedPolicySchema } from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
@@ -185,6 +186,16 @@ export const bookingPayloadSchema = z.object({
   /** The price is this customer's own (a reward, a discount, their price taken): the notice goes with it. */
   personalised: personalisedSchema.optional(),
   resourceId: z.string().optional(),
+  /**
+   * Salons (ADR-035), written only by the inbox: the member of staff's first name as customers see
+   * it, the add-ons booked with the service (their names, minutes and prices then), the deposit that
+   * holds the booking, and the cancellation policy dated for it in the business's zone, as the
+   * customer confirmed them.
+   */
+  staffName: z.string().min(1).max(60).optional(),
+  addOns: z.array(bookedAddOnSchema).max(10).optional(),
+  deposit: z.object({ amount: moneySchema, dueBy: isoDateTime.optional(), refundable: z.boolean() }).optional(),
+  policy: datedPolicySchema.optional(),
   notes: z.string().max(5_000).optional(),
   /**
    * A payment or deposit recorded for the booking (`record_payment`): it gates nothing, but a booking

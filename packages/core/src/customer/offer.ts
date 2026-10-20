@@ -49,6 +49,16 @@ export interface OfferTerms {
   readonly creates?: "booking" | "order" | undefined;
   readonly delivery?: { readonly method: "pickup" | "delivery" | "digital"; readonly when?: string | undefined };
   readonly quantity?: number | undefined;
+  /**
+   * Salons (ADR-035): who the booking is with, what was added, the deposit that keeps it and the
+   * policy dated for it. Part of what a customer confirms, so a change to any is a new confirmation.
+   */
+  readonly staff?: { readonly id: string; readonly name: string } | undefined;
+  readonly addOns?:
+    | readonly { readonly id: string; readonly durationMin: number; readonly price?: Money | undefined }[]
+    | undefined;
+  readonly deposit?: { readonly amount: Money; readonly refundable: boolean } | undefined;
+  readonly policy?: unknown;
   readonly itemOffered?:
     | {
         readonly name: string;
@@ -272,6 +282,18 @@ export function bookingRequestTerms(payload: PayloadOf<"booking">): OfferTerms {
     endTime: payload.endTime,
     ...(payload.partySize !== undefined ? { partySize: payload.partySize } : {}),
     ...(payload.totalPrice ? { totalPrice: payload.totalPrice } : {}),
+    ...(payload.resourceId && payload.staffName ? { staff: { id: payload.resourceId, name: payload.staffName } } : {}),
+    ...(payload.addOns?.length
+      ? {
+          addOns: payload.addOns.map((a) => ({
+            id: a.id,
+            durationMin: a.durationMin,
+            ...(a.price ? { price: a.price } : {}),
+          })),
+        }
+      : {}),
+    ...(payload.deposit ? { deposit: { amount: payload.deposit.amount, refundable: payload.deposit.refundable } } : {}),
+    ...(payload.policy ? { policy: payload.policy } : {}),
   };
 }
 

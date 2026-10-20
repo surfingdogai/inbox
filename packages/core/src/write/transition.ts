@@ -28,6 +28,8 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
+import { bookingFeeAt } from "../staff/fee";
+import { checkFirstRefusal, heldForCheck } from "../staff/requires";
 import { hashJson, hashText } from "../util/canonical";
 import {
   actorMeta,
@@ -279,6 +281,8 @@ async function attempt_(
   // Judged on what the caller asked for: a yes to a request that lapsed goes back to the customer as
   // our offer, on the customer's terms, so it is held exactly as the yes would have been.
   if (caller.actor.kind === "rule") await assertBusinessPriced(db, item, input.event);
+  // What comes first is a person's to check (ADR-035): no rule, AI or key confirms such a booking.
+  if (automation && (await heldForCheck(db, item, input.event))) throw checkFirstRefusal();
   if (automation && caller.actor.kind !== "rule" && (await heldForPrice(db, item, input.event))) {
     throw new WriteError(
       "guard_failed",
@@ -728,6 +732,16 @@ async function attempt_(
           throw new WriteError("guard_failed", "we have not sent a quote yet", { details: { guard } });
         break;
       case "within_cancellation_window": {
+        // A booking with its own policy (ADR-035): free while cancelling costs nothing under it.
+        if (item.type === "booking" && item.state === "confirmed" && item.payload.policy) {
+          const fee = bookingFeeAt(item.payload, now);
+          if (fee.value > 0) {
+            throw new WriteError("guard_failed", "cancelling now costs a fee under this booking's policy", {
+              details: { guard, fee, lateCancellation: "record" },
+            });
+          }
+          break;
+        }
         if (item.type === "booking" && item.state === "confirmed") {
           const start = Date.parse(item.payload.startTime);
           const windowMs = settings.booking.cancellationWindowMin * 60_000;
@@ -751,6 +765,14 @@ async function attempt_(
         // The door fires this once `cancel` found the window closed (ADR-017 §3.1): recorded as a
         // late cancellation where the owner chose to record them, refused where they did not.
         if (item.type !== "booking") break;
+        // With its own policy (ADR-035) the customer saw the fee and said yes to it: a cancellation
+        // with a fee is late, whatever the business-wide window.
+        if (item.payload.policy) {
+          if (bookingFeeAt(item.payload, now).value === 0) {
+            throw new WriteError("guard_failed", "cancelling now is free; cancel as usual", { details: { guard } });
+          }
+          break;
+        }
         const windowMs = settings.booking.cancellationWindowMin * 60_000;
         if (Date.parse(item.payload.startTime) - now >= windowMs) {
           throw new WriteError("guard_failed", "the cancellation window is still open; cancel as usual", {
@@ -1189,7 +1211,13 @@ async function attempt_(
   }
   // Pay links (ADR-023): the order this event concerns (or the order an accepted quote became), when a
   // payment platform takes this inbox's orders or the order holds a live link a change may close.
-  const payItem = item.type === "order" ? item.id : linkedEvent?.type === "order.create" ? linkedEvent.itemId : null;
+  // A booking with a deposit (ADR-035) has its link kept in step the same way, by its schedule source.
+  const payItem =
+    item.type === "order" || (item.type === "booking" && payload.deposit !== undefined)
+      ? item.id
+      : linkedEvent?.type === "order.create"
+        ? linkedEvent.itemId
+        : null;
   const payLinks = payItem !== null && (await hasPayLinks(db));
   const payFollows = payItem !== null && (payLinks || (await hasLivePayLink(db, payItem)));
   // While a link is on its way, the customer's email about the order waits a moment, so the one email
@@ -2066,7 +2094,14 @@ async function applyCounter(
       fields: [{ path: "input.startTime", problem: "invalid", message: "a start time from the free times" }],
     });
   }
-  const end = start + service.durationMin * 60_000;
+  // With a member of staff or add-ons (ADR-035), the booking keeps its own length, and their places.
+  const resourceId = typeof payload.resourceId === "string" ? payload.resourceId : undefined;
+  const ownLength = Date.parse(String(payload.endTime)) - Date.parse(String(payload.startTime));
+  const keepsLength = (resourceId !== undefined || Array.isArray(payload.addOns)) && ownLength > 0;
+  const end = start + (keepsLength ? ownLength : service.durationMin * 60_000);
+  const resource = resourceId
+    ? (await db.orm.select({ capacity: resources.capacity }).from(resources).where(eq(resources.id, resourceId)))[0]
+    : undefined;
   const facts = await businessFacts(db);
   // The time we proposed, answered with a price of their own: ours to give, whatever holds it now.
   let offered = proposed !== undefined && start === Date.parse(proposed.startTime);
@@ -2081,6 +2116,11 @@ async function applyCounter(
         // Too soon is the notice guard's to say, in its own words; here only "is it free".
         now,
         minNoticeMin: 0,
+        ...(resourceId && resource
+          ? { resource: { id: resourceId, capacity: resource.capacity, durationMin: (end - start) / 60_000 } }
+          : keepsLength
+            ? { durationMin: (end - start) / 60_000 }
+            : {}),
       });
       offered = r.slots.some((slot) => Date.parse(slot.startTime) === start);
     } catch {

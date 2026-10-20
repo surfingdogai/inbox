@@ -50,10 +50,12 @@ import { lawOf } from "../negotiation/holidays";
 import { agreedOf, legacyOfferId, offerRows, openOf } from "../negotiation/offers";
 import { rewardsOf } from "../negotiation/rewards";
 import { ORDER_SENT, type WithdrawalRight } from "../negotiation/withdrawal";
+import { policySentence } from "../policy/index";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { items, parties, products, services } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { staffWords } from "../staff/words";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf, withIdempotencyKey } from "../write/caller";
 import { findIdempotent } from "../write/common";
@@ -432,7 +434,14 @@ export class CustomerDoors {
       : type === "order"
         ? words.lineGoods(vars({ days }))
         : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
-    return [main, personalisedLine(payload, a), trader, withdrawal, c.confirmStep.obligation(vars({ total }))]
+    return [
+      main,
+      type === "booking" ? salonLine(payload as PayloadOf<"booking">, a) : "",
+      personalisedLine(payload, a),
+      trader,
+      withdrawal,
+      c.confirmStep.obligation(vars({ total })),
+    ]
       .filter(Boolean)
       .join(" ");
   }
@@ -2496,4 +2505,23 @@ async function lastEvent(db: Db, itemId: string): Promise<{ event: string; actor
   });
   const r = rows[0];
   return r ? { event: String(r[0]), actorKind: String(r[1]) } : null;
+}
+
+/**
+ * Who a salon's booking is with, what was added, the deposit that keeps it and its cancellation policy
+ * (ADR-035), as the customer reads them before they confirm: in the business's words and their language.
+ */
+function salonLine(p: PayloadOf<"booking">, a: Audience): string {
+  const w = staffWords(a.lang);
+  const parts: string[] = [];
+  if (p.staffName) parts.push(w.withStaff(p.staffName));
+  if (p.addOns?.length) parts.push(w.addOns(p.addOns.map((x) => x.name).join(", ")));
+  if (p.deposit) {
+    const amount = moneyIn(p.deposit.amount, a.lang);
+    parts.push(
+      p.deposit.dueBy ? w.deposit(amount, whenText(p.deposit.dueBy, a.timezone, a.lang)) : w.depositNow(amount),
+    );
+  }
+  if (p.policy && p.totalPrice) parts.push(policySentence(p.policy, { lang: a.lang, total: p.totalPrice }));
+  return parts.join(" ");
 }

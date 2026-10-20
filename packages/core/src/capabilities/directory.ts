@@ -67,7 +67,7 @@ export async function offeredItemTypes(
   const [services, open, products] = await Promise.all([
     db.client.query({ sql: "SELECT id, price FROM services WHERE active = 1", params: [], method: "all" }),
     db.client.query({
-      sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'",
+      sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open' AND resource_id IS NULL",
       params: [],
       method: "all",
     }),
@@ -162,7 +162,7 @@ export async function directoryProfile(
  */
 async function publicHours(db: Db, timezone: string, now: number): Promise<z.infer<typeof profileHoursSchema> | null> {
   const { rows } = await db.client.query({
-    sql: "SELECT weekly FROM availability_rules WHERE kind = 'open' AND service_id IS NULL LIMIT 1",
+    sql: "SELECT weekly FROM availability_rules WHERE kind = 'open' AND service_id IS NULL AND resource_id IS NULL LIMIT 1",
     params: [],
     method: "all",
   });
