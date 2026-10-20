@@ -1,6 +1,7 @@
 import {
   type CalendarChoice,
   type ConnectContext,
+  type Connected,
   type ConnectorDefinition,
   ConnectorError,
   type ConnectorHttpResponse,
@@ -8,19 +9,24 @@ import {
   type Interval,
   type LinkState,
   mergeIntervals,
+  type OAuthClient,
   type OutboundBooking,
   type RunContext,
   secretField,
   subtractIntervals,
 } from "@surfingdog/core";
 import { z } from "zod";
-import { verifyHexHmac } from "./hook-sign";
-import { retryAfterMs } from "./http";
+import { constantTimeEqual, hmacSha256Hex } from "./hook-sign";
+import { basicAuth, retryAfterMs } from "./http";
 
 /**
- * Calendly (ADR-030), with the owner's personal access token over Calendly's API v2: the business's own
- * account, its own token, nothing of ours in between.
+ * Calendly (ADR-030) over its API v2, in the business's own account: signed in with Calendly (OAuth, the
+ * authorization code flow with PKCE, through the Calendly app of whoever runs the server), or with a
+ * personal access token the owner makes and pastes. Nothing of ours in between either way.
  *
+ * - **The plan is read when connecting** (`GET /organizations/{uuid}`, its `stage`): on Calendly's Free
+ *   plan other apps may read but not book, so a Free account is connected with Add confirmed bookings off
+ *   and says so on its line, before the owner relies on it.
  * - **Busy times in.** `GET /user_busy_times`: the Calendly events and the events of every calendar
  *   Calendly checks for conflicts, at most seven days a call, so the 92 days ahead are read a week at a
  *   time. Calendly events this inbox made are left out by the ids it keeps for them; their copies in a
@@ -30,8 +36,9 @@ import { retryAfterMs } from "./http";
  *   made on a one-on-one event type of the same length. Calendly emails whoever is named as the invitee,
  *   so the invitee is the business itself (the account's own address) under the customer's name: the
  *   slot is held and the customer, whom the inbox has told already, hears nothing from Calendly. A move
- *   is a new event, then the old one cancelled: Calendly has no reschedule in its API. A cancel is
- *   Calendly's cancellation.
+ *   is a new event, then the old one cancelled: Calendly has no reschedule in its API. A move tried
+ *   again first looks for the event it may have made already at the new time, by the mark only this
+ *   inbox makes, so a run that stopped half-way never leaves two. A cancel is Calendly's cancellation.
  * - **Webhooks are a nudge.** `invitee.created` and `invitee.canceled` at the connection's own address,
  *   signed with a key the inbox makes for it (`Calendly-Webhook-Signature`: HMAC-SHA-256 over
  *   `t.body`, three minutes either way), read busy times again at once. Calendly sends webhooks on paid
@@ -41,7 +48,12 @@ import { retryAfterMs } from "./http";
  * already made. A booking made on Calendly blocks its time here; it does not become an inbox booking.
  *
  * Docs, read 20 October 2026:
- * - API reference (OpenAPI): https://developer.calendly.com/openapi/calendly-api.yaml
+ * - API reference (OpenAPI): https://developer.calendly.com/openapi/calendly-api.yaml (the plan:
+ *   `Organization.stage`, `OrganizationStage`; refusals: `InviteesErrorMessage`, `DeleteScheduledEventErrorMessage`)
+ * - Signing in: https://developer.calendly.com/docs/authentication/creating-an-oauth-app,
+ *   https://developer.calendly.com/api-docs/calendly-o-auth/o-auth/get-oauth-authorize,
+ *   https://developer.calendly.com/api-docs/calendly-o-auth/o-auth/post-oauth-refresh-token (access for two
+ *   hours; a refresh token is used once), https://developer.calendly.com/api-docs/calendly-o-auth/o-auth/post-oauth-revoke
  * - Personal access tokens and scopes:
  *   https://developer.calendly.com/docs/authentication/how-to-authenticate-with-personal-access-tokens,
  *   https://developer.calendly.com/docs/authentication/scopes
@@ -54,11 +66,14 @@ import { retryAfterMs } from "./http";
  */
 
 export const CALENDLY_API = "https://api.calendly.com";
+/** Where an owner signs in with Calendly, and where its codes and refresh tokens become access tokens. */
+export const CALENDLY_AUTH = "https://auth.calendly.com";
 /** The destination that picks the event type as long as each booking. */
 export const CALENDLY_AUTO = "auto";
-/** What the token is made with: reads, booking (`:write` includes `:read`), and its own webhook. */
+/** What the token is made with: reads, the plan, booking (`:write` includes `:read`), and its own webhook. */
 export const CALENDLY_SCOPES = [
   "users:read",
+  "organizations:read",
   "event_types:read",
   "availability:read",
   "scheduled_events:write",
@@ -73,20 +88,26 @@ const WEEK_MS = 7 * 86_400_000;
 const MAX_WEEKS = 14;
 /** Event types read: pages of a hundred. */
 const MAX_TYPE_PAGES = 5;
+/** How many `v1=` signatures of one delivery are checked: Calendly sends one; a header of thousands is refused. */
+const MAX_SIGNATURES = 5;
 const TOKENS = "https://calendly.com/integrations/api_webhooks";
+
+/** What the connection's line says when it does less than its card. */
+export const CALENDLY_FREE_NOTE = "Calendly Free: busy times only";
+export const CALENDLY_NO_TYPES_NOTE =
+  "None of your Calendly event types can take bookings from here (one-on-one, no required questions, a place you set). Busy times still work.";
 
 export const calendlyForm = z.object({
   token: secretField(
     z.string().trim().min(20, "a Calendly token is longer").max(4000).regex(/^\S+$/, "a Calendly token has no spaces"),
     {
       label: "Personal access token",
-      help: "Calendly shows it once, when it is made: copy it then.",
-      link: { href: TOKENS, text: "Make one: Integrations & apps → API & webhooks" },
-      placeholder: "eyJraWQiOi…",
+      link: { href: TOKENS, text: "Open Calendly" },
+      placeholder: "Paste the token",
       steps: [
         "In Calendly: Integrations & apps → API & webhooks → Generate new token.",
-        `Name it after this inbox, and tick ${CALENDLY_SCOPES.join(", ")}.`,
-        "Create it, then copy the token.",
+        `Name it Inbox. Under scopes, tick: ${CALENDLY_SCOPES.join(" · ")}`,
+        "Create it and copy it: Calendly shows it once.",
       ],
     },
   ),
@@ -163,7 +184,9 @@ function nextToken(json: unknown): string | null {
 function messageOf(json: unknown): string {
   const j = (json ?? {}) as { message?: unknown; title?: unknown; details?: { message?: unknown }[] };
   const detail = Array.isArray(j.details) ? j.details.find((d) => typeof d?.message === "string")?.message : undefined;
-  const m = [j.message, detail].filter((x): x is string => typeof x === "string" && x.length > 0);
+  const m = [j.message, detail]
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .map((x) => x.trim().replace(/([^.!?])$/, "$1."));
   return m.join(" ").slice(0, 200);
 }
 
@@ -285,13 +308,30 @@ async function eventTypes(ctx: Ctx, token: string, who: Me): Promise<CalendarCho
   return out;
 }
 
-/* --- what the connection keeps ------------------------------------------------------------------------- */
+/** Where the account is in Calendly's plans (`Organization.stage`): `free` books nothing from other apps. */
+type Stage = "free" | "trial" | "paid" | null;
 
-function tokenOf(ctx: Pick<RunContext, "secret">): string {
-  const token = ctx.secret.token ?? "";
-  if (!token) throw new ConnectorError("auth", "The saved token is missing. Connect Calendly again.");
-  return token;
+/**
+ * The account's plan, read from its organization. Null when it cannot be read (a token made without
+ * organizations:read): not known, so nothing is switched off for it.
+ */
+async function stageOf(ctx: Ctx, token: string, who: Pick<Me, "orgUri">): Promise<Stage> {
+  const orgId = idOf(who.orgUri, "organizations");
+  if (!orgId) return null;
+  const { res, json } = await call(ctx, token, "GET", `/organizations/${encodeURIComponent(orgId)}`);
+  if (res.status !== 200) return null;
+  const stage = resourceOf(json)?.stage;
+  return stage === "free" || stage === "trial" || stage === "paid" ? stage : null;
 }
+
+/** The line the connection says, when it does less than "Busy times in, bookings out". */
+function noteOf(stage: Stage, destinations: readonly CalendarChoice[]): string | null {
+  if (stage === "free") return CALENDLY_FREE_NOTE;
+  if (!destinations.some((d) => d.id !== CALENDLY_AUTO)) return CALENDLY_NO_TYPES_NOTE;
+  return null;
+}
+
+/* --- what the connection keeps ------------------------------------------------------------------------- */
 
 function userOf(ctx: Pick<RunContext, "extra">): string {
   const u = ctx.extra.userUri;
@@ -357,6 +397,9 @@ class SlotRefused extends ConnectorError {
   }
 }
 
+/** Calendly's documented word for the Free plan (`InviteesErrorMessage`), as against a token without the scope. */
+const PAID_ONLY = /paid Calendly plans?|upgrade your (plan|Calendly account)/i;
+
 /** Makes the booking on Calendly: its event, as the inbox keeps it. */
 async function book(ctx: RunContext, token: string, typeId: string, booking: OutboundBooking): Promise<LinkState> {
   const email = typeof ctx.extra.email === "string" ? ctx.extra.email : "";
@@ -397,16 +440,18 @@ async function book(ctx: RunContext, token: string, typeId: string, booking: Out
     return { externalId: eventId, etag: null, calendar: typeId, start: booking.start, end: booking.end };
   }
   if (res.status === 403) {
-    const page = typeof ctx.extra.schedulingUrl === "string" ? ctx.extra.schedulingUrl : null;
+    // The plan, by Calendly's own words for it; anything else is the token's scopes.
     throw new ConnectorError(
       "refused",
-      `Calendly would not let this token book. Booking from other apps needs a paid Calendly plan (Standard or above) and a token with scheduled_events:write. Or switch off Add confirmed bookings here and keep Calendly's busy times${page ? `; customers can still book at ${page}` : ""}.`,
+      PAID_ONLY.test(messageOf(json))
+        ? `Calendly's Free plan doesn't let other apps add bookings, so ${whenOf(ctx, booking.start)} is not blocked on Calendly. Block it there yourself, or switch off Add confirmed bookings.`
+        : "Calendly did not let this connection add bookings: it needs scheduled_events:write. Make a token with it and connect again, or switch off Add confirmed bookings.",
     );
   }
   if (res.status === 404) {
     throw new ConnectorError("refused", "That event type is gone from Calendly. Choose another one here.");
   }
-  const why = messageOf(json);
+  const why = messageOf(json).replace(/[.\s]+$/, "");
   const text = `Calendly would not take ${whenOf(ctx, booking.start)}${why ? `: ${why}` : ""}. Check the hours of the event type in Calendly.`;
   // A refusal that names another field than the time (the name, the place) is not about the slot.
   const named = parametersOf(json);
@@ -421,7 +466,11 @@ function parametersOf(json: unknown): string[] {
     : [];
 }
 
-/** Cancels an event this inbox made. Done, not an error, when it is gone, cancelled, or over. */
+/**
+ * Cancels an event this inbox made. Done, not an error, when it is gone, cancelled already, or over
+ * (`DeleteScheduledEventErrorMessage`: "Event is already canceled", "Event in the past"); any other
+ * refusal ("You are not allowed to cancel this event") is said, since the event still holds its time.
+ */
 async function cancel(ctx: RunContext, token: string, link: LinkState): Promise<void> {
   if (!link.externalId) return;
   const { res, json } = await call(
@@ -433,18 +482,106 @@ async function cancel(ctx: RunContext, token: string, link: LinkState): Promise<
   );
   if (res.status === 201 || res.status === 200 || res.status === 404) return;
   const why = messageOf(json);
-  // Cancelled already, or in the past: nothing is held any more.
-  if ((res.status === 400 || res.status === 403) && /cancel/i.test(why)) return;
-  if ((res.status === 400 || res.status === 403) && link.start !== undefined && link.start <= ctx.now) return;
+  const refusal = res.status === 400 || res.status === 403;
+  if (refusal && /already\s+(been\s+)?cancel/i.test(why)) return;
+  if (refusal && link.start !== undefined && link.start <= ctx.now) return;
   throw new ConnectorError("refused", `Calendly would not cancel it${why ? `: ${why}` : "."}`);
 }
 
 const overlaps = (a: Interval, b: Interval) => a.start < b.end && b.start < a.end;
 
+/**
+ * An event this inbox made for the booking at its start, found by the mark only it makes, leaving out
+ * `except` (the event a move leaves behind). Asked a minute either side of the start, since Calendly
+ * names its bounds "after" and "prior to"; only an event at the very start is taken.
+ */
+async function findMarked(
+  ctx: RunContext,
+  token: string,
+  booking: OutboundBooking,
+  except?: string | null | undefined,
+): Promise<LinkState | null> {
+  const user = userOf(ctx);
+  const mark = await markOf(ctx, booking.itemId);
+  const q = new URLSearchParams({
+    user,
+    min_start_time: utcIso(booking.start - 60_000),
+    max_start_time: utcIso(booking.start + 60_000),
+    status: "active",
+    count: "20",
+    ...(typeof ctx.extra.email === "string" ? { invitee_email: ctx.extra.email } : {}),
+  });
+  const { res, json } = await call(ctx, token, "GET", `/scheduled_events?${q}`);
+  if (res.status !== 200) return null;
+  for (const e of collectionOf(json)) {
+    const id = idOf(e.uri, "scheduled_events");
+    if (!id || id === except || Date.parse(String(e.start_time)) !== booking.start) continue;
+    const listed = await call(
+      ctx,
+      token,
+      "GET",
+      `/scheduled_events/${encodeURIComponent(id)}/invitees?${new URLSearchParams({ status: "active", count: "20" })}`,
+    );
+    if (listed.res.status !== 200) continue;
+    const ours = collectionOf(listed.json).some(
+      (i) => (i.tracking as { utm_content?: unknown } | null | undefined)?.utm_content === mark,
+    );
+    if (!ours) continue;
+    return {
+      externalId: id,
+      etag: null,
+      calendar: idOf(e.event_type, "event_types"),
+      start: booking.start,
+      end: Date.parse(String(e.end_time)) || booking.end,
+    };
+  }
+  return null;
+}
+
+async function put(
+  ctx: RunContext,
+  token: string,
+  booking: OutboundBooking,
+  link: LinkState | null,
+): Promise<LinkState> {
+  const type = eventTypeFor(ctx, booking);
+  // Calendly cannot rename an invitee: the same times on the same event type are left as they are.
+  if (link?.externalId && link.calendar === type.id && link.start === booking.start && link.end === booking.end) {
+    return link;
+  }
+  let current = link;
+  if (current?.externalId) {
+    // A move tried before may have made its new event and stopped before the old one was cancelled, or
+    // before its id was kept: that event, already at the new time, is the one to keep, never a second.
+    const there = await findMarked(ctx, token, booking, current.externalId);
+    if (there) {
+      await cancel(ctx, token, current);
+      if (there.calendar === type.id) return there;
+      current = there;
+    }
+  }
+  let made: LinkState;
+  try {
+    made = await book(ctx, token, type.id, booking);
+  } catch (error) {
+    // Moved to a time the old event still holds: it goes first, then the new one is made.
+    const old =
+      current?.start !== undefined && current.end !== undefined ? { start: current.start, end: current.end } : null;
+    if (!(error instanceof SlotRefused) || !current?.externalId || !old || !overlaps(old, booking)) throw error;
+    await cancel(ctx, token, current);
+    return book(ctx, token, type.id, booking);
+  }
+  if (current?.externalId && current.externalId !== made.externalId) await cancel(ctx, token, current);
+  return made;
+}
+
 /* --- busy times in ------------------------------------------------------------------------------------- */
 
-async function busy(ctx: RunContext, window: Interval): Promise<Interval[] | { intervals: Interval[]; until: number }> {
-  const token = tokenOf(ctx);
+async function busy(
+  ctx: RunContext,
+  token: string,
+  window: Interval,
+): Promise<Interval[] | { intervals: Interval[]; until: number }> {
   const user = userOf(ctx);
   // Calendly takes no start in the past: from the next whole minute.
   const from = Math.max(window.start, Math.ceil((ctx.now + 60_000) / 60_000) * 60_000);
@@ -527,7 +664,7 @@ async function addWebhook(
     if (res.status === 403) return { state: "plan" };
     // One at this address already: this connection's own, from before. It goes, and is made again.
     if (res.status === 409 && attempt === 0) {
-      await dropWebhooksAt(ctx, token, who, url);
+      await dropWebhooksWhere(ctx, token, who, (callback) => callback === url);
       continue;
     }
     return { state: "pending" };
@@ -535,11 +672,12 @@ async function addWebhook(
   return { state: "pending" };
 }
 
-async function dropWebhooksAt(
+/** Removes the account's webhooks whose address `which` picks. */
+async function dropWebhooksWhere(
   ctx: Ctx,
   token: string,
   who: { readonly userUri: string; readonly orgUri: string | null },
-  url: string,
+  which: (callback: string) => boolean,
 ): Promise<void> {
   if (!who.orgUri) return;
   const q = new URLSearchParams({ organization: who.orgUri, user: who.userUri, scope: "user", count: "100" });
@@ -547,7 +685,7 @@ async function dropWebhooksAt(
   if (res.status !== 200) return;
   for (const w of collectionOf(json)) {
     const id = idOf(w.uri, "webhook_subscriptions");
-    if (id && w.callback_url === url) await dropWebhook(ctx, token, id);
+    if (id && typeof w.callback_url === "string" && which(w.callback_url)) await dropWebhook(ctx, token, id);
   }
 }
 
@@ -566,9 +704,12 @@ function webhookExtra(w: Webhook, url: string | null, now: number): Record<strin
     : { webhook: w.state, webhook_id: null, hook_url: null, hook_tried_at: now };
 }
 
-/** Parses `Calendly-Webhook-Signature: t=1492774577,v1=5257a8…` into its time and signatures. */
+/**
+ * Parses `Calendly-Webhook-Signature: t=1492774577,v1=5257a8…` into its time and signatures, a few at
+ * most: each one is compared, and a header of thousands would make each delivery that many comparisons.
+ */
 function signatureParts(header: string | null): { readonly t: string; readonly v1: readonly string[] } | null {
-  if (!header) return null;
+  if (!header || header.length > 2048) return null;
   let t = "";
   const v1: string[] = [];
   for (const part of header.split(",")) {
@@ -577,7 +718,7 @@ function signatureParts(header: string | null): { readonly t: string; readonly v
     const k = part.slice(0, i).trim();
     const v = part.slice(i + 1).trim();
     if (k === "t") t = v;
-    else if (k === "v1" && v) v1.push(v);
+    else if (k === "v1" && v && v1.length < MAX_SIGNATURES) v1.push(v.toLowerCase());
   }
   return /^\d{1,12}$/.test(t) && v1.length > 0 ? { t, v1 } : null;
 }
@@ -590,10 +731,10 @@ async function verify(ctx: RunContext, request: { headers: Headers; body: string
   if (!key || !parts) throw refused();
   // A delivery from more than three minutes away, either way, is a replay or a clock gone wrong.
   if (Math.abs(Math.floor(ctx.now / 1000) - Number(parts.t)) > CALENDLY_TOLERANCE_S) throw refused();
+  // One HMAC over `t.body`, compared with each signature in constant time.
+  const expected = await hmacSha256Hex(key, `${parts.t}.${request.body}`);
   let ok = false;
-  for (const sig of parts.v1) {
-    if (await verifyHexHmac(key, `${parts.t}.${request.body}`, sig)) ok = true;
-  }
+  for (const sig of parts.v1) if (constantTimeEqual(expected, sig)) ok = true;
   if (!ok) throw refused();
   let parsed: { event?: unknown; payload?: { uri?: unknown; event?: unknown } } = {};
   try {
@@ -614,9 +755,264 @@ async function verify(ctx: RunContext, request: { headers: Headers; body: string
   return { eventId: `${topic}:${m[2]}`, topic, refs: [m[1], m[2]] };
 }
 
+/* --- signing in with Calendly -------------------------------------------------------------------------- */
+
+function formBody(params: Record<string, string>): string {
+  return new URLSearchParams(params).toString();
+}
+
+function jsonOf(res: ConnectorHttpResponse): Record<string, unknown> {
+  try {
+    const v = JSON.parse(res.text) as unknown;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A connection's access: a personal access token as pasted, or a signed-in one that is refreshed. */
+interface Access {
+  /** A token for Calendly's API now, refreshed first when it is about to lapse. */
+  bearer(ctx: RunContext): Promise<string>;
+  /** The secret as it is now: a signed-in one's refresh token changes each time it is used. */
+  current(ctx: Pick<RunContext, "secret">): Promise<Readonly<Record<string, string>>>;
+  /** Gives a signed-in connection's access back to Calendly (best effort). */
+  revoke(ctx: RunContext): Promise<void>;
+  /** Turns a code from the way back into tokens. */
+  exchange(
+    ctx: ConnectContext,
+    p: { readonly code: string; readonly verifier: string; readonly redirectUri: string },
+  ): Promise<{
+    readonly token: string;
+    readonly secret: Readonly<Record<string, string>>;
+    readonly owner: string | null;
+  }>;
+}
+
+function access(client: OAuthClient | null): Access {
+  /**
+   * Tokens refreshed in this process, by the refresh token they replaced: Calendly takes a refresh token
+   * once, so a second call in the same run (or two at once) uses what the first got, never asks again.
+   */
+  const rotated = new Map<
+    string,
+    Promise<{ readonly access: string; readonly refresh: string; readonly expiresAt: number }>
+  >();
+
+  async function tokenRequest(ctx: ConnectContext, body: Record<string, string>): Promise<Record<string, unknown>> {
+    if (!client?.clientId || !client.clientSecret) {
+      throw new ConnectorError("config", "Calendly sign-in is not set up on this inbox. Connect with a token instead.");
+    }
+    const res = await ctx.http.request({
+      method: "POST",
+      url: `${CALENDLY_AUTH}/oauth/token`,
+      headers: {
+        // A web app: its id and secret as HTTP Basic, as Calendly asks of web clients.
+        authorization: basicAuth(client.clientId, client.clientSecret),
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: formBody(body),
+    });
+    const j = jsonOf(res);
+    if (res.status === 400 && j.error === "invalid_grant") {
+      throw new ConnectorError("auth", "Calendly stopped this connection. Connect it again.");
+    }
+    if (res.status === 401 || j.error === "invalid_client" || j.error === "unauthorized_client") {
+      throw new ConnectorError("config", "Calendly did not recognise this inbox's sign-in app.");
+    }
+    if (res.status === 429 || j.error === "temporarily_unavailable") {
+      throw new ConnectorError("rate_limited", "Calendly asked this inbox to slow down.", {
+        retryAfterMs: retryAfterMs(res.headers) ?? 60_000,
+      });
+    }
+    if (res.status >= 500) {
+      throw new ConnectorError(
+        "unreachable",
+        "Calendly is not answering properly; this inbox tries again in a few minutes.",
+      );
+    }
+    if (res.status !== 200) throw new ConnectorError("bad_response", "Calendly would not finish the sign-in.");
+    return j;
+  }
+
+  function tokensOf(j: Record<string, unknown>, now: number) {
+    const accessToken = typeof j.access_token === "string" ? j.access_token : "";
+    const refresh = typeof j.refresh_token === "string" ? j.refresh_token : "";
+    if (!accessToken || !refresh) throw new ConnectorError("bad_response", "Calendly did not give lasting access.");
+    const seconds = Number(j.expires_in);
+    return {
+      access: accessToken,
+      refresh,
+      expiresAt: now + (Number.isFinite(seconds) && seconds > 0 ? seconds : 7200) * 1000,
+    };
+  }
+
+  async function current(ctx: Pick<RunContext, "secret">): Promise<Readonly<Record<string, string>>> {
+    const refresh = ctx.secret.refresh_token;
+    const next = refresh ? await rotated.get(refresh)?.catch(() => null) : null;
+    return next
+      ? {
+          ...ctx.secret,
+          access_token: next.access,
+          refresh_token: next.refresh,
+          access_expires_at: String(next.expiresAt),
+        }
+      : ctx.secret;
+  }
+
+  return {
+    current,
+
+    async bearer(ctx) {
+      if (ctx.secret.token) return ctx.secret.token;
+      const expires = Number(ctx.secret.access_expires_at ?? 0);
+      if (ctx.secret.access_token && expires > ctx.now + 60_000) return ctx.secret.access_token;
+      const refresh = ctx.secret.refresh_token;
+      if (!refresh) throw new ConnectorError("auth", "Calendly's lasting access is missing. Connect it again.");
+      let pending = rotated.get(refresh);
+      if (!pending) {
+        pending = tokenRequest(ctx, { grant_type: "refresh_token", refresh_token: refresh }).then(async (j) => {
+          const next = tokensOf(j, ctx.now);
+          // Kept at once: the refresh token just used is spent, and only the new one works from now on.
+          await ctx.saveSecret({
+            ...ctx.secret,
+            access_token: next.access,
+            refresh_token: next.refresh,
+            access_expires_at: String(next.expiresAt),
+          });
+          return next;
+        });
+        if (rotated.size >= 500) rotated.clear();
+        rotated.set(refresh, pending);
+        // A refusal is not kept: the next run asks again with what it has.
+        pending.catch(() => rotated.delete(refresh));
+      }
+      const next = await pending;
+      if (next.expiresAt <= ctx.now + 60_000) {
+        rotated.delete(refresh);
+        throw new ConnectorError("unreachable", "Calendly's access lapsed; this inbox tries again in a few minutes.");
+      }
+      return next.access;
+    },
+
+    async revoke(ctx) {
+      if (ctx.secret.token || !client?.clientId || !client.clientSecret) return;
+      const token = (await current(ctx)).refresh_token;
+      if (!token) return;
+      try {
+        await ctx.http.request({
+          method: "POST",
+          url: `${CALENDLY_AUTH}/oauth/revoke`,
+          headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+          body: formBody({ client_id: client.clientId, client_secret: client.clientSecret, token }),
+        });
+      } catch (error) {
+        // Best effort: the owner can remove the app in Calendly too.
+        if (!(error instanceof ConnectorError)) throw error;
+      }
+    },
+
+    async exchange(ctx, { code, verifier, redirectUri }) {
+      const j = await tokenRequest(ctx, {
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        code_verifier: verifier,
+      });
+      const next = tokensOf(j, ctx.now);
+      return {
+        token: next.access,
+        owner: typeof j.owner === "string" ? j.owner : null,
+        secret: {
+          access_token: next.access,
+          refresh_token: next.refresh,
+          access_expires_at: String(next.expiresAt),
+        },
+      };
+    },
+  };
+}
+
 /* --- the connector ------------------------------------------------------------------------------------- */
 
-export function calendlyConnector(): ConnectorDefinition {
+export interface CalendlyOptions {
+  /** A hosted inbox, whose Calendly app is ours and on its way: "Soon" rather than "set up". */
+  readonly hosted?: boolean | undefined;
+}
+
+/**
+ * Calendly, with a personal access token (always), and a sign-in with Calendly beside it once the
+ * server has its Calendly app (`CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`; ADR-026 §5): until then
+ * that way says "Soon" on a hosted inbox and "set up" on one's own server.
+ */
+export function calendlyConnector(client: OAuthClient | null = null, opts: CalendlyOptions = {}): ConnectorDefinition {
+  const auth = access(client);
+  const signInReady = () =>
+    client?.clientId && client.clientSecret ? (true as const) : "Calendly sign-in is not set up on this inbox yet.";
+
+  /** Reads the account, its plan and event types, and adds the webhook: one way in or the other. */
+  async function connectWith(
+    ctx: ConnectContext,
+    token: string,
+    secret: Readonly<Record<string, string>>,
+    owner?: string | null,
+  ): Promise<Connected> {
+    const who = await me(ctx, token);
+    if (owner && owner !== who.userUri) {
+      throw new ConnectorError("bad_response", "Calendly answered for another account. Try again.");
+    }
+    const destinations = await eventTypes(ctx, token, who);
+    const stage = await stageOf(ctx, token, who);
+    const hookUrl = ctx.hookUrl ?? null;
+    // Calendly sends no webhooks on its Free plan: none is asked for.
+    const webhook: Webhook =
+      stage === "free"
+        ? { state: "plan" }
+        : hookUrl && ctx.hooksLive !== false
+          ? await addWebhook(ctx, token, who, hookUrl)
+          : { state: "pending" };
+    const before = ctx.previous?.extra.webhook === "added" ? ctx.previous.extra.webhook_id : undefined;
+    // This inbox's own address for its Calendly webhooks, whatever the connection's token in it.
+    const ours = `${ctx.inbox.origin}/v1/hooks/calendly/`;
+    return {
+      account: accountOf(who),
+      externalId: who.userId,
+      secret: { ...secret, ...(webhook.state === "added" ? { signing_key: webhook.signingKey } : {}) },
+      extra: {
+        userUri: who.userUri,
+        orgUri: who.orgUri,
+        email: who.email,
+        schedulingUrl: who.schedulingUrl,
+        plan: stage,
+        ...webhookExtra(webhook, hookUrl, ctx.now),
+      },
+      calendars: [],
+      destinations,
+      // On the Free plan nothing can be added on Calendly: bookings start off, and the line says why.
+      defaults: { busy: [], destination: CALENDLY_AUTO, ...(stage === "free" ? { bookings: false } : {}) },
+      note: noteOf(stage, destinations),
+      async settle(kept) {
+        try {
+          if (!kept) {
+            // Refused after all: what was just made goes, and what worked before stays.
+            if (webhook.state === "added") await dropWebhook(ctx, token, webhook.id);
+            return;
+          }
+          if (typeof before === "string" && (webhook.state !== "added" || before !== webhook.id)) {
+            await dropWebhook(ctx, token, before);
+          }
+          // Connected again by signing in, with a new address of its own: the old address's webhook goes.
+          if (webhook.state === "added" && hookUrl?.startsWith(ours)) {
+            await dropWebhooksWhere(ctx, token, who, (callback) => callback.startsWith(ours) && callback !== hookUrl);
+          }
+        } catch {
+          // Best effort, never throws.
+        }
+      },
+    };
+  }
+
   return {
     kind: "calendly",
     title: "Calendly",
@@ -624,66 +1020,78 @@ export function calendlyConnector(): ConnectorDefinition {
     capabilities: ["busy_times", "write_bookings"],
     auth: "form",
     form: calendlyForm,
-    disconnectNote: "Revoke the token too, in Calendly → Integrations & apps → API & webhooks.",
+    note: "Busy times work on every Calendly plan. Adding your bookings to Calendly needs its Standard plan or above.",
+    presets: [
+      {
+        id: "oauth",
+        label: "Calendly",
+        values: {},
+        auth: "oauth",
+        action: "Continue with Calendly",
+        consent:
+          "Calendly will ask to let this inbox see when you are busy, read your event types and add the bookings it confirms.",
+        ready: signInReady,
+        whenNotReady: opts.hosted
+          ? { status: "soon" }
+          : {
+              status: "setup",
+              hint: "Needs a Calendly app on the server.",
+              href: "https://surfingdog.ai/docs/connectors/calendly/#sign-in-with-calendly",
+            },
+      },
+    ],
+    disconnectNote: "If you made a token for it, revoke it too: Calendly → Integrations & apps → API & webhooks.",
 
     async connect(ctx, input) {
       const token = (input.token ?? "").trim();
-      const who = await me(ctx, token);
-      const destinations = await eventTypes(ctx, token, who);
-      const hookUrl = ctx.hookUrl ?? null;
-      const webhook: Webhook =
-        hookUrl && ctx.hooksLive !== false ? await addWebhook(ctx, token, who, hookUrl) : { state: "pending" };
-      const before = ctx.previous?.extra.webhook === "added" ? ctx.previous.extra.webhook_id : undefined;
-      return {
-        account: accountOf(who),
-        externalId: who.userId,
-        secret: { token, ...(webhook.state === "added" ? { signing_key: webhook.signingKey } : {}) },
-        extra: {
-          userUri: who.userUri,
-          orgUri: who.orgUri,
-          email: who.email,
-          schedulingUrl: who.schedulingUrl,
-          ...webhookExtra(webhook, hookUrl, ctx.now),
-        },
-        calendars: [],
-        destinations,
-        defaults: { busy: [], destination: CALENDLY_AUTO },
-        async settle(kept) {
-          try {
-            if (!kept) {
-              // Refused after all: what was just made goes, and what worked before stays.
-              if (webhook.state === "added") await dropWebhook(ctx, token, webhook.id);
-              return;
-            }
-            if (typeof before === "string" && (webhook.state !== "added" || before !== webhook.id)) {
-              await dropWebhook(ctx, token, before);
-            }
-          } catch {
-            // Best effort, never throws.
-          }
-        },
-      };
+      return connectWith(ctx, token, { token });
+    },
+
+    oauth: {
+      authorizeUrl({ redirectUri, state, challenge }) {
+        const q = new URLSearchParams({
+          client_id: client?.clientId ?? "",
+          response_type: "code",
+          redirect_uri: redirectUri,
+          code_challenge_method: "S256",
+          code_challenge: challenge,
+          state,
+        });
+        return `${CALENDLY_AUTH}/oauth/authorize?${q}`;
+      },
+
+      async exchange(ctx, p) {
+        const got = await auth.exchange(ctx, p);
+        return connectWith(ctx, got.token, got.secret, got.owner);
+      },
     },
 
     /**
-     * Every six hours, and sooner when the webhook is still to add or the inbox moved: the account and
-     * its event types again, and the webhook kept pointing at this inbox. One Calendly switched off
-     * (deliveries failed for a day) or that points elsewhere is made again with a new signing key; one
+     * Every six hours, and sooner when the webhook is still to add or the inbox moved: the account, its
+     * plan and its event types again, and the webhook kept pointing at this inbox. One Calendly switched
+     * off (deliveries failed for a day) or that points elsewhere is made again with a new signing key; one
      * still to add is added once the inbox can be reached (and tried again on a plan that may have changed).
      */
     async refresh(ctx) {
-      const token = tokenOf(ctx);
+      const token = await auth.bearer(ctx);
       const who = await me(ctx, token);
-      const base = { account: accountOf(who), calendars: [], destinations: await eventTypes(ctx, token, who) };
+      const destinations = await eventTypes(ctx, token, who);
+      const stage = await stageOf(ctx, token, who);
+      const base = { account: accountOf(who), calendars: [], destinations, note: noteOf(stage, destinations) };
       const extra = {
         ...ctx.extra,
         userUri: who.userUri,
         orgUri: who.orgUri,
         email: who.email,
         schedulingUrl: who.schedulingUrl,
+        plan: stage,
       };
       const hookUrl = ctx.hookUrl ?? null;
       if (!hookUrl || ctx.hooksLive === false) return { ...base, extra };
+      // Still on Free: Calendly sends it no webhook, and none is asked for.
+      if (stage === "free" && ctx.extra.webhook !== "added") {
+        return { ...base, extra: { ...extra, ...webhookExtra({ state: "plan" }, hookUrl, ctx.now) } };
+      }
       const id = typeof ctx.extra.webhook_id === "string" ? ctx.extra.webhook_id : null;
       if (ctx.extra.webhook === "added" && id) {
         const got = await call(ctx, token, "GET", `/webhook_subscriptions/${encodeURIComponent(id)}`);
@@ -693,7 +1101,8 @@ export function calendlyConnector(): ConnectorDefinition {
         if (got.res.status === 200) await dropWebhook(ctx, token, id);
       }
       const made = await addWebhook(ctx, token, who, hookUrl);
-      if (made.state === "added") await ctx.saveSecret({ ...ctx.secret, signing_key: made.signingKey });
+      // The secret as it is now: a token refreshed in this run is kept, never the one it replaced.
+      if (made.state === "added") await ctx.saveSecret({ ...(await auth.current(ctx)), signing_key: made.signingKey });
       return { ...base, extra: { ...extra, ...webhookExtra(made, hookUrl, ctx.now) } };
     },
 
@@ -706,74 +1115,25 @@ export function calendlyConnector(): ConnectorDefinition {
       return ctx.extra.webhook !== "plan" && ctx.now - tried > 30 * 60_000;
     },
 
-    busy,
+    async busy(ctx, window) {
+      return busy(ctx, await auth.bearer(ctx), window);
+    },
 
     bookings: {
       async put(ctx, booking, link) {
-        const token = tokenOf(ctx);
-        const type = eventTypeFor(ctx, booking);
-        const sameTimes = link?.start === booking.start && link?.end === booking.end;
-        // Calendly cannot rename an invitee: the same times on the same event type are left as they are.
-        if (link?.externalId && link.calendar === type.id && sameTimes) return link;
-        let made: LinkState;
-        try {
-          made = await book(ctx, token, type.id, booking);
-        } catch (error) {
-          // Moved to a time the old event still holds: it goes first, then the new one is made.
-          const old = link?.start !== undefined && link.end !== undefined ? { start: link.start, end: link.end } : null;
-          if (!(error instanceof SlotRefused) || !link?.externalId || !old || !overlaps(old, booking)) throw error;
-          await cancel(ctx, token, link);
-          return book(ctx, token, type.id, booking);
-        }
-        if (link?.externalId && link.externalId !== made.externalId) await cancel(ctx, token, link);
-        return made;
+        return put(ctx, await auth.bearer(ctx), booking, link);
       },
 
       async remove(ctx, link) {
-        await cancel(ctx, tokenOf(ctx), link);
+        await cancel(ctx, await auth.bearer(ctx), link);
       },
 
       /**
-       * An event this inbox made and kept no id for: one at the booking's exact start, booked by the
-       * business's own address, whose invitee carries the mark only this inbox can make.
+       * An event this inbox made and kept no id for: one at the booking's start, booked by the business's
+       * own address, whose invitee carries the mark only this inbox can make.
        */
       async find(ctx, booking) {
-        const token = tokenOf(ctx);
-        const user = userOf(ctx);
-        const mark = await markOf(ctx, booking.itemId);
-        const q = new URLSearchParams({
-          user,
-          min_start_time: utcIso(booking.start),
-          max_start_time: utcIso(booking.start + 1000),
-          status: "active",
-          count: "20",
-          ...(typeof ctx.extra.email === "string" ? { invitee_email: ctx.extra.email } : {}),
-        });
-        const { res, json } = await call(ctx, token, "GET", `/scheduled_events?${q}`);
-        if (res.status !== 200) return null;
-        for (const e of collectionOf(json)) {
-          const id = idOf(e.uri, "scheduled_events");
-          if (!id || Date.parse(String(e.start_time)) !== booking.start) continue;
-          const listed = await call(
-            ctx,
-            token,
-            "GET",
-            `/scheduled_events/${encodeURIComponent(id)}/invitees?${new URLSearchParams({ status: "active", count: "20" })}`,
-          );
-          if (listed.res.status !== 200) continue;
-          const ours = collectionOf(listed.json).some(
-            (i) => (i.tracking as { utm_content?: unknown } | null | undefined)?.utm_content === mark,
-          );
-          if (!ours) continue;
-          return {
-            externalId: id,
-            etag: null,
-            calendar: idOf(e.event_type, "event_types"),
-            start: booking.start,
-            end: Date.parse(String(e.end_time)) || booking.end,
-          };
-        }
-        return null;
+        return findMarked(ctx, await auth.bearer(ctx), booking);
       },
     },
 
@@ -788,8 +1148,8 @@ export function calendlyConnector(): ConnectorDefinition {
 
     async disconnect(ctx) {
       const id = ctx.extra.webhook_id;
-      if (ctx.extra.webhook !== "added" || typeof id !== "string") return;
-      await dropWebhook(ctx, tokenOf(ctx), id);
+      if (ctx.extra.webhook === "added" && typeof id === "string") await dropWebhook(ctx, await auth.bearer(ctx), id);
+      await auth.revoke(ctx);
     },
   };
 }

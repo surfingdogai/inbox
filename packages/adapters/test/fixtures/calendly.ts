@@ -1,4 +1,4 @@
-import { hmacSha256Hex } from "../../src/index";
+import { basicAuth, hmacSha256Hex } from "../../src/index";
 import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
 
 /**
@@ -16,11 +16,22 @@ import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
  * - `POST /webhook_subscriptions`: https://developer.calendly.com/api-docs/calendly-api/webhooks/create-webhook-subscription
  * - the signed delivery: https://developer.calendly.com/api-docs/overview/webhooks/webhook-signatures and
  *   https://developer.calendly.com/api-docs/calendly-api/webhooks/get-sample-webhook-data
+ * - `GET /organizations/{uuid}` (its `plan` and `stage`), and the refusals' own words
+ *   (`InviteesErrorMessage`, `DeleteScheduledEventErrorMessage`): https://developer.calendly.com/openapi/calendly-api.yaml
+ * - signing in: `GET https://auth.calendly.com/oauth/authorize` (PKCE, S256) and `POST /oauth/token` (HTTP Basic
+ *   for a web app; a refresh token is taken once), `POST /oauth/revoke`:
+ *   https://developer.calendly.com/api-docs/calendly-o-auth/o-auth/post-oauth-refresh-token
  *
  * The account is a plumber in Cape Town, its customers named in isiXhosa, Afrikaans and English.
  */
 
 export const API = "https://api.calendly.com";
+export const AUTH = "https://auth.calendly.com";
+/** Made up: the Calendly app of whoever runs the server. */
+export const CLIENT = { clientId: "Xk2wCalendlyAppId0001", clientSecret: "made-up-calendly-client-secret" } as const;
+/** Calendly's words for the Free plan (`InviteesErrorMessage`). */
+export const PAID_ONLY =
+  "The Scheduling API is only available on paid Calendly plans. Upgrade your plan to access this feature.";
 /** Made up, in the shape of a Calendly personal access token (a JWT). */
 export const TOKEN = "eyJraWQiOiJ0ZXN0IiwidHlwIjoiUEFUIiwiYWxnIjoiRVMyNTYifQ.eyJzdWIiOiJraGFueWlzYSJ9.c2lnbmF0dXJl";
 export const USER = `${API}/users/KHANYISA0000001`;
@@ -132,6 +143,20 @@ export const EVENT_TYPES = [
   }),
 ];
 
+export function organization(stage: "free" | "trial" | "paid", plan = stage === "free" ? "basic" : "standard") {
+  return {
+    resource: {
+      uri: ORG,
+      kind: "single",
+      name: "Khanyisa Plumbing",
+      plan,
+      stage,
+      created_at: "2024-03-02T08:04:05.678123Z",
+      updated_at: "2026-08-07T06:05:04.321123Z",
+    },
+  };
+}
+
 export function page(collection: unknown[], next: string | null = null) {
   return {
     collection,
@@ -156,8 +181,24 @@ export interface FakeCalendly {
     { body: Record<string, unknown>; status: "active" | "canceled"; start: string; end: string; type: string }
   >;
   readonly webhooks: Map<string, { url: string; signingKey: string; events: string[]; state: string }>;
-  /** What Calendly answers to the next bookings: a slot it refuses, another field it refuses, or the Free plan. */
-  refuse: "slot" | "field" | "plan" | null;
+  /**
+   * What Calendly answers to the next bookings: a slot it refuses, another field it refuses, the Free plan,
+   * or a token without scheduled_events:write. Besides, a time an active event already holds is refused.
+   */
+  refuse: "slot" | "field" | "plan" | "scope" | null;
+  /** The account's plan (`Organization.stage`); null answers 403, a token without organizations:read. */
+  stage: "free" | "trial" | "paid" | null;
+  /** A cancellation Calendly refuses with this message (`DeleteScheduledEventErrorMessage`). */
+  cancelRefusal: string | null;
+  /** Signing in: codes handed out, live tokens, and what was given back. */
+  readonly oauth: {
+    readonly codes: Map<string, { readonly challenge: string; readonly redirectUri: string }>;
+    readonly access: Set<string>;
+    readonly refresh: Set<string>;
+    readonly revoked: string[];
+  };
+  /** The code Calendly sends the owner back with, for a sign-in started with this challenge. */
+  authorize(challenge: string, redirectUri: string): string;
   /** Webhooks need a paid plan: false answers 403 to `POST /webhook_subscriptions`. */
   paid: boolean;
   /** Another answer to `GET /user_busy_times`: 424, a calendar Calendly checks could not be read. */
@@ -175,15 +216,103 @@ export function fakeCalendly(): FakeCalendly {
     events: new Map(),
     webhooks: new Map(),
     refuse: null,
+    stage: "paid",
+    cancelRefusal: null,
+    oauth: { codes: new Map(), access: new Set(), refresh: new Set(), revoked: [] },
+    authorize(challenge, redirectUri) {
+      const code = `code${String(++n).padStart(12, "0")}`;
+      c.oauth.codes.set(code, { challenge, redirectUri });
+      return code;
+    },
     paid: true,
     busyStatus: null,
     eventTypes: EVENT_TYPES.map((t) => structuredClone(t)),
   };
-  const authed = (req: { headers: Headers }) => req.headers.get("authorization") === `Bearer ${c.token.value}`;
+  const authed = (req: { headers: Headers }) => {
+    const header = req.headers.get("authorization") ?? "";
+    return (
+      header === `Bearer ${c.token.value}` || (header.startsWith("Bearer ") && c.oauth.access.has(header.slice(7)))
+    );
+  };
   const unauthorized = () =>
     json({ title: "Unauthenticated", message: "The access token is invalid" }, 401, { "x-ratelimit-limit": "500" });
   let n = 0;
+  // Tokens as unguessable as Calendly's own: never the same in two fakes.
+  const salt = crypto.randomUUID().replaceAll("-", "");
+  const tokens = () => {
+    const access = `acc${salt}${String(++n).padStart(6, "0")}`;
+    const refresh = `ref${salt}${String(++n).padStart(6, "0")}`;
+    c.oauth.access.add(access);
+    c.oauth.refresh.add(refresh);
+    return json({
+      token_type: "Bearer",
+      access_token: access,
+      refresh_token: refresh,
+      created_at: 1793606400,
+      expires_in: 7200,
+      owner: USER,
+      organization: ORG,
+      scope: "default",
+    });
+  };
   platform
+    .on("POST", `${AUTH}/oauth/token`, async (req) => {
+      if (req.headers.get("authorization") !== basicAuth(CLIENT.clientId, CLIENT.clientSecret)) {
+        return json({ error: "invalid_client", error_description: "Client authentication failed" }, 401);
+      }
+      const form = new URLSearchParams(req.body);
+      if (form.get("grant_type") === "authorization_code") {
+        const code = c.oauth.codes.get(form.get("code") ?? "");
+        c.oauth.codes.delete(form.get("code") ?? "");
+        const digest = new Uint8Array(
+          await crypto.subtle.digest("SHA-256", new TextEncoder().encode(form.get("code_verifier") ?? "")),
+        );
+        let binary = "";
+        for (const b of digest) binary += String.fromCharCode(b);
+        const challenge = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        if (!code || code.redirectUri !== form.get("redirect_uri") || code.challenge !== challenge) {
+          return json(
+            { error: "invalid_grant", error_description: "The provided authorization grant is invalid" },
+            400,
+          );
+        }
+        return tokens();
+      }
+      if (form.get("grant_type") === "refresh_token") {
+        // Taken once: the refresh token used is spent.
+        if (!c.oauth.refresh.delete(form.get("refresh_token") ?? "")) {
+          return json(
+            { error: "invalid_grant", error_description: "The provided authorization grant is invalid" },
+            400,
+          );
+        }
+        return tokens();
+      }
+      return json({ error: "unsupported_grant_type" }, 400);
+    })
+    .on("POST", `${AUTH}/oauth/revoke`, (req) => {
+      const form = new URLSearchParams(req.body);
+      if (form.get("client_id") !== CLIENT.clientId || form.get("client_secret") !== CLIENT.clientSecret) {
+        return json({ error: "invalid_request", error_description: "Client authentication failed" }, 400);
+      }
+      const token = form.get("token") ?? "";
+      c.oauth.revoked.push(token);
+      c.oauth.refresh.delete(token);
+      c.oauth.access.delete(token);
+      return json({});
+    })
+    .on("GET", `${API}/organizations/:id`, (req) => {
+      if (!authed(req)) return unauthorized();
+      if (`${API}/organizations/${req.params.id}` !== ORG)
+        return json({ title: "Resource Not Found", message: "" }, 404);
+      if (!c.stage) {
+        return json(
+          { title: "Permission Denied", message: "You do not have permission to access this resource." },
+          403,
+        );
+      }
+      return json(organization(c.stage));
+    })
     .on("GET", `${API}/users/me`, (req) => (authed(req) ? json(ME) : unauthorized()))
     .on("GET", `${API}/event_types`, (req) => {
       if (!authed(req)) return unauthorized();
@@ -211,9 +340,8 @@ export function fakeCalendly(): FakeCalendly {
     })
     .on("POST", `${API}/invitees`, (req) => {
       if (!authed(req)) return unauthorized();
-      if (c.refuse === "plan") {
-        return json({ title: "Permission Denied", message: "Please upgrade your Calendly account to Standard" }, 403);
-      }
+      if (c.refuse === "plan") return json({ title: "Permission Denied", message: PAID_ONLY }, 403);
+      if (c.refuse === "scope") return json({ title: "Permission Denied", message: "You do not have permission" }, 403);
       if (c.refuse === "field") {
         return json(
           {
@@ -239,6 +367,20 @@ export function fakeCalendly(): FakeCalendly {
       if (!type) return json({ title: "Resource Not Found", message: "" }, 404);
       const start = String(body.start_time);
       const end = new Date(Date.parse(start) + Number(type.duration) * 60_000).toISOString();
+      // The host is one person: a time an active event already holds is not offered again.
+      const held = [...c.events.values()].some(
+        (e) => e.status === "active" && Date.parse(e.start) < Date.parse(end) && Date.parse(start) < Date.parse(e.end),
+      );
+      if (held) {
+        return json(
+          {
+            title: "Invalid Argument",
+            message: "The supplied parameters are invalid.",
+            details: [{ parameter: "start_time", message: "The selected time is no longer available." }],
+          },
+          400,
+        );
+      }
       const id = `EV${String(++n).padStart(14, "0")}`;
       c.events.set(id, { body, status: "active", start, end, type: String(type.uri) });
       const invitee = body.invitee as Record<string, unknown>;
@@ -276,8 +418,9 @@ export function fakeCalendly(): FakeCalendly {
       if (!authed(req)) return unauthorized();
       const e = c.events.get(req.params.id ?? "");
       if (!e) return json({ title: "Resource Not Found", message: "" }, 404);
+      if (c.cancelRefusal) return json({ title: "Permission Denied", message: c.cancelRefusal }, 403);
       if (e.status === "canceled") {
-        return json({ title: "Permission Denied", message: "Event has already been canceled" }, 403);
+        return json({ title: "Permission Denied", message: "Event is already canceled" }, 403);
       }
       e.status = "canceled";
       return json(
@@ -293,7 +436,8 @@ export function fakeCalendly(): FakeCalendly {
       const email = q.get("invitee_email");
       const list = [...c.events.entries()]
         .filter(([, e]) => e.status === (q.get("status") ?? e.status))
-        .filter(([, e]) => Date.parse(e.start) >= min && Date.parse(e.start) < max)
+        // "After" and "prior to", as Calendly names its bounds: neither one is taken.
+        .filter(([, e]) => Date.parse(e.start) > min && Date.parse(e.start) < max)
         .filter(([, e]) => !email || (e.body.invitee as { email?: unknown }).email === email)
         .map(([id, e]) => ({
           uri: `${API}/scheduled_events/${id}`,
@@ -324,7 +468,7 @@ export function fakeCalendly(): FakeCalendly {
     .on("POST", `${API}/webhook_subscriptions`, (req) => {
       if (!authed(req)) return unauthorized();
       if (!c.paid) {
-        return json({ title: "Permission Denied", message: "Please upgrade your Calendly account to Standard" }, 403);
+        return json({ title: "Permission Denied", message: "Please upgrade to a paid Calendly account." }, 403);
       }
       const body = JSON.parse(req.body) as { url: string; events: string[]; signing_key: string };
       if ([...c.webhooks.values()].some((w) => w.url === body.url)) {

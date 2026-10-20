@@ -1,8 +1,26 @@
-import { type ConnectContext, ConnectorError, type OutboundBooking, type RunContext } from "@surfingdog/core";
+import {
+  type ConnectContext,
+  ConnectorError,
+  describeForm,
+  type OutboundBooking,
+  type RunContext,
+  readiness,
+} from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { CALENDLY_AUTO, CALENDLY_SCOPES, calendlyConnector, calendlyForm } from "../src/index";
+import {
+  CALENDLY_AUTH,
+  CALENDLY_AUTO,
+  CALENDLY_FREE_NOTE,
+  CALENDLY_NO_TYPES_NOTE,
+  CALENDLY_SCOPES,
+  calendlyConnector,
+  calendlyForm,
+  hmacSha256Hex,
+} from "../src/index";
 import {
   API,
+  AUTH,
+  CLIENT,
   delivery,
   type FakeCalendly,
   fakeCalendly,
@@ -90,10 +108,15 @@ describe("Calendly: connecting", () => {
         orgUri: ORG,
         email: OWNER_EMAIL,
         schedulingUrl: SCHEDULING_URL,
+        plan: "paid",
         webhook: "added",
         hook_url: HOOK,
       },
+      note: null,
     });
+    // Bookings start on: the plan takes them.
+    expect(made.defaults.bookings).toBeUndefined();
+    expect(c.platform.requests("GET", `${API}/organizations/ORGCAPETOWN0001`)).toHaveLength(1);
     // One-on-one, booked at once, a place the business sets, nothing the customer must answer.
     expect(made.destinations.map((d) => [d.id, d.name, d.lengths])).toEqual([
       [CALENDLY_AUTO, "Same length as the booking", undefined],
@@ -131,17 +154,35 @@ describe("Calendly: connecting", () => {
     });
   });
 
-  it("asks for a token, sealed, with the scopes to tick", () => {
+  it("asks for a token, sealed, in three steps an owner can follow, with the scopes to tick", () => {
     expect(calendlyForm.safeParse({ token: TOKEN }).success).toBe(true);
     expect(calendlyForm.safeParse({ token: "short" }).success).toBe(false);
     expect(calendlyForm.safeParse({ token: `${TOKEN} ${TOKEN}` }).success).toBe(false);
     expect(CALENDLY_SCOPES).toEqual([
       "users:read",
+      "organizations:read",
       "event_types:read",
       "availability:read",
       "scheduled_events:write",
       "webhooks:write",
     ]);
+    const [field] = describeForm(calendlyForm);
+    expect(field).toMatchObject({
+      key: "token",
+      secret: true,
+      placeholder: "Paste the token",
+      link: { href: "https://calendly.com/integrations/api_webhooks", text: "Open Calendly" },
+      steps: [
+        "In Calendly: Integrations & apps → API & webhooks → Generate new token.",
+        "Name it Inbox. Under scopes, tick: users:read · organizations:read · event_types:read · availability:read · scheduled_events:write · webhooks:write",
+        "Create it and copy it: Calendly shows it once.",
+      ],
+    });
+    expect(field?.help).toBeUndefined();
+    // Said before the owner relies on it: the plan bookings need.
+    expect(cal.note).toBe(
+      "Busy times work on every Calendly plan. Adding your bookings to Calendly needs its Standard plan or above.",
+    );
   });
 
   it("makes no webhook before the inbox can be reached, and adds it once it can", async () => {
@@ -160,14 +201,46 @@ describe("Calendly: connecting", () => {
     expect(saved[0]).toEqual({ token: TOKEN, signing_key: [...c.webhooks.values()][0]?.signingKey });
   });
 
-  it("connects on the Free plan with busy times only: Calendly sends no webhooks there", async () => {
+  it("connects on the Free plan with busy times only, bookings off, and says so on its line", async () => {
     const c = fakeCalendly();
+    c.stage = "free";
     c.paid = false;
     const made = await connected(c);
-    expect(made.extra).toMatchObject({ webhook: "plan" });
+    expect(made.extra).toMatchObject({ webhook: "plan", plan: "free" });
+    expect(made.defaults).toMatchObject({ bookings: false });
+    expect(made.note).toBe(CALENDLY_FREE_NOTE);
+    expect(made.note).toBe("Calendly Free: busy times only");
     expect(made.secret).toEqual({ token: TOKEN });
+    // Calendly sends no webhooks on Free: none is asked for.
+    expect(c.platform.requests("POST", `${API}/webhook_subscriptions`)).toHaveLength(0);
     // Tried again on the six-hourly read only, never every sync.
     expect(cal.stale?.(runCtx(c, made, { now: NOW + 3_600_000 }).ctx)).toBe(false);
+    // Upgraded: the six-hourly read clears the line and adds the webhook. Bookings stay the owner's choice.
+    c.stage = "paid";
+    c.paid = true;
+    const fresh = await cal.refresh?.(runCtx(c, made).ctx);
+    expect(fresh?.note).toBeNull();
+    expect(fresh?.extra).toMatchObject({ plan: "paid", webhook: "added" });
+  });
+
+  it("connects a token that cannot read the plan as before: bookings on, nothing said", async () => {
+    const c = fakeCalendly();
+    c.stage = null;
+    const made = await connected(c);
+    expect(made.extra).toMatchObject({ plan: null, webhook: "added" });
+    expect(made.defaults.bookings).toBeUndefined();
+    expect(made.note).toBeNull();
+  });
+
+  it("says on its line when none of the event types can take bookings from here", async () => {
+    const c = fakeCalendly();
+    c.eventTypes = c.eventTypes.filter((t) => t.kind === "group" || t.booking_method === "poll");
+    const made = await connected(c);
+    expect(made.destinations.map((d) => d.id)).toEqual([CALENDLY_AUTO]);
+    expect(made.note).toBe(CALENDLY_NO_TYPES_NOTE);
+    expect(made.note).toBe(
+      "None of your Calendly event types can take bookings from here (one-on-one, no required questions, a place you set). Busy times still work.",
+    );
   });
 
   it("connecting again in place makes its webhook again at the same address and drops the old one", async () => {
@@ -311,9 +384,10 @@ describe("Calendly: bookings", () => {
       tracking: { utm_source: "inbox", utm_content: expect.stringMatching(/^[0-9a-f]{32}$/) },
     });
     // A conference is made by Calendly; a call the customer makes takes the business's own number.
-    await cal.bookings?.put(ctx, { ...booking, itemId: "b2", durationMin: 30, end: booking.start + 1_800_000 }, null);
+    const at = (h: number) => booking.start + h * 3_600_000;
+    await cal.bookings?.put(ctx, { ...booking, itemId: "b2", durationMin: 30, start: at(2), end: at(2.5) }, null);
     expect([...c.events.values()][1]?.body.location).toEqual({ kind: "google_conference" });
-    await cal.bookings?.put(ctx, { ...booking, itemId: "b3", durationMin: 15, end: booking.start + 900_000 }, null);
+    await cal.bookings?.put(ctx, { ...booking, itemId: "b3", durationMin: 15, start: at(3), end: at(3.25) }, null);
     expect([...c.events.values()][2]?.body.location).toEqual({ kind: "inbound_call" });
   });
 
@@ -361,16 +435,52 @@ describe("Calendly: bookings", () => {
     // The old one went before the second try; the booking stays in the inbox and says why.
     expect(c.events.get(String(first?.externalId))?.status).toBe("canceled");
     expect(c.platform.seen.slice(route).map((r) => `${r.method} ${r.url.pathname}`)).toEqual([
+      // A move first looks for the event it may have made already at the new time.
+      "GET /scheduled_events",
       "GET /event_types/ETWORKSHOP60",
       "POST /invitees",
       `POST /scheduled_events/${first?.externalId}/cancellation`,
       "GET /event_types/ETWORKSHOP60",
       "POST /invitees",
     ]);
-    // Accepted on the next try: nothing to cancel twice.
+    // Accepted on the next try: the old one is cancelled already, which is done.
     c.refuse = null;
     const again = await cal.bookings?.put(ctx, half, first ?? null);
     expect(c.events.get(String(again?.externalId))?.status).toBe("active");
+  });
+
+  it("moves onto half its own time by itself: Calendly refuses a time an event holds, the old one goes first", async () => {
+    const c = fakeCalendly();
+    const made = await connected(c);
+    const { ctx } = runCtx(c, made);
+    const first = await cal.bookings?.put(ctx, booking, null);
+    const half = { ...booking, start: booking.start + 1_800_000, end: booking.end + 1_800_000 };
+    const moved = await cal.bookings?.put(ctx, half, first ?? null);
+    expect(c.events.get(String(first?.externalId))?.status).toBe("canceled");
+    expect(c.events.get(String(moved?.externalId))).toMatchObject({ status: "active", start: "2026-11-04T09:30:00Z" });
+  });
+
+  it("a move that stopped after making the new event is finished on the next try, never made twice", async () => {
+    const c = fakeCalendly();
+    const made = await connected(c);
+    const { ctx } = runCtx(c, made);
+    const first = await cal.bookings?.put(ctx, booking, null);
+    const later = { ...booking, start: booking.start + 86_400_000, end: booking.end + 86_400_000 };
+    // The new event is made; cancelling the old one fails once, so the inbox keeps the old link.
+    c.platform.fail("POST", `${API}/scheduled_events/:id/cancellation`, 503);
+    await expect(cal.bookings?.put(ctx, later, first ?? null)).rejects.toMatchObject({ code: "unreachable" });
+    const active = () => [...c.events.entries()].filter(([, e]) => e.status === "active");
+    expect(active().map(([, e]) => e.start)).toEqual(["2026-11-04T09:00:00Z", "2026-11-05T09:00:00Z"]);
+    // Tried again with the old link: the event already at the new time is the one kept, the old one goes.
+    const again = await cal.bookings?.put(ctx, later, first ?? null);
+    expect(active().map(([id, e]) => [id, e.start])).toEqual([[again?.externalId, "2026-11-05T09:00:00Z"]]);
+    expect(c.events.get(String(first?.externalId))?.status).toBe("canceled");
+    expect(again).toMatchObject({ calendar: "ETWORKSHOP60", start: later.start, end: later.end });
+    expect(c.platform.requests("POST", `${API}/invitees`)).toHaveLength(2);
+    // A third try with the link it keeps writes nothing.
+    const calls = c.platform.seen.length;
+    expect(await cal.bookings?.put(ctx, later, again ?? null)).toEqual(again);
+    expect(c.platform.seen.length).toBe(calls);
   });
 
   it("keeps the old event when Calendly refuses something else than the time", async () => {
@@ -388,15 +498,21 @@ describe("Calendly: bookings", () => {
     expect(c.platform.requests("POST", `${API}/scheduled_events/`)).toHaveLength(0);
   });
 
-  it("on the Free plan says Calendly books from other apps on paid plans only, and where customers can book", async () => {
+  it("on the Free plan says the time is not blocked on Calendly and what to do, told apart from a missing scope", async () => {
     const c = fakeCalendly();
     const made = await connected(c);
     c.refuse = "plan";
     const error = (await cal.bookings?.put(runCtx(c, made).ctx, booking, null).catch((e: unknown) => e)) as Error;
     expect(error).toMatchObject({ code: "refused" });
-    expect(error.message).toContain("paid Calendly plan (Standard or above)");
-    expect(error.message).toContain("switch off Add confirmed bookings");
-    expect(error.message).toContain(SCHEDULING_URL);
+    expect(error.message).toBe(
+      "Calendly's Free plan doesn't let other apps add bookings, so 4 Nov, 11:00 is not blocked on Calendly. Block it there yourself, or switch off Add confirmed bookings.",
+    );
+    c.refuse = "scope";
+    const scope = (await cal.bookings?.put(runCtx(c, made).ctx, booking, null).catch((e: unknown) => e)) as Error;
+    expect(scope).toMatchObject({ code: "refused" });
+    expect(scope.message).toContain("scheduled_events:write");
+    expect(scope.message).not.toContain("Free plan");
+    expect(made.extra?.schedulingUrl).toBe(SCHEDULING_URL);
   });
 
   it("refuses an event type that changed in Calendly to ask the customer something", async () => {
@@ -437,6 +553,23 @@ describe("Calendly: bookings", () => {
     await expect(cal.bookings?.remove(runCtx(d, made).ctx, link)).rejects.toMatchObject({ code: "refused" });
   });
 
+  it("says so when Calendly will not let it cancel, since the event still holds the time", async () => {
+    const c = fakeCalendly();
+    const made = await connected(c);
+    const { ctx } = runCtx(c, made);
+    const link = await cal.bookings?.put(ctx, booking, null);
+    if (!link) throw new Error("no link");
+    c.cancelRefusal = "You are not allowed to cancel this event";
+    await expect(cal.bookings?.remove(ctx, link)).rejects.toMatchObject({
+      code: "refused",
+      message: "Calendly would not cancel it: You are not allowed to cancel this event.",
+    });
+    expect(c.events.get(String(link.externalId))?.status).toBe("active");
+    // In the past, Calendly's own words: nothing is held any more.
+    c.cancelRefusal = "Event in the past";
+    await cal.bookings?.remove({ ...ctx, now: booking.end + 60_000 }, link);
+  });
+
   it("finds an event it made and kept no id for by its mark, never one someone else made", async () => {
     const c = fakeCalendly();
     const made = await connected(c);
@@ -449,6 +582,9 @@ describe("Calendly: bookings", () => {
     const q = c.platform.requests("GET", `${API}/scheduled_events`)[0]?.url.searchParams;
     expect(q?.get("invitee_email")).toBe(OWNER_EMAIL);
     expect(q?.get("user")).toBe(USER);
+    // Calendly's bounds are "after" and "prior to": a minute either side, so the start itself is in.
+    expect(q?.get("min_start_time")).toBe("2026-11-04T08:59:00Z");
+    expect(q?.get("max_start_time")).toBe("2026-11-04T09:01:00Z");
   });
 });
 
@@ -497,6 +633,25 @@ describe("Calendly: its webhook", () => {
     });
   });
 
+  it("checks a few signatures at most, each against one HMAC, in any case", async () => {
+    const { key, verify } = await hooked();
+    const good = await delivery(key);
+    const header = good.headers["calendly-webhook-signature"] ?? "";
+    const [t, v1] = header.split(",");
+    const wrong = "v1=0000000000000000000000000000000000000000000000000000000000000000";
+    // Calendly's own one among a few: taken. Upper case hex: taken.
+    const few = { ...good.headers, "calendly-webhook-signature": [t, wrong, wrong, v1].join(",") };
+    expect(await verify({ body: good.body, headers: few })).toMatchObject({ topic: "invitee.created" });
+    const upper = { ...good.headers, "calendly-webhook-signature": `${t},${v1?.toUpperCase().replace("V1=", "v1=")}` };
+    expect(await verify({ body: good.body, headers: upper })).toMatchObject({ topic: "invitee.created" });
+    // Past the fifth, nothing more is looked at; a header of thousands is refused unread.
+    const late = { ...good.headers, "calendly-webhook-signature": [t, ...Array(5).fill(wrong), v1].join(",") };
+    await expect(verify({ body: good.body, headers: late })).rejects.toMatchObject({ code: "refused" });
+    const huge = { ...good.headers, "calendly-webhook-signature": [t, ...Array(400).fill(wrong), v1].join(",") };
+    await expect(verify({ body: good.body, headers: huge })).rejects.toMatchObject({ code: "refused" });
+    expect(await hmacSha256Hex(key, `${t?.slice(2)}.${good.body}`)).toBe(v1?.slice(3));
+  });
+
   it("answers nothing for an event it does not follow, and a connection with no key refuses everything", async () => {
     const { c, made, key, verify } = await hooked();
     expect(await verify(await delivery(key, { event: "invitee_no_show.created" }))).toBeNull();
@@ -542,5 +697,146 @@ describe("Calendly: its webhook", () => {
     expect(again?.extra).toMatchObject({ webhook: "added", hook_url: moved });
     expect([...c.webhooks.values()].map((w) => w.url)).toEqual([moved]);
     expect(cal.stale?.({ ...there, extra: again?.extra ?? {} })).toBe(false);
+  });
+});
+
+describe("Calendly: signing in with Calendly", () => {
+  const signIn = calendlyConnector(CLIENT);
+  const REDIRECT = "https://inbox.khanyisa.example.com/oauth/connect/calendly/callback";
+
+  async function pkce() {
+    const verifier = "kV8vYw3r2c1x0zQpLmNoJiHgFeDcBa9876543210abcdefGHIJK";
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    let binary = "";
+    for (const b of digest) binary += String.fromCharCode(b);
+    return { verifier, challenge: btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") };
+  }
+
+  async function signedIn(c: FakeCalendly) {
+    const { verifier, challenge } = await pkce();
+    const code = c.authorize(challenge, REDIRECT);
+    const made = await signIn.oauth?.exchange(connectCtx(c), { code, verifier, redirectUri: REDIRECT });
+    if (!made) throw new Error("not signed in");
+    return made;
+  }
+
+  it("is a way beside the token, 'Soon' on a hosted inbox and 'set up' on one's own server until its app is set", () => {
+    const way = (def: ReturnType<typeof calendlyConnector>) => def.presets?.find((p) => p.id === "oauth");
+    const none = calendlyConnector();
+    expect(readiness(none, way(none))).toBe("Calendly sign-in is not set up on this inbox yet.");
+    expect(way(none)?.whenNotReady).toMatchObject({ status: "setup", hint: "Needs a Calendly app on the server." });
+    const hosted = calendlyConnector(null, { hosted: true });
+    expect(way(hosted)?.whenNotReady).toEqual({ status: "soon" });
+    expect(readiness(signIn, way(signIn))).toBe(true);
+    expect(way(signIn)).toMatchObject({ auth: "oauth", label: "Calendly", action: "Continue with Calendly" });
+    // The token needs nothing of the server.
+    expect(readiness(none)).toBe(true);
+  });
+
+  it("sends the owner to Calendly with PKCE (S256) and its state, and nothing secret", () => {
+    const url = new URL(
+      signIn.oauth?.authorizeUrl({ redirectUri: REDIRECT, state: "st4te", challenge: "ch4llenge" }) ?? "",
+    );
+    expect(`${url.origin}${url.pathname}`).toBe(`${CALENDLY_AUTH}/oauth/authorize`);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      client_id: CLIENT.clientId,
+      response_type: "code",
+      redirect_uri: REDIRECT,
+      code_challenge_method: "S256",
+      code_challenge: "ch4llenge",
+      state: "st4te",
+    });
+    expect(url.href).not.toContain(CLIENT.clientSecret);
+  });
+
+  it("turns the code into lasting access with the app's own key, then connects as the token does", async () => {
+    const c = fakeCalendly();
+    const made = await signedIn(c);
+    expect(made).toMatchObject({
+      account: `Khanyisa Plumbing (${OWNER_EMAIL})`,
+      externalId: "KHANYISA0000001",
+      extra: { userUri: USER, plan: "paid", webhook: "added" },
+      note: null,
+    });
+    expect(Object.keys(made.secret).sort()).toEqual([
+      "access_expires_at",
+      "access_token",
+      "refresh_token",
+      "signing_key",
+    ]);
+    expect(made.secret.access_expires_at).toBe(String(NOW + 7_200_000));
+    const [exchange] = c.platform.requests("POST", `${AUTH}/oauth/token`);
+    expect(exchange?.headers.get("authorization")).toMatch(/^Basic /);
+    expect(Object.fromEntries(new URLSearchParams(exchange?.body ?? ""))).toMatchObject({
+      grant_type: "authorization_code",
+      redirect_uri: REDIRECT,
+    });
+    // The app's secret goes to Calendly's sign-in alone; its API sees the access token only.
+    const api = c.platform.seen.filter((r) => r.url.origin === API);
+    expect(api.every((r) => r.headers.get("authorization") === `Bearer ${made.secret.access_token}`)).toBe(true);
+    // A code is used once.
+    const { verifier } = await pkce();
+    await expect(
+      signIn.oauth?.exchange(connectCtx(c), { code: "code-used", verifier, redirectUri: REDIRECT }),
+    ).rejects.toMatchObject({ code: "auth" });
+  });
+
+  it("refreshes before the two hours are up, keeps the new refresh token at once, and asks once per run", async () => {
+    const c = fakeCalendly();
+    const made = await signedIn(c);
+    const later = NOW + 2 * 3_600_000;
+    const { ctx, saved } = runCtx(c, made, { now: later });
+    await signIn.bookings?.find?.(ctx, booking);
+    await signIn.busy?.(ctx, { start: later, end: later + 86_400_000 });
+    await signIn.bookings?.put(ctx, booking, null);
+    const refreshes = c.platform.requests("POST", `${AUTH}/oauth/token`).slice(1);
+    expect(refreshes).toHaveLength(1);
+    expect(new URLSearchParams(refreshes[0]?.body ?? "").get("refresh_token")).toBe(made.secret.refresh_token);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.refresh_token).not.toBe(made.secret.refresh_token);
+    expect(saved[0]?.signing_key).toBe(made.secret.signing_key);
+    expect(c.oauth.refresh.has(String(made.secret.refresh_token))).toBe(false);
+    // The webhook made again in the same run keeps the new refresh token, never the spent one.
+    const [id, hook] = [...c.webhooks.entries()][0] ?? [];
+    if (hook) hook.state = "disabled";
+    await signIn.refresh?.(ctx);
+    expect(c.webhooks.has(String(id))).toBe(false);
+    expect(saved.at(-1)?.refresh_token).toBe(saved[0]?.refresh_token);
+    expect(saved.at(-1)?.signing_key).not.toBe(made.secret.signing_key);
+  });
+
+  it("says to connect again when Calendly no longer takes the refresh token", async () => {
+    const c = fakeCalendly();
+    const made = await signedIn(c);
+    c.oauth.refresh.clear();
+    const { ctx } = runCtx(c, made, { now: NOW + 3 * 3_600_000 });
+    await expect(signIn.busy?.(ctx, { start: ctx.now, end: ctx.now + 86_400_000 })).rejects.toMatchObject({
+      code: "auth",
+      message: "Calendly stopped this connection. Connect it again.",
+    });
+  });
+
+  it("gives the access back to Calendly when it is disconnected, with its webhook", async () => {
+    const c = fakeCalendly();
+    const made = await signedIn(c);
+    await signIn.disconnect?.(runCtx(c, made).ctx);
+    expect(c.webhooks.size).toBe(0);
+    expect(c.oauth.revoked).toEqual([made.secret.refresh_token]);
+  });
+
+  it("signed in again with a new address of its own, drops this inbox's old webhook once kept", async () => {
+    const c = fakeCalendly();
+    const first = await connected(c);
+    await first.settle?.(true);
+    const moved = "https://inbox.khanyisa.example.com/v1/hooks/calendly/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+    const { verifier, challenge } = await pkce();
+    const code = c.authorize(challenge, REDIRECT);
+    const again = await signIn.oauth?.exchange(connectCtx(c, { hookUrl: moved }), {
+      code,
+      verifier,
+      redirectUri: REDIRECT,
+    });
+    await again?.settle?.(true);
+    expect([...c.webhooks.values()].map((w) => w.url)).toEqual([moved]);
   });
 });

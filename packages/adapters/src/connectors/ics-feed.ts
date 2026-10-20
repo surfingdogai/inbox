@@ -4,7 +4,7 @@ import { ownUid } from "./caldav/index";
 import { wallTimeOf } from "./caldav/zones";
 
 /**
- * The calendar link to share (ADR-030): the inbox's confirmed bookings as an iCalendar feed (RFC 5545,
+ * Share your bookings, the calendar link to share (ADR-030): the inbox's confirmed bookings as an iCalendar feed (RFC 5545,
  * https://www.rfc-editor.org/rfc/rfc5545), at a private address the owner pastes where another platform
  * imports a calendar by link: a booking site's calendar sync, a phone's calendar, Google Calendar's "From
  * URL". With the calendar link the inbox already reads (`ics`), a business that also takes bookings
@@ -138,7 +138,7 @@ async function serve(ctx: FeedContext, request: FeedRequest): Promise<FeedRespon
 export function icsFeedConnector(): ConnectorDefinition {
   return {
     kind: "ics_feed",
-    title: "Calendar link to share",
+    title: "Share your bookings",
     group: "calendars",
     capabilities: [],
     auth: "link",

@@ -178,6 +178,24 @@ describe("the calendar link to share", () => {
     expect(unknown).toContain("X-WR-CALNAME:Bookings");
   });
 
+  it("never lets a name break a line: a lone CR, a newline and other control characters", () => {
+    const text = bookingsCalendar([{ ...tour, serviceName: "Mezcal\rtour\r\nby\nboat\u0000\u0007\ttoday" }], {
+      inboxId: OAXACA.id,
+      name: "Casa\rAzul",
+      timezone: OAXACA.timezone,
+    });
+    const lines = linesOf(text);
+    expect(lines).toContain("SUMMARY:Mezcal\\ntour\\nby\\nboat\ttoday");
+    expect(lines).toContain("X-WR-CALNAME:Casa\\nAzul");
+    // Every line ends CRLF, and no bare CR or LF is left inside one.
+    const control = (line: string) => [...line].some((ch) => ch.charCodeAt(0) < 0x09 || ch === "\r" || ch === "\n");
+    for (const line of text.split("\r\n")) expect(control(line), JSON.stringify(line)).toBe(false);
+    // A strict reader takes it as one event, still named as written.
+    const events = (parseICal(text)[0]?.children ?? []).filter((c) => c.name === "VEVENT");
+    expect(events).toHaveLength(1);
+    expect(events[0]?.props.map((p) => p.name)).toContain("STATUS");
+  });
+
   it("is an empty calendar, still valid, with no booking", () => {
     expect(linesOf(bookingsCalendar([], { inboxId: OAXACA.id, name: "Casa Azul", timezone: OAXACA.timezone }))).toEqual(
       [

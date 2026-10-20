@@ -55,7 +55,7 @@ For a Cal.com you run yourself, give its API address under **More options**.
 
 ## Share your bookings
 
-The other way round: **Calendar link to share** makes a private link to your confirmed bookings, for a booking site's calendar sync, Google Calendar or a phone. It shows when you are booked and for which service, never who booked. Your Inbox knows its own bookings when a calendar copies them back, so they block nothing twice. See [Calendar link to share](/docs/connectors/calendar-link/).
+The other way round: **Share your bookings** makes a private calendar link to your confirmed bookings, for a booking site's calendar sync, Google Calendar or a phone. It shows when you are booked and for which service, never who booked. Your Inbox knows its own bookings when a calendar copies them back, so they block nothing twice. See [Share your bookings](/docs/connectors/calendar-link/).
 
 ## Google Calendar
 

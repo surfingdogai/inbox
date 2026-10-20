@@ -12,6 +12,7 @@ import {
 import { Fragment, useEffect, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
+import { accountOf, bookedTwice, isBookingPlatform, lengthGaps, servesLink, tagOf } from "../lib/integrations";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
 import type { ConnectionView, FormField, GalleryCard, GalleryWay } from "../lib/types";
 import { ErrorState, Toast } from "./Feedback";
@@ -93,12 +94,9 @@ export function IntegrationsCard() {
         { id: "payments" as const, label: "Payments" },
         { id: "shops" as const, label: "Shops and tills" },
       ];
-  // Cal.com adds the bookings it is given to the calendar it checks, so with both adding them each
-  // booking would show twice there.
-  const calcom = connections.find((c) => c.kind === "calcom" && c.bookings_on && c.status !== "disabled");
-  const twice = connections.find(
-    (c) => (c.kind === "caldav" || c.kind === "google_calendar") && c.bookings_on && c.status !== "disabled",
-  );
+  // A booking platform (Cal.com, Calendly) adds the bookings it is given to the calendar it checks, so
+  // with both adding them each booking would show twice there.
+  const twice = bookedTwice(connections);
 
   return (
     <section className="card glass stack">
@@ -130,21 +128,24 @@ export function IntegrationsCard() {
           ))}
         </div>
       )}
-      {calcom && twice && (
+      {twice && (
         <p className="hint int-twice" role="note">
-          Cal.com adds its bookings to your calendar too, so each would show twice.{" "}
+          {twice.platform.title} adds its bookings to your calendar too, so each would show twice.{" "}
           <button
             type="button"
             className="int-inline"
             disabled={write.isPending}
             onClick={() =>
               write.mutate(
-                { id: twice.id, patch: { bookings_on: false } },
-                { onSuccess: () => setNotice({ tone: "success", text: `${twice.title} no longer adds bookings.` }) },
+                { id: twice.calendar.id, patch: { bookings_on: false } },
+                {
+                  onSuccess: () =>
+                    setNotice({ tone: "success", text: `${twice.calendar.title} no longer adds bookings.` }),
+                },
               )
             }
           >
-            Stop adding them from {twice.title}
+            Stop adding them from {twice.calendar.title}
           </button>
         </p>
       )}
@@ -191,6 +192,7 @@ export function IntegrationsCard() {
                   <ConnectPanel
                     key={here.id}
                     card={here}
+                    made={(byCard.get(here.id) ?? []).some((c) => servesLink(c) && c.link !== null)}
                     email={email}
                     instead={pays(here) ? insteadOf(here.id) : null}
                     pending={write.isPending}
@@ -207,6 +209,10 @@ export function IntegrationsCard() {
                         },
                       )
                     }
+                    onShow={() => {
+                      setOpen(null);
+                      setNotice({ tone: "success", text: LINK_BELOW });
+                    }}
                     onError={(text) => setNotice({ tone: "danger", text })}
                   />
                 )}
@@ -220,21 +226,16 @@ export function IntegrationsCard() {
   );
 }
 
+/** Where a link made is, and what to do with it: its line is under the notice. */
+const LINK_MADE = "Your link is made. Copy it below, then paste it where the other site imports a calendar.";
+const LINK_BELOW = "Your link is below. Paste it where the other site imports a calendar.";
+
 /** What the owner is told once a way connected, in the words of what it does. */
 function connectedText(card: GalleryCard, way: GalleryWay): string {
-  if (way.auth === "link") return "Your link is made. Copy it from its line above.";
+  if (way.auth === "link") return LINK_MADE;
   if (card.group === "shops") return `${card.title} is connected. Reading your catalogue now.`;
   if (card.group === "payments") return `${card.title} is connected. Orders you accept get a link to pay.`;
   return "Connected. Reading your calendar now.";
-}
-
-/** What a card's tag says: the worst of its connections. */
-function tagOf(connections: readonly ConnectionView[]): { text: string; tone: "on" | "warn" | "quiet" } | null {
-  if (connections.length === 0) return null;
-  if (connections.every((c) => c.payments?.disconnecting)) return { text: "Disconnecting", tone: "quiet" };
-  if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
-  if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
-  return { text: "Connected", tone: "on" };
 }
 
 function Tile({
@@ -327,21 +328,26 @@ function preferredWay(card: GalleryCard, email: string | null): { way: GalleryWa
 
 function ConnectPanel({
   card,
+  made,
   email,
   instead,
   pending,
   error,
   onConnect,
+  onShow,
   onCancel,
   onError,
 }: {
   card: GalleryCard;
+  /** A link of this card is made already: its drawer shows it rather than making one. */
+  made: boolean;
   email: string | null;
   /** Another payment platform sends the links now: connecting this one asks to send them from it instead. */
   instead?: string | null;
   pending: boolean;
   error: ApiProblem | null;
   onConnect: (body: { kind: string; preset?: string; values: Record<string, string> }, way: GalleryWay) => void;
+  onShow: () => void;
   onCancel: () => void;
   onError: (text: string) => void;
 }) {
@@ -351,6 +357,9 @@ function ConnectPanel({
   const setup = card.ways.filter((w) => w.status === "setup");
   const main = card.ways.filter((w) => !w.advanced);
   const others = card.ways.filter((w) => w.advanced && w.status === "ready" && keyOf(w) !== keyOf(way));
+  // Back to the way most people use, from one under More options: never to the way already open (the
+  // only ready way may be an advanced one, while the sign-in beside it is not set up).
+  const back = way?.advanced && preferred.way && keyOf(preferred.way) !== keyOf(way) ? preferred.way : null;
   const body = (w: GalleryWay, values: Record<string, string>) => ({
     kind: w.kind,
     ...(w.preset ? { preset: w.preset } : {}),
@@ -413,10 +422,11 @@ function ConnectPanel({
       ) : way.auth === "link" ? (
         <MakeLink
           way={way}
+          made={made}
           pending={pending}
           error={error}
           onCancel={onCancel}
-          onMake={() => onConnect(body(way, {}), way)}
+          onMake={() => (made ? onShow() : onConnect(body(way, {}), way))}
         />
       ) : (
         <WayForm
@@ -436,7 +446,7 @@ function ConnectPanel({
           onSubmit={(values) => onConnect(body(way, values), way)}
         />
       )}
-      {(others.length > 0 || way.advanced) && (
+      {(others.length > 0 || back) && (
         <details className="advanced">
           <summary className="disclosure">
             <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
@@ -444,9 +454,9 @@ function ConnectPanel({
             <span className="disclosure-closed">More options</span>
           </summary>
           <div className="advanced-body stack-xs">
-            {way.advanced && preferred.way && (
+            {back && (
               <button type="button" className="int-inline" onClick={() => setPicked(null)}>
-                Back to {preferred.way.label}
+                Back to {back.label}
               </button>
             )}
             {others.map((w) => (
@@ -464,12 +474,15 @@ function ConnectPanel({
 /** A link the inbox makes (a calendar of your bookings for another platform): one press. */
 function MakeLink({
   way,
+  made,
   pending,
   error,
   onMake,
   onCancel,
 }: {
   way: GalleryWay;
+  /** Made already: the button shows it. */
+  made: boolean;
   pending: boolean;
   error: ApiProblem | null;
   onMake: () => void;
@@ -492,7 +505,7 @@ function MakeLink({
       )}
       <div className="rowx">
         <button type="button" className="btn btn-primary" disabled={pending} onClick={onMake}>
-          {pending ? "Making…" : way.action}
+          {pending ? "Making…" : made ? "Show my link" : way.action}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
           Cancel
@@ -794,7 +807,11 @@ function ConnectionLine({
   const pays = c.payments;
   const disconnecting = pays?.disconnecting === true;
   // A connection that is a link the inbox serves (a calendar to import elsewhere): nothing to sync.
-  const serves = c.capabilities.length === 0;
+  const serves = servesLink(c);
+  const services = useServices();
+  // What a platform booking by length cannot take, said before a booking fails.
+  const gaps = lengthGaps(c, services.data?.items ?? []);
+  const account = accountOf(c);
   const products = c.catalogue
     ? `${c.catalogue.products} ${c.catalogue.products === 1 ? "product" : "products"}${c.catalogue.truncated ? " (the first ones)" : ""}`
     : null;
@@ -837,7 +854,7 @@ function ConnectionLine({
             : "busy times off",
           writes
             ? c.bookings_on
-              ? destination && c.kind !== "calcom"
+              ? destination && !isBookingPlatform(c)
                 ? `bookings go to ${destination.name}`
                 : "bookings go out"
               : "bookings off"
@@ -851,7 +868,7 @@ function ConnectionLine({
       <div className="int-conn-main">
         <div className="int-conn-head">
           <span className="int-title">{c.title}</span>
-          <span className="int-account">{c.account}</span>
+          {account && <span className="int-account">{account}</span>}
           <span className={clsx("pill pill-xs", failing && "is-warn")}>
             {disconnecting
               ? "Disconnecting"
@@ -869,7 +886,13 @@ function ConnectionLine({
             </a>
           )}
         </div>
-        {serves && c.link && <LinkLine link={c.link} />}
+        {c.note && <div className="hint int-note">{c.note}</div>}
+        {gaps.map((line) => (
+          <div key={line} className="hint int-note">
+            {line}
+          </div>
+        ))}
+        {serves && c.link && <LinkLine link={c.link} steps={way?.steps ?? []} />}
         {pays?.webhook === "pending" && !disconnecting && (
           <div className="hint">
             {c.title} tells this inbox of payments once it is live; until then the inbox asks {c.title} on each sync.
@@ -1297,7 +1320,7 @@ function Choices({
       )}
       <ChoiceFields connection={c} onNotice={onNotice} />
       {bookingsOn && writable.length > 1 && (
-        <Field id={`dest-${c.id}`} label={c.kind === "calcom" ? "Event type" : "To"}>
+        <Field id={`dest-${c.id}`} label={isBookingPlatform(c) ? "Event type" : "To"}>
           <select
             id={`dest-${c.id}`}
             className="input"
@@ -1389,22 +1412,35 @@ function ChoiceFields({ connection: c, onNotice }: { connection: ConnectionView;
   );
 }
 
-/** A link a connection serves, read-only, with Copy: the owner pastes it into another platform. */
-function LinkLine({ link }: { link: string }) {
+/**
+ * A link a connection serves, on one line with Copy, and where to paste it: the owner pastes it into
+ * another platform. The whole address is in its title and copied whole; on a phone it is cut short.
+ */
+function LinkLine({ link, steps }: { link: string; steps: readonly string[] }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="int-hook stack-xs">
       <span className="int-hook-row">
-        <code className="int-hook-url">{link}</code>
+        {/* Cut short on screen only: its text, the whole address, is what is read out and copied. */}
+        <code className="int-link-url" title={link}>
+          {link}
+        </code>
         <button
           type="button"
-          className="btn btn-ghost btn-sm btn-icon"
-          aria-label={copied ? "Link copied" : "Copy the link"}
+          className="btn btn-secondary btn-sm int-copy"
           onClick={() => void navigator.clipboard.writeText(link).then(() => setCopied(true))}
         >
           {copied ? <Check className="icon-xs" aria-hidden="true" /> : <Copy className="icon-xs" aria-hidden="true" />}
+          {copied ? "Copied" : "Copy link"}
         </button>
       </span>
+      {steps.length > 0 && (
+        <ol className="int-steps">
+          {steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -1434,7 +1470,10 @@ function NewLink({
               {
                 onSuccess: () => {
                   onDone();
-                  onNotice({ tone: "success", text: "A new link is made. Copy it from its line." });
+                  onNotice({
+                    tone: "success",
+                    text: "A new link is made. Copy it below, and paste it where the old one was.",
+                  });
                 },
               },
             )

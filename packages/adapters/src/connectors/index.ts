@@ -17,10 +17,14 @@ export { multistatus, parseXml } from "./caldav/xml";
 export { resolveZone, zonedToUtc } from "./caldav/zones";
 export {
   CALENDLY_API,
+  CALENDLY_AUTH,
   CALENDLY_AUTO,
   CALENDLY_EVENTS,
+  CALENDLY_FREE_NOTE,
+  CALENDLY_NO_TYPES_NOTE,
   CALENDLY_SCOPES,
   CALENDLY_TOLERANCE_S,
+  type CalendlyOptions,
   calendlyConnector,
   calendlyForm,
 } from "./calendly";
@@ -79,6 +83,8 @@ export interface ConnectorHostOptions {
  * private link need nothing of the host; Google needs the instance's OAuth client, and without one
  * says "Soon" on a hosted inbox (ours is on its way) and "set up" on one's own server. Stripe and
  * Mollie take the business's own key and need nothing of the host but its public address (ADR-023).
+ * Calendly takes the owner's token, and its sign-in beside it needs the instance's Calendly app, as
+ * Google's does.
  *
  * A connector added here takes one import, one export line and one entry below (ADR-026 §7), in the
  * order WooCommerce, Shopify, Square, Calendly, the calendar link to share.
@@ -92,7 +98,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
-    calendlyConnector(),
+    calendlyConnector(opts.oauth?.calendly ?? null, { hosted: opts.hosted }),
     icsFeedConnector(),
   ];
 }

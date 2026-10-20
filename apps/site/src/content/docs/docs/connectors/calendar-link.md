@@ -1,6 +1,6 @@
 ---
-title: Calendar link to share
-description: A private link to your confirmed bookings, for a booking site's calendar sync, Google Calendar or a phone. When you are booked and for what, never who booked.
+title: Share your bookings
+description: A private calendar link to your confirmed bookings, for a booking site's calendar sync, Google Calendar or a phone. When you are booked and for what, never who booked.
 sidebar:
   order: 5
 ---
@@ -9,15 +9,17 @@ Your Inbox makes a private link to a calendar of your confirmed bookings. Paste 
 
 With a [calendar link](/docs/calendars/#a-calendar-link) the other way, a guesthouse on two booking sites, or a studio with a second booking page, keeps both sides closed for the same time.
 
-Settings → Integrations → **Calendar link to share** → **Make a link**.
+Settings → Integrations → **Share your bookings** → **Make a link**.
 
 ## Making the link
 
 1. Press **Make a link**.
-2. Copy it.
+2. Press **Copy link** on its line.
 3. Paste it where the other site or app imports a calendar by link. Booking sites often call it *Import calendar* or *Sync calendars*; Google Calendar, *From URL*; a phone, *Subscribe*.
 
-The link is shown to you, signed in, and to nobody else: not to your AI, and not to keys you gave other systems.
+Other sites fetch the link from your Inbox's own https address, so it can be made once your Inbox has one: on your own server, set it under Settings → General, **Inbox address**; on a hosted Inbox, once it is live at its own address. Until then the card says **Needs this inbox's address first**.
+
+The link is shown to you, signed in, and to nobody else: not to your AI, and not to keys you gave other systems. Opening the card again shows where it is: **Show my link**.
 
 ## What it shows
 

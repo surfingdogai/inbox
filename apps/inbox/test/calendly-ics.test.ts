@@ -1,15 +1,24 @@
-import { createApiKey } from "@surfingdog/adapters";
-import { type Db, schema, ulid } from "@surfingdog/core";
+import { createApiKey, type OAuthClients } from "@surfingdog/adapters";
+import { type ConnectionView, type Db, type HostPolicy, schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import {
   API,
+  CLIENT,
   delivery,
   type FakeCalendly,
   fakeCalendly,
   OWNER_EMAIL,
   TOKEN,
 } from "../../../packages/adapters/test/fixtures/calendly";
+import {
+  accountOf,
+  bookedTwice,
+  isBookingPlatform,
+  lengthGaps,
+  servesLink,
+  tagOf,
+} from "../client/src/lib/integrations";
 import { createInbox, type Inbox } from "../src/app";
 import { confirmed, freshDb, futureDay, nextDay, openWeekdays } from "./harness";
 
@@ -38,7 +47,13 @@ interface S {
   call(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<Response>;
 }
 
-async function setup(opts: { base: string; business: Record<string, unknown>; service: string }): Promise<S> {
+async function setup(opts: {
+  base: string;
+  business: Record<string, unknown>;
+  service: string;
+  oauth?: OAuthClients;
+  policy?: HostPolicy;
+}): Promise<S> {
   const db = await freshDb();
   const calendly = fakeCalendly();
   const pending: Promise<unknown>[] = [];
@@ -51,6 +66,8 @@ async function setup(opts: { base: string; business: Record<string, unknown>; se
     baseUrl: opts.base,
     eventSettleMs: 0,
     background: (work) => void pending.push(work),
+    ...(opts.oauth ? { oauth: opts.oauth } : {}),
+    ...(opts.policy ? { policy: opts.policy } : {}),
     // Calendly is the fake; the inbox's own address is the inbox itself (its calendar link, read back).
     fetchImpl: (async (input: string | URL | Request, init?: RequestInit) =>
       new URL(String(input)).host === host && inbox
@@ -156,19 +173,52 @@ const CAPE_TOWN = {
   service: "Workshop visit",
 };
 
+interface Cards {
+  cards: {
+    id: string;
+    title: string;
+    line: string;
+    status: string;
+    ways: {
+      kind: string;
+      preset: string | null;
+      label: string;
+      status: string;
+      auth: string;
+      action: string;
+      advanced?: boolean;
+      note?: string;
+      steps?: string[];
+      needs?: { text: string; href: string };
+      form: Record<string, unknown>[];
+    }[];
+  }[];
+}
+
 describe("Settings → Integrations", () => {
   it("offers Calendly with a token to paste, and a calendar link to make, both ready", async () => {
     const s = await setup(CAPE_TOWN);
-    const body = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as {
-      cards: {
-        id: string;
-        status: string;
-        ways: { kind: string; status: string; auth: string; action: string; form: Record<string, unknown>[] }[];
-      }[];
-    };
+    const body = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as Cards;
     const calendly = body.cards.find((c) => c.id === "calendly");
-    expect(calendly).toMatchObject({ status: "ready", ways: [{ kind: "calendly", status: "ready", auth: "form" }] });
-    expect(calendly?.ways[0]?.form).toEqual([
+    // The token is the way in until the server has a Calendly app; signing in says what it needs.
+    expect(calendly).toMatchObject({
+      status: "ready",
+      ways: [
+        { kind: "calendly", preset: "oauth", label: "Sign in with Calendly", status: "setup", auth: "oauth" },
+        {
+          kind: "calendly",
+          preset: null,
+          label: "Personal access token",
+          status: "ready",
+          auth: "form",
+          advanced: true,
+        },
+      ],
+    });
+    expect(calendly?.ways[1]?.note).toBe(
+      "Busy times work on every Calendly plan. Adding your bookings to Calendly needs its Standard plan or above.",
+    );
+    expect(calendly?.ways[1]?.form).toEqual([
       expect.objectContaining({
         key: "token",
         secret: true,
@@ -179,9 +229,56 @@ describe("Settings → Integrations", () => {
     ]);
     const link = body.cards.find((c) => c.id === "ics_feed");
     expect(link).toMatchObject({
+      title: "Share your bookings",
+      line: "A private calendar link for other sites",
       status: "ready",
       ways: [{ kind: "ics_feed", status: "ready", auth: "link", action: "Make a link", form: [] }],
     });
+    expect(link?.ways[0]?.needs).toBeUndefined();
+  });
+
+  it("signs in with Calendly first once the server has its Calendly app, the token under More options", async () => {
+    const s = await setup({ ...CAPE_TOWN, oauth: { calendly: CLIENT } });
+    const body = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as Cards;
+    const calendly = body.cards.find((c) => c.id === "calendly");
+    expect(calendly?.ways.map((w) => [w.preset, w.status, w.action, w.advanced ?? false])).toEqual([
+      ["oauth", "ready", "Continue with Calendly", false],
+      [null, "ready", "Connect", true],
+    ]);
+    const res = await s.call(
+      "POST",
+      "/v1/owner/integrations/authorize",
+      { kind: "calendly", preset: "oauth" },
+      s.owner,
+    );
+    expect(res.status, await res.clone().text()).toBe(200);
+    const url = new URL(((await res.json()) as { authorize_url: string }).authorize_url);
+    expect(`${url.origin}${url.pathname}`).toBe("https://auth.calendly.com/oauth/authorize");
+    expect(url.searchParams.get("client_id")).toBe(CLIENT.clientId);
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("redirect_uri")).toBe(`${CAPE_TOWN.base}/oauth/connect/calendly/callback`);
+  });
+
+  it("never makes a link where other sites cannot fetch it: no https address, or a hosted inbox not live yet", async () => {
+    for (const [opts, text] of [
+      [
+        { ...CAPE_TOWN, base: "http://inbox.khanyisa.example.com" },
+        "Booking sites fetch this link from your inbox's own https address. Add it first: Settings → General, Inbox address.",
+      ],
+      [
+        { ...CAPE_TOWN, policy: { hooksLive: false } },
+        "Booking sites fetch this link from your inbox's own address. It can be made once your inbox is live there.",
+      ],
+    ] as const) {
+      const s = await setup(opts);
+      const body = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as Cards;
+      const link = body.cards.find((c) => c.id === "ics_feed");
+      expect(link?.line).toBe("Needs this inbox's address first");
+      expect(link?.ways[0]?.needs).toEqual({ text, href: "/settings#s-app-url" });
+      const made = await s.call("POST", "/v1/owner/integrations", { kind: "ics_feed" }, s.owner);
+      expect(made.status).toBe(403);
+      expect(((await made.json()) as { detail: string }).detail).toMatch(/fetch this link/);
+    }
   });
 });
 
@@ -310,6 +407,105 @@ describe("Calendly, end to end", () => {
   });
 });
 
+describe("Calendly on its Free plan, end to end", () => {
+  it("connects with busy times on, bookings off, and its line says why, before any booking fails", async () => {
+    const s = await setup(CAPE_TOWN);
+    s.calendly.stage = "free";
+    s.calendly.paid = false;
+    const res = await s.call("POST", "/v1/owner/integrations", { kind: "calendly", values: { token: TOKEN } }, s.owner);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const view = (await res.json()) as ConnectionView;
+    expect(view).toMatchObject({ busy_on: true, bookings_on: false, note: "Calendly Free: busy times only" });
+    // A booking confirmed now is not sent to Calendly, so nothing fails and nothing is promised.
+    await booked(s, "Workshop visit", "09:00", { name: "Lindiwe Dlamini", email: "lindiwe@example.com" });
+    await drain(s);
+    expect(s.calendly.platform.requests("POST", `${API}/invitees`)).toHaveLength(0);
+    const after = (await (
+      await s.call("GET", `/v1/owner/integrations/${view.id}`, undefined, s.owner)
+    ).json()) as ConnectionView;
+    expect(after).toMatchObject({ bookings_failing: 0, note: "Calendly Free: busy times only" });
+  });
+});
+
+describe("the owner app's words for a connection", () => {
+  const conn = (over: Partial<ConnectionView>): ConnectionView =>
+    ({
+      id: "c1",
+      kind: "calendly",
+      preset: null,
+      title: "Calendly",
+      name: "Calendly",
+      account: "Khanyisa Plumbing (bookings@khanyisa.example.com)",
+      status: "active",
+      capabilities: ["busy_times", "write_bookings"],
+      busy_on: true,
+      bookings_on: true,
+      calendars: [],
+      busy_calendars: [],
+      destinations: [
+        { id: "auto", name: "Same length as the booking", writable: true },
+        { id: "ETWORKSHOP60", name: "Workshop visit · 60 min", writable: true, lengths: [60] },
+        { id: "ETVIDEO30", name: "Video quote · 30 min", writable: true, lengths: [30] },
+      ],
+      destination: "auto",
+      services: null,
+      note: null,
+      link: null,
+      payments: null,
+      ...over,
+    }) as ConnectionView;
+  const services = [
+    { name: "Workshop visit", durationMin: 60, active: 1 },
+    { name: "Geyser check", durationMin: 45, active: 1 },
+    { name: "Leak trace", durationMin: 45, active: 1 },
+    { name: "Drain survey", durationMin: 90, active: 1 },
+    { name: "Old service", durationMin: 20, active: 0 },
+  ];
+
+  it("names the services a length Calendly has no event type for, before a booking fails", () => {
+    expect(lengthGaps(conn({}), services)).toEqual([
+      "No 45-min event type on Calendly: Geyser check and Leak trace bookings won't be added there.",
+      "No 90-min event type on Calendly: Drain survey bookings won't be added there.",
+    ]);
+    // One event type chosen: what is not its length.
+    expect(lengthGaps(conn({ destination: "ETVIDEO30" }), services.slice(0, 2))).toEqual([
+      "Video quote · 30 min is not 45 min: Geyser check bookings won't be added there.",
+      "Video quote · 30 min is not 60 min: Workshop visit bookings won't be added there.",
+    ]);
+    // Nothing when bookings are off, or the line says why already (the Free plan, no event type at all).
+    expect(lengthGaps(conn({ bookings_on: false }), services)).toEqual([]);
+    expect(lengthGaps(conn({ note: "Calendly Free: busy times only" }), services)).toEqual([]);
+    expect(lengthGaps(conn({ kind: "calcom", title: "Cal.com" }), services)).toEqual([]);
+  });
+
+  it("warns of each booking twice for Calendly as for Cal.com, and names the event type as such", () => {
+    const google = conn({ id: "g1", kind: "google_calendar", title: "Google Calendar", account: "x@example.com" });
+    for (const kind of ["calendly", "calcom"]) {
+      const platform = conn({ kind, title: kind === "calcom" ? "Cal.com" : "Calendly" });
+      expect(isBookingPlatform(platform)).toBe(true);
+      expect(bookedTwice([platform, google])).toEqual({ platform, calendar: google });
+      expect(bookedTwice([{ ...platform, bookings_on: false }, google])).toBeNull();
+    }
+    expect(isBookingPlatform(google)).toBe(false);
+  });
+
+  it("says Made for a link, and no account beside a title that says it all", () => {
+    const link = conn({
+      kind: "ics_feed",
+      title: "Share your bookings",
+      account: "",
+      capabilities: [],
+      status: "configured",
+    });
+    expect(servesLink(link)).toBe(true);
+    expect(tagOf([link])).toEqual({ text: "Made", tone: "on" });
+    expect(tagOf([conn({})])).toEqual({ text: "Connected", tone: "on" });
+    expect(accountOf(link)).toBeNull();
+    expect(accountOf({ title: "Share your bookings", account: "Share your bookings" })).toBeNull();
+    expect(accountOf(conn({}))).toBe("Khanyisa Plumbing (bookings@khanyisa.example.com)");
+  });
+});
+
 describe("the calendar link to share, end to end", () => {
   const KYOTO = {
     base: "https://yoyaku.ryokan-hana.example.com",
@@ -326,9 +522,17 @@ describe("the calendar link to share, end to end", () => {
     });
     const res = await s.call("POST", "/v1/owner/integrations", { kind: "ics_feed" }, s.owner);
     expect(res.status, await res.clone().text()).toBe(201);
-    const view = (await res.json()) as { id: string; link: string };
+    const view = (await res.json()) as { id: string; link: string; title: string; account: string };
     expect(view.link).toMatch(
       /^https:\/\/yoyaku\.ryokan-hana\.example\.com\/v1\/feeds\/ics_feed\/[A-Za-z0-9_-]{43}\.ics$/,
+    );
+    // Its line names it once: nothing to sign in to, so no account beside it.
+    expect(view).toMatchObject({ title: "Share your bookings", account: "" });
+    // Made already: said plainly, and the link stays the one made.
+    const twice = await s.call("POST", "/v1/owner/integrations", { kind: "ics_feed" }, s.owner);
+    expect(twice.status).toBe(409);
+    expect(((await twice.json()) as { detail: string }).detail).toBe(
+      "Your link is made already. Copy it from its line, or make a new one there.",
     );
 
     const feed = await s.call("GET", view.link);
