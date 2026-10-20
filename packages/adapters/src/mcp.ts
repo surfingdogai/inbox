@@ -64,6 +64,7 @@ import {
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { problemFrom } from "./problem";
+import { listsStaff, registerPublicStaffTools, STAFF_INSTRUCTIONS } from "./staff";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
 /**
@@ -260,7 +261,13 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
-    const server = new McpServer({ name, version }, { instructions: PUBLIC_INSTRUCTIONS });
+    // A salon (ADR-035) says its staff are booked by name, and has the tool that lists them.
+    const staffed = await listsStaff(caps);
+    const server = new McpServer(
+      { name, version },
+      { instructions: staffed ? `${PUBLIC_INSTRUCTIONS} ${STAFF_INSTRUCTIONS}` : PUBLIC_INSTRUCTIONS },
+    );
+    if (staffed) registerPublicStaffTools(server, caps);
 
     server.registerTool(
       "get_business_profile",
@@ -330,16 +337,18 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Check availability",
         description:
-          "Free start times for a service between two instants (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered.",
+          "Free start times for a service between two instants (at most 14 days). A time that has started, or that starts within the business's minimum notice, is not offered. Where staff are listed (list_staff): staff_id, or any, and each time names who is free then; add_ons make it longer.",
         inputSchema: checkAvailabilityInput,
         annotations: readOnly,
       },
       (args) =>
         run(async () => {
           const r = await caps.checkAvailability(args, { now: caller.now ? caller.now() : Date.now(), caller });
+          const first = r.slots[0] as { startTime?: string; staff?: readonly { name: string }[] } | undefined;
+          const who = first?.staff?.length ? ` with ${first.staff.map((s) => s.name).join(", ")}` : "";
           return {
             text: r.slots.length
-              ? `${r.slots.length} free slots for ${r.service.name}; first ${r.slots[0]?.startTime}.`
+              ? `${r.slots.length} free slots for ${r.service.name}; first ${first?.startTime}${who}.`
               : `No free slots for ${r.service.name} in that window.`,
             structured: r,
           };
@@ -364,7 +373,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Request a booking",
         description:
-          "Request a service at a time. Check availability first. A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.",
+          "Request a service at a time. Check availability first. Where staff are listed: staff_id from list_staff, or any; add_ons from list_services. A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.",
         inputSchema: createBookingInput,
         annotations: writes,
       },
@@ -513,15 +522,22 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Cancel",
         description:
-          "Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations (it may count against the customer), and refused where it does not.",
+          "Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations (it may count against the customer), and refused where it does not. A confirmed booking with its own cancellation policy answers first with the fee and what comes back (confirm): send its fee_sha once your person said yes.",
         inputSchema: cancelItemInput,
         annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
       },
-      (args) =>
-        run(async () => {
+      async (args) => {
+        try {
           const r = await caps.cancelItem(caller, args);
-          return { text: humanOf(r), structured: r };
-        }),
+          return ok(humanOf(r), r);
+        } catch (error) {
+          // The fee to show the person first is the question to put to them, not a failure.
+          if (error instanceof WriteError && error.code === "confirm_terms") {
+            return ok(`Nothing is cancelled yet. ${error.message}`, { confirm: error.details });
+          }
+          return failed(error);
+        }
+      },
     );
     server.registerTool(
       "send_message",
@@ -1570,6 +1586,12 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           const soon: string[] = [];
           const setup: string[] = [];
           for (const card of r.cards) {
+            // A card every way of which needs setting up (a booking system, ADR-035) says so, once.
+            if (card.ways.length > 0 && card.ways.every((w) => w.status === "setup")) {
+              const hint = card.ways[0]?.hint;
+              setup.push(`${card.title}${hint ? `: ${hint.replace(/\.$/, "")}` : ""}`);
+              continue;
+            }
             if (card.status === "soon") {
               soon.push(card.title);
               continue;
